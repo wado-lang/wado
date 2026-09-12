@@ -15,8 +15,7 @@ use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
-use crate::ast::AstId;
-use crate::ast::AstIdSpace;
+use crate::ast::{AstId, AstIdSpace};
 use crate::defs::DefId;
 use crate::name::FqTraitName;
 

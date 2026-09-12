@@ -12,14 +12,9 @@ use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
 use crate::defs::DefId;
 use crate::elaborator::sig;
-use crate::elaborator::sig::AssocConstSig;
-use crate::elaborator::sig::ImplSig;
-use crate::elaborator::sig::TraitSig;
+use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
 use crate::tir;
-use crate::tir::AnonStructId;
-use crate::tir::EffectRef;
-use crate::tir::TirEffectOp;
-use crate::tir::TirStruct;
+use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
 
 /// A function's canonical signature, resolved once by its module's decl
 /// pass in the declaring perspective, with the function's own type params

@@ -35,15 +35,13 @@ use super::types::{
     cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
-use crate::cm_abi::CmValType;
-use crate::cm_abi::layout_tuple_with_registry_scoped;
+use crate::cm_abi::{CmValType, layout_tuple_with_registry_scoped};
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_return_needs_outptr;
-use crate::component_model::cm_size_with_registry_scoped;
-use crate::component_model::cm_variant_size_align_scoped;
-use crate::name::FqTypeName;
-use crate::name::cm_wrap_async_func_name;
+use crate::component_model::{
+    cm_align_with_registry_scoped, cm_return_needs_outptr, cm_size_with_registry_scoped,
+    cm_variant_size_align_scoped,
+};
+use crate::name::{FqTypeName, cm_wrap_async_func_name};
 use crate::tir;
 
 /// Build the binding function name for a WASI import.

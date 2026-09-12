@@ -10,11 +10,9 @@ use wado_manifest::{
 };
 
 use crate::compile::empty_manifest;
-use crate::git;
-use crate::git::fetch_manifest;
-use crate::git::resolve_ref;
+use crate::git::{fetch_manifest, resolve_ref};
 use crate::manifest::resolve_manifest;
-use crate::oci;
+use crate::{git, oci};
 
 /// Parse an image tag into a semver [`Version`], stripping an optional leading
 /// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule

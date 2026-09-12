@@ -20,8 +20,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
-use crate::tir::TirFunction;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The element type `T` of a `builtin::array_clone::<T>` /

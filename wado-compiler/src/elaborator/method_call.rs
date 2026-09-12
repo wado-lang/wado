@@ -26,25 +26,19 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::merge_turbofish_type_args;
-use crate::elaborator::call::turbofish_has_hole;
-use crate::elaborator::call::turbofish_holes;
+use crate::elaborator::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
 use crate::elaborator::synth::ArgProbe;
-use crate::elaborator::trait_env::BlanketBound;
-use crate::elaborator::trait_env::BlanketReceiver;
-use crate::elaborator::trait_env::ImplHeader;
-use crate::elaborator::trait_env::get_type_name_static;
-use crate::elaborator::types::ImplMemberKind;
-use crate::elaborator::types::RequiredTrait;
-use crate::hashmap;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
+use crate::elaborator::trait_env::{
+    BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
+};
+use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
+use crate::name::{DeclName, FqTraitName};
 use crate::resolve::Resolution;
-use crate::tir;
 use crate::unparse::unparse_type_into;
+use crate::{hashmap, tir};
 
 /// A static call named the way [symbol notation] writes it — the receiver's
 /// type arguments included (`List<i32>::with_capacity`). Rendering only the

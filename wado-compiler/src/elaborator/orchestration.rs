@@ -27,62 +27,35 @@ use super::types::{
     ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
-use crate::ast::CmImport;
-use crate::ast::CmResourceBacking;
-use crate::ast::GenericType;
-use crate::ast::NamedType;
-use crate::ast::UseItem;
+use crate::ast::{CmImport, CmResourceBacking, GenericType, NamedType, UseItem};
 use crate::compiler_item::Resolved;
 use crate::component_model::SourceInterfaceBatch;
-use crate::defs::DefId;
-use crate::defs::DefKind;
-use crate::defs::DefTable;
-use crate::elaborator::build_func_index;
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::infer_hole::InferHoleTable;
-use crate::elaborator::item::register_builtin_type_compiler_item;
-use crate::elaborator::item::register_enum_case_compiler_item;
-use crate::elaborator::item::register_enum_compiler_item;
-use crate::elaborator::item::register_newtype_compiler_item;
-use crate::elaborator::item::register_resource_compiler_item;
-use crate::elaborator::item::register_struct_compiler_item;
-use crate::elaborator::item::register_trait_compiler_item;
-use crate::elaborator::item::register_tuple_compiler_item;
-use crate::elaborator::item::register_variant_case_compiler_item;
-use crate::elaborator::item::register_variant_compiler_item;
-use crate::elaborator::liveness;
-use crate::elaborator::liveness::CompilerNamed;
-use crate::elaborator::liveness::Liveness;
-use crate::elaborator::liveness::References;
+use crate::elaborator::item::{
+    register_builtin_type_compiler_item, register_enum_case_compiler_item,
+    register_enum_compiler_item, register_newtype_compiler_item, register_resource_compiler_item,
+    register_struct_compiler_item, register_trait_compiler_item, register_tuple_compiler_item,
+    register_variant_case_compiler_item, register_variant_compiler_item,
+};
+use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
 use crate::elaborator::reify::Reify;
-use crate::elaborator::scope;
 use crate::elaborator::sem::ModuleSemantics;
-use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::elaborator::trait_env::ImplHeader;
-use crate::elaborator::trait_env::ImplTargetKey;
-use crate::elaborator::trait_env::TraitEnv;
-use crate::elaborator::trait_env::is_user_local;
-use crate::elaborator::trait_env::namespace_imports_of;
+use crate::elaborator::trait_env::{
+    ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of,
+};
 use crate::elaborator::type_resolution::substitute_type_params;
-use crate::elaborator::types::BoundRef;
-use crate::elaborator::types::type_param_defaults_of;
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::elaborator::{build_func_index, liveness, scope, sig};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::name::namespace_member_alias;
-use crate::name::resolve_import_with_invocations;
-use crate::resolve::Resolution;
-use crate::resolve::Resolutions;
-use crate::resolve::head_site;
+use crate::name::{namespace_member_alias, resolve_import_with_invocations};
+use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
-use crate::stdlib_snapshot::is_building;
-use crate::stdlib_snapshot::rehydrate_tir_module;
-use crate::stdlib_snapshot::stdlib_sources;
+use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
-use crate::tir::AnonStructId;
-use crate::tir::PrimitiveType;
-use crate::tir::StructDef;
-use crate::tir::TirFunction;
-use crate::tir::TraitRef;
+use crate::tir::{AnonStructId, PrimitiveType, StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;

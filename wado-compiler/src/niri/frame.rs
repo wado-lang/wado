@@ -17,9 +17,8 @@ use super::place::{borrowed_place_operand, named_local, place_aliased_by_another
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
-use crate::compiler_trace;
 use crate::name::diagnostic_function_name;
-use crate::niri;
+use crate::{compiler_trace, niri};
 
 impl FrameState {
     /// Whether `index` takes part in a live place alias, as the alias handle

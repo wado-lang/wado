@@ -10,19 +10,15 @@
 
 use crate::hashmap;
 use crate::hashmap::IndexSet;
-use crate::nir::FuncId;
-use crate::nir::NirLocal;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
-use crate::nir_value_graph::ValuePool;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
-use crate::tir::ResolvedType;
-use crate::tir::TypeTable;
+use crate::tir::{ResolvedType, TypeTable};
 
 /// Every reachable block, each before the blocks nested under it.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {

@@ -5,21 +5,16 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::AstId;
-use crate::ast::Visibility;
-use crate::ast::WorldExport;
-use crate::ast::{Item, Module, UseDecl, UseItem};
-use crate::compiler_host::CompilerHost;
-use crate::compiler_host::Diagnostic;
+use crate::ast::{AstId, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
+use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::entry_dir_of;
-use crate::name::namespace_member_alias;
-use crate::name::resolve_import_with_invocations;
-use crate::name::validate_module_path;
+use crate::name::{
+    entry_dir_of, namespace_member_alias, resolve_import_with_invocations, validate_module_path,
+};
 use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;

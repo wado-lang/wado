@@ -10,35 +10,23 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
-use crate::ast::AstIdSpace;
-use crate::ast::ImportAttributes;
-use crate::ast::UseDecl;
-use crate::ast::{Item, Module};
-use crate::bind;
-use crate::compiler_host::Diagnostic;
-use crate::compiler_host::InMemoryCompilerHost;
-use crate::compiler_host::{CompilerHost, SourceError};
+use crate::ast::{AstIdSpace, ImportAttributes, Item, Module, UseDecl};
+use crate::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
 use crate::component_model::SourceInterfaceBatch;
-use crate::hashmap;
 use crate::kiln::InvocationIndex;
-use crate::lexer::LexError;
-use crate::lexer::lex;
+use crate::lexer::{LexError, lex};
 use crate::logger::Logger;
-use crate::module_source::is_bundled_specifier;
-use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind};
-use crate::name::canonical_local_path;
-use crate::name::canonicalize_entry_point;
-use crate::name::entry_dir_of;
-use crate::name::resolve_import_with_invocations;
-use crate::name::resolve_local_identity;
-use crate::name::{normalize_module_path, resolve_module_path};
-use crate::parser;
+use crate::module_source::{
+    CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
+};
+use crate::name::{
+    canonical_local_path, canonicalize_entry_point, entry_dir_of, normalize_module_path,
+    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
+};
 use crate::parser::Parser;
-use crate::path::is_cwd_relative;
-use crate::path::normalize;
-use crate::stdlib;
-use crate::wit_consume::ComponentBindings;
-use crate::wit_consume::build_bindings;
+use crate::path::{is_cwd_relative, normalize};
+use crate::wit_consume::{ComponentBindings, build_bindings};
+use crate::{bind, hashmap, parser, stdlib};
 
 /// Error that can occur during module loading
 #[derive(Debug, Clone)]

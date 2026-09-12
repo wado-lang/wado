@@ -7,8 +7,7 @@
 use std::rc::Rc;
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::Body;
-use crate::nir_arena::Operand;
+use crate::nir_arena::{Body, Operand};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 

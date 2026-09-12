@@ -7,9 +7,7 @@ use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
 use crate::ast;
-use crate::ast::Attribute;
-use crate::ast::Item;
-use crate::ast::{CmBoundary, Function, Type};
+use crate::ast::{Attribute, CmBoundary, Function, Item, Type};
 use crate::compiler_item::CompilerItem;
 use crate::lexer::lex;
 use crate::tir::{ResolvedType, TypeId, TypeTable};

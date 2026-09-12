@@ -1,8 +1,7 @@
 //! Resolved call-target identities: a free function callee is the declaration
 //! it names (WEP 2026-08-12), a static method callee what dispatch picked.
 
-use crate::defs::DefId;
-use crate::defs::DefTable;
+use crate::defs::{DefId, DefTable};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::FqTraitName;
 

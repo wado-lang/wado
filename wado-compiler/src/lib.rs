@@ -2382,8 +2382,7 @@ impl std::error::Error for CompileError {}
 mod lib_world_tests {
     use super::synthesize_lib_world_info;
     use crate::component_model::CmInterfaceRegistry;
-    use crate::hashmap;
-    use crate::parse;
+    use crate::{hashmap, parse};
 
     #[test]
     fn synthesizes_one_export_per_export_fn() {

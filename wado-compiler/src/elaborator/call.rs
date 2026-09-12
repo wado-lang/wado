@@ -23,19 +23,14 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
-use crate::Span;
-use crate::ast::AstId;
-use crate::ast::GenericParam;
+use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
-use crate::defs::DefId;
-use crate::defs::DefKind;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
-use crate::elaborator::types::ImplMemberKind;
-use crate::elaborator::types::VariantCaseData;
-use crate::elaborator::types::VariantInfo;
-use crate::token;
+use crate::elaborator::types::{ImplMemberKind, VariantCaseData, VariantInfo};
+use crate::{Span, token};
 
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple

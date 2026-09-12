@@ -28,8 +28,7 @@ use crate::compiler_trace;
 use crate::module_source::ModuleSource;
 use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
-use crate::optimize::dce::DescriptorCache;
-use crate::optimize::dce::callee_descriptor;
+use crate::optimize::dce::{DescriptorCache, callee_descriptor};
 use cranelift_entity::EntityRef;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key

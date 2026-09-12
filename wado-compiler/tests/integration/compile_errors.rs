@@ -3,10 +3,9 @@
 //! This module tests that compilation errors are properly reported with
 //! correct error types, messages, and source locations.
 
-use crate::common::compile_file;
-use crate::common::compile_source;
-use crate::common::compile_source_with_compiler_options;
-use crate::common::compile_source_with_opts;
+use crate::common::{
+    compile_file, compile_source, compile_source_with_compiler_options, compile_source_with_opts,
+};
 use std::path::Path;
 use wado_compiler::{CompileError, OptLevel};
 

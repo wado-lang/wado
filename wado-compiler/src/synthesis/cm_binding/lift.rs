@@ -27,8 +27,7 @@ use super::types::{
     disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
 use crate::tir::StructDef;
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.

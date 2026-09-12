@@ -3,8 +3,7 @@
 
 use std::fmt::Write as _;
 
-use crate::common::InMemoryHost;
-use crate::common::runtime;
+use crate::common::{InMemoryHost, runtime};
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity};
 
 const SOURCE: &str = r#"

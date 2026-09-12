@@ -3,8 +3,7 @@
 //! `if it.tag == -1 { … } else { out.push(it) }` made the whole-value read
 //! non-final, so the element the iterator had already copied was copied twice.
 
-use crate::common::assert_pushes_by_move;
-use crate::common::wir_function_body;
+use crate::common::{assert_pushes_by_move, wir_function_body};
 use std::path::Path;
 
 const SOURCE: &str = r#"

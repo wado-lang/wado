@@ -6,8 +6,7 @@
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
-use crate::nir::FuncId;
-use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;

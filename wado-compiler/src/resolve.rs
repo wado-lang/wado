@@ -7,13 +7,11 @@
 use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
-use crate::defs::DefKind;
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::NAMESPACE_MEMBER_SEP;
-use crate::name::namespace_member_alias;
+use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::SymbolTable;
 
 /// What a reference site refers to.
@@ -649,14 +647,12 @@ pub fn head_site(ty: &Type) -> Option<AstId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyze;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
     use crate::defs::DefKind;
-    use crate::hashmap;
     use crate::lexer::lex;
     use crate::logger::Logger;
     use crate::module_source::ModuleSourceInterner;
-    use crate::parser;
+    use crate::{analyze, hashmap, parser};
 
     /// Resolve two modules together and hand back the table, so a test can ask
     /// what a name means from either vantage.

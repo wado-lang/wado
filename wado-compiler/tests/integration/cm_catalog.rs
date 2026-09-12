@@ -30,15 +30,10 @@ use wasmtime::component::{
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
-use crate::common::DEFAULT_TIMEOUT_MS;
-use crate::common::WasiState;
-use crate::common::compile_source_with_compiler_options;
-use crate::common::engine;
-use crate::common::limit_store;
-use crate::common::linker;
-use crate::common::lookup_func;
-use crate::common::opt_level_name;
-use crate::common::runtime;
+use crate::common::{
+    DEFAULT_TIMEOUT_MS, WasiState, compile_source_with_compiler_options, engine, limit_store,
+    linker, lookup_func, opt_level_name, runtime,
+};
 
 /// Stream producer that delivers a batch with `Completed`, then signals
 /// end-of-stream with a separate `Dropped` poll. Unlike the built-in `Vec`

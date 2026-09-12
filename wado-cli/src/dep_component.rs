@@ -20,12 +20,9 @@
 
 use wado_manifest::Manifest;
 
-use crate::cache::component_path;
-use crate::cache::write_atomic;
+use crate::cache::{component_path, write_atomic};
 use crate::fetch::split_registry_id;
-use crate::git::fetch_manifest;
-use crate::git::materialize_entry;
-use crate::git::resolve_ref;
+use crate::git::{fetch_manifest, materialize_entry, resolve_ref};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 

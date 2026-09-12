@@ -4,41 +4,26 @@
 //! `__effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
-use crate::Span;
-use crate::ast::RestClause;
-use crate::ast::Visibility;
+use crate::ast::{RestClause, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
-use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::DeclName;
-use crate::name::DeclPath;
-use crate::name::FqTypeName;
-use crate::name::LocalMethodName;
-use crate::name::MethodName;
-use crate::name::cm_wrap_async_func_name;
-use crate::name::dispatch_field_name;
-use crate::name::dispatch_global_name;
-use crate::name::dispatch_struct_name;
-use crate::name::dispatch_wrapper_name;
-use crate::name::effect_default_impl_name;
-use crate::name::mangle_generic_name;
+use crate::name::{
+    DeclName, DeclPath, FqTypeName, LocalMethodName, MethodName, cm_wrap_async_func_name,
+    dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
+    effect_default_impl_name, mangle_generic_name,
+};
 use crate::package::Package;
-use crate::synthesis::common::alloc_named_local;
-use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
-use crate::tir;
-use crate::tir::GlobalInit;
-use crate::tir::ResolvedType;
-use crate::tir::StructDef;
+use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
-    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint, ResolvedType, StructDef,
+    TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
+    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
-use crate::token;
+use crate::{Span, hashmap, tir, token};
 
 /// Canonical identity of an effect or resource **declaration**:
 /// `(defining_module, base_name)`. It stays bound to the declaration —

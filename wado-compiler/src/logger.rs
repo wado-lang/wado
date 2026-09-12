@@ -466,8 +466,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 mod tests {
     use super::*;
     use crate::ast::AstIdSpace;
-    use crate::compiler_host::DiagnosticSpan;
-    use crate::compiler_host::InMemoryCompilerHost;
+    use crate::compiler_host::{DiagnosticSpan, InMemoryCompilerHost};
 
     #[test]
     fn test_logger_levels() {

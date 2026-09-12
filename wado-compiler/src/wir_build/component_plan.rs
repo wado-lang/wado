@@ -4,8 +4,7 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::component_model::CmInterfaceRegistry;
-use crate::component_model::wado_primitive_name_to_cm;
+use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
 use crate::name::kebab_export_name;
 use crate::package::test_selected;

@@ -5,11 +5,7 @@
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
 use crate::ast;
-use crate::ast::AstVisitor;
-use crate::ast::ImplBlock;
-use crate::ast::Stmt;
-use crate::ast::walk_item;
-use crate::ast::{AstId, Item, Module, Visibility};
+use crate::ast::{AstId, AstVisitor, ImplBlock, Item, Module, Stmt, Visibility, walk_item};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::TUPLE_TYPE_NAME;
@@ -538,14 +534,11 @@ impl AstVisitor for LocalItems<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::analyze;
-    use crate::ast;
-    use crate::hashmap;
     use crate::lexer::lex;
     use crate::logger::Logger;
     use crate::module_source::ModuleSourceInterner;
-    use crate::parser;
     use crate::symbol::{StructSymbol, TraitSymbol};
+    use crate::{analyze, ast, hashmap, parser};
 
     fn table() -> (DefTable, SymbolTable, ModuleSource, ModuleSource) {
         let mut symbols = SymbolTable::new();

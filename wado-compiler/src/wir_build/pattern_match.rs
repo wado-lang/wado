@@ -12,13 +12,11 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
-use crate::name::VARIANT_DISCRIMINANT_FIELD;
-use crate::name::variant_payload_field;
-use crate::name::wir_type_key;
-use crate::name::wir_variant_case_key;
+use crate::name::{
+    VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_type_key, wir_variant_case_key,
+};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
-use crate::wir::WirTypeDef;
-use crate::wir::WirVariantType;
+use crate::wir::{WirTypeDef, WirVariantType};
 use crate::wir_build::translate::ref_binding_needs_boxing;
 use crate::wir_build::types::generic_instance_name;
 use std::assert_matches;

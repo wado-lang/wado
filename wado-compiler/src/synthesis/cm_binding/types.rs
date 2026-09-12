@@ -18,12 +18,11 @@ use crate::tir::{
 };
 
 use crate::cm_abi::align_to;
-use crate::component_model::cm_align_with_registry;
-use crate::component_model::future_payload_rejection;
-use crate::component_model::stream_payload_rejection;
+use crate::component_model::{
+    cm_align_with_registry, future_payload_rejection, stream_payload_rejection,
+};
 use crate::defs::DefId;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
+use crate::name::{FqTraitName, FqTypeName};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
 use crate::tir::StructDef;
 

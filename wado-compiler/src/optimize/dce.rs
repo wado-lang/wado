@@ -8,37 +8,27 @@ use super::mod_ref::FnEffect;
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
-use crate::compiler_item::CompilerItem;
-use crate::compiler_item::SeqField;
+use crate::compiler_item::{CompilerItem, SeqField};
 use crate::defs::DefId;
-use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::CLOSURE_CALL_METHOD;
-use crate::name::CLOSURE_STRUCT_PREFIX;
-use crate::name::FqTraitName;
-use crate::name::is_fn_type_name;
 use crate::name::{
-    FqTypeName, FreeFunctionName, FunctionId, MethodName, mangle_generic_name,
-    mangle_local_trait_method, mangle_method_generic,
+    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, FreeFunctionName,
+    FunctionId, MethodName, is_fn_type_name, mangle_generic_name, mangle_local_trait_method,
+    mangle_method_generic,
 };
-use crate::nir;
-use crate::nir::NirStruct;
-use crate::nir::NirUnaryOp;
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::NirRefVisitor;
-use crate::nir_visitor::reachable_exprs;
-use crate::optimize::arena_query::expr_node_may_trap;
-use crate::optimize::arena_query::is_pure_nontrapping_expr_typed;
-use crate::optimize::arena_query::promoted_local_reads;
+use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
+use crate::optimize::arena_query::{
+    expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
+};
 use crate::optimize::mod_ref::compute_fn_effects;
-use crate::tir;
-use crate::tir::StructDef;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;

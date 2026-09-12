@@ -25,11 +25,9 @@ use super::types::{
     field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
 use crate::name::FqTypeName;
-use crate::synthesis::cm_binding::types::cm_val_type_to_type_id;
-use crate::synthesis::cm_binding::types::cm_zero;
+use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
 
 /// Join two CM flat slot types via the single Canonical ABI join

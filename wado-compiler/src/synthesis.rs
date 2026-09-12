@@ -16,11 +16,9 @@ pub mod traits;
 
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
-use crate::name;
 use crate::package::Package;
-use crate::tir;
-use crate::tir::ResolvedType;
-use crate::tir::TypeTable;
+use crate::tir::{ResolvedType, TypeTable};
+use crate::{name, tir};
 
 /// The five reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a

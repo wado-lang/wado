@@ -1,48 +1,31 @@
 // The parser implementation of Wado with recursive descent parser.
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
-use crate::ast;
-use crate::ast::AssocTypeBound;
-use crate::ast::AstIdSpace;
-use crate::ast::AttrObject;
-use crate::ast::AttrValue;
-use crate::ast::EffectHandlerBinding;
-use crate::ast::ErrorExpr;
-use crate::ast::ErrorItem;
-use crate::ast::ErrorStmt;
-use crate::ast::GenericParam;
-use crate::ast::LabeledBlockExpr;
-use crate::ast::ResumeExpr;
-use crate::ast::TraitBound;
-use crate::ast::TupleComprehensionExpr;
-use crate::ast::WithHandlerExpr;
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
-    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
-    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
-    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
-    WorldExportFn, WorldExportInterface, WorldImport,
+    AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
+    AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
+    BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
+    ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceBacking, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt,
+    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
+    ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
+    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TryOpExpr,
+    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
+    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::comment::Comment;
-use crate::comment::TriviaMap;
-use crate::compiler_host::Diagnostic;
-use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-use crate::format_spec;
-use crate::hashmap;
-use crate::lexer::LexResult;
-use crate::lexer::lex_interpolation;
+use crate::comment::{Comment, TriviaMap};
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::lexer::{LexResult, lex_interpolation};
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::{ast, format_spec, hashmap};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -6555,14 +6538,10 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast;
-    use crate::ast::AstVisitor;
-    use crate::ast::ConditionElement;
-    use crate::ast::EffectHandlerBinding;
-    use crate::ast::Item;
-    use crate::format;
+    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
     use crate::lexer::lex;
     use crate::name::SYNTHETIC_LABEL_PREFIX;
+    use crate::{ast, format};
     use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a

@@ -5,11 +5,10 @@
 //! and WAT-style mnemonics for arithmetic instructions (i32.add, f64.mul, etc.).
 
 use crate::tir::EffectRef;
-use crate::wir::WirTypeId;
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
-    WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
+    WirPackage, WirStructType, WirType, WirTypeDef, WirTypeId, WirVariantType,
 };
 
 /// Unparse a `WirPackage` into pseudo-Wado source code.

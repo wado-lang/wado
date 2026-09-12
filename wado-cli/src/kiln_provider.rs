@@ -53,12 +53,10 @@ use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 
-use crate::build_dep::GENERATOR_WORLD_FQ;
-use crate::build_dep::GENERATOR_WORLD_SEGMENT;
-use crate::build_dep::parse_spec;
-use crate::build_dep::resolve_generator_version;
-use crate::cache::generator_path;
-use crate::cache::write_atomic;
+use crate::build_dep::{
+    GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
+};
+use crate::cache::{generator_path, write_atomic};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
 use crate::kiln_wit::options_descriptor_from_component;
@@ -1037,8 +1035,7 @@ impl CliGeneratorProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kiln_provider::make_relative_sources;
-    use crate::kiln_provider::normalize_path;
+    use crate::kiln_provider::{make_relative_sources, normalize_path};
     use wado_compiler::kiln::InvocationPath;
 
     fn runtime() -> tokio::runtime::Runtime {

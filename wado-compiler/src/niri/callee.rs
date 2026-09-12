@@ -10,8 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
-use crate::nir::FuncId;
-use crate::nir::NirFunction;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
 
 /// Identity of a callee in the [`CalleeMap`].

@@ -22,8 +22,7 @@ use pubgrub::{
 };
 
 use crate::lockfile::LockedPackage;
-use crate::manifest::Dependency;
-use crate::manifest::{DependencySource, GitPin, Manifest};
+use crate::manifest::{Dependency, DependencySource, GitPin, Manifest};
 use crate::provider::{DependencyProvider, ProviderError};
 use crate::version::{Version, VersionSpecifier};
 

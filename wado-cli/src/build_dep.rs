@@ -17,8 +17,7 @@ use indexmap::IndexMap;
 
 use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest};
 
-use crate::cache::generator_path;
-use crate::cache::write_atomic;
+use crate::cache::{generator_path, write_atomic};
 use crate::oci;
 use crate::registry::parse_version_tag;
 

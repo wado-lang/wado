@@ -30,24 +30,20 @@ use crate::synthesis::common::{
 
 use super::synthesize_lift;
 use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
-use crate::ast;
-use crate::ast::GenericType;
-use crate::ast::Visibility;
-use crate::component_model::classify_future_payload;
-use crate::component_model::classify_stream_payload;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_payload_type_from_type_id;
-use crate::component_model::cm_size_with_registry_scoped;
-use crate::component_model::is_u8_stream_element;
-use crate::component_model::peel_newtypes;
+use crate::ast::{GenericType, Visibility};
+use crate::component_model::{
+    classify_future_payload, classify_stream_payload, cm_align_with_registry_scoped,
+    cm_payload_type_from_type_id, cm_size_with_registry_scoped, is_u8_stream_element,
+    peel_newtypes,
+};
 use crate::flat_package::FlatPackage;
-use crate::synthesis::cm_binding::PayloadsValidated;
-use crate::synthesis::cm_binding::future_stream_payload_site;
-use crate::synthesis::cm_binding::lower::synthesize_lower_list_to_buffer;
-use crate::synthesis::cm_binding::lower::synthesize_lower_wasi_type_to_memory;
+use crate::synthesis::cm_binding::lower::{
+    synthesize_lower_list_to_buffer, synthesize_lower_wasi_type_to_memory,
+};
 use crate::synthesis::cm_binding::types::cm_package_from_source;
-use crate::tir;
+use crate::synthesis::cm_binding::{PayloadsValidated, future_stream_payload_site};
 use crate::tir::TirStructField;
+use crate::{ast, tir};
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
@@ -2032,8 +2028,7 @@ fn pascal_to_kebab(name: &str) -> String {
 #[cfg(test)]
 mod cm_binding_tests {
     use super::*;
-    use crate::ast::Attribute;
-    use crate::ast::Item;
+    use crate::ast::{Attribute, Item};
     use crate::parse;
     use crate::stdlib::all_core_modules;
 

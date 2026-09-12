@@ -4,40 +4,27 @@
 //! for world exports.
 
 use super::component_context::{CmTypeKey, ComponentModelContext};
-use crate::ProviderComponent;
-use crate::ast;
-use crate::ast::AstId;
-use crate::ast::CmImport;
-use crate::ast::NamedType;
-use crate::ast::Type;
+use crate::ast::{AstId, CmImport, NamedType, Type};
 use crate::canonical::{
     CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload,
 };
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
-use crate::component_model::CmDefined;
-use crate::component_model::CmInterfaceInfo;
-use crate::component_model::CmInterfaceRegistry;
-use crate::component_model::CmTypeSink;
-use crate::component_model::InstanceSink;
-use crate::component_model::classify_future_payload_from_ast;
-use crate::component_model::classify_stream_payload_from_ast;
-use crate::component_model::cm_instance_key;
-use crate::component_model::cm_return_needs_outptr;
-use crate::component_model::emit_cm_defined;
-use crate::component_model::wado_primitive_name_to_cm;
-use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
+use crate::component_model::{
+    CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeSink,
+    CmVariantCase, InstanceSink, classify_future_payload_from_ast,
+    classify_stream_payload_from_ast, cm_instance_key, cm_return_needs_outptr, emit_cm_defined,
+    wado_primitive_name_to_cm,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::nir_package::NirPackage;
-use crate::test_names::SECTION_NAME;
-use crate::test_names::encode;
+use crate::test_names::{SECTION_NAME, encode};
 use crate::token::Span;
-use crate::wir::ImportEntry;
-use crate::wir::ImportKind;
-use crate::wir::WirPackage;
+use crate::wir::{ImportEntry, ImportKind, WirPackage};
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
 use crate::world_registry::fq_name_package;
+use crate::{ProviderComponent, ast};
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,

@@ -21,28 +21,17 @@ use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
-use crate::ast::AstId;
-use crate::ast::SelfKind;
+use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
-use crate::elaborator::trait_env::BlanketBound;
-use crate::elaborator::trait_env::BlanketImpl;
-use crate::elaborator::trait_env::BlanketReceiver;
-use crate::elaborator::trait_env::ImplHeader;
-use crate::elaborator::trait_env::TraitDeclHeader;
-use crate::elaborator::trait_env::TraitEnv;
-use crate::elaborator::trait_env::get_type_name_static;
-use crate::elaborator::trait_env::header_answers_bare_bound;
-use crate::elaborator::types::RequiredTrait;
-use crate::elaborator::types::StructFieldInfo;
-use crate::elaborator::types::VariantInfo;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::resolve::Resolution;
-use crate::resolve::Resolutions;
-use crate::resolve::head_site;
-use crate::tir::SlotProjections;
-use crate::tir::TraitRef;
+use crate::elaborator::trait_env::{
+    BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
+    get_type_name_static, header_answers_bare_bound,
+};
+use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
+use crate::name::{DeclName, FqTraitName};
+use crate::resolve::{Resolution, Resolutions, head_site};
+use crate::tir::{SlotProjections, TraitRef};
 
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).

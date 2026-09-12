@@ -7,8 +7,7 @@ use wado_manifest::LockFile;
 
 use crate::args::{self, CliExit};
 use crate::build_dep::resolve_build_dependencies;
-use crate::manifest::discover;
-use crate::manifest::emit_manifest_warnings;
+use crate::manifest::{discover, emit_manifest_warnings};
 use crate::registry::FilesystemProvider;
 
 #[derive(Debug)]

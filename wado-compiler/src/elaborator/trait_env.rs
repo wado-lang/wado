@@ -7,17 +7,14 @@
 use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
-use crate::defs::DefId;
-use crate::defs::DefTable;
+use crate::defs::{DefId, DefTable};
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
-use crate::resolve::Resolution;
-use crate::resolve::Resolutions;
-use crate::resolve::head_site;
+use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::TypeTable;
 use crate::token::Span;
 

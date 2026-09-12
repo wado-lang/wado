@@ -2,42 +2,27 @@
 //
 // Converts AST back to canonical source code with comments.
 
-use crate::ast::AstId;
-use crate::ast::AstVisitor;
-use crate::ast::AttrObject;
-use crate::ast::AttrValue;
-use crate::ast::LabeledBlockExpr;
-use crate::ast::LiteralMember;
-use crate::ast::MatchesExpr;
-use crate::ast::RangeKind;
-use crate::ast::StructLiteralField;
-use crate::ast::TaskReturnStmt;
-use crate::ast::TraitBound;
-use crate::ast::TupleComprehensionExpr;
-use crate::ast::WithHandlerExpr;
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AttrArg, Attribute, BinaryExpr, BinaryOp, Block,
-    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
-    FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WorldDecl, WorldExport,
+    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrObject, AttrValue,
+    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
+    Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
+    TraitBound, TraitDecl, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
 };
-use crate::comment::TriviaMap;
-use crate::comment::{Comment, CommentKind};
+use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::semantics::member_visible;
 use crate::tir;
-use crate::tir::EffectRef;
-use crate::tir::ResolvedType;
-use crate::tir::TirCapture;
-use crate::tir::TirTemplatePart;
+use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
 use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;

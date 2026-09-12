@@ -14,11 +14,9 @@ use super::is_reference_type;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
-use crate::tir::TirFunction;
-use crate::tir::TirPattern;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirParam, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 

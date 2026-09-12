@@ -5,8 +5,7 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::MangledName;
-use crate::name::global_name;
+use crate::name::{MangledName, global_name};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
@@ -17,21 +16,15 @@ use crate::wir::{
 
 use super::context::{PendingFunctionBody, WirContext};
 use super::translate::OPTION_NONE_CASE;
-use crate::component_model::CmFunctionInfo;
-use crate::component_model::CmInterfaceRegistry;
-use crate::component_model::cm_return_needs_outptr;
-use crate::component_model::flatten_cm_param_type;
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
+};
 use crate::name::wir_func_type_key;
-use crate::nir;
 use crate::nir::FuncId;
-use crate::nir_arena;
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
-use crate::tir;
-use crate::wir::WirAbstractHeapType;
-use crate::wir::WirExport;
-use crate::wir::WirExportDesc;
-use crate::wir::WirLocals;
+use crate::wir::{WirAbstractHeapType, WirExport, WirExportDesc, WirLocals};
+use crate::{nir, nir_arena, tir};
 
 /// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {

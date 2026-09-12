@@ -20,8 +20,7 @@ use wasmtime_wasi_tls::{
 use crate::args::CliExit;
 use crate::http_hooks::WadoHttpHooks;
 use crate::timezone_host::add_to_linker;
-use crate::tls_trust::build_root_cert_store;
-use crate::tls_trust::install_default_crypto_provider;
+use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.

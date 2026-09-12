@@ -9,8 +9,7 @@ use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
 use crate::hashmap;
-use crate::name::FqTraitName;
-use crate::name::{LocalMethodName, MethodName};
+use crate::name::{FqTraitName, LocalMethodName, MethodName};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };

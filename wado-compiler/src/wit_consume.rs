@@ -8,11 +8,10 @@
 //! Type mapping reuses [`crate::wit_emit`]'s `CmShape` so producer and consumer
 //! cannot drift on how `option`/`list`/`tuple`/`result` are structured.
 
-use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
-    AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
-    Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType, Newtype, Param,
-    SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
+    FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
+    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;

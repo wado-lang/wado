@@ -1319,9 +1319,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::WirAbstractHeapType;
-    use crate::wir::WirFuncId;
-    use crate::wir::WirLocals;
+    use crate::wir::{WirAbstractHeapType, WirFuncId, WirLocals};
     use std::assert_matches;
     use std::rc::Rc;
 

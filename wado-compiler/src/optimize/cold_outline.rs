@@ -37,8 +37,7 @@ use super::inline::{InlineCtx, splice_stmt};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::name::cold_region_helper_name;
-use crate::optimize::inline::call_site_size;
-use crate::optimize::inline::region_size;
+use crate::optimize::inline::{call_site_size, region_size};
 
 /// Split every cold region the preconditions admit, in every function —
 /// including the ones this pass itself creates, so a region nested inside a

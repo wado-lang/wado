@@ -13,9 +13,9 @@ use wado_compiler::CompilerOptions;
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitEmitSnapshot, WitScope};
 
 use crate::args::{self, CliExit, OptSpec};
-use crate::compile::maybe_run_pipeline;
 use crate::compile::{
     announce_artifact, attach_manifest_and_component_deps, load_nearest_manifest,
+    maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::manifest::{self, EntryPointKind};

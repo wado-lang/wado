@@ -7,7 +7,6 @@
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
-use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
@@ -15,13 +14,12 @@ use crate::synthesis::common;
 use crate::synthesis::common::{
     cm_canonical_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
 };
-use crate::tir;
-use crate::tir::TirTemplatePart;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
+use crate::{hashmap, tir};
 
 /// An owned resource-bearing value currently live in some scope.
 #[derive(Clone)]

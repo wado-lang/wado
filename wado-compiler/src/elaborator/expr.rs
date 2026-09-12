@@ -22,30 +22,23 @@ use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
-use crate::ast::RangeExpr;
-use crate::ast::Visibility;
+use crate::ast::{RangeExpr, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
-use crate::elaborator::control_flow::collect_unresolved_null_breaks;
-use crate::elaborator::control_flow::collect_unresolved_null_tails;
-use crate::elaborator::control_flow::collect_unresolved_null_tails_in_block;
+use crate::elaborator::control_flow::{
+    collect_unresolved_null_breaks, collect_unresolved_null_tails,
+    collect_unresolved_null_tails_in_block,
+};
 use crate::elaborator::infer::unify;
 use crate::elaborator::sem::decls::FunctionSig;
-use crate::elaborator::sem::types::AssignPlace;
-use crate::elaborator::sem::types::DesugarKind;
-use crate::elaborator::sem::types::FromCallFacts;
-use crate::elaborator::sem::types::GenericInstantiation;
-use crate::elaborator::sem::types::OperatorDispatch;
+use crate::elaborator::sem::types::{
+    AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
+};
 use crate::elaborator::trait_env::written_type_arg;
-use crate::elaborator::types::ImplMemberKind;
-use crate::elaborator::types::StructFieldInfo;
-use crate::elaborator::types::newtype_member_owner;
-use crate::elaborator::util::unescape_byte;
-use crate::elaborator::util::unescape_char;
+use crate::elaborator::types::{ImplMemberKind, StructFieldInfo, newtype_member_owner};
+use crate::elaborator::util::{unescape_byte, unescape_char};
 use crate::hashmap;
-use crate::tir::AnonStructId;
-use crate::tir::PrimitiveType;
-use crate::tir::StructDef;
+use crate::tir::{AnonStructId, PrimitiveType, StructDef};
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes

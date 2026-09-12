@@ -20,15 +20,13 @@ use super::trait_env::TraitEnv;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, VariantInfo,
 };
-use crate::ast::AstId;
-use crate::ast::GenericParam;
+use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::hashmap;
 use crate::name::FqTypeName;
 use crate::resolve::Resolutions;
-use crate::tir;
+use crate::{hashmap, tir};
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at

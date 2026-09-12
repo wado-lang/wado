@@ -2,8 +2,7 @@
 //! hands the readable end over, and drains what comes back — a channel between
 //! two components. See `docs/wep-2026-06-26-wasm-cm-component-import.md`.
 
-use crate::common::compile_source_with_compiler_options;
-use crate::common::run_wasm;
+use crate::common::{compile_source_with_compiler_options, run_wasm};
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 

@@ -11,15 +11,14 @@ use super::Elaborator;
 use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, TypeError};
 use crate::elaborator::sem::types::StaticMethodDispatch;
-use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::synthesis::template::has_reflect_kind;
-use crate::synthesis::traits::REFLECT_CASE_PAYLOADS_ASSOC;
-use crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC;
-use crate::synthesis::traits::REFLECT_HOLES_ASSOC;
-use crate::synthesis::traits::REFLECT_MEMBERS_ASSOC;
-use crate::tir;
+use crate::synthesis::traits::{
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC,
+    REFLECT_MEMBERS_ASSOC,
+};
+use crate::{hashmap, tir};
 
 /// The two payload-free kinds share one static-call resolution shape, differing
 /// only in their compiler items, subject kind, and scalar type (`i32` / `u64`).

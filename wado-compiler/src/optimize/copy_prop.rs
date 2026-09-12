@@ -22,10 +22,9 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
 use super::gate::{FunctionGate, GatedPass};
 use super::value_copy::mutation::MutationOracle;
-use crate::optimize::arena_query::bare_promoted_local;
-use crate::optimize::arena_query::buried_promoted_reads;
-use crate::optimize::arena_query::promoted_local_reads;
-use crate::optimize::arena_query::reachable_nodes;
+use crate::optimize::arena_query::{
+    bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
+};
 use crate::optimize::value_copy::mutation::build_param_mut;
 
 #[derive(Debug, Clone)]

@@ -7,12 +7,10 @@
 use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
-use crate::nir_arena::ArenaCallArg;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::optimize::dce::build_callee_descriptors;
-use crate::optimize::dce::callee_descriptor;
+use crate::optimize::dce::{build_callee_descriptors, callee_descriptor};
 use crate::tir::TypeTable;
 
 /// The builtin general-name of a call's callee descriptor, resolving a

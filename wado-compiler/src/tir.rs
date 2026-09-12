@@ -14,28 +14,18 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::AstId;
-use crate::ast::RestClause;
-use crate::ast::Visibility;
+use crate::ast::{AstId, RestClause, Visibility};
 use crate::compiler_item::CompilerItems;
-use crate::defs::DefId;
-use crate::defs::DefTable;
-use crate::hashmap;
+use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::name::TEMPLATE_SHAPE_PREFIX;
-use crate::name::TUPLE_TYPE_NAME;
-use crate::name::TypeHead;
-use crate::name::mangle_builtin_array_type;
-use crate::name::mangle_generic_name;
-use crate::name::mangle_local_item_name;
-use crate::name::mangle_stores_member;
-use crate::name::mangle_tuple_type;
-use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
+    TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
+    mangle_local_item_name, mangle_stores_member, mangle_tuple_type,
+};
 use crate::symbol_notation::render;
 use crate::token::Span;
+use crate::{hashmap, name};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
@@ -6499,8 +6489,7 @@ impl TirProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstId;
-    use crate::ast::AstIdSpace;
+    use crate::ast::{AstId, AstIdSpace};
     use std::assert_matches;
 
     #[test]

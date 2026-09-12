@@ -5,9 +5,9 @@ use std::path::Path;
 use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
-use crate::compile::attach_manifest_and_component_deps;
-use crate::compile::load_nearest_manifest;
-use crate::compile::maybe_run_pipeline;
+use crate::compile::{
+    attach_manifest_and_component_deps, load_nearest_manifest, maybe_run_pipeline,
+};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::knobs::{CompileKnobs, KnobOpt};
 

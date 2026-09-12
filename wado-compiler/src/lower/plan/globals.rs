@@ -9,16 +9,13 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
-use crate::name::MODULE_INIT_FUNCTION;
-use crate::name::MODULES_INIT_FUNCTION;
+use crate::name::{MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::synthesis::common::builtin_call;
 use crate::tir;
-use crate::tir::FunctionRef;
-use crate::tir::PrimitiveType;
 use crate::tir::{
-    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionKind, FunctionRef, GlobalInit, InlineHint, PrimitiveType, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;

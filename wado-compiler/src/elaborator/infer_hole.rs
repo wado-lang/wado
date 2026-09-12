@@ -12,21 +12,14 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
-use crate::ast::AstId;
-use crate::ast::GenericParam;
+use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sem::TypeAnnotations;
-use crate::elaborator::sem::types::BodyFacts;
-use crate::elaborator::sem::types::ClosureCaptureInfo;
-use crate::elaborator::sem::types::ForOfIteratorInfo;
-use crate::elaborator::sem::types::GenericInstantiation;
-use crate::elaborator::sem::types::KeyValueCoercionFacts;
-use crate::elaborator::sem::types::LiteralCallee;
-use crate::elaborator::sem::types::LiteralFromCall;
-use crate::elaborator::sem::types::MethodDispatch;
-use crate::elaborator::sem::types::OperatorDispatch;
-use crate::elaborator::sem::types::SequenceCoercionFacts;
-use crate::elaborator::sem::types::StaticMethodDispatch;
+use crate::elaborator::sem::types::{
+    BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
+    LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch,
+};
 use crate::elaborator::types::VariantInfo;
 use crate::name::mangle_generic_name;
 use crate::tir;

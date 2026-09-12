@@ -7,9 +7,7 @@
 
 use std::path::Path;
 
-use crate::common::compile_source_with_compiler_options;
-use crate::common::run_wasm;
-use crate::common::wir_text;
+use crate::common::{compile_source_with_compiler_options, run_wasm, wir_text};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// The archetype: a hot append whose growth arm carries several calls and a

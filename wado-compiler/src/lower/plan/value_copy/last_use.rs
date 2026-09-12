@@ -8,16 +8,12 @@ use super::is_reference_type;
 use super::ownership::OwnedCalls;
 use super::stores::StoredParams;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::ValueCopyPlan;
-use crate::lower::plan::value_copy::analyze;
-use crate::lower::plan::value_copy::modref;
-use crate::lower::plan::value_copy::place;
 use crate::lower::plan::value_copy::place::field_owner;
+use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
 use crate::tir;
-use crate::tir::TirTemplatePart;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
-    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
+    TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;

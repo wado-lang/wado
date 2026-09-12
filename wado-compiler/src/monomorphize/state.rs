@@ -9,12 +9,11 @@ use crate::elaborator::trait_env::{ImplReceiver, ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::dispatch_receiver_name;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::name::MangledName;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
-use crate::tir::TirTypeParam;
-use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TypeId, TypeTable};
+use crate::name::{
+    DeclName, FqTraitName, FqTypeName, LocalMethodName, MangledName, MethodName, RefKind,
+    mangle_generic_name,
+};
+use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TirTypeParam, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
 pub(super) struct StructInstState {

@@ -7,14 +7,12 @@ use crate::hashmap::IndexSet;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::Pattern;
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
-    ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt,
-    Stmt, WhileStmt,
+    ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, Pattern,
+    ReturnStmt, Stmt, WhileStmt,
 };
-use crate::compiler_host::CompilerHost;
-use crate::compiler_host::Diagnostic;
+use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
 use crate::module_source::ModuleSource;
 use crate::token::Span;
@@ -1302,8 +1300,7 @@ pub fn bind_module<H: CompilerHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler_host::Diagnostic;
-    use crate::compiler_host::{InMemoryCompilerHost, LogLevel, Severity};
+    use crate::compiler_host::{Diagnostic, InMemoryCompilerHost, LogLevel, Severity};
     use crate::lexer::lex;
     use crate::module_source::ModuleSource;
     use crate::parser::Parser;

@@ -7,23 +7,20 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::Visibility;
-use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::CLOSURE_CALL_METHOD;
-use crate::name::CLOSURE_STRUCT_PREFIX;
-use crate::name::FqTraitName;
-use crate::name::is_fn_type_name;
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir;
-use crate::tir::StructDef;
+use crate::name::{
+    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, LocalMethodName,
+    MethodName, is_fn_type_name,
+};
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
-    TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, StructDef,
+    TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
+use crate::{hashmap, tir};
 
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {

@@ -9,31 +9,18 @@ use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
-use crate::name::StructName;
-use crate::name::wir_enum_type_key;
-use crate::name::wir_type_key;
-use crate::nir;
-use crate::nir::FuncId;
-use crate::nir::NirFunction;
+use crate::name::{StructName, wir_enum_type_key, wir_type_key};
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_package::NirPackage;
-use crate::tir;
 use crate::tir::{TypeId, TypeTable};
-use crate::wir::CmImportViolation;
-use crate::wir::TraitBoundViolation;
-use crate::wir::WasmModuleFunc;
-use crate::wir::WasmModuleInfo;
-use crate::wir::WirAbstractHeapType;
-use crate::wir::WirField;
-use crate::wir::WirInstr;
-use crate::wir::WirMemory;
-use crate::wir::WirMeta;
-use crate::wir::WirStructType;
 use crate::wir::{
-    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
-    WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef, WirTypeId,
+    CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
+    WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,
+    WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
+    WirStructType, WirType, WirTypeDef, WirTypeId,
 };
-use crate::wir_build::types::generic_instance_name;
-use crate::wir_build::types::list_wrapper_struct_name;
+use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name};
+use crate::{nir, tir};
 
 /// Base offset for defined function `WirFuncId` indices.
 /// Import functions use indices 0..N, defined functions use `DEFINED_FUNC_BASE + 0..M`.

@@ -13,14 +13,11 @@ use crate::nir_arena::{
 use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
-use crate::compiler_trace;
-use crate::const_eval::MAX_SEQ_ELEMENTS;
-use crate::const_eval::Value;
+use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::nir_value_graph::value_kind_to_const;
-use crate::niri::CtfeBuiltin;
-use crate::niri::CtfeBuiltinMap;
-use crate::tir;
+use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
 use crate::tir::PrimitiveType;
+use crate::{compiler_trace, tir};
 
 /// Per-function heap-version tracker: every node that may write the heap bumps
 /// the covering generation, and a read's effective version is the max over all

@@ -12,9 +12,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::elaborator::sem::types::CaptureEntry;
-use crate::elaborator::sem::types::ClosureCaptureInfo;
-use crate::elaborator::sem::types::MutCapture;
+use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
 /// Expected function-type info extracted from an `expected_type` hint.

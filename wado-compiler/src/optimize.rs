@@ -86,10 +86,9 @@ use value_copy_demote::demote_value_copies;
 use extract::FreezePhase;
 use gate::GatedPass;
 
-use crate::OptOverrides;
 use crate::compiler_host::SpanEmitter;
-use crate::compiler_trace;
 use crate::nir_package::NirPackage;
+use crate::{OptOverrides, compiler_trace};
 
 /// Configuration for optimization passes
 struct OptConfig {

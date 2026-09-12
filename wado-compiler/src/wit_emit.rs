@@ -15,20 +15,15 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::ast::NamedType;
-use crate::component_model::CmFunctionInfo;
-use crate::component_model::CmInterfaceInfo;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry};
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
-use crate::module_source::is_bundled_specifier;
+use crate::module_source::{ModuleSource, is_bundled_specifier};
 use crate::name::to_kebab;
 use crate::semantics::Semantics;
-use crate::tir::TirEnum;
-use crate::tir::TirFlags;
-use crate::tir::TirNewtype;
-use crate::tir::TirStruct;
-use crate::tir::TirVariantDecl;
-use crate::tir::{PrimitiveType, ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{
+    PrimitiveType, ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct,
+    TirVariantDecl, TypeId, TypeTable,
+};
 use crate::world_registry::WorldRegistry;
 
 /// How much of the referenced interface graph to inline into the WIT document.

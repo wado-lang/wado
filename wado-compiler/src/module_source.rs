@@ -7,9 +7,7 @@
 use crate::compiler_host::DependencyIndex;
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::stdlib::ALL_CORE_WASM_ASSETS;
-use crate::stdlib::BINDING_MODULE_PATHS;
-use crate::stdlib::CORE_MODULE_PATHS;
+use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 

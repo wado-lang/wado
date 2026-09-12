@@ -22,29 +22,22 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
-use crate::component_model::CmInterfaceRegistry;
-use crate::component_model::CmNameSink;
-use crate::component_model::CmTypeGen;
-use crate::component_model::cm_payload_type_from_type_id;
-use crate::component_model::future_payload_rejection;
-use crate::component_model::is_cm_record_stream_element;
-use crate::component_model::stream_payload_rejection;
+use crate::component_model::{
+    CmInterfaceRegistry, CmNameSink, CmTypeGen, cm_payload_type_from_type_id,
+    future_payload_rejection, is_cm_record_stream_element, stream_payload_rejection,
+};
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::DeclPath;
-use crate::name::kebab_export_name;
-use crate::name::to_kebab;
-use crate::package::Package;
-use crate::package::test_selected;
-use crate::tir::TirStmt;
-use crate::tir::TirStmtKind;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
+use crate::name::{DeclPath, kebab_export_name, to_kebab};
+use crate::package::{Package, test_selected};
+use crate::tir::{
+    ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
+    TypeTable,
+};
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
-use crate::world_registry::TEST_WORLD;
-use crate::world_registry::fq_name_package;
-use crate::world_registry::{WorldExportInfo, WorldInfo};
+use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
 
 pub use export_adapter::export_binding_func_name;
 use export_adapter::{
@@ -133,8 +126,9 @@ mod payload_validation {
     use crate::tir_visitor::TirRefVisitor;
 
     use super::{FunctionKey, NamedPayloadFinder};
-    use crate::synthesis::cm_binding::reachable_from_export_bindings;
-    use crate::synthesis::cm_binding::reachable_from_export_bindings_flat;
+    use crate::synthesis::cm_binding::{
+        reachable_from_export_bindings, reachable_from_export_bindings_flat,
+    };
 
     /// Witness that a scan ran while the TIR still carried the pristine
     /// `future-new` / `stream-new` shape it matches. Each rewrite half consumes

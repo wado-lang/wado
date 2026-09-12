@@ -14,8 +14,7 @@ use crate::tir::{TypeId, TypeTable};
 use super::ProgramFacts;
 use super::callee::{CallSite, Callee};
 use super::place::write_root_local;
-use crate::hashmap;
-use crate::niri;
+use crate::{hashmap, niri};
 
 /// Record the local each `&mut` parameter of `site` writes. `None` when the
 /// site does not match the signature, or when no local roots a write's place.

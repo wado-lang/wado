@@ -14,8 +14,7 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::diagnostic_function_name;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::Operand;
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,

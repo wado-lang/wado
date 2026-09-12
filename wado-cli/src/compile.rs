@@ -6,30 +6,24 @@ use std::sync::Arc;
 use wado_manifest::DependencySource;
 
 use lexopt::Arg::Value;
-use wado_compiler::Severity;
-use wado_compiler::wit_bundle;
+use wado_compiler::{Severity, wit_bundle};
 
 use crate::args::{self, CliExit};
-use crate::build_dep::GENERATOR_WORLD_FQ;
-use crate::build_dep::locked_generator_versions;
-use crate::build_dep::spec_key;
+use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::dep_component::fetch_component_dependencies;
-use crate::dep_component::resolve_inline_component_dependencies;
-use crate::dep_component::resolve_inline_git_dependencies;
+use crate::dep_component::{
+    fetch_component_dependencies, resolve_inline_component_dependencies,
+    resolve_inline_git_dependencies,
+};
 use crate::git::materialize;
-use crate::kiln_driver;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
-use crate::kiln_provider::CliGeneratorProvider;
-use crate::kiln_provider::RegistryContext;
+use crate::kiln_provider::{CliGeneratorProvider, RegistryContext};
 use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
-use crate::manifest;
-use crate::manifest::openable_dir;
-use crate::manifest::resolve_manifest;
-use crate::metadata_embed::clean_git_revision;
-use crate::metadata_embed::embed_metadata_sections;
+use crate::manifest::{openable_dir, resolve_manifest};
+use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
 use crate::wit::default_interface_name;
+use crate::{kiln_driver, manifest};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {

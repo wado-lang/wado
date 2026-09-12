@@ -7,15 +7,10 @@
 //! across every length around the 64-byte block boundary exercises the
 //! padding scheme exhaustively — the classic location for SHA bugs.
 
-use crate::common::TestHttpCtx;
-use crate::common::WasiState;
-use crate::common::cli_engine;
-use crate::common::cli_linker;
-use crate::common::compile_file;
-use crate::common::install_rustls_provider_for_tests;
-use crate::common::limit_store;
-use crate::common::report_fuel_used;
-use crate::common::runtime;
+use crate::common::{
+    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file,
+    install_rustls_provider_for_tests, limit_store, report_fuel_used, runtime,
+};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 use std::sync::OnceLock;

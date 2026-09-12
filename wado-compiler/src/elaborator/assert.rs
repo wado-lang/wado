@@ -12,9 +12,7 @@ use super::Elaborator;
 use super::types::FunctionContext;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::sem::ModuleSemantics;
-use crate::elaborator::sem::types::AssertCaptureInfo;
-use crate::elaborator::sem::types::AssertSlot;
-use crate::elaborator::sem::types::DesugarKind;
+use crate::elaborator::sem::types::{AssertCaptureInfo, AssertSlot, DesugarKind};
 use crate::tir::TypeTable;
 
 impl<H: CompilerHost> Elaborator<'_, H> {

@@ -13,11 +13,9 @@ use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{carries_storage, is_reference, may_carry_storage, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::lower::plan::value_copy::analyze;
-use crate::lower::plan::value_copy::analyze::is_owned_value;
-use crate::lower::plan::value_copy::analyze::returned_value;
-use crate::lower::plan::value_copy::hands_out_payload;
+use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
+use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
     BuiltinDeclaration, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,

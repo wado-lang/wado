@@ -11,11 +11,9 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::sem::decls::FunctionSig;
 use crate::ast;
-use crate::ast::SelfKind;
-use crate::ast::Visibility;
+use crate::ast::{SelfKind, Visibility};
 use crate::name::FqTypeName;
-use crate::tir::ResolvedType;
-use crate::tir::SlotProjections;
+use crate::tir::{ResolvedType, SlotProjections};
 
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]

@@ -3,18 +3,14 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use crate::ast::LiteralMember;
-use crate::ast::{self, Expr, Literal, UnaryOp};
+use crate::ast::{self, Expr, Literal, LiteralMember, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
-use crate::elaborator::sem::types::CoercionKind;
-use crate::elaborator::sem::types::KeyValueCoercionFacts;
-use crate::elaborator::sem::types::LiteralCallee;
-use crate::elaborator::sem::types::LiteralFromCall;
-use crate::elaborator::sem::types::SequenceCoercionFacts;
-use crate::elaborator::typecheck::TypeCheckResult;
-use crate::elaborator::typecheck::check_assignable;
+use crate::elaborator::sem::types::{
+    CoercionKind, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, SequenceCoercionFacts,
+};
+use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;

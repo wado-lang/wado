@@ -12,11 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::FunctionId;
-use crate::name::LocalMethodName;
+use crate::name::{FunctionId, LocalMethodName};
 use crate::nir_arena::{Body, ExprBody};
-use crate::tir::StructDef;
-use crate::tir::{self, EffectRef, TypeId, TypeTable};
+use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Canonical identity of a function entity. Minted in `lower` over the

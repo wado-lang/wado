@@ -30,79 +30,48 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
-use crate::ast::AttrArg;
-use crate::ast::Attribute;
-use crate::ast::InterfaceDecl;
-use crate::ast::Visibility;
+use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
-use crate::elaborator::assert::NOT_EVALUATED;
-use crate::elaborator::assert::render_local_name;
-use crate::elaborator::assert::seen_local_name;
-use crate::elaborator::control_flow::CtrlFlowCtx;
-use crate::elaborator::control_flow::find_return_type_in_block;
-use crate::elaborator::expr::compose_union_plan;
-use crate::elaborator::expr::int_literal_cast_operand;
-use crate::elaborator::expr::int_literal_repr;
-use crate::elaborator::expr::peel_to_struct;
+use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
+use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
+use crate::elaborator::expr::{
+    compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
+};
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
-use crate::elaborator::sem::types::BodyFacts;
-use crate::elaborator::sem::types::CoercionKind;
-use crate::elaborator::sem::types::DesugarKind;
-use crate::elaborator::sem::types::ForOfIteratorInfo;
-use crate::elaborator::sem::types::ImplFacts;
-use crate::elaborator::sem::types::KeyValueCoercionFacts;
-use crate::elaborator::sem::types::LiteralCallee;
-use crate::elaborator::sem::types::LiteralFromCall;
-use crate::elaborator::sem::types::MethodNames;
-use crate::elaborator::sem::types::OperatorDispatch;
-use crate::elaborator::sem::types::SequenceCoercionFacts;
-use crate::elaborator::sem::types::StaticMethodDispatch;
-use crate::elaborator::sem::types::with_body_facts;
-use crate::elaborator::stmt::collect_pattern_bindings_with_index;
-use crate::elaborator::stmt::primitive_assoc_const_to_i128;
-use crate::elaborator::stmt::remap_pattern_local;
-use crate::elaborator::trait_query::assoc_const_owner;
-use crate::elaborator::trait_query::assoc_const_owner_of_path;
-use crate::elaborator::trait_query::trait_sig_of_with;
-use crate::elaborator::types::VarRef;
-use crate::elaborator::types::newtype_member_owner;
-use crate::elaborator::util::is_float_only_literal;
-use crate::elaborator::util::parse_i128_literal;
-use crate::elaborator::util::parse_int_bits;
-use crate::elaborator::util::parse_u128_literal;
-use crate::elaborator::util::range_endpoint_to_i128;
-use crate::elaborator::util::unescape_byte;
-use crate::elaborator::util::unescape_bytes;
-use crate::elaborator::util::unescape_char;
-use crate::elaborator::util::unescape_string;
-use crate::elaborator::util::unescape_template_segment;
-use crate::elaborator::util::unpack_i128;
-use crate::format_spec;
-use crate::format_spec::FormatKind;
-use crate::format_spec::TemplateFormatSpec;
-use crate::hashmap;
-use crate::name::LocalMethodName;
-use crate::name::MethodName;
-use crate::name::display_function_name;
-use crate::name::effect_default_impl_name;
-use crate::name::mangle_local_item_name;
-use crate::name::test_function_name;
+use crate::elaborator::sem::types::{
+    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, KeyValueCoercionFacts,
+    LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch, with_body_facts,
+};
+use crate::elaborator::stmt::{
+    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
+};
+use crate::elaborator::trait_query::{
+    assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
+};
+use crate::elaborator::types::{VarRef, newtype_member_owner};
+use crate::elaborator::util::{
+    is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
+    range_endpoint_to_i128, unescape_byte, unescape_bytes, unescape_char, unescape_string,
+    unescape_template_segment, unpack_i128,
+};
+use crate::format_spec::{FormatKind, TemplateFormatSpec};
+use crate::name::{
+    LocalMethodName, MethodName, display_function_name, effect_default_impl_name,
+    mangle_local_item_name, test_function_name,
+};
 use crate::resolve::head_site;
-use crate::symbol::Symbol;
-use crate::symbol::SymbolKind;
-use crate::tir::EffectRef;
-use crate::tir::StructDef;
-use crate::tir::TirEffectOp;
-use crate::tir::TirField;
-use crate::tir::TirImpl;
-use crate::tir::TirParam;
-use crate::tir::TirTypeParam;
-use crate::tir::agree_branch_types;
+use crate::symbol::{Symbol, SymbolKind};
+use crate::tir::{
+    EffectRef, StructDef, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
+    agree_branch_types,
+};
 use crate::token::Span;
 use crate::unparse::unparse_expr_source;
+use crate::{format_spec, hashmap};
 
 /// Generate the `ann_*` annotation accessors on [`Reify`], one per
 /// [`super::sem::types::BodyFacts`] map from the list `with_body_facts!`

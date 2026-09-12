@@ -10,19 +10,14 @@ use crate::module_source::ModuleSource;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
-use crate::ast::AttrArg;
-use crate::ast::Attribute;
-use crate::ast::CallExpr;
-use crate::ast::CmImport;
-use crate::ast::EffectHandlerBinding;
-use crate::ast::ImplBlock;
-use crate::ast::{self, AstId, AstVisitor, Expr, Function, Item, Stmt};
+use crate::ast::{
+    self, AstId, AstVisitor, AttrArg, Attribute, CallExpr, CmImport, EffectHandlerBinding, Expr,
+    Function, ImplBlock, Item, Stmt,
+};
 use crate::compiler_host::Diagnostic;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::types::AssignPlace;
-use crate::elaborator::sem::types::ForOfIteratorInfo;
-use crate::elaborator::sem::types::TypeAnnotations;
+use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.

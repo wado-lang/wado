@@ -6,10 +6,7 @@
 
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::nir::FuncId;
-use crate::nir::NirGlobal;
-use crate::nir::NirLocal;
-use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirGlobal, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind,
 };

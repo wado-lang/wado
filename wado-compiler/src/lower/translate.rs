@@ -22,24 +22,17 @@ use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use cranelift_entity::EntityRef;
 
 use crate::compiler_item::CompilerItem;
-use crate::lower::bare_asserts;
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
-use crate::lower::wide_int_literal;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::name::CLOSURE_CALL_METHOD;
-use crate::name::FunctionId;
-use crate::name::case_construct_helper_name;
-use crate::name::case_extract_helper_name;
-use crate::name::field_get_helper_name;
-use crate::name::hole_fmt_helper_name;
-use crate::name::hole_get_helper_name;
-use crate::name::variant_tag_helper_name;
-use crate::nir;
-use crate::nir::FuncId;
+use crate::lower::{bare_asserts, wide_int_literal};
+use crate::name::{
+    CLOSURE_CALL_METHOD, FunctionId, case_construct_helper_name, case_extract_helper_name,
+    field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
+};
 use crate::nir::{
-    NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
-    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
+    FuncId, NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction,
+    NirGlobal, NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
     NirVariantCase, NirVariantDecl,
 };
 use crate::nir_arena::{
@@ -49,17 +42,15 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
-use crate::tir;
-use crate::tir::ResolvedType;
-use crate::tir::StructDef;
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, TirBlock, TirCapture, TirEnum,
-    TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
-    TirImport, TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam,
-    TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType, StructDef,
+    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags,
+    TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal, TirMatchArm,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
+    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
 };
 use crate::token::Span;
+use crate::{nir, tir};
 
 /// Translate a [`FlatPackage`] (TIR-shaped) into a [`NirPackage`] (NIR-shaped).
 ///

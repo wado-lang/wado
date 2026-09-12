@@ -7,8 +7,7 @@ use serde_json::Value;
 
 use crate::Engine;
 use crate::host::FilesystemCompilerHost;
-use crate::semantic_tokens::TOKEN_MODIFIERS;
-use crate::semantic_tokens::TOKEN_TYPES;
+use crate::semantic_tokens::{TOKEN_MODIFIERS, TOKEN_TYPES};
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, InitializeResult, InlayHintParams, JsonRpcRequest, PublishDiagnosticsParams,

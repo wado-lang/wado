@@ -10,18 +10,14 @@ use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
     VariantCaseData, VariantInfo,
 };
-use crate::elaborator::item::register_enum_case_compiler_item;
-use crate::elaborator::item::register_enum_compiler_item;
-use crate::elaborator::item::register_function_compiler_item;
-use crate::elaborator::item::register_method_compiler_item;
-use crate::elaborator::item::register_trait_compiler_item;
-use crate::elaborator::item::register_variant_case_compiler_item;
-use crate::elaborator::item::register_variant_compiler_item;
+use crate::elaborator::item::{
+    register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
+    register_method_compiler_item, register_trait_compiler_item,
+    register_variant_case_compiler_item, register_variant_compiler_item,
+};
 use crate::elaborator::scope::param_decl;
-use crate::elaborator::types::BoundRef;
-use crate::elaborator::types::type_param_defaults_of;
-use crate::name::FqTypeName;
-use crate::name::{MethodName, RefKind};
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::name::{FqTypeName, MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {

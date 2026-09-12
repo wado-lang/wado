@@ -6,10 +6,10 @@
 //! rewritten with it. Runs before SROA.
 
 use crate::hashmap::IndexMap;
-use crate::name::VARIANT_DISCRIMINANT_FIELD;
-use crate::name::is_variant_payload_field;
-use crate::wir::WirVariantCase;
-use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
+use crate::name::{VARIANT_DISCRIMINANT_FIELD, is_variant_payload_field};
+use crate::wir::{
+    WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr,
+};
 
 /// Lower eligible variants to the `NullableRef` representation. Mandatory at every
 /// `-O` — not gated like the optimization passes.

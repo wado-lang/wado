@@ -14,27 +14,18 @@ use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
-use crate::name::CLOSURE_CALL_METHOD;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::name::MangledName;
-use crate::name::MethodName;
-use crate::name::StructName;
-use crate::nir;
+use crate::name::{
+    CLOSURE_CALL_METHOD, FqTraitName, FqTypeName, MangledName, MethodName, StructName,
+};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
-use crate::nir_value_graph::OpaqueSource;
-use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::{OpaqueSource, ValueId};
 use crate::optimize::multi_value_return::block_tail_call;
-use crate::tir;
 use crate::token::Span;
-use crate::wir::CmImportViolation;
-use crate::wir::TraitBoundViolation;
-use crate::wir::WirAbstractHeapType;
-use crate::wir::WirFuncId;
-use crate::wir::WirLocals;
-use crate::wir::WirMeta;
-use crate::wir_build::context::CANONICAL_INSPECT_SLOT;
-use crate::wir_build::context::ClosureWrapperFuncs;
+use crate::wir::{
+    CmImportViolation, TraitBoundViolation, WirAbstractHeapType, WirFuncId, WirLocals, WirMeta,
+};
+use crate::wir_build::context::{CANONICAL_INSPECT_SLOT, ClosureWrapperFuncs};
+use crate::{nir, tir};
 
 pub(super) fn ref_binding_needs_boxing(
     binding_wir: &WirType,

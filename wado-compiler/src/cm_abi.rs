@@ -9,10 +9,10 @@
 #[cfg(test)]
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
-use crate::component_model::CmInterfaceRegistry;
-use crate::component_model::CmPrimitiveType;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::{
+    CmInterfaceRegistry, CmPrimitiveType, cm_align_with_registry_scoped,
+    cm_size_with_registry_scoped,
+};
 #[cfg(test)]
 use crate::token::Span;
 

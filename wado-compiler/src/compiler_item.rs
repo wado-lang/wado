@@ -6,12 +6,10 @@
 
 use std::fmt;
 
-use crate::ast::AstId;
-use crate::ast::Attribute;
+use crate::ast::{AstId, Attribute};
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
+use crate::name::{FqTraitName, FqTypeName};
 
 /// The two fields of the `List` / `String` sequence containers, which share a
 /// `{ repr: array<T>, used: i32 }` layout: an owned backing array plus the

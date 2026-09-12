@@ -28,13 +28,11 @@ use std::process::Command;
 use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
 
 use crate::args::{self, CliExit};
-use crate::compile::build_output_path;
-use crate::compile::build_publish_world;
-use crate::compile::world_path_segment;
-use crate::manifest::governing_workspace_root_dir;
-use crate::manifest::lib_world_fq;
-use crate::manifest::workspace_member_dirs;
-use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
+use crate::compile::{build_output_path, build_publish_world, world_path_segment};
+use crate::manifest::{
+    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir, lib_world_fq,
+    workspace_member_dirs,
+};
 use crate::metadata_embed::working_tree_dirty;
 
 #[derive(Debug)]

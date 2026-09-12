@@ -2,8 +2,7 @@
 
 use crate::elaborator::trait_env::ReceiverCandidate;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
-use crate::name::{MethodName, RefKind};
+use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind};
 use crate::tir::{
     CallArg, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr,
     TirExprKind, TirLocal, TirModule, TirStmt, TirStmtKind, TypeId, TypeTable,
@@ -13,10 +12,8 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use super::generic_function_key;
 use super::module_source_for_trait_impl;
 use super::state::Monomorphizer;
-use crate::monomorphize::dispatch_receiver_head;
-use crate::monomorphize::func_inst::blanket_pack_dispatch_args;
-use crate::monomorphize::func_inst::receiver_candidates;
-use crate::monomorphize::generic_function_name;
+use crate::monomorphize::func_inst::{blanket_pack_dispatch_args, receiver_candidates};
+use crate::monomorphize::{dispatch_receiver_head, generic_function_name};
 use crate::name::FqTraitName;
 
 /// Strip `&`/`&mut` and `Newtype` and return the underlying type's home

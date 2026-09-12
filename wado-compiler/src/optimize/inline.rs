@@ -19,8 +19,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -40,9 +39,7 @@ use crate::compiler_trace;
 use crate::nir::FuncId;
 use crate::nir_value_graph::OpaqueSource;
 use crate::niri::is_ctfe_eligible;
-use crate::optimize::alias::CallImmutability;
-use crate::optimize::alias::call_verdicts;
-use crate::optimize::alias::first_param_types;
+use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::DescriptorCache;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::token::Span;

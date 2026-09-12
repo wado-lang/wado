@@ -4,16 +4,8 @@
 //! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
 //! query needs without paying for monomorphize / lower / codegen.
 
-use crate::Diagnostic;
-use crate::ParseError;
 use crate::analyze::Analyzer;
-use crate::ast;
-use crate::ast::AstIdSpace;
-use crate::ast::ImplBlock;
-use crate::ast::Item;
-use crate::ast::SelfKind;
-use crate::ast::Visibility;
-use crate::ast::{AstId, Module};
+use crate::ast::{AstId, AstIdSpace, ImplBlock, Item, Module, SelfKind, Visibility};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::component_model::CmInterfaceRegistry;
@@ -27,23 +19,18 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
 use crate::lexer::LexError;
-use crate::load;
-use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
-use crate::parse;
 use crate::resolve::Resolutions;
-use crate::stdlib_snapshot::get_or_init_snapshot;
-use crate::stdlib_snapshot::reparsed_snapshot_module;
+use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
-use crate::symbol_notation;
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
-use crate::wit_emit::WitContract;
-use crate::wit_emit::WitEmitInput;
+use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::WorldRegistry;
+use crate::{Diagnostic, ParseError, ast, load, loader, parse, symbol_notation};
 
 /// A ready-to-query analysis result.
 ///

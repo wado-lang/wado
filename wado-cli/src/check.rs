@@ -13,12 +13,9 @@ use lexopt::Arg::Value;
 use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
-use crate::compile::attach_manifest_and_component_deps;
-use crate::compile::load_nearest_manifest;
-use crate::compile::prepare_kiln;
+use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::kiln_driver::check_pipeline;
-use crate::kiln_driver::{CheckOutcome, PipelineError};
+use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
 use crate::knobs::{CompileKnobs, KnobOpt};
 
 #[derive(Debug)]

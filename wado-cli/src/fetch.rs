@@ -12,16 +12,12 @@
 use std::fmt::Write as _;
 
 use crate::args::{self, CliExit};
-use crate::build_dep::fetch_build_dependencies;
-use crate::build_dep::locked_generator_versions;
-use crate::build_dep::resolve_build_dependencies;
-use crate::cache::component_path;
-use crate::cache::generator_path;
-use crate::cache::write_atomic;
+use crate::build_dep::{
+    fetch_build_dependencies, locked_generator_versions, resolve_build_dependencies,
+};
+use crate::cache::{component_path, generator_path, write_atomic};
 use crate::git::materialize;
-use crate::manifest::ProjectManifest;
-use crate::manifest::discover;
-use crate::manifest::emit_manifest_warnings;
+use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 

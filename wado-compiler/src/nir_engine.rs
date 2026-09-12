@@ -13,20 +13,15 @@ use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirLocal};
-use crate::nir_arena::ArenaCallArg;
-use crate::nir_arena::ArenaStructField;
-use crate::nir_arena::ArenaStructPatternField;
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
-    PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
-use crate::nir_value_graph::HeapVersion;
-use crate::nir_value_graph::builder::CallFacts;
-use crate::nir_value_graph::builder::build;
-use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::nir_value_graph::builder::{CallFacts, build};
+use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
 use crate::niri::CtfeBuiltinMap;
-use crate::tir::TypeId;
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// A live-pool representative per field read, plus the versions a placement
@@ -1823,8 +1818,7 @@ mod tests {
     use crate::const_eval::Value;
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-    use crate::tir::PrimitiveType;
-    use crate::tir::TypeTable;
+    use crate::tir::{PrimitiveType, TypeTable};
     use Span;
     use std::assert_matches;
 

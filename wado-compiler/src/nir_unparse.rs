@@ -5,23 +5,18 @@
 
 use crate::const_eval::Value;
 use crate::lexer::is_valid_ident;
-use crate::nir;
-use crate::nir::FuncId;
 use crate::nir::{
-    NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule, NirParam,
-    NirStruct, NirUnaryOp,
+    FuncId, NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule,
+    NirParam, NirStruct, NirUnaryOp,
 };
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueId;
-use crate::nir_value_graph::ValueKind;
-use crate::tir;
-use crate::tir::EffectRef;
-use crate::tir::ResolvedType;
-use crate::tir::TypeTable;
+use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::tir::{EffectRef, ResolvedType, TypeTable};
 use crate::unparse::unparse_with_row_into;
+use crate::{nir, tir};
 
 fn escape_string(s: &str) -> String {
     let mut result = String::new();

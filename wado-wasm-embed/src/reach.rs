@@ -12,8 +12,7 @@ use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
 use crate::dataref::{DataRange, DataRefs, merge_with_gap};
-use crate::segment_base;
-use crate::{Asset, Error};
+use crate::{Asset, Error, segment_base};
 
 /// A gap this small is cheaper to keep than to split around: a second segment
 /// costs a header, an offset expression and a length.

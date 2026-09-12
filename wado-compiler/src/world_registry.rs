@@ -8,9 +8,7 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::Attribute;
-use crate::ast::CmImport;
-use crate::ast::{Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
+use crate::ast::{Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
 use crate::module_source::ModuleSource;
 
 /// Well-known world name for the test world.
@@ -378,14 +376,10 @@ impl WorldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstId;
-    use crate::ast::CmBoundary;
-    use crate::ast::CmImport;
-    use crate::ast::GenericType;
-    use crate::ast::NamedType;
-    use crate::ast::Visibility;
-    use crate::ast::WorldExportFn;
-    use crate::ast::{self, Attribute};
+    use crate::ast::{
+        self, AstId, Attribute, CmBoundary, CmImport, GenericType, NamedType, Visibility,
+        WorldExportFn,
+    };
     use crate::component_model::CmInterfaceRegistry;
     use crate::token::Span;
 

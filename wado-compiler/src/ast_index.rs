@@ -353,10 +353,7 @@ fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Condition;
-    use crate::ast::ConditionElement;
-    use crate::ast::Pattern;
-    use crate::ast::Stmt;
+    use crate::ast::{Condition, ConditionElement, Pattern, Stmt};
     use crate::lexer::lex;
     use crate::parser::Parser;
 

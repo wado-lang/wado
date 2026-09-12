@@ -9,8 +9,7 @@ use wasmparser::{ElementItems, ElementKind};
 
 use crate::dataref::DataRange;
 use crate::reach::{Keep, Live};
-use crate::segment_base;
-use crate::{Asset, Embed, Error};
+use crate::{Asset, Embed, Error, segment_base};
 
 /// What an asset with no memory of its own is given, so every embedded module
 /// ends up with the same shape.

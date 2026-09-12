@@ -10,14 +10,11 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::defs::DefId;
-use crate::defs::DefKind;
-use crate::elaborator::sem::types::HandlerBindingFacts;
-use crate::elaborator::sem::types::HandlerEffectEntry;
+use crate::defs::{DefId, DefKind};
+use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
 use crate::elaborator::trait_env::ImplTargetKey;
 use crate::hashmap;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
+use crate::name::{DeclName, FqTraitName};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler

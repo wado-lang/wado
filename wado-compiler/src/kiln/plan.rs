@@ -207,8 +207,7 @@ fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
 mod tests {
     use super::*;
     use crate::kiln::invocation::{DeclSite, GeneratorModule};
-    use crate::kiln::options::CanonicalValue;
-    use crate::kiln::options::OptionsDescriptor;
+    use crate::kiln::options::{CanonicalValue, OptionsDescriptor};
     use crate::kiln::options_check::CanonicalOptions;
     use crate::token::Span;
 

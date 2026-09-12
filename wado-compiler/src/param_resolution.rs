@@ -13,8 +13,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::wide_int_literal::create_literal;
-use crate::tir::GlobalInit;
-use crate::tir::{TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir::{GlobalInit, TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Severity for one class of param-resolution diagnostic, set per `wado`

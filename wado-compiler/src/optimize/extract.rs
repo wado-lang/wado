@@ -15,30 +15,22 @@ use crate::trace::filter;
 
 use super::arena_query::value_may_trap;
 use super::census;
-use crate::const_eval::Value;
-use crate::const_eval::prim_of;
+use crate::const_eval::{Value, prim_of};
 use crate::hashmap;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::BlockId;
-use crate::nir_arena::Operand;
-use crate::nir_arena::StmtId;
+use crate::nir_arena::{BlockId, Operand, StmtId};
 use crate::nir_engine::FieldValues;
 #[cfg(test)]
 use crate::nir_engine::Rule;
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::OpaqueSource;
-use crate::nir_value_graph::ValuePool;
 use crate::nir_value_graph::builder::is_const_value;
-use crate::nir_value_graph::value_kind_to_const;
-use crate::optimize::alias::CallImmutability;
-use crate::optimize::alias::builder_alias_sets;
-use crate::optimize::alias::call_verdicts;
-use crate::optimize::alias::first_param_types;
+use crate::nir_value_graph::{OpaqueSource, ValuePool, value_kind_to_const};
+use crate::optimize::alias::{
+    CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
+};
 use crate::optimize::arena_query::storage_root;
 use crate::tir;
-use crate::tir::PrimitiveType;
-use crate::tir::ResolvedType;
-use crate::tir::TypeTable;
+use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
 use crate::token::Span;
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
@@ -883,9 +875,7 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirLocal};
-    use crate::nir_arena::BlockId;
-    use crate::nir_arena::StmtId;
-    use crate::nir_arena::{BlockNode, Body, ExprNode, StmtKind, StmtNode};
+    use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
     use crate::nir_engine::{EngineBuffers, Rule};
     use crate::tir;
     use crate::tir::TypeTable;

@@ -18,9 +18,8 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
 use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
-use crate::compiler_trace;
-use crate::hashmap;
 use crate::token::Span;
+use crate::{compiler_trace, hashmap};
 
 /// A set of local indices, in the form [`crate::nir_value_graph::ValueGraph`]'s
 /// opaque-local collection hands back.

@@ -11,8 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::Diagnostic;
-use crate::{Position, Range};
+use crate::{Diagnostic, Position, Range};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {

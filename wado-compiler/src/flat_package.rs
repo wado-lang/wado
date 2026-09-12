@@ -14,8 +14,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
-use crate::module_source::ModuleSource;
-use crate::module_source::ModuleSourceInterner;
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclaration, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
@@ -23,8 +22,7 @@ use crate::tir::{
 };
 use crate::token::Span;
 use crate::wir_build::component_plan::ComponentPlan;
-use crate::world_registry::GENERATOR_HOST_INTERFACE;
-use crate::world_registry::{self, WorldRegistry};
+use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
 ///

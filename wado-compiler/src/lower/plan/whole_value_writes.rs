@@ -6,10 +6,9 @@ use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::tir::TirBlock;
 use crate::tir::{
-    ResolvedType, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeTable,
+    ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 

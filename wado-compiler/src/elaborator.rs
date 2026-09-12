@@ -47,45 +47,26 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::AstId;
-use crate::ast::Block;
-use crate::ast::Expr;
-use crate::ast::IdentExpr;
-use crate::ast::ImplBlock;
-use crate::ast::Visibility;
-use crate::ast::{self, Item, Module};
-use crate::compiler_host::CompilerHost;
-use crate::compiler_host::Diagnostic;
-use crate::defs::DefId;
-use crate::defs::DefKind;
+use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
+use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
-use crate::elaborator::sem::ModuleBindings;
-use crate::elaborator::sem::ModuleSemantics;
-use crate::elaborator::sem::TypeAnnotations;
+use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
-use crate::logger::Bail;
-use crate::logger::Logger;
+use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::name::global_name;
-use crate::name::is_builtin_shape_name;
-use crate::name::namespace_member_alias;
 use crate::name::{self as name, Receiver, RefKind};
-use crate::resolve::Resolution;
-use crate::resolve::head_site;
-use crate::symbol::SymbolKind;
-use crate::symbol::VariableSymbol;
-use crate::symbol::{Symbol, SymbolTable};
-use crate::tir::ResolvedType;
-use crate::tir::StructDef;
-use crate::tir::TraitRef;
+use crate::name::{
+    DeclName, FqTraitName, FqTypeName, global_name, is_builtin_shape_name, namespace_member_alias,
+};
+use crate::resolve::{Resolution, head_site};
+use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TraitRef};
 use crate::token::Span;
 
 /// Build a function-name → item-index map for a module's items. Used

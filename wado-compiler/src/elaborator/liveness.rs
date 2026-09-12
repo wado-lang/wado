@@ -8,13 +8,12 @@
 //! counts as used so a function only it calls is not reported dead, but is
 //! emitted only when a call reaches it.
 
-use crate::ast::type_head_name;
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
+    type_head_name,
 };
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::CmNamespace;
-use crate::module_source::ModuleSource;
+use crate::module_source::{CmNamespace, ModuleSource};
 use crate::token::Span;
 
 /// Result of the source-level liveness analysis. Two root sets run over one call

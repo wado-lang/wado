@@ -8,8 +8,7 @@
 
 use std::path::Path;
 
-use crate::common::compile_source_with_compiler_options;
-use crate::common::run_wasm;
+use crate::common::{compile_source_with_compiler_options, run_wasm};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// A string-building loop. `String` append (`+`) lowers to

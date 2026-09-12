@@ -16,21 +16,17 @@ use crate::compiler_item::SeqField;
 use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
-use crate::nir::FuncId;
-use crate::nir::NirFunction;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::ValueId;
-use crate::nir_value_graph::ValueKind;
-use crate::niri::guard_declares_locals;
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::{
     AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
     GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
-    build_ctfe_builtin_map, materializing_globals,
+    build_ctfe_builtin_map, guard_declares_locals, materializing_globals,
 };
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;

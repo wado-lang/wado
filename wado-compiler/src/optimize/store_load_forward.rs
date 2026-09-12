@@ -13,14 +13,11 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
-use crate::niri::CtfeBuiltinMap;
-use crate::niri::build_ctfe_builtin_map;
-use crate::optimize::alias::CallImmutability;
-use crate::optimize::alias::FirstParamTypes;
-use crate::optimize::alias::builder_alias_sets;
-use crate::optimize::alias::first_param_types;
-use crate::optimize::extract::extract_const;
-use crate::optimize::extract::is_place_read;
+use crate::niri::{CtfeBuiltinMap, build_ctfe_builtin_map};
+use crate::optimize::alias::{
+    CallImmutability, FirstParamTypes, builder_alias_sets, first_param_types,
+};
+use crate::optimize::extract::{extract_const, is_place_read};
 use crate::tir::TypeTable;
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`

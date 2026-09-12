@@ -4,21 +4,19 @@
 //! `frame`, `rewrite`, `trackability`, `pattern`, `place`, `region`, `callee`.
 //! What it can evaluate: `docs/wep-2026-04-27-nir-interpreter.md`.
 
-use crate::compiler_trace;
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
-use crate::nir_arena;
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::ResolvedType;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
+use crate::{compiler_trace, nir_arena};
 
 /// Three-state lattice over compile-time evaluation results, ordered
 /// `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst` — the SCCP lattice with

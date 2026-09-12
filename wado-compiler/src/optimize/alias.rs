@@ -13,11 +13,10 @@ use cranelift_entity::SecondaryMap;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::NirLocal;
-use crate::nir::{FuncId, NirUnaryOp};
-use crate::nir_arena::ArenaCallArg;
-use crate::nir_arena::PatId;
-use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtKind};
+use crate::nir::{FuncId, NirLocal, NirUnaryOp};
+use crate::nir_arena::{
+    ArenaCallArg, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatId, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::niri::AliasClasses;
 use crate::tir::{ResolvedType, TypeId, TypeTable};

@@ -14,17 +14,15 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItems;
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
-use crate::name::TypeHead;
-use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_local_trait_method};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, TypeHead, mangle_local_trait_method,
+};
 use crate::package::Package;
 use crate::tir;
-use crate::tir::TirField;
-use crate::tir::TirStruct;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
-    TirBinaryOp, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt, TypeId,
-    TypeTable,
+    TirBinaryOp, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirModule, TirParam,
+    TirStmt, TirStruct, TypeId, TypeTable,
 };
 use crate::token::Span;
 

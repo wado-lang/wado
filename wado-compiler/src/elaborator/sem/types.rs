@@ -4,22 +4,14 @@
 //! instantiations, capture tables. Facts derivable from the AST alone belong on
 //! [`crate::ast_index::AstIndex`], decl-level ones on [`super::decls::ModuleDecls`].
 
-use crate::ast::Expr;
-use crate::ast::{self, AstId};
+use crate::ast::{self, AstId, Expr};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::name::MethodName;
-use crate::name::Receiver;
+use crate::name::{FqTraitName, FqTypeName, MethodName, Receiver};
 use crate::tir;
-use crate::tir::EffectRef;
-use crate::tir::TirEffectOp;
-use crate::tir::TirTypeParam;
-use crate::tir::TypeTable;
-use crate::tir::{FunctionRef, TypeId};
+use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without

@@ -1,8 +1,7 @@
-use crate::manifest::GitPin;
-use crate::manifest::Package;
-use crate::manifest::{DependencySource, Manifest, ManifestError, WorkspacePackage};
-use crate::version::VersionError;
-use crate::version::{Version, VersionSpecifier};
+use crate::manifest::{
+    DependencySource, GitPin, Manifest, ManifestError, Package, WorkspacePackage,
+};
+use crate::version::{Version, VersionError, VersionSpecifier};
 
 /// Validate a parsed manifest for semantic consistency.
 ///
@@ -309,8 +308,7 @@ fn validate_version_specifier(dep_name: &str, version: &str) -> Result<(), Manif
 mod tests {
     use super::*;
     use crate::Manifest;
-    use crate::validate::PublishError;
-    use crate::validate::validate_for_publish;
+    use crate::validate::{PublishError, validate_for_publish};
     use std::assert_matches;
 
     #[test]

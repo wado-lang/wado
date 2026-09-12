@@ -42,8 +42,7 @@ use super::types::{
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_align_with_registry_scoped;
-use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
 use crate::name::FqTypeName;
 
 /// Build the export binding function name for a world export.

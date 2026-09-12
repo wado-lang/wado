@@ -9,8 +9,7 @@
 
 use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
-use crate::compiler_host::Diagnostic;
-use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 

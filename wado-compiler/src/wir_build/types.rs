@@ -19,15 +19,12 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
 use crate::compiler_item::CompilerItem;
-use crate::hashmap;
-use crate::name::mangle_builtin_array_type;
-use crate::name::mangle_generic_name;
-use crate::name::wir_enum_type_key;
-use crate::name::wir_tuple_type_key;
-use crate::name::wir_type_key;
-use crate::name::wir_variant_case_key;
-use crate::tir;
+use crate::name::{
+    mangle_builtin_array_type, mangle_generic_name, wir_enum_type_key, wir_tuple_type_key,
+    wir_type_key, wir_variant_case_key,
+};
 use crate::wir::WirAbstractHeapType;
+use crate::{hashmap, tir};
 
 /// A type declaration in topological order (struct or variant).
 pub enum TypeDecl<'a> {

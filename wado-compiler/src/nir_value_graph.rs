@@ -8,12 +8,7 @@ pub mod builder;
 
 use std::ops::ControlFlow;
 
-use crate::const_eval::Value;
-use crate::const_eval::eval_binary;
-use crate::const_eval::eval_cast;
-use crate::const_eval::eval_unary;
-use crate::const_eval::is_int_prim;
-use crate::const_eval::prim_of;
+use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, prim_of};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
@@ -1227,8 +1222,7 @@ impl ValuePool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
-    use crate::tir::TypeId;
-    use crate::tir::TypeTable;
+    use crate::tir::{TypeId, TypeTable};
 
     // ---- Hash-cons dedup ----
 

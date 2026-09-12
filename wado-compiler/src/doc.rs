@@ -1,23 +1,18 @@
 use crate::hashmap::IndexSet;
 use serde::Serialize;
 
-use crate::ParseResult;
-use crate::ast;
-use crate::ast::ResourceDecl;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
-    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
 };
-use crate::comment::Comment;
-use crate::comment::{CommentKind, TriviaMap};
-use crate::parse;
-use crate::stdlib;
+use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
     unparse_type_into,
 };
+use crate::{ParseResult, ast, parse, stdlib};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {

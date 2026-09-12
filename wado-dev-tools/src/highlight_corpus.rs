@@ -19,8 +19,7 @@
 use std::fmt::Write as _;
 use std::fs;
 
-use crate::grammar_corpus::collect_corpus;
-use crate::grammar_corpus::emit_corpus_to;
+use crate::grammar_corpus::{collect_corpus, emit_corpus_to};
 use lexopt::Arg::{Long, Value};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::semantic_tokens::{

@@ -18,37 +18,26 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, FormatterField};
-use crate::defs::DefId;
-use crate::defs::DefKind;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
 };
-use crate::format_spec;
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
-use crate::name::MethodName;
-use crate::name::TEMPLATE_BLOCK_LABEL;
-use crate::name::TEMPLATE_FORMATTER_LOCAL;
-use crate::name::TEMPLATE_RESULT_LOCAL;
-use crate::name::hole_fmt_helper_name;
-use crate::name::{FqTypeName, LocalMethodName, RefKind};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, TEMPLATE_BLOCK_LABEL,
+    TEMPLATE_FORMATTER_LOCAL, TEMPLATE_RESULT_LOCAL, hole_fmt_helper_name,
+};
 use crate::synthesis::common::{field_access, locals_from_params, make_synthetic_free_function};
 use crate::synthesis::traits::case_index_dispatch;
-use crate::tir;
-use crate::tir::StructDef;
-use crate::tir::TemplateShape;
-use crate::tir::TirFunction;
-use crate::tir::TirParam;
-use crate::tir::TraitRef;
 use crate::tir::{
-    CallArg, FunctionRef, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirLocal,
-    TirModule, TirStmt, TirStmtKind, TirStructField, TirTemplatePart, TirUnaryOp, TypeId,
-    TypeTable,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateShape, TirBlock, TirExpr,
+    TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt, TirStmtKind, TirStructField,
+    TirTemplatePart, TirUnaryOp, TraitRef, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirOptVisitor;
-use crate::tir_visitor::opt_walk_expr;
+use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
+use crate::{format_spec, tir};
 
 /// Every `core:prelude/format` symbol this synthesiser needs, resolved once
 /// through the [`CompilerItem`] registry so a stdlib rename does not reach

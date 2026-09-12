@@ -31,27 +31,16 @@ use super::types::{
 use super::tysys::TypeSystem;
 use crate::elaborator::callee::CalleeRef;
 use crate::elaborator::expr::MemberOwner;
-use crate::elaborator::scope;
 use crate::elaborator::scope::param_decl;
-use crate::elaborator::sem::types::DesugarKind;
-use crate::elaborator::sem::types::OperatorDispatch;
-use crate::elaborator::sig;
+use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::sig::ImplSig;
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::trait_env::written_type_arg;
-use crate::elaborator::trait_env::written_type_args;
-use crate::elaborator::types::ImplMemberKind;
-use crate::elaborator::types::RequiredTrait;
-use crate::elaborator::types::TraitMethodMatch;
-use crate::elaborator::tysys::operator_compiler_item;
-use crate::elaborator::tysys::operator_trait_method;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::name::RefKind;
-use crate::name::TypeHead;
-use crate::resolve::Resolution;
-use crate::resolve::head_site;
+use crate::elaborator::trait_env::{written_type_arg, written_type_args};
+use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
+use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
+use crate::elaborator::{scope, sig};
+use crate::name::{DeclName, FqTraitName, FqTypeName, RefKind, TypeHead};
+use crate::resolve::{Resolution, head_site};
 use crate::unparse::binary_op_str;
 
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say

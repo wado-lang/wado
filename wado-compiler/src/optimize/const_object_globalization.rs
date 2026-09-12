@@ -23,30 +23,20 @@ use super::arena_query::{
     expr_mentions_local, is_local, promoted_local_reads, reachable_nodes, strip_refs,
 };
 use crate::ast::Visibility;
-use crate::compiler_trace;
-use crate::name::CONST_OBJ_GLOBAL_PREFIX;
-use crate::name::MODULE_INIT_FUNCTION;
-use crate::name::MODULES_INIT_FUNCTION;
-use crate::nir;
-use crate::nir::ArrayElementAccess;
-use crate::nir::FuncId;
-use crate::nir::NirParam;
-use crate::nir::NirStruct;
-use crate::nir_arena::ArenaCallArg;
-use crate::nir_arena::PatId;
-use crate::nir_arena::PatKind;
-use crate::nir_value_graph::ValueId;
-use crate::nir_value_graph::ValueKind;
+use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::nir::{ArrayElementAccess, FuncId, NirParam, NirStruct};
+use crate::nir_arena::{ArenaCallArg, PatId, PatKind};
 use crate::nir_value_graph::builder::is_const_value;
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::is_ctfe_eligible;
 use crate::optimize::arena_query::projected_const_field;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::multi_value_return::aggregate_field_info;
-use crate::tir::GlobalInit;
-use crate::tir::PrimitiveType;
+use crate::tir::{GlobalInit, PrimitiveType};
 use crate::token::Span;
 use crate::wir_build::packed_array_is_eager;
 use crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT;
+use crate::{compiler_trace, nir};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid

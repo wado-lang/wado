@@ -8,22 +8,15 @@ use std::ops::ControlFlow;
 
 use super::arena_query::local_written_by;
 use crate::const_eval::Value;
-use crate::hashmap;
-use crate::nir::FuncId;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena;
+use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::OpaqueSource;
-use crate::nir_value_graph::ValueId;
-use crate::nir_value_graph::ValueKind;
-use crate::optimize::alias::CallImmutability;
-use crate::optimize::alias::builder_alias_sets;
-use crate::optimize::alias::first_param_types;
-use crate::optimize::arena_query::is_pure_nontrapping_expr_typed;
-use crate::optimize::arena_query::storage_root;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
+use crate::optimize::arena_query::{is_pure_nontrapping_expr_typed, storage_root};
 use crate::tir::TypeTable;
+use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
 /// The combined `licm` session reuses its (value-preserving) `ValueGraph`, so

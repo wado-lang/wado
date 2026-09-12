@@ -8,8 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::common::FilesystemHost;
-use crate::common::InMemoryHost;
+use crate::common::{FilesystemHost, InMemoryHost};
 use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };

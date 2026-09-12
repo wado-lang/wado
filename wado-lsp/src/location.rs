@@ -9,8 +9,7 @@
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::Symbol;
 
-use crate::uri::Uri;
-use crate::uri::percent_encode_path;
+use crate::uri::{Uri, percent_encode_path};
 
 /// Resolve the URI of a module relative to the requesting document's URI.
 ///

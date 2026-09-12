@@ -5,11 +5,8 @@ use std::cell::RefCell;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::Expr;
-use crate::ast::Visibility;
-use crate::ast::{self, AstId};
-use crate::compiler_host::Code;
-use crate::compiler_host::Diagnostic;
+use crate::ast::{self, AstId, Expr, Visibility};
+use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
@@ -19,15 +16,9 @@ use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::FqTraitName;
-use crate::name::FqTypeName;
-use crate::resolve::Resolution;
-use crate::resolve::Resolutions;
-use crate::tir::AnonStructId;
-use crate::tir::StructDef;
-use crate::tir::TirLocal;
-use crate::tir::TypeId;
-use crate::tir::TypeTable;
+use crate::name::{FqTraitName, FqTypeName};
+use crate::resolve::{Resolution, Resolutions};
+use crate::tir::{AnonStructId, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Struct field info: module source and field definitions
@@ -3144,8 +3135,7 @@ pub(super) struct FromArrayInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler_host::Code;
-    use crate::compiler_host::Diagnostic;
+    use crate::compiler_host::{Code, Diagnostic};
     use crate::token::Span;
     use std::assert_matches;
 

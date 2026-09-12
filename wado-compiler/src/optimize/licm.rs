@@ -9,8 +9,7 @@ use std::ops::ControlFlow;
 
 use crate::compiler_trace;
 
-use crate::hashmap::IndexMap;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
@@ -27,12 +26,9 @@ use super::gate::{FunctionGate, GatedPass};
 use crate::nir::NirLocal;
 use crate::nir_arena::PatId;
 use crate::nir_value_graph::ValuePool;
-use crate::optimize::alias::CallImmutability;
-use crate::optimize::alias::builder_alias_sets;
-use crate::optimize::alias::first_param_types;
+use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::storage_root;
-use crate::optimize::condition_implication::eliminate_at_root;
-use crate::optimize::condition_implication::resolve_panic_ids;
+use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 
 /// Tracks which variables and fields are modified within a loop.
 ///

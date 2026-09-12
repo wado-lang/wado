@@ -9,13 +9,10 @@
 //! the call graph would remove that cliff for thin forwarding wrappers.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::FuncId;
-use crate::nir::{NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
-use crate::nir_arena::BlockNode;
-use crate::nir_arena::ExprNode;
-use crate::nir_arena::StmtNode;
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;

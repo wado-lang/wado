@@ -19,16 +19,14 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
-use crate::name::FunctionId;
-use crate::name::LocalMethodName;
+use crate::name::{FunctionId, LocalMethodName};
 use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
 };
 use crate::tir::{TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
-use crate::world_registry::GENERATOR_HOST_INTERFACE;
-use crate::world_registry::{self, WorldRegistry};
+use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
 ///

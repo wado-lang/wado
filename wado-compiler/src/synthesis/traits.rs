@@ -28,22 +28,15 @@ use super::common::{
 use crate::ast::Visibility;
 use crate::defs::DefId;
 use crate::elaborator::unescape_template_segment;
-use crate::hashmap;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::name::case_construct_helper_name;
-use crate::name::case_extract_helper_name;
-use crate::name::field_get_helper_name;
-use crate::name::hole_get_helper_name;
+use crate::name::{
+    DeclName, FqTraitName, case_construct_helper_name, case_extract_helper_name,
+    field_get_helper_name, hole_get_helper_name,
+};
 use crate::synthesis::common;
-use crate::synthesis::common::locals_from_params;
-use crate::synthesis::common::option_some;
-use crate::synthesis::common::relocate_synthetic_locals;
+use crate::synthesis::common::{locals_from_params, option_some, relocate_synthetic_locals};
 use crate::synthesis::template::blanket_dispatch_for;
-use crate::tir;
-use crate::tir::StructDef;
-use crate::tir::TemplateShape;
-use crate::tir::TraitRef;
+use crate::tir::{StructDef, TemplateShape, TraitRef};
+use crate::{hashmap, tir};
 
 /// Snapshot of every `core:prelude/{traits,format}` symbol name that the
 /// trait-synthesis phase reaches for. Built once per pass through the

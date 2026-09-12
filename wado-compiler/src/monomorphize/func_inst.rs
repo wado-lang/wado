@@ -6,8 +6,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::trait_env::ReceiverCandidate;
-use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{
+    BlanketImpl, BlanketParamSource, ImplReceiver, ReceiverCandidate, TraitEnv,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -21,19 +22,14 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use super::state::Monomorphizer;
 use super::{generic_function_key, module_source_for_trait_impl};
 use crate::defs::DefId;
-use crate::monomorphize::dispatch_receiver_head;
-use crate::monomorphize::dispatch_receiver_name;
-use crate::name;
-use crate::name::DeclName;
-use crate::name::FqTraitName;
-use crate::name::MangledName;
-use crate::synthesis::template::blanket_impl_args;
-use crate::synthesis::template::blanket_is_reflect_keyed;
-use crate::synthesis::template::has_reflect_kind;
-use crate::synthesis::template::ranked_value_blanket;
-use crate::tir;
+use crate::monomorphize::{dispatch_receiver_head, dispatch_receiver_name};
+use crate::name::{DeclName, FqTraitName, MangledName};
+use crate::synthesis::template::{
+    blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, ranked_value_blanket,
+};
 use crate::tir::TirTypeParam;
 use crate::token::Span;
+use crate::{name, tir};
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.
 pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {

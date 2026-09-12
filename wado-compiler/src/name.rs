@@ -4,17 +4,13 @@
 //! Module paths are filesystem representations, not URIs: normalized lexically
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
-use crate::ast;
-use crate::ast::AstId;
-use crate::ast::TestMetadata;
-use crate::defs::DefId;
-use crate::defs::DefTable;
+use crate::ast::{AstId, TestMetadata};
+use crate::defs::{DefId, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
-use crate::path::normalize;
-use crate::path::relative_path;
-use crate::tir;
+use crate::path::{normalize, relative_path};
 use crate::tir::ResolvedType;
+use crate::{ast, tir};
 use std::fmt;
 use std::hash::Hash;
 

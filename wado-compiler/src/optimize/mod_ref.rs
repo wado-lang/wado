@@ -7,15 +7,13 @@
 use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir;
-use crate::nir::NirFunction;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::optimize::arena_query::expr_node_may_trap;
-use crate::tir;
 use crate::tir::TypeTable;
+use crate::{nir, tir};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -874,15 +872,13 @@ pub(super) fn compute_fn_effects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::FuncId;
-    use crate::nir::{NirBinaryOp, NirUnaryOp};
-    use crate::nir_arena::BlockRole;
+    use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
-        ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
+        ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
+        StmtNode,
     };
     use crate::nir_value_graph::ValueKind;
-    use crate::tir::TypeId;
-    use crate::tir::TypeTable;
+    use crate::tir::{TypeId, TypeTable};
     use crate::token::Span;
 
     /// Build an expression into a fresh arena and summarise it.

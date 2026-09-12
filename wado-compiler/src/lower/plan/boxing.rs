@@ -9,12 +9,10 @@ use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
-use crate::tir::StructDef;
-use crate::tir::TirFunction;
-use crate::tir::TirTemplatePart;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField, TirFunction,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 

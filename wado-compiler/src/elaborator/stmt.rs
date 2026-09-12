@@ -12,26 +12,18 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use crate::IndexMap;
-use crate::ast::RangeKind;
-use crate::ast::StructPatternField;
+use crate::ast::{RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
-use crate::elaborator::sem::types::BodyFacts;
-use crate::elaborator::sem::types::DesugarKind;
-use crate::elaborator::sem::types::ForOfIteratorInfo;
-use crate::elaborator::types::BoundRef;
-use crate::elaborator::types::GenericNewtypeInfo;
-use crate::elaborator::types::ImplMemberKind;
-use crate::elaborator::types::StructFieldInfo;
-use crate::elaborator::types::type_param_defaults_of;
-use crate::hashmap;
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::types::{
+    BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
+};
 use crate::name::mangle_local_item_name;
 use crate::symbol_notation::render;
-use crate::tir;
-use crate::tir::StructDef;
-use crate::tir::TirTypeParam;
+use crate::tir::{StructDef, TirTypeParam};
+use crate::{IndexMap, hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.

@@ -16,8 +16,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::FqTypeName;
-use crate::name::FreeFunctionName;
+use crate::name::{FqTypeName, FreeFunctionName};
 
 /// Key used to store/look up a generic function in the global function map.
 ///

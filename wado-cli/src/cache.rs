@@ -172,10 +172,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::cache::component_path;
-    use crate::cache::config_root_value;
-    use crate::cache::generator_path;
-    use crate::cache::write_atomic;
+    use crate::cache::{component_path, config_root_value, generator_path, write_atomic};
     use std::path::Path;
 
     #[test]

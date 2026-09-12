@@ -11,36 +11,21 @@ use crate::hashmap::{IndexMap, IndexSet};
 use wasm_encoder::ValType;
 
 use crate::ast;
-use crate::ast::AstId;
-use crate::ast::CmBoundary;
-use crate::ast::CmResourceBacking;
-use crate::ast::FunctionType;
-use crate::ast::InterfaceDecl;
-use crate::ast::Item;
-use crate::ast::NamedType;
-use crate::ast::NamespacedGenericType;
-use crate::ast::{Attribute, CmImport, GenericType, Type};
-use crate::canonical::CmStreamPayload;
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
-use crate::cm_abi::CmValType;
-use crate::cm_abi::align_to;
-use crate::cm_abi::cm_align;
-use crate::cm_abi::cm_enum_byte_size;
-use crate::cm_abi::cm_flags_byte_align;
-use crate::cm_abi::cm_flags_byte_size;
-use crate::cm_abi::cm_size;
-use crate::cm_abi::layout_record_with_registry_scoped;
-use crate::cm_abi::layout_tuple_with_registry_scoped;
+use crate::ast::{
+    AstId, Attribute, CmBoundary, CmImport, CmResourceBacking, FunctionType, GenericType,
+    InterfaceDecl, Item, NamedType, NamespacedGenericType, Type,
+};
+use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
+use crate::cm_abi::{
+    CmValType, align_to, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size,
+    cm_size, layout_record_with_registry_scoped, layout_tuple_with_registry_scoped,
+};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::DeclName;
-use crate::name::DeclPath;
-use crate::name::to_kebab;
+use crate::name::{DeclName, DeclPath, to_kebab};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
-use crate::world_registry::InterfaceExportLookup;
-use crate::world_registry::InterfaceExportMethod;
-use crate::world_registry::WorldRegistry;
+use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
 
 /// The one classifier, so every operation on a given `Future<T>` — read, write,
 /// cancel, drop, new — agrees on its component-level future type.
@@ -4831,9 +4816,7 @@ impl CmPrimitiveType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstId;
-    use crate::ast::GenericType;
-    use crate::ast::NamedType;
+    use crate::ast::{AstId, GenericType, NamedType};
     use crate::lexer::lex;
     use crate::name::DeclName;
     use crate::parser;

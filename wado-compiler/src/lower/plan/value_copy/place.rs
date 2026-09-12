@@ -8,8 +8,7 @@ use super::ownership::BuiltinDeclarations;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::lower::plan::value_copy::analyze::carries_no_storage;
-use crate::lower::plan::value_copy::analyze::returned_value;
+use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value};
 use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{

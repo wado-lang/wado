@@ -19,8 +19,7 @@ use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
 use crate::elaborator::trait_env::ImplTargetKey;
-use crate::name::DeclName;
-use crate::name::RefKind;
+use crate::name::{DeclName, RefKind};
 use crate::tir::StructDef;
 use crate::token::Span;
 

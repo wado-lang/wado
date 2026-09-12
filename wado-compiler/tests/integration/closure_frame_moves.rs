@@ -3,8 +3,7 @@
 //! The move analysis used to abandon any function that built one, so a single
 //! `map(|x| …)` left every other local in that body copying.
 
-use crate::common::assert_pushes_by_move;
-use crate::common::wir_function_body;
+use crate::common::{assert_pushes_by_move, wir_function_body};
 use std::path::Path;
 
 const SOURCE: &str = r#"

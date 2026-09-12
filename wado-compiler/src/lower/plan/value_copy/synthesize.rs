@@ -22,11 +22,10 @@ use crate::token::Span;
 use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
-use crate::hashmap;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::array_clone_element_type_arg;
 use crate::name::value_copy_helper_name;
-use crate::tir;
+use crate::{hashmap, tir};
 
 pub fn synthesize_helpers(
     project: &mut FlatPackage,
