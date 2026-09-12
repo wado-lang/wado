@@ -1,0 +1,16 @@
+// Regression test: a field default is written by the struct's author, in the
+// author's file, so it resolves there. Omitting such a field from another file
+// must not ask that file to see what the default calls.
+
+use { println, Stdout } from "core:cli";
+use { Config, hidden_of, tag_of } from "./sub/field_default_private_callee_a.wado";
+
+export fn run() with Stdout {
+    let c = Config { name: "x" };
+    println(`${c.name} ${tag_of(&c)} ${hidden_of(&c)}`);
+}
+
+__DATA__
+{
+    "stdout": "x 7 9\n"
+}

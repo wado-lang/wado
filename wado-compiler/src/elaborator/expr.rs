@@ -3973,19 +3973,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     // The default is *foreign* AST owned by the struct's
-                    // declaring module. Its free identifiers (e.g. a private
-                    // `global` of that module) resolve in its scope via
-                    // `default_scope_module` (the same callee-scope fallback
-                    // `pad_args_with_defaults` uses for function defaults).
-                    // Only scope is redirected, not fact keying: the default's
-                    // nodes carry their own globally-unique `AstId`s, so its
-                    // facts can't collide with a local node. `expected_type_id`
+                    // declaring module, so it both resolves in that module's
+                    // scope and is checked from that module's vantage: what a
+                    // default calls is the author's to see, not this
+                    // construction site's. `pad_args_with_defaults` redirects
+                    // both the same way for function defaults.
+                    // Fact keying stays local, the default's nodes carrying
+                    // their own globally-unique `AstId`s, and `expected_type_id`
                     // still drives literal / `null → None` coercion.
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
                         self.with_default_scope_module(Some(struct_module_source.clone()), |s| {
-                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
+                            let vantage = s
+                                .annotate_ctx
+                                .default_scope_module
+                                .clone()
+                                .map(|m| (m, default_expr.id().space()));
+                            s.with_foreign_vantage(vantage, |s| {
+                                s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
+                            })
                         })
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
