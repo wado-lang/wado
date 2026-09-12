@@ -8,36 +8,31 @@
 //! path per line — the only form that survives a path containing a space.
 
 use { parse } from "../src/lib.wado";
-use { corpus_root, collect_paths, read_file } from "./corpus.wado";
+use { collect_paths } from "./corpus.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let root = match corpus_root() {
-        Some(dir) => dir,
-        None => {
-            return;
-        },
-    };
-    let paths = collect_paths(&root, &args());
+    let paths = collect_paths(&args());
 
     let mut bad = 0;
     for let arg of &paths {
-        if let Some(src) = read_file(&root, arg) {
-            let result = parse(&src);
-            if result.diagnostics.len() == 0 {
-                println(`ok\t${*arg}`);
-            } else {
-                bad += 1;
-                let d = result.diagnostics[0];
-                let line = line_of(&src, d.span.start);
-                println(
-                    `ng\t${*arg}\t${result.diagnostics.len()}\t${line}\t${d.message}\t${snippet(&src, d.span.start)}`,
-                );
-            }
-        } else {
+        let Ok(src) = fs::read_to_string(arg) else {
             bad += 1;
             println(`ng\t${*arg}\t0\t0\tunreadable\t`);
+            continue;
+        };
+        let result = parse(&src);
+        if result.diagnostics.len() == 0 {
+            println(`ok\t${*arg}`);
+        } else {
+            bad += 1;
+            let d = result.diagnostics[0];
+            let line = line_of(&src, d.span.start);
+            println(
+                `ng\t${*arg}\t${result.diagnostics.len()}\t${line}\t${d.message}\t${snippet(&src, d.span.start)}`,
+            );
         }
     }
     eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);

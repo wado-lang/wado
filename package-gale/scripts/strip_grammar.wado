@@ -4,7 +4,8 @@
 //! prints the stripped grammar to stdout.
 
 use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { strip_action_bodies } from "../src/g4/action_strip.wado";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
@@ -13,26 +14,12 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         eprintln("usage: strip_grammar <path/to/Grammar.g4>");
         exit(1);
     }
-    let path = arguments[0];
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("strip_grammar: no preopened directories available");
-        exit(1);
-    }
-    let root = dirs[0].0;
-    let open_result = root.open_at(
-        PathFlags::none(),
-        path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait();
-    if let Err(_) = open_result {
-        eprintln(`strip_grammar: cannot open file: ${path}`);
-        exit(1);
-    }
-    let file = open_result.unwrap();
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let bytes = read_stream.read_to_end();
-    let content = String::from_utf8_unchecked(bytes);
+    let content = match fs::read_to_string(&arguments[0]) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln(`strip_grammar: ${e}`);
+            exit(1);
+        },
+    };
     print(strip_action_bodies(&content));
 }

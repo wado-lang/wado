@@ -20,15 +20,9 @@
 //   wado run example/tree.wado -L 2 -a .
 
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
-use {
-    Preopens,
-    Descriptor,
-    DescriptorType,
-    DescriptorFlags,
-    PathFlags,
-    OpenFlags,
-    DirectoryEntry,
-} from "wasi:filesystem";
+use fs from "core:fs";
+use { DirEntry, FsError } from "core:fs";
+use { Preopens } from "wasi:filesystem";
 
 struct Options {
     max_depth: i32,  // -1 = unlimited
@@ -93,32 +87,40 @@ fn print_help() with Stdout {
     println("  -h      show this help");
 }
 
-fn collect_entries(dir: &Descriptor, opts: &Options) -> List<DirectoryEntry> {
-    let mut out: List<DirectoryEntry> = [];
-    let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(64);
-        for let e of chunk.items {
-            if !opts.show_hidden && e.name.starts_with(".") {
-                continue;
-            }
-            if opts.dirs_only && !e.type matches { Directory } {
-                continue;
-            }
-            out.push(e);
+/// The entries of `dir` the options keep, sorted by name. A directory that
+/// cannot be read lists nothing; `walk` prints the reason.
+fn collect_entries(dir: &String, opts: &Options) -> Result<List<DirEntry>, FsError> with Preopens {
+    let mut out: List<DirEntry> = [];
+    for let e of fs::read_dir(dir)? {
+        if !opts.show_hidden && e.name.starts_with(".") {
+            continue;
         }
-        if chunk.result != CopyResult::Completed {
-            break;
+        if opts.dirs_only && !e.type matches { Directory } {
+            continue;
         }
+        out.push(e);
     }
-    stream.drop();
-    done.drop();
-    out.sort_by(|a: &DirectoryEntry, b: &DirectoryEntry| a.name.cmp(&b.name));
-    return out;
+    out.sort_by(|a: &DirEntry, b: &DirEntry| a.name.cmp(&b.name));
+    return Result::Ok(out);
 }
 
-fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with (Stdout, Stderr) {
-    let entries = collect_entries(dir, opts);
+/// List `dir` and print it, or print why it could not be listed in place of
+/// its contents.
+fn enter(dir: &String, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with (Stdout, Stderr, Preopens) {
+    match collect_entries(dir, opts) {
+        Ok(entries) => walk(dir, &entries, depth, prefix, opts, stats),
+        Err(e) => println(`${prefix}[${e}]`),
+    }
+}
+
+fn walk(
+    dir: &String,
+    entries: &List<DirEntry>,
+    depth: i32,
+    prefix: String,
+    opts: &Options,
+    stats: &mut Stats,
+) with (Stdout, Stderr, Preopens) {
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         let entry = &entries[i];
@@ -135,31 +137,23 @@ fn walk(dir: &Descriptor, depth: i32, prefix: String, opts: &Options, stats: &mu
             stats.dirs += 1;
             let can_recurse = opts.max_depth < 0 || depth < opts.max_depth;
             if can_recurse {
-                let sub = dir.open_at(
-                    PathFlags::none(),
-                    entry.name,
-                    OpenFlags::Directory,
-                    DescriptorFlags::Read,
-                ).wait();
-                match sub {
-                    Ok(d) => {
-                        let mut child_prefix = String::with_capacity(prefix.len() + 4);
-                        child_prefix.push_str(&prefix);
-                        child_prefix.push_str(&next_prefix_fragment);
-                        walk(&d, depth + 1, child_prefix, opts, stats);
-                    },
-                    Err(_) => {
-                        let mut child_prefix = String::with_capacity(prefix.len() + 4);
-                        child_prefix.push_str(&prefix);
-                        child_prefix.push_str(&next_prefix_fragment);
-                        println(`${child_prefix}[error opening dir]`);
-                    },
-                }
+                let mut child_prefix = String::with_capacity(prefix.len() + 4);
+                child_prefix.push_str(&prefix);
+                child_prefix.push_str(&next_prefix_fragment);
+                enter(&join_path(dir, &entry.name), depth + 1, child_prefix, opts, stats);
             }
         } else {
             stats.files += 1;
         }
     }
+}
+
+/// `name` under `dir`, which is empty at the preopened directory itself.
+fn join_path(dir: &String, name: &String) -> String {
+    if dir.is_empty() {
+        return *name;
+    }
+    return `${dir}/${name}`;
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
@@ -175,42 +169,24 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         },
     };
 
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("tree: no preopened directories available");
-        return;
-    }
-    let root = dirs[0].0;
-
-    // Figure out the starting descriptor and the label to print on the first line.
+    // The empty path is the preopened directory itself, which `core:fs`
+    // resolves; only the label printed on the first line differs.
     let label = if opts.path.is_empty() { "." } else { opts.path };
 
-    let mut stats = Stats { dirs: 0, files: 0 };
+    // The starting directory is listed here rather than in `enter`, so a path
+    // that cannot be listed reports itself instead of printing a header.
+    let entries = match collect_entries(&opts.path, &opts) {
+        Ok(list) => list,
+        Err(e) => {
+            eprintln(`tree: ${e}`);
+            return;
+        },
+    };
 
-    if opts.path.is_empty() || opts.path == "." {
-        println(label);
-        if opts.max_depth != 0 {
-            walk(&root, 1, "", &opts, &mut stats);
-        }
-    } else {
-        let opened = root.open_at(
-            PathFlags::none(),
-            opts.path,
-            OpenFlags::Directory,
-            DescriptorFlags::Read,
-        ).wait();
-        match opened {
-            Ok(start) => {
-                println(label);
-                if opts.max_depth != 0 {
-                    walk(&start, 1, "", &opts, &mut stats);
-                }
-            },
-            Err(_) => {
-                eprintln(`tree: cannot open '${opts.path}'`);
-                return;
-            },
-        }
+    let mut stats = Stats { dirs: 0, files: 0 };
+    println(label);
+    if opts.max_depth != 0 {
+        walk(&opts.path, &entries, 1, "", &opts, &mut stats);
     }
 
     println("");
