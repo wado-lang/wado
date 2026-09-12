@@ -12,15 +12,9 @@
 // Recognising the call at NIR pre-`inline` keeps this independent of
 // inliner threshold decisions.
 //
-// We exercise three short-literal cases (1–3 ASCII bytes) and verify in
-// the WIR that:
-//   * each literal is a module global, copied in at its own offset within
-//     the one reservation the fusion leaves for the whole adjacent run —
-//     the buffer starts empty and nothing else writes it, so that
-//     reservation's new length is the constant 6; and
-//   * no `push_str`, char-`push`, or `encode_char` call survives, so
-//     neither the temporary `String` nor the UTF-8 width dispatch is paid
-//     at any short-literal site.
+// The three literals are 1-3 ASCII bytes. The buffer starts empty and nothing
+// else writes it, so the one reservation covering the whole run ends at the
+// constant 6.
 
 use { println, Stdout } from "core:cli";
 

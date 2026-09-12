@@ -350,7 +350,8 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
     buf.push(':');
 }
 
-/// The indented twins, on the same split so a constant key folds there too.
+/// The indented twins, on the same plain/escaping split so a constant key folds
+/// here too.
 fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
     if count > 0 {
         buf.push(',');
@@ -847,8 +848,8 @@ fn is_json_ws(b: i32) -> bool {
 }
 
 /// Whether a whitespace scan stops on `b`. Testing the space first settles a
-/// skipped byte in one compare, and costs a stopping byte one: a trade that
-/// pays on indented input and is paid for on minified (`dead-ends.md`).
+/// skipped byte in one compare and a stopping byte in two, which wins on
+/// indented input and loses on minified (`dead-ends.md`).
 fn json_ws_end(b: i32) -> bool {
     return b != b' ' && (b > b' ' || !is_json_ws(b));
 }
@@ -863,9 +864,9 @@ fn digit_value(b: i32) -> u32 {
 /// that many needs no overflow check.
 global I64_SAFE_DIGITS: i32 = 18;
 
-// The digit-accumulating loop is written out at each of its three sites rather
-// than shared. Calling out for it costs json-canada deserialize 5.8%: the body
-// is a loop, so the inliner declines it, and every digit then pays a call.
+// The three digit-accumulating loops below are deliberately not shared. The
+// body is a loop, so the inliner declines the call and every digit pays one
+// (`dead-ends.md`).
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
 /// needs the float-based integer fallback.

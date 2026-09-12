@@ -166,11 +166,8 @@ impl Rule for ConstAsciiPushRule {
     }
 }
 
-/// Receivers safe to clone N times — deliberately narrow, excluding anything
-/// that may allocate, trap, or be observably stateful. `push_str`'s `&mut self`
-/// already forces a place, so in practice only a `Local`, an `&mut`-wrapped one,
-/// or a `FieldAccess` chain rooted at one appears; `GlobalVarGet` is accepted
-/// defensively, being a pure read.
+/// Receivers safe to clone N times: deliberately narrow, admitting nothing that
+/// may allocate, trap, or be observably stateful.
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,

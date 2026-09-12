@@ -18,12 +18,26 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Sharing `core:json`'s three digit-accumulating loops (2026-09-12)
+
+A distill folded them into one `fold_digits` helper as duplication. The body is
+a loop, so the inliner declines the call, and every digit of every number then
+pays one. json-canada deserialize over four alternating rounds: 9.738 ms/iter
+with the helper against 9.594 without.
+
+The extraction first measured flat, because it was measured on json-catalog.
+The change was to the float scanner and json-catalog's numbers are integers, so
+that row is unmoved either way (de 3.907 vs 3.906, ser 0.879 vs 0.873).
+
+Generalizes: a loop body is not a candidate for extraction, whatever the
+duplication looks like. And run a scanner change on the corpus whose values
+reach that scanner — the next entry is the same mistake from the other end.
+
 ## Making `json_ws_end` cost nothing on minified input (2026-09-12)
 
 The whitespace predicate tests `b != b' '` first, which settles a skipped byte
-in one compare and costs a stopping byte one. citm_catalog is 71% whitespace so
-it wins; canada.json is minified — 24 whitespace bytes in 2.25 MB — so it only
-pays. Measured against `origin/main`'s `core:json`, one dev compiler and five
+in one compare and a stopping byte in two. citm_catalog is 71% whitespace, so it
+wins. canada.json is minified, 24 whitespace bytes in 2.25 MB, so it only pays. Measured against `origin/main`'s `core:json`, one dev compiler and five
 alternating rounds, with the rest of the branch held constant:
 
 | `core:json`                           | catalog de | canada de |
@@ -68,8 +82,8 @@ before believing either number — they move in opposite directions here, and
 ## Reading more than four bytes per bounds check (2026-09-12)
 
 citm_catalog is 71% whitespace, in runs averaging 24 bytes past the one its
-caller already read. That is well over the 16-byte floor the entry below sets
-for batching, so widening `peek_after_whitespace_run`'s block from four bytes
+caller already read. That is well over the 16-byte floor the entry on short runs
+sets for batching, so widening `peek_after_whitespace_run`'s block from four bytes
 should pay. It does not. json-catalog deserialize, three alternating rounds
 against the four-wide arm at 4.21 ms/iter:
 
@@ -87,13 +101,14 @@ extra get past that is a lone one, and the block issues it whether the run needs
 it or not: a run ending at byte 0 still reads all sixteen.
 
 Generalizes: four is the number, not a starting point. The run length decides
-whether to batch at all (the entry below); it does not buy a wider block.
+whether to batch at all; it does not buy a wider block.
 
 ## Two digits at a time in `write_decimal_digits` (2026-09-12)
 
-The `core:prelude` integer digit loop, the twin of the `fpfmt` one three entries
-down, and it comes out the same way on a corpus of 8.8-digit integers.
-json-catalog serialize, three alternating rounds against 0.822 ms/iter:
+The `core:prelude` integer digit loop is the twin of the `fpfmt` one in the
+entry on `write_digits_at`, and it comes out the same way on a corpus of
+8.8-digit integers. json-catalog serialize, three alternating rounds against
+0.822 ms/iter:
 
 - **`t / 100`, then the pair's two digits off the remainder**: 0.956, 0.956,
   1.045. Same store count, half the divisions and half the loop trips.

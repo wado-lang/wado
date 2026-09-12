@@ -347,11 +347,10 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
     let mut start = None;
     let mut offset = 0;
     for line in wir.split_inclusive('\n') {
-        if start.is_some() && line.starts_with('}') {
-            return Some(&wir[start.unwrap()..offset + line.len()]);
-        }
-        if start.is_none() && line.starts_with("fn \"") && line.contains(scope) {
-            start = Some(offset);
+        match start {
+            Some(s) if line.starts_with('}') => return Some(&wir[s..offset + line.len()]),
+            None if line.starts_with("fn \"") && line.contains(scope) => start = Some(offset),
+            _ => {}
         }
         offset += line.len();
     }
