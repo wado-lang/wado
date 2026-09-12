@@ -862,21 +862,9 @@ fn digit_value(b: i32) -> u32 {
 /// that many needs no overflow check.
 global I64_SAFE_DIGITS: i32 = 18;
 
-/// Folds the digits in `[pos, cap)` into `acc`, stopping at the first byte
-/// that is not one. Returns the accumulator and the position it stopped at.
-fn fold_digits(input: &ByteSlice, pos: i32, cap: i32, acc: u64) -> [u64, i32] {
-    let mut v = acc;
-    let mut p = pos;
-    while p < cap {
-        let d = digit_value(input.get_unchecked(p) as i32);
-        if d > 9 {
-            break;
-        }
-        v = v * 10 + d as u64;
-        p += 1;
-    }
-    return [v, p];
-}
+// The digit-accumulating loop is written out at each of its three sites rather
+// than shared. Calling out for it costs json-canada deserialize 5.8%: the body
+// is a loop, so the inliner declines it, and every digit then pays a call.
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
 /// needs the float-based integer fallback.
@@ -1474,8 +1462,15 @@ impl JsonDeserializer {
         if cap > len {
             cap = len;
         }
-        let mut [digits, end] = fold_digits(&input, pos, cap, 0);
-        pos = end;
+        let mut digits: u64 = 0;
+        while pos < cap {
+            let d = digit_value(input.get_unchecked(pos) as i32);
+            if d > 9 {
+                break;
+            }
+            digits = digits * 10 + d as u64;
+            pos += 1;
+        }
         let mut acc_digits = pos - sig_start;
         if pos == cap {
             while pos < len && digit_value(input.get_unchecked(pos) as i32) <= 9 {
@@ -1502,9 +1497,14 @@ impl JsonDeserializer {
                 frac_cap = len;
             }
             let frac_start = pos;
-            let [with_frac, frac_end] = fold_digits(&input, pos, frac_cap, digits);
-            digits = with_frac;
-            pos = frac_end;
+            while pos < frac_cap {
+                let d = digit_value(input.get_unchecked(pos) as i32);
+                if d > 9 {
+                    break;
+                }
+                digits = digits * 10 + d as u64;
+                pos += 1;
+            }
             frac_digits = pos - frac_start;
             acc_digits += frac_digits;
             if pos == frac_cap {
@@ -1620,8 +1620,15 @@ impl JsonDeserializer {
             if cap > len {
                 cap = len;
             }
-            let [v, end] = fold_digits(&input, pos, cap, 0);
-            pos = end;
+            let mut v: u64 = 0;
+            while pos < cap {
+                let d = digit_value(input.get_unchecked(pos) as i32);
+                if d > 9 {
+                    break;
+                }
+                v = v * 10 + d as u64;
+                pos += 1;
+            }
             if pos == digits_start {
                 break fast;
             }
