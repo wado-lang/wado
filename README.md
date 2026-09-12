@@ -13,7 +13,7 @@ Visit [wado-lang.org](https://wado-lang.org) for the documentation, playground, 
 This is a complete Wado program that prints "Hello, world!" to stdout:
 
 ```wado
-#!/usr/bin/env wado run
+#!/usr/bin/env -S wado run
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
@@ -55,34 +55,64 @@ Prebuilt binaries are published on
 
 Each archive contains the `wado` binary plus `LICENSE` and `README.md`.
 
-On macOS and Linux, run the commands below to download, verify, and install the Wado CLI. The provenance check requires the GitHub CLI (`gh`). Make sure `~/bin` is in your `PATH` before running `wado`.
+On macOS and Linux, choose one of the following methods. Make sure `~/bin` is in your `PATH` before running `wado`. We provide explicit commands instead of an installer script so you can review each step before running it.
+
+#### With GitHub CLI (`gh`)
+
+Download the latest release and verify its integrity and signed [build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations):
 
 ```sh
-# Download the latest release and verify its checksum and build provenance
+(
+  set -e
+  cd "$(mktemp -d)"
+  ASSET="wado-$(uname -s | tr A-Z a-z)-$(uname -m).tar.gz"
 
-BASE=https://github.com/wado-lang/wado/releases/latest/download
-ASSET="wado-$(uname -s | tr A-Z a-z)-$(uname -m).tar.gz"
+  gh release download --repo wado-lang/wado --pattern "$ASSET"
+  gh attestation verify --repo wado-lang/wado "$ASSET"
 
-curl -fsSLO "$BASE/$ASSET"
+  tar xzf "$ASSET"
+  mkdir -p ~/bin
+  install -m 755 "${ASSET%.tar.gz}/wado" ~/bin/wado
 
-if command -v shasum >/dev/null; then
-  curl -fsSL "$BASE/SHA256SUMS.txt" | shasum -a 256 --ignore-missing -c -
-else
-  curl -fsSL "$BASE/SHA256SUMS.txt" | sha256sum --ignore-missing -c -
-fi
-gh attestation verify --repo wado-lang/wado "$ASSET"
-
-tar xzf "$ASSET"
-mkdir -p ~/bin && install -m 755 "${ASSET%.tar.gz}/wado" ~/bin/wado
-
-wado --version # verify installation
+  ~/bin/wado --version
+)
 ```
 
-Every release archive carries a signed [build provenance attestation](https://docs.github.com/en/actions/security-guides/using-artifact-attestations)
-binding the file to the workflow run that built it; the `gh attestation verify`
-step above checks it.
+#### With curl and SHA-256 checksums
 
-On Windows, download the matching `wado-windows-*.zip`, verify its checksum against `SHA256SUMS.txt`, and check its provenance with `gh attestation verify --repo wado-lang/wado <archive>`. Extract the archive and place `wado.exe` in a directory on your `PATH`.
+This method does not require `gh`. It checks the archive against the published checksum, but does not verify build provenance.
+
+```sh
+(
+  set -e
+  cd "$(mktemp -d)"
+  BASE=https://github.com/wado-lang/wado/releases/latest/download
+  ASSET="wado-$(uname -s | tr A-Z a-z)-$(uname -m).tar.gz"
+
+  curl -fsSLO "$BASE/$ASSET"
+  curl -fsSLO "$BASE/SHA256SUMS.txt"
+  awk -v asset="$ASSET" '$2 == asset { print; found = 1 } END { exit !found }' \
+    SHA256SUMS.txt > CHECKSUM.txt
+
+  if command -v shasum >/dev/null; then
+    shasum -a 256 -c CHECKSUM.txt
+  else
+    sha256sum -c CHECKSUM.txt
+  fi
+
+  tar xzf "$ASSET"
+  mkdir -p ~/bin
+  install -m 755 "${ASSET%.tar.gz}/wado" ~/bin/wado
+
+  ~/bin/wado --version
+)
+```
+
+Both methods stop on failure and leave the downloaded files in a temporary directory.
+
+#### Windows
+
+Download the matching `wado-windows-*.zip` and either verify its provenance with `gh attestation verify --repo wado-lang/wado <archive>` or verify its checksum against `SHA256SUMS.txt`. Extract the archive and place `wado.exe` in a directory on your `PATH`.
 
 ### From source
 
