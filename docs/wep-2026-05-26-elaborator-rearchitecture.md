@@ -928,14 +928,13 @@ resolved once at its declaration instead of re-resolved per use.
 
 ### Transient walk state without guards
 
-`scope.rs` guards what it owns; dozens of `mem::replace` / `mem::take` sites on
-walk state sit outside it. `assoc_binding_stack` is mutated by a hand-written
+`scope.rs` guards what it owns; 46 `mem::replace` / `mem::take` sites on walk
+state sit outside it. `assoc_binding_stack` is mutated by a hand-written
 insert / `shift_remove` pair around a call that can return early;
-`with_module_perspective_for` and `with_reference_recording_suppressed`
-restore by assignment after the body rather than on drop; `FunctionContext`'s
-`for_continue_labels`, `compound_hoist_types`, and the `scope_floor` /
-`travelled_splices` pair that `enter_travelled_expr` swaps are saved and
-restored by hand. None is panic-safe.
+`with_module_perspective_for`, `with_reference_recording_suppressed` and
+`with_caller_bindings_hidden` restore by assignment after the body rather than
+on drop; `FunctionContext`'s `for_continue_labels` and `compound_hoist_types`
+are saved and restored by hand. None is panic-safe.
 
 Closing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
 onto `Scope` where the membership rule puts it.

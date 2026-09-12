@@ -2444,9 +2444,8 @@ impl FunctionContext {
         type_table: &RefCell<TypeTable>,
     ) -> Self {
         // Snapshot all locals from outer context
-        let outer_scopes = &outer_ctx.scopes;
         let mut outer_locals = IndexMap::default();
-        for scope in outer_scopes {
+        for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 outer_locals.insert(name.clone(), local.clone());
             }
@@ -2454,7 +2453,7 @@ impl FunctionContext {
 
         // Compute box types for address-taken outer locals
         let mut outer_box_types = IndexMap::default();
-        for scope in outer_scopes {
+        for scope in &outer_ctx.scopes {
             for (name, local) in scope {
                 if outer_ctx.address_taken_locals.contains(&local.index) {
                     let ref_type = type_table.borrow_mut().make_mut_ref(local.type_id);
@@ -3020,7 +3019,6 @@ impl<'a> TypeLookup<'a> {
     /// The function-local items tried ahead of the indexes are the walk's own
     /// position; a local item is visible only after its declaration statement.
     pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
-        let frame = self.current_module_source;
         let canon = canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.fn_local_items.get(name) {
@@ -3033,11 +3031,11 @@ impl<'a> TypeLookup<'a> {
         // reach — what it imported, what it declares, what the prelude gives
         // it — so a declaration this module cannot see stays unseen here.
         self.resolutions
-            .imported_as(frame, name)
+            .imported_as(self.current_module_source, name)
             .or_else(|| {
                 self.decls?
                     .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == frame)
+                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
             })
             .or_else(|| self.resolutions.prelude_decl(name))
     }

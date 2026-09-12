@@ -1,14 +1,13 @@
 // Regression: a binding introduced INSIDE a default expression — a closure
 // parameter, a match / if-let pattern binding, or a labeled-block `let` — that
-// shadows an EARLIER parameter must win inside that form. The earlier
-// parameter's substituted argument must not leak past the shadow.
+// shadows an EARLIER parameter must win inside that form. The caller's value
+// for that parameter must not leak past the shadow.
 //
-// `Expr::substitute_idents` (annotate side) leaves these binder / control
-// forms untouched, so the shadowing binding resolves there; reify must agree.
-// Before the fix, reify's default-argument override map (keyed by parameter
-// name) hijacked the shadowed name inside the form, so the inner binding was
-// ignored in favour of the outer argument. `reify_expr` now suppresses the
-// override map while descending into these forms (`with_defaults_suppressed`).
+// Annotate resolves the shadowing binding, and reify must agree. Its
+// default-argument override map is keyed by parameter name, and it used to
+// hijack the shadowed name inside the form, so the inner binding lost to the
+// outer argument. Reify now suppresses the map while descending into a binder
+// or control form.
 
 global OPT: Option<i32> = Option::Some(99);
 

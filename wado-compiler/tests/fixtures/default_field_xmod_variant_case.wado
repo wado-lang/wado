@@ -2,12 +2,11 @@
 //! type path (`Mode::Fast`, `Color::Red`) must resolve in the struct's
 //! declaring module when the struct is constructed from another module
 //! that does NOT import the type. Default expressions resolve in the
-//! declaration scope (`default_scope_module`); before the fix the
-//! annotate-phase fallback only covered bare identifiers (globals /
-//! function refs), so the qualified variant / enum case errored with
-//! "unknown identifier 'Mode::Fast'" — with the span misattributed to
-//! this file. The private-global default (`retries`) already worked and
-//! pins the existing behavior.
+//! declaration scope; annotate used to cover only bare identifiers there
+//! (globals / function refs), so the qualified variant / enum case
+//! errored with "unknown identifier 'Mode::Fast'", and the span was
+//! misattributed to this file. The private-global default (`retries`)
+//! already worked and pins the existing behavior.
 
 use { Job, mode_score, color_score } from "./sub/default_scope_xmod_lib.wado";
 
