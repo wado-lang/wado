@@ -1,6 +1,5 @@
-//! What every tool that reads the repository's Rust with the Gale-generated
-//! parser needs: the recognizer with its base ports installed, and the WASI
-//! plumbing that turns a command line into file contents.
+//! What both Rust tools here need: the recognizer with its base ports
+//! installed, and the WASI plumbing from a command line to file contents.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -103,8 +102,6 @@ pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> wit
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" {
-            // Without this the option falls through the `.rs` arm and the run
-            // reports a clean zero files.
             assert i + 1 < argv.len(), "--paths-from needs a file";
             i += 1;
             // An unreadable list yields no paths, which would otherwise read as

@@ -21,11 +21,8 @@ fn line_of(source: &String, at: i32) -> i32 {
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let root = match corpus_root() {
-        Some(dir) => dir,
-        None => {
-            return;
-        },
+    let Some(root) = corpus_root() else {
+        return;
     };
     let paths = collect_paths(&root, &args());
 

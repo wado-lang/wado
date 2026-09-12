@@ -1,7 +1,5 @@
-//! Every `crate::` / `super::` path a Rust file writes outside a `use` item
-//! (`AGENTS.md` > General Rules), as the grammar sees it rather than as a
-//! regular expression over bytes does. `scripts/check-rust-paths.sh` drives
-//! every mode and `scripts/rust-inline-paths.json` is the baseline it ratchets.
+//! Every `crate::` / `super::` path a Rust file writes where its item is read
+//! (`AGENTS.md` > General Rules), read off the grammar rather than off bytes.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -26,36 +24,34 @@ pub struct InlinePath {
     pub text: String,
 }
 
-/// The character offset of every `crate` / `super` that opens a path outside a
-/// `use` item or a visibility, paired with the text a report quotes for it.
-///
-/// A `pub(in ...)` names a module scope rather than reading an item, and Rust's
-/// grammar admits only a path there — no import can stand in for it.
+/// The character offset of every `crate` / `super` that opens a path where its
+/// item is read, paired with the text a report quotes for it.
 fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     let cst = &result.cst;
     let toks = &result.tokens;
     let mut out: List<[i32, String]> = [];
     let mut depth = 0;
-    // Neither exempt rule nests the other, so the depth the first one opened at
-    // is enough to know when its subtree closes.
-    let mut free_depth = -1;
+    // A `use` item is where a path belongs, and a `pub(in ...)` names a scope
+    // rather than reading an item, so Rust admits no import there. Neither
+    // nests the other, so one depth marks where the exempt subtree closes.
+    let mut exempt_depth = -1;
     for let mut row = 0; row < cst.row_count(); row += 1 {
         match cst.tag[row] {
             Open => {
                 depth += 1;
                 let kind = cst.kind(row);
-                if free_depth < 0 && (kind == rust::RK_USEDECLARATION || kind == rust::RK_VISIBILITY) {
-                    free_depth = depth;
+                if exempt_depth < 0 && (kind == rust::RK_USEDECLARATION || kind == rust::RK_VISIBILITY) {
+                    exempt_depth = depth;
                 }
             },
             Close => {
-                if free_depth == depth {
-                    free_depth = -1;
+                if exempt_depth == depth {
+                    exempt_depth = -1;
                 }
                 depth -= 1;
             },
             Tok => {
-                if free_depth < 0 {
+                if exempt_depth < 0 {
                     let tok = cst.token_index(row);
                     let kind = toks.kind_at(tok);
                     let root = kind == rust::TK_KW_CRATE || kind == rust::TK_KW_SUPER;
