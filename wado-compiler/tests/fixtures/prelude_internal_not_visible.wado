@@ -1,8 +1,10 @@
 // The prelude's scope is what `core:prelude` exports, not what its
-// implementation modules happen to declare. `UnpackResult` is `pub` inside
-// `core:prelude/fpfmt.wado` so its siblings can name it, and `core:prelude`
-// imports that module without re-exporting anything from it — so no module
-// outside `core:` can see the name.
+// implementation modules happen to declare. `UnpackResult` is declared in
+// `core:prelude/fpfmt.wado`, which `core:prelude` imports without re-exporting
+// anything from it, so the name is not a prelude name and writing it without an
+// import is an error. It is still `pub`, so an explicit
+// `use { UnpackResult } from "core:prelude/fpfmt.wado"` reaches it; what went
+// away is the auto-import, not the symbol.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {

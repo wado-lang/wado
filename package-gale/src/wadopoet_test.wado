@@ -630,3 +630,29 @@ test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     quote.push('"');
     assert `${lit_name(quote)}` == "'\"'";
 }
+
+test "wado runs a block comment to its close, not to the first quote inside" {
+    // `/*` opens a state of its own: an unbalanced quote inside is comment
+    // text, so the hole after the close is still in a string.
+    let x = "a\"b";
+    assert wado`/* he said "hi */ let s = "${x}";` == "/* he said \"hi */ let s = \"a\\\"b\";";
+}
+
+test "wado leaves a block comment only on the star that precedes the slash" {
+    let x = "q\"r";
+    assert wado`/** doc **/ let s = "${x}";` == "/** doc **/ let s = \"q\\\"r\";";
+}
+
+test "wado reads an apostrophe inside a template as text, not as a char literal" {
+    // Without a template state the apostrophe would open `Ctx::Chr` and the
+    // hole would be escaped for `'`.
+    let x = "a`b";
+    assert wado`let m = \`don't ${x}\`;` == "let m = `don't a\\`b`;";
+}
+
+test "wado escapes a dollar in a template hole so it cannot open an interpolation" {
+    let x = "${evil}";
+    assert wado`let m = \`${x}\`;` == "let m = `\\${evil}`;";
+    // Outside a template a `$` is ordinary text.
+    assert wado`let s = "${x}";` == "let s = \"${evil}\";";
+}

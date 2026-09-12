@@ -1828,25 +1828,27 @@ literal `'…'` for a Unicode scalar.
 
 #### Escape Sequences
 
-Escape sequences are shared between character and string literals:
+Escape sequences are shared between character, string and template literals,
+except where the table names one:
 
-| Escape   | Character                  |
-| -------- | -------------------------- |
-| `\'`     | Single quote (char only)   |
-| `\"`     | Double quote (string only) |
-| `\\`     | Backslash                  |
-| `\/`     | Forward slash              |
-| `\b`     | Backspace                  |
-| `\f`     | Form feed                  |
-| `\n`     | Newline                    |
-| `\r`     | Carriage return            |
-| `\t`     | Tab                        |
-| `\0`     | Null                       |
-| `\$`     | Dollar sign (literal `$`)  |
-| `\{`     | Left brace (literal `{`)   |
-| `\}`     | Right brace (literal `}`)  |
-| `\uHHHH` | Unicode BMP (4 hex digits) |
-| `\u{H+}` | Unicode full range         |
+| Escape   | Character                   |
+| -------- | --------------------------- |
+| `\'`     | Single quote (char only)    |
+| `\"`     | Double quote (string only)  |
+| `` \` `` | Backtick (template only)    |
+| `\\`     | Backslash                   |
+| `\/`     | Forward slash               |
+| `\b`     | Backspace                   |
+| `\f`     | Form feed                   |
+| `\n`     | Newline                     |
+| `\r`     | Carriage return             |
+| `\t`     | Tab                         |
+| `\0`     | Null                        |
+| `\$`     | Dollar sign (template only) |
+| `\{`     | Left brace (literal `{`)    |
+| `\}`     | Right brace (literal `}`)   |
+| `\uHHHH` | Unicode BMP (4 hex digits)  |
+| `\u{H+}` | Unicode full range          |
 
 In a template string only `${` opens an interpolation, so `{` and `}` are already
 literal and need no escaping. Use `\$` to write a literal `$` before a `{`

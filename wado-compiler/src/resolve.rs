@@ -129,20 +129,28 @@ impl Scopes {
     ) -> Self {
         let mut out = Self::default();
         // The prelude scope is what `core:prelude` exports — its own
-        // declarations and what it re-exports — and nothing else. An
+        // declarations and what it re-exports. A name that lands here is in
+        // scope in every module of the program, `core:` or not, so it has to
+        // reach that far on its own: `reachable_from(false)`. An
         // implementation module's symbol is `pub` so its siblings can name it,
-        // not so every module in the program can.
+        // and a prelude-private helper is nobody's to name.
         let prelude = ModuleSource::prelude();
         let mut surface: IndexMap<String, DefId> = IndexMap::default();
         for name in symbols.reexport_names(&prelude) {
-            if let Some(sym) = symbols.lookup_in_module(&prelude, &name)
+            let reexport_reaches = symbols
+                .get_reexport(&prelude, &name)
+                .is_some_and(|r| r.visibility.reachable_from(false));
+            if reexport_reaches
+                && let Some(sym) = symbols.lookup_in_module(&prelude, &name)
                 && let Some(def) = defs.of_ast_id(sym.defined_at)
             {
                 surface.insert(name, def);
             }
         }
         for sym in symbols.get_module_symbols(&prelude) {
-            if let Some(def) = defs.of_ast_id(sym.defined_at) {
+            if sym.visibility.reachable_from(false)
+                && let Some(def) = defs.of_ast_id(sym.defined_at)
+            {
                 surface.entry(sym.name.clone()).or_insert(def);
             }
         }
@@ -675,12 +683,27 @@ mod tests {
         ModuleSource,
         IndexMap<ModuleSource, Module>,
     ) {
+        resolve_sources(entry, other, |i| i.local("./other.wado"))
+    }
+
+    /// As `resolve_with_ast`, with the second module's source chosen by the
+    /// caller — `core:prelude` for a test about the prelude tier.
+    fn resolve_sources(
+        entry: &str,
+        other: &str,
+        mint_other: impl FnOnce(&mut ModuleSourceInterner) -> ModuleSource,
+    ) -> (
+        Resolutions,
+        ModuleSource,
+        ModuleSource,
+        IndexMap<ModuleSource, Module>,
+    ) {
         // One interner: `ModuleSource` equality is pointer identity, so two
         // interners would mint values that never compare equal and every import
         // would resolve to a module the map does not hold.
         let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
         let entry_source = interner.borrow_mut().local("./main.wado");
-        let other_source = interner.borrow_mut().local("./other.wado");
+        let other_source = mint_other(&mut interner.borrow_mut());
         let mut modules: IndexMap<ModuleSource, Module> = IndexMap::default();
         for (source, text) in [(&entry_source, entry), (&other_source, other)] {
             let lexed = crate::lexer::lex(text);
@@ -711,6 +734,24 @@ mod tests {
             other_source,
             modules,
         )
+    }
+
+    /// The prelude tier is in scope in every module, so only a name that reaches
+    /// outside `core:` belongs in it. A prelude-private helper is nobody's to
+    /// name, however freely `core:prelude` itself calls it.
+    #[test]
+    fn prelude_tier_holds_only_what_reaches_every_module() {
+        let (r, _, _, _) = resolve_sources(
+            "fn main() -> i32 { return shared(); }",
+            "#![no_prelude]
+             fn hidden() -> i32 { return 1; }
+             internal fn sibling_only() -> i32 { return 2; }
+             pub fn shared() -> i32 { return hidden() + sibling_only(); }",
+            |i| i.core("prelude"),
+        );
+        assert!(r.prelude_decl("shared").is_some());
+        assert!(r.prelude_decl("hidden").is_none());
+        assert!(r.prelude_decl("sibling_only").is_none());
     }
 
     /// Every shape a reference can take, so a walk that stops short of one is
