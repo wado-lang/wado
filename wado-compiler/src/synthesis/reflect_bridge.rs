@@ -17,6 +17,8 @@ use super::traits::{
     REFLECT_MEMBERS_ASSOC, generate_case_bridge_helpers, generate_field_bridge_helpers,
     generate_variant_instance_discriminant_fn,
 };
+use crate::hashmap;
+use crate::name::variant_tag_helper_name;
 
 /// Mint the value bridges of every instantiated generic struct and variant whose
 /// base carries a synthesized reflect impl.
@@ -50,7 +52,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
     // Keyed on the subject's mangle, not its `TypeId`: the mangle is what the
     // helper is named after, so two ids that spell the same way would still
     // produce one name twice. The variant path keys the same way.
-    let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
+    let mut seen_subjects: hashmap::IndexSet<String> = hashmap::IndexSet::default();
     for index in targets {
         let decl = &flat.structs[index];
         let fields: Vec<(String, TypeId, u32)> = decl
@@ -93,7 +95,7 @@ fn collect_struct_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Tir
 fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<TirFunction>>>) {
     // The subject's mangle is the bridge's identity, so a type interned twice
     // collapses onto one helper.
-    let mut seen_subjects: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
+    let mut seen_subjects: hashmap::IndexSet<String> = hashmap::IndexSet::default();
     let instances: Vec<(TypeId, String, ModuleSource, Vec<TypeId>)> = {
         let tt = flat.type_table.borrow();
         tt.iter_type_ids()
@@ -162,9 +164,8 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
         // The tag read is named after the subject, and lowering mints the call
         // after monomorphization, so the generic declaration's `discriminant`
         // is a template nothing instantiates.
-        let discriminant_name = crate::name::variant_tag_helper_name(
-            &flat.type_table.borrow().mangle_type_arg_erased(subject),
-        );
+        let discriminant_name =
+            variant_tag_helper_name(&flat.type_table.borrow().mangle_type_arg_erased(subject));
         helpers.push(generate_variant_instance_discriminant_fn(
             discriminant_name,
             ref_subject,

@@ -21,6 +21,13 @@ use super::trait_env::TraitEnv;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, VariantInfo,
 };
+use crate::ast::{AstId, GenericParam};
+use crate::defs::DefId;
+use crate::elaborator::sig;
+use crate::elaborator::solver_bridge::SolverBridge;
+use crate::hashmap;
+use crate::name::FqTypeName;
+use crate::resolve::Resolutions;
 
 /// Pipeline-wide type knowledge — the type arena, the cross-module decl
 /// indices, the registries, and the read-only caches built once at
@@ -41,18 +48,18 @@ pub(crate) struct TypeSystem {
     /// the annotate-decls pass; read-only afterwards. [`super::types::TypeLookup`]
     /// resolves type names against these without cloning into per-module
     /// flat maps.
-    pub(crate) all_newtypes: Rc<IndexMap<crate::defs::DefId, TypeId>>,
-    pub(crate) all_generic_newtypes: Rc<IndexMap<crate::defs::DefId, GenericNewtypeInfo>>,
-    pub(crate) all_struct_fields: Rc<IndexMap<crate::defs::DefId, StructFieldInfo>>,
-    pub(crate) all_variant_cases: Rc<IndexMap<crate::defs::DefId, VariantInfo>>,
-    pub(crate) all_enum_cases: Rc<IndexMap<crate::defs::DefId, EnumInfo>>,
-    pub(crate) all_flags_cases: Rc<IndexMap<crate::defs::DefId, FlagsInfo>>,
-    pub(crate) all_resource_types: Rc<IndexMap<crate::defs::DefId, ResourceInfo>>,
+    pub(crate) all_newtypes: Rc<IndexMap<DefId, TypeId>>,
+    pub(crate) all_generic_newtypes: Rc<IndexMap<DefId, GenericNewtypeInfo>>,
+    pub(crate) all_struct_fields: Rc<IndexMap<DefId, StructFieldInfo>>,
+    pub(crate) all_variant_cases: Rc<IndexMap<DefId, VariantInfo>>,
+    pub(crate) all_enum_cases: Rc<IndexMap<DefId, EnumInfo>>,
+    pub(crate) all_flags_cases: Rc<IndexMap<DefId, FlagsInfo>>,
+    pub(crate) all_resource_types: Rc<IndexMap<DefId, ResourceInfo>>,
 
     /// What every type/trait reference site in the program refers to, resolved
     /// once from the module that wrote it. The single producer of declaration
     /// identity from written syntax (WEP 2026-08-12).
-    pub(crate) resolutions: Rc<crate::resolve::Resolutions>,
+    pub(crate) resolutions: Rc<Resolutions>,
 
     /// Immutable trait knowledge base: impl indices, trait declarations,
     /// and blanket impls. Built once by [`TraitEnv::build`] and shared
@@ -62,7 +69,7 @@ pub(crate) struct TypeSystem {
     /// resolved and `None` until then. Selection asks it in every profile, so
     /// that a debug and a release build cannot choose different impls
     /// (WEP 2026-09-01).
-    pub(crate) solver: Option<Rc<super::solver_bridge::SolverBridge>>,
+    pub(crate) solver: Option<Rc<SolverBridge>>,
 
     /// Registries the elaborator queries. The Component-Model
     /// `WorldRegistry` is built by the same `CmInterfaceRegistry::build_from_stdlib`
@@ -101,7 +108,7 @@ pub(crate) struct TypeSystem {
     /// Every source declaration's decl-pass facts — signatures, globals,
     /// associated constants, data sections. See [`super::sig::Signatures`]
     /// for the membership rule.
-    pub(crate) signatures: Rc<super::sig::Signatures>,
+    pub(crate) signatures: Rc<sig::Signatures>,
 }
 
 impl TypeSystem {
@@ -147,7 +154,7 @@ impl TypeSystem {
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare
     /// identifier site: the hint when no expected type supplies one.
-    pub(crate) fn bare_case_at(&self, site: crate::ast::AstId) -> Option<String> {
+    pub(crate) fn bare_case_at(&self, site: AstId) -> Option<String> {
         let case = self.resolutions.declared_if_walked(site)?;
         let defs = self.resolutions.defs();
         if !defs.kind(case).is_case() {
@@ -164,7 +171,7 @@ impl TypeSystem {
         if type_args.is_empty() {
             return type_id;
         }
-        let substitution: crate::hashmap::IndexMap<u32, TypeId> = type_args
+        let substitution: hashmap::IndexMap<u32, TypeId> = type_args
             .iter()
             .enumerate()
             .map(|(i, &t)| (i as u32, t))
@@ -175,18 +182,14 @@ impl TypeSystem {
     }
 
     /// The `Type::Case` spelling of `case` under `owner`.
-    pub(crate) fn qualified_case(&self, owner: crate::defs::DefId, case: &str) -> String {
+    pub(crate) fn qualified_case(&self, owner: DefId, case: &str) -> String {
         format!("{}::{case}", self.resolutions.defs().name(owner))
     }
 
     /// The method `name` that `owner` — an `impl` block or a `trait`
     /// declaration — declares. Answered from the declaration table, so two
     /// blocks on one type each declaring `name` stay distinct.
-    pub(crate) fn declared_method(
-        &self,
-        owner: crate::defs::DefId,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(crate) fn declared_method(&self, owner: DefId, name: &str) -> Option<DefId> {
         let defs = self.resolutions.defs();
         defs.members(owner)
             .iter()
@@ -199,11 +202,7 @@ impl TypeSystem {
     /// only way in and the whole of it: `String` in `impl Tr for Foo<String>`
     /// fills an argument position and binds no slot, and a name the block does
     /// declare is a slot however many modules name a type that.
-    pub(crate) fn is_impl_target_param(
-        &self,
-        declared: &[crate::ast::GenericParam],
-        name: &str,
-    ) -> bool {
+    pub(crate) fn is_impl_target_param(&self, declared: &[GenericParam], name: &str) -> bool {
         declared.iter().any(|p| p.name == name)
     }
 
@@ -263,9 +262,7 @@ impl TypeSystem {
                 .map(|(n, _)| n),
             // `Array<T>` is declared definitionless, so it has no nominal head
             // to read; its declaration names it `Array` and carries its impls.
-            ResolvedType::BuiltinArray(_) => {
-                Some(crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string())
-            }
+            ResolvedType::BuiltinArray(_) => Some(TypeTable::ARRAY_TYPE_NAME.to_string()),
             _ => None,
         }
     }
@@ -275,18 +272,14 @@ impl TypeSystem {
     /// (`List<i32>` → `core:prelude/list.wado/List`). Reading the module off
     /// the resolved type is what makes this exact — a written name would have
     /// to be re-resolved in the current scope, which the type already did.
-    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> crate::name::FqTypeName {
+    pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> FqTypeName {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
     /// The first link at or below `type_id` — itself included — writing its own
     /// impl of `trait_`, stopping above a scalar base: a primitive's operator
     /// impl *is* the instruction, not one a newtype inherits.
-    pub(crate) fn own_impl_link(
-        &self,
-        type_id: TypeId,
-        trait_: crate::defs::DefId,
-    ) -> Option<TypeId> {
+    pub(crate) fn own_impl_link(&self, type_id: TypeId, trait_: DefId) -> Option<TypeId> {
         let mut tid = type_id;
         loop {
             let key = self.type_table.borrow().impl_receiver_key(tid);
@@ -317,7 +310,7 @@ impl TypeSystem {
         &self,
         name: &str,
         type_id: TypeId,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
     ) -> (String, TypeId) {
         match self.own_impl_link(type_id, trait_) {
             Some(link) if link != type_id => (self.type_table.borrow().base_type_name(link), link),
@@ -333,7 +326,7 @@ impl TypeSystem {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {
-                return (crate::tir::TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
+                return (TypeTable::ARRAY_TYPE_NAME.to_string(), base_id);
             }
             if let Some(base_name) = self.struct_name_for_type(base_id) {
                 return (base_name, base_id);

@@ -3,6 +3,7 @@
 //! packing encodes smaller than inline operands, and splitting one past the
 //! threshold into `array.new_default` + sets.
 
+use crate::tir::PrimitiveType;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
@@ -181,7 +182,7 @@ fn try_pack_constant_elements(element_type: &WirType, elements: &[WirInstr]) -> 
 /// lowering, asked by `const_object_globalization` before it. `bool` is not a
 /// `PrimitiveType`; an enum or flags element is four bytes, like the `u32` it
 /// lowers to.
-pub(crate) fn primitive_byte_width(prim: crate::tir::PrimitiveType) -> Option<usize> {
+pub(crate) fn primitive_byte_width(prim: PrimitiveType) -> Option<usize> {
     use crate::tir::PrimitiveType as P;
     Some(match prim {
         P::I8 | P::U8 => 1,

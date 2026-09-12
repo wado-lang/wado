@@ -26,6 +26,9 @@ use super::types::{
     LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id,
     disc_load_op, kebab_to_pascal,
 };
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::tir::StructDef;
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
 ///
@@ -105,18 +108,10 @@ fn synthesize_lift_inner(
         let tt = ctx.type_table.borrow();
         let items = tt.compiler_items();
         (
-            items
-                .struct_name(crate::compiler_item::CompilerItem::String)
-                .to_string(),
-            items
-                .struct_name(crate::compiler_item::CompilerItem::List)
-                .to_string(),
-            items
-                .variant_name(crate::compiler_item::CompilerItem::Option)
-                .to_string(),
-            items
-                .variant_name(crate::compiler_item::CompilerItem::Result)
-                .to_string(),
+            items.struct_name(CompilerItem::String).to_string(),
+            items.struct_name(CompilerItem::List).to_string(),
+            items.variant_name(CompilerItem::Option).to_string(),
+            items.variant_name(CompilerItem::Result).to_string(),
         )
     };
     match ty {
@@ -132,7 +127,7 @@ fn synthesize_lift_inner(
                 let string_type_id = ctx
                     .type_table
                     .borrow_mut()
-                    .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+                    .make_compiler_struct(CompilerItem::String);
                 return internal_call("memory_to_gc_string", vec![ptr, len], string_type_id);
             }
             match named_name {
@@ -337,7 +332,7 @@ fn try_lift_wasi_struct(
         let def = ctx.cm_decl(source, &named.name);
         ctx.type_table
             .borrow_mut()
-            .make_struct(crate::tir::StructDef::Decl(def))
+            .make_struct(StructDef::Decl(def))
     };
 
     // Lift each field — Wado field names come directly from this interface's
@@ -587,16 +582,10 @@ pub(super) fn synthesize_lift_list(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let elem_size = crate::component_model::cm_size_with_registry_scoped(
-        elem_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
-    let elem_align = crate::component_model::cm_align_with_registry_scoped(
-        elem_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
+    let elem_size =
+        cm_size_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
+    let elem_align =
+        cm_align_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
 
     // Resolve TypeIds for `List<ElemType>` and its element, needed to
     // instantiate `List::with_capacity` / `.push()`. When the caller knows the
@@ -617,7 +606,7 @@ pub(super) fn synthesize_lift_list(
             let lt = tt.make_list(elem);
             (lt, elem)
         };
-        let list_head = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
+        let list_head = tt.compiler_struct_fq_name(CompilerItem::List);
         (elem_tid, list_tid, list_head)
     };
 
@@ -884,10 +873,8 @@ fn synthesize_lift_result_inner(
             cm_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let result_type_id = tt.make_result(ok_type_id, err_type_id);
         let items = tt.compiler_items();
-        let (_, _, ok_n, ok_i) =
-            items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-        let (_, _, err_n, err_i) =
-            items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+        let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
         (
             result_type_id,
             ok_n.to_string(),
@@ -1037,7 +1024,7 @@ fn synthesize_lift_tuple(
 fn string_name_for_free(ctx: &LiftContext<'_>) -> String {
     ctx.type_table
         .borrow()
-        .compiler_struct_name(crate::compiler_item::CompilerItem::String)
+        .compiler_struct_name(CompilerItem::String)
         .to_string()
 }
 

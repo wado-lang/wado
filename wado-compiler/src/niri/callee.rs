@@ -10,11 +10,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
-use crate::nir::NirFunction;
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, Operand};
 
 /// Identity of a callee in the [`CalleeMap`].
-pub type CalleeKey = crate::nir::FuncId;
+pub type CalleeKey = FuncId;
 
 /// The callees a compile-time frame may run.
 ///

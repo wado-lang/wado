@@ -16,6 +16,7 @@ use crate::nir_package::NirPackage;
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::nir::FuncId;
+use crate::tir::TypeTable;
 
 /// A function's canonical [`FuncId`]: the candidate/confirmed/pinned sets key on
 /// it, and a call site is matched by the stamped `func_id` on its call node.
@@ -226,7 +227,7 @@ fn validate_in_body(
     body: &Body,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
-    type_table: &crate::tir::TypeTable,
+    type_table: &TypeTable,
 ) {
     body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(id) = node {
@@ -240,7 +241,7 @@ fn validate_call(
     id: ExprId,
     candidates: &IndexMap<FnKey, Vec<bool>>,
     rejected: &mut IndexSet<FnKey>,
-    type_table: &crate::tir::TypeTable,
+    type_table: &TypeTable,
 ) {
     let ExprKind::Call { func_id, args, .. } = &body.exprs[id].kind else {
         return;

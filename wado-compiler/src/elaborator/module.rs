@@ -10,7 +10,14 @@ use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
     VariantCaseData, VariantInfo,
 };
-use crate::name::{MethodName, RefKind};
+use crate::elaborator::item::{
+    register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
+    register_method_compiler_item, register_trait_compiler_item,
+    register_variant_case_compiler_item, register_variant_compiler_item,
+};
+use crate::elaborator::scope::param_decl;
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::name::{FqTypeName, MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_types(&mut self, module: &Module) {
@@ -38,7 +45,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_defaults.push(field.default.clone());
                     }
                     // Extract type parameter bounds
-                    let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> = struct_decl
+                    let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
                         .type_params
                         .iter()
                         .map(|p| {
@@ -46,7 +53,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 p.name.clone(),
                                 p.bounds
                                     .iter()
-                                    .map(|b| super::types::BoundRef {
+                                    .map(|b| BoundRef {
                                         name: b.name.clone(),
                                         site: b.id,
                                     })
@@ -81,9 +88,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
-                            type_param_defaults: super::types::type_param_defaults_of(
-                                &struct_decl.type_params,
-                            ),
+                            type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
                         },
                     );
 
@@ -121,7 +126,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: super::types::type_param_defaults_of(
+                                type_param_defaults: type_param_defaults_of(
                                     &newtype_decl.type_params,
                                 ),
                             },
@@ -185,13 +190,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             type_params,
                             cases,
                             type_param_type_ids,
-                            type_param_defaults: super::types::type_param_defaults_of(
-                                &variant_decl.type_params,
-                            ),
+                            type_param_defaults: type_param_defaults_of(&variant_decl.type_params),
                         },
                     );
 
-                    super::item::register_variant_compiler_item(
+                    register_variant_compiler_item(
                         &scope.tysys.type_table,
                         &variant_decl.attrs,
                         variant_decl.id,
@@ -202,7 +205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
 
                     for (case_index, case) in variant_decl.cases.iter().enumerate() {
-                        super::item::register_variant_case_compiler_item(
+                        register_variant_case_compiler_item(
                             &scope.tysys.type_table,
                             &case.attrs,
                             &variant_decl.name,
@@ -238,7 +241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // (i.e. one reached only through `module.rs` and not the
                     // first-pass walk in `orchestration.rs`) still lands in
                     // the registry.
-                    super::item::register_enum_compiler_item(
+                    register_enum_compiler_item(
                         &self.tysys.type_table,
                         &enum_decl.attrs,
                         enum_decl.id,
@@ -248,7 +251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.logger,
                     );
                     for (case_index, case) in enum_decl.cases.iter().enumerate() {
-                        super::item::register_enum_case_compiler_item(
+                        register_enum_case_compiler_item(
                             &self.tysys.type_table,
                             &case.attrs,
                             &enum_decl.name,
@@ -303,7 +306,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
                 Item::Function(func) => {
-                    super::item::register_function_compiler_item(
+                    register_function_compiler_item(
                         &self.tysys.type_table,
                         &func.attrs,
                         &func.name,
@@ -313,7 +316,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
                 Item::Trait(trait_decl) => {
-                    super::item::register_trait_compiler_item(
+                    register_trait_compiler_item(
                         &self.tysys.type_table,
                         &trait_decl.attrs,
                         trait_decl.id,
@@ -328,22 +331,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // method declarations against the trait as their owner type
                     // — the trait body is the only place a serde protocol
                     // method and its owning trait are both in scope.
-                    let owner_head =
-                        self.tysys
-                            .resolutions
-                            .defs()
-                            .of_ast_id(trait_decl.id)
-                            .map(|def| {
-                                crate::name::FqTypeName::declared(
-                                    self.tysys.resolutions.defs(),
-                                    def,
-                                )
-                            });
+                    let owner_head = self
+                        .tysys
+                        .resolutions
+                        .defs()
+                        .of_ast_id(trait_decl.id)
+                        .map(|def| FqTypeName::declared(self.tysys.resolutions.defs(), def));
                     for method in &trait_decl.methods {
                         let Some(owner_head) = owner_head.as_ref() else {
                             continue;
                         };
-                        super::item::register_method_compiler_item(
+                        register_method_compiler_item(
                             &self.tysys.type_table,
                             &method.attrs,
                             &method.name,
@@ -439,10 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     BinderInScope {
                                         index,
                                         type_id,
-                                        decl: super::scope::param_decl(
-                                            &impl_block.type_params,
-                                            name,
-                                        ),
+                                        decl: param_decl(&impl_block.type_params, name),
                                     },
                                 );
                             }
@@ -491,7 +486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // where the method declaration AND its owner type are
                 // simultaneously in scope.
                 for method in &impl_block.methods {
-                    super::item::register_method_compiler_item(
+                    register_method_compiler_item(
                         &scope.tysys.type_table,
                         &method.attrs,
                         &method.name,

@@ -9,7 +9,10 @@ use wado_manifest::{
     DependencyProvider, GitTagInfo, Manifest, ProviderError, RegistryPackageInfo, Version,
 };
 
-use crate::oci;
+use crate::compile::empty_manifest;
+use crate::git::{fetch_manifest, resolve_ref};
+use crate::manifest::resolve_manifest;
+use crate::{git, oci};
 
 /// Parse an image tag into a semver [`Version`], stripping an optional leading
 /// letter prefix (`v1.2.3`, `release1.2.3`) as the manifest WEP's git-tag rule
@@ -45,7 +48,7 @@ impl FilesystemProvider {
         if toml_path.file_name().and_then(|n| n.to_str()) != Some("wado.toml")
             || !toml_path.is_file()
         {
-            return Ok(crate::compile::empty_manifest());
+            return Ok(empty_manifest());
         }
         let text = std::fs::read_to_string(&toml_path).map_err(|e| ProviderError::IoError {
             path: toml_path.display().to_string(),
@@ -55,11 +58,9 @@ impl FilesystemProvider {
         // workspace member: it force-inherits `version` and would otherwise fail
         // a standalone parse. Falls back to a standalone parse when it is not.
         let member_dir = toml_path.parent().unwrap_or(self.root.as_path());
-        crate::manifest::resolve_manifest(member_dir, &text).map_err(|e| {
-            ProviderError::InvalidManifest {
-                source: toml_path.display().to_string(),
-                message: e.to_string(),
-            }
+        resolve_manifest(member_dir, &text).map_err(|e| ProviderError::InvalidManifest {
+            source: toml_path.display().to_string(),
+            message: e.to_string(),
         })
     }
 }
@@ -134,7 +135,7 @@ impl DependencyProvider for FilesystemProvider {
             // no transitive Wado dependencies and no source entry module. The
             // lock records the resolved version and the manifest digest.
             Ok(RegistryPackageInfo {
-                manifest: crate::compile::empty_manifest(),
+                manifest: empty_manifest(),
                 integrity,
             })
         }
@@ -145,7 +146,7 @@ impl DependencyProvider for FilesystemProvider {
         url: &str,
     ) -> impl Future<Output = Result<Vec<GitTagInfo>, ProviderError>> + Send {
         let url = url.to_string();
-        on_blocking(move || crate::git::list_tags(&url))
+        on_blocking(move || git::list_tags(&url))
     }
 
     fn resolve_git_ref(
@@ -155,7 +156,7 @@ impl DependencyProvider for FilesystemProvider {
     ) -> impl Future<Output = Result<String, ProviderError>> + Send {
         let url = url.to_string();
         let ref_name = ref_name.to_string();
-        on_blocking(move || crate::git::resolve_ref(&url, &ref_name))
+        on_blocking(move || resolve_ref(&url, &ref_name))
     }
 
     fn fetch_git_manifest(
@@ -167,7 +168,7 @@ impl DependencyProvider for FilesystemProvider {
         let url = url.to_string();
         let sha = sha.to_string();
         let directory = directory.map(str::to_string);
-        on_blocking(move || crate::git::fetch_manifest(&url, &sha, directory.as_deref()))
+        on_blocking(move || fetch_manifest(&url, &sha, directory.as_deref()))
     }
 
     fn load_path_manifest(
@@ -181,6 +182,7 @@ impl DependencyProvider for FilesystemProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manifest::resolve_manifest;
     use std::assert_matches;
     use std::future::Future;
 
@@ -262,7 +264,7 @@ name = "app"
         .unwrap();
 
         let app_dir = tmp.path().join("app");
-        let manifest = crate::manifest::resolve_manifest(
+        let manifest = resolve_manifest(
             &app_dir,
             &std::fs::read_to_string(app_dir.join("wado.toml")).unwrap(),
         )

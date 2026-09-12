@@ -3,20 +3,26 @@
 // Converts AST back to canonical source code with comments.
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AttrArg, Attribute, BinaryExpr, BinaryOp, Block,
-    BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison, ClosureExpr,
-    ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement,
-    EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl, ForOfStmt, ForStmt, Function,
-    FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LoopStmt, MatchArm, MatchExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, ResourceDecl, RestClause, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
-    TemplateStringExpr, TestDecl, TraitDecl, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr,
-    UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WorldDecl, WorldExport,
+    AssertStmt, AssignExpr, AssociatedConst, AstId, AstVisitor, AttrArg, AttrObject, AttrValue,
+    Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
+    ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
+    Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt,
+    ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
+    TraitBound, TraitDecl, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
+    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
 };
-use crate::comment::{Comment, CommentKind};
+use crate::comment::{Comment, CommentKind, TriviaMap};
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
+use crate::semantics::member_visible;
+use crate::tir;
+use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
 use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;
@@ -51,7 +57,7 @@ fn has_with(u: &UseDecl) -> bool {
 /// Structural nesting depth of an attribute value: scalars (and empty
 /// containers) are 0, a container of scalars is 1, a container holding another
 /// container is 2, and so on.
-fn attr_value_depth(v: &crate::ast::AttrValue) -> usize {
+fn attr_value_depth(v: &AttrValue) -> usize {
     use crate::ast::AttrValue;
     match v {
         AttrValue::Array(items) if !items.is_empty() => {
@@ -217,10 +223,10 @@ pub struct Unparser<'a> {
     /// `trivia.trailing_of(id)`, or `trivia.inner_tail_of(id)`. `None`
     /// means "render without comments" (used by `wado dump`'s
     /// AST-rendering path, where comment fidelity is not required).
-    trivia: Option<&'a crate::comment::TriviaMap>,
+    trivia: Option<&'a TriviaMap>,
     /// All comments sorted by source position (cached from `trivia`). Used for
     /// positional emission where node-keyed lookup misses a comment.
-    all_comments: Vec<crate::comment::Comment>,
+    all_comments: Vec<Comment>,
     output: String,
     indent_level: usize,
     emitted_comments: IndexSet<usize>,
@@ -249,7 +255,7 @@ impl<'a> Unparser<'a> {
     /// formatter pipeline can opt in with
     /// `Unparser::new().with_trivia(&trivia)`, while paths that don't
     /// care about comments (e.g. AST dump) just call `Unparser::new()`.
-    pub fn with_trivia(mut self, trivia: &'a crate::comment::TriviaMap) -> Self {
+    pub fn with_trivia(mut self, trivia: &'a TriviaMap) -> Self {
         self.all_comments = trivia.all_comments();
         self.trivia = Some(trivia);
         self
@@ -293,14 +299,14 @@ impl<'a> Unparser<'a> {
     /// Open a member's line: whatever the members before it had no slot for,
     /// then its own leading comments — in that order, so nothing lands between
     /// a doc comment and what it documents.
-    fn open_member(&mut self, id: crate::ast::AstId, start: usize) {
+    fn open_member(&mut self, id: AstId, start: usize) {
         self.flush_comments_before(self.leading_start(id, start), Spacing::KeepBlankLines);
         self.emit_leading_for(id);
     }
 
     /// Where `id`'s leading run begins: the first leading comment no construct
     /// has placed, else `fallback`.
-    fn leading_start(&self, id: crate::ast::AstId, fallback: usize) -> usize {
+    fn leading_start(&self, id: AstId, fallback: usize) -> usize {
         self.first_unplaced_leading(id)
             .map_or(fallback, |c| c.span.start)
     }
@@ -308,7 +314,7 @@ impl<'a> Unparser<'a> {
     /// The first leading comment of `id` no construct has placed. One emitted
     /// elsewhere is no longer part of the run: it anchors nothing and bounds
     /// nothing.
-    fn first_unplaced_leading(&self, id: crate::ast::AstId) -> Option<&'a crate::comment::Comment> {
+    fn first_unplaced_leading(&self, id: AstId) -> Option<&'a Comment> {
         self.leading_of(id)
             .iter()
             .find(|c| !self.emitted_comments.contains(&c.span.start))
@@ -347,11 +353,7 @@ impl<'a> Unparser<'a> {
     }
 
     /// The comments in `lo..hi` no construct has placed, in source order.
-    fn pending_comments(
-        &self,
-        lo: usize,
-        hi: usize,
-    ) -> impl Iterator<Item = &crate::comment::Comment> {
+    fn pending_comments(&self, lo: usize, hi: usize) -> impl Iterator<Item = &Comment> {
         self.all_comments.iter().filter(move |c| {
             c.span.start >= lo
                 && c.span.start < hi
@@ -361,7 +363,7 @@ impl<'a> Unparser<'a> {
 
     /// [`Self::pending_comments`] as an owned list, for a caller that emits
     /// them and so cannot hold the borrow.
-    fn pending_comments_in(&self, lo: usize, hi: usize) -> Vec<crate::comment::Comment> {
+    fn pending_comments_in(&self, lo: usize, hi: usize) -> Vec<Comment> {
         self.pending_comments(lo, hi).cloned().collect()
     }
 
@@ -378,7 +380,7 @@ impl<'a> Unparser<'a> {
         anchors: A,
         mut emit: E,
     ) where
-        A: Fn(&T) -> (Option<usize>, Option<crate::ast::AstId>),
+        A: Fn(&T) -> (Option<usize>, Option<AstId>),
         E: FnMut(&mut Self, &T),
     {
         let mut lo = open;
@@ -406,24 +408,24 @@ impl<'a> Unparser<'a> {
 
     /// Leading trivia for `id`, or an empty slice when no trivia map is
     /// attached or the id has no recorded leading comments.
-    fn leading_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
+    fn leading_of(&self, id: AstId) -> &'a [Comment] {
         self.trivia.map(|t| t.leading_of(id)).unwrap_or(&[])
     }
 
     /// The line `id`'s leading run starts on: its first still-unplaced leading
     /// comment, else `fallback`.
-    fn leading_start_line(&self, id: crate::ast::AstId, fallback: usize) -> usize {
+    fn leading_start_line(&self, id: AstId, fallback: usize) -> usize {
         self.first_unplaced_leading(id)
             .map_or(fallback, |c| c.span.line)
     }
 
     /// Trailing trivia for `id`. Same fallback as [`Self::leading_of`].
-    fn trailing_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
+    fn trailing_of(&self, id: AstId) -> &'a [Comment] {
         self.trivia.map(|t| t.trailing_of(id)).unwrap_or(&[])
     }
 
     /// Inner-tail trivia for a block `id`. Same fallback as [`Self::leading_of`].
-    fn inner_tail_of(&self, id: crate::ast::AstId) -> &'a [crate::comment::Comment] {
+    fn inner_tail_of(&self, id: AstId) -> &'a [Comment] {
         self.trivia.map(|t| t.inner_tail_of(id)).unwrap_or(&[])
     }
 
@@ -703,30 +705,30 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" }");
     }
 
-    fn unparse_attr_value(&mut self, v: &crate::ast::AttrValue) {
+    fn unparse_attr_value(&mut self, v: &AttrValue) {
         match v {
-            crate::ast::AttrValue::String(s) => {
+            AttrValue::String(s) => {
                 self.output.push('"');
                 self.output.push_str(s);
                 self.output.push('"');
             }
-            crate::ast::AttrValue::Int(n) => {
+            AttrValue::Int(n) => {
                 self.output.push_str(&n.to_string());
             }
-            crate::ast::AttrValue::Float(f) => {
+            AttrValue::Float(f) => {
                 let s = format!("{f}");
                 self.output.push_str(&s);
                 if !s.contains('.') && !s.contains('e') && !s.contains('E') {
                     self.output.push_str(".0");
                 }
             }
-            crate::ast::AttrValue::Bool(b) => {
+            AttrValue::Bool(b) => {
                 self.output.push_str(if *b { "true" } else { "false" });
             }
-            crate::ast::AttrValue::Array(items) => {
+            AttrValue::Array(items) => {
                 self.delimited("[", "]", items, Unparser::unparse_attr_value);
             }
-            crate::ast::AttrValue::Object(obj) => {
+            AttrValue::Object(obj) => {
                 self.output.push_str("{ ");
                 self.comma_sep(obj, |s, (k, entry)| {
                     s.output.push_str(k);
@@ -742,9 +744,9 @@ impl<'a> Unparser<'a> {
     /// (depth ≥ 2) is always expanded multi-line; a leaf container (depth 1,
     /// only scalar members) is inline-first and falls back to multi-line only
     /// when it overflows. Scalars are always inline.
-    fn unparse_attr_value_wrapped(&mut self, v: &crate::ast::AttrValue) {
+    fn unparse_attr_value_wrapped(&mut self, v: &AttrValue) {
         match v {
-            crate::ast::AttrValue::Object(obj) if !obj.is_empty() => {
+            AttrValue::Object(obj) if !obj.is_empty() => {
                 self.emit_container_value(
                     attr_value_depth(v),
                     |s| s.unparse_attr_value(v),
@@ -753,7 +755,7 @@ impl<'a> Unparser<'a> {
                     },
                 );
             }
-            crate::ast::AttrValue::Array(items) if !items.is_empty() => {
+            AttrValue::Array(items) if !items.is_empty() => {
                 self.emit_container_value(
                     attr_value_depth(v),
                     |s| s.unparse_attr_value(v),
@@ -788,7 +790,7 @@ impl<'a> Unparser<'a> {
 
     /// Emit `{` then one `key: value,` per line (recursively wrapping each
     /// value as needed), then a closing `}` on its own indented line.
-    fn unparse_attr_object_multiline(&mut self, obj: &crate::ast::AttrObject) {
+    fn unparse_attr_object_multiline(&mut self, obj: &AttrObject) {
         self.output.push_str("{\n");
         self.indent_level += 1;
         for (k, entry) in obj {
@@ -805,7 +807,7 @@ impl<'a> Unparser<'a> {
 
     /// Emit `[` then one element per line (recursively wrapping each as needed),
     /// then a closing `]` on its own indented line.
-    fn unparse_attr_array_multiline(&mut self, items: &[crate::ast::AttrValue]) {
+    fn unparse_attr_array_multiline(&mut self, items: &[AttrValue]) {
         self.output.push_str("[\n");
         self.indent_level += 1;
         for item in items {
@@ -984,7 +986,7 @@ impl<'a> Unparser<'a> {
 
     /// `A + B<Item = i32>` — the shared rendering of every `+`-joined bound
     /// list: generic-parameter bounds, associated-type bounds, supertraits.
-    fn unparse_trait_bounds(&mut self, bounds: &[crate::ast::TraitBound]) {
+    fn unparse_trait_bounds(&mut self, bounds: &[TraitBound]) {
         self.comma_sep_with(" + ", bounds, |s, bound| {
             if let Some(sig) = &bound.fn_signature {
                 // `<F: fn(...)>` / `<F: fn mut(...)>` round-trip. Use
@@ -1005,7 +1007,7 @@ impl<'a> Unparser<'a> {
     }
 
     /// Unparse generic type parameters: `<T, U: Ord>`
-    fn unparse_generic_params(&mut self, params: &[crate::ast::GenericParam]) {
+    fn unparse_generic_params(&mut self, params: &[GenericParam]) {
         if params.is_empty() {
             return;
         }
@@ -1076,7 +1078,7 @@ impl<'a> Unparser<'a> {
         self.output.push(',');
     }
 
-    fn unparse_flags(&mut self, f: &crate::ast::FlagsDecl) {
+    fn unparse_flags(&mut self, f: &FlagsDecl) {
         self.emit_outer_attrs(f.attributes.as_deref().unwrap_or(&[]));
         self.emit_visibility(f.visibility);
 
@@ -1509,7 +1511,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str(";\n");
     }
 
-    fn unparse_task_return(&mut self, tr: &crate::ast::TaskReturnStmt) {
+    fn unparse_task_return(&mut self, tr: &TaskReturnStmt) {
         self.write_indent();
         self.output.push_str("task return ");
         self.unparse_expr(&tr.value);
@@ -1807,8 +1809,8 @@ impl<'a> Unparser<'a> {
             Expr::Range(range) => {
                 self.unparse_expr(&range.start);
                 match range.kind {
-                    crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
-                    crate::ast::RangeKind::Inclusive => self.output.push_str("..="),
+                    RangeKind::Exclusive => self.output.push_str("..<"),
+                    RangeKind::Inclusive => self.output.push_str("..="),
                 }
                 self.unparse_expr(&range.end);
             }
@@ -1823,7 +1825,7 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_with_handler(&mut self, w: &crate::ast::WithHandlerExpr) {
+    fn unparse_with_handler(&mut self, w: &WithHandlerExpr) {
         self.output.push_str("with ");
         self.comma_sep(&w.handlers, |s, binding| {
             if let Some(effect) = &binding.effect {
@@ -1836,7 +1838,7 @@ impl<'a> Unparser<'a> {
         self.unparse_block_expr(&w.body);
     }
 
-    fn unparse_matches(&mut self, m: &crate::ast::MatchesExpr) {
+    fn unparse_matches(&mut self, m: &MatchesExpr) {
         self.with_parens_if(matches_scrutinee_needs_parens(&m.expr), |s| {
             s.unparse_expr(&m.expr);
         });
@@ -1849,7 +1851,7 @@ impl<'a> Unparser<'a> {
         self.output.push_str(" }");
     }
 
-    fn unparse_labeled_block_expr(&mut self, lb: &crate::ast::LabeledBlockExpr) {
+    fn unparse_labeled_block_expr(&mut self, lb: &LabeledBlockExpr) {
         self.output.push_str(&lb.label);
         self.output.push_str(": {\n");
         self.indent_level += 1;
@@ -1863,7 +1865,7 @@ impl<'a> Unparser<'a> {
 
     /// `[for let v of tuple { expr }]` — always one line: the body is a single
     /// expression, so there is nothing to break across lines.
-    fn unparse_tuple_comprehension(&mut self, c: &crate::ast::TupleComprehensionExpr) {
+    fn unparse_tuple_comprehension(&mut self, c: &TupleComprehensionExpr) {
         self.output.push_str("[for let ");
         self.unparse_pattern(&c.binding);
         self.output.push_str(" of ");
@@ -2546,8 +2548,8 @@ impl<'a> Unparser<'a> {
             } => {
                 self.unparse_pattern(start);
                 match kind {
-                    crate::ast::RangeKind::Exclusive => self.output.push_str("..<"),
-                    crate::ast::RangeKind::Inclusive => self.output.push_str("..="),
+                    RangeKind::Exclusive => self.output.push_str("..<"),
+                    RangeKind::Inclusive => self.output.push_str("..="),
                 }
                 self.unparse_pattern(end);
             }
@@ -2678,17 +2680,17 @@ impl<'a> Unparser<'a> {
         self.output.push('}');
     }
 
-    fn emit_literal_member(&mut self, member: &crate::ast::LiteralMember<'_>) {
+    fn emit_literal_member(&mut self, member: &LiteralMember<'_>) {
         match member {
-            crate::ast::LiteralMember::Spread(_, sp) => {
+            LiteralMember::Spread(_, sp) => {
                 self.output.push_str("..");
                 self.unparse_expr(&sp.expr);
             }
-            crate::ast::LiteralMember::Field(_, f) => self.emit_struct_literal_field(f),
+            LiteralMember::Field(_, f) => self.emit_struct_literal_field(f),
         }
     }
 
-    fn emit_struct_literal_field(&mut self, field: &crate::ast::StructLiteralField) {
+    fn emit_struct_literal_field(&mut self, field: &StructLiteralField) {
         self.output.push_str(&format_field_name(&field.name));
         if !field.is_shorthand {
             self.output.push_str(": ");
@@ -2811,7 +2813,7 @@ impl<'a> Unparser<'a> {
     /// Emit a member of a braced body that itself carries leading attributes and
     /// optional comments: leading comments → blank lines → caller body → inline
     /// trailing comments → newline.
-    fn emit_member<F>(&mut self, id: crate::ast::AstId, span: Span, attrs: &[Attribute], body: F)
+    fn emit_member<F>(&mut self, id: AstId, span: Span, attrs: &[Attribute], body: F)
     where
         F: FnOnce(&mut Self),
     {
@@ -2904,7 +2906,7 @@ impl<'a> Unparser<'a> {
 
     /// Emit `trivia.leading_of(id)` on its own indented line with the
     /// usual blank-line padding before each entry.
-    fn emit_leading_for(&mut self, id: crate::ast::AstId) {
+    fn emit_leading_for(&mut self, id: AstId) {
         let comments: Vec<Comment> = self.leading_of(id).to_vec();
         for comment in &comments {
             if self.emitted_comments.insert(comment.span.start) {
@@ -2920,7 +2922,7 @@ impl<'a> Unparser<'a> {
     /// emitted comment was a `///` doc comment. Items use this to
     /// decide whether to insert a blank line between leading docs and
     /// the item itself.
-    fn emit_leading_for_check_doc(&mut self, id: crate::ast::AstId) -> bool {
+    fn emit_leading_for_check_doc(&mut self, id: AstId) -> bool {
         let comments: Vec<Comment> = self.leading_of(id).to_vec();
         let mut last_was_doc = false;
         for comment in &comments {
@@ -2938,7 +2940,7 @@ impl<'a> Unparser<'a> {
     /// Emit `trivia.trailing_of(id)` after the node, inserting it
     /// *before* a trailing newline if the output already ended with one
     /// — keeping the comment glued to the node on the same line.
-    fn emit_trailing_for(&mut self, id: crate::ast::AstId) {
+    fn emit_trailing_for(&mut self, id: AstId) {
         let comments: Vec<Comment> = self.trailing_of(id).to_vec();
         for comment in &comments {
             if self.emitted_comments.insert(comment.span.start) {
@@ -2958,7 +2960,7 @@ impl<'a> Unparser<'a> {
     /// Inline variant of [`Self::emit_trailing_for`]: appends two
     /// spaces and the comment without touching surrounding newlines.
     /// Used in places where the caller manages line termination itself.
-    fn emit_trailing_for_inline(&mut self, id: crate::ast::AstId) {
+    fn emit_trailing_for_inline(&mut self, id: AstId) {
         let comments: Vec<Comment> = self.trailing_of(id).to_vec();
         for comment in &comments {
             if self.emitted_comments.insert(comment.span.start) {
@@ -2979,11 +2981,11 @@ impl<'a> Unparser<'a> {
             None => return false,
         };
         struct Probe<'t> {
-            trivia: &'t crate::comment::TriviaMap,
+            trivia: &'t TriviaMap,
             found: bool,
         }
-        impl crate::ast::AstVisitor for Probe<'_> {
-            fn visit_id(&mut self, id: crate::ast::AstId, _span: Span) {
+        impl AstVisitor for Probe<'_> {
+            fn visit_id(&mut self, id: AstId, _span: Span) {
                 if self.found {
                     return;
                 }
@@ -3003,13 +3005,13 @@ impl<'a> Unparser<'a> {
         // emits it). For this probe we only care about *interior*
         // trivia, so leaving `m.id` out is exactly the behaviour we
         // want — leading/trailing of `m` itself live outside `m.span`.
-        crate::ast::AstVisitor::visit_match_expr(&mut probe, m);
+        AstVisitor::visit_match_expr(&mut probe, m);
         probe.found
     }
 
     /// Flush comments that fall inside a block but after its last
     /// statement (its `inner_tail`), each on its own indented line.
-    fn emit_inner_tail_for(&mut self, id: crate::ast::AstId) {
+    fn emit_inner_tail_for(&mut self, id: AstId) {
         let comments: Vec<Comment> = self.inner_tail_of(id).to_vec();
         for comment in &comments {
             if self.emitted_comments.insert(comment.span.start) {
@@ -3066,7 +3068,7 @@ pub fn get_item_span(item: &Item) -> Span {
     }
 }
 
-pub fn get_item_id(item: &Item) -> crate::ast::AstId {
+pub fn get_item_id(item: &Item) -> AstId {
     match item {
         Item::Use(u) => u.id,
         Item::Function(f) => f.id,
@@ -3092,7 +3094,7 @@ pub fn get_item_id(item: &Item) -> crate::ast::AstId {
 /// This is used to compute blank lines correctly when items have both doc comments
 /// and attributes, avoiding blank-line growth on repeated formatting passes.
 fn get_item_first_line(item: &Item) -> usize {
-    let first_attr_line = |attrs: &[crate::ast::Attribute]| attrs.first().map(|a| a.span.line);
+    let first_attr_line = |attrs: &[Attribute]| attrs.first().map(|a| a.span.line);
     let item_line = get_item_span(item).line;
     let attr_line = match item {
         Item::Struct(s) => first_attr_line(&s.attrs),
@@ -3722,8 +3724,8 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         Expr::Range(range) => {
             unparse_expr_into(&range.start, output);
             match range.kind {
-                crate::ast::RangeKind::Exclusive => output.push_str("..<"),
-                crate::ast::RangeKind::Inclusive => output.push_str("..="),
+                RangeKind::Exclusive => output.push_str("..<"),
+                RangeKind::Inclusive => output.push_str("..="),
             }
             unparse_expr_into(&range.end, output);
         }
@@ -4024,8 +4026,8 @@ fn unparse_pattern_into(pattern: &Pattern, output: &mut String) {
         } => {
             unparse_pattern_into(start, output);
             match kind {
-                crate::ast::RangeKind::Exclusive => output.push_str("..<"),
-                crate::ast::RangeKind::Inclusive => output.push_str("..="),
+                RangeKind::Exclusive => output.push_str("..<"),
+                RangeKind::Inclusive => output.push_str("..="),
             }
             unparse_pattern_into(end, output);
         }
@@ -4256,7 +4258,7 @@ pub fn unparse_assoc_const_signature(c: &AssociatedConst) -> String {
 /// Empty when nothing is visible, so the caller can drop the block.
 pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String {
     let inherent = b.trait_type.is_none();
-    let visible = |visibility| crate::semantics::member_visible(public_only, inherent, visibility);
+    let visible = |visibility| member_visible(public_only, inherent, visibility);
 
     let mut lines: Vec<String> = Vec::new();
     for c in &b.constants {
@@ -4333,7 +4335,7 @@ pub fn unparse_global_signature(g: &GlobalDecl) -> String {
 }
 
 /// `A + B<Item = i32>` — see [`Unparser::unparse_trait_bounds`].
-fn unparse_trait_bounds_into(bounds: &[crate::ast::TraitBound], o: &mut String) {
+fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
     for (i, bound) in bounds.iter().enumerate() {
         if i > 0 {
             o.push_str(" + ");
@@ -4570,7 +4572,7 @@ impl<'a> TirUnparser<'a> {
     }
 
     /// Emit a turbofish `::<T1, T2, ...>` for a list of monomorphized type ids.
-    fn unparse_type_args(&mut self, args: &[crate::tir::TypeId]) {
+    fn unparse_type_args(&mut self, args: &[tir::TypeId]) {
         if args.is_empty() {
             return;
         }
@@ -4774,7 +4776,7 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    fn unparse_tir_with_clause(&mut self, effects: &[super::tir::EffectRef], stores: &[String]) {
+    fn unparse_tir_with_clause(&mut self, effects: &[EffectRef], stores: &[String]) {
         let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         if !stores.is_empty() {
             items.push(format!("stores[{}]", stores.join(", ")));
@@ -5256,10 +5258,7 @@ impl<'a> TirUnparser<'a> {
             } => {
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
-                if matches!(
-                    self.type_table.get(expr.type_id),
-                    crate::tir::ResolvedType::Ref(_)
-                ) {
+                if matches!(self.type_table.get(expr.type_id), ResolvedType::Ref(_)) {
                     self.output.push('&');
                 }
                 self.output.push_str(struct_name);
@@ -5353,10 +5352,10 @@ impl<'a> TirUnparser<'a> {
                 self.output.push('`');
                 for part in parts {
                     match part {
-                        crate::tir::TirTemplatePart::Literal(s) => {
+                        TirTemplatePart::Literal(s) => {
                             self.output.push_str(s);
                         }
-                        crate::tir::TirTemplatePart::Interpolation {
+                        TirTemplatePart::Interpolation {
                             expr: inner,
                             format_spec,
                         } => {
@@ -5404,7 +5403,7 @@ impl<'a> TirUnparser<'a> {
     fn unparse_closure_form(
         &mut self,
         params: &[(String, TypeId)],
-        captures: &[crate::tir::TirCapture],
+        captures: &[TirCapture],
         body: &TirExpr,
     ) {
         self.delimited("|", "|", params, |s, (name, type_id)| {
@@ -5443,12 +5442,12 @@ fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
 
 /// Map a TIR inline hint to its `#[inline...]` attribute, or `None` for the
 /// default (no attribute).
-fn inline_hint_attr(hint: crate::tir::InlineHint) -> Option<&'static str> {
+fn inline_hint_attr(hint: tir::InlineHint) -> Option<&'static str> {
     match hint {
-        crate::tir::InlineHint::Auto => None,
-        crate::tir::InlineHint::Hint => Some("#[inline]"),
-        crate::tir::InlineHint::Always => Some("#[inline(always)]"),
-        crate::tir::InlineHint::Never => Some("#[inline(never)]"),
+        tir::InlineHint::Auto => None,
+        tir::InlineHint::Hint => Some("#[inline]"),
+        tir::InlineHint::Always => Some("#[inline(always)]"),
+        tir::InlineHint::Never => Some("#[inline(never)]"),
     }
 }
 
@@ -5495,7 +5494,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 /// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(
     params: &[(String, TypeId)],
-    captures: &[crate::tir::TirCapture],
+    captures: &[TirCapture],
     body: &TirExpr,
     type_table: &TypeTable,
 ) -> String {
@@ -5512,7 +5511,7 @@ pub fn unparse_tir(module: &TirModule) -> String {
 }
 
 /// Unparse a `FlatPackage` (flat TIR lists) to pseudo-Wado source
-pub fn unparse_flat_package(package: &crate::flat_package::FlatPackage) -> String {
+pub fn unparse_flat_package(package: &FlatPackage) -> String {
     let type_table_ref = package.type_table.borrow();
     let mut unparser = TirUnparser::new(&type_table_ref);
 

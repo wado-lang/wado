@@ -1188,12 +1188,10 @@ fn perform_fusion(
             let else_body = arms[1].body;
             let then_block = arm_body_operand_into_block(engine, variant_body, span);
             // A unit-valued else arm (the `None` case) contributes no block.
-            let else_block = if else_body.as_value().is_some_and(|v| {
-                matches!(
-                    engine.body.values.kind(v),
-                    crate::nir_value_graph::ValueKind::Unit
-                )
-            }) {
+            let else_block = if else_body
+                .as_value()
+                .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit))
+            {
                 None
             } else {
                 Some(arm_body_operand_into_block(engine, else_body, span))
@@ -1301,9 +1299,7 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     let ExprKind::VariantConstruct { payload, .. } = &engine.body.exprs[vc].kind else {
         unreachable!("guarded by the caller's case-index filter")
     };
-    let value = payload.unwrap_or_else(|| {
-        engine.const_operand(crate::nir_value_graph::ValueKind::Unit, payload_type)
-    });
+    let value = payload.unwrap_or_else(|| engine.const_operand(ValueKind::Unit, payload_type));
     let stmt = engine.alloc_stmt(
         StmtKind::Let {
             name: format!("$fused_payload_{payload_local}"),

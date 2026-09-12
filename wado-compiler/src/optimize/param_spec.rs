@@ -18,6 +18,11 @@ use super::dae::is_dae_sroa_eligible;
 use super::dce::reachable_function_positions;
 use super::extract::is_place_read;
 use super::gate::FunctionGate;
+use crate::ast::Visibility;
+use crate::compiler_trace;
+use crate::module_source::ModuleSource;
+use crate::name::param_spec_name;
+use crate::nir::NirLocal;
 
 /// Cap on the number of distinct clones minted for one original callee. A
 /// config struct threaded from a handful of call sites specializes; a callee
@@ -660,7 +665,7 @@ struct Site {
 }
 
 fn select_sites(
-    locals: &[crate::nir::NirLocal],
+    locals: &[NirLocal],
     body: &Body,
     types: &TypeTable,
     signatures: &Signatures,
@@ -952,7 +957,7 @@ fn mint_clones(
             {
                 continue;
             }
-            crate::compiler_trace!(
+            compiler_trace!(
                 "param_spec",
                 "specialized {} on {} field(s)",
                 project.functions[site.callee.index()].borrow().name,
@@ -1000,13 +1005,13 @@ struct Clone {
 fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize) -> Clone {
     let mut clone = project.functions[site.callee.index()].borrow().clone();
     let origin = (clone.module_source.clone(), clone.name.clone());
-    let name = crate::name::param_spec_name(&clone.name, ordinal);
+    let name = param_spec_name(&clone.name, ordinal);
     clone.name.clone_from(&name);
     if let Some(info) = &mut clone.method_info {
-        info.method_name = crate::name::param_spec_name(&info.method_name, ordinal);
+        info.method_name = param_spec_name(&info.method_name, ordinal);
     }
     clone.id = Some(id);
-    clone.visibility = crate::ast::Visibility::Private;
+    clone.visibility = Visibility::Private;
     clone.is_export = false;
 
     let mut bound: IndexMap<u32, FieldConsts> = IndexMap::default();
@@ -1049,8 +1054,8 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
 /// clone's literals are pruned out from under it.
 fn copy_function_strings(
     project: &mut NirPackage,
-    origin: &(crate::module_source::ModuleSource, String),
-    clone: (crate::module_source::ModuleSource, String),
+    origin: &(ModuleSource, String),
+    clone: (ModuleSource, String),
 ) {
     if let Some(strings) = project.function_strings.get(origin).cloned() {
         project.function_strings.insert(clone, strings);
@@ -1091,7 +1096,7 @@ fn signatures_match(project: &NirPackage, original: FuncId, clone: FuncId) -> bo
 /// itself (see the module's Profitability note).
 fn substitute_fields(
     body: &mut Body,
-    locals: &mut Vec<crate::nir::NirLocal>,
+    locals: &mut Vec<NirLocal>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
 ) {
@@ -1119,7 +1124,7 @@ fn substitute_fields(
     });
 
     for (read, value) in reads {
-        if super::extract::is_place_read(&engine, read) {
+        if is_place_read(&engine, read) {
             continue;
         }
         let type_id = engine.body.exprs[read].type_id;

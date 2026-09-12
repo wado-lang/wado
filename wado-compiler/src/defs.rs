@@ -4,9 +4,11 @@
 //!
 //! See `docs/wep-2026-08-12-declaration-identity.md`.
 
-use crate::ast::{AstId, Item, Module, Visibility};
+use crate::ast;
+use crate::ast::{AstId, AstVisitor, ImplBlock, Item, Module, Stmt, Visibility, walk_item};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::TUPLE_TYPE_NAME;
 use crate::symbol::{SymbolKind, SymbolTable};
 use crate::token::Span;
 
@@ -216,7 +218,7 @@ impl DefTable {
                         table.declare(Def {
                             ast_id: decl.id,
                             module: module.clone(),
-                            name: crate::name::TUPLE_TYPE_NAME.to_string(),
+                            name: TUPLE_TYPE_NAME.to_string(),
                             kind: DefKind::BuiltinType,
                             visibility: decl.visibility,
                             span: Some(decl.span),
@@ -235,7 +237,7 @@ impl DefTable {
                 module,
             };
             for item in &ast.items {
-                crate::ast::walk_item(&mut locals, item);
+                walk_item(&mut locals, item);
             }
         }
         table
@@ -268,7 +270,7 @@ impl DefTable {
     fn declare_impl_block(
         &mut self,
         module: &ModuleSource,
-        block: &crate::ast::ImplBlock,
+        block: &ImplBlock,
         function_local: bool,
     ) {
         if self.by_ast_id.contains_key(&block.id) {
@@ -520,20 +522,23 @@ struct LocalItems<'a> {
     module: &'a ModuleSource,
 }
 
-impl crate::ast::AstVisitor for LocalItems<'_> {
-    fn visit_stmt(&mut self, stmt: &crate::ast::Stmt) {
-        if let crate::ast::Stmt::Item(item) = stmt {
+impl AstVisitor for LocalItems<'_> {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if let Stmt::Item(item) = stmt {
             self.table.declare_local_item(self.module, item);
         }
-        crate::ast::walk_stmt(self, stmt);
+        ast::walk_stmt(self, stmt);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::lex;
+    use crate::logger::Logger;
     use crate::module_source::ModuleSourceInterner;
     use crate::symbol::{StructSymbol, TraitSymbol};
+    use crate::{analyze, ast, hashmap, parser};
 
     fn table() -> (DefTable, SymbolTable, ModuleSource, ModuleSource) {
         let mut symbols = SymbolTable::new();
@@ -782,26 +787,25 @@ mod tests {
         source: &str,
     ) -> (
         DefTable,
-        IndexMap<ModuleSource, crate::ast::Module>,
+        IndexMap<ModuleSource, ast::Module>,
         SymbolTable,
         ModuleSource,
     ) {
         use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
-        let lexed = crate::lexer::lex(source);
+        let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
-        let ast = crate::parser::Parser::new(lexed.tokens)
+        let ast = parser::Parser::new(lexed.tokens)
             .parse_strict()
             .expect("parse error");
         let mut interner = ModuleSourceInterner::new();
         let module = interner.local("./main.wado");
-        let mut modules: IndexMap<ModuleSource, crate::ast::Module> = IndexMap::default();
+        let mut modules: IndexMap<ModuleSource, ast::Module> = IndexMap::default();
         modules.insert(module.clone(), ast);
 
         let host = InMemoryCompilerHost::new();
-        let logger = crate::logger::Logger::new(&host, LogLevel::Error);
-        let mut analyzer = crate::analyze::Analyzer::new(&logger);
-        let _ =
-            analyzer.analyze_loaded_modules(&modules, &module, crate::hashmap::IndexSet::default());
+        let logger = Logger::new(&host, LogLevel::Error);
+        let mut analyzer = analyze::Analyzer::new(&logger);
+        let _ = analyzer.analyze_loaded_modules(&modules, &module, hashmap::IndexSet::default());
         let symbols = analyzer.into_symbols();
         let defs = DefTable::build(&modules, &symbols);
         (defs, modules, symbols, module)

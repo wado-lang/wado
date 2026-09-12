@@ -13,9 +13,10 @@ use super::funcset::FuncKeyMap;
 use super::is_reference_type;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirParam, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -150,7 +151,7 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
 }
 
 /// The reference-parameter positions named in a function's `stores[...]` clause.
-fn declared_positions(func: &crate::tir::TirFunction) -> IndexSet<u32> {
+fn declared_positions(func: &TirFunction) -> IndexSet<u32> {
     func.params
         .iter()
         .enumerate()
@@ -387,13 +388,13 @@ impl StoresWalker<'_> {
         self.escape(&carried);
     }
 
-    fn bind_pattern(&mut self, pattern: &crate::tir::TirPattern, source: &TirExpr) {
+    fn bind_pattern(&mut self, pattern: &TirPattern, source: &TirExpr) {
         let carried = self.carries(source);
         if carried.is_empty() {
             return;
         }
         let mut binds: IndexSet<u32> = IndexSet::default();
-        super::analyze::collect_pattern_bindings(pattern, &mut binds);
+        analyze::collect_pattern_bindings(pattern, &mut binds);
         for b in binds {
             self.carry_into(b, &carried);
         }

@@ -40,6 +40,10 @@ use super::types::{
     flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::name::FqTypeName;
 
 /// Build the export binding function name for a world export.
 pub fn export_binding_func_name(export_name: &str) -> String {
@@ -89,7 +93,7 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -177,12 +181,12 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size = crate::component_model::cm_size_with_registry_scoped(
+            let elem_size = cm_size_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
                 Some(ctx.cm_package),
             );
-            let elem_align = crate::component_model::cm_align_with_registry_scoped(
+            let elem_align = cm_align_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
                 Some(ctx.cm_package),
@@ -275,7 +279,7 @@ fn lower_to_flat_inner(
                 Some(
                     names
                         .index_value
-                        .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
+                        .with_args(vec![FqTypeName::builtin("i32")]),
                 ),
                 "index_value".to_string(),
             );
@@ -461,10 +465,8 @@ fn lower_to_flat_inner(
             let (ok_index, err_name, err_index) = {
                 let tt = ctx.type_table.borrow();
                 let items = tt.compiler_items();
-                let (_, _, _, ok_i) =
-                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-                let (_, _, err_n, err_i) =
-                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+                let (_, _, _, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
+                let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
                 (ok_i, err_n.to_string(), err_i)
             };
 
@@ -717,7 +719,7 @@ pub(super) fn synthesize_lift_from_flat_params(
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
     let type_table_cell = lift_ctx.type_table;
-    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let names = CmStdlibNames::from_type_table(&type_table_cell.borrow());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
@@ -1118,13 +1120,9 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         _ => (TypeTable::UNIT, TypeTable::UNIT),
     };
     let items = type_table.compiler_items();
-    let (_, _, ok_name, ok_index) =
-        items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-    let (_, _, err_name, err_index) =
-        items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-    let result_name = items
-        .variant_name(crate::compiler_item::CompilerItem::Result)
-        .to_string();
+    let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+    let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
+    let result_name = items.variant_name(CompilerItem::Result).to_string();
     let case = |name: &str, index: u32, payload: TypeId| TirVariantCase {
         name: name.to_string(),
         index,
@@ -1133,13 +1131,13 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         wire_name_override: None,
     };
     let def = type_table
-        .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+        .compiler_item_def(CompilerItem::Result)
         .expect("the `Result` compiler item is declared");
     TirVariantDecl {
         def,
         name: result_name,
         module_source: type_table.def_module(def).clone(),
-        visibility: crate::ast::Visibility::Public,
+        visibility: Visibility::Public,
         type_params: Vec::new(),
         cases: vec![
             case(ok_name, ok_index, ok_tid),
@@ -1462,7 +1460,7 @@ impl<'a> ExportBindingEnv<'a> {
             cm_interface_registry: self.cm_interface_registry,
             type_table: self.type_table,
             wasi_package: self.cm_package,
-            names: super::types::CmStdlibNames::from_type_table(&self.type_table.borrow()),
+            names: CmStdlibNames::from_type_table(&self.type_table.borrow()),
         }
     }
 
@@ -1659,16 +1657,10 @@ fn push_sync_return_epilogue(
             call_user,
         ));
 
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            ty,
-            env.cm_interface_registry,
-            Some(env.cm_package),
-        );
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            ty,
-            env.cm_interface_registry,
-            Some(env.cm_package),
-        );
+        let size =
+            cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+        let align =
+            cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
         let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
         body_stmts.push(let_stmt(
             "$ret_ptr",
@@ -1753,7 +1745,7 @@ pub(super) fn synthesize_post_return(
         return None;
     }
 
-    let names = super::types::CmStdlibNames::from_type_table(&env.type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&env.type_table.borrow());
     let shape_ctx = env.shape_ctx(&names);
     let shape = cm_shape(ty, &shape_ctx);
 
@@ -1763,16 +1755,8 @@ pub(super) fn synthesize_post_return(
     let addr = local_ref(0, "$ret_ptr", TypeTable::I32);
 
     let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
-    let size = crate::component_model::cm_size_with_registry_scoped(
-        ty,
-        env.cm_interface_registry,
-        Some(env.cm_package),
-    );
-    let align = crate::component_model::cm_align_with_registry_scoped(
-        ty,
-        env.cm_interface_registry,
-        Some(env.cm_package),
-    );
+    let size = cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+    let align = cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
     body.push(expr_stmt(builtin_call(
         "realloc",
         vec![
@@ -1837,7 +1821,7 @@ fn push_result_task_return_epilogue(
         }
         other => panic!("expected Result type for export binding return, got: {other:?}"),
     };
-    let names = super::types::CmStdlibNames::from_type_table(&tt);
+    let names = CmStdlibNames::from_type_table(&tt);
     drop(tt);
 
     // Mutable flat slots holding the flattened task-return args, zeroed.

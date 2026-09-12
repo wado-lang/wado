@@ -17,7 +17,14 @@ use crate::tir::{
     TirVariantDecl, TypeId, TypeTable,
 };
 
+use crate::cm_abi::align_to;
+use crate::component_model::{
+    cm_align_with_registry, future_payload_rejection, stream_payload_rejection,
+};
+use crate::defs::DefId;
+use crate::name::{FqTraitName, FqTypeName};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
+use crate::tir::StructDef;
 
 /// Snapshot of the stdlib type / variant names CM binding matches against,
 /// resolved once through the `CompilerItem` registry so a stdlib rename flows
@@ -45,9 +52,9 @@ pub struct CmStdlibNames {
     /// The `IndexValue` trait the list adapters call through, as the
     /// declaration the registry records — never a spelling a user trait could
     /// share.
-    pub index_value: crate::name::FqTraitName,
+    pub index_value: FqTraitName,
     /// `List`'s head, likewise the declaration the registry records.
-    pub array_fq: crate::name::FqTypeName,
+    pub array_fq: FqTypeName,
 }
 
 impl CmStdlibNames {
@@ -57,7 +64,7 @@ impl CmStdlibNames {
     /// it through [`LowerContext`] — mirroring the `from_compiler_items`
     /// constructor shape used by the other synthesis passes
     /// (`SerdeStdlibNames`, `FormatStdlibNames`, `TraitsStdlibNames`).
-    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+    pub fn from_type_table(type_table: &TypeTable) -> Self {
         let items = type_table.compiler_items();
         let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
         let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
@@ -130,7 +137,7 @@ impl LiftContext<'_> {
     /// The declaration behind a CM named type — see
     /// [`crate::tir::TypeTable::cm_decl_in`] for why the WIT boundary resolves
     /// a name rather than following a reference site.
-    pub(super) fn cm_decl(&self, source: &str, name: &str) -> crate::defs::DefId {
+    pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
         let module_source = self.module_source_for(source);
         self.type_table
             .borrow()
@@ -161,7 +168,7 @@ impl LiftContext<'_> {
                         let def = tt
                             .cm_decl_in(&n.name, &ms)
                             .expect("the declaration this type names exists");
-                        return tt.make_struct(crate::tir::StructDef::Decl(def));
+                        return tt.make_struct(StructDef::Decl(def));
                     }
                     if self
                         .cm_interface_registry
@@ -185,15 +192,9 @@ impl LiftContext<'_> {
                 let (list_name, option_name, result_name) = {
                     let items = tt.compiler_items();
                     (
-                        items
-                            .struct_name(crate::compiler_item::CompilerItem::List)
-                            .to_string(),
-                        items
-                            .variant_name(crate::compiler_item::CompilerItem::Option)
-                            .to_string(),
-                        items
-                            .variant_name(crate::compiler_item::CompilerItem::Result)
-                            .to_string(),
+                        items.struct_name(CompilerItem::List).to_string(),
+                        items.variant_name(CompilerItem::Option).to_string(),
+                        items.variant_name(CompilerItem::Result).to_string(),
                     )
                 };
                 if g.name == list_name && g.args.len() == 1 {
@@ -249,7 +250,7 @@ pub fn cm_type_to_type_id(
         .to_string();
     match ty {
         Type::Named(named) if named.name.as_str() == string_struct_name => {
-            type_table.make_compiler_struct(crate::compiler_item::CompilerItem::String)
+            type_table.make_compiler_struct(CompilerItem::String)
         }
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
@@ -602,10 +603,10 @@ fn check_cm_boundary_representable_inner(
                 if let Some(&payload) = args.first()
                     && let Some(reason) = match name.as_str() {
                         "Future" | "FutureWritable" => {
-                            crate::component_model::future_payload_rejection(type_table, payload)
+                            future_payload_rejection(type_table, payload)
                         }
                         "Stream" | "StreamWritable" => {
-                            crate::component_model::stream_payload_rejection(type_table, payload)
+                            stream_payload_rejection(type_table, payload)
                         }
                         _ => None,
                     }
@@ -658,7 +659,7 @@ fn check_cm_boundary_representable_inner(
                 // rather than lowering it as an opaque i32.
                 let result_name = type_table
                     .compiler_items()
-                    .variant_name(crate::compiler_item::CompilerItem::Result);
+                    .variant_name(CompilerItem::Result);
                 if name == result_name {
                     let args = type_args.clone();
                     for a in args {
@@ -802,7 +803,7 @@ pub(super) fn coerce_flat_lower(
 /// `names.string` guard handles a non-`"String"` prelude String name first.
 pub fn flatten_param_type(
     ty: &Type,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<TypeId> {
     let resolved = cm_interface_registry.resolve_type(ty);
@@ -841,7 +842,7 @@ pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
 
 pub(super) fn cm_param_store_plan(
     ty: &Type,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
     if let Type::Named(named) = ty {
@@ -891,9 +892,8 @@ pub(super) fn cm_param_store_plan(
         Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
-            let inner_align =
-                crate::component_model::cm_align_with_registry(&g.args[0], cm_interface_registry);
-            let payload_offset = crate::cm_abi::align_to(1, inner_align);
+            let inner_align = cm_align_with_registry(&g.args[0], cm_interface_registry);
+            let payload_offset = align_to(1, inner_align);
             let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
             let mut stores = vec![(0, "i32_store8")]; // discriminant
             for (sub_offset, store_name) in inner_store {
@@ -1174,7 +1174,7 @@ fn flat_types_from_type_id_inner(
 /// declaration, so the search is keyed by that: a same-named variant in
 /// another module answers for nothing (WEP 2026-08-12).
 pub(super) fn variant_decl_of(
-    def: crate::defs::DefId,
+    def: DefId,
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TirVariantDecl> {
     tir_modules
@@ -1188,7 +1188,7 @@ pub(super) fn variant_decl_of(
 /// that instantiation and at the declaration otherwise. Keyed by identity, for
 /// the reason [`variant_decl_of`] is.
 pub(super) fn struct_decl_of(
-    def: crate::tir::StructDef,
+    def: StructDef,
     type_args: &[TypeId],
     tir_modules: &IndexMap<ModuleSource, TirModule>,
 ) -> Option<TirStruct> {

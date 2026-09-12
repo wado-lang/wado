@@ -4,7 +4,10 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
+use crate::compiler_host::DependencyIndex;
+use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
+use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
@@ -93,16 +96,16 @@ fn well_known_arcs() -> Vec<Arc<str>> {
 /// `Core` and `Binding` store the prefix-stripped path, `Wasm` the full one.
 static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
     let mut arcs: Vec<Arc<str>> = Vec::new();
-    for path in crate::stdlib::CORE_MODULE_PATHS {
+    for path in CORE_MODULE_PATHS {
         let name = path.strip_prefix("core:").unwrap_or(path);
         arcs.push(Arc::<str>::from(name));
     }
-    for path in crate::stdlib::BINDING_MODULE_PATHS {
+    for path in BINDING_MODULE_PATHS {
         let (_, interface) = CmNamespace::split_specifier(path)
             .unwrap_or_else(|| panic!("bundled binding module `{path}` has no reserved namespace"));
         arcs.push(Arc::<str>::from(interface));
     }
-    for (path, _bytes) in crate::stdlib::ALL_CORE_WASM_ASSETS {
+    for (path, _bytes) in ALL_CORE_WASM_ASSETS {
         // The loader interns the full canonical path for `Wasm`
         // variants (no prefix stripping); see `ModuleLoader::handle_wasm_import`.
         arcs.push(Arc::<str>::from(*path));
@@ -122,22 +125,22 @@ pub struct ModuleSourceInterner {
     /// Resolved `[dependencies]`, consulted for bare-name `use` clauses, plus
     /// declared-but-unresolved entries (with reasons) for precise errors.
     /// Empty for single-file compilation.
-    dependencies: crate::compiler_host::DependencyIndex,
+    dependencies: DependencyIndex,
     /// Module path → its elected package root, so `pkg` is a function of the
     /// path and equal modules agree on their package.
-    package_roots: crate::hashmap::IndexMap<InternedStr, InternedStr>,
+    package_roots: hashmap::IndexMap<InternedStr, InternedStr>,
 }
 
 impl ModuleSourceInterner {
     pub fn new() -> Self {
         Self {
             strings: StringInterner::with_well_known_arcs(well_known_arcs()),
-            dependencies: crate::compiler_host::DependencyIndex::default(),
-            package_roots: crate::hashmap::IndexMap::default(),
+            dependencies: DependencyIndex::default(),
+            package_roots: hashmap::IndexMap::default(),
         }
     }
 
-    pub fn set_dependencies(&mut self, dependencies: crate::compiler_host::DependencyIndex) {
+    pub fn set_dependencies(&mut self, dependencies: DependencyIndex) {
         self.dependencies = dependencies;
     }
 
@@ -844,6 +847,7 @@ impl fmt::Display for ModuleSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
 
     #[test]
@@ -876,7 +880,7 @@ mod tests {
     #[test]
     fn resolve_dependency_uses_registered_path() {
         let mut interner = ModuleSourceInterner::new();
-        let mut index = crate::compiler_host::DependencyIndex::default();
+        let mut index = DependencyIndex::default();
         index
             .resolved
             .insert("greet".to_string(), "../greet/src/lib.wado".to_string());

@@ -3,6 +3,7 @@
 //! These tests verify that specific codegen features (like branch hints)
 //! are correctly emitted in the WebAssembly output.
 
+use crate::common::compile_file_with_opts;
 use std::path::PathBuf;
 use wado_compiler::OptLevel;
 
@@ -11,8 +12,7 @@ fn compile_fixture_opt(fixture: &str, opt: OptLevel) -> wado_compiler::CompileRe
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let source_path = PathBuf::from(manifest_dir).join(format!("tests/fixtures/{fixture}"));
 
-    crate::common::compile_file_with_opts(&source_path, opt)
-        .unwrap_or_else(|e| panic!("Compilation failed: {e}"))
+    compile_file_with_opts(&source_path, opt).unwrap_or_else(|e| panic!("Compilation failed: {e}"))
 }
 
 /// Compile a fixture file with O0 optimization

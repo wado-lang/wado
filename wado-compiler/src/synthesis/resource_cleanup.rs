@@ -10,13 +10,16 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
+use crate::synthesis::common;
 use crate::synthesis::common::{
     cm_canonical_call, expr_stmt, let_stmt, local_ref, return_stmt, synth_span,
 };
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable,
 };
+use crate::token::Span;
+use crate::{hashmap, tir};
 
 /// An owned resource-bearing value currently live in some scope.
 #[derive(Clone)]
@@ -63,7 +66,7 @@ impl Cx<'_> {
             name: name.clone(),
             type_id,
             is_mut: false,
-            span: crate::token::Span::default(),
+            span: Span::default(),
         });
         *self.local_count = self.locals.len() as u32;
         (idx, name)
@@ -73,10 +76,10 @@ impl Cx<'_> {
 /// Fields of each struct `(name, module)`, in declaration order, as
 /// `(index, name, type_id)`. Built once so the drop walk can recurse into
 /// struct fields without holding the `TirModule`s.
-type StructFieldReg = crate::hashmap::IndexMap<(String, ModuleSource), Vec<(u32, String, TypeId)>>;
+type StructFieldReg = hashmap::IndexMap<(String, ModuleSource), Vec<(u32, String, TypeId)>>;
 
 fn build_struct_field_reg(project: &Package) -> StructFieldReg {
-    let mut reg: StructFieldReg = crate::hashmap::IndexMap::default();
+    let mut reg: StructFieldReg = hashmap::IndexMap::default();
     for module in project.tir_modules.values() {
         let structs = module.structs.iter().chain(module.generic_structs.values());
         for s in structs {
@@ -422,7 +425,7 @@ fn drop_projected(
         if !carries_resource(cx.tt, cx.reg, cx.struct_fields, *field_ty) {
             continue;
         }
-        let field = crate::synthesis::common::field_access(
+        let field = common::field_access(
             scrutinee.clone(),
             *index,
             name.clone(),
@@ -698,7 +701,7 @@ fn scan_transfers(expr: &TirExpr, consuming: bool, consumed: &mut Vec<u32>, cx: 
         }
         TirExprKind::TemplateString { parts } => {
             for part in parts {
-                if let crate::tir::TirTemplatePart::Interpolation { expr: inner, .. } = part {
+                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
                     scan_transfers(inner, true, consumed, cx);
                 }
             }
@@ -877,7 +880,7 @@ fn elab_block_entry(
 fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> Vec<TirStmt> {
     let span = synth_span();
     let inner = TirBlock { stmts, span };
-    let result_ty = crate::tir::block_result_type(cx.tt, &inner);
+    let result_ty = tir::block_result_type(cx.tt, &inner);
     if result_ty == TypeTable::UNIT || result_ty == TypeTable::NEVER {
         // The block yields nothing observable; the drops can simply run last.
         let mut out = inner.stmts;

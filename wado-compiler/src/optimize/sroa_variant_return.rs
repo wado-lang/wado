@@ -19,6 +19,10 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_item::CompilerItem;
+use crate::compiler_trace;
+use crate::module_source::ModuleSource;
+use crate::nir_visitor::reachable_exprs;
 
 /// Widest result tuple the scalarized return may use, counting the tag. Matches
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
@@ -127,7 +131,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     let candidates = collect_and_validate(project, gate);
     let mut changed = !candidates.is_empty();
     for &key in candidates.keys() {
-        crate::compiler_trace!(
+        compiler_trace!(
             "sroa_variant_return",
             "scalarizing {}",
             project.functions[key.index()].borrow().name
@@ -200,7 +204,7 @@ fn rebox_stragglers(
         let targets = straggler_calls(&body, scalarized, &bound);
         let reboxed = !targets.is_empty();
         for call in targets {
-            crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
+            compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
             rebox_call(&mut body, &mut func.locals, call, scalarized, span);
         }
         func.body = Some(body);
@@ -243,7 +247,7 @@ fn rebox_stragglers_in_globals(
         if targets.is_empty() {
             continue;
         }
-        crate::compiler_trace!(
+        compiler_trace!(
             "sroa_variant_return",
             "reboxing {} call(s) in global {name}",
             targets.len()
@@ -1014,12 +1018,12 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
 }
 
 /// Where `Option` is declared, per `#[compiler_item("option")]`.
-fn option_module(project: &NirPackage) -> Option<crate::module_source::ModuleSource> {
+fn option_module(project: &NirPackage) -> Option<ModuleSource> {
     project
         .type_table
         .borrow()
         .compiler_items()
-        .variant_module(crate::compiler_item::CompilerItem::Option)
+        .variant_module(CompilerItem::Option)
         .cloned()
 }
 
@@ -1720,7 +1724,7 @@ impl Rebind {
     fn new(func: &NirFunction, type_table: &TypeTable) -> Self {
         let box_name = type_table
             .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::Box)
+            .struct_name(CompilerItem::Box)
             .to_string();
         let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
         let boxes = local_types
@@ -2156,7 +2160,7 @@ fn rewrite_call_sites(
 /// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
-    for e in crate::nir_visitor::reachable_exprs(body) {
+    for e in reachable_exprs(body) {
         let node = &mut body.exprs[e];
         if let ExprKind::Call { func_id, .. } = &node.kind
             && let Some(cand) = candidates.get(func_id)

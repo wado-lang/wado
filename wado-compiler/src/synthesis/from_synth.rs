@@ -8,7 +8,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
-use crate::name::{LocalMethodName, MethodName};
+use crate::hashmap;
+use crate::name::{FqTraitName, LocalMethodName, MethodName};
 use crate::synthesis::common::{
     block, local_ref, make_synthetic_method, param_local, return_stmt, synth_span,
 };
@@ -68,8 +69,8 @@ pub fn synthesize_from(module: &mut TirModule) {
 
 fn collect_existing_from_methods(
     module: &TirModule,
-    from_trait_name: &crate::name::FqTraitName,
-) -> crate::hashmap::IndexSet<String> {
+    from_trait_name: &FqTraitName,
+) -> hashmap::IndexSet<String> {
     module
         .functions
         .iter()
@@ -96,7 +97,7 @@ fn generate_variant_from(
     module: &TirModule,
     req: &SynthesisRequest,
     source: TypeId,
-    from_trait: &crate::name::FqTraitName,
+    from_trait: &FqTraitName,
 ) -> Option<TirFunction> {
     let variant_def = module
         .variants

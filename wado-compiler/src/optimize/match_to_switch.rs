@@ -4,8 +4,9 @@
 //! `lower::translate` emits one canonical `Match` shape. Arm bodies are
 //! deep-cloned, one arm being reachable at several `br_table` offsets.
 
+use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::nir::{FunctionRef, NirFunction, NirLiteralPattern};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirGlobal, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind,
 };
@@ -83,10 +84,10 @@ pub(super) fn match_to_switch_globals(project: &mut NirPackage) -> bool {
 }
 
 fn run_globals(
-    globals: &mut [crate::nir::NirGlobal],
+    globals: &mut [NirGlobal],
     rule: &MatchToSwitchRule,
     type_table: &TypeTable,
-    pure_builtin_callees: &crate::hashmap::IndexSet<crate::nir::FuncId>,
+    pure_builtin_callees: &hashmap::IndexSet<FuncId>,
     buffers: &mut EngineBuffers,
 ) -> bool {
     let mut changed = false;
@@ -94,7 +95,7 @@ fn run_globals(
     // runtime-computed local is hoisted into `$initialize_module`). Lend an
     // empty scratch list, reused across globals; `MatchToSwitchRule` never
     // allocates, so it stays empty.
-    let mut no_locals: Vec<crate::nir::NirLocal> = Vec::new();
+    let mut no_locals: Vec<NirLocal> = Vec::new();
     for global in globals {
         let mut engine = Engine::new(
             global.init.slot_expr_mut().body_mut(),
@@ -110,15 +111,15 @@ fn run_globals(
 
 pub(super) struct MatchToSwitchRule<'t> {
     type_table: &'t TypeTable,
-    cold_path_id: crate::nir::FuncId,
-    unreachable_id: crate::nir::FuncId,
+    cold_path_id: FuncId,
+    unreachable_id: FuncId,
 }
 
 impl<'t> MatchToSwitchRule<'t> {
     pub(super) fn new(
         type_table: &'t TypeTable,
-        cold_path_id: crate::nir::FuncId,
-        unreachable_id: crate::nir::FuncId,
+        cold_path_id: FuncId,
+        unreachable_id: FuncId,
     ) -> Self {
         Self {
             type_table,
@@ -131,9 +132,7 @@ impl<'t> MatchToSwitchRule<'t> {
 /// Intern the `cold_path` / `unreachable` builtins this pass synthesizes for the
 /// default arm of an exhaustive match, returning their `FuncId`s so the
 /// synthesized calls are born resolved.
-pub(super) fn intern_cold_markers(
-    project: &mut NirPackage,
-) -> (crate::nir::FuncId, crate::nir::FuncId) {
+pub(super) fn intern_cold_markers(project: &mut NirPackage) -> (FuncId, FuncId) {
     let cold_path_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "cold_path".to_string(),
@@ -364,8 +363,8 @@ fn build_switch(
     arms: &[ArmData],
     analysis: SwitchAnalysis,
     span: Span,
-    cold_path_id: crate::nir::FuncId,
-    unreachable_id: crate::nir::FuncId,
+    cold_path_id: FuncId,
+    unreachable_id: FuncId,
 ) -> ExprKind {
     let range = (analysis.max_value - analysis.min_value + 1) as usize;
 

@@ -4,12 +4,16 @@
 //! [`ExprKind`] / [`StmtKind`] variant must be added to `accumulate_expr` /
 //! `accumulate_stmt` explicitly, or it silently defaults to pure.
 
+use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::optimize::arena_query::expr_node_may_trap;
+use crate::tir::TypeTable;
+use crate::{nir, tir};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -117,7 +121,7 @@ struct AccumScope<'a> {
     open_labels: Vec<String>,
     /// Type table for the `FieldAccess` non-null trap check; `None` stays
     /// conservative.
-    types: Option<&'a crate::tir::TypeTable>,
+    types: Option<&'a TypeTable>,
 }
 
 /// A `FieldAccess` traps only on a null receiver, and every type a field access
@@ -148,7 +152,7 @@ fn cast_truncates_a_float(
     body: &Body,
     scope: &AccumScope<'_>,
     inner: Operand,
-    target: crate::tir::TypeId,
+    target: tir::TypeId,
 ) -> bool {
     let Some(types) = scope.types else {
         return true;
@@ -167,7 +171,7 @@ impl ModRef {
 
     /// Like [`of_expr`], but a type table lets the `FieldAccess` trap check
     /// prove a non-null receiver (see [`field_receiver_nonnull`]).
-    pub fn of_expr_typed(body: &Body, id: ExprId, types: Option<&crate::tir::TypeTable>) -> Self {
+    pub fn of_expr_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> Self {
         let mut mr = ModRef::default();
         let mut scope = AccumScope {
             types,
@@ -757,11 +761,8 @@ fn memory_builtin_effect(name: &str) -> Option<FnEffect> {
 /// are Wasm instructions: opaque only when they touch linear memory.
 /// Anything bodyless that is not a builtin at all (an extern declaration) is
 /// opaque, since there is no body to inspect.
-fn leaf_effect(
-    f: &crate::nir::NirFunction,
-    registry: &crate::builtin_registry::BuiltinRegistry,
-) -> FnEffect {
-    let fref = crate::nir::FunctionRef::from_resolved(f, f.module_source.clone());
+fn leaf_effect(f: &NirFunction, registry: &BuiltinRegistry) -> FnEffect {
+    let fref = nir::FunctionRef::from_resolved(f, f.module_source.clone());
     let Some(qualified) = fref
         .builtin_name()
         .or_else(|| fref.monomorphized_builtin_name())
@@ -791,8 +792,8 @@ fn leaf_effect(
 /// A cycle of mutually recursive functions that never touch a channel stays
 /// pure, which is what makes ordinary recursive helpers usable.
 pub(super) fn compute_fn_effects(
-    funcs: &[std::rc::Rc<std::cell::RefCell<crate::nir::NirFunction>>],
-    registry: &crate::builtin_registry::BuiltinRegistry,
+    funcs: &[std::rc::Rc<std::cell::RefCell<NirFunction>>],
+    registry: &BuiltinRegistry,
 ) -> Vec<FnEffect> {
     use cranelift_entity::EntityRef;
 
@@ -831,7 +832,7 @@ pub(super) fn compute_fn_effects(
                             callee_edges.push(callee);
                         }
                     }
-                    _ => own.may_trap |= super::arena_query::expr_node_may_trap(body, id),
+                    _ => own.may_trap |= expr_node_may_trap(body, id),
                 }
             }
             body.for_each_child(node, |c| stack.push(c));
@@ -871,11 +872,13 @@ pub(super) fn compute_fn_effects(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::nir::{NirBinaryOp, NirUnaryOp};
+    use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::{
-        ArenaCallArg, ArenaStructField, ArmData, BlockNode, Body, ExprNode, PatNode, StmtNode,
+        ArenaCallArg, ArenaStructField, ArmData, BlockNode, BlockRole, Body, ExprNode, PatNode,
+        StmtNode,
     };
-    use crate::tir::TypeId;
+    use crate::nir_value_graph::ValueKind;
+    use crate::tir::{TypeId, TypeTable};
     use crate::token::Span;
 
     /// Build an expression into a fresh arena and summarise it.
@@ -923,7 +926,7 @@ mod tests {
     fn int(body: &mut Body, v: i64) -> Operand {
         Operand::Value(
             body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64, ty()), ty()),
+                .alloc_unshared(ValueKind::Int(v as u64, ty()), ty()),
         )
     }
     fn bin(
@@ -1048,7 +1051,7 @@ mod tests {
         pe(
             body,
             ExprKind::Call {
-                func_id: crate::nir::FuncId::new(0),
+                func_id: FuncId::new(0),
                 type_args: vec![],
                 args,
                 has_receiver: false,
@@ -1589,7 +1592,7 @@ mod tests {
     }
 
     fn cast_traps(from: TypeId, to: TypeId) -> bool {
-        let types = crate::tir::TypeTable::new();
+        let types = TypeTable::new();
         let mut body = Body::empty();
         let c = cast(&mut body, from, to);
         ModRef::of_expr_typed(&body, c, Some(&types)).may_trap
@@ -1625,10 +1628,7 @@ mod tests {
         // loop itself, so its NonLocal contribution must NOT propagate
         // past the Loop boundary.
         let mr = mr_stmt(|b| {
-            let cond = Operand::Value(
-                b.values
-                    .alloc_unshared(crate::nir_value_graph::ValueKind::Bool(true), ty()),
-            );
+            let cond = Operand::Value(b.values.alloc_unshared(ValueKind::Bool(true), ty()));
             let brk = break_stmt(b, None);
             let then_block = pblock(b, vec![brk]);
             let inner = ps(
@@ -1808,7 +1808,7 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
-                    role: crate::nir_arena::BlockRole::Plain,
+                    role: BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)
@@ -1828,7 +1828,7 @@ mod tests {
                     label: "L".to_string(),
                     block,
                     result_type: ty(),
-                    role: crate::nir_arena::BlockRole::Plain,
+                    role: BlockRole::Plain,
                 },
             );
             let_stmt(b, 5, lb)

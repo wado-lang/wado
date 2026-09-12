@@ -24,6 +24,7 @@ use super::types::{
     CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_gc_passthrough_param,
     is_wasm_flat_type,
 };
+use crate::name::FqTypeName;
 
 /// Recursively replace WASI-derived types with user types in the binding.
 /// Given a WASI AST `Type` and the user's `TypeId`, compute the WASI-derived `TypeId`
@@ -36,7 +37,7 @@ fn replace_wasi_derived_type_recursive(
     wasi_package: &str,
     type_table: &RefCell<TypeTable>,
 ) {
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&type_table.borrow());
     let old_type = {
         let mut tt = type_table.borrow_mut();
         cm_type_to_type_id(wasi_type, &mut tt, cm_interface_registry, wasi_package)
@@ -261,8 +262,8 @@ fn replace_type_in_adapter_with_names(
     adapter: &mut TirFunction,
     old_type: TypeId,
     new_type: TypeId,
-    old_fq: &crate::name::FqTypeName,
-    new_fq: &crate::name::FqTypeName,
+    old_fq: &FqTypeName,
+    new_fq: &FqTypeName,
 ) {
     if old_type == new_type {
         return;
@@ -300,7 +301,7 @@ fn replace_type_in_adapter_with_names(
 struct TypeReplacer<'a> {
     old_type: TypeId,
     new_type: TypeId,
-    rename: Option<(&'a crate::name::FqTypeName, &'a crate::name::FqTypeName)>,
+    rename: Option<(&'a FqTypeName, &'a FqTypeName)>,
 }
 
 impl TypeReplacer<'_> {
@@ -473,7 +474,7 @@ fn flatten_arg_for_call_site(
     arg: &TirExpr,
     flat_tys: &[TypeId],
     flat_args: &mut Vec<TirExpr>,
-    names: &super::types::CmStdlibNames,
+    names: &CmStdlibNames,
 ) {
     // Unwrap Cast nodes transparently
     let inner = match &arg.kind {
@@ -595,7 +596,7 @@ pub(super) fn rewrite_calls_in_block(
 ) {
     // The stdlib-name snapshot is invariant across the whole walk; build it
     // once here instead of once per expression node in `rewrite_calls_in_expr`.
-    let names = super::types::CmStdlibNames::from_type_table(&type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&type_table.borrow());
     CallRewriteWalker {
         adapters,
         entry_source,
@@ -779,7 +780,7 @@ fn flatten_call_site_args(
     skip_self: bool,
     cm_interface_registry: &CmInterfaceRegistry,
     type_table: &RefCell<TypeTable>,
-    names: &super::types::CmStdlibNames,
+    names: &CmStdlibNames,
 ) -> Vec<TirExpr> {
     let param_offset = usize::from(skip_self);
     let mut flat = Vec::new();

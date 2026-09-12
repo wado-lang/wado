@@ -9,7 +9,7 @@
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::symbol::Symbol;
 
-use crate::uri::Uri;
+use crate::uri::{Uri, percent_encode_path};
 
 /// Resolve the URI of a module relative to the requesting document's URI.
 ///
@@ -54,7 +54,7 @@ fn filename_to_uri(filename: &str) -> String {
     if filename.starts_with("file://") {
         filename.to_string()
     } else if filename.starts_with('/') {
-        format!("file://{}", crate::uri::percent_encode_path(filename))
+        format!("file://{}", percent_encode_path(filename))
     } else {
         filename.to_string()
     }

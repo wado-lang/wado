@@ -11,6 +11,10 @@ use wado_lsp::{
 use wado_compiler::kiln::InvocationIndex;
 
 use crate::args::CliExit;
+use crate::compile::{
+    attach_manifest_and_component_deps, attach_manifest_deps, load_nearest_manifest,
+    maybe_run_pipeline,
+};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::discover;
 use crate::manifest::ProjectManifest;
@@ -41,8 +45,8 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    let manifest_pair = crate::compile::load_nearest_manifest(&canonical);
-    let host = crate::compile::attach_manifest_and_component_deps(
+    let manifest_pair = load_nearest_manifest(&canonical);
+    let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair.as_ref(),
         &base,
@@ -78,7 +82,7 @@ fn entry_host(
         .parent()
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
-    crate::compile::attach_manifest_deps(
+    attach_manifest_deps(
         FilesystemCompilerHost::silent(base.clone()),
         manifest_pair,
         &base,
@@ -98,7 +102,7 @@ async fn run_generators_for(
     host: &FilesystemCompilerHost,
     manifest_pair: Option<ProjectManifest>,
 ) -> Option<InvocationIndex> {
-    match crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
+    match maybe_run_pipeline(entry_file, host, false, manifest_pair).await {
         Ok(outcome) => Some(outcome.invocations),
         Err(e) => {
             eprintln!(
@@ -216,8 +220,8 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
     // come from the notation, not source text, so there are no inline component
     // deps — pass empty source; manifest `[dependencies]` still resolve.
     let entry_path = base_dir.join(QUERY_ENTRY);
-    let manifest_pair = crate::compile::load_nearest_manifest(&entry_path);
-    let host = crate::compile::attach_manifest_and_component_deps(
+    let manifest_pair = load_nearest_manifest(&entry_path);
+    let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::silent(base_dir.clone()),
         manifest_pair.as_ref(),
         &base_dir,
@@ -284,7 +288,7 @@ async fn symbol_invocations(env: &SymbolEnv) -> Option<InvocationIndex> {
     // directory, so run it with a host based there — not `env.host`, which is
     // based at `base_dir` to resolve the synthetic entry's imports. Host and
     // pipeline share one manifest load, anchored at the target.
-    let manifest_pair = crate::compile::load_nearest_manifest(&target_abs);
+    let manifest_pair = load_nearest_manifest(&target_abs);
     let pipeline_host = entry_host(&target_abs, manifest_pair.as_ref());
     let raw = run_generators_for(&target_abs, &pipeline_host, manifest_pair).await?;
     let target_decl = target_abs.to_string_lossy();

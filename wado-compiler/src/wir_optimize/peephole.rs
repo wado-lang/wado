@@ -4,6 +4,7 @@
 //! `local.get` fusion into `local.tee`. All are instruction-selection-level and
 //! have no NIR analogue, the shapes they match existing only after lowering.
 
+use crate::compiler_trace;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
 use crate::wir_optimize::util::{self, is_side_effect_free, may_trap_in};
@@ -391,7 +392,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         }
         rounds += 1;
         if rounds >= MAX_ROUNDS {
-            crate::compiler_trace!(
+            compiler_trace!(
                 "wir_peephole",
                 "fixpoint cap ({MAX_ROUNDS} rounds) hit; stopping with rewrites pending"
             );
@@ -1318,7 +1319,7 @@ fn relax_ref_local_get(instr: &mut WirInstr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wir::WirLocals;
+    use crate::wir::{WirAbstractHeapType, WirFuncId, WirLocals};
     use std::assert_matches;
     use std::rc::Rc;
 
@@ -1667,7 +1668,7 @@ mod tests {
             WirInstr::LocalSet {
                 name: "r".to_string(),
                 value: Box::new(WirInstr::RefNull {
-                    heap_type: crate::wir::WirAbstractHeapType::Any,
+                    heap_type: WirAbstractHeapType::Any,
                 }),
             },
             WirInstr::Return {
@@ -1872,7 +1873,7 @@ mod tests {
         let mut instr = short_circuit_and(
             local_get("c", WirType::I32),
             WirInstr::Call {
-                func_id: crate::wir::WirFuncId::new(0, "f".into()),
+                func_id: WirFuncId::new(0, "f".into()),
                 args: vec![],
             },
         );

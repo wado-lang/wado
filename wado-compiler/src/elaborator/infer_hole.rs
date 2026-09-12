@@ -12,6 +12,17 @@ use crate::token::Span;
 use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
+use crate::ast::{AstId, GenericParam};
+use crate::defs::DefId;
+use crate::elaborator::sem::TypeAnnotations;
+use crate::elaborator::sem::types::{
+    BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
+    LiteralCallee, LiteralFromCall, MethodDispatch, OperatorDispatch, SequenceCoercionFacts,
+    StaticMethodDispatch,
+};
+use crate::elaborator::types::VariantInfo;
+use crate::name::mangle_generic_name;
+use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
 #[derive(Default)]
@@ -35,7 +46,7 @@ pub(crate) struct InferHoleTable {
 /// and the spelling that site wrote.
 #[derive(Clone, Debug)]
 pub(crate) struct DeclaredBound {
-    pub(crate) decl: crate::defs::DefId,
+    pub(crate) decl: DefId,
     pub(crate) written: String,
 }
 
@@ -99,7 +110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A bound whose site reaches no declaration is dropped: it is diagnosed
     /// where it was written, and there is nothing to enforce a solution
     /// against.
-    pub(super) fn declared_bounds(&self, param: &crate::ast::GenericParam) -> Vec<DeclaredBound> {
+    pub(super) fn declared_bounds(&self, param: &GenericParam) -> Vec<DeclaredBound> {
         param
             .bounds
             .iter()
@@ -185,7 +196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_id: TypeId,
         variant_name: &str,
-        variant_info: &super::types::VariantInfo,
+        variant_info: &VariantInfo,
         span: Span,
     ) -> TypeId {
         let arity = variant_info.type_param_type_ids.len();
@@ -445,7 +456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::sweep_body_facts`].
     fn sweep_type_annotations(
         tt: &mut TypeTable,
-        types: &mut super::sem::TypeAnnotations,
+        types: &mut TypeAnnotations,
         subst: &IndexMap<InferVarId, TypeId>,
     ) {
         sub_map(tt, &mut types.fn_return_types, subst);
@@ -468,7 +479,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// hold the same kinds and sweep through the same list.
     fn sweep_body_facts(
         tt: &mut TypeTable,
-        facts: &mut super::sem::types::BodyFacts,
+        facts: &mut BodyFacts,
         subst: &IndexMap<InferVarId, TypeId>,
     ) {
         sub_map(tt, &mut facts.expression_types, subst);
@@ -533,7 +544,7 @@ fn sub_vec(tt: &mut TypeTable, v: &mut [TypeId], subst: &IndexMap<InferVarId, Ty
 
 fn sub_map(
     tt: &mut TypeTable,
-    m: &mut IndexMap<crate::ast::AstId, TypeId>,
+    m: &mut IndexMap<AstId, TypeId>,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     for t in m.values_mut() {
@@ -543,7 +554,7 @@ fn sub_map(
 
 fn sub_vec_map(
     tt: &mut TypeTable,
-    m: &mut IndexMap<crate::ast::AstId, Vec<TypeId>>,
+    m: &mut IndexMap<AstId, Vec<TypeId>>,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     for v in m.values_mut() {
@@ -553,7 +564,7 @@ fn sub_vec_map(
 
 fn sub_monomorph(
     tt: &mut TypeTable,
-    f: &mut crate::tir::FunctionRef,
+    f: &mut tir::FunctionRef,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     if let Some(mi) = f.monomorph_info.as_mut() {
@@ -567,7 +578,7 @@ fn sub_monomorph(
 /// instance type.
 fn sub_generic_instantiation(
     tt: &mut TypeTable,
-    gi: &mut super::sem::types::GenericInstantiation,
+    gi: &mut GenericInstantiation,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     sub_vec(tt, &mut gi.type_args, subst);
@@ -577,13 +588,13 @@ fn sub_generic_instantiation(
         && let base = tt.def_name(def).to_string()
     {
         let arg_names: Vec<String> = type_args.iter().map(|&t| tt.type_name(t)).collect();
-        *name = crate::name::mangle_generic_name(&base, &arg_names);
+        *name = mangle_generic_name(&base, &arg_names);
     }
 }
 
 fn sub_method_dispatch(
     tt: &mut TypeTable,
-    md: &mut super::sem::types::MethodDispatch,
+    md: &mut MethodDispatch,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     md.return_type = sub(tt, md.return_type, subst);
@@ -593,7 +604,7 @@ fn sub_method_dispatch(
 
 fn sub_static_dispatch(
     tt: &mut TypeTable,
-    sd: &mut super::sem::types::StaticMethodDispatch,
+    sd: &mut StaticMethodDispatch,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     sub_vec(tt, &mut sd.type_args, subst);
@@ -603,18 +614,14 @@ fn sub_static_dispatch(
 
 fn sub_operator_dispatch(
     tt: &mut TypeTable,
-    od: &mut super::sem::types::OperatorDispatch,
+    od: &mut OperatorDispatch,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     od.return_type = sub(tt, od.return_type, subst);
     sub_monomorph(tt, &mut od.function_ref, subst);
 }
 
-fn sub_for_of(
-    tt: &mut TypeTable,
-    f: &mut super::sem::types::ForOfIteratorInfo,
-    subst: &IndexMap<InferVarId, TypeId>,
-) {
+fn sub_for_of(tt: &mut TypeTable, f: &mut ForOfIteratorInfo, subst: &IndexMap<InferVarId, TypeId>) {
     f.item_type = sub(tt, f.item_type, subst);
     f.iter_type = sub(tt, f.iter_type, subst);
     sub_monomorph(tt, &mut f.into_iter, subst);
@@ -623,7 +630,7 @@ fn sub_for_of(
 
 fn sub_closure_captures(
     tt: &mut TypeTable,
-    cc: &mut super::sem::types::ClosureCaptureInfo,
+    cc: &mut ClosureCaptureInfo,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     for c in &mut cc.captures {
@@ -637,7 +644,7 @@ fn sub_closure_captures(
 
 fn sub_sequence_coercion(
     tt: &mut TypeTable,
-    sc: &mut super::sem::types::SequenceCoercionFacts,
+    sc: &mut SequenceCoercionFacts,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     sc.element_type = sub(tt, sc.element_type, subst);
@@ -647,7 +654,7 @@ fn sub_sequence_coercion(
 
 fn sub_literal_from_call(
     tt: &mut TypeTable,
-    call: &mut super::sem::types::LiteralFromCall,
+    call: &mut LiteralFromCall,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     call.from_type = sub(tt, call.from_type, subst);
@@ -657,7 +664,7 @@ fn sub_literal_from_call(
 
 fn sub_literal_callee(
     tt: &mut TypeTable,
-    callee: &mut super::sem::types::LiteralCallee,
+    callee: &mut LiteralCallee,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     sub_vec(tt, &mut callee.type_arg_ids, subst);
@@ -666,7 +673,7 @@ fn sub_literal_callee(
 
 fn sub_key_value_coercion(
     tt: &mut TypeTable,
-    kv: &mut super::sem::types::KeyValueCoercionFacts,
+    kv: &mut KeyValueCoercionFacts,
     subst: &IndexMap<InferVarId, TypeId>,
 ) {
     kv.value_type = sub(tt, kv.value_type, subst);

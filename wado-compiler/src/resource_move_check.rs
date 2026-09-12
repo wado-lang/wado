@@ -2,6 +2,8 @@ use crate::ast::{
     self, AssignExpr, AstId, Block, Condition, ConditionElement, Expr, Function, IdentExpr, Item,
     Pattern, Stmt, for_each_pattern_binding,
 };
+use crate::compiler_host::Diagnostic;
+use crate::elaborator::liveness::is_user_authored;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
@@ -96,7 +98,7 @@ impl std::fmt::Display for ResourceMoveError {
 
 impl std::error::Error for ResourceMoveError {}
 
-impl From<ResourceMoveError> for crate::compiler_host::Diagnostic {
+impl From<ResourceMoveError> for Diagnostic {
     fn from(e: ResourceMoveError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (message, span, module) = match e {
@@ -125,7 +127,7 @@ impl From<ResourceMoveError> for crate::compiler_host::Diagnostic {
                 module,
             ),
         };
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message,
@@ -138,7 +140,7 @@ impl From<ResourceMoveError> for crate::compiler_host::Diagnostic {
 pub fn check_resource_moves_semantic(sem: &Semantics) -> Vec<ResourceMoveError> {
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
-        if !crate::elaborator::liveness::is_user_authored(src) {
+        if !is_user_authored(src) {
             continue;
         }
         for item in &module.items {

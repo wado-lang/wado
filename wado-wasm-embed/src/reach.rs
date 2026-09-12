@@ -12,7 +12,7 @@ use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
 use crate::dataref::{DataRange, DataRefs, merge_with_gap};
-use crate::{Asset, Error};
+use crate::{Asset, Error, segment_base};
 
 /// A gap this small is cheaper to keep than to split around: a second segment
 /// costs a header, an offset expression and a length.
@@ -58,7 +58,7 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
         splittable: asset
             .datas
             .iter()
-            .map(|data| asset.data_refs.is_some() && crate::segment_base(data).is_some())
+            .map(|data| asset.data_refs.is_some() && segment_base(data).is_some())
             .collect(),
     };
 

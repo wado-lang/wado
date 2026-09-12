@@ -7,7 +7,8 @@
 use std::rc::Rc;
 
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::Body;
+use crate::nir_arena::{Body, Operand};
+use crate::nir_value_graph::value_kind_to_const;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// A typed compile-time value produced by the interpreter.
@@ -356,14 +357,10 @@ impl Value {
     /// denotes. Constants live in the `ValuePool`, so only `Operand::Value`
     /// can be one.
     #[must_use]
-    pub fn from_operand(
-        body: &Body,
-        op: crate::nir_arena::Operand,
-        type_table: &TypeTable,
-    ) -> Option<Self> {
+    pub fn from_operand(body: &Body, op: Operand, type_table: &TypeTable) -> Option<Self> {
         let v = op.as_value()?;
         let ty = body.values.type_of(v)?;
-        crate::nir_value_graph::value_kind_to_const(body.values.kind(v), prim_of(ty, type_table))
+        value_kind_to_const(body.values.kind(v), prim_of(ty, type_table))
     }
 }
 

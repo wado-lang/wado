@@ -12,6 +12,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
 /// Expected function-type info extracted from an `expected_type` hint.
@@ -31,7 +32,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
         matches!(
             self.tysys.type_table.borrow().get(ty),
-            crate::tir::ResolvedType::TypeParam { .. }
+            ResolvedType::TypeParam { .. }
         )
     }
 
@@ -111,7 +112,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the outer `ctx` so any subsequent local-index accounting in the
         // parent function stays consistent with what reify will produce.
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
-        let mut mut_captures: Vec<super::sem::types::MutCapture> = Vec::new();
+        let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
         for var_name in &assigned_names {
@@ -126,7 +127,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
-                mut_captures.push(super::sem::types::MutCapture {
+                mut_captures.push(MutCapture {
                     var_name: var_name.clone(),
                     ref_name: ref_name.clone(),
                     inner_type,
@@ -186,10 +187,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Build the recorded capture list from the closure scope's captures.
-        let recorded_captures: Vec<super::sem::types::CaptureEntry> = closure_ctx
+        let recorded_captures: Vec<CaptureEntry> = closure_ctx
             .get_captures()
             .into_iter()
-            .map(|(name, _index, local)| super::sem::types::CaptureEntry {
+            .map(|(name, _index, local)| CaptureEntry {
                 name,
                 outer_index: local.index,
                 type_id: local.type_id,
@@ -201,7 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // for the closure's capture analysis.
         self.record_closure_captures(
             closure.id,
-            super::sem::types::ClosureCaptureInfo {
+            ClosureCaptureInfo {
                 mut_captures,
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,

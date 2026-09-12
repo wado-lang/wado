@@ -10,6 +10,8 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::args::{self, CliExit};
+use crate::cache::root;
+use crate::git::prune_worktrees;
 
 #[derive(Debug, Default)]
 pub struct CleanOptions {
@@ -53,7 +55,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CleanOptions, CliExit> {
 }
 
 pub fn run(opts: CleanOptions) -> Result<(), CliExit> {
-    let root = crate::cache::root().map_err(CliExit::error)?;
+    let root = root().map_err(CliExit::error)?;
     if !root.is_dir() {
         eprintln!("Nothing to clean ({} does not exist)", root.display());
         return Ok(());
@@ -74,7 +76,7 @@ pub fn run(opts: CleanOptions) -> Result<(), CliExit> {
         std::fs::remove_dir_all(dir)
             .map_err(|e| CliExit::error(format!("removing {}: {e}", dir.display())))?;
         if let Some(repo) = dir.parent() {
-            let _ = crate::git::prune_worktrees(repo);
+            let _ = prune_worktrees(repo);
         }
         removed += 1;
     }

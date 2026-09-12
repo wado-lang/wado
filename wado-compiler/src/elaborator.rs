@@ -47,13 +47,27 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{self, Item, Module};
-use crate::compiler_host::CompilerHost;
-use crate::logger::Logger;
+use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
+use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::defs::{DefId, DefKind};
+use crate::elaborator::item::OperationOwner;
+use crate::elaborator::reify::default_impl_methods;
+use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::types::FunctionContext;
+use crate::hashmap;
+use crate::kiln::InvocationIndex;
+use crate::loader::resolve_use_decl_source;
+use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
-use crate::symbol::{Symbol, SymbolTable};
+use crate::name::{
+    DeclName, FqTraitName, FqTypeName, global_name, is_builtin_shape_name, namespace_member_alias,
+};
+use crate::resolve::{Resolution, head_site};
+use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
+use crate::tir::{ResolvedType, StructDef, TraitRef};
+use crate::token::Span;
 
 /// Build a function-name → item-index map for a module's items. Used
 /// once per loaded module during annotate
@@ -108,7 +122,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Kiln invocation redirects consulted by `use` resolution sites. Shared
     /// by `Rc` so per-module Elaborator instances can read the single
     /// compilation-unit-wide redirect map cheaply.
-    pub(super) invocations: Rc<crate::kiln::InvocationIndex>,
+    pub(super) invocations: Rc<InvocationIndex>,
     /// `ModuleSource` interner shared with the loader and downstream
     /// phases. Wrapped in `Rc<RefCell<>>` so per-module elaborator
     /// instances can `borrow_mut()` it from `&self` contexts (e.g.
@@ -131,7 +145,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// The `(base, assoc)` pairs whose binding is being resolved right now.
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
-    pub(super) assoc_binding_stack: crate::hashmap::IndexSet<(crate::tir::TypeId, String)>,
+    pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
@@ -225,10 +239,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The channel for every diagnostic raised during item/body resolution.
     /// A located one names the file its span indexes; `current_module_source`
     /// answers only for a span no parse produced.
-    pub(super) fn emit(
-        &self,
-        err: impl Into<crate::compiler_host::Diagnostic>,
-    ) -> Result<(), crate::logger::Bail> {
+    pub(super) fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.logger.error_in(&self.current_module_source, err)
     }
 
@@ -236,7 +247,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// Every item the collect pass walks was declared into the table, so a miss
     /// is a hole in that pass rather than a name that reached nothing.
-    pub(super) fn def_of_item(&self, id: crate::ast::AstId) -> crate::defs::DefId {
+    pub(super) fn def_of_item(&self, id: AstId) -> DefId {
         self.tysys
             .resolutions
             .defs()
@@ -246,11 +257,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site
     /// is not at hand — a mangled name, a synthesis target. No scope is run.
-    pub(crate) fn symbol_named(
-        &self,
-        module: &ModuleSource,
-        name: &str,
-    ) -> Option<&'a crate::symbol::Symbol> {
+    pub(crate) fn symbol_named(&self, module: &ModuleSource, name: &str) -> Option<&'a Symbol> {
         // Three recorded facts, in the order the scope stores them and none of
         // them a walk: what this module `use`d under the name, what it declares
         // itself, and what the prelude puts in scope everywhere. No spelling
@@ -305,7 +312,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`super::types::TypeLookup::variant_cases_at`].
     pub(super) fn lookup_variant_cases_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         name: &str,
     ) -> Option<&VariantInfo> {
         self.type_lookup().variant_cases_at(site, name)
@@ -313,7 +320,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     pub(super) fn lookup_flags_members_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         name: &str,
     ) -> Option<&FlagsInfo> {
         self.type_lookup().flags_members_at(site, name)
@@ -325,7 +332,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// is `None` when the qualifier owns the members itself.
     pub(super) fn flags_members_through_newtype(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         name: &str,
     ) -> Option<(FlagsInfo, Option<TypeId>)> {
         let lookup = self.type_lookup();
@@ -341,42 +348,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().newtype(name)
     }
 
-    pub(super) fn lookup_variant_case_of_decl(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&VariantInfo> {
+    pub(super) fn lookup_variant_case_of_decl(&self, def: DefId) -> Option<&VariantInfo> {
         self.type_lookup().variant_cases_of(def)
     }
 
-    pub(super) fn lookup_enum_case_of_decl(&self, def: crate::defs::DefId) -> Option<&EnumInfo> {
+    pub(super) fn lookup_enum_case_of_decl(&self, def: DefId) -> Option<&EnumInfo> {
         self.type_lookup().enum_cases_of(def)
     }
 
-    pub(super) fn lookup_resource_type_of_decl(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&ResourceInfo> {
+    pub(super) fn lookup_resource_type_of_decl(&self, def: DefId) -> Option<&ResourceInfo> {
         self.type_lookup().resource_type_of(def)
     }
 
-    pub(super) fn lookup_generic_newtype_of_decl(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&GenericNewtypeInfo> {
+    pub(super) fn lookup_generic_newtype_of_decl(&self, def: DefId) -> Option<&GenericNewtypeInfo> {
         self.type_lookup().generic_newtype_of(def)
     }
 
-    pub(super) fn lookup_newtype_of_decl(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub(super) fn lookup_newtype_of_decl(&self, def: DefId) -> Option<TypeId> {
         self.type_lookup().newtype_of(def)
     }
 
     /// The declaration a *type* reference names; see
     /// [`TypeLookup::declaration_at`].
-    pub(super) fn type_decl_at(
-        &self,
-        site: Option<crate::ast::AstId>,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(super) fn type_decl_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         self.type_lookup().declaration_at(site, name)
     }
 
@@ -423,7 +417,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// through here, so the [`Self::suppress_reference_recording`] gate lives in
     /// exactly one place: when set, the edge is dropped rather than recorded
     /// as a spurious duplicate by a type-checking query (see the field docs).
-    fn insert_reference(&mut self, use_id: crate::ast::AstId, def_id: crate::ast::AstId) {
+    fn insert_reference(&mut self, use_id: AstId, def_id: AstId) {
         if self.suppress_reference_recording {
             return;
         }
@@ -432,11 +426,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Record that an identifier resolved to a local binding in the current
     /// module. Both `use_id` and `def_id` live in `current_module_source`.
-    pub(super) fn record_reference(
-        &mut self,
-        use_id: crate::ast::AstId,
-        def_id: crate::ast::AstId,
-    ) {
+    pub(super) fn record_reference(&mut self, use_id: AstId, def_id: AstId) {
         self.insert_reference(use_id, def_id);
     }
 
@@ -444,45 +434,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// node may live in any module — its `AstId` is globally unique, so the
     /// edge needs no module qualifier; navigation recovers the def's module
     /// from the id via [`crate::semantics::Semantics::module_of_id`].
-    pub(super) fn record_reference_to_def(
-        &mut self,
-        use_id: crate::ast::AstId,
-        def_id: crate::ast::AstId,
-    ) {
+    pub(super) fn record_reference_to_def(&mut self, use_id: AstId, def_id: AstId) {
         self.insert_reference(use_id, def_id);
     }
 
     /// The free function the reference site `site` names, answered by the
     /// module that wrote it (WEP 2026-08-12). `None` where it names something
     /// else — a binder, a variant case, a node no walk saw.
-    pub(super) fn free_function_at(&self, site: crate::ast::AstId) -> Option<crate::defs::DefId> {
+    pub(super) fn free_function_at(&self, site: AstId) -> Option<DefId> {
         let def = self.tysys.resolutions.declared_if_walked(site)?;
-        (self.tysys.resolutions.defs().kind(def) == crate::defs::DefKind::Function).then_some(def)
+        (self.tysys.resolutions.defs().kind(def) == DefKind::Function).then_some(def)
     }
 
     /// The canonical signature of the free function the site names.
-    pub(super) fn free_function_sig_at(
-        &self,
-        site: crate::ast::AstId,
-    ) -> Option<&sem::decls::FunctionSig> {
+    pub(super) fn free_function_sig_at(&self, site: AstId) -> Option<&sem::decls::FunctionSig> {
         self.tysys
             .signatures
             .function_sig(self.free_function_at(site)?)
     }
 
     /// The declaration `id` declares. See [`crate::defs::DefTable::def_at`].
-    pub(super) fn def_at(&self, id: crate::ast::AstId) -> crate::defs::DefId {
+    pub(super) fn def_at(&self, id: AstId) -> DefId {
         self.tysys.resolutions.defs().def_at(id)
     }
 
     /// The declaration `module` declares under `name`, for the positions no
     /// reference site answers. The module is named by the caller, not searched
     /// for.
-    pub(super) fn decl_in_module(
-        &self,
-        module: &ModuleSource,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(super) fn decl_in_module(&self, module: &ModuleSource, name: &str) -> Option<DefId> {
         self.symbols
             .lookup_in_module(module, name)
             .and_then(|sym| self.tysys.resolutions.defs().of_ast_id(sym.defined_at))
@@ -494,18 +473,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The callee identity of the declaration `def`.
-    fn callee_of(&self, def: crate::defs::DefId) -> callee::CalleeRef {
+    fn callee_of(&self, def: DefId) -> callee::CalleeRef {
         callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
     }
 
     /// Record a use→def edge naming the declaration `def`. The map is keyed by
     /// node on both sides, so the declaring node is read off the identity here
     /// rather than carried beside it.
-    pub(super) fn record_reference_to_decl(
-        &mut self,
-        use_id: crate::ast::AstId,
-        def: crate::defs::DefId,
-    ) {
+    pub(super) fn record_reference_to_decl(&mut self, use_id: AstId, def: DefId) {
         let node = self.tysys.resolutions.defs().ast_id(def);
         self.insert_reference(use_id, node);
     }
@@ -514,7 +489,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the current module under `name` (local item, imported item, imported
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
-    pub(super) fn record_item_reference_by_name(&mut self, use_id: crate::ast::AstId, name: &str) {
+    pub(super) fn record_item_reference_by_name(&mut self, use_id: AstId, name: &str) {
         let Some(sym) = self.symbol_named(&self.current_module_source, name) else {
             return;
         };
@@ -526,9 +501,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// case segment at `case_ast_id`. A bare case (`Some`) is the ident itself.
     pub(super) fn record_qualified_case(
         &mut self,
-        ident: &crate::ast::IdentExpr,
+        ident: &IdentExpr,
         type_name: &str,
-        case_ast_id: crate::ast::AstId,
+        case_ast_id: AstId,
     ) {
         match ident.segments.as_slice() {
             [] => self.record_reference_to_def(ident.id, case_ast_id),
@@ -543,11 +518,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record the suffix (`Case`) segment of a `ns::Type::Case`
     /// namespace-qualified case path. The leading `ns` and `Type`
     /// segments are left to existing namespace-import edges.
-    pub(super) fn record_namespaced_case(
-        &mut self,
-        ident: &crate::ast::IdentExpr,
-        case_ast_id: crate::ast::AstId,
-    ) {
+    pub(super) fn record_namespaced_case(&mut self, ident: &IdentExpr, case_ast_id: AstId) {
         if let Some(seg) = ident.segments.get(2) {
             self.record_reference_to_def(seg.id, case_ast_id);
         }
@@ -556,11 +527,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Record a use→def edge from `use_id` to `def_id` (in the current
     /// module) when the defining id is known. Convenience for sites that
     /// receive an `Option<AstId>` from a local variable lookup.
-    pub(super) fn record_reference_opt(
-        &mut self,
-        use_id: crate::ast::AstId,
-        def_id: Option<crate::ast::AstId>,
-    ) {
+    pub(super) fn record_reference_opt(&mut self, use_id: AstId, def_id: Option<AstId>) {
         if let Some(def_id) = def_id {
             self.record_reference(use_id, def_id);
         }
@@ -572,11 +539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// the `<T>` declaration rather than on a top-level item that happens
     /// to share the name. Falls through to the symbol-table lookup
     /// otherwise.
-    pub(in crate::elaborator) fn record_type_name_reference(
-        &mut self,
-        use_id: crate::ast::AstId,
-        name: &str,
-    ) {
+    pub(in crate::elaborator) fn record_type_name_reference(&mut self, use_id: AstId, name: &str) {
         if let Some(decl_id) = self
             .annotate_ctx
             .trait_ctx
@@ -597,7 +560,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         target: &ModuleSource,
         name: &str,
-        span: crate::token::Span,
+        span: Span,
     ) {
         let Some(visibility) =
             self.symbols
@@ -671,14 +634,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// call ends its ladder here, so none of them stops one alias short.
     pub(super) fn qualified_method_decl_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         type_name: &str,
         method_name: &str,
-    ) -> Option<crate::defs::DefId> {
+    ) -> Option<DefId> {
         self.qualified_method_decl_id(&self.impl_target_at(site, type_name), method_name)
             .or_else(|| {
                 let (base, base_name) = self.newtype_base(type_name)?;
-                let receiver = self.impl_target_of(base, &crate::name::DeclName::new(&base_name));
+                let receiver = self.impl_target_of(base, &DeclName::new(&base_name));
                 self.qualified_method_decl_id(&receiver, method_name)
             })
     }
@@ -698,7 +661,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> Option<crate::defs::DefId> {
+    ) -> Option<DefId> {
         self.qualified_method_decl_ids(receiver, method_name).next()
     }
 
@@ -709,7 +672,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         receiver: &trait_env::ImplTargetKey,
         method_name: &str,
-    ) -> impl Iterator<Item = crate::defs::DefId> {
+    ) -> impl Iterator<Item = DefId> {
         self.impl_method_entries(receiver, method_name)
             .map(|entry| entry.method_id)
     }
@@ -792,21 +755,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    pub(super) fn ast_find_return_type_in_block(
-        &self,
-        block: &crate::ast::Block,
-    ) -> Option<TypeId> {
+    pub(super) fn ast_find_return_type_in_block(&self, block: &Block) -> Option<TypeId> {
         control_flow::find_return_type_in_block(self.ctrl_flow_ctx(), block)
     }
 
-    pub(super) fn ast_block_always_exits(&self, block: &crate::ast::Block) -> bool {
+    pub(super) fn ast_block_always_exits(&self, block: &Block) -> bool {
         control_flow::block_always_exits(self.ctrl_flow_ctx(), block)
     }
 
     /// Reject an unlabeled `break` / `continue` that no enclosing loop binds.
     /// Called per function, method, and closure body: each is its own label
     /// stack.
-    pub(super) fn validate_loop_jumps_ast(&self, body: Option<&crate::ast::Block>) {
+    pub(super) fn validate_loop_jumps_ast(&self, body: Option<&Block>) {
         let Some(body) = body else {
             return;
         };
@@ -818,24 +778,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Whether a labeled block's body can reach its own end, so its trailing
     /// statement is a branch of the block.
-    pub(super) fn ast_labeled_block_falls_through(
-        &self,
-        block: &crate::ast::Block,
-        label: &str,
-    ) -> bool {
+    pub(super) fn ast_labeled_block_falls_through(&self, block: &Block, label: &str) -> bool {
         control_flow::labeled_block_falls_through(self.ctrl_flow_ctx(), block, label)
     }
 
     /// Result type of an AST block, read from `expression_types` rather
     /// than from a built `TirBlock`: types `{ … }`, `if` / `match` arms, and
     /// loop and handler bodies with no TIR in hand.
-    pub(super) fn ast_block_result_type(&self, block: &crate::ast::Block) -> TypeId {
+    pub(super) fn ast_block_result_type(&self, block: &Block) -> TypeId {
         control_flow::block_result_type(self.ctrl_flow_ctx(), block)
     }
 
     /// Recorded type of one AST expression, the single-expression counterpart
     /// of [`Self::ast_block_result_type`]. `None` until the body walk reaches it.
-    pub(super) fn ast_expr_type(&self, expr: &crate::ast::Expr) -> Option<TypeId> {
+    pub(super) fn ast_expr_type(&self, expr: &Expr) -> Option<TypeId> {
         self.sem.types.expression_types.get(&expr.id()).copied()
     }
 
@@ -864,8 +820,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             return;
         }
-        if return_type == crate::tir::TypeTable::UNIT || return_type == crate::tir::TypeTable::NEVER
-        {
+        if return_type == TypeTable::UNIT || return_type == TypeTable::NEVER {
             return;
         }
         if control_flow::block_always_exits(self.ctrl_flow_ctx(), body) {
@@ -882,7 +837,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Skipped for [`TypeTable::ERROR`] and for a type still mentioning
     /// [`TypeTable::UNKNOWN`]: both mark a result the body walk will revisit, and
     /// recording the sentinel would leave an entry reify cannot consume.
-    pub(super) fn record_expression_type(&mut self, ast_id: crate::ast::AstId, type_id: TypeId) {
+    pub(super) fn record_expression_type(&mut self, ast_id: AstId, type_id: TypeId) {
         if type_id == TypeTable::ERROR {
             return;
         }
@@ -902,8 +857,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
-        ast_id: Option<crate::ast::AstId>,
-        method_def: Option<crate::defs::DefId>,
+        ast_id: Option<AstId>,
+        method_def: Option<DefId>,
         function_ref: &tir::FunctionRef,
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
@@ -943,7 +898,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// map only carries decisions reify needs.
     pub(super) fn record_generic_instantiation(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         type_args: Vec<TypeId>,
         instance_type: TypeId,
     ) {
@@ -956,7 +911,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// else takes the default `None` through the bare helper above.
     pub(super) fn record_generic_instantiation_with_mangle(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         type_args: Vec<TypeId>,
         instance_type: TypeId,
         mangled_name: Option<String>,
@@ -978,11 +933,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Record the resolved (type-arg-substituted) parameter types for the
     /// call at `ast_id`, so reify can replay per-argument expected types.
-    pub(super) fn record_call_param_types(
-        &mut self,
-        ast_id: crate::ast::AstId,
-        param_types: Vec<TypeId>,
-    ) {
+    pub(super) fn record_call_param_types(&mut self, ast_id: AstId, param_types: Vec<TypeId>) {
         let key = ast_id;
         self.sem.types.call_param_types.insert(key, param_types);
     }
@@ -991,7 +942,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `ast_id`. See [`sem::types::ClosureCaptureInfo`].
     pub(super) fn record_closure_captures(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::ClosureCaptureInfo,
     ) {
         let key = ast_id;
@@ -1002,7 +953,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// statement at `ast_id`. See [`sem::types::AssertCaptureInfo`].
     pub(super) fn record_assert_captures(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::AssertCaptureInfo,
     ) {
         let key = ast_id;
@@ -1015,7 +966,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// entry here. See [`sem::types::ForOfIteratorInfo`].
     pub(super) fn record_for_of_iterator(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::ForOfIteratorInfo,
     ) {
         let key = ast_id;
@@ -1029,7 +980,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// was taken instead. See [`sem::types::OperatorDispatch`].
     pub(super) fn record_operator_dispatch(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::OperatorDispatch,
     ) {
         let key = ast_id;
@@ -1045,7 +996,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `Index` dispatch keyed by the same `AstId`.
     pub(super) fn record_index_assign_dispatch(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::OperatorDispatch,
     ) {
         let key = ast_id;
@@ -1060,7 +1011,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// [`sem::types::HandlerBindingFacts`].
     pub(super) fn record_handler_binding_facts(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         info: sem::types::HandlerBindingFacts,
     ) {
         let key = ast_id;
@@ -1075,7 +1026,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// builtin shape has no declaring module in any mangle, so both stay bare
     /// — matching what `TypeTable::mangle_type_arg_for_generic` produces for
     /// the same type on the consuming side.
-    pub(super) fn qualified_receiver_name(&self, written: &str) -> crate::name::FqTypeName {
+    pub(super) fn qualified_receiver_name(&self, written: &str) -> FqTypeName {
         self.qualified_receiver_name_owned(written, None)
     }
 
@@ -1085,8 +1036,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn qualified_receiver_name_owned(
         &self,
         written: &str,
-        owner: Option<crate::defs::DefId>,
-    ) -> crate::name::FqTypeName {
+        owner: Option<DefId>,
+    ) -> FqTypeName {
         if self
             .annotate_ctx
             .trait_ctx
@@ -1098,14 +1049,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 None => self.binder_in_scope(written),
             };
         }
-        if crate::name::is_builtin_shape_name(written) {
-            return crate::name::FqTypeName::builtin(written);
+        if is_builtin_shape_name(written) {
+            return FqTypeName::builtin(written);
         }
         self.decl_key_or_local(written).map_or_else(
             // A name that reaches no declaration at all: it names a shape or
             // nothing, and the writing module is the only vantage left.
-            || crate::name::FqTypeName::shape(&self.current_module_source, written),
-            |def| crate::name::FqTypeName::of_head(self.tysys.resolutions.defs(), def),
+            || FqTypeName::shape(&self.current_module_source, written),
+            |def| FqTypeName::of_head(self.tysys.resolutions.defs(), def),
         )
     }
 
@@ -1113,32 +1064,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `impl` block in scope when it is that block's receiver, bare otherwise.
     /// Matched on the binding, not the spelling — a method parameter may shadow
     /// the receiver's letter (#1932).
-    pub(super) fn binder_in_scope(&self, written: &str) -> crate::name::FqTypeName {
+    pub(super) fn binder_in_scope(&self, written: &str) -> FqTypeName {
         let ctx = &self.annotate_ctx.trait_ctx;
         if let Some((owner, Some(receiver_decl))) = &ctx.impl_owner
             && ctx.type_params.get(written).and_then(|b| b.decl) == Some(*receiver_decl)
         {
             return self.impl_receiver_binder(*owner, written);
         }
-        crate::name::FqTypeName::binder(written)
+        FqTypeName::binder(written)
     }
 
     /// The binder naming the receiver parameter `written` of the `impl` block
     /// `owner` — every pass that names a blanket's receiver asks here.
-    pub(super) fn impl_receiver_binder(
-        &self,
-        owner: crate::defs::DefId,
-        written: &str,
-    ) -> crate::name::FqTypeName {
-        crate::name::FqTypeName::binder_of_impl(self.tysys.resolutions.defs(), owner, written)
+    pub(super) fn impl_receiver_binder(&self, owner: DefId, written: &str) -> FqTypeName {
+        FqTypeName::binder_of_impl(self.tysys.resolutions.defs(), owner, written)
     }
 
     /// The name an `impl` block's receiver registers under. One block, one
     /// name: two spellings of it register two templates.
-    pub(super) fn impl_receiver_name(
-        &self,
-        impl_block: &crate::ast::ImplBlock,
-    ) -> crate::name::FqTypeName {
+    pub(super) fn impl_receiver_name(&self, impl_block: &ImplBlock) -> FqTypeName {
         self.qualified_receiver_name_owned(
             &self.get_type_name(&impl_block.ty),
             self.tysys.resolutions.defs().of_ast_id(impl_block.id),
@@ -1147,7 +1091,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The spelling `def` renders to in a mangled head — its declared name,
     /// with a function-local declaration's disambiguator applied.
-    pub(super) fn decl_render_name(&self, def: crate::defs::DefId) -> String {
+    pub(super) fn decl_render_name(&self, def: DefId) -> String {
         trait_env::render_decl_name(self.tysys.resolutions.defs(), def)
     }
 
@@ -1157,14 +1101,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// aliases, so this is the import tier answering the qualification the
     /// programmer wrote — the same answer the resolve walk gives `ns::Name` in
     /// type position, rather than a second lookup beside it.
-    pub(super) fn namespace_member(
-        &self,
-        namespace: &str,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(super) fn namespace_member(&self, namespace: &str, name: &str) -> Option<DefId> {
         self.tysys.resolutions.imported_as(
             &self.current_module_source,
-            &crate::name::namespace_member_alias(namespace, name),
+            &namespace_member_alias(namespace, name),
         )
     }
 
@@ -1180,11 +1120,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration a written reference names, keyed on the site that wrote it,
     /// so an alias, a namespace prefix and a function-local item each reach their
     /// own. `name` is read only where the site reaches nothing.
-    pub(crate) fn decl_key_at(
-        &self,
-        site: crate::ast::AstId,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(crate) fn decl_key_at(&self, site: AstId, name: &str) -> Option<DefId> {
         self.tysys
             .resolutions
             .declared_if_walked(site)
@@ -1197,7 +1133,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// The frames are the walk's own position, never a caller's. Where it reads an
     /// expression another module wrote, that writing module answers first.
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
+    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
         // its own; the indexes cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
@@ -1229,22 +1165,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// A site naming no declaration gets no invented identity — `use` and the
     /// prelude are the only ways to name a trait, so a name reaching nothing here
     /// reaches nothing at all, and the mangle falls back to the spelling.
-    pub(super) fn fq_trait_name_at(
-        &self,
-        site: crate::ast::AstId,
-        written: &str,
-    ) -> crate::name::FqTraitName {
+    pub(super) fn fq_trait_name_at(&self, site: AstId, written: &str) -> FqTraitName {
         let resolutions = &self.tysys.resolutions;
         let answer = resolutions.get(site);
-        if let crate::resolve::Resolution::Binder(_) = answer {
-            return crate::name::FqTraitName::binder(written);
+        if let Resolution::Binder(_) = answer {
+            return FqTraitName::binder(written);
         }
         // `written` is a bound's spelling, and a bound is a bare name: the
         // parser reads `<...>` after one as associated-type bindings, so no
         // type argument ever reaches here to be split back out.
         resolutions.declared(site).map_or_else(
-            || crate::name::FqTraitName::binder(written),
-            |def| crate::name::FqTraitName::declared(resolutions.defs(), def),
+            || FqTraitName::binder(written),
+            |def| FqTraitName::declared(resolutions.defs(), def),
         )
     }
 
@@ -1256,22 +1188,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// in the module that wrote the reference — so an alias and a second
     /// module's same-named trait cannot reach the mangle. A site that names no
     /// declaration carries no identity — see [`Self::fq_trait_name_at`].
-    pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> crate::name::FqTraitName {
+    pub(super) fn fq_trait_name(&self, ty: &ast::Type) -> FqTraitName {
         let written = self.get_type_name(ty);
         let args = trait_env::written_type_args(ty, &self.tysys.resolutions);
-        let head = crate::resolve::head_site(ty)
+        let head = head_site(ty)
             .and_then(|site| {
                 let resolutions = &self.tysys.resolutions;
                 match resolutions.get(site) {
-                    crate::resolve::Resolution::Binder(_) => {
-                        Some(crate::name::FqTraitName::binder(&written))
-                    }
+                    Resolution::Binder(_) => Some(FqTraitName::binder(&written)),
                     _ => resolutions
                         .declared(site)
-                        .map(|def| crate::name::FqTraitName::declared(resolutions.defs(), def)),
+                        .map(|def| FqTraitName::declared(resolutions.defs(), def)),
                 }
             })
-            .unwrap_or_else(|| crate::name::FqTraitName::binder(&written));
+            .unwrap_or_else(|| FqTraitName::binder(&written));
         head.with_args(args)
     }
 
@@ -1281,11 +1211,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// target, the trait reference, the type params, or the
     /// associated types happens inside `reify_impl`.
     /// See [`sem::types::ImplFacts`].
-    pub(super) fn record_impl_facts(
-        &mut self,
-        ast_id: crate::ast::AstId,
-        info: sem::types::ImplFacts,
-    ) {
+    pub(super) fn record_impl_facts(&mut self, ast_id: AstId, info: sem::types::ImplFacts) {
         let key = ast_id;
         self.sem.types.impl_facts.insert(key, info);
     }
@@ -1329,7 +1255,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_name: &str,
         target_type_id: TypeId,
         target_type_name: &str,
-        span: crate::token::Span,
+        span: Span,
     ) {
         if target_type_id == tir::TypeTable::ERROR {
             return;
@@ -1363,8 +1289,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // The marker's own site says which trait it names, so an already-present
         // impl is recognised by declaration rather than by a spelling another
         // module's trait can share.
-        let requested = crate::resolve::head_site(trait_type)
-            .and_then(|site| self.tysys.resolutions.declared(site));
+        let requested =
+            head_site(trait_type).and_then(|site| self.tysys.resolutions.declared(site));
         if requested.is_some_and(|trait_| {
             self.tysys.has_real_trait_impl_for_type(
                 &self.annotate_ctx,
@@ -1444,7 +1370,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// branch can bypass it.
     pub(super) fn record_coercion(
         &mut self,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         kind: sem::types::CoercionKind,
         target_type: TypeId,
     ) {
@@ -1461,28 +1387,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// so [`Self::assign_to_target`] can validate l-values and global
     /// mutability from the AST + this fact instead of the now-placeholder
     /// resolved `target.kind`. See [`sem::types::AssignPlace`].
-    pub(super) fn record_assign_place(
-        &mut self,
-        ast_id: crate::ast::AstId,
-        place: sem::types::AssignPlace,
-    ) {
+    pub(super) fn record_assign_place(&mut self, ast_id: AstId, place: sem::types::AssignPlace) {
         let key = ast_id;
         self.sem.types.assign_places.insert(key, place);
     }
 
     /// Record that the bare case at `site` is a case of `owner`, the expected
     /// type there.
-    pub(super) fn record_bare_case(&mut self, site: crate::ast::AstId, owner: crate::defs::DefId) {
+    pub(super) fn record_bare_case(&mut self, site: AstId, owner: DefId) {
         self.sem.types.bare_cases.insert(site, owner);
     }
 
     /// Look up the recorded assignment-target place classification for the
     /// identifier at `ast_id`. Returns `None` for idents that did not resolve
     /// to a place (functions, variants, enums, flags, constants).
-    pub(super) fn assign_place_of(
-        &self,
-        ast_id: crate::ast::AstId,
-    ) -> Option<&sem::types::AssignPlace> {
+    pub(super) fn assign_place_of(&self, ast_id: AstId) -> Option<&sem::types::AssignPlace> {
         self.sem.types.assign_places.get(&ast_id)
     }
 
@@ -1491,11 +1410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// / `while` / compound-assignment lowering site so the future
     /// `reify` pass can pick the same expansion path. See
     /// [`sem::types::DesugarKind`].
-    pub(super) fn record_desugar(
-        &mut self,
-        ast_id: crate::ast::AstId,
-        kind: sem::types::DesugarKind,
-    ) {
+    pub(super) fn record_desugar(&mut self, ast_id: AstId, kind: sem::types::DesugarKind) {
         let key = ast_id;
         self.sem.types.desugars.insert(key, kind);
     }
@@ -1506,21 +1421,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// where a user-visible local is introduced.
     pub(super) fn record_local_symbol(
         &mut self,
-        def_id: crate::ast::AstId,
+        def_id: AstId,
         name: &str,
-        span: crate::token::Span,
+        span: Span,
         is_mut: bool,
         type_id: TypeId,
     ) {
         let symbol = Symbol {
             name: name.to_string(),
-            kind: crate::symbol::SymbolKind::Variable(crate::symbol::VariableSymbol {
+            kind: SymbolKind::Variable(VariableSymbol {
                 is_mut,
                 is_reactive: false,
             }),
             defined_at: def_id,
             module: self.current_module_source.clone(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             span: Some(span),
         };
         self.sem.bindings.local_symbols.insert(def_id, symbol);
@@ -1535,7 +1450,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// lookup.
     pub(super) fn associated_constant_of(
         &self,
-        owner: crate::defs::DefId,
+        owner: DefId,
         name: &str,
     ) -> Option<sig::AssocConstSig> {
         self.tysys
@@ -1570,10 +1485,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `Color::Red`, `Color` in `ns::Color::Red` — read off the site the
     /// resolve walk answered for. `None` for a bare name, which qualifies
     /// nothing, and for an owner that reaches no declaration.
-    pub(crate) fn qualified_owner_decl(
-        &self,
-        ident: &ast::IdentExpr,
-    ) -> Option<crate::defs::DefId> {
+    pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
         let owner = ident.segments.len().checked_sub(2)?;
         self.tysys.resolutions.declared(ident.segments[owner].id)
     }
@@ -1584,25 +1496,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// struct — the caller has already diagnosed it and is carrying on.
     pub(super) fn struct_fields_of_written_decl(
         &self,
-        decl: Option<crate::defs::DefId>,
+        decl: Option<DefId>,
     ) -> Option<&StructFieldInfo> {
         self.lookup_struct_fields_of_decl(decl?)
     }
 
     /// Field info for the struct `def` declares.
-    pub(super) fn lookup_struct_fields_of_decl(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&StructFieldInfo> {
+    pub(super) fn lookup_struct_fields_of_decl(&self, def: DefId) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_of(def)
     }
 
     /// Field info for a struct type's head; see
     /// [`TypeLookup::struct_fields_of_head`].
-    pub(super) fn lookup_struct_fields_of(
-        &self,
-        head: crate::tir::StructDef,
-    ) -> Option<&StructFieldInfo> {
+    pub(super) fn lookup_struct_fields_of(&self, head: StructDef) -> Option<&StructFieldInfo> {
         self.type_lookup().struct_fields_of_head(head)
     }
 
@@ -1654,8 +1560,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module: &Module,
         module_source: &ModuleSource,
         entry: Option<&ModuleSource>,
-        invocations: &crate::kiln::InvocationIndex,
-        symbols: &crate::symbol::SymbolTable,
+        invocations: &InvocationIndex,
+        symbols: &SymbolTable,
     ) -> IndexMap<String, ModuleSource> {
         let mut sources = IndexMap::default();
         for item in &module.items {
@@ -1672,23 +1578,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // `entry` must be threaded so identities match the loader
                 // (see `name::resolve_local_identity`). Wasm-asset imports
                 // resolve to `ModuleSource::Wasm`, matching the loader.
-                let source = crate::loader::resolve_use_decl_source(
-                    interner,
-                    module_source,
-                    use_decl,
-                    entry,
-                    invocations,
-                );
+                let source =
+                    resolve_use_decl_source(interner, module_source, use_decl, entry, invocations);
                 for interface_name in std::iter::once(first).chain(interfaces) {
                     sources.insert(interface_name.clone(), source.clone());
                 }
             }
         }
         for (local_name, sym) in symbols.imports_in(module_source) {
-            if matches!(
-                sym.kind,
-                crate::symbol::SymbolKind::Effect(_) | crate::symbol::SymbolKind::Resource(_)
-            ) {
+            if matches!(sym.kind, SymbolKind::Effect(_) | SymbolKind::Resource(_)) {
                 sources.insert(local_name.to_string(), sym.module_source().clone());
             }
         }
@@ -1726,7 +1624,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// spelling, by then the concrete name the rewrite produced.
     pub(crate) fn impl_target_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         type_name: &str,
     ) -> trait_env::ImplTargetKey {
         let defs = self.tysys.resolutions.defs();
@@ -1746,7 +1644,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn impl_target_of(
         &self,
         type_id: tir::TypeId,
-        fallback_name: &crate::name::DeclName,
+        fallback_name: &DeclName,
     ) -> trait_env::ImplTargetKey {
         match self.type_decl_key(type_id) {
             Some(def) => trait_env::ImplTargetKey::of_decl(self.tysys.resolutions.defs(), def),
@@ -1774,7 +1672,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// For a generic instance it is the *base* type's declaration — type
     /// arguments are dropped, so it cannot tell `Foo<A>` from `Foo<B>`.
-    pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<crate::defs::DefId> {
+    pub(crate) fn type_decl_key(&self, type_id: tir::TypeId) -> Option<DefId> {
         // A builtin's identity is its name, and the name path already knows
         // which module declares it. A second table answering here would be a
         // second derivation, free to disagree with that one.
@@ -1793,7 +1691,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         type_id: tir::TypeId,
         impl_name: &str,
-    ) -> Option<crate::defs::DefId> {
+    ) -> Option<DefId> {
         use crate::tir::ResolvedType;
         let mut current = self.tysys.type_table.borrow().peel_refs(type_id);
         loop {
@@ -1804,7 +1702,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if let Some(key) = self.type_decl_key(current) {
                 let defs = self.tysys.resolutions.defs();
                 if self.decl_render_name(key) == impl_name
-                    || crate::name::FqTypeName::declared(defs, key).to_mangled() == impl_name
+                    || FqTypeName::declared(defs, key).to_mangled() == impl_name
                 {
                     return Some(key);
                 }
@@ -1829,7 +1727,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(crate) fn resolve_effects(
         &mut self,
         effects: &[String],
-        effect_ids: &[(crate::ast::AstId, crate::token::Span)],
+        effect_ids: &[(AstId, Span)],
     ) -> Vec<tir::EffectRef> {
         effects
             .iter()
@@ -2057,12 +1955,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // the work.
         self.sem.decls.effect_ops.clear();
         self.sem.decls.resource_method_ids.clear();
-        let decl_ops: Vec<(
-            crate::ast::AstId,
-            Vec<ast::GenericParam>,
-            Vec<ast::Function>,
-            bool,
-        )> = module
+        let decl_ops: Vec<(AstId, Vec<ast::GenericParam>, Vec<ast::Function>, bool)> = module
             .items
             .iter()
             .filter_map(|item| match item {
@@ -2099,8 +1992,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // later in the file) to infer type arguments at the call site
         // during body resolution, without relying on a later
         // monomorphization-time fallback.
-        let mut function_sigs: IndexMap<crate::defs::DefId, Rc<sem::decls::FunctionSig>> =
-            IndexMap::default();
+        let mut function_sigs: IndexMap<DefId, Rc<sem::decls::FunctionSig>> = IndexMap::default();
         for item in &module.items {
             if let Item::Function(func) = item {
                 let def = self.def_at(func.id);
@@ -2175,13 +2067,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.reject_unsupported_operation_clauses(
                         &effect_decl.name,
                         &effect_decl.methods,
-                        crate::elaborator::item::OperationOwner::Interface,
+                        OperationOwner::Interface,
                     );
                     self.resolve_operation_param_defaults(&[], &effect_decl.methods, None);
                     // An operation's default body is walked as the function
                     // reify will emit it as, so its facts land under the same
                     // `AstId` every other function's do.
-                    for method in crate::elaborator::reify::default_impl_methods(effect_decl) {
+                    for method in default_impl_methods(effect_decl) {
                         self.resolve_function(&method);
                     }
                 }
@@ -2190,7 +2082,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,
                         &resource_decl.methods,
-                        crate::elaborator::item::OperationOwner::Resource,
+                        OperationOwner::Resource,
                     );
                     let resource_def = self.tysys.resolutions.defs().of_ast_id(resource_decl.id);
                     self.resolve_operation_param_defaults(
@@ -2272,15 +2164,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .contains_type_param(target_type_id);
             // The header names one instantiation whatever it binds, so the
             // arguments are resolved once rather than per associated type.
-            let impl_trait_ref = trait_name
-                .as_ref()
-                .and_then(crate::name::FqTraitName::canonical)
-                .map(|trait_key| {
-                    impl_block.trait_type.as_ref().map_or_else(
-                        || crate::tir::TraitRef::bare(trait_key),
-                        |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
-                    )
-                });
+            let impl_trait_ref =
+                trait_name
+                    .as_ref()
+                    .and_then(FqTraitName::canonical)
+                    .map(|trait_key| {
+                        impl_block.trait_type.as_ref().map_or_else(
+                            || TraitRef::bare(trait_key),
+                            |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
+                        )
+                    });
 
             for binding in &impl_block.associated_types {
                 let type_id = scope.resolve_type(&binding.ty);
@@ -2338,7 +2231,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let self_type = scope.resolve_type(&impl_block.ty);
             let is_handler_method = trait_name
                 .as_ref()
-                .and_then(crate::name::FqTraitName::canonical)
+                .and_then(FqTraitName::canonical)
                 .is_some_and(|key| {
                     scope.tysys.trait_env.effect_decl_index.contains(&key)
                         || scope.tysys.trait_env.resource_decl_index.contains(&key)
@@ -2363,7 +2256,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // impl's type-param scope so generic impls
             // round-trip their `TypeParam` ids. Mirrors
             // `record_impl_sig`.
-            let trait_type_args: Vec<crate::tir::TypeId> = match &impl_block.trait_type {
+            let trait_type_args: Vec<tir::TypeId> = match &impl_block.trait_type {
                 Some(ast::Type::Generic(generic)) => generic
                     .args
                     .iter()
@@ -2373,13 +2266,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             };
             // Concrete-impl owner (`impl List<u8>`): the receiver's
             // qualified mangle, matching call sites (issue #1348).
-            let concrete_owner: Option<crate::name::FqTypeName> =
+            let concrete_owner: Option<FqTypeName> =
                 if scope.impl_is_concrete_instantiation(&impl_block.ty) {
                     let tt = scope.tysys.type_table.borrow();
                     let peeled = tt.peel_refs(self_type);
                     let is_instantiation = match tt.get(peeled) {
-                        crate::tir::ResolvedType::GenericInstance { .. } => true,
-                        crate::tir::ResolvedType::Newtype { type_args, .. } => {
+                        ResolvedType::GenericInstance { .. } => true,
+                        ResolvedType::Newtype { type_args, .. } => {
                             // A trait impl needs none: the trait index keys it.
                             !type_args.is_empty() && trait_name.is_none()
                         }
@@ -2408,9 +2301,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut scope = scope;
         for constant in &impl_block.constants {
             let declared = scope.resolve_type(&constant.ty);
-            let mut ctx = crate::elaborator::types::FunctionContext::new(
+            let mut ctx = FunctionContext::new(
                 declared,
-                crate::name::global_name(&scope.current_module_source, &constant.name),
+                global_name(&scope.current_module_source, &constant.name),
             );
             scope.resolve_expr(&constant.value, &mut ctx, Some(declared));
         }
@@ -2479,12 +2372,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // stay isolated; clone the impl module's `decls`
                 // / `imports` so the walk's reads see the
                 // resolved decls + import context.
-                let synthetic = super::elaborator::sem::ModuleSemantics {
-                    bindings: super::elaborator::sem::ModuleBindings::default(),
+                let synthetic = ModuleSemantics {
+                    bindings: ModuleBindings::default(),
                     imports: scope.sem.imports.clone(),
-                    types: super::elaborator::sem::TypeAnnotations::default(),
+                    types: TypeAnnotations::default(),
                     decls: scope.sem.decls.clone(),
-                    default_method_semantics: crate::hashmap::IndexMap::default(),
+                    default_method_semantics: hashmap::IndexMap::default(),
                 };
                 // Swap the elaborator's owned `sem` with the
                 // synthetic. `resolve_method` writes through

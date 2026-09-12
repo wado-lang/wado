@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use crate::common::wir_function_body;
 use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
@@ -25,7 +26,7 @@ export fn run() { assert caller(&[1]) == 8; }
 "#;
 
 fn caller_body() -> String {
-    crate::common::wir_function_body(
+    wir_function_body(
         Path::new("closure_confinement_test.wado"),
         SOURCE,
         OptLevel::O2,

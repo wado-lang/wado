@@ -15,10 +15,12 @@ pub mod place;
 pub mod stores;
 pub mod synthesize;
 
+use crate::compiler_item::CompilerItem;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::tir;
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The element type `T` of a `builtin::array_clone::<T>` /
@@ -32,7 +34,7 @@ fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
     }
     let is_clone = ["array_clone", "array_clone_prefix"]
         .into_iter()
-        .any(|name| crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), name));
+        .any(|name| tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), name));
     if !is_clone {
         return None;
     }
@@ -234,10 +236,7 @@ fn register_variant_cases(flat: &FlatPackage) {
 /// [`place::ReturnPath`] that stays inside the receiver's own storage — one
 /// leaving through a `&` field lands somewhere the caller cannot place.
 #[must_use]
-pub fn hands_out_payload(
-    func: &crate::tir::TirFunction,
-    return_paths: &place::ReturnPaths,
-) -> bool {
+pub fn hands_out_payload(func: &TirFunction, return_paths: &place::ReturnPaths) -> bool {
     return_paths
         .get(&func.module_source, &func.name)
         .is_some_and(|path| !path.through_borrow)
@@ -316,8 +315,8 @@ fn needs_copy_in_env(
         return true;
     }
     let items = type_table.compiler_items();
-    let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
-    let list_name = items.struct_name(crate::compiler_item::CompilerItem::List);
+    let box_name = items.struct_name(CompilerItem::Box);
+    let list_name = items.struct_name(CompilerItem::List);
     match type_table.get(type_id) {
         // Concrete structs need a field-by-field deep copy, except for
         // the `Box<T>` shortcut whose semantics intentionally share

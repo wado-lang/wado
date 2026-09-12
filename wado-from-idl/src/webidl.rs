@@ -5,6 +5,7 @@ use anyhow::{Result, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
 
+use crate::WadoCodeGenerator;
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -154,7 +155,7 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String
     } = transform(snapshot)?;
     module.source_files = vec![source.to_string()];
     module.stdlib_identity = Some(format!("web:{}", snapshot.package));
-    Ok((crate::WadoCodeGenerator::new().generate(&module), skipped))
+    Ok((WadoCodeGenerator::new().generate(&module), skipped))
 }
 
 /// Transform a snapshot into the `web:<package>` module.

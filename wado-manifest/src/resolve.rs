@@ -22,7 +22,7 @@ use pubgrub::{
 };
 
 use crate::lockfile::LockedPackage;
-use crate::manifest::{DependencySource, GitPin, Manifest};
+use crate::manifest::{Dependency, DependencySource, GitPin, Manifest};
 use crate::provider::{DependencyProvider, ProviderError};
 use crate::version::{Version, VersionSpecifier};
 
@@ -186,7 +186,7 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
     /// their declarer and enqueueing registry/git deps for crawling.
     async fn expand(
         &mut self,
-        deps: &IndexMap<String, crate::manifest::Dependency>,
+        deps: &IndexMap<String, Dependency>,
         registries: &IndexMap<String, String>,
         base: &str,
     ) -> Result<Vec<Edge>, ResolveError> {

@@ -13,6 +13,9 @@ use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::place::{carries_storage, is_reference, may_carry_storage, param_position};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
+use crate::lower::plan::value_copy::place::ReturnPaths;
+use crate::lower::plan::value_copy::{analyze, hands_out_payload};
 use crate::tir::{
     BuiltinDeclaration, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
@@ -168,7 +171,7 @@ pub struct ReturnConventions {
 pub fn compute_receiver_alias(
     project: &FlatPackage,
     call_graph: &CallGraph,
-    return_paths: &super::place::ReturnPaths,
+    return_paths: &ReturnPaths,
     type_table: &TypeTable,
     builtins: &BuiltinDeclarations,
 ) -> FuncKeySet {
@@ -183,7 +186,7 @@ pub fn compute_receiver_alias(
             return false;
         }
         let Some(body) = &func.body else { return false };
-        let hands_out_payload = super::hands_out_payload(&func, return_paths);
+        let hands_out_payload = hands_out_payload(&func, return_paths);
         if function_returns_receiver_alias(body, &set, builtins, type_table, hands_out_payload) {
             set.insert(func.module_source.clone(), func.name.clone());
             true
@@ -213,7 +216,7 @@ fn function_returns_receiver_alias(
         fn visit_stmt(&mut self, stmt: &TirStmt) {
             if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
                 self.saw_return = true;
-                let v = super::analyze::returned_value(v, self.hands_out_payload, self.type_table);
+                let v = returned_value(v, self.hands_out_payload, self.type_table);
                 if !is_receiver_projection(v, 0, self.set, self.builtins) {
                     self.all_alias = false;
                 }
@@ -291,7 +294,7 @@ fn is_receiver_projection(
 pub fn compute_return_conventions(
     project: &FlatPackage,
     call_graph: &CallGraph,
-    return_paths: &super::place::ReturnPaths,
+    return_paths: &ReturnPaths,
     builtins: &BuiltinDeclarations,
 ) -> ReturnConventions {
     let type_table = project.type_table.borrow();
@@ -337,7 +340,7 @@ fn settle_component(
     component: &[u32],
     project: &FlatPackage,
     call_graph: &CallGraph,
-    return_paths: &super::place::ReturnPaths,
+    return_paths: &ReturnPaths,
     type_table: &TypeTable,
     builtins: &BuiltinDeclarations,
     owned: &mut FuncKeySet,
@@ -373,7 +376,7 @@ fn settle_component(
         let body = func.body.as_ref().expect("members have bodies");
         let (ret_owned, ret_self_proj) = {
             let oracle = OwnedCalls::new(owned, self_proj, builtins);
-            let hands_out_payload = super::hands_out_payload(&func, return_paths);
+            let hands_out_payload = hands_out_payload(&func, return_paths);
             function_return_convention(body, &func.params, &oracle, type_table, hands_out_payload)
         };
         let mut dropped = false;
@@ -486,8 +489,8 @@ struct ReturnWalker<'a> {
 impl TirRefVisitor for ReturnWalker<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Return { value: Some(v) } = &stmt.kind {
-            let v = super::analyze::returned_value(v, self.hands_out_payload, self.type_table);
-            if !super::analyze::is_owned_value(v, self.fresh, self.oracle, self.type_table) {
+            let v = returned_value(v, self.hands_out_payload, self.type_table);
+            if !is_owned_value(v, self.fresh, self.oracle, self.type_table) {
                 self.all_owned = false;
                 match projection_param(v, self.params) {
                     Some(p) if self.self_proj.is_none_or(|held| held == p) => {
@@ -542,7 +545,7 @@ fn projection_root(expr: &TirExpr) -> Option<u32> {
 /// shrinking).
 fn compute_fresh_locals(
     body: &TirBlock,
-    params: &[crate::tir::TirParam],
+    params: &[TirParam],
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> IndexSet<u32> {
@@ -577,16 +580,14 @@ fn compute_fresh_locals(
             if fresh.contains(&local)
                 && !sources
                     .iter()
-                    .all(|s| super::analyze::is_owned_value(s, &fresh, oracle, type_table))
+                    .all(|s| is_owned_value(s, &fresh, oracle, type_table))
             {
                 fresh.swap_remove(&local);
                 changed = true;
             }
         }
         for (local, scrut) in &collector.match_sources {
-            if fresh.contains(local)
-                && !super::analyze::is_owned_value(scrut, &fresh, oracle, type_table)
-            {
+            if fresh.contains(local) && !is_owned_value(scrut, &fresh, oracle, type_table) {
                 fresh.swap_remove(local);
                 changed = true;
             }
@@ -625,7 +626,7 @@ impl TirRefVisitor for BindingCollector {
         if let TirExprKind::Match { expr: scrut, arms } = &expr.kind {
             for arm in arms {
                 let mut binds: IndexSet<u32> = IndexSet::default();
-                super::analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
+                analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                 for b in binds {
                     if b >= self.n_params {
                         self.match_sources.push((b, (**scrut).clone()));

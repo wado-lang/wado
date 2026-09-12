@@ -2,6 +2,7 @@
 //! interface must survive a WIT decode: it exports only the types it defines,
 //! so no type is registered under two owners.
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -34,7 +35,7 @@ fn compile(world: &str, source: &str) -> Vec<u8> {
         target_world: Some(world.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new(path), source, options)
+    compile_source_with_compiler_options(Path::new(path), source, options)
         .expect("the service program compiles")
         .wasm
 }

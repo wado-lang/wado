@@ -17,6 +17,8 @@ use super::place::{borrowed_place_operand, named_local, place_aliased_by_another
 use super::region::{block_shape, region_needs, region_shape, value_block_shape};
 use super::trackability::Trackability;
 use super::{CallRun, CtfeBuiltin, FrameState, Interpreter, Lattice};
+use crate::name::diagnostic_function_name;
+use crate::{compiler_trace, niri};
 
 impl FrameState {
     /// Whether `index` takes part in a live place alias, as the alias handle
@@ -173,11 +175,7 @@ impl Interpreter<'_> {
             match self.exec_stmt(body, s) {
                 Flow::Fallthrough(v) => value = v,
                 Flow::Bail => {
-                    crate::compiler_trace!(
-                        "ctfe_stmt",
-                        "abandoned at {s:?}: {:?}",
-                        body.stmts[s].kind
-                    );
+                    compiler_trace!("ctfe_stmt", "abandoned at {s:?}: {:?}", body.stmts[s].kind);
                     return Flow::Bail;
                 }
                 other => return other,
@@ -239,7 +237,7 @@ impl Interpreter<'_> {
                         Flow::Fallthrough(Lattice::Unevaluated)
                     }
                     lattice @ (Lattice::NonConst | Lattice::Unevaluated) => {
-                        crate::compiler_trace!(
+                        compiler_trace!(
                             "ctfe_stmt",
                             "let local {index} did not reach a constant: {lattice:?}"
                         );
@@ -411,7 +409,7 @@ impl Interpreter<'_> {
     fn exec_global_materialize(
         &mut self,
         body: &mut Body,
-        key: super::GlobalKey,
+        key: niri::GlobalKey,
         value: Operand,
     ) -> Flow {
         if !self.facts.materializes(&key) {
@@ -585,7 +583,7 @@ impl Interpreter<'_> {
     /// the alias still named.
     fn bind_ctfe_local(&mut self, index: u32, lattice: Lattice) {
         let lattice = if self.frame.ctfe_clobbered.contains(index) {
-            crate::compiler_trace!("region_seed", "local {index} is clobbered");
+            compiler_trace!("region_seed", "local {index} is clobbered");
             Lattice::NonConst
         } else {
             lattice
@@ -696,7 +694,7 @@ impl Interpreter<'_> {
     /// What `WADO_TRACE=ctfe_call` says about one call, under the name its
     /// author wrote. A self-call already holds the borrow, so it leaves the id.
     fn trace_call(&self, key: &CalleeKey, what: &str) {
-        crate::compiler_trace!(
+        compiler_trace!(
             "ctfe_call",
             "{}: {what}",
             self.facts
@@ -705,7 +703,7 @@ impl Interpreter<'_> {
                 .and_then(|c| c.func.try_borrow().ok())
                 .map_or_else(
                     || format!("{key:?}"),
-                    |f| crate::name::diagnostic_function_name(&f.name).to_string(),
+                    |f| diagnostic_function_name(&f.name).to_string(),
                 )
         );
     }
@@ -861,7 +859,7 @@ impl Interpreter<'_> {
     /// which also confines writes to the scratch.
     pub(super) fn try_region_fold(&mut self, body: &Body, e: ExprId) -> Option<Value> {
         let (block, label) = region_shape(body, e, self.type_table)?;
-        crate::compiler_trace!(
+        compiler_trace!(
             "region_seed",
             "region {e:?} ({}): shaped",
             self.type_table.type_name(body.exprs[e].type_id)
@@ -870,16 +868,16 @@ impl Interpreter<'_> {
             return Some(value.clone());
         }
         if self.type_table.is_reference_shaped(body.exprs[e].type_id) {
-            crate::compiler_trace!("region_seed", "region {e:?}: reference-shaped, refused");
+            compiler_trace!("region_seed", "region {e:?}: reference-shaped, refused");
             return None;
         }
         if self.frame.region_misses.contains(&e) {
-            crate::compiler_trace!("region_seed", "region {e:?}: already missed");
+            compiler_trace!("region_seed", "region {e:?}: already missed");
             return None;
         }
         let needs = region_needs(body, block, self.facts, self.type_table);
         if let Some(refusal) = needs.refusal {
-            crate::compiler_trace!(
+            compiler_trace!(
                 "region_seed",
                 "region {e:?}: refused, {}",
                 refusal.describe()
@@ -890,11 +888,11 @@ impl Interpreter<'_> {
         for read in needs.free_reads {
             let index = read.index;
             if self.frame.alias_involves(index) {
-                crate::compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
+                compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
             }
             let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "region_seed",
                     "region {e:?}: local {index} not constant in the walker env"
                 );
@@ -904,7 +902,7 @@ impl Interpreter<'_> {
             // program holds an alias: boxing collapses `&mut x` into a bare
             // read, so no write position is left for `region_needs` to see.
             if read.writable_reference && value.is_scalar() {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "region_seed",
                     "region {e:?}: writable reference local {index} holds a scalar"
                 );
@@ -924,11 +922,11 @@ impl Interpreter<'_> {
             .and_then(|lattice| lattice.as_const());
         match &value {
             None => {
-                crate::compiler_trace!("region_seed", "region {e:?}: run abandoned");
+                compiler_trace!("region_seed", "region {e:?}: run abandoned");
                 self.frame.region_misses.insert(e);
             }
             Some(v) => {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "region_seed",
                     "region {e:?}: folded (scalar={})",
                     v.is_scalar()

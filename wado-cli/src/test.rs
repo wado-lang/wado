@@ -13,8 +13,7 @@ use futures::FutureExt;
 use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use lexopt::Arg::Value;
-use tokio::sync::OwnedSemaphorePermit;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc};
 use wado_compiler::hashmap::IndexMap;
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, GuestProfiler, UpdateDeadline};
@@ -23,6 +22,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::discover;
 use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
+use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, WasiState};
 use crate::sync::lock;
@@ -1780,7 +1780,7 @@ pub(crate) fn format_three_axis_lines(
 
 pub(crate) fn resource_summary_lines(wall: &str) -> Vec<String> {
     let mut lines = vec![format!("wall:    {wall}")];
-    lines.extend(crate::rss::summary_line());
+    lines.extend(summary_line());
     lines
 }
 

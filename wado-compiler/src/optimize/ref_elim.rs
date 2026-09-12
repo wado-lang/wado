@@ -12,6 +12,7 @@ use crate::tir::TypeId;
 use crate::token::Span;
 
 use super::arena_query::{Place, is_place_prefix, place_path};
+use crate::optimize::arena_query::is_pure_expr;
 
 /// Per-binding analysis state, keyed by the ref local index.
 struct RefInfo {
@@ -218,8 +219,7 @@ fn resolve_via_engine(engine: &mut Engine, e: ExprId, refs: &IndexMap<u32, RefIn
 /// it (`project_struct_literal`) drops the rest. Restricted to `&` (shared)
 /// borrows by the caller.
 fn is_inline_pure_aggregate(body: &Body, id: ExprId) -> bool {
-    matches!(&body.exprs[id].kind, ExprKind::StructLiteral { .. })
-        && super::arena_query::is_pure_expr(body, id)
+    matches!(&body.exprs[id].kind, ExprKind::StructLiteral { .. }) && is_pure_expr(body, id)
 }
 
 /// An expression is a valid referent if it's a pure read of a local — either

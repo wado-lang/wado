@@ -10,6 +10,7 @@ use crate::wir::{
     WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
+use crate::codegen_flags::CodegenFlags;
 use wasm_encoder::{
     AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
     CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements, ExportKind,
@@ -48,7 +49,7 @@ fn packed_signedness(ty: &WirType) -> Option<bool> {
 pub fn emit_core_module(
     wir: &WirPackage,
     strip_names: bool,
-    codegen_flags: crate::codegen_flags::CodegenFlags,
+    codegen_flags: CodegenFlags,
 ) -> Vec<u8> {
     let mut emitter = WirEmitter::new(wir, strip_names, codegen_flags);
     emitter.emit()
@@ -98,15 +99,11 @@ struct WirEmitter<'a> {
     /// When true, strip debug name sections for smaller binary size (-Os).
     strip_names: bool,
     /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
-    codegen_flags: crate::codegen_flags::CodegenFlags,
+    codegen_flags: CodegenFlags,
 }
 
 impl<'a> WirEmitter<'a> {
-    fn new(
-        wir: &'a WirPackage,
-        strip_names: bool,
-        codegen_flags: crate::codegen_flags::CodegenFlags,
-    ) -> Self {
+    fn new(wir: &'a WirPackage, strip_names: bool, codegen_flags: CodegenFlags) -> Self {
         Self {
             wir,
             type_index_map: IndexMap::default(),
@@ -2775,6 +2772,7 @@ impl<'a> WirEmitter<'a> {
 #[cfg(test)]
 mod tests {
     use super::emit_core_module;
+    use crate::codegen_flags::CodegenFlags;
     use crate::hashmap::{IndexMap, IndexSet};
     use crate::wir::{
         WirComponent, WirExport, WirExportDesc, WirField, WirFuncId, WirGlobal, WirInstr, WirMeta,
@@ -2864,7 +2862,7 @@ mod tests {
         pkg.types.push(WirTypeDef::Struct(struct_ty));
         pkg.globals.push(global);
 
-        let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        let bytes = emit_core_module(&pkg, false, CodegenFlags::default());
         validate(&bytes).expect("const struct global init should validate as Wasm");
     }
 
@@ -2895,7 +2893,7 @@ mod tests {
             meta: WirMeta::default(),
         });
 
-        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        emit_core_module(&pkg, false, CodegenFlags::default());
     }
 
     /// Likewise for a function id with no Wasm index, where the raw WIR id
@@ -2911,6 +2909,6 @@ mod tests {
             },
         });
 
-        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        emit_core_module(&pkg, false, CodegenFlags::default());
     }
 }

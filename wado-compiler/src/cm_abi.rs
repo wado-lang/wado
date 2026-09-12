@@ -9,6 +9,10 @@
 #[cfg(test)]
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
+use crate::component_model::{
+    CmInterfaceRegistry, CmPrimitiveType, cm_align_with_registry_scoped,
+    cm_size_with_registry_scoped,
+};
 #[cfg(test)]
 use crate::token::Span;
 
@@ -223,23 +227,18 @@ pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
 }
 
 /// Registry-aware layout for `option<T>`.
-pub fn layout_option_with_registry(
-    inner: &Type,
-    registry: &crate::component_model::CmInterfaceRegistry,
-) -> CmLayout {
+pub fn layout_option_with_registry(inner: &Type, registry: &CmInterfaceRegistry) -> CmLayout {
     layout_option_with_registry_scoped(inner, registry, None)
 }
 
 /// Package-scoped registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry_scoped(
     inner: &Type,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
-    let payload_align =
-        crate::component_model::cm_align_with_registry_scoped(inner, registry, wasi_package);
-    let payload_size =
-        crate::component_model::cm_size_with_registry_scoped(inner, registry, wasi_package);
+    let payload_align = cm_align_with_registry_scoped(inner, registry, wasi_package);
+    let payload_size = cm_size_with_registry_scoped(inner, registry, wasi_package);
     let overall_align = 1u32.max(payload_align);
     let payload_offset = align_to(1, payload_align);
     let size = align_to(payload_offset + payload_size, overall_align);
@@ -251,10 +250,7 @@ pub fn layout_option_with_registry_scoped(
 }
 
 /// Registry-aware layout for a tuple (positional elements).
-pub fn layout_tuple_with_registry(
-    elements: &[Type],
-    registry: &crate::component_model::CmInterfaceRegistry,
-) -> CmLayout {
+pub fn layout_tuple_with_registry(elements: &[Type], registry: &CmInterfaceRegistry) -> CmLayout {
     layout_tuple_with_registry_scoped(elements, registry, None)
 }
 
@@ -263,7 +259,7 @@ pub fn layout_tuple_with_registry(
 /// carrying a named record/variant/newtype lays out at the correct offsets.
 pub fn layout_tuple_with_registry_scoped(
     elements: &[Type],
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
     layout_fields_with_registry_scoped(elements.iter(), registry, wasi_package)
@@ -275,17 +271,15 @@ pub fn layout_tuple_with_registry_scoped(
 /// resolved types pass them without cloning into a `Vec`.
 pub fn layout_fields_with_registry_scoped<'a>(
     fields: impl Iterator<Item = &'a Type>,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
     let mut offset: u32 = 0;
     let mut max_align: u32 = 1;
     let mut offsets = Vec::new();
     for ty in fields {
-        let field_align =
-            crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package);
-        let field_size =
-            crate::component_model::cm_size_with_registry_scoped(ty, registry, wasi_package);
+        let field_align = cm_align_with_registry_scoped(ty, registry, wasi_package);
+        let field_size = cm_size_with_registry_scoped(ty, registry, wasi_package);
         offset = align_to(offset, field_align);
         offsets.push(offset);
         offset += field_size;
@@ -303,7 +297,7 @@ pub fn layout_fields_with_registry_scoped<'a>(
 /// like a tuple of the field types.
 pub fn layout_record_with_registry_scoped(
     field_types: &[Type],
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
     layout_fields_with_registry_scoped(field_types.iter(), registry, wasi_package)
@@ -314,11 +308,11 @@ pub fn layout_record_with_registry_scoped(
 /// `payloads` iterates the payload types of the payload-bearing cases only.
 pub fn variant_payload_offset_with_registry_scoped<'a>(
     payloads: impl Iterator<Item = &'a Type>,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> u32 {
     let max_payload_align = payloads
-        .map(|ty| crate::component_model::cm_align_with_registry_scoped(ty, registry, wasi_package))
+        .map(|ty| cm_align_with_registry_scoped(ty, registry, wasi_package))
         .max()
         .unwrap_or(1);
     align_to(1, max_payload_align)
@@ -365,7 +359,7 @@ pub fn cm_enum_byte_size(count: usize) -> u32 {
 pub fn layout_result_with_registry(
     ok: &Type,
     err: &Type,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
 ) -> CmLayout {
     layout_result_with_registry_scoped(ok, err, registry, None)
 }
@@ -374,17 +368,13 @@ pub fn layout_result_with_registry(
 pub fn layout_result_with_registry_scoped(
     ok: &Type,
     err: &Type,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> CmLayout {
-    let payload_align =
-        crate::component_model::cm_align_with_registry_scoped(ok, registry, wasi_package).max(
-            crate::component_model::cm_align_with_registry_scoped(err, registry, wasi_package),
-        );
-    let payload_size =
-        crate::component_model::cm_size_with_registry_scoped(ok, registry, wasi_package).max(
-            crate::component_model::cm_size_with_registry_scoped(err, registry, wasi_package),
-        );
+    let payload_align = cm_align_with_registry_scoped(ok, registry, wasi_package)
+        .max(cm_align_with_registry_scoped(err, registry, wasi_package));
+    let payload_size = cm_size_with_registry_scoped(ok, registry, wasi_package)
+        .max(cm_size_with_registry_scoped(err, registry, wasi_package));
     let overall_align = 1u32.max(payload_align);
     let disc_size = 1u32;
     let payload_offset = align_to(disc_size, payload_align);
@@ -443,7 +433,7 @@ pub fn join_flat_unions(a: &[CmValType], b: &[CmValType]) -> Vec<CmValType> {
 
 /// For tuple return types, return the list of `CmPrimitiveType`s.
 /// Returns `None` if the type is not a tuple or not all elements are primitives.
-pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<crate::component_model::CmPrimitiveType>> {
+pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<CmPrimitiveType>> {
     use crate::component_model::CmPrimitiveType;
     let elements = match ty {
         Type::Tuple(elems) if !elems.is_empty() => elems,

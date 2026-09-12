@@ -7,8 +7,8 @@ use super::value_copy::funcset::FuncKeyMap;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    ResolvedType, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeTable,
+    ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -59,7 +59,7 @@ pub fn compute(
 
 fn writes_in(
     func: &TirFunction,
-    body: &crate::tir::TirBlock,
+    body: &TirBlock,
     computed: &WholeValueWrites,
     types: &TypeTable,
 ) -> IndexSet<u32> {
@@ -94,7 +94,7 @@ pub fn replaced_locals(
 /// What a body is spelled as, which differs between a function and a closure.
 #[derive(Clone, Copy)]
 pub enum Body<'a> {
-    Block(&'a crate::tir::TirBlock),
+    Block(&'a TirBlock),
     Expr(&'a TirExpr),
 }
 

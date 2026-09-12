@@ -17,6 +17,11 @@ use crate::trait_solver::{
 use super::trait_env::{BlanketReceiver, ImplHeader};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
+use crate::defs::DefKind;
+use crate::elaborator::scope;
+use crate::elaborator::types::TypeLookup;
+use crate::resolve::Resolutions;
+use crate::tir::StructDef;
 
 /// What a [`TypeDeclId`] stands for: a declaration, or a shape no module
 /// declares — a primitive, which the compiler answers for by name, or an
@@ -180,7 +185,7 @@ impl Lowering {
         &mut self,
         ty: &Type,
         param: &dyn Fn(&str) -> Option<ParamKind>,
-        resolutions: &crate::resolve::Resolutions,
+        resolutions: &Resolutions,
         self_type: Option<&SolverType>,
     ) -> Option<SolverType> {
         // A builtin shape is keyed by its spelling, as `ImplTargetKey::of_decl`
@@ -302,7 +307,7 @@ impl Lowering {
             // (WEP 2026-09-01, "The candidates").
             ResolvedType::Unit => decl(DeclKey::Builtin(TypeTable::UNIT_TYPE_NAME.into()), vec![]),
             ResolvedType::Struct {
-                def: crate::tir::StructDef::Decl(def),
+                def: StructDef::Decl(def),
                 type_args,
             } => instance(*def, type_args),
             // A literal's shape lowers under the one anonymous head, its field
@@ -310,7 +315,7 @@ impl Lowering {
             // environment — declares no fields the compiler reflects, so it
             // stays unsaid.
             ResolvedType::Struct {
-                def: crate::tir::StructDef::Anon(shape),
+                def: StructDef::Anon(shape),
                 ..
             } => {
                 if let Some(template) = table.template_shape(*shape) {
@@ -402,7 +407,7 @@ pub(super) fn lower_impls<'a>(
     lowering: &mut Lowering,
     program: &mut Program,
     impl_headers: impl IntoIterator<Item = (&'a DefId, &'a ImplHeader)>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for (&def, header) in impl_headers {
@@ -774,9 +779,10 @@ impl SolverBridge {
         // A struct declared in a body has its identity here and its fields
         // only once annotate reaches the body.
         let defs = tysys.resolutions.defs();
-        for def in defs.iter().filter(|&def| {
-            matches!(defs.kind(def), crate::defs::DefKind::Struct) && defs.is_function_local(def)
-        }) {
+        for def in defs
+            .iter()
+            .filter(|&def| matches!(defs.kind(def), DefKind::Struct) && defs.is_function_local(def))
+        {
             let head = lowering.type_decl(def);
             lowering.opaque_heads.insert(head);
         }
@@ -1213,7 +1219,7 @@ impl SolverBridge {
     /// can be answered from the program alone. `None` where a bound names a
     /// trait the lowering never interned, which the caller reads as "outside
     /// what the lowering states".
-    fn env_at(&self, tysys: &TypeSystem, ctx: &super::scope::Scope) -> Option<(Env, Vec<String>)> {
+    fn env_at(&self, tysys: &TypeSystem, ctx: &scope::Scope) -> Option<(Env, Vec<String>)> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
@@ -1240,8 +1246,8 @@ impl SolverBridge {
     fn question(
         &self,
         tysys: &TypeSystem,
-        ctx: &super::scope::Scope,
-        scope: &super::types::TypeLookup,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
     ) -> Option<Question> {
@@ -1275,8 +1281,8 @@ impl SolverBridge {
     pub(super) fn answer(
         &self,
         tysys: &TypeSystem,
-        ctx: &super::scope::Scope,
-        scope: &super::types::TypeLookup,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
     ) -> Option<bool> {
@@ -1294,7 +1300,7 @@ impl SolverBridge {
     pub(super) fn select(
         &self,
         tysys: &TypeSystem,
-        ctx: &super::scope::Scope,
+        ctx: &scope::Scope,
         module: &ModuleSource,
         type_id: TypeId,
         through_ref: Option<bool>,
@@ -1387,8 +1393,8 @@ impl SolverBridge {
     pub(super) fn explain(
         &self,
         tysys: &TypeSystem,
-        ctx: &super::scope::Scope,
-        scope: &super::types::TypeLookup,
+        ctx: &scope::Scope,
+        scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
     ) -> String {

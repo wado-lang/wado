@@ -8,18 +8,27 @@ use super::mod_ref::FnEffect;
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
+use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, FreeFunctionName, FunctionId, MethodName, mangle_generic_name,
-    mangle_local_trait_method, mangle_method_generic,
+    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, FreeFunctionName,
+    FunctionId, MethodName, is_fn_type_name, mangle_generic_name, mangle_local_trait_method,
+    mangle_method_generic,
 };
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
+use crate::optimize::arena_query::{
+    expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
+};
+use crate::optimize::mod_ref::compute_fn_effects;
+use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
+use crate::{hashmap, nir, tir};
 
 /// Call graph: function ID -> set of called function IDs
 type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
@@ -35,7 +44,7 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 struct PendingInspectEdge {
     closure_module: ModuleSource,
     /// `$Closure_{functor_id}` struct name.
-    struct_name: crate::name::FqTypeName,
+    struct_name: FqTypeName,
     /// `(arity, return_type)` key into `InspectableSignatures`.
     key: (usize, TypeId),
 }
@@ -97,7 +106,7 @@ impl DceAnalysis {
     /// that drops the rest. A struct's stored `name` predates newtype / flags
     /// erasure while the reachable set renders after it (`FlagsBit<Perms>`
     /// against `FlagsBit<u32>`), so both spellings count.
-    fn keeps_struct(&self, s: &crate::nir::NirStruct, type_table: &TypeTable) -> bool {
+    fn keeps_struct(&self, s: &NirStruct, type_table: &TypeTable) -> bool {
         let Some(mono) = &s.monomorph_info else {
             return self
                 .struct_exact
@@ -258,9 +267,7 @@ fn compute_function_reachability(
     let inspectable =
         collect_inspectable_signatures_from_reachable(project, descriptors, &reachable_v1);
     let items = project.type_table.borrow();
-    let inspect_trait = items
-        .compiler_items()
-        .trait_fq(crate::compiler_item::CompilerItem::Inspect);
+    let inspect_trait = items.compiler_items().trait_fq(CompilerItem::Inspect);
     drop(items);
     apply_inspect_edges(
         &mut graph.call_graph,
@@ -362,7 +369,7 @@ fn extend_reachable_for_optimizer_passes(
                 let func = func_rc.borrow();
                 let mut helpers = Vec::new();
                 if let Some(body) = func.body.as_ref() {
-                    let mut needed: IndexSet<crate::tir::TypeId> = IndexSet::default();
+                    let mut needed: IndexSet<tir::TypeId> = IndexSet::default();
                     collect_array_clone_element_types(body, descriptors, &mut needed);
                     for type_id in needed {
                         // A stale `array_clone::<T>` can name a type already
@@ -417,7 +424,7 @@ fn extend_reachable_for_optimizer_passes(
 fn collect_array_clone_element_types(
     body: &Body,
     descriptors: &[FunctionRef],
-    out: &mut IndexSet<crate::tir::TypeId>,
+    out: &mut IndexSet<tir::TypeId>,
 ) {
     body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
@@ -431,15 +438,12 @@ fn collect_array_clone_element_types(
             // descriptor's `monomorph_info` is generic — only the node knows `T`).
             let func = callee_descriptor(descriptors, *func_id);
             if func.module_source.is_core_builtin()
-                && (crate::nir::matches_builtin(
-                    &func.name,
-                    func.monomorph_info.as_ref(),
-                    "array_clone",
-                ) || crate::nir::matches_builtin(
-                    &func.name,
-                    func.monomorph_info.as_ref(),
-                    "array_clone_prefix",
-                ))
+                && (nir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "array_clone")
+                    || nir::matches_builtin(
+                        &func.name,
+                        func.monomorph_info.as_ref(),
+                        "array_clone_prefix",
+                    ))
                 && let Some(elem) = type_args.first().copied()
             {
                 out.insert(elem);
@@ -652,10 +656,10 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
         .collect();
 
     project.closure_functors.retain(|functor| {
-        let call_method_name = crate::name::MethodName::format_local(
-            &crate::name::FqTypeName::shape(&functor.module_source, &functor.struct_name),
+        let call_method_name = MethodName::format_local(
+            &FqTypeName::shape(&functor.module_source, &functor.struct_name),
             None,
-            crate::name::CLOSURE_CALL_METHOD,
+            CLOSURE_CALL_METHOD,
         );
         surviving_funcs.contains(&(functor.module_source.clone(), call_method_name))
     });
@@ -775,7 +779,7 @@ fn apply_inspect_edges(
     call_graph: &mut CallGraph,
     pending: &PendingInspectsByCaller,
     sigs: &InspectableSignatures,
-    inspect: &crate::name::FqTraitName,
+    inspect: &FqTraitName,
 ) {
     for (caller, edges) in pending {
         let Some(callees) = call_graph.get_mut(caller) else {
@@ -816,7 +820,7 @@ fn collect_inspectable_signatures_from_reachable(
     // simple name alone — as `dae` does for the same impls.
     let inspect_name = type_table
         .compiler_items()
-        .trait_name(crate::compiler_item::CompilerItem::Inspect);
+        .trait_name(CompilerItem::Inspect);
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         let func_id = function_id_for(&func);
@@ -871,7 +875,7 @@ fn scan_inspect_signatures_block(
         if let NodeRef::Expr(e) = node
             && let Some((receiver, func_id, _)) = body.exprs[e].kind.as_method_call()
             && let Some(info) = &callee_descriptor(descriptors, func_id).method_info
-            && crate::name::is_fn_type_name(&info.base_struct_name())
+            && is_fn_type_name(&info.base_struct_name())
             && let Some(trait_name) = info.base_trait_name()
         {
             // Receiver is `&Fn(...)` (possibly wrapped in `Box<fn(...)>` by the
@@ -954,7 +958,7 @@ impl<'a> DceWalker<'a> {
         self.analysis.used_types.insert(type_id);
     }
 
-    fn record_call(&mut self, func: &crate::nir::FunctionRef) {
+    fn record_call(&mut self, func: &nir::FunctionRef) {
         let original_callee_module = func.module_source.clone();
         let func_name = func.name.clone();
 
@@ -1006,7 +1010,7 @@ impl<'a> DceWalker<'a> {
         }
     }
 
-    fn record_method_call(&mut self, receiver_type: TypeId, func: &crate::nir::FunctionRef) {
+    fn record_method_call(&mut self, receiver_type: TypeId, func: &nir::FunctionRef) {
         let func_name = func.name.clone();
 
         // Monomorphized methods (e.g. `List<i32>::len`) already have
@@ -1024,7 +1028,7 @@ impl<'a> DceWalker<'a> {
         // Non-monomorphized method - determine target from receiver type.
         // Strip any reference wrappers and newtypes to get the base type.
         let mut current_type = self.type_table.get(receiver_type);
-        let mut newtype_info: Option<crate::defs::DefId> = None;
+        let mut newtype_info: Option<DefId> = None;
         loop {
             match current_type {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
@@ -1106,9 +1110,7 @@ impl<'a> DceWalker<'a> {
                 // Box<i32>^Ord::cmp). Also mark the FunctionRef's original
                 // method target as reachable.
                 let boxed = def.decl().is_some_and(|d| {
-                    self.type_table
-                        .compiler_item_def(crate::compiler_item::CompilerItem::Box)
-                        == Some(d)
+                    self.type_table.compiler_item_def(CompilerItem::Box) == Some(d)
                 });
                 if boxed && let Some(info) = func.method_info.clone() {
                     let original_method_id = FunctionId::Method(MethodName::new(
@@ -1293,12 +1295,9 @@ impl<'a> DceWalker<'a> {
     ) {
         // `$call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let struct_name = crate::name::FqTypeName::shape(
+        let struct_name = FqTypeName::shape(
             closure_module,
-            &format!(
-                "{prefix}{functor_id}",
-                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
-            ),
+            &format!("{CLOSURE_STRUCT_PREFIX}{functor_id}"),
         );
         self.analysis
             .callees
@@ -1306,7 +1305,7 @@ impl<'a> DceWalker<'a> {
                 closure_module.clone(),
                 struct_name.clone(),
                 None,
-                crate::name::CLOSURE_CALL_METHOD.to_string(),
+                CLOSURE_CALL_METHOD.to_string(),
             )));
 
         // A per-functor `$Closure_N^Inspect` impl only needs to stay alive
@@ -1552,10 +1551,8 @@ impl DceAnalysis {
                     // `keeps_struct` recognises the monomorph either way: a dead
                     // local still declares its type, and `wir_build` declares a
                     // Wasm local for it.
-                    self.struct_monomorph_names.insert(
-                        type_table
-                            .struct_rendered_name(crate::tir::StructDef::Decl(*def), type_args),
-                    );
+                    self.struct_monomorph_names
+                        .insert(type_table.struct_rendered_name(StructDef::Decl(*def), type_args));
                 }
                 _ => {}
             }
@@ -1572,8 +1569,8 @@ impl DceAnalysis {
 fn variant_decls_kept_past_use(
     project: &NirPackage,
     type_table: &TypeTable,
-) -> crate::hashmap::IndexSet<(String, ModuleSource)> {
-    let mut kept: crate::hashmap::IndexSet<(String, ModuleSource)> = project
+) -> hashmap::IndexSet<(String, ModuleSource)> {
+    let mut kept: hashmap::IndexSet<(String, ModuleSource)> = project
         .functions
         .iter()
         .filter_map(|f| f.borrow().scalarized_from)
@@ -1586,7 +1583,7 @@ fn variant_decls_kept_past_use(
         .collect();
     if let Some(ms) = type_table
         .compiler_items()
-        .variant_module(crate::compiler_item::CompilerItem::Option)
+        .variant_module(CompilerItem::Option)
     {
         kept.insert(("Option".to_string(), ms.clone()));
     }
@@ -1899,7 +1896,7 @@ pub fn remove_unreachable_types(project: &mut NirPackage, analysis: &DceAnalysis
 /// in-place rewrite displaced, and one nothing refers to never runs.
 fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
     struct Collect(Vec<StmtId>);
-    impl crate::nir_visitor::NirRefVisitor for Collect {
+    impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
             if let NodeRef::Stmt(s) = node {
                 self.0.push(s);
@@ -1911,7 +1908,7 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
     collect.0
 }
 
@@ -1921,19 +1918,19 @@ fn reachable_stmt_ids(body: &Body) -> Vec<StmtId> {
 /// ever keeps a statement alive.
 fn mentioned_locals(body: &Body) -> IndexSet<u32> {
     let mut out = IndexSet::default();
-    for e in crate::nir_visitor::reachable_exprs(body) {
+    for e in reachable_exprs(body) {
         if let ExprKind::Local { index, .. } = &body.exprs[e].kind {
             out.insert(*index);
         }
     }
-    super::arena_query::promoted_local_reads(body, &mut out);
+    promoted_local_reads(body, &mut out);
     out
 }
 
 /// The `GlobalVarGet`s in `expr`'s subtree, and the ids that read them.
 fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))> {
     struct Collect(Vec<(ExprId, (String, String))>);
-    impl crate::nir_visitor::NirRefVisitor for Collect {
+    impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
             if let NodeRef::Expr(e) = node
                 && let ExprKind::GlobalVarGet {
@@ -1948,7 +1945,7 @@ fn global_reads_in(body: &Body, expr: ExprId) -> Vec<(ExprId, (String, String))>
         }
     }
     let mut collect = Collect(Vec::new());
-    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Expr(expr));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Expr(expr));
     collect.0
 }
 
@@ -1963,11 +1960,11 @@ pub(super) fn deletable_value(
     body: &Body,
     value: Operand,
     types: &TypeTable,
-    effects: &[super::mod_ref::FnEffect],
+    effects: &[FnEffect],
 ) -> bool {
     use cranelift_entity::EntityRef;
 
-    if super::arena_query::is_pure_nontrapping_operand_typed(body, value, Some(types)) {
+    if is_pure_nontrapping_operand_typed(body, value, Some(types)) {
         return true;
     }
     let Some(root) = value.as_expr() else {
@@ -1979,14 +1976,14 @@ pub(super) fn deletable_value(
                 let effect = effects
                     .get(func_id.index())
                     .copied()
-                    .unwrap_or_else(super::mod_ref::FnEffect::opaque);
+                    .unwrap_or_else(FnEffect::opaque);
                 (!effect.is_pure() || effect.may_trap).then_some(())
             }
             ExprKind::GlobalVarSet { .. }
             | ExprKind::Assign { .. }
             | ExprKind::IndirectCall { .. }
             | ExprKind::CmRawCall { .. } => Some(()),
-            _ => super::arena_query::expr_node_may_trap(body, id).then_some(()),
+            _ => expr_node_may_trap(body, id).then_some(()),
         },
         // A block statement that is not a binding or a discarded value
         // leaves the region, and deleting it would take the exit with it.
@@ -2003,7 +2000,7 @@ fn lazy_guard_global(
     stmt: StmtId,
     descriptors: &[FunctionRef],
     types: &TypeTable,
-    effects: &[super::mod_ref::FnEffect],
+    effects: &[FnEffect],
 ) -> Option<(ExprId, (String, String), Operand)> {
     let StmtKind::If {
         condition,
@@ -2194,7 +2191,7 @@ fn dead_pure_binding(
         return None;
     }
     let value = value.as_expr()?;
-    super::arena_query::is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
+    is_pure_nontrapping_expr_typed(body, value, Some(types)).then_some(value)
 }
 
 /// Un-hoist a constant globalization hoisted for nobody: the folds that run
@@ -2204,7 +2201,7 @@ fn dead_pure_binding(
 /// count as observing, provided the value is a `deletable_value`.
 pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     let descriptors = build_callee_descriptors(project);
-    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
@@ -2246,7 +2243,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
                 unobserving.extend(global_reads_in(body, value).into_iter().map(|(e, _)| e));
             }
         }
-        for e in crate::nir_visitor::reachable_exprs(body) {
+        for e in reachable_exprs(body) {
             if let ExprKind::GlobalVarGet {
                 module_source,
                 name,
@@ -2281,7 +2278,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
 /// each one's guard and store, so a surviving read would see the uninitialized
 /// slot.
 fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
-    crate::nir_visitor::reachable_exprs(body)
+    reachable_exprs(body)
         .into_iter()
         .any(|e| match &body.exprs[e].kind {
             ExprKind::GlobalVarGet {
@@ -2298,7 +2295,7 @@ fn reads_any_global(body: &Body, globals: &IndexSet<(String, String)>) -> bool {
 /// non-observing outlives the store it was counted against.
 fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
     struct Collect(Vec<BlockId>);
-    impl crate::nir_visitor::NirRefVisitor for Collect {
+    impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
             if let NodeRef::Block(b) = node {
                 self.0.push(b);
@@ -2310,7 +2307,7 @@ fn reachable_block_ids(body: &Body) -> Vec<BlockId> {
         return Vec::new();
     }
     let mut collect = Collect(Vec::new());
-    crate::nir_visitor::NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
+    NirRefVisitor::visit_node(&mut collect, body, NodeRef::Block(body.root));
     collect.0
 }
 
@@ -2429,7 +2426,7 @@ fn remove_dead_global_sets_block(
             // keeps its effect/trap even though the global itself is gone.
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
             if let Some(ve) = value.as_expr()
-                && !super::arena_query::is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
+                && !is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
             {
                 let new_s = body.stmts.push(StmtNode {
                     kind: StmtKind::Expr(ve.into()),

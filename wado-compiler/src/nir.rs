@@ -12,9 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::LocalMethodName;
+use crate::name::{FunctionId, LocalMethodName};
 use crate::nir_arena::{Body, ExprBody};
-use crate::tir::{self, EffectRef, TypeId, TypeTable};
+use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Canonical identity of a function entity. Minted in `lower` over the
@@ -171,7 +171,7 @@ impl FunctionRef {
     /// *call site* happens to carry `monomorph_info` (which flipped the older
     /// `Method`/`Free` split and made the same callee key two different ways).
     /// Used to mint and stamp `FuncId`s in `lower`.
-    pub fn function_id(&self) -> crate::name::FunctionId {
+    pub fn function_id(&self) -> FunctionId {
         use crate::name::FunctionId;
         FunctionId::free(&self.module_source, &self.name)
     }
@@ -551,7 +551,7 @@ impl NirFunction {
     pub fn is_trait_method(&self) -> bool {
         self.method_info
             .as_ref()
-            .is_some_and(super::name::LocalMethodName::is_trait_method)
+            .is_some_and(LocalMethodName::is_trait_method)
     }
 
     /// Returns true if this is the synthesized `$call` method on a
@@ -561,7 +561,7 @@ impl NirFunction {
     pub fn is_closure_call(&self) -> bool {
         self.method_info
             .as_ref()
-            .is_some_and(super::name::LocalMethodName::is_closure_call)
+            .is_some_and(LocalMethodName::is_closure_call)
     }
 
     /// Returns true if this function has type params that need monomorphization
@@ -641,7 +641,7 @@ pub struct NirStruct {
     /// The struct type this reifies — the declaration it was written from, or
     /// the shape it was built from. Carried down from `TirStruct` so a pass
     /// asking which struct this is does not have to find one by `name`.
-    pub def: crate::tir::StructDef,
+    pub def: StructDef,
     pub name: String,
     pub module_source: ModuleSource,
     pub visibility: ast::Visibility,

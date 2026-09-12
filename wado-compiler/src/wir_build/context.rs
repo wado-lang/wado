@@ -9,14 +9,18 @@ use crate::name::MangledName;
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::module_source::ModuleSource;
-use crate::name::StructName;
-use crate::nir::NirFunction;
+use crate::name::{StructName, wir_enum_type_key, wir_type_key};
+use crate::nir::{FuncId, NirFunction};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 use crate::wir::{
-    WirComponent, WirData, WirExport, WirFuncId, WirFuncType, WirFunction, WirGlobal, WirImport,
-    WirImportDesc, WirName, WirNames, WirPackage, WirType, WirTypeDef, WirTypeId,
+    CmImportViolation, TraitBoundViolation, WasmModuleFunc, WasmModuleInfo, WirAbstractHeapType,
+    WirComponent, WirData, WirExport, WirField, WirFuncId, WirFuncType, WirFunction, WirGlobal,
+    WirImport, WirImportDesc, WirInstr, WirMemory, WirMeta, WirName, WirNames, WirPackage,
+    WirStructType, WirType, WirTypeDef, WirTypeId,
 };
+use crate::wir_build::types::{generic_instance_name, list_wrapper_struct_name};
+use crate::{nir, tir};
 
 /// Base offset for defined function `WirFuncId` indices.
 /// Import functions use indices 0..N, defined functions use `DEFINED_FUNC_BASE + 0..M`.
@@ -41,11 +45,11 @@ pub struct UnregisteredType {
 
 impl UnregisteredType {
     fn struct_ref(description: String) -> Self {
-        Self::new(description, crate::wir::WirAbstractHeapType::Struct)
+        Self::new(description, WirAbstractHeapType::Struct)
     }
 
     fn array_ref(description: String) -> Self {
-        Self::new(description, crate::wir::WirAbstractHeapType::Array)
+        Self::new(description, WirAbstractHeapType::Array)
     }
 
     /// An enum is an i32 discriminant, so the placeholder is already the right
@@ -58,7 +62,7 @@ impl UnregisteredType {
         }
     }
 
-    fn new(description: String, heap_type: crate::wir::WirAbstractHeapType) -> Self {
+    fn new(description: String, heap_type: WirAbstractHeapType) -> Self {
         Self {
             description,
             placeholder: WirType::AbstractRef {
@@ -97,12 +101,12 @@ pub struct WirContext<'a> {
     /// All function definitions (with optional bodies).
     pub functions: Vec<WirFunction>,
     /// Map from fully-qualified function name to `WirFuncId`.
-    pub func_map: IndexMap<crate::name::MangledName, WirFuncId>,
+    pub func_map: IndexMap<MangledName, WirFuncId>,
     /// Map from a defined function's canonical [`crate::nir::FuncId`] to its
     /// `WirFuncId`. Lets a stamped call resolve its target by id, skipping the
     /// name reconstruction in `resolve_function_ref` (the name path stays for
     /// extern / unstamped callees).
-    pub funcid_map: IndexMap<crate::nir::FuncId, WirFuncId>,
+    pub funcid_map: IndexMap<FuncId, WirFuncId>,
     /// Function type index for each function (into types vec).
     pub func_type_ids: Vec<WirTypeId>,
 
@@ -183,10 +187,10 @@ pub struct WirContext<'a> {
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
-    pub trait_bound_violations: Vec<crate::wir::TraitBoundViolation>,
+    pub trait_bound_violations: Vec<TraitBoundViolation>,
     /// Calls to a `#[cm(...)]` member with no backing import, collected alongside
     /// [`Self::trait_bound_violations`] and reported the same way.
-    pub cm_import_violations: Vec<crate::wir::CmImportViolation>,
+    pub cm_import_violations: Vec<CmImportViolation>,
 }
 
 /// A function body that needs to be translated from TIR to WIR.
@@ -264,7 +268,7 @@ impl<'a> WirContext<'a> {
                 .iter()
                 .filter_map(|f| {
                     let f = f.try_borrow().ok()?;
-                    if let crate::nir::ReturnAbi::MultiValue {
+                    if let nir::ReturnAbi::MultiValue {
                         result_types,
                         field_names,
                     } = &f.return_abi
@@ -394,11 +398,7 @@ impl<'a> WirContext<'a> {
     /// `nir_id` is the source function's canonical id (`None` for synthesized
     /// functions with no NIR origin); when present it indexes `funcid_map` so a
     /// stamped call resolves by id.
-    pub fn register_function(
-        &mut self,
-        func: WirFunction,
-        nir_id: Option<crate::nir::FuncId>,
-    ) -> WirFuncId {
+    pub fn register_function(&mut self, func: WirFunction, nir_id: Option<FuncId>) -> WirFuncId {
         let func_idx =
             DEFINED_FUNC_BASE + u32::try_from(self.functions.len()).expect("too many funcs");
         let fq = func.name.fq.clone();
@@ -467,7 +467,7 @@ impl<'a> WirContext<'a> {
         // Create canonical function type: (ref null struct, params...) -> results
         // The env param must be nullable to accept any struct ref subtype.
         let abstract_struct_nullable = WirType::AbstractRef {
-            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            heap_type: WirAbstractHeapType::Struct,
             nullable: true,
         };
         let mut fn_params = vec![abstract_struct_nullable.clone()];
@@ -543,7 +543,7 @@ impl<'a> WirContext<'a> {
         }
         let callback_fn_type_id = self.get_or_create_canonical_callback_fn_type();
         let abstract_struct_nullable = WirType::AbstractRef {
-            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            heap_type: WirAbstractHeapType::Struct,
             nullable: true,
         };
         use crate::wir::{WirField, WirMeta, WirName, WirStructType};
@@ -591,7 +591,7 @@ impl<'a> WirContext<'a> {
             return id.clone();
         }
         let abstract_struct_nullable = WirType::AbstractRef {
-            heap_type: crate::wir::WirAbstractHeapType::Struct,
+            heap_type: WirAbstractHeapType::Struct,
             nullable: true,
         };
         self.register_func_type(
@@ -759,7 +759,7 @@ impl<'a> WirContext<'a> {
             ResolvedType::GenericInstance { def, type_args }
                 if type_table.def_name(*def) == "List" && type_args.len() == 1 =>
             {
-                let lookup_name = super::types::list_wrapper_struct_name(type_table, type_args[0]);
+                let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "list wrapper struct `{lookup_name}`"
@@ -795,12 +795,12 @@ impl<'a> WirContext<'a> {
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the
                 // newtype-resolved spelling onto the same type, so one key each.
-                let mangled = super::types::generic_instance_name(type_table, name, type_args);
+                let mangled = generic_instance_name(type_table, name, type_args);
                 let struct_name = StructName::new(module_source.clone(), mangled.clone());
-                let type_id = self.struct_type_map.get(&struct_name).or_else(|| {
-                    self.type_map
-                        .get(&crate::name::wir_type_key(module_source, &mangled))
-                });
+                let type_id = self
+                    .struct_type_map
+                    .get(&struct_name)
+                    .or_else(|| self.type_map.get(&wir_type_key(module_source, &mangled)));
                 let Some(type_id) = type_id else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "generic instance `{struct_name}` (as neither a struct nor a variant)"
@@ -825,10 +825,7 @@ impl<'a> WirContext<'a> {
             }
             // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum { def } => {
-                let key = crate::name::wir_enum_type_key(
-                    type_table.def_module(*def),
-                    type_table.def_name(*def),
-                );
+                let key = wir_enum_type_key(type_table.def_module(*def), type_table.def_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
                 };
@@ -837,10 +834,7 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Variant { def } => {
-                let key = crate::name::wir_type_key(
-                    type_table.def_module(*def),
-                    type_table.def_name(*def),
-                );
+                let key = wir_type_key(type_table.def_module(*def), type_table.def_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };
@@ -865,7 +859,7 @@ impl<'a> WirContext<'a> {
                 // Use abstract structref so any concrete closure struct is a valid subtype.
                 // IndirectCall will RefCast to the specific canonical closure struct.
                 WirType::AbstractRef {
-                    heap_type: crate::wir::WirAbstractHeapType::Struct,
+                    heap_type: WirAbstractHeapType::Struct,
                     nullable: false,
                 }
             }
@@ -906,8 +900,8 @@ impl<'a> WirContext<'a> {
     /// the ones in `tuple_type_map`. This fallback searches by matching WIR types of elements.
     pub fn find_tuple_type_for_elements(
         &self,
-        type_table: &crate::tir::TypeTable,
-        elem_type_ids: &[crate::tir::TypeId],
+        type_table: &TypeTable,
+        elem_type_ids: &[tir::TypeId],
     ) -> Option<WirTypeId> {
         let elem_wir_types: Vec<WirType> = elem_type_ids
             .iter()
@@ -935,8 +929,8 @@ impl<'a> WirContext<'a> {
     /// Used for CM binding synthesis tuple returns that weren't pre-registered.
     pub fn define_tuple_struct_for_elements(
         &mut self,
-        type_table: &crate::tir::TypeTable,
-        elem_type_ids: &[crate::tir::TypeId],
+        type_table: &TypeTable,
+        elem_type_ids: &[tir::TypeId],
     ) -> Option<WirTypeId> {
         let elem_wir_types: Vec<WirType> = elem_type_ids
             .iter()
@@ -961,28 +955,28 @@ impl<'a> WirContext<'a> {
                 .collect::<Vec<_>>()
                 .join(", ")
         );
-        let fields: Vec<crate::wir::WirField> = elem_names
+        let fields: Vec<WirField> = elem_names
             .iter()
             .zip(elem_wir_types.iter())
-            .map(|(name, ty)| crate::wir::WirField {
+            .map(|(name, ty)| WirField {
                 name: name.clone(),
                 ty: ty.clone(),
                 mutable: true,
             })
             .collect();
-        let struct_def = crate::wir::WirTypeDef::Struct(crate::wir::WirStructType {
-            name: crate::wir::WirName {
+        let struct_def = WirTypeDef::Struct(WirStructType {
+            name: WirName {
                 fq: display.clone(),
             },
             fields,
-            meta: crate::wir::WirMeta::default(),
+            meta: WirMeta::default(),
             generic_origin: None,
             newtype_origin: None,
             supertype: None,
         });
         let type_id = self.register_type(display, struct_def);
         // Register in tuple_type_map using the TIR element TypeIds
-        let filtered_type_ids: Vec<crate::tir::TypeId> = elem_type_ids
+        let filtered_type_ids: Vec<tir::TypeId> = elem_type_ids
             .iter()
             .copied()
             .filter(|tid| !matches!(self.type_id_to_wir_type(type_table, *tid), WirType::Unit))
@@ -1018,7 +1012,7 @@ impl<'a> WirContext<'a> {
 
     /// Consume this context and produce the final `WirPackage`.
     pub fn into_wir_package(self) -> WirPackage {
-        let memory = crate::wir::WirMemory {
+        let memory = WirMemory {
             min: self.wasm_module_min_memory_pages(),
             max: None,
         };
@@ -1082,15 +1076,15 @@ impl<'a> WirContext<'a> {
                 }
 
                 // Get result types from the function's type definition
-                let results = if let Some(crate::wir::WirTypeDef::Func(ft)) =
+                let results = if let Some(WirTypeDef::Func(ft)) =
                     self.types.get(func.type_id.index() as usize)
                 {
                     ft.results.clone()
                 } else {
-                    vec![crate::wir::WirType::I32]
+                    vec![WirType::I32]
                 };
 
-                mod_functions.push(crate::wir::WasmModuleFunc {
+                mod_functions.push(WasmModuleFunc {
                     export_name,
                     param_names: func.param_names.clone(),
                     results,
@@ -1100,7 +1094,7 @@ impl<'a> WirContext<'a> {
                 });
             }
 
-            let info = crate::wir::WasmModuleInfo {
+            let info = WasmModuleInfo {
                 functions: mod_functions,
                 globals: mod_globals,
                 global_name_to_index: mod_global_name_to_index,
@@ -1139,13 +1133,13 @@ impl<'a> WirContext<'a> {
 }
 
 /// Collect fully-qualified global names referenced by WIR instructions.
-fn collect_referenced_globals(instrs: &[crate::wir::WirInstr], out: &mut IndexMap<String, ()>) {
+fn collect_referenced_globals(instrs: &[WirInstr], out: &mut IndexMap<String, ()>) {
     for instr in instrs {
         collect_referenced_globals_instr(instr, out);
     }
 }
 
-fn collect_referenced_globals_instr(instr: &crate::wir::WirInstr, out: &mut IndexMap<String, ()>) {
+fn collect_referenced_globals_instr(instr: &WirInstr, out: &mut IndexMap<String, ()>) {
     use crate::wir::WirInstr;
     match instr {
         WirInstr::GlobalGet { name, .. } | WirInstr::GlobalSet { name, .. } => {

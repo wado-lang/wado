@@ -27,28 +27,60 @@ use super::types::{
     ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
+use crate::ast::{CmImport, GenericType, NamedType, UseItem};
+use crate::compiler_item::Resolved;
+use crate::component_model::SourceInterfaceBatch;
+use crate::defs::{DefId, DefKind, DefTable};
+use crate::elaborator::infer_hole::InferHoleTable;
+use crate::elaborator::item::{
+    register_builtin_type_compiler_item, register_enum_case_compiler_item,
+    register_enum_compiler_item, register_newtype_compiler_item, register_resource_compiler_item,
+    register_struct_compiler_item, register_trait_compiler_item, register_tuple_compiler_item,
+    register_variant_case_compiler_item, register_variant_compiler_item,
+};
+use crate::elaborator::liveness::{CompilerNamed, Liveness, References};
+use crate::elaborator::reify::Reify;
+use crate::elaborator::sem::ModuleSemantics;
+use crate::elaborator::solver_bridge::SolverBridge;
+use crate::elaborator::trait_env::{
+    ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of,
+};
+use crate::elaborator::type_resolution::substitute_type_params;
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::elaborator::{build_func_index, liveness, scope, sig};
+use crate::hashmap;
+use crate::kiln::InvocationIndex;
+use crate::name::{namespace_member_alias, resolve_import_with_invocations};
+use crate::resolve::{Resolution, Resolutions, head_site};
+use crate::semantics::Semantics;
+use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
+use crate::symbol::SymbolKind;
+use crate::tir::{AnonStructId, PrimitiveType, StructDef, TirFunction, TraitRef};
+use crate::token::Span;
+use crate::unparse::unparse_type_into;
+use crate::wit_consume::module_host_leaf_imports;
 
 /// One `resource Child extends Parent` clause, held until every resource has
 /// been collected: a parent may be declared after its child, or elsewhere.
 struct PendingExtends {
-    child: crate::defs::DefId,
+    child: DefId,
     child_name: String,
     child_is_generic: bool,
     parent: Type,
     module: ModuleSource,
-    span: crate::token::Span,
+    span: Span,
 }
 
 /// Every resource's declared instance-method names, by declaration.
-type ResourceMethodNames = IndexMap<crate::defs::DefId, Vec<(String, crate::token::Span)>>;
+type ResourceMethodNames = IndexMap<DefId, Vec<(String, Span)>>;
 
 /// Resolve every `extends` clause and record the ones that hold.
 /// See `docs/wep-2026-04-28-resource-inheritance.md`.
 fn resolve_resource_extends<H: CompilerHost>(
     pending: &[PendingExtends],
     method_names: &ResourceMethodNames,
-    generic_resources: &IndexSet<crate::defs::DefId>,
-    resolutions: &crate::resolve::Resolutions,
+    generic_resources: &IndexSet<DefId>,
+    resolutions: &Resolutions,
     type_table: &RefCell<TypeTable>,
     logger: &Logger<'_, H>,
 ) {
@@ -62,9 +94,9 @@ fn resolve_resource_extends<H: CompilerHost>(
         );
     };
 
-    let mut links: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
+    let mut links: IndexMap<DefId, DefId> = IndexMap::default();
     for clause in pending {
-        let Some(site) = crate::resolve::head_site(&clause.parent) else {
+        let Some(site) = head_site(&clause.parent) else {
             reject(
                 clause,
                 format!(
@@ -75,8 +107,8 @@ fn resolve_resource_extends<H: CompilerHost>(
             continue;
         };
         let parent = match resolutions.get(site) {
-            crate::resolve::Resolution::Def(def) => def,
-            crate::resolve::Resolution::Binder(_) => {
+            Resolution::Def(def) => def,
+            Resolution::Binder(_) => {
                 reject(
                     clause,
                     format!(
@@ -86,9 +118,9 @@ fn resolve_resource_extends<H: CompilerHost>(
                 );
                 continue;
             }
-            crate::resolve::Resolution::Unresolved => {
+            Resolution::Unresolved => {
                 let mut spelled = String::new();
-                crate::unparse::unparse_type_into(&clause.parent, &mut spelled);
+                unparse_type_into(&clause.parent, &mut spelled);
                 reject(
                     clause,
                     format!(
@@ -127,7 +159,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             );
             continue;
         }
-        if defs.kind(parent) != crate::defs::DefKind::Resource {
+        if defs.kind(parent) != DefKind::Resource {
             reject(
                 clause,
                 format!(
@@ -176,7 +208,7 @@ fn resolve_resource_extends<H: CompilerHost>(
         links.insert(clause.child, parent);
     }
 
-    let mut committed: IndexMap<crate::defs::DefId, crate::defs::DefId> = IndexMap::default();
+    let mut committed: IndexMap<DefId, DefId> = IndexMap::default();
     for clause in pending {
         let Some(&parent) = links.get(&clause.child) else {
             continue;
@@ -215,10 +247,10 @@ fn resolve_resource_extends<H: CompilerHost>(
 /// reach one declaration.
 fn reject_overrides<H: CompilerHost>(
     clause: &PendingExtends,
-    parent: crate::defs::DefId,
+    parent: DefId,
     method_names: &ResourceMethodNames,
-    resolutions: &crate::resolve::Resolutions,
-    committed: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    resolutions: &Resolutions,
+    committed: &IndexMap<DefId, DefId>,
     logger: &Logger<'_, H>,
 ) {
     let own = method_names
@@ -247,12 +279,8 @@ fn reject_overrides<H: CompilerHost>(
 }
 
 /// Whether `target` is `from` or lies on its parent chain.
-fn reaches(
-    links: &IndexMap<crate::defs::DefId, crate::defs::DefId>,
-    from: crate::defs::DefId,
-    target: crate::defs::DefId,
-) -> bool {
-    let mut seen: Vec<crate::defs::DefId> = Vec::new();
+fn reaches(links: &IndexMap<DefId, DefId>, from: DefId, target: DefId) -> bool {
+    let mut seen: Vec<DefId> = Vec::new();
     let mut current = from;
     loop {
         if current == target {
@@ -299,10 +327,10 @@ pub(crate) struct AnnotateState {
     /// by the body walk in [`Self::build_tir_from_state`]. Each module owns its
     /// own [`super::sem::ModuleSemantics`], so the walk's `&mut` access stays
     /// disjoint and needs no shared-mutability plumbing.
-    pub(crate) module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics>,
+    pub(crate) module_semantics: IndexMap<ModuleSource, ModuleSemantics>,
     /// Kiln invocation redirects consulted by `resolve_import` call sites
     /// when walking `use` declarations. Populated from [`crate::loader::LoadResult`].
-    pub(crate) invocations: Rc<crate::kiln::InvocationIndex>,
+    pub(crate) invocations: Rc<InvocationIndex>,
     /// `ModuleSource` interner shared across phases. `Rc<RefCell<>>` so
     /// `&self` elaborator methods can `borrow_mut()` it when constructing
     /// new module sources during name resolution.
@@ -310,7 +338,7 @@ pub(crate) struct AnnotateState {
     /// Source-level liveness computed between `annotate_bodies` and `reify`
     /// in [`Self::build_tir_from_state`]. Empty until that runs; consumed by
     /// reify item gating and the unused-diagnostics emitter.
-    pub(crate) liveness: super::liveness::Liveness,
+    pub(crate) liveness: Liveness,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -324,18 +352,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         entry_module_source: &ModuleSource,
         logger: &'a Logger<'a, H>,
         included_files: Rc<IndexMap<[String; 2], Vec<u8>>>,
-        invocations: crate::kiln::InvocationIndex,
+        invocations: InvocationIndex,
         interner: Rc<RefCell<ModuleSourceInterner>>,
-        cm_source_interfaces: &crate::component_model::SourceInterfaceBatch,
-        snapshot: Option<&crate::semantics::Semantics>,
+        cm_source_interfaces: &SourceInterfaceBatch,
+        snapshot: Option<&Semantics>,
     ) -> Result<AnnotateState, Bail> {
         let invocations = Rc::new(invocations);
         // Set of stdlib module sources covered by the snapshot.  When non-empty,
         // the per-module passes below skip these — their decl info is already
         // present in the seeded maps.
-        let stdlib_set: IndexSet<ModuleSource> = snapshot
-            .map(crate::stdlib_snapshot::stdlib_sources)
-            .unwrap_or_default();
+        let stdlib_set: IndexSet<ModuleSource> = snapshot.map(stdlib_sources).unwrap_or_default();
         // Seed the shared type table from the snapshot when available so
         // stdlib `TypeId`s occupy the same indices as in cached `TirModule`s.
         let type_table = Rc::new(RefCell::new(
@@ -359,43 +385,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // carries `DefId`s, and they only read back as the same
             // declarations if the identities are the same ones.
             let seed = snapshot_state.map(|s| s.tysys.resolutions.defs().as_ref());
-            let defs =
-                std::sync::Arc::new(crate::defs::DefTable::build_seeded(seed, modules, symbols));
+            let defs = std::sync::Arc::new(DefTable::build_seeded(seed, modules, symbols));
             // The type table renders a nominal type's head out of the
             // declaration it carries, so it reads the same identities.
             type_table.borrow_mut().attach_defs(defs.clone());
-            Rc::new(crate::resolve::Resolutions::build(modules, symbols, defs))
+            Rc::new(Resolutions::build(modules, symbols, defs))
         };
 
         // Keyed by the declaration, not by a spelling a module has to be
         // standing in to resolve. `TypeLookup` reaches an entry through
         // `Resolutions`, which is the only thing that turns a name into one.
-        let mut all_newtypes: IndexMap<crate::defs::DefId, TypeId> = snapshot_state
+        let mut all_newtypes: IndexMap<DefId, TypeId> = snapshot_state
             .map(|s| (*s.tysys.all_newtypes).clone())
             .unwrap_or_default();
-        let mut all_generic_newtypes: IndexMap<crate::defs::DefId, GenericNewtypeInfo> =
-            snapshot_state
-                .map(|s| (*s.tysys.all_generic_newtypes).clone())
-                .unwrap_or_default();
-        let mut all_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo> = snapshot_state
+        let mut all_generic_newtypes: IndexMap<DefId, GenericNewtypeInfo> = snapshot_state
+            .map(|s| (*s.tysys.all_generic_newtypes).clone())
+            .unwrap_or_default();
+        let mut all_struct_fields: IndexMap<DefId, StructFieldInfo> = snapshot_state
             .map(|s| (*s.tysys.all_struct_fields).clone())
             .unwrap_or_default();
-        let mut all_variant_cases: IndexMap<crate::defs::DefId, VariantInfo> = snapshot_state
+        let mut all_variant_cases: IndexMap<DefId, VariantInfo> = snapshot_state
             .map(|s| (*s.tysys.all_variant_cases).clone())
             .unwrap_or_default();
-        let mut all_enum_cases: IndexMap<crate::defs::DefId, EnumInfo> = snapshot_state
+        let mut all_enum_cases: IndexMap<DefId, EnumInfo> = snapshot_state
             .map(|s| (*s.tysys.all_enum_cases).clone())
             .unwrap_or_default();
-        let mut all_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo> = snapshot_state
+        let mut all_flags_cases: IndexMap<DefId, FlagsInfo> = snapshot_state
             .map(|s| (*s.tysys.all_flags_cases).clone())
             .unwrap_or_default();
-        let mut all_resource_types: IndexMap<crate::defs::DefId, ResourceInfo> = snapshot_state
+        let mut all_resource_types: IndexMap<DefId, ResourceInfo> = snapshot_state
             .map(|s| (*s.tysys.all_resource_types).clone())
             .unwrap_or_default();
 
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
         let mut resource_method_names: ResourceMethodNames = IndexMap::default();
-        let mut generic_resources: IndexSet<crate::defs::DefId> = IndexSet::default();
+        let mut generic_resources: IndexSet<DefId> = IndexSet::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -408,23 +432,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
-                            struct_decl
-                                .type_params
-                                .iter()
-                                .map(|p| {
-                                    (
-                                        p.name.clone(),
-                                        p.bounds
-                                            .iter()
-                                            .map(|b| super::types::BoundRef {
-                                                name: b.name.clone(),
-                                                site: b.id,
-                                            })
-                                            .collect(),
-                                    )
-                                })
-                                .collect();
+                        let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
+                            .type_params
+                            .iter()
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    p.bounds
+                                        .iter()
+                                        .map(|b| BoundRef {
+                                            name: b.name.clone(),
+                                            site: b.id,
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .collect();
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
                             all_struct_fields.insert(
                                 def,
@@ -437,13 +460,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     field_defaults: Vec::new(),
                                     type_param_bounds,
                                     type_param_type_ids: Vec::new(), // filled in second pass
-                                    type_param_defaults: super::types::type_param_defaults_of(
+                                    type_param_defaults: type_param_defaults_of(
                                         &struct_decl.type_params,
                                     ),
                                 },
                             );
                         }
-                        super::item::register_struct_compiler_item(
+                        register_struct_compiler_item(
                             &type_table,
                             &struct_decl.attrs,
                             struct_decl.id,
@@ -470,13 +493,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_params,
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
-                                    type_param_defaults: super::types::type_param_defaults_of(
+                                    type_param_defaults: type_param_defaults_of(
                                         &variant_decl.type_params,
                                     ),
                                 },
                             );
                         }
-                        super::item::register_variant_compiler_item(
+                        register_variant_compiler_item(
                             &type_table,
                             &variant_decl.attrs,
                             variant_decl.id,
@@ -486,7 +509,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             logger,
                         );
                         for (case_index, case) in variant_decl.cases.iter().enumerate() {
-                            super::item::register_variant_case_compiler_item(
+                            register_variant_case_compiler_item(
                                 &type_table,
                                 &case.attrs,
                                 &variant_decl.name,
@@ -506,7 +529,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 EnumInfo::new(module_source.clone(), enum_decl.id, Vec::new()),
                             );
                         }
-                        super::item::register_enum_compiler_item(
+                        register_enum_compiler_item(
                             &type_table,
                             &enum_decl.attrs,
                             enum_decl.id,
@@ -516,7 +539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             logger,
                         );
                         for (case_index, case) in enum_decl.cases.iter().enumerate() {
-                            super::item::register_enum_case_compiler_item(
+                            register_enum_case_compiler_item(
                                 &type_table,
                                 &case.attrs,
                                 &enum_decl.name,
@@ -568,7 +591,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 });
                             }
                         }
-                        super::item::register_resource_compiler_item(
+                        register_resource_compiler_item(
                             &type_table,
                             &resource_decl.attrs,
                             resource_decl.id,
@@ -579,7 +602,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Trait(trait_decl) => {
-                        super::item::register_trait_compiler_item(
+                        register_trait_compiler_item(
                             &type_table,
                             &trait_decl.attrs,
                             trait_decl.id,
@@ -592,7 +615,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::TupleTypeDecl(decl) => {
-                        super::item::register_tuple_compiler_item(
+                        register_tuple_compiler_item(
                             &type_table,
                             &decl.attrs,
                             decl.id,
@@ -602,7 +625,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::BuiltinTypeDecl(decl) => {
-                        super::item::register_builtin_type_compiler_item(
+                        register_builtin_type_compiler_item(
                             &type_table,
                             &decl.attrs,
                             decl.id,
@@ -613,7 +636,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                     Item::Newtype(decl) => {
-                        super::item::register_newtype_compiler_item(
+                        register_newtype_compiler_item(
                             &type_table,
                             &decl.attrs,
                             decl.id,
@@ -640,24 +663,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if stdlib_set.contains(module_source) {
                     continue;
                 }
-                let namespace_imports = super::trait_env::namespace_imports_of(
+                let namespace_imports = namespace_imports_of(
                     &mut interner.borrow_mut(),
                     module,
                     module_source,
                     Some(entry_module_source),
                     &invocations,
                 );
-                let empty_struct: IndexMap<crate::defs::DefId, StructFieldInfo> =
+                let empty_struct: IndexMap<DefId, StructFieldInfo> = IndexMap::default();
+                let empty_newtype: IndexMap<DefId, TypeId> = IndexMap::default();
+                let empty_enum: IndexMap<DefId, EnumInfo> = IndexMap::default();
+                let empty_flags: IndexMap<DefId, FlagsInfo> = IndexMap::default();
+                let empty_gnt: IndexMap<DefId, GenericNewtypeInfo> = IndexMap::default();
+                let empty_variant: IndexMap<DefId, VariantInfo> = IndexMap::default();
+                let empty_anon_struct: IndexMap<AnonStructId, StructFieldInfo> =
                     IndexMap::default();
-                let empty_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
-                let empty_enum: IndexMap<crate::defs::DefId, EnumInfo> = IndexMap::default();
-                let empty_flags: IndexMap<crate::defs::DefId, FlagsInfo> = IndexMap::default();
-                let empty_gnt: IndexMap<crate::defs::DefId, GenericNewtypeInfo> =
-                    IndexMap::default();
-                let empty_variant: IndexMap<crate::defs::DefId, VariantInfo> = IndexMap::default();
-                let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
-                    IndexMap::default();
-                let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
+                let empty_local_items: IndexMap<String, DefId> = IndexMap::default();
                 for item in &module.items {
                     let Item::Newtype(newtype_decl) = item else {
                         continue;
@@ -719,7 +740,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: super::types::type_param_defaults_of(
+                                type_param_defaults: type_param_defaults_of(
                                     &newtype_decl.type_params,
                                 ),
                             },
@@ -741,7 +762,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Stdlib fields are already resolved in the seeded maps.
                 continue;
             }
-            let namespace_imports = super::trait_env::namespace_imports_of(
+            let namespace_imports = namespace_imports_of(
                 &mut interner.borrow_mut(),
                 module,
                 module_source,
@@ -753,15 +774,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // current state of the shared tables. Recreated per call site so
             // that the previous borrow is released before each `borrow_mut()`
             // on `type_table`.
-            let empty_struct: IndexMap<crate::defs::DefId, StructFieldInfo> = IndexMap::default();
-            let empty_newtype: IndexMap<crate::defs::DefId, TypeId> = IndexMap::default();
-            let empty_enum: IndexMap<crate::defs::DefId, EnumInfo> = IndexMap::default();
-            let empty_flags: IndexMap<crate::defs::DefId, FlagsInfo> = IndexMap::default();
-            let empty_gnt: IndexMap<crate::defs::DefId, GenericNewtypeInfo> = IndexMap::default();
-            let empty_variant: IndexMap<crate::defs::DefId, VariantInfo> = IndexMap::default();
-            let empty_anon_struct: IndexMap<crate::tir::AnonStructId, StructFieldInfo> =
-                IndexMap::default();
-            let empty_local_items: IndexMap<String, crate::defs::DefId> = IndexMap::default();
+            let empty_struct: IndexMap<DefId, StructFieldInfo> = IndexMap::default();
+            let empty_newtype: IndexMap<DefId, TypeId> = IndexMap::default();
+            let empty_enum: IndexMap<DefId, EnumInfo> = IndexMap::default();
+            let empty_flags: IndexMap<DefId, FlagsInfo> = IndexMap::default();
+            let empty_gnt: IndexMap<DefId, GenericNewtypeInfo> = IndexMap::default();
+            let empty_variant: IndexMap<DefId, VariantInfo> = IndexMap::default();
+            let empty_anon_struct: IndexMap<AnonStructId, StructFieldInfo> = IndexMap::default();
+            let empty_local_items: IndexMap<String, DefId> = IndexMap::default();
 
             for item in &module.items {
                 let lookup = TypeLookup {
@@ -818,23 +838,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_defaults.push(field.default.clone());
                         }
                         // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<super::types::BoundRef>)> =
-                            struct_decl
-                                .type_params
-                                .iter()
-                                .map(|p| {
-                                    (
-                                        p.name.clone(),
-                                        p.bounds
-                                            .iter()
-                                            .map(|b| super::types::BoundRef {
-                                                name: b.name.clone(),
-                                                site: b.id,
-                                            })
-                                            .collect(),
-                                    )
-                                })
-                                .collect();
+                        let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
+                            .type_params
+                            .iter()
+                            .map(|p| {
+                                (
+                                    p.name.clone(),
+                                    p.bounds
+                                        .iter()
+                                        .map(|b| BoundRef {
+                                            name: b.name.clone(),
+                                            site: b.id,
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .collect();
                         // Collect TypeIds for struct's own type params in declaration order.
                         // This allows infer_struct_type_args to fill phantom type params
                         // that don't appear in any field (e.g., D in struct DirMap<D, V>).
@@ -863,9 +882,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_defaults,
                             type_param_bounds,
                             type_param_type_ids,
-                            type_param_defaults: super::types::type_param_defaults_of(
-                                &struct_decl.type_params,
-                            ),
+                            type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
                         };
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
                             all_struct_fields.insert(def, info);
@@ -900,7 +917,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             let info = GenericNewtypeInfo {
                                 type_params,
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: super::types::type_param_defaults_of(
+                                type_param_defaults: type_param_defaults_of(
                                     &newtype_decl.type_params,
                                 ),
                             };
@@ -958,7 +975,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     type_params,
                                     cases,
                                     type_param_type_ids,
-                                    type_param_defaults: super::types::type_param_defaults_of(
+                                    type_param_defaults: type_param_defaults_of(
                                         &variant_decl.type_params,
                                     ),
                                 },
@@ -1093,7 +1110,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // Also runs orphan rule checking; violations are emitted as errors.
         let (trait_env, orphan_violations) = {
             let _span = logger.span("elaborate/trait_env");
-            super::trait_env::TraitEnv::build(
+            TraitEnv::build(
                 modules,
                 &mut interner.borrow_mut(),
                 Some(entry_module_source),
@@ -1132,7 +1149,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             };
             for header in trait_env.impl_headers.values() {
-                if !super::trait_env::is_user_local(&header.module) {
+                if !is_user_local(&header.module) {
                     continue;
                 }
                 if header.trait_key.as_ref() == Some(&sealed_key) {
@@ -1157,7 +1174,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // implementing its own `Encode` is never checked against another
         // module's declaration of that name.
         for header in trait_env.impl_headers.values() {
-            if !super::trait_env::is_user_local(&header.module) {
+            if !is_user_local(&header.module) {
                 continue;
             }
             let Some(decl) = header
@@ -1247,7 +1264,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             for def in all_generic_newtypes.keys() {
                 cache.insert(resolutions.defs().name(*def).to_string());
             }
-            for name in crate::tir::PrimitiveType::all_primitive_names() {
+            for name in PrimitiveType::all_primitive_names() {
                 cache.insert(name.to_string());
             }
             cache
@@ -1327,7 +1344,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut visible: IndexMap<ModuleSource, IndexSet<String>> = IndexMap::default();
             for ms in modules.keys() {
                 let mut set: IndexSet<String> = IndexSet::default();
-                for prim in crate::tir::PrimitiveType::all_primitive_names() {
+                for prim in PrimitiveType::all_primitive_names() {
                     set.insert(prim.to_string());
                 }
                 if let Some(own) = local.get(ms) {
@@ -1378,7 +1395,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // Pre-populated from snapshot.
                     continue;
                 }
-                indices.insert(src.clone(), super::build_func_index(&module.items));
+                indices.insert(src.clone(), build_func_index(&module.items));
             }
             indices
         };
@@ -1414,8 +1431,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // user modules can extend on top. The snapshot holds them per module
         // already, so each lands in the [`super::sem::ModuleSemantics`] whose
         // walk recorded it.
-        let mut module_semantics: IndexMap<ModuleSource, super::sem::ModuleSemantics> =
-            IndexMap::default();
+        let mut module_semantics: IndexMap<ModuleSource, ModuleSemantics> = IndexMap::default();
         // Ensure every loaded module has an entry; the body walk in
         // `build_tir_from_state` requires a `ModuleSemantics` to swap in
         // for each user module it processes.
@@ -1459,7 +1475,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
             // Assembled by `build_tir_from_state` between the decl and body
             // passes, once every module's own declarations are resolved.
-            signatures: Rc::new(super::sig::Signatures::default()),
+            signatures: Rc::new(sig::Signatures::default()),
         };
         Ok(AnnotateState {
             tysys,
@@ -1468,7 +1484,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             module_semantics,
             invocations,
             interner,
-            liveness: super::liveness::Liveness::default(),
+            liveness: Liveness::default(),
         })
     }
 
@@ -1477,7 +1493,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// points.
     fn module_elaborator(
         state: &AnnotateState,
-        sem: super::sem::ModuleSemantics,
+        sem: ModuleSemantics,
         symbols: &'a SymbolTable,
         logger: &'a Logger<'a, H>,
         entry_module_source: &ModuleSource,
@@ -1489,12 +1505,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             entry_module_source: entry_module_source.clone(),
-            annotate_ctx: super::scope::Scope::default(),
+            annotate_ctx: scope::Scope::default(),
             invocations: Rc::clone(&state.invocations),
             interner: Rc::clone(&state.interner),
             suppress_reference_recording: false,
-            infer_holes: super::infer_hole::InferHoleTable::default(),
-            assoc_binding_stack: crate::hashmap::IndexSet::default(),
+            infer_holes: InferHoleTable::default(),
+            assoc_binding_stack: hashmap::IndexSet::default(),
         }
     }
 
@@ -1509,7 +1525,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &'a IndexMap<ModuleSource, Module>,
         entry_module_source: ModuleSource,
         logger: &'a Logger<'a, H>,
-        snapshot: Option<&crate::semantics::Semantics>,
+        snapshot: Option<&Semantics>,
         build_tir: bool,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
@@ -1519,10 +1535,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module is preserved.  Lives across the whole loop so aliases
         // between distinct stdlib modules (e.g. a generic helper shared
         // between two `core:prelude/*` modules) are preserved too.
-        let mut fn_remap: IndexMap<
-            *const RefCell<crate::tir::TirFunction>,
-            Rc<RefCell<crate::tir::TirFunction>>,
-        > = IndexMap::default();
+        let mut fn_remap: IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>> =
+            IndexMap::default();
 
         // Per-module resolution: walk modules in the per-compile
         // topological order so a `TirModule`'s position in the result map
@@ -1574,14 +1588,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if let Item::Use(use_decl) = item {
                     for use_item in &use_decl.items {
                         match use_item {
-                            crate::ast::UseItem::Simple { name, alias, .. } => {
+                            UseItem::Simple { name, alias, .. } => {
                                 // Add both original name and alias (if any)
                                 imported_functions.insert(name.clone());
                                 if let Some(a) = alias {
                                     imported_functions.insert(a.clone());
                                 }
                             }
-                            crate::ast::UseItem::InterfaceFunctions { functions, .. } => {
+                            UseItem::InterfaceFunctions { functions, .. } => {
                                 // Effect functions are imported by their function name
                                 for func_item in functions {
                                     imported_functions.insert(func_item.name.clone());
@@ -1590,8 +1604,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Namespace { name: ns } => {
-                                let source = crate::name::resolve_import_with_invocations(
+                            UseItem::Namespace { name: ns } => {
+                                let source = resolve_import_with_invocations(
                                     &mut state.interner.borrow_mut(),
                                     module_source,
                                     &use_decl.source,
@@ -1600,13 +1614,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 );
                                 for (name, sym) in symbols.reachable_members(module_source, &source)
                                 {
-                                    if matches!(sym.kind, crate::symbol::SymbolKind::Function(_)) {
+                                    if matches!(sym.kind, SymbolKind::Function(_)) {
                                         imported_functions
-                                            .insert(crate::name::namespace_member_alias(ns, &name));
+                                            .insert(namespace_member_alias(ns, &name));
                                     }
                                 }
                             }
-                            crate::ast::UseItem::Wildcard => {
+                            UseItem::Wildcard => {
                                 // Wildcard import: no individual function names to collect
                             }
                         }
@@ -1641,7 +1655,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
 
         {
-            let mut signatures = super::sig::Signatures {
+            let mut signatures = sig::Signatures {
                 data_sections: modules
                     .iter()
                     .filter_map(|(ms, m)| m.data_section().map(|d| (ms.clone(), d.to_owned())))
@@ -1687,9 +1701,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         // Every declaration is resolved, so the solver reads them all at once.
         // Selection asks it, so it is built in every profile.
-        state.tysys.solver = Some(Rc::new(super::solver_bridge::SolverBridge::build(
-            &state.tysys,
-        )));
+        state.tysys.solver = Some(Rc::new(SolverBridge::build(&state.tysys)));
 
         // Imported globals: a `use`-brought global's type is the declaring
         // module's declaration fact, so it is filled here — once every decl
@@ -1765,17 +1777,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             let (direct, inherited) = spelled_references(state, snapshot);
             let dispatch = dispatched_callee_edges(state, snapshot);
-            let references = super::liveness::References {
+            let references = References {
                 direct: &direct,
                 inherited: &inherited,
                 dispatch: &dispatch,
             };
-            let export_names: crate::hashmap::IndexSet<String> = state
+            let export_names: hashmap::IndexSet<String> = state
                 .world_registry
                 .all_export_names()
                 .map(str::to_string)
                 .collect();
-            state.liveness = super::liveness::compute(
+            state.liveness = liveness::compute(
                 modules,
                 &references,
                 &export_names,
@@ -1792,11 +1804,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // The snapshot caches every stdlib declaration, being built before
             // any program that could narrow the set; this compile's liveness is
             // what narrows it. Building the snapshot itself gates on nothing.
-            let gate =
-                (!crate::stdlib_snapshot::is_building()).then_some(&state.liveness.emit_live);
+            let gate = (!is_building()).then_some(&state.liveness.emit_live);
             // A rehydrated `TirFunction` names its declaration, not the AST node
             // liveness is keyed by, so the set is projected once per compile.
-            let live_defs: IndexSet<crate::defs::DefId> = gate
+            let live_defs: IndexSet<DefId> = gate
                 .into_iter()
                 .flatten()
                 .filter_map(|id| state.tysys.resolutions.defs().of_ast_id(*id))
@@ -1809,7 +1820,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .expect("stdlib snapshot hit implies a cached TirModule");
                     result.insert(
                         module_source.clone(),
-                        crate::stdlib_snapshot::rehydrate_tir_module(
+                        rehydrate_tir_module(
                             snap_module,
                             &state.tysys.type_table,
                             snapshot_gate,
@@ -1822,7 +1833,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .module_semantics
                         .get(module_source)
                         .expect("populated by Phase 1");
-                    let mut reify = super::reify::Reify::new(
+                    let mut reify = Reify::new(
                         state.tysys.clone(),
                         sem_ref,
                         &state.module_semantics,
@@ -1859,9 +1870,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `register_symbol_key_type_indices` resolves against.
     fn intern_all_decl_types(
         modules: &IndexMap<ModuleSource, Module>,
-        all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
-        all_resource_types: &IndexMap<crate::defs::DefId, ResourceInfo>,
-        defs: &crate::defs::DefTable,
+        all_struct_fields: &IndexMap<DefId, StructFieldInfo>,
+        all_resource_types: &IndexMap<DefId, ResourceInfo>,
+        defs: &DefTable,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
     ) {
@@ -1885,7 +1896,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let Some(def) = defs.of_ast_id(struct_decl.id) else {
                             continue;
                         };
-                        let type_id = tt.make_struct(crate::tir::StructDef::Decl(def));
+                        let type_id = tt.make_struct(StructDef::Decl(def));
                         tt.register_decl_type(struct_decl.id, type_id);
                     }
                     Item::Enum(enum_decl) => {
@@ -1964,14 +1975,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module: &Module,
         module_source: &ModuleSource,
         entry_module_source: &ModuleSource,
-        symbols: &crate::symbol::SymbolTable,
+        symbols: &SymbolTable,
     ) -> IndexMap<String, (ModuleSource, String, TypeId, bool)> {
         let mut imported = IndexMap::default();
         for item in &module.items {
             let Item::Use(use_decl) = item else {
                 continue;
             };
-            let source = crate::name::resolve_import_with_invocations(
+            let source = resolve_import_with_invocations(
                 &mut state.interner.borrow_mut(),
                 module_source,
                 &use_decl.source,
@@ -2011,8 +2022,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 .visibility_barrier(module_source, &source, &name)
                                 .is_none()
                             {
-                                to_import
-                                    .push((crate::name::namespace_member_alias(ns, &name), entry));
+                                to_import.push((namespace_member_alias(ns, &name), entry));
                             }
                         }
                     }
@@ -2031,7 +2041,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// module, so a re-exported name needs the chain resolved first.
     fn global_declared_for(
         state: &AnnotateState,
-        symbols: &crate::symbol::SymbolTable,
+        symbols: &SymbolTable,
         source: &ModuleSource,
         name: &str,
     ) -> Option<(ModuleSource, String, TypeId, bool)> {
@@ -3137,7 +3147,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Ok(())
     }
 
-    pub(super) fn first_infer_span(ty: &Type) -> Option<crate::token::Span> {
+    pub(super) fn first_infer_span(ty: &Type) -> Option<Span> {
         match ty {
             Type::Infer(span) => Some(*span),
             Type::Generic(g) => g.args.iter().find_map(Self::first_infer_span),
@@ -3374,7 +3384,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             return TypeTable::UNKNOWN;
                         };
                         if lookup.struct_fields_of(def).is_some() {
-                            type_table.make_struct(crate::tir::StructDef::Decl(def))
+                            type_table.make_struct(StructDef::Decl(def))
                         } else if lookup.resource_type_of(def).is_some() {
                             type_table.make_resource(def)
                         } else if lookup.variant_cases_of(def).is_some() {
@@ -3439,7 +3449,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         return TypeTable::UNKNOWN;
                     };
                     if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                        let concrete_base = super::type_resolution::substitute_type_params(
+                        let concrete_base = substitute_type_params(
                             &gn_info.base_type_ast,
                             &gn_info.type_params,
                             &generic.args,
@@ -3515,18 +3525,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .namespace_imports
                     .contains_key(namespaced.namespace.as_str())
                 {
-                    let alias = crate::name::namespace_member_alias(
-                        &namespaced.namespace,
-                        &namespaced.name,
-                    );
+                    let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
                     let aliased = if namespaced.args.is_empty() {
-                        Type::Named(crate::ast::NamedType::new(
-                            namespaced.id,
-                            alias,
-                            namespaced.span,
-                        ))
+                        Type::Named(NamedType::new(namespaced.id, alias, namespaced.span))
                     } else {
-                        Type::Generic(crate::ast::GenericType {
+                        Type::Generic(GenericType {
                             id: namespaced.id,
                             name: alias,
                             args: namespaced.args.clone(),
@@ -3565,7 +3568,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     lookup,
                     type_params,
                 );
-                type_table.intern(crate::tir::ResolvedType::Function {
+                type_table.intern(ResolvedType::Function {
                     is_mut: func_type.is_mut,
                     params,
                     return_type,
@@ -3603,7 +3606,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         modules: &IndexMap<ModuleSource, Module>,
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
-        resolutions: &crate::resolve::Resolutions,
+        resolutions: &Resolutions,
     ) {
         for (module_source, module) in modules {
             if stdlib_set.contains(module_source) {
@@ -3624,7 +3627,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(trait_key) = impl_block
                     .trait_type
                     .as_ref()
-                    .and_then(crate::resolve::head_site)
+                    .and_then(head_site)
                     .and_then(|site| resolutions.declared(site))
                 else {
                     continue;
@@ -3678,13 +3681,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     // because the key stays `AstId`-shaped: its readers arrive
                     // through `decl_of_type`, which also answers for
                     // monomorphized instances and `BuiltinArray`.
-                    let base_decl = crate::resolve::head_site(&impl_block.ty)
+                    let base_decl = head_site(&impl_block.ty)
                         .and_then(|site| resolutions.declared(site))
                         .map(|def| resolutions.defs().ast_id(def));
                     if let Some(base_decl) = base_decl {
                         type_table.borrow_mut().register_generic_assoc_type_def(
                             base_decl,
-                            crate::tir::TraitRef::bare(trait_key),
+                            TraitRef::bare(trait_key),
                             binding.name.clone(),
                             type_param_id,
                         );
@@ -3699,8 +3702,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 /// built, plus the snapshot's, read in place.
 fn all_module_semantics<'a>(
     state: &'a AnnotateState,
-    snapshot: Option<&'a crate::semantics::Semantics>,
-) -> impl Iterator<Item = &'a super::sem::ModuleSemantics> {
+    snapshot: Option<&'a Semantics>,
+) -> impl Iterator<Item = &'a ModuleSemantics> {
     state.module_semantics.values().chain(
         snapshot
             .and_then(|s| s.state.as_ref())
@@ -3714,7 +3717,7 @@ fn all_module_semantics<'a>(
 /// files its edges — once per inheriting impl.
 fn spelled_references(
     state: &AnnotateState,
-    snapshot: Option<&crate::semantics::Semantics>,
+    snapshot: Option<&Semantics>,
 ) -> (
     IndexMap<ast::AstId, ast::AstId>,
     IndexMap<ast::AstId, IndexSet<ast::AstId>>,
@@ -3741,7 +3744,7 @@ fn spelled_references(
 /// the snapshot is read alongside this compile's own state.
 fn dispatched_callee_edges(
     state: &AnnotateState,
-    snapshot: Option<&crate::semantics::Semantics>,
+    snapshot: Option<&Semantics>,
 ) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
     let defs = state.tysys.resolutions.defs();
     let mut edges: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
@@ -3767,13 +3770,13 @@ fn dispatched_callee_edges(
 /// runs: its own inherent methods and free functions, plus the impl blocks a
 /// synthesis pass dispatches to. An entity the compiler reaches for and has
 /// not registered as a `CompilerItem` is a gap in the registry, not here.
-fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed {
+fn compiler_named_entities(tysys: &TypeSystem) -> CompilerNamed {
     let tt = tysys.type_table.borrow();
     let items = tt.compiler_items();
-    let mut named = super::liveness::CompilerNamed::default();
+    let mut named = CompilerNamed::default();
     for &item in CompilerItem::ALL {
         match items.get(item) {
-            Some(crate::compiler_item::Resolved::Method {
+            Some(Resolved::Method {
                 owner_type, name, ..
             }) => {
                 named
@@ -3782,7 +3785,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
                     .or_default()
                     .insert(name.clone());
             }
-            Some(crate::compiler_item::Resolved::Function {
+            Some(Resolved::Function {
                 module_source,
                 name,
             }) => {
@@ -3796,11 +3799,11 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
         }
     }
     let defs = tysys.resolutions.defs();
-    let synthesis_traits: IndexSet<crate::defs::DefId> = CompilerItem::ALL
+    let synthesis_traits: IndexSet<DefId> = CompilerItem::ALL
         .iter()
         .filter(|item| item.dispatched_by_synthesis())
         .filter_map(|&item| match items.get(item) {
-            Some(crate::compiler_item::Resolved::Trait { decl, .. }) => defs.of_ast_id(*decl),
+            Some(Resolved::Trait { decl, .. }) => defs.of_ast_id(*decl),
             _ => None,
         })
         .collect();
@@ -3822,16 +3825,13 @@ fn compiler_named_entities(tysys: &TypeSystem) -> super::liveness::CompilerNamed
 fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::AstId>> {
     let defs = tysys.resolutions.defs();
     let mut stands_for: IndexMap<ast::AstId, IndexSet<ast::AstId>> = IndexMap::default();
-    let mut edge = |from: crate::defs::DefId, to: crate::defs::DefId| {
+    let mut edge = |from: DefId, to: DefId| {
         stands_for
             .entry(defs.ast_id(from))
             .or_default()
             .insert(defs.ast_id(to));
     };
-    let mut by_head: IndexMap<
-        (crate::defs::DefId, &super::trait_env::ImplTargetKey),
-        Vec<&super::trait_env::ImplHeader>,
-    > = IndexMap::default();
+    let mut by_head: IndexMap<(DefId, &ImplTargetKey), Vec<&ImplHeader>> = IndexMap::default();
     for header in tysys.trait_env.impl_headers.values() {
         let Some(trait_) = header.trait_ref else {
             continue;
@@ -3887,7 +3887,7 @@ pub(crate) fn fold_component_interfaces(
         let interface_fqs = component_interface_fqs(module);
         let world_func_names = component_world_func_names(module);
         if !interface_fqs.is_empty() || !world_func_names.is_empty() {
-            let host_leaf_imports = crate::wit_consume::module_host_leaf_imports(module);
+            let host_leaf_imports = module_host_leaf_imports(module);
             Arc::make_mut(registry).register_component_decls(
                 module,
                 &interface_fqs,
@@ -3929,9 +3929,7 @@ fn component_world_func_names(module: &Module) -> Vec<String> {
 /// synthesized into the same module but is not composed from the dependency's
 /// exports, so it is excluded via the module's host-leaf import list.
 fn component_interface_fqs(module: &Module) -> Vec<String> {
-    let imports: IndexSet<String> = crate::wit_consume::module_host_leaf_imports(module)
-        .into_iter()
-        .collect();
+    let imports: IndexSet<String> = module_host_leaf_imports(module).into_iter().collect();
     module
         .items
         .iter()
@@ -3939,7 +3937,7 @@ fn component_interface_fqs(module: &Module) -> Vec<String> {
             Item::Interface(decl) => decl
                 .attrs
                 .iter()
-                .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path)),
+                .find_map(|a| a.as_cm_import().map(CmImport::interface_path)),
             _ => None,
         })
         .filter(|fq| !imports.contains(fq))
