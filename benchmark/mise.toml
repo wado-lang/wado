@@ -368,6 +368,13 @@ for f in $FILES; do
         done
         [ -n "$keep" ] || continue
     fi
+    # `logs.ts` keys a row by (task, impl, phase), so without a marker per
+    # benchmark every `de:` row in the log collides onto one key and `pick.ts`
+    # / `ab.ts` compare unrelated benchmarks. mise prints one marker for the
+    # whole task, so the loop prints its own.
+    name=${f##*/}
+    echo "[${name%.wado}] \\$ wado run -O2 $f"
+    echo "=== Wado ==="
     wado run -O2 $WADO_BENCH_FLAGS "$f"
 done
 """

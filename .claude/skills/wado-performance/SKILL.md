@@ -284,6 +284,8 @@ mise run all-wado                                # every Wado row
 mise run all-wado json_catalog sieve             # those, by name
 ```
 
+Its log feeds `ab.ts` and `pick.ts` like any other, one row per benchmark file.
+
 **Hash the wasm before you time anything.** Compile every benchmark under both
 compilers and compare. A row whose bytes are identical cannot have moved, so
 whatever the suite says about it is the host. That is a stronger check than

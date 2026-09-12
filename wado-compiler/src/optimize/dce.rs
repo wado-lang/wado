@@ -273,12 +273,9 @@ fn compute_function_reachability(
     let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
-    // Optimizer passes (e.g. `nir/string_push`) may *synthesize* new calls
-    // during the optimization loop. Functions those passes call must
-    // survive the early DCE that runs before the loop, otherwise the
-    // synthesis target is gone and the rewrite cannot fire. The virtual
-    // edges are gated by compiler-item markers so each rule names its
-    // canonical pair (`string_push_str` → `string_push_char`, etc.).
+    // A pass may *synthesize* calls during the optimization loop, and their
+    // targets must survive the early DCE that runs before it — otherwise the
+    // target is gone and the rewrite cannot fire.
     extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
@@ -305,12 +302,9 @@ fn compute_reachable_positions(
         .collect()
 }
 
-/// Add functions that the NIR optimizer's rewrites may *synthesize* calls
-/// to. For now this is a single pair: `nir/string_push` rewrites
-/// `String::push_str("short")` calls into `String::push(c)` calls, so
-/// `String::push` (the function flagged with `string_push_char`) must
-/// survive early DCE whenever the function flagged with `string_push_str`
-/// is reachable.
+/// Add functions the NIR optimizer's rewrites reach without a call edge: what
+/// `nir/string_push` writes an append run in terms of, and what an
+/// `array_clone::<T>` site reaches through its element type.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     descriptors: &[FunctionRef],
@@ -319,17 +313,14 @@ fn extend_reachable_for_optimizer_passes(
 ) {
     use crate::compiler_item::CompilerItem;
 
-    let mut push_str: Option<(FunctionId, crate::nir::FuncId)> = None;
+    let mut push_str_id: Option<FunctionId> = None;
     let mut push_char_id: Option<FunctionId> = None;
     let mut fused: Vec<FunctionId> = Vec::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         match func.compiler_item {
             Some(CompilerItem::StringPushStr) => {
-                push_str = Some((
-                    function_id_for(&func),
-                    func.id.expect("func_id assigned at lower"),
-                ));
+                push_str_id = Some(function_id_for(&func));
             }
             Some(CompilerItem::StringPushChar) => {
                 push_char_id = Some(function_id_for(&func));
@@ -350,7 +341,7 @@ fn extend_reachable_for_optimizer_passes(
     // wherever an append is reachable at all. Ungated beyond that: the fusion
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
-    if push_str.is_some_and(|(id, _)| reachable.contains(&id))
+    if push_str_id.is_some_and(|id| reachable.contains(&id))
         || push_char_id.is_some_and(|id| reachable.contains(&id))
     {
         for id in fused {
