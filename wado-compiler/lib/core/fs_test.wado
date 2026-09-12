@@ -1,8 +1,118 @@
+use fs from "core:fs";
 use { FsError, FsErrorKind } from "core:fs";
-use { ErrorCode } from "wasi:filesystem";
+use { ErrorCode, Preopens } from "wasi:filesystem";
 
-// The operations need a real directory. `tests/fixtures/core_fs.wado` covers
-// them, against a scratch preopen it writes before it reads.
+// `wado test` preopens the working directory, so each test owns a directory
+// under the gitignored `target/` and reads only what it wrote there.
+fn scratch(case: &String) -> String with Preopens {
+    let dir = `target/core-fs-test/${*case}`;
+    fs::create_dir_all(&dir).unwrap();
+    return dir;
+}
+
+test "text round-trips" {
+    let dir = scratch(&"text");
+    let path = `${dir}/greeting.txt`;
+    let text: String = "hello, wado\n";
+    fs::write(&path, &text).unwrap();
+    assert fs::read_to_string(&path).unwrap() == text;
+}
+
+test "bytes round-trip" {
+    let dir = scratch(&"bytes");
+    let path = `${dir}/raw.bin`;
+    let bytes: ByteList = [0xff as u8, 0x00 as u8, 0xfe as u8];
+    fs::write(&path, &bytes).unwrap();
+    assert fs::read(&path).unwrap() == bytes;
+}
+
+test "bytes that are not UTF-8 do not read as text" {
+    let dir = scratch(&"not-utf8");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &([0xff as u8] as ByteList)).unwrap();
+    let e = fs::read_to_string(&path).unwrap_err();
+    assert e.kind matches { NotUtf8 };
+}
+
+test "a path that names nothing is NotFound" {
+    let dir = scratch(&"missing");
+    let e = fs::read_to_string(&`${dir}/nope.txt`).unwrap_err();
+    assert e.kind matches { NotFound };
+}
+
+test "create_dir_all creates every parent, and repeating it is not an error" {
+    let dir = scratch(&"nested");
+    let leaf = `${dir}/a/b/c`;
+    fs::create_dir_all(&leaf).unwrap();
+    fs::create_dir_all(&leaf).unwrap();
+    let path = `${leaf}/leaf.txt`;
+    fs::write(&path, &"leaf").unwrap();
+    assert fs::read_to_string(&path).unwrap() == "leaf";
+}
+
+test "a directory does not read as a file" {
+    // `read_via_stream` traps on one, so `read` refuses it first.
+    let dir = scratch(&"read-a-directory");
+    let e = fs::read(&dir).unwrap_err();
+    assert e.kind matches { Io(IsDirectory) };
+}
+
+test "an absolute path is not rebuilt under the preopen" {
+    let e = fs::create_dir_all(&"/rooted/elsewhere").unwrap_err();
+    assert e.kind matches { Io(NotPermitted) };
+    assert fs::read_dir(&"rooted").is_err();
+}
+
+test "a file occupying the path is not the directory it names" {
+    let dir = scratch(&"occupied");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &"not a directory").unwrap();
+    let e = fs::create_dir_all(&path).unwrap_err();
+    assert e.kind matches { Io(NotDirectory) };
+}
+
+test "directory entries carry their type" {
+    let dir = scratch(&"entries");
+    fs::create_dir_all(&`${dir}/sub`).unwrap();
+    fs::write(&`${dir}/sub/leaf.txt`, &"leaf").unwrap();
+
+    let nested = fs::read_dir(&dir).unwrap();
+    assert nested.len() == 1;
+    assert nested[0].name == "sub";
+    assert nested[0].type matches { Directory };
+
+    let leaves = fs::read_dir(&`${dir}/sub`).unwrap();
+    assert leaves.len() == 1;
+    assert leaves[0].name == "leaf.txt";
+    assert leaves[0].type matches { File };
+}
+
+test "the empty path and \".\" both name the preopen" {
+    let mut here: List<String> = [];
+    for let entry of fs::read_dir(&"").unwrap() {
+        here.push(entry.name);
+    }
+    let mut dot: List<String> = [];
+    for let entry of fs::read_dir(&".").unwrap() {
+        dot.push(entry.name);
+    }
+    here.sort();
+    dot.sort();
+    assert here == dot;
+    assert !here.is_empty();
+}
+
+test "remove_file removes it" {
+    let dir = scratch(&"remove");
+    let path = `${dir}/doomed.txt`;
+    fs::write(&path, &"doomed").unwrap();
+    fs::remove_file(&path).unwrap();
+    assert fs::read(&path).is_err();
+}
+
+test "root answers the preopened directory" {
+    assert fs::root().is_ok();
+}
 
 test "an error renders its path and its cause" {
     let e = FsError { path: "build/out.json", kind: FsErrorKind::NotFound };

@@ -1504,7 +1504,10 @@ for let entry of fs::read_dir(&"src")? {           // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }
 }
 
-eprintln(`error: ${e}`);        // FsError renders as "path: no such file or directory"
+if let Err(e) = fs::read(&"icon.png") {
+    eprintln(`error: ${e}`);            // "icon.png: no such file or directory"
+}
+
 let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem does
 ```
 

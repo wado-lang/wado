@@ -128,11 +128,12 @@ caller in the repository needs them, not because they would not fit.
 
 ## Roadmap
 
-1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, with
-   `tests/fixtures/core_fs.wado`, which writes into a scratch preopen before it
-   reads: the round trips, `NotFound`, `NotUtf8`, the nested `create_dir_all` /
-   `read_dir` / `remove_file` path, and the empty path. Done when that fixture
-   passes at every optimization level.
+1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, tested by
+   `lib/core/fs_test.wado` beside it: the round trips, `NotFound`, `NotUtf8`,
+   the nested `create_dir_all` / `read_dir` / `remove_file` path, and the empty
+   path. `wado test` preopens the working directory, so each test owns a
+   directory under `target/` and reads only what it wrote there. Done when that
+   file passes at every optimization level.
 2. The call sites the issue names: `package-gale/tools/rust_corpus.wado`,
    `rust_corpus_check.wado`, `rust_inline_paths.wado`, and
    `package-gale-highlight-wado/tools/{corpus,corpus_check,highlight_dump}.wado`.

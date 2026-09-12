@@ -202,10 +202,20 @@ pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
         }
         prefix.push_str(&component);
         if let Err(e) = dir.create_directory_at(prefix).wait() {
-            if e matches { Exist } {
-                continue;
+            if !e matches { Exist } {
+                return Result::Err(failure(&prefix, e));
             }
-            return Result::Err(failure(&prefix, e));
+            // `Exist` says something is at the path, not that it is the
+            // directory the path names.
+            let found = match dir.stat_at(PathFlags::none(), prefix).wait() {
+                Ok(stat) => stat.type,
+                Err(e) => {
+                    return Result::Err(failure(&prefix, e));
+                },
+            };
+            if !found matches { Directory } {
+                return Result::Err(failure(&prefix, ErrorCode::NotDirectory));
+            }
         }
     }
     return Result::Ok(());
