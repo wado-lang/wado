@@ -113,22 +113,10 @@ pub struct FilesystemCompilerHost {
     dep_index: Option<wado_compiler::DependencyIndex>,
 }
 
-/// Developer traces (`WADO_TRACE`, `WADO_DUMP_PASS_*`) go to stderr, beside the
-/// diagnostics. Nothing is traced until a host installs this.
-struct StderrTraceSink;
-
-impl wado_compiler::TraceSink for StderrTraceSink {
-    fn trace(&self, line: &str) {
-        eprintln!("{line}");
-    }
-}
-
-static STDERR_TRACE_SINK: StderrTraceSink = StderrTraceSink;
-
 impl FilesystemCompilerHost {
     /// The one constructor; the three below name the combinations callers want.
     fn configured(base_path: PathBuf, print_diagnostics: bool, log_level: LogLevel) -> Self {
-        wado_compiler::set_trace_sink(&STDERR_TRACE_SINK);
+        wado_lsp::install_stderr_trace_sink();
         Self {
             inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
             print_diagnostics,
