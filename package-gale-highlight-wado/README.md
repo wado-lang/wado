@@ -78,7 +78,6 @@ src/
   main.wado             CLI (delegates to gale-highlight's run_cli)
   lib_test.wado         highlight regression tests
 tools/
-  corpus.wado           shared: the path list and reading a file
   corpus_check.wado     parse verdicts, for `mise run check-grammar`
   highlight_dump.wado   capture spans, for `mise run check-highlight`
 example/

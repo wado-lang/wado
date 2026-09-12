@@ -1,14 +1,13 @@
-//! The path list the corpus tools share. Every path opens relative to the
-//! first preopen, which `wado run` grants; `core:fs` resolves it.
+//! The command line a corpus tool takes: paths to process, listed or in a file.
 
 use { eprintln, Stderr } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
-/// The `.wado` paths to process: every `--paths-from <file>` list plus any
-/// bare `.wado` argument. `--paths-from` reads one path per line — the only
-/// form that survives a path containing a space.
-pub fn collect_paths(argv: &List<String>) -> List<String> with (Stderr, Preopens) {
+/// The paths to process: every `--paths-from <file>` list, one path per line,
+/// plus any bare argument ending in `extension`. A list that cannot be read
+/// yields its own path, so the run reports it rather than looking clean.
+pub fn collect_paths(argv: &List<String>, extension: &String) -> List<String> with (Stderr, Preopens) {
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" {
@@ -22,15 +21,12 @@ pub fn collect_paths(argv: &List<String>) -> List<String> with (Stderr, Preopens
                         }
                     }
                 },
-                // An unreadable list yields no paths, which would otherwise
-                // read as a clean run. Keep it as the one path that reports
-                // itself.
                 Err(e) => {
                     eprintln(`error: ${e}`);
                     paths.push(argv[i]);
                 },
             }
-        } else if argv[i].ends_with(".wado") {
+        } else if argv[i].ends_with(*extension) {
             paths.push(argv[i]);
         }
     }

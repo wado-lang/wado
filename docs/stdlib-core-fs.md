@@ -29,10 +29,10 @@ for let entry of fs::read_dir(&"src")? {
 ```
 
 A file is read into memory and written in one call. Streaming a file
-without holding it — `example/cat.wado` connects a file to stdout that way
-— stays on `wasi:filesystem`, which [`root`] hands the descriptor for. So
-do the operations this module leaves out: append, rename, symlink, times,
-and metadata.
+without holding it stays on `wasi:filesystem`, and so do the operations
+this module leaves out: append, rename, symlink, times, and metadata.
+[`root`] hands over the descriptor for them. `example/cat.wado` connects a
+file's read stream to stdout that way.
 
 ## Functions
 
@@ -79,9 +79,9 @@ that already exists is not a failure.
 
 Why a filesystem operation failed, and the path it failed on.
 
-The path is carried here because every caller reports it, and `Display`
-renders the pair (`"build/out.json: no such file or directory"`), so
-`eprintln(`error: ${e}`)` is the whole error path.
+Every caller reports the path, so it is carried here rather than added at
+each site. `Display` renders the pair:
+`"build/out.json: no such file or directory"`.
 
 #### `path: String`
 

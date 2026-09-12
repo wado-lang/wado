@@ -30,7 +30,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         exit(1);
     }
     let property = arguments[0];
-    let table = read_file(&arguments[1]);
+    let table = match fs::read_to_string(&arguments[1]) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln(`check_unicode_properties: ${e}`);
+            exit(1);
+        },
+    };
 
     let mut failures = 0;
     let entries = parse_table(&table, &mut failures);
@@ -158,14 +164,4 @@ fn merge_ranges(ranges: &List<[i32, i32]>) -> List<[i32, i32]> {
         }
     }
     return out;
-}
-
-fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
-    return match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln(`check_unicode_properties: ${e}`);
-            exit(1);
-        },
-    };
 }

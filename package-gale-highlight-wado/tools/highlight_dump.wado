@@ -16,7 +16,7 @@
 //!
 //! A file that cannot be read reports a diagnostic count of `-1`.
 
-use { collect_paths } from "./corpus.wado";
+use { collect_paths } from "lib:gale";
 use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
     with {
         generator: {
@@ -32,7 +32,7 @@ use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args());
+    let paths = collect_paths(&args(), &".wado");
 
     let mapping = highlight_mapping();
     let mut header = "V";

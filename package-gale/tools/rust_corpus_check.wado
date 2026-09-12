@@ -3,7 +3,8 @@
 //! diagnostic. `AGENTS.md` has the invocation; paths open relative to the
 //! first preopen, so run it from the repository root.
 
-use { parse_rust, collect_paths } from "./rust_corpus.wado";
+use { parse_rust } from "./rust_corpus.wado";
+use { collect_paths } from "../src/corpus.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
@@ -22,7 +23,7 @@ fn line_of(source: &String, at: i32) -> i32 {
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args());
+    let paths = collect_paths(&args(), &".rs");
 
     let mut bad = 0;
     for let path of &paths {

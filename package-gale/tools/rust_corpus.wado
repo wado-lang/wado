@@ -1,5 +1,5 @@
 //! What both Rust tools here need: the recognizer with its base ports
-//! installed, and the WASI plumbing from a command line to file contents.
+//! installed.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -10,9 +10,6 @@ use rust from "../tests/grammars/RustLexer.g4"
         },
     };
 use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
-use { eprintln, Stderr } from "core:cli";
-use fs from "core:fs";
-use { Preopens } from "wasi:filesystem";
 
 // The Wado twin of `grammars/java/RustLexerBase.java`, which the ANTLR4 oracle
 // runs; `tests/driver_cst_rust_test.wado` holds the copy that pins the pair.
@@ -59,35 +56,4 @@ pub fn parse_rust(source: &String) -> rust::ParseResult {
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
         return rust::parse(source);
     };
-}
-
-/// The `.rs` files an argument list names, directly or through
-/// `--paths-from <file>`, which reads one path per line.
-pub fn collect_paths(argv: &List<String>) -> List<String> with (Stderr, Preopens) {
-    let mut paths: List<String> = [];
-    for let mut i = 0; i < argv.len(); i += 1 {
-        if argv[i] == "--paths-from" {
-            assert i + 1 < argv.len(), "--paths-from needs a file";
-            i += 1;
-            match fs::read_to_string(&argv[i]) {
-                Ok(list) => {
-                    for let line of list.lines() {
-                        if !line.is_empty() {
-                            paths.push(line);
-                        }
-                    }
-                },
-                // An unreadable list yields no paths, which would otherwise
-                // read as a clean run. Keep it as the one path that reports
-                // itself.
-                Err(e) => {
-                    eprintln(`error: ${e}`);
-                    paths.push(argv[i]);
-                },
-            }
-        } else if argv[i].ends_with(".rs") {
-            paths.push(argv[i]);
-        }
-    }
-    return paths;
 }

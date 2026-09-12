@@ -25,10 +25,10 @@
 //! ```
 //!
 //! A file is read into memory and written in one call. Streaming a file
-//! without holding it — `example/cat.wado` connects a file to stdout that way
-//! — stays on `wasi:filesystem`, which [`root`] hands the descriptor for. So
-//! do the operations this module leaves out: append, rename, symlink, times,
-//! and metadata.
+//! without holding it stays on `wasi:filesystem`, and so do the operations
+//! this module leaves out: append, rename, symlink, times, and metadata.
+//! [`root`] hands over the descriptor for them. `example/cat.wado` connects a
+//! file's read stream to stdout that way.
 
 use {
     Preopens,
@@ -43,9 +43,9 @@ use {
 
 /// Why a filesystem operation failed, and the path it failed on.
 ///
-/// The path is carried here because every caller reports it, and `Display`
-/// renders the pair (`"build/out.json: no such file or directory"`), so
-/// `eprintln(`error: ${e}`)` is the whole error path.
+/// Every caller reports the path, so it is carried here rather than added at
+/// each site. `Display` renders the pair:
+/// `"build/out.json: no such file or directory"`.
 pub struct FsError {
     pub path: String,
     pub kind: FsErrorKind,
@@ -113,28 +113,11 @@ pub fn root() -> Result<Descriptor, FsError> with Preopens {
 
 /// The whole content of `path`.
 pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens {
-    let dir = root()?;
-    let file = match dir.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            return Result::Err(failure(path, e));
-        },
-    };
+    let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
     let [stream, done] = file.read_via_stream(0 as Filesize);
     let bytes = stream.read_to_end();
     stream.drop();
-    // The stream ends on an I/O error the same way it ends on the last byte,
-    // so a read that skips this future reports a truncated file as a whole one.
-    let finished = done.read();
-    done.drop();
-    if let Some(Err(e)) = finished {
-        return Result::Err(failure(path, e));
-    }
+    finish(path, done)?;
     return Result::Ok(bytes as ByteList);
 }
 
@@ -152,28 +135,12 @@ pub fn read_to_string(path: &String) -> Result<String, FsError> with Preopens {
 /// `data` is anything that views as bytes — a `String`, a `ByteList`, a
 /// `ByteSlice` — and is written through without a copy.
 pub fn write<T: AsByteSlice>(path: &String, data: &T) -> Result<(), FsError> with Preopens {
-    let dir = root()?;
-    let file = match dir.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::Create | OpenFlags::Truncate,
-        DescriptorFlags::Write,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            return Result::Err(failure(path, e));
-        },
-    };
+    let file = open(path, OpenFlags::Create | OpenFlags::Truncate, DescriptorFlags::Write)?;
     let [rx, tx] = Stream::<u8>::new();
     let done = file.write_via_stream(rx, 0 as Filesize);
     tx.write_raw_all(data.as_byte_slice() as Slice<u8>);
     tx.drop();
-    let finished = done.read();
-    done.drop();
-    if let Some(Err(e)) = finished {
-        return Result::Err(failure(path, e));
-    }
-    return Result::Ok(());
+    return finish(path, done);
 }
 
 /// Remove the file `path` names. A directory is not a file: `remove_file` on
@@ -193,11 +160,7 @@ pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens 
     let [stream, done] = dir.read_directory();
     let raw = stream.read_to_end();
     stream.drop();
-    let finished = done.read();
-    done.drop();
-    if let Some(Err(e)) = finished {
-        return Result::Err(failure(path, e));
-    }
+    finish(path, done)?;
     let mut out: List<DirEntry> = List::with_capacity(raw.len());
     for let entry of raw {
         out.push(DirEntry { name: entry.name, type: file_type(entry.type) });
@@ -229,19 +192,29 @@ pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
 }
 
 fn open_dir(path: &String) -> Result<Descriptor, FsError> with Preopens {
-    let dir = root()?;
     if path.is_empty() || *path == "." {
-        return Result::Ok(dir);
+        return root();
     }
-    return match dir.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::Directory,
-        DescriptorFlags::Read,
-    ).wait() {
-        Ok(d) => Result::Ok(d),
+    return open(path, OpenFlags::Directory, DescriptorFlags::Read);
+}
+
+fn open(path: &String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, FsError> with Preopens {
+    let dir = root()?;
+    return match dir.open_at(PathFlags::none(), *path, open_flags, flags).wait() {
+        Ok(opened) => Result::Ok(opened),
         Err(e) => Result::Err(failure(path, e)),
     };
+}
+
+/// A stream ends on an I/O error the same way it ends on the last byte, so a
+/// transfer that skips this future reports a truncated file as a whole one.
+fn finish(path: &String, done: Future<Result<(), ErrorCode>>) -> Result<(), FsError> {
+    let finished = done.read();
+    done.drop();
+    if let Some(Err(e)) = finished {
+        return Result::Err(failure(path, e));
+    }
+    return Result::Ok(());
 }
 
 fn failure(path: &String, code: ErrorCode) -> FsError {

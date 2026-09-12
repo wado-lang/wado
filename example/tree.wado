@@ -21,7 +21,6 @@
 
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
-use { DirEntry, FsError } from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 struct Options {
@@ -87,10 +86,9 @@ fn print_help() with Stdout {
     println("  -h      show this help");
 }
 
-/// The entries of `dir` the options keep, sorted by name. A directory that
-/// cannot be read lists nothing; `walk` prints the reason.
-fn collect_entries(dir: &String, opts: &Options) -> Result<List<DirEntry>, FsError> with Preopens {
-    let mut out: List<DirEntry> = [];
+/// The entries of `dir` the options keep, sorted by name.
+fn collect_entries(dir: &String, opts: &Options) -> Result<List<fs::DirEntry>, fs::FsError> with Preopens {
+    let mut out: List<fs::DirEntry> = [];
     for let e of fs::read_dir(dir)? {
         if !opts.show_hidden && e.name.starts_with(".") {
             continue;
@@ -100,13 +98,13 @@ fn collect_entries(dir: &String, opts: &Options) -> Result<List<DirEntry>, FsErr
         }
         out.push(e);
     }
-    out.sort_by(|a: &DirEntry, b: &DirEntry| a.name.cmp(&b.name));
+    out.sort_by(|a: &fs::DirEntry, b: &fs::DirEntry| a.name.cmp(&b.name));
     return Result::Ok(out);
 }
 
 /// List `dir` and print it, or print why it could not be listed in place of
 /// its contents.
-fn enter(dir: &String, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with (Stdout, Stderr, Preopens) {
+fn enter(dir: &String, depth: i32, prefix: String, opts: &Options, stats: &mut Stats) with (Stdout, Preopens) {
     match collect_entries(dir, opts) {
         Ok(entries) => walk(dir, &entries, depth, prefix, opts, stats),
         Err(e) => println(`${prefix}[${e}]`),
@@ -115,12 +113,12 @@ fn enter(dir: &String, depth: i32, prefix: String, opts: &Options, stats: &mut S
 
 fn walk(
     dir: &String,
-    entries: &List<DirEntry>,
+    entries: &List<fs::DirEntry>,
     depth: i32,
     prefix: String,
     opts: &Options,
     stats: &mut Stats,
-) with (Stdout, Stderr, Preopens) {
+) with (Stdout, Preopens) {
     let n = entries.len();
     for let mut i = 0; i < n; i += 1 {
         let entry = &entries[i];
@@ -169,8 +167,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         },
     };
 
-    // The empty path is the preopened directory itself, which `core:fs`
-    // resolves; only the label printed on the first line differs.
     let label = if opts.path.is_empty() { "." } else { opts.path };
 
     // The starting directory is listed here rather than in `enter`, so a path

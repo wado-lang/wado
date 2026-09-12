@@ -25,12 +25,10 @@ use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 
-fn grammars_root() -> String {
-    return "package-gale/tests/antlr4-compat/grammars";
-}
+global GRAMMARS_ROOT: String = "package-gale/tests/antlr4-compat/grammars";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let categories = match list_dir(&grammars_root()) {
+    let categories = match list_dir(&GRAMMARS_ROOT) {
         Ok(entries) => entries,
         Err(e) => {
             eprintln(`expand: ${e} — run from the repository root`);
@@ -45,7 +43,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         if !category.type matches { Directory } {
             continue;
         }
-        let dir = `${grammars_root()}/${category.name}`;
+        let dir = `${GRAMMARS_ROOT}/${category.name}`;
         for let name of grammar_names(&dir) {
             total += 1;
             let path = `${dir}/${name}`;

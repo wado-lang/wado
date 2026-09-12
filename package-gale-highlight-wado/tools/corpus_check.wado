@@ -8,13 +8,13 @@
 //! path per line — the only form that survives a path containing a space.
 
 use { parse } from "../src/lib.wado";
-use { collect_paths } from "./corpus.wado";
+use { collect_paths } from "lib:gale";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args());
+    let paths = collect_paths(&args(), &".wado");
 
     let mut bad = 0;
     for let arg of &paths {

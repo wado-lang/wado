@@ -16,15 +16,14 @@ the compiler's fixtures:
 One of the 24 root lookups is inside a code generator (`highlight_gen.wado`),
 which writes the boilerplate into every CLI it emits.
 
-The last row is the part that is not merely verbose. `read_via_stream` returns a
-stream and a future, and the future is where a mid-read I/O error is reported.
-22 of the 27 call sites drop it, so on those paths a failed read is a short file
-rather than an error. That is the same defect the issue reports for
-`--paths-from` hardening — one package fixed it, the other could not share the
-fix — except it is unfixed everywhere but the five sites that happened to get it
-right.
+The last row is a bug rather than verbosity. `read_via_stream` returns a stream
+and a future, and the future is where a mid-read I/O error is reported. 22 of
+the 27 call sites drop it, so a failed read there is a short file rather than an
+error. The issue reports this for `--paths-from`, where one package fixed it and
+the other could not share the fix. Only the five sites that happened to get it
+right are fixed.
 
-So the module is not sugar: it is the one place that can know which of the four
+So the module is not sugar. It is the one place that can know which of the four
 values (`file`, `rx`, `tx`, `sub`) owes a `drop()`, and that a completion future
 has to be read.
 
@@ -58,9 +57,9 @@ recursive directory walk needs no descriptor either: `read_dir("a/b")` is what
 
 The empty path and `"."` name the preopen itself, so a walk has a root case.
 
-A second preopen is ignored. Nothing in the repository grants one, and the
-alternative — resolving a path against the longest matching preopen prefix, as
-wasi-libc does — is machinery with no caller. `root()` is the escape hatch for
+A second preopen is ignored. Nothing in the repository grants one. The
+alternative, resolving a path against the longest matching preopen prefix as
+wasi-libc does, is machinery with no caller. `root()` is the escape hatch for
 anything this module does not cover, and returns the same descriptor.
 
 ### The error carries the path
@@ -103,15 +102,16 @@ changing their signatures.
 ### Whole files only
 
 `read` buffers, `write` creates-truncates-and-closes. Streaming stays on
-`wasi:filesystem`: `example/cat.wado` connects a file's read stream directly to
-stdout and never holds the file in memory, which is the shape this module would
-break rather than shorten. `example/cat.wado` therefore keeps its raw WASI code
-on purpose, as the worked example of the boundary.
+`wasi:filesystem`. `example/cat.wado` connects a file's read stream straight to
+stdout and never holds the file in memory. This module would break that shape
+rather than shorten it, so the example keeps its raw WASI code on purpose, as
+the worked case of the boundary.
 
 `write` takes any `AsByteSlice` (`String`, `ByteList`, `ByteSlice`,
-`ByteArray`), so text and bytes are one function, and it writes through
+`ByteArray`), so text and bytes are one function. It writes through
 `write_raw_all`, which hands the CM lowering a view instead of copying the
-buffer first — the `content.bytes().collect()` every current writer pays for.
+buffer first. That copy is the `content.bytes().collect()` every current writer
+pays for.
 
 Deliberately absent: append, rename, symlink, `remove_dir`, metadata / `stat`,
 file times, permissions, random access, and reading a file that does not fit in
@@ -121,10 +121,10 @@ caller in the repository needs them, not because they would not fit.
 ## Roadmap
 
 1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, with
-   `tests/fixtures/core_fs.wado` — a scratch preopen the program writes before
-   it reads — covering the round trips, `NotFound`, `NotUtf8`, the nested
-   `create_dir_all` / `read_dir` / `remove_file` path, and the empty path.
-   Done when that fixture passes at every optimization level.
+   `tests/fixtures/core_fs.wado`, which writes into a scratch preopen before it
+   reads: the round trips, `NotFound`, `NotUtf8`, the nested `create_dir_all` /
+   `read_dir` / `remove_file` path, and the empty path. Done when that fixture
+   passes at every optimization level.
 2. The call sites the issue names: `package-gale/tools/rust_corpus.wado`,
    `rust_corpus_check.wado`, `rust_inline_paths.wado`, and
    `package-gale-highlight-wado/tools/{corpus,corpus_check,highlight_dump}.wado`.
@@ -133,9 +133,11 @@ caller in the repository needs them, not because they would not fit.
    `core:fs`.
 3. The rest of the whole-file readers and writers: `package-marl/src/main.wado`,
    `package-gale/src/highlight/facade.wado`, the ten `benchmark/*` copies,
-   `example/tree.wado`, and the four `package-gale/scripts/*.wado` that only
-   read or write. Done when each package's tests pass and
-   `expand_action_templates_in_place.wado` reports its corpus unchanged.
+   `example/tree.wado`, the four `package-gale/scripts/*.wado` that only read or
+   write, and `package-gale/src/highlight_gen.wado`, which emits the boilerplate
+   rather than running it. Done when each package's tests pass,
+   `expand_action_templates_in_place.wado` reports its corpus unchanged, and the
+   regenerated highlighters carry the shorter `run`.
 
 ## Known gaps
 
@@ -146,7 +148,9 @@ caller in the repository needs them, not because they would not fit.
   means porting those sites to paths and re-running the vendor extract.
 - A second preopen is unreachable. Closing it means resolving a path against the
   preopen whose name is its longest matching prefix, and deciding what an
-  ambiguous path does.
+  ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
+  that reason: it searches every grant and names the ones it searched, which is
+  what makes `wado run --dir` legible there.
 - No handler can stand in for the filesystem, so a test of a caller still needs
   a real directory. Closing it needs an operation to be able to declare an
   effect (`docs/spec.md`, "Beyond a name, parameters and a return type, an

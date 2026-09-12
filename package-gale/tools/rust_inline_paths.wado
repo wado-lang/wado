@@ -9,7 +9,8 @@ use rust from "../tests/grammars/RustLexer.g4"
             output_dir: "../tests/generated/cst_rust",
         },
     };
-use { parse_rust, collect_paths } from "./rust_corpus.wado";
+use { parse_rust } from "./rust_corpus.wado";
+use { collect_paths } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
@@ -250,7 +251,7 @@ fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr,
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
-    let paths = collect_paths(&argv);
+    let paths = collect_paths(&argv, &".rs");
     let update = argv.into_iter().any(|a: String| a == "--update");
     let check = argv.into_iter().any(|a: String| a == "--check");
     let status = if update || check { ratchet_mode(&paths, update) } else { list_mode(&paths) };

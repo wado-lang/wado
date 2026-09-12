@@ -18031,7 +18031,8 @@ pub fn highlight(input: &String) -> String {
 }
 
 use { args, print, eprintln, Stdout, Stderr, Environment } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let arguments = args();
@@ -18039,14 +18040,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         eprintln("Usage: <highlighter> <input-file>");
         return;
     }
-    let path = arguments[0];
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
-    let file = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait().unwrap();
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let bytes = read_stream.read_to_end() as ByteList;
-    read_stream.drop();
-    let input = String::from_utf8_unchecked(bytes);
+    let input = match fs::read_to_string(&arguments[0]) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return;
+        },
+    };
     print(highlight(&input));
 }
 
