@@ -928,7 +928,7 @@ resolved once at its declaration instead of re-resolved per use.
 
 ### Transient walk state without guards
 
-`scope.rs` guards what it owns; 46 `mem::replace` / `mem::take` sites on walk
+`scope.rs` guards what it owns; `mem::replace` / `mem::take` sites on walk
 state sit outside it. `assoc_binding_stack` is mutated by a hand-written
 insert / `shift_remove` pair around a call that can return early;
 `with_module_perspective_for`, `with_reference_recording_suppressed` and

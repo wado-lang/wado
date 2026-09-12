@@ -1,12 +1,35 @@
 ---
 name: code-review-response
-description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify each finding before acting, fix only what is real, put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
+description: "How to answer code review feedback — a human reviewer, CodeRabbit, or any review bot. Verify the findings, report the classes they are instances of to the user before fixing, then fix the class rather than the sites named. Put design decisions to the user, then run /distill. Invoke when responding to review comments on a pull request, or to the findings of a /code-review run."
 ---
 
 # Answering a code review
 
 A finding is a claim, not an instruction. The goal is a better codebase, never a
 cleared comment list.
+
+## First, the classes — and report them
+
+Answer the review as a whole before touching any single finding.
+
+1. Verify each finding against the current code, as below, so what follows rests
+   on what is real rather than on what was claimed.
+2. Group the survivors by the class of defect each one is an instance of. Two
+   findings in different files are often one class. One finding is often a class
+   whose other instances the reviewer never reached.
+3. Report the classes to the user before writing any fix: what each class is,
+   which findings fall out of it as instances, and what closing it would take.
+   This is a report, not a request — state it and keep going. Do not wait for
+   approval. Only a design decision blocks, and it blocks under its own heading
+   below.
+
+Then fix the class, not the finding. Raise the altitude and fix what admits the
+class — the missing invariant, the type that allows the state, the call site
+nobody has to remember. A patch at the site the reviewer named leaves the rest
+of the class standing, and the next review returns them one at a time.
+
+Report first so the user can redirect the work while it is still cheap, not to
+ask whether to do it.
 
 ## Verify before fixing
 
@@ -25,14 +48,6 @@ to this branch or to the tree costs time and changes nothing you then do.
 
 A severity label and an aggregate "merge risk" verdict track neither the truth
 nor what you have already answered. Neither is evidence of anything.
-
-## Fix the class, not the finding
-
-A finding points at one site. Before fixing it, raise the altitude: what class of
-defect is this, and where else does the class hold? Fix what admits the class:
-the missing invariant, the type that allows the state, the call site nobody has
-to remember. A patch at the site the reviewer named leaves the rest of the class
-in the tree.
 
 ## Tests are held to a higher bar
 
