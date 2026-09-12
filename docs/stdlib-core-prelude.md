@@ -222,6 +222,19 @@ none — with escapes processed.
 
 `tail()` with escapes preserved.
 
+### `pub trait Ref`
+
+Marker for reference-identity types: those whose value is a Wasm GC
+reference. Sealed and compiler-synthesized; user impls are rejected.
+See WEP 2026-01-20.
+
+### `pub trait RefMut`
+
+Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
+ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
+value. Sealed and compiler-synthesized; user impls are rejected.
+See WEP 2026-01-20.
+
 ### `pub trait IndexRef<IndexType>`
 
 Immutable reference indexing: `&container[i]` reads through this.
@@ -621,6 +634,13 @@ Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 Trait for creating a collection from any iterator of `Elem`.
 
 #### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
+
+### `pub trait LiteralSpread`
+
+`..base` inside a `{ … }` literal: merge `base` into `self`, last write
+wins. A target without this impl rejects `..base` where it is written.
+
+#### `fn spread_literal(&mut self, base: Self)`
 
 ### `pub trait FromStr`
 
