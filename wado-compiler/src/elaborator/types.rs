@@ -2567,9 +2567,10 @@ impl FunctionContext {
         index
     }
 
-    /// Look up a variable by name (searches from innermost to outermost scope)
+    /// Look up a variable by name, innermost scope first and never below the
+    /// floor [`Self::enter_travelled_expr`] set.
     pub(super) fn lookup(&self, name: &str) -> Option<&LocalVar> {
-        for scope in self.scopes.iter().rev() {
+        for scope in self.scopes[self.scope_floor..].iter().rev() {
             if let Some(local) = scope.get(name) {
                 return Some(local);
             }

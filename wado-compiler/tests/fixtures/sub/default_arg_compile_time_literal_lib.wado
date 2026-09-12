@@ -1,0 +1,17 @@
+// Helper for `default_arg_compile_time_literal.wado`. Each default names a
+// path and a `__DATA__` section that only this file has.
+
+pub fn text(s: String = #include_str("../testdata/hello.txt")) -> String {
+    return s;
+}
+
+pub fn bytes(b: ByteList = #include_bytes("../testdata/hello.txt")) -> ByteList {
+    return b;
+}
+
+pub fn section(s: String = #data) -> String {
+    return s;
+}
+
+__DATA__
+callee-section

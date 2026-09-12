@@ -387,15 +387,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration_at(site, name)
     }
 
-    /// The module `node` was written in, which is the module it resolves in.
-    ///
-    /// A default expression travels: it is written by one module's author and
-    /// re-resolved wherever the default is taken. Its names, its import
-    /// aliases and the vantage its visibility is judged from all stay the
-    /// author's, and the caller's own arguments spliced into it stay the
-    /// caller's, because each node carries the space it was parsed in.
-    ///
-    /// Synthesized nodes belong to no module and answer with the current one.
+    /// The module `node` was written in, which is the module it resolves in
+    /// however far its AST has travelled. Each node carries the space it was
+    /// parsed in, so a caller's argument spliced into a default stays the
+    /// caller's. A synthesized node answers with the current module.
     pub(super) fn home_module(&self, node: ast::AstId) -> ModuleSource {
         self.tysys
             .trait_env
@@ -1233,10 +1228,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// site is not at hand — a rendered head, a synthesis target. One that
     /// holds a site should call [`Self::decl_key_at`] instead.
     ///
-    /// The frame is where the AST being resolved was *written*: the walk's own
-    /// position normally, and the author's module while the walk is inside an
-    /// expression that travelled. One frame, not a preference between two —
-    /// a name both modules declare must not be decided by which is tried first.
+    /// The frame is where the AST being resolved was written: the walk's own
+    /// position, or the author's module while the walk is inside a travelled
+    /// expression. One frame and not a preference between two, so a name both
+    /// modules declare is not decided by which is tried first.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
         let frame = self
             .annotate_ctx

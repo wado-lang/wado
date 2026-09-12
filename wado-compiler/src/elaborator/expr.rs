@@ -603,11 +603,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.get_string_struct_type()
             }
             Literal::DataSection => {
-                // #data - returns the __DATA__ section content as a String
+                // `#data` is the section of the file that wrote it, which is
+                // also the only file the loader read one from. Reify agrees by
+                // standing in that module. The same holds for the includes
+                // below, whose table is keyed by the writing module.
                 let data = self
                     .tysys
                     .signatures
-                    .data_section(&self.current_module_source)
+                    .data_section(&self.home_module(lit.id))
                     .map(str::to_owned);
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
@@ -620,7 +623,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 string_type
             }
             Literal::IncludeStr(raw_path) => {
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
                     if std::str::from_utf8(bytes).is_err() {
@@ -638,7 +641,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 string_type
             }
             Literal::IncludeBytes(raw_path) => {
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_byte_list();
                 if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.emit(TypeError::InvalidLiteral {
@@ -838,13 +841,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_ident_in_module(
         &mut self,
         ident: &ast::IdentExpr,
-        fallback: &ModuleSource,
+        home: &ModuleSource,
     ) -> Option<TypeId> {
-        // Reify resolves the fallback-module global / `FuncRef` its own
-        // way; project the type only. This default-expr path is never an
-        // assignment target, so no place is recorded.
-        let (owner, name) = self.declaring_module_of_ident(&ident.name, fallback);
-        if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
+        // Reify resolves the global / `FuncRef` its own way; project the type
+        // only. A travelled expression is never an assignment target, so no
+        // place is recorded.
+        if let Some(ty) = self.global_type_in(&ident.name, home) {
             return Some(ty);
         }
         let sig = self.free_function_sig_at(ident.id)?.clone();
@@ -854,29 +856,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Where `name` is *declared*, as seen from `fallback`. The signature
-    /// tables are keyed by declaring module, so a name `fallback` merely
-    /// imported or re-exported is not found under `fallback` itself.
-    fn declaring_module_of_ident(
-        &self,
-        name: &str,
-        fallback: &ModuleSource,
-    ) -> (ModuleSource, String) {
-        if self.tysys.signatures.global(fallback, name).is_some()
+    /// The declared type of the global `name` names as written in `home`, for
+    /// a walk standing somewhere else — `sem.decls` answers only for where it
+    /// stands, while the signature tables answer for any module.
+    pub(super) fn global_type_in(&self, name: &str, home: &ModuleSource) -> Option<TypeId> {
+        let (owner, name) = self.declaring_module_of_ident(name, home);
+        self.tysys
+            .signatures
+            .global(&owner, &name)
+            .map(|(ty, _)| ty)
+    }
+
+    /// Where `name` is *declared*, as seen from `home`. The signature tables
+    /// are keyed by declaring module, so a name `home` merely imported or
+    /// re-exported is not found under `home` itself.
+    fn declaring_module_of_ident(&self, name: &str, home: &ModuleSource) -> (ModuleSource, String) {
+        if self.tysys.signatures.global(home, name).is_some()
             || self
-                .decl_in_module(fallback, name)
+                .decl_in_module(home, name)
                 .is_some_and(|def| self.tysys.signatures.function_sig(def).is_some())
         {
-            return (fallback.clone(), name.to_string());
+            return (home.clone(), name.to_string());
         }
         // Imports and re-exports are different maps; a default may name either.
         let resolved = self
             .symbols
-            .imported(fallback, name)
-            .or_else(|| self.symbols.lookup_in_module(fallback, name));
+            .imported(home, name)
+            .or_else(|| self.symbols.lookup_in_module(home, name));
         match resolved {
             Some(symbol) => (symbol.module.clone(), symbol.name.clone()),
-            None => (fallback.clone(), name.to_string()),
+            None => (home.clone(), name.to_string()),
         }
     }
 
@@ -3975,15 +3984,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
-                    // The default is *foreign* AST owned by the struct's
-                    // declaring module, and everything it names is that
-                    // module's: its scope, its import aliases, and the vantage
-                    // its visibility is judged from. None of the three belong
-                    // to this construction site.
-                    // Fact keying stays local, the default's nodes carrying
-                    // their own globally-unique `AstId`s, and `expected_type_id`
-                    // still drives literal / `null → None` coercion.
-                    // A field default names no argument, so nothing is spliced.
+                    // The default is the struct module's AST, and its scope,
+                    // its import aliases and the vantage its visibility is
+                    // judged from are all that module's. Fact keying stays
+                    // local, the default's nodes carrying their own globally
+                    // unique `AstId`s. A field default names no argument, so
+                    // nothing of this site's is spliced into it.
                     let travelled = ctx.enter_travelled_expr(std::iter::empty());
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))

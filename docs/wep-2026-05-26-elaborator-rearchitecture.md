@@ -357,14 +357,14 @@ Every convergence below was forced by a defect where two of them disagreed:
 ### Scope — transient walk state with RAII-only mutation
 
 One `Scope` struct (`elaborator/scope.rs`) holds the trait-resolution context
-and the default-expression module fallback. Effect parameters live in
+and the module a travelled expression resolves in. Effect parameters live in
 `TraitContext` itself: they are declared in a signature's `type_params` list,
 so they are generic-scope state and the `TypeParamScope` guard restores them
 with the rest of the context. All mutation goes through guards —
 `TypeParamScope`, `with_self_type` / `with_self_type_if_known`,
-`with_default_scope_module`, `with_foreign_vantage`, one shared field-restore
-guard behind the `with_*` helpers. Enforceable by inspection: no `mem::replace`
-or manual clone-restore of `Scope`'s own fields outside `scope.rs`.
+`with_resolving_home`, one shared field-restore guard behind the `with_*`
+helpers. Enforceable by inspection: no `mem::replace` or manual clone-restore
+of `Scope`'s own fields outside `scope.rs`.
 
 The rule is about transient walk state, not about this struct: any value saved
 for the length of a sub-walk and restored after it needs a guard, so an early
@@ -928,13 +928,14 @@ resolved once at its declaration instead of re-resolved per use.
 
 ### Transient walk state without guards
 
-`scope.rs` guards what it owns; 29 `mem::replace` / `mem::take` sites on walk
-state sit outside it. `assoc_binding_stack` is mutated by a hand-written
+`scope.rs` guards what it owns; dozens of `mem::replace` / `mem::take` sites on
+walk state sit outside it. `assoc_binding_stack` is mutated by a hand-written
 insert / `shift_remove` pair around a call that can return early;
 `with_module_perspective_for` and `with_reference_recording_suppressed`
 restore by assignment after the body rather than on drop; `FunctionContext`'s
-`for_continue_labels` and `compound_hoist_types` are saved and restored by
-hand. None is panic-safe.
+`for_continue_labels`, `compound_hoist_types`, and the `scope_floor` /
+`travelled_splices` pair that `enter_travelled_expr` swaps are saved and
+restored by hand. None is panic-safe.
 
 Closing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
 onto `Scope` where the membership rule puts it.

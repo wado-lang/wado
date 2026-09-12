@@ -4,10 +4,15 @@
 // `let SECRET = 99` answered for the `SECRET` its author wrote, in the same
 // module and across one, in parameter and field defaults alike.
 //
+// A name on the *value* path — a function-typed global, called indirectly —
+// reaches its binding through a second lookup, which `called` pins. That one
+// also used to panic the compiler when no caller local shadowed the global:
+// the callee's own global was invisible from the call site.
+//
 // The caller's own arguments spliced into a default (`fn f(a, b = a)`) stay the
 // caller's code and keep reaching the caller's locals, which `pair` pins.
 
-use { Conf, Box, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
+use { Conf, Box, called, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
 
 global SECRET: i32 = 7;
 
@@ -23,8 +28,13 @@ fn pair(a: i32, b: i32 = a) -> i32 {
     return a * 1000 + b;
 }
 
+fn ninety_nine() -> i32 {
+    return 99;
+}
+
 export fn run() {
     let SECRET = 99;
+    let MAKE: fn() -> i32 = ninety_nine;
 
     // Same module.
     assert here() == 7;
@@ -37,6 +47,8 @@ export fn run() {
     assert Conf {}.v == 7;
     assert Box::new(1).plus() == 8;
     assert Box::of().base == 7;
+    assert called() == 7;
+    assert MAKE() == 99;
 
     // A spliced caller argument still names the caller's locals.
     assert pair(SECRET) == 99099;

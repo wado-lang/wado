@@ -40,14 +40,13 @@ small enough that the packing shifts cost more than batching saves. The "~20
 machine instructions" figure for `array.get` is a straight-line one, and a tight
 scan loop over a single array does not pay anything like it.
 
-The entry on four-wide blocks is not in tension with this: batching the
-whitespace scan does pay. The difference is what the body does. A loop that only
-tests a byte has the get as its whole cost, so amortising it is the win; a loop
-that also accumulates the byte is near its floor already, and widening only adds
-the pack.
+Batching the whitespace scan still pays, and the two results agree. What
+differs is the body. A loop that only tests a byte has the get as its whole
+cost, so amortising the get is the win. A loop that also accumulates the byte is
+near its floor already, and widening it only adds the pack.
 
-Generalizes: measure the loop you mean to beat before widening it, in isolation,
-rather than reasoning from a per-get instruction count.
+Measure the loop you mean to beat, in isolation, before widening it. A per-get
+instruction count is not enough to reason from.
 
 ## Sharing `core:json`'s three digit-accumulating loops (2026-09-12)
 

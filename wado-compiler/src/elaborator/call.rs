@@ -228,11 +228,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declared type of a *global* (current-module or imported) named
-    /// `name`, if one exists. Lets a bare call resolve a global callee (a
-    /// function-typed global becomes an indirect call; any other type gets a
-    /// clear not-callable diagnostic instead of "unknown function").
-    fn global_var_type(&self, name: &str) -> Option<TypeId> {
+    /// The declared type of a *global* named `name` as written at `site`, if
+    /// one exists. Lets a bare call resolve a global callee (a function-typed
+    /// global becomes an indirect call; any other type gets a clear
+    /// not-callable diagnostic instead of "unknown function").
+    fn global_var_type(&self, site: ast::AstId, name: &str) -> Option<TypeId> {
+        // `sem.decls` holds the walk's own module, which a travelled expression
+        // is not written in.
+        let home = self.home_module(site);
+        if home != self.current_module_source {
+            return self.global_type_in(name, &home);
+        }
         self.sem
             .decls
             .lookup_global(name, &self.current_module_source)
@@ -425,7 +431,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|local| (local.type_id, local.defining_ast_id));
             let value_ty = local
                 .map(|(ty, _)| ty)
-                .or_else(|| self.global_var_type(&ident.name));
+                .or_else(|| self.global_var_type(ident.id, &ident.name));
             if let Some(value_ty) = value_ty {
                 // Record the use→def edge the same way `resolve_ident` would,
                 // so navigation on a value-binding callee (local or global)

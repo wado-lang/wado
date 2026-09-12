@@ -629,16 +629,16 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The module declaring the type a rendered head names, for a caller whose
-    /// receiver carries no declaration. The frame derivation and nothing wider
-    /// (WEP 2026-08-12), so an unseen declaration lands where the walk stands.
-    /// [`Self::declaring_module_at`] for a caller with no reference site.
+    /// [`Self::declaring_module_at`] for a caller holding a rendered head and
+    /// no reference site.
     pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
         self.declaring_module_at(None, struct_name)
     }
 
-    /// The module declaring the type `struct_name` names as written at `site`.
-    /// Two modules may each declare the name, so the site is what picks.
+    /// The module declaring the type `struct_name` names as written at `site`,
+    /// which is what picks when two modules each declare the name. The frame
+    /// derivation and nothing wider (WEP 2026-08-12), so an unseen declaration
+    /// lands where the walk stands.
     pub(super) fn declaring_module_at(
         &self,
         site: Option<AstId>,

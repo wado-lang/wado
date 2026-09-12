@@ -1,0 +1,23 @@
+// Regression: `#include_str`, `#include_bytes` and `#data` in a default read
+// the file that wrote them. The tables behind all three are keyed by module,
+// and annotate was keying them by the module taking the default, so an include
+// resolved to nothing — "file not found" at a path that exists beside its
+// author. Reify was already right, having swapped to the callee's perspective,
+// which is why `#data` reached the correct section while annotate rejected the
+// program outright when the caller had no `__DATA__` of its own.
+//
+// `#file` / `#line` / `#function` go the other way on purpose and report the
+// call site; `default_arg_location_call_site.wado` pins that.
+
+use { println, Stdout } from "core:cli";
+use { text, bytes, section } from "./sub/default_arg_compile_time_literal_lib.wado";
+
+export fn run() with Stdout {
+    assert text() == "Hello, World!\n";
+    assert bytes().len() == 14;
+    assert section() == "callee-section\n";
+    println("ok");
+}
+
+__DATA__
+{"stdout": "ok\n"}

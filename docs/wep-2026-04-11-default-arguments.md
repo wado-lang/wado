@@ -150,13 +150,15 @@ A default expression resolves its names in the scope of the declaration (the fun
 
 - A default may reference the defining module's private items (`port: i32 = DEFAULT_PORT` where `DEFAULT_PORT` is a file-private `global`); callers need no access to them.
 - A default may reference qualified type paths (`mode: Mode = Mode::Fast`); the use site does not need to import `Mode`.
-- Conversely, names visible only at the use site never leak into a default's meaning — changing a caller's imports cannot change what an omitted argument evaluates to.
+- Conversely, names visible only at the use site never leak into a default's meaning. Neither a caller's imports nor its locals can change what an omitted argument evaluates to, so a `let` that happens to spell the same name as the declaring module's `global` shadows nothing.
 
-The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and earlier-parameter references substitute the caller's argument expression (next section).
+Compile-time literals that read a file follow the declaration too: `#include_str`, `#include_bytes` and `#data` all name the file that wrote them, which is the only file whose paths and `__DATA__` section the loader read.
+
+The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and earlier-parameter references substitute the caller's argument expression (next section). A substituted argument is the caller's code and keeps reaching the caller's locals.
 
 The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all.
 
-This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default).
+This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default), `field_default_private_callee.wado` and `field_default_namespaced_callee.wado` (a field default's private items and import aliases), `default_arg_namespaced_callee.wado` (a parameter default's), `default_arg_caller_local_not_in_scope.wado` (a caller's locals), and `default_arg_compile_time_literal.wado` (the file-reading literals).
 
 Default expressions may reference earlier parameters in the same function:
 
@@ -506,17 +508,18 @@ let resp = Fetch::fetch(url, init).read();
 
 ### Interaction with Existing Features
 
-| Feature           | Interaction                                                    |
-| ----------------- | -------------------------------------------------------------- |
-| Effect system     | Default expressions must be pure (no effects)                  |
-| Traits            | Only trait definition specifies defaults                       |
-| Function types    | Defaults erased — arity fixed                                  |
-| Closures          | Defaults rejected — parsed but error in elaborator             |
-| `export fn` (CM)  | Defaults rejected — arity must match WIT signature             |
-| Default trait     | Auto-derived for all-defaulted structs                         |
-| Serde             | Declared field default → optional on deserialize               |
-| Generics          | Default expressions are monomorphized per call site            |
-| Location literals | `#file`/`#line`/`#function` defaults evaluate at the call site |
+| Feature           | Interaction                                                     |
+| ----------------- | --------------------------------------------------------------- |
+| Effect system     | Default expressions must be pure (no effects)                   |
+| Traits            | Only trait definition specifies defaults                        |
+| Function types    | Defaults erased — arity fixed                                   |
+| Closures          | Defaults rejected — parsed but error in elaborator              |
+| `export fn` (CM)  | Defaults rejected — arity must match WIT signature              |
+| Default trait     | Auto-derived for all-defaulted structs                          |
+| Serde             | Declared field default → optional on deserialize                |
+| Generics          | Default expressions are monomorphized per call site             |
+| Location literals | `#file`/`#line`/`#function` defaults evaluate at the call site  |
+| File literals     | `#include_str`/`#include_bytes`/`#data` read the declaring file |
 
 ## Implementation Roadmap
 
