@@ -79,17 +79,15 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::len$scalar" = fn(i32) -> i32;  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar" = fn(ref Array<u8>, i32, u8);  // TypeId(28)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -107,6 +105,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 global global:core:prelude/format.wado::__const_obj_3: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 global global:core:prelude/format.wado::__const_obj_5: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
+global global:core:prelude/types.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 };
 
 fn "result_unwrap_err_message.wado/__cm_export__run"() {
     "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("called Result::unwrap() on an Err value"), used: 39 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("decode failed"), used: 13 });
@@ -206,7 +205,7 @@ fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<core:prelude/s
     let __fuse_len_4: i32;
     let __fuse_at_5: i32;
     cold_path;
-    "core:rt/panic"(__local_2 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(34); __fuse_len_4 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"(msg.used); __fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 2 + __fuse_len_4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_2.repr, __fuse_at_5, msg, __fuse_len_4); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_2.repr, __fuse_at_5 + __fuse_len_4, 58); "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(__local_2.repr, __fuse_at_5 + (1 + __fuse_len_4), 32); __local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(value, __local_3); __local_2);
+    "core:rt/panic"(__local_2 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(34); __fuse_len_4 = "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"(msg.used); __fuse_at_5 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_2, 2 + __fuse_len_4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_2.repr, __fuse_at_5, msg, __fuse_len_4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_2.repr, __fuse_at_5 + __fuse_len_4, global:core:prelude/types.wado::__const_obj_7, 2); __local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_2); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(value, __local_3); __local_2);
     unreachable;
 }
 
@@ -968,10 +967,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::len$scalar"(self) {
     return self;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_unchecked$scalar"(self, index, value) {
-    builtin::array_set_u8(self, index, value);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {

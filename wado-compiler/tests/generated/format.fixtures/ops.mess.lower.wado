@@ -5342,21 +5342,64 @@ fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count:
 }
 
 fn count_digits_u64(val: u64) -> i32 {
-    if (val == 0) {
-        return 1;
-    }
-    let mut n: i32 = 0;
-    let mut t: u64 = val;
-    loop {
-        if !(t > 0) {
-            break;
+    if (val < 100000) {
+        if (val < 100) {
+            if (val < 10) {
+                return 1;
+            }
+            return 2;
         }
-        $for_0_body: {
-            n = (n + 1);
+        if (val < 1000) {
+            return 3;
         }
-        t = (t / 10);
+        if (val < 10000) {
+            return 4;
+        }
+        return 5;
     }
-    return n;
+    if (val < 10000000000) {
+        if (val < 10000000) {
+            if (val < 1000000) {
+                return 6;
+            }
+            return 7;
+        }
+        if (val < 100000000) {
+            return 8;
+        }
+        if (val < 1000000000) {
+            return 9;
+        }
+        return 10;
+    }
+    if (val < 1000000000000000) {
+        if (val < 1000000000000) {
+            if (val < 100000000000) {
+                return 11;
+            }
+            return 12;
+        }
+        if (val < 10000000000000) {
+            return 13;
+        }
+        if (val < 100000000000000) {
+            return 14;
+        }
+        return 15;
+    }
+    if (val < 100000000000000000) {
+        if (val < 10000000000000000) {
+            return 16;
+        }
+        return 17;
+    }
+    if (val < 1000000000000000000) {
+        return 18;
+    }
+    if (val < 10000000000000000000) {
+        return 19;
+    }
+    return 20;
 }
 
 fn round_off_digits_u64(val: u64, drop: i32) -> u64 {

@@ -85,29 +85,33 @@ type "functype//effect_handler_with_do.wado/__cm_binding__MonotonicClock_now" = 
 
 type "functype//effect_handler_with_do.wado/__cm_export__run" = fn();  // TypeId(26)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(28)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(29)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_0::__call" = fn(ref "effect_handler_with_do.wado//__Closure_0") -> u64;  // TypeId(30)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(30)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_1::__call" = fn() -> u64;  // TypeId(31)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_0::__call" = fn(ref "effect_handler_with_do.wado//__Closure_0") -> u64;  // TypeId(31)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_2::__call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(32)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_1::__call" = fn() -> u64;  // TypeId(32)
 
-type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_3::__call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(33)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_2::__call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(33)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(34)
+type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_3::__call" = fn() -> ref "core:prelude/types.wado//AsyncCall<()>";  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -124,7 +128,9 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_with_do.wado::__effect_MonotonicClock: ref null "effect_handler_with_do.wado//__Dispatch_MonotonicClock" = ref.null none;
-global global:effect_handler_with_do.wado::__const_obj_1: ref null "effect_handler_with_do.wado//FixedClock" = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
+global global:effect_handler_with_do.wado::__const_obj_1: ref null Array<u8> = array.new_fixed<u8>(109, 97, 114, 107, 58, 32);
+global global:effect_handler_with_do.wado::__const_obj_2: ref null "effect_handler_with_do.wado//FixedClock" = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
+global global:core:prelude/primitive.wado::__const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_with_do.wado/run"() with Stdout {
     let m: u64;
@@ -134,14 +140,14 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let __d_MonotonicClock: ref "effect_handler_with_do.wado//__Dispatch_MonotonicClock";
     let __local_0: ref null "effect_handler_with_do.wado//__Dispatch_MonotonicClock";
     let __local_1: ref "effect_handler_with_do.wado//__Dispatch_MonotonicClock";
-    let __local_2_10: u64;
+    let __local_2_9: u64;
     let handle: i32;
     let new_used: i32;
-    let start: i32;
+    let start_24: i32;
     let packed: i64;
-    let rx_64: i32;
-    let tx_65: i32;
-    __h_MonotonicClock = global:effect_handler_with_do.wado::__const_obj_1;
+    let rx_32: i32;
+    let tx_33: i32;
+    __h_MonotonicClock = global:effect_handler_with_do.wado::__const_obj_2;
     __save_MonotonicClock = global:effect_handler_with_do.wado::__effect_MonotonicClock;
     __d_MonotonicClock = struct.new "effect_handler_with_do.wado//__Dispatch_MonotonicClock" { outer: __save_MonotonicClock, op_now: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//__Closure_0" { __capture_0: __h_MonotonicClock }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_with_do.wado//__Closure_1" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//__Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//__Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/__closure_wrapper_3" } };
     global:effect_handler_with_do.wado::__effect_MonotonicClock = __d_MonotonicClock;
@@ -150,13 +156,13 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
         if ref.is_null(__local_0) == 0 {
             __local_1 = ref.as_non_null(__local_0);
             global:effect_handler_with_do.wado::__effect_MonotonicClock = __local_1.outer;
-            __local_2_10 = block -> u64 {
+            __local_2_9 = block -> u64 {
                 let __indirect_call_1: ref "canonical//CanonicalClosure_0";
                 __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1.op_now);
                 call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
             };
             global:effect_handler_with_do.wado::__effect_MonotonicClock = __local_0;
-            break $inline___effect_dispatch__MonotonicClock__now_1: __local_2_10;
+            break $inline___effect_dispatch__MonotonicClock__now_1: __local_2_9;
         } else {
             break $inline___effect_dispatch__MonotonicClock__now_1: "effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"();
         }
@@ -168,19 +174,14 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_2_2, new_used);
     }
-    start = __local_2_2.used;
+    start_24 = __local_2_2.used;
     __local_2_2.used = new_used;
-    builtin::array_set_u8(__local_2_2.repr, start, 109);
-    builtin::array_set_u8(__local_2_2.repr, start + 1, 97);
-    builtin::array_set_u8(__local_2_2.repr, start + 2, 114);
-    builtin::array_set_u8(__local_2_2.repr, start + 3, 107);
-    builtin::array_set_u8(__local_2_2.repr, start + 4, 58);
-    builtin::array_set_u8(__local_2_2.repr, start + 5, 32);
+    builtin::array_copy<u8>(__local_2_2.repr, start_24, global:effect_handler_with_do.wado::__const_obj_1, 0, 6);
     "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(m, __local_2_2);
-    rx_64 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_65 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "effect_handler_with_do.wado/__cm_binding__Stdout_write_via_stream"(rx_64);
-    "core:rt/write_string_to_stream"(tx_65, __local_2_2);
+    rx_32 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_33 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "effect_handler_with_do.wado/__cm_binding__Stdout_write_via_stream"(rx_32);
+    "core:rt/write_string_to_stream"(tx_33, __local_2_2);
     "wasi/future-drop-readable:transmission-cli"(handle);
     global:effect_handler_with_do.wado::__effect_MonotonicClock = __save_MonotonicClock;
 }
@@ -196,6 +197,67 @@ fn "effect_handler_with_do.wado/__cm_binding__MonotonicClock_now"() with Monoton
 fn "effect_handler_with_do.wado/__cm_export__run"() {
     "effect_handler_with_do.wado/run"();
     "wasi/task-return"(0);
+}
+
+fn "core:prelude/primitive.wado/count_digits_u64"(val) {
+    if val <u 100000_i64 {
+        if val <u 100_i64 {
+            if val <u 10_i64 {
+                return 1;
+            }
+            return 2;
+        }
+        if val <u 1000_i64 {
+            return 3;
+        }
+        if val <u 10000_i64 {
+            return 4;
+        }
+        return 5;
+    }
+    if val <u 10000000000_i64 {
+        if val <u 10000000_i64 {
+            if val <u 1000000_i64 {
+                return 6;
+            }
+            return 7;
+        }
+        if val <u 100000000_i64 {
+            return 8;
+        }
+        if val <u 1000000000_i64 {
+            return 9;
+        }
+        return 10;
+    }
+    if val <u 1000000000000000_i64 {
+        if val <u 1000000000000_i64 {
+            if val <u 100000000000_i64 {
+                return 11;
+            }
+            return 12;
+        }
+        if val <u 10000000000000_i64 {
+            return 13;
+        }
+        if val <u 100000000000000_i64 {
+            return 14;
+        }
+        return 15;
+    }
+    if val <u 100000000000000000_i64 {
+        if val <u 10000000000000000_i64 {
+            return 16;
+        }
+        return 17;
+    }
+    if val <u 1000000000000000000_i64 {
+        return 18;
+    }
+    if val <u -8446744073709551616_i64 {
+        return 19;
+    }
+    return 20;
 }
 
 fn "core:rt/write_string_to_stream"(tx, message) {
@@ -253,14 +315,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = _av_52 + (_av_53 - _av_52);
     offset = data.start;
     block {
-        l6: loop {
+        l25: loop {
             __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b7: block {
-                l8: loop {
-                    break_if b7 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b26: block {
+                l27: loop {
+                    break_if b26 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
                     i = i + 1;
-                    continue l8;
+                    continue l27;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -293,7 +355,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l6;
+            continue l25;
         };
     };
 }
@@ -317,51 +379,36 @@ fn "effect_handler_with_do.wado/effect_handler_with_do.wado/__Closure_3::__call"
 
 fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let digit_count_2: i32;
-    let n_5: i32;
-    let t_6: u64;
-    let new_used_62: i32;
-    let start_63: i32;
+    let offset_3: i32;
     let arr: ref Array<u8>;
     let pos: i32;
-    let t_284: u64;
-    let i_285: i32;
-    digit_count_2 = $inline_count_digits_u64_0: block -> i32 {
-        if self == 0_i64 {
-            break $inline_count_digits_u64_0: 1;
-        }
-        n_5 = 0;
-        t_6 = self;
-        b14: block {
-            l15: loop {
-                break_if b14 t_6 <=u 0_i64;
-                n_5 = n_5 + 1;
-                t_6 = t_6 /u 10_i64;
-                continue l15;
-            };
-        };
-        break $inline_count_digits_u64_0: n_5;
-    };
-    new_used_62 = f.used + digit_count_2;
-    if @unlikely(new_used_62 > builtin::array_len(f.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_62);
-    }
-    start_63 = f.used;
-    f.used = new_used_62;
+    let t: u64;
+    let i: i32;
+    digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
+    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, global:core:prelude/primitive.wado::__const_obj_5, digit_count_2);
     arr = f.repr;
-    pos = start_63 + digit_count_2;
-    t_284 = self;
-    i_285 = 0;
-    b17: block {
-        l18: loop {
-            break_if b17 i_285 >= digit_count_2;
+    pos = offset_3 + digit_count_2;
+    t = self;
+    i = 0;
+    b32: block {
+        l33: loop {
+            break_if b32 i >= digit_count_2;
             pos = pos - 1;
-            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t_284 %u 10_i64)) & 255);
-            t_284 = t_284 /u 10_i64;
-            i_285 = i_285 + 1;
-            continue l18;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            t = t /u 10_i64;
+            i = i + 1;
+            continue l33;
         };
     };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, alt_prefix, digit_count) {
+    let new_used_55: i32;
+    let start_56: i32;
+    return new_used_55 = self.used + digit_count, if @unlikely(new_used_55 > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_55);
+    }, start_56 = self.used, self.used = new_used_55, start_56;
 }
 
 fn "closure/effect_handler_with_do.wado/__closure_wrapper_0"(__env) {
