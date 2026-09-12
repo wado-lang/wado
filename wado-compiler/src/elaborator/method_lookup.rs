@@ -1340,14 +1340,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &mut inferred,
         );
         // A slot answered with itself is not answered. The argument that
-        // supplied it is this call's own declaration frame, reaching the
-        // solver through a variable an earlier phase settled back onto the
-        // slot; taking it carries a rigid parameter into codegen, where it
-        // dies as `unsubstituted TypeParam`. Put the variable back so the
-        // blame below reports it at the call, as the free-function path does
-        // in `defer_or_report_uninferred_fn_type_args`. A slot the enclosing
-        // scope declares is a caller forwarding its own generics, which
-        // monomorphization resolves — hence the same `scope_params` guard.
+        // supplied it is this call's own frame, reaching the solver through a
+        // variable the argument walk settled back onto the slot, and a rigid
+        // parameter carried past here dies in codegen as `unsubstituted
+        // TypeParam`. Putting the variable back lets the blame below report it
+        // at the call. A slot the enclosing scope declares is different: a
+        // caller is forwarding its own generics and monomorphization resolves
+        // it, so the same `scope_params` guard as
+        // `defer_or_report_uninferred_fn_type_args`.
         let scope_params = self.scope_type_param_ids();
         for (i, answer) in inferred.iter_mut().enumerate() {
             if slots.get(i) == Some(answer) && !scope_params.contains(answer) {

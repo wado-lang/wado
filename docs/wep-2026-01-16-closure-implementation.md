@@ -50,17 +50,17 @@ The compiler chooses static (specialised) vs dynamic (canonical) dispatch via es
 
 A closure literal's parameter types come from the expected `fn(..)` type at its use site, matched by position. Every row of the table above supplies one, as does a `let` carrying a `fn(..)` annotation and a newtype over `fn(..)`. An annotation is needed only where nothing supplies one, and always wins over what would have been inferred.
 
-The expected type may be written in the callee's own type parameters — `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables _before_ it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`, a type no expression it could write can construct.
+The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`.
 
-Arguments are then resolved in three tiers, each pinning what it answers about those variables, so an argument that depends on the answer reads a settled type:
+Arguments are then resolved in three tiers, each pinning what it answers about those variables. An argument that depends on the answer therefore reads a settled type:
 
-1. Every argument but a closure whose parameter types still hold a variable, in source order.
-2. Those closures. A closure is worth waiting for because it cannot defer: its body applies operators and methods to the parameter types the signature handed it, and one applied to an unanswered variable resolves against nothing. Waiting is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
-3. Numeric literals, pinning only what is still open. `i32` / `f64` is a default, not an answer, so locking a slot to it ahead of a typed neighbour or a closure body is what the first two tiers exist to avoid: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body, not the `0`, says the accumulator is `i64`, while in `fold(0, |acc, x| x)` the `0` is all there is.
+1. Everything but a closure whose parameter types still hold a variable, in source order.
+2. Those closures. A closure takes its parameter types off the signature, and its body applies operators and methods to them right away. An operator applied to a variable resolves against nothing, so the closure waits for the arguments that can answer it. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
+3. Numeric literals, answering only what is still open. `i32` / `f64` is a default, not an answer. In `fold(0, |acc, x| acc + x)` over a `List<i64>` the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0` is all there is.
 
-Once every argument is resolved each variable is settled back onto its slot, so type-argument inference proper still sees the declaration's own frame. A slot that inference then answers with itself is not answered: it is put back to the variable so the call reports it, since a rigid parameter carried past this point dies in codegen rather than in a diagnostic.
+Once every argument is resolved each variable is settled back onto its slot, so type-argument inference proper still sees the declaration's own frame. A slot that inference then answers with itself is not answered. It goes back to the variable, and the call reports it: a rigid parameter carried past this point dies in codegen rather than in a diagnostic.
 
-A variable renders in a diagnostic as the slot it stands for. `?0` is an internal identity that names nothing the source wrote, where `A` is exactly what the reader would annotate.
+A variable renders in a diagnostic as the slot it stands for. `?0` names nothing the source wrote, where `A` is exactly what the reader would annotate. A mangled name keeps the variable's own identity, so two same-named slots cannot collapse onto one name.
 
 The receiver's type parameters are not part of that step. Method lookup has already instantiated the declaring level, so `Self::Item` is concrete before the first argument is looked at.
 

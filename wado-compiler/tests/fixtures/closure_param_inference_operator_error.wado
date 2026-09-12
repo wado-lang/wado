@@ -1,10 +1,10 @@
 // A closure's parameter type is answered by a sibling argument, and the answer
 // has to satisfy whatever the body does with it. `Plain` has no `Add`, so the
-// `+` is reported here, at the operator, against the type the sibling supplied.
+// `+` is reported at the operator, against the type the sibling supplied.
 //
-// Before the argument tiers this reached WIR undispatched and killed the
-// compiler: an operator applied to an unanswered inference variable finds no
-// impl, records no dispatch, and the variable is only substituted afterwards.
+// An operator applied to an unanswered variable finds no impl and records no
+// dispatch, and the variable is substituted only afterwards. Before the
+// argument tiers that reached WIR build, which panicked.
 
 struct Plain {
     v: i32,

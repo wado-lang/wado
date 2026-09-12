@@ -1,12 +1,9 @@
-// Nothing answers `A`: it is written only in the closure's parameter, and the
-// closure's body says nothing about it either. The call is where that is
-// reported, and the message names the slot the reader would annotate — an
-// inference variable is an internal identity, so `?0` names nothing the source
-// wrote.
+// Nothing answers `A`. It is written only in the closure's parameter, and the
+// body says nothing about it either, so the call is where that is reported.
 //
-// A slot answered with itself is not answered. Left standing it would carry the
-// declaration's own frame into codegen, where it died as an `unsubstituted
-// TypeParam` panic rather than a diagnostic.
+// A slot answered with itself is not answered. Left standing it carries the
+// declaration's own frame into codegen, which panicked with `unsubstituted
+// TypeParam` instead of raising a diagnostic.
 
 struct Counter {
     v: i32,

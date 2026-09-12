@@ -298,26 +298,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a call's arguments against parameter types that may still hold
-    /// this call's inference variables, each argument pinning what it answers
-    /// about them so a later one reads a refined type instead of a bare
-    /// variable.
+    /// this call's inference variables, each pinning what it answers.
     ///
-    /// Three tiers decide who speaks when, mirroring the solver's own
+    /// Three tiers decide who answers first, as the solver's own tiers do
     /// ([`InferCtx::add`], [`InferCtx::add_expected_return`],
     /// [`InferCtx::add_deferred`]):
     ///
-    /// 1. Every argument whose parameter type is already settled, in source
-    ///    order.
-    /// 2. Each closure whose parameter types still held a variable when its
-    ///    turn came. A closure takes its parameter types off the signature and
-    ///    a variable is not a type its body could use: an operator applied to
-    ///    one dispatches against nothing and reaches WIR with no lowering.
-    ///    Waiting for the concrete arguments is what lets
-    ///    `late(|a, b| a + b, seed)` read `seed`'s type.
-    /// 3. A numeric literal pins last, and only what is still open. Its
-    ///    default (`i32` / `f64`) is not an answer, so locking a slot to it
-    ///    ahead of a typed neighbour or a closure body is exactly what tiers 1
-    ///    and 2 exist to avoid.
+    /// 1. Everything but a closure whose parameter types still hold a
+    ///    variable, in source order.
+    /// 2. Those closures. A closure takes its parameter types off the
+    ///    signature and cannot defer what its body does with them: an operator
+    ///    applied to a variable dispatches against nothing and reaches WIR
+    ///    with no lowering. Waiting is what lets `late(|a, b| a + b, seed)`
+    ///    read `seed`'s type.
+    /// 3. Numeric literals, answering only what is still open. `i32` / `f64`
+    ///    is a default, not an answer.
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
@@ -818,23 +813,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None => self.resolve_args_against_params(&call.args, ctx, &param_types),
         };
 
-        // Settle this resolution's variables. `solve_infer_var` keeps the
-        // first answer, so a slot the arguments pinned stays pinned and one
-        // they left open goes back to the declaration's parameter — leaving
-        // inference exactly what it saw before this step existed.
         if let Some(inst) = &arg_inst {
-            let pairs: Vec<(TypeId, TypeId)> = inst
-                .vars
-                .iter()
-                .copied()
-                .zip(callee_slots.iter().copied())
-                .collect();
-            for (var, slot) in pairs {
-                self.solve_infer_var(var, slot);
-            }
-            for arg in &mut args {
-                *arg = self.apply_infer_holes(*arg);
-            }
+            self.settle_onto_slots(inst, &callee_slots, &mut args);
         }
 
         // Pin a deferred hole carried into a variant payload (`Result::Ok(v)`,
@@ -843,12 +823,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scoped to variant payloads to avoid touching them.
         if is_variant_payload {
             for (i, arg) in args.iter_mut().enumerate() {
-                if let Some(&expected) = param_types.get(i)
-                    && self.type_has_infer_hole(*arg)
-                    && self.hole_pinnable_against(expected)
-                {
-                    self.solve_infer_holes_against(*arg, expected);
-                    *arg = self.apply_infer_holes(*arg);
+                if let Some(&expected) = param_types.get(i) {
+                    self.pin_arg_hole_against(arg, expected);
                 }
             }
         }
@@ -1874,12 +1850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                // Pin a deferred hole carried into this argument
-                // (`let v = gen()?; foo(v)`) against the parameter type.
-                if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
-                    self.solve_infer_holes_against(*arg, expected);
-                    *arg = self.apply_infer_holes(*arg);
-                }
+                self.pin_arg_hole_against(arg, expected);
                 self.typecheck(
                     *arg,
                     expected,

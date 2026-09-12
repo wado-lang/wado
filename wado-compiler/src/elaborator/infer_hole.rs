@@ -134,9 +134,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.mint_infer_var_for(None)
     }
 
-    /// [`Self::mint_infer_var`] for a variable standing in for a named slot,
-    /// which every diagnostic that meets the variable renders it as. `?0` is
-    /// an internal identity and names nothing the source wrote.
+    /// [`Self::mint_infer_var`] for a variable standing in for a named slot. A
+    /// diagnostic renders the variable as that name, since `?0` names nothing
+    /// the source wrote.
     pub(super) fn mint_infer_var_named(&mut self, slot_name: &str) -> TypeId {
         self.mint_infer_var_for(Some(slot_name))
     }
@@ -329,6 +329,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
                 *slot = Some(concrete);
             }
+        }
+    }
+
+    /// Pin a deferred hole an argument carried in (`let v = gen()?; foo(v)`)
+    /// against the parameter type it is checked against, and substitute the
+    /// answer into the argument. A no-op unless the hole may pin here.
+    pub(super) fn pin_arg_hole_against(&mut self, arg: &mut TypeId, expected: TypeId) {
+        if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
+            self.solve_infer_holes_against(*arg, expected);
+            *arg = self.apply_infer_holes(*arg);
         }
     }
 

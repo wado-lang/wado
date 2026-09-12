@@ -843,7 +843,7 @@ inc();
 inc();
 assert get() == 2;
 
-// Parameter types come from the expected fn type where the context has one —
+// Parameter types come from the expected fn type where the context has one:
 // an argument position, a typed binding, a struct field. Annotate only where
 // nothing supplies it (the `let`s above).
 let f: fn(i32) -> i32 = |x| x + 1;
@@ -1189,7 +1189,7 @@ iter.next();                              // Option<i32>
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
-// Combinators — the closure's parameter types come from the receiver
+// Combinators: the closure's parameter types come from the receiver
 let doubled = arr.into_iter().map(|x| x * 2).collect();            // [2, 4, 6, 8, 10]
 let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();      // [2, 4]
 let acc = arr.into_iter().fold(0, |acc, x| acc + x);               // 15

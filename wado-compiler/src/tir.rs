@@ -753,11 +753,10 @@ pub struct TypeTable {
     /// essentially every type query, so it is a hash-free `Vec` index.
     types: TypeMap<ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
-    /// The slot each inference variable stands for, for diagnostics. A
-    /// variable is an internal identity: a message that says `?0` names
-    /// nothing the source wrote, where the slot's own name (`A`, `Acc`) is
-    /// exactly what the reader annotates. Kept beside the variant rather than
-    /// inside it so the interning key stays the id alone.
+    /// The slot each inference variable stands for, read only by diagnostics:
+    /// `?0` names nothing the source wrote, where `A` is what the reader
+    /// annotates. Beside the variant, not inside it, so the interning key
+    /// stays the id alone.
     infer_var_names: IndexMap<InferVarId, String>,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the

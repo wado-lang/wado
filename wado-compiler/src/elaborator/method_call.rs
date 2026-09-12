@@ -663,13 +663,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Instantiate the method's own slots before an argument is resolved
-        // against one of its parameter types — the free-function path's rule
-        // (`resolve_call`), for the same reason. A rigid slot is the
-        // declaration's own and opaque here, so a closure argument passed to
-        // `fn(Acc, Item) -> Acc` handed its body an `Acc` no expression can
-        // construct; against a variable in that position the body defers and
-        // the sibling `init` argument decides what the variable is. The lookup
-        // already instantiated the declaring level, so only these slots remain.
+        // against one of its parameter types, as `resolve_call` does for a free
+        // function. A rigid slot is the declaration's own: a closure passed to
+        // `fn(Acc, Item) -> Acc` would meet an `Acc` no expression can
+        // construct, where against a variable its body defers and a sibling
+        // argument answers it. The lookup already instantiated the declaring
+        // level, so only these slots remain.
         let arg_inst = (!method_type_param_ids.is_empty()).then(|| {
             self.instantiate(
                 &method_type_param_ids,
@@ -697,18 +696,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut args: Vec<TypeId> =
             self.resolve_args_against_params(args_ast, ctx, arg_param_types);
 
-        // Settle this resolution's variables. `solve_infer_var` keeps the first
-        // answer, so a slot the arguments pinned stays pinned and one they left
-        // open goes back to the declaration's parameter — leaving
-        // `infer_method_type_args` below exactly the rigid signature it saw
-        // before this step existed.
         if let Some(inst) = &arg_inst {
-            for (&var, &slot) in inst.vars.iter().zip(method_type_param_ids.iter()) {
-                self.solve_infer_var(var, slot);
-            }
-            for arg in &mut args {
-                *arg = self.apply_infer_holes(*arg);
-            }
+            self.settle_onto_slots(inst, &method_type_param_ids, &mut args);
         }
 
         // The module that declares this method: the scope its own defaults —
@@ -785,10 +774,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these argument types — has run. That check happens once below,
         // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
-            if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected_type) {
-                self.solve_infer_holes_against(*arg, expected_type);
-                *arg = self.apply_infer_holes(*arg);
-            }
+            self.pin_arg_hole_against(arg, expected_type);
         }
 
         self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);

@@ -2260,10 +2260,11 @@ let parse = |s: String| -> Result<i32, String> {
 ```
 
 A parameter type is inferred from the expected `fn(..)` type wherever the
-context supplies one — a typed binding, a function or method parameter, a struct
-field, a newtype over a `fn(..)` — positionally, so each parameter takes the
-expected type's parameter at its own index. An annotation is needed only where
-no such type reaches the closure, and always wins where it is written:
+context supplies one: a typed binding, a function or method parameter, a struct
+field, a newtype over a `fn(..)`. The match is positional, so each parameter
+takes the expected type's parameter at its own index. An annotation is needed
+only where no such type reaches the closure, and always wins where it is
+written:
 
 ```wado
 let arr: List<i32> = [1, 2, 3];
@@ -2272,15 +2273,15 @@ arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from `init`
 let add_one = |x: i32| x + 1;            // no expected type: annotate
 ```
 
-The expected type may be written in the callee's own type parameters — `fold`
+The expected type may be written in the callee's own type parameters. `fold`
 declares `fn mut(Acc, Self::Item) -> Acc`. Each argument settles what it can, and
-a closure argument is checked after the ones that do not need it, so a sibling
-argument fixes the closure's parameter types wherever it is written relative to
-the closure. A numeric literal settles last: its `i32` / `f64` default answers
-only what nothing else did, which is why `fold(0, |acc, x| acc + x)` over a
-`List<i64>` takes `i64` from the body rather than `i32` from the `0`. A parameter
-nothing settles is reported as uninferred at the call (`cannot infer type
-parameter ...`), not as an error inside the closure.
+a closure is checked after the arguments that do not need it. A sibling argument
+therefore fixes the closure's parameter types whether it is written before or
+after the closure. A numeric literal settles last, answering only what nothing
+else did: `fold(0, |acc, x| acc + x)` over a `List<i64>` takes `i64` from the
+body, not `i32` from the `0`. A parameter nothing settles is reported as
+uninferred at the call (`cannot infer type parameter ...`), not as an error
+inside the closure.
 
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.

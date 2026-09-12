@@ -122,6 +122,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Settle the variables an argument walk used back onto the slots they
+    /// stand for, substituting the answers through `args`.
+    ///
+    /// [`Self::solve_infer_var`] keeps the first answer, so a slot the
+    /// arguments pinned stays pinned and one they left open returns to the
+    /// declaration's parameter. Type-argument inference then sees the rigid
+    /// signature it would have seen had the arguments never been instantiated
+    /// against.
+    pub(super) fn settle_onto_slots(
+        &mut self,
+        inst: &Instantiated,
+        slots: &[TypeId],
+        args: &mut [TypeId],
+    ) {
+        for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
+            self.solve_infer_var(var, slot);
+        }
+        for arg in args {
+            *arg = self.apply_infer_holes(*arg);
+        }
+    }
+
     /// Carry each slot's declared trait bounds onto the variable standing in
     /// for it, so [`Self::finalize_infer_holes`] re-checks whatever solved it.
     ///
