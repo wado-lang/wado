@@ -501,8 +501,7 @@ fn test_run_announces_nothing() {
         .stderr(predicate::str::is_empty());
 }
 
-/// Developer traces reach stderr, so the `optimizer-debug` recipes still work
-/// now that a trace goes to a sink the host installs rather than straight out.
+/// Traces reach stderr, which every `optimizer-debug` recipe depends on.
 #[test]
 fn test_trace_env_var_reaches_stderr() {
     wado()

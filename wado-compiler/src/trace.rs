@@ -1,7 +1,5 @@
-//! Developer tracing, selected by the `WADO_TRACE` env var — a comma-separated
-//! target list, or `*` — and rendered under a `[target]` prefix. Where a trace
-//! lands is the host's business: it installs a [`TraceSink`], and without one
-//! every trace is dropped. User-facing diagnostics go through `Logger` instead.
+//! Developer tracing. `WADO_TRACE` selects the targets (a comma-separated list,
+//! or `*`); the host selects where they land, by installing a [`TraceSink`].
 //! On `wasm32-unknown-unknown` the filter is always empty.
 
 use std::fmt::Arguments;
@@ -27,11 +25,8 @@ pub fn filter() -> &'static TraceFilter {
     FILTER.get_or_init(|| parse_filter(std::env::var("WADO_TRACE").ok().as_deref()))
 }
 
-/// Parse a comma-separated env-var value into a Vec, dropping empty
-/// entries and trimming whitespace. Used by callers that cache the
-/// result themselves (typically a `OnceLock`); this helper exists so
-/// `trace::filter()`-style filters and `optimize::pass_dump`-style
-/// per-pass checks share the same parse rules.
+/// Parse a comma-separated env-var value, trimming each entry and dropping the
+/// empty ones. The trace filter and the `WADO_DUMP_PASS_*` checks share it.
 pub fn parse_env_list(raw: Option<&str>) -> Vec<String> {
     raw.unwrap_or("")
         .split(',')
@@ -72,9 +67,8 @@ pub fn set_sink(sink: &'static dyn TraceSink) {
     let _ = SINK.set(sink);
 }
 
-/// Write one line to the installed sink, or drop it when no host installed
-/// one. The caller has already decided the line is wanted — [`emit`] against
-/// `WADO_TRACE`, a pass dump against `WADO_DUMP_PASS_*`.
+/// Write one line to the installed sink, dropping it when no host installed
+/// one. The caller has already decided the line is wanted.
 pub fn write(line: &str) {
     if let Some(sink) = SINK.get() {
         sink.trace(line);

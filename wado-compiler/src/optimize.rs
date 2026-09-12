@@ -480,14 +480,14 @@ pub mod pass_dump {
     fn dump_before_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
         LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
+            trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
         })
     }
 
     fn dump_after_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
         LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
+            trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
         })
     }
 
@@ -498,9 +498,7 @@ pub mod pass_dump {
 
     fn skip_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
-        LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref())
-        })
+        LIST.get_or_init(|| trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref()))
     }
 
     /// Returns true if `name` matches one of the comma-separated entries in

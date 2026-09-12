@@ -993,7 +993,7 @@ fn read_license_text(
 }
 
 /// A finished build: the emitted component, and where it was written.
-/// `--wat-to-stdout` writes no artifact, so neither is set there.
+/// `--wat-to-stdout` writes no file, so `output_path` is `None` there.
 pub struct Artifact {
     pub bytes: Vec<u8>,
     pub output_path: Option<PathBuf>,
