@@ -834,9 +834,9 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
-    /// Resources declared `#[cm(..., type = "extern-handle")]`: a copyable handle
-    /// to a host object, outside the affine resource discipline.
-    extern_handle_resources: IndexSet<crate::defs::DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
+    /// handle to a host object, outside the affine resource discipline.
+    unrestricted_resources: IndexSet<crate::defs::DefId>,
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -963,7 +963,7 @@ impl TypeTable {
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
-            extern_handle_resources: IndexSet::default(),
+            unrestricted_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1114,15 +1114,15 @@ impl TypeTable {
             .copied()
     }
 
-    pub fn mark_extern_handle_resource(&mut self, def: crate::defs::DefId) {
-        self.extern_handle_resources.insert(def);
+    pub fn mark_unrestricted_resource(&mut self, def: crate::defs::DefId) {
+        self.unrestricted_resources.insert(def);
     }
 
-    /// Whether `def` declares an extern-handle-backed resource, which no affine
-    /// check and no cleanup pass owns.
+    /// Whether `def` declares an unrestricted resource, which no affine check
+    /// and no cleanup pass owns.
     #[must_use]
-    pub fn is_extern_handle_resource(&self, def: crate::defs::DefId) -> bool {
-        self.extern_handle_resources.contains(&def)
+    pub fn is_unrestricted_resource(&self, def: crate::defs::DefId) -> bool {
+        self.unrestricted_resources.contains(&def)
     }
 
     /// Record `child extends parent`, already validated by the caller.

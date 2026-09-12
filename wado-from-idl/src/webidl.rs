@@ -1,5 +1,5 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
-//! writes: one extern-handle resource per interface. See `docs/wep-2026-04-01-tide.md`.
+//! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-tide.md`.
 
 use anyhow::{Result, bail};
 use indexmap::{IndexMap, IndexSet};
@@ -186,7 +186,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 name: to_upper_camel_case(name),
                 doc_comment: None,
                 cm_attr: path,
-                extern_handle: true,
+                unrestricted: true,
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
             },

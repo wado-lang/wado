@@ -5,33 +5,48 @@ use crate::ast::{
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Whether `type_id` transitively owns an affine resource, making a binding of
-/// that type move-only: a bare resource, or a struct / tuple / `Result` carrying
-/// one. A reference stops the walk, a borrowed place owning nothing. The
-/// aggregate set stays in step with `resource_cleanup::carries_resource`, so
-/// nothing is move-only that the cleanup pass would then leak.
-fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
-    let base = sem.types.representation_head(type_id);
+/// that type move-only. The aggregate set stays in step with
+/// `resource_cleanup::carries_resource`, so nothing is move-only that the
+/// cleanup pass would then leak. `struct_fields` answers a struct's field
+/// types, which the type table alone does not hold.
+pub(crate) fn carries_affine_resource(
+    types: &TypeTable,
+    struct_fields: &impl Fn(TypeId) -> Option<Vec<TypeId>>,
+    type_id: TypeId,
+    visited: &mut Vec<TypeId>,
+) -> bool {
+    let base = types.representation_head(type_id);
     if visited.contains(&base) {
         return false;
     }
     visited.push(base);
-    let children: Vec<TypeId> = match sem.types.get(base) {
-        ResolvedType::Resource { def } => return !sem.types.is_extern_handle_resource(*def),
-        ResolvedType::GenericResource { .. } => return true,
+    let children: Vec<TypeId> = match types.get(base) {
+        ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } => {
+            return !types.is_unrestricted_resource(*def);
+        }
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => return false,
-        ResolvedType::Struct { .. } => sem.struct_field_type_ids_of(base).unwrap_or_default(),
-        ResolvedType::GenericInstance { type_args, .. } if sem.types.is_result(base) => {
+        ResolvedType::Struct { .. } => struct_fields(base).unwrap_or_default(),
+        ResolvedType::GenericInstance { type_args, .. } if types.is_result(base) => {
             type_args.clone()
         }
-        _ => sem.types.as_tuple(base).unwrap_or_default(),
+        _ => types.as_tuple(base).unwrap_or_default(),
     };
     children
         .into_iter()
-        .any(|t| type_carries_resource(sem, t, visited))
+        .any(|t| carries_affine_resource(types, struct_fields, t, visited))
+}
+
+fn type_carries_resource(sem: &Semantics, type_id: TypeId, visited: &mut Vec<TypeId>) -> bool {
+    carries_affine_resource(
+        &sem.types,
+        &|id| sem.struct_field_type_ids_of(id),
+        type_id,
+        visited,
+    )
 }
 
 #[derive(Debug, Clone)]

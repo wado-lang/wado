@@ -1,7 +1,7 @@
 #![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/web/dom.webidl.json"])]
 #![stdlib("web:dom")]
 
-#[cm("web:dom/event-target", type = "extern-handle")]
+#[cm("web:dom/event-target", linearity = "unrestricted")]
 pub resource EventTarget {
     #[cm("web:dom/event-target#new")]
     fn new() -> EventTarget;
@@ -10,7 +10,7 @@ pub resource EventTarget {
     fn dispatch_event(&self, event: Event) -> bool;
 }
 
-#[cm("web:dom/event", type = "extern-handle")]
+#[cm("web:dom/event", linearity = "unrestricted")]
 pub resource Event {
     #[cm("web:dom/event#new")]
     #[cm_params("type")]
@@ -74,7 +74,7 @@ pub resource Event {
     fn init_event(&self, type: String, bubbles: Option<bool>, cancelable: Option<bool>);
 }
 
-#[cm("web:dom/node", type = "extern-handle")]
+#[cm("web:dom/node", linearity = "unrestricted")]
 pub resource Node extends EventTarget {
     #[cm("web:dom/node#node-type")]
     #[cm_params("self")]
@@ -168,7 +168,7 @@ pub resource Node extends EventTarget {
     fn remove_child(&self, child: Node) -> Node;
 }
 
-#[cm("web:dom/element", type = "extern-handle")]
+#[cm("web:dom/element", linearity = "unrestricted")]
 pub resource Element extends Node {
     #[cm("web:dom/element#get-spatial-navigation-container")]
     #[cm_params("self")]
@@ -616,7 +616,7 @@ pub resource Element extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("web:dom/html-element", type = "extern-handle")]
+#[cm("web:dom/html-element", linearity = "unrestricted")]
 pub resource HtmlElement extends Element {
     #[cm("web:dom/html-element#container-timing")]
     #[cm_params("self")]
@@ -812,7 +812,7 @@ pub resource HtmlElement extends Element {
     fn blur(&self);
 }
 
-#[cm("web:dom/html-input-element", type = "extern-handle")]
+#[cm("web:dom/html-input-element", linearity = "unrestricted")]
 pub resource HtmlInputElement extends HtmlElement {
     #[cm("web:dom/html-input-element#webkitdirectory")]
     #[cm_params("self")]
@@ -1104,7 +1104,7 @@ pub resource HtmlInputElement extends HtmlElement {
     fn set_popover_target_action(&self, value: String);
 }
 
-#[cm("web:dom/document", type = "extern-handle")]
+#[cm("web:dom/document", linearity = "unrestricted")]
 pub resource Document extends Node {
     #[cm("web:dom/document#element-from-point")]
     #[cm_params("self", "x", "y")]
@@ -1326,7 +1326,7 @@ pub resource Document extends Node {
     fn aria_notify(&self, announcement: String);
 }
 
-#[cm("web:dom/window", type = "extern-handle")]
+#[cm("web:dom/window", linearity = "unrestricted")]
 pub resource Window extends EventTarget {
     #[cm("web:dom/window#credentialless")]
     #[cm_params("self")]
