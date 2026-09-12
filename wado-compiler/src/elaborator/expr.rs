@@ -278,6 +278,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let ast_id = expr.id();
+        // A travelled walk covers one module's nodes, so the ambient reads
+        // under it and the node's own home agree. Splicing a caller's AST into
+        // a default would break that, and this is where it would show.
+        debug_assert!(
+            self.annotate_ctx
+                .resolving_home
+                .as_ref()
+                .is_none_or(|home| *home == self.home_module(ast_id)),
+            "a node written in another module reached a travelled walk"
+        );
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         self.record_expression_type(ast_id, type_id);
         type_id
