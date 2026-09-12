@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789195628188,
+  "lastUpdate": 1789199609848,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55209,6 +55209,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe30fd382ca91941337721308368e798651a2eeb",
+          "message": "Merge pull request #2030 from wado-lang/gfx/json-catalog-perf\n\nperf(json): 20% faster json-catalog deserialize, 9% faster serialize",
+          "timestamp": "2026-09-12T16:36:44+09:00",
+          "tree_id": "3d436942fa92c79a47df87af17ba33cc7bed0e94",
+          "url": "https://github.com/wado-lang/wado/commit/fe30fd382ca91941337721308368e798651a2eeb"
+        },
+        "date": 1789199609320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
             "unit": "bytes"
           }
         ]
