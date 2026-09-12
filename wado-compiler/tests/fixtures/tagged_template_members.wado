@@ -2,14 +2,23 @@
 // the tail both ways, the hole's source text, its index, and whether it wrote
 // a specifier. `fmt` renders through the specifier as the untagged template
 // would, and a tag needs no bound to call it (WEP 2026-01-10).
+//
+// `ReflectTemplate` and `Hole` are `pub`, so a module that spells the import
+// out — as one under `#![no_prelude]` must — names the same trait the
+// auto-import gives.
 use { println, Stdout } from "core:cli";
+use { ReflectTemplate, Hole } from "core:prelude";
+
+fn show<T, V>(h: &Hole<T, V>, t: &T, out: &mut String) {
+    out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);
+    h.fmt(t, &mut Formatter::new(out));
+    out.push_str(&"]");
+}
 
 fn describe<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);
-        h.fmt(&t, &mut Formatter::new(&mut out));
-        out.push_str(&"]");
+        show(&h, &t, &mut out);
     }
     out.push_str(&`[tail=${ReflectTemplate::<T>::tail():?} raw=${ReflectTemplate::<T>::raw_tail():?}]`);
     return out;
