@@ -234,16 +234,18 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       payload opaque" is inexpressible there.
 - [ ] Folding a call to an effect-free callee whose arguments are all constant,
       past the inliner's size budget. A tagged template's per-hole context scan
-      is the standing case: the shape holds every literal segment as a constant,
-      so `advance(Ctx::Code, h.lit())` reads nothing else, and it folds to its
-      answer while the scan fits `inline_threshold` (16 at -O2, 26 at -O3) —
-      then survives as one call per hole the moment it does not, leaving a code
-      generator to rescan a string the compiler knows on every emitted line
-      (~30% of the per-line cost in WadoPoet's `wado` tag). `niri` already
-      admits such a callee (`is_ctfe_eligible`) and
-      `--optimize-inline-threshold 200` folds this one, so what is missing is
-      reaching the fold without the inliner first paying for the body.
-      `tagged_template_lit_scan_fold.wado` pins both sides of the boundary.
+      is the standing case. The shape holds every literal segment as a constant,
+      so the scan reads nothing else. It folds to its answer while the scan fits
+      `inline_threshold` (16 at -O2, 26 at -O3), and survives as one call per
+      hole once the scan is larger. A code generator then rescans a string the
+      compiler knows on every emitted line. Splitting the per-character
+      transition out of the loop brings both halves under the budget at any
+      state count. WadoPoet's `wado` tag folds away entirely that way, so the
+      gap costs a shape the author has to know rather than the fold itself.
+      `niri` already admits such a callee (`is_ctfe_eligible`), and
+      `--optimize-inline-threshold 200` folds the undivided form, so what is
+      missing is reaching the fold without the inliner paying for the body
+      first. `tagged_template_lit_scan_fold.wado` pins all three shapes.
 
 ## Tried and found ineffective
 

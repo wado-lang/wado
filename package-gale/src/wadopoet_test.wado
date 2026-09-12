@@ -462,7 +462,7 @@ test "wado escapes control chars" {
     assert got == expected, `got: ${got}`;
 }
 
-test "wado escapes a hole inside a char literal" {
+test "wado writes a hole inside a char literal" {
     let c = 'a';
     assert wado`if ch == '${c}' { return; }` == "if ch == 'a' { return; }";
 }
@@ -502,12 +502,33 @@ test "wado carries the context across an empty segment" {
     assert wado`let s = "${a}${b}";` == "let s = \"a\\\"b\";";
 }
 
+test "a hole's value does not shift the context of the next hole" {
+    // The first hole renders an unbalanced quote; the second is still code.
+    let opener = "f(\"";
+    let text = "x";
+    assert wado`${opener}${text}");` == "f(\"x\");";
+}
+
 test "wado reads a quote in a line comment as text" {
     let comment = "don't";
     let text = "x\"y";
     let got = wado`// ${comment}
 let s = "${text}";`;
     assert got == "// don't\nlet s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads a lone slash as division, not a comment" {
+    let text = "x\"y";
+    let got = wado`let n = a / b; let s = "${text}";`;
+    assert got == "let n = a / b; let s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads an escaped quote as text inside a string literal" {
+    // The template writes `\\"` because it emits `\"`; the scan sees the
+    // backslash and the string stays open.
+    let text = "x\"y";
+    let got = wado`let s = "a\\"${text}";`;
+    assert got == "let s = \"a\\\"x\\\"y\";", `got: ${got}`;
 }
 
 test "wado applies a format specifier" {

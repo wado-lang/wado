@@ -38,11 +38,11 @@ fn gen_source(src: &String) -> String {
 // gate has to go unsimulated, which is warn-and-degrade, not a dead emit.
 fn members_grammar(members: &String) -> String {
     return `grammar C;
-options \{ language = Java; \}
-@parser::members \{
+options { language = Java; }
+@parser::members {
 ${*members}
-\}
-r : A \{ n = 1; \} A ;
+}
+r : A { n = 1; } A ;
 A : 'a' ;
 `;
 }
@@ -251,14 +251,14 @@ fn gate_source(
     scope_body: &String = &SCOPE_BODY,
     head_body: &String = &HEAD_BODY,
 ) -> String {
-    let after_clause = if after.is_empty() { String::new() } else { `@after \{ ${*after} \}` };
+    let after_clause = if after.is_empty() { String::new() } else { `@after { ${*after} }` };
     return `grammar G;
-options \{ language = Java; \}
-@parser::members \{ ${GATE_MEMBERS} \}
+options { language = Java; }
+@parser::members { ${GATE_MEMBERS} }
 r : scope | head ;
 scope
 locals [int sv]
-@init \{ ${*init} \}
+@init { ${*init} }
 ${after_clause}
  : ${*scope_body} ;
 head : ${*head_body} ;

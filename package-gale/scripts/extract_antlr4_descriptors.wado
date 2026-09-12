@@ -617,7 +617,7 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
     w.blank();
     let imports = claim_a_imports(entries);
     if !imports.is_empty() {
-        w.line(&`use \{ ${join_names(&imports)} \} from "../../src/g4/parser.wado";`);
+        w.line(&`use { ${join_names(&imports)} } from "../../src/g4/parser.wado";`);
         w.blank();
     }
     let mut needs_separator = false;
@@ -789,7 +789,7 @@ fn emit_category_test_file(attr: &String, category: &String, chunks: Slice<TestC
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
     if !helpers.is_empty() {
         w.blank();
-        w.line(&`use \{ ${join_names(&helpers)} \} from "../../../support/tree_compare.wado";`);
+        w.line(&`use { ${join_names(&helpers)} } from "../../../support/tree_compare.wado";`);
     }
     for let chunk of chunks {
         w.blank();

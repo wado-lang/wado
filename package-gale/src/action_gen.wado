@@ -815,7 +815,7 @@ pub fn emit_atn_disabled_seed(
     }
     w.line(&"let mut _atn_disabled: List<i32> = [];");
     for let g of &gates {
-        w.line(&`if !(${g.1}) \{ _atn_disabled.push(${g.0}); \}`);
+        w.line(&`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
     }
     return String::from(", &_atn_disabled");
 }
@@ -1094,7 +1094,7 @@ pub fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
     f.add_param_spec(ParamSpec {
         name: "vals",
         type_str: vname,
-        default_value: Option::Some(`${vname} \{\}`),
+        default_value: Option::Some(`${vname} {}`),
     });
 }
 

@@ -1,3 +1,5 @@
+use { ReflectTemplate } from "core:prelude";
+
 /// WadoPoet — KotlinPoet-style code generation for Wado.
 ///
 /// Hybrid design: `CodeWriter` handles indentation and blocks;
@@ -137,112 +139,104 @@ impl CodeWriter {
     }
 }
 
-/// The lexical state the template text of a `wado` tag is in at a hole.
+/// The lexical state the template text of a `wado` tag is in at a hole. A
+/// pending backslash or `/` is a state of its own, so `step` needs no memory
+/// beyond the one it is given.
 enum Ctx {
     Code,
+    CodeSlash,
     Str,
+    StrEscape,
     Chr,
+    ChrEscape,
     Comment,
 }
 
-/// Advance the lexical state over one literal segment. Only the template's own
-/// text is read, never a hole's value, so where a hole lands is decided by what
-/// the template says and nothing else.
+/// The state one character further on.
+fn step(ctx: Ctx, c: char) -> Ctx {
+    return match ctx {
+        Ctx::Code => match c {
+            '"' => Ctx::Str,
+            '\'' => Ctx::Chr,
+            '/' => Ctx::CodeSlash,
+            _ => Ctx::Code,
+        },
+        Ctx::CodeSlash => match c {
+            '"' => Ctx::Str,
+            '\'' => Ctx::Chr,
+            '/' => Ctx::Comment,
+            _ => Ctx::Code,
+        },
+        Ctx::Str => match c {
+            '\\' => Ctx::StrEscape,
+            '"' => Ctx::Code,
+            _ => Ctx::Str,
+        },
+        Ctx::StrEscape => Ctx::Str,
+        Ctx::Chr => match c {
+            '\\' => Ctx::ChrEscape,
+            '\'' => Ctx::Code,
+            _ => Ctx::Chr,
+        },
+        Ctx::ChrEscape => Ctx::Chr,
+        Ctx::Comment => match c {
+            '\n' => Ctx::Code,
+            _ => Ctx::Comment,
+        },
+    };
+}
+
+/// Advance the lexical state over one literal segment. Kept apart from `step`
+/// so both fit the inliner's budget: the whole walk then folds to a constant at
+/// -O2 and the tag pays nothing for it.
 fn advance(ctx: Ctx, lit: &String) -> Ctx {
     let mut cur = ctx;
-    let mut escaped = false;
-    let mut prev_slash = false;
     for let c of lit.chars() {
-        if escaped {
-            escaped = false;
-            prev_slash = false;
-            continue;
-        }
-        match cur {
-            Ctx::Code => {
-                if c == '"' {
-                    cur = Ctx::Str;
-                } else if c == '\'' {
-                    cur = Ctx::Chr;
-                } else if c == '/' && prev_slash {
-                    cur = Ctx::Comment;
-                }
-            },
-            Ctx::Str => {
-                if c == '\\' {
-                    escaped = true;
-                } else if c == '"' {
-                    cur = Ctx::Code;
-                }
-            },
-            Ctx::Chr => {
-                if c == '\\' {
-                    escaped = true;
-                } else if c == '\'' {
-                    cur = Ctx::Code;
-                }
-            },
-            Ctx::Comment => {
-                if c == '\n' {
-                    cur = Ctx::Code;
-                }
-            },
-        }
-        prev_slash = c == '/';
+        cur = step(cur, c);
     }
     return cur;
 }
 
-/// Append `text` as the body of a Wado literal delimited by `quote` (`b'"'` for
-/// a string, `b'\''` for a char). Escapes the delimiter, the backslash, and
-/// control characters; passes every other byte through unchanged, so printable
-/// non-ASCII text (Japanese, emoji, …) survives intact.
-///
-/// The control-char policy mirrors `Inspect for String` in core's
-/// `format.wado` (see WEP: Inspect). Keep the two in lockstep: a literal
-/// emitted here and a `${x:?}` debug rendering must escape the same set.
-fn escape_into(text: &String, quote: u8, out: &mut String) {
-    let n = text.len();
-    let mut from = 0;
-    for let mut i = 0; i < n; i += 1 {
-        let b = text.get_byte_unchecked(i);
-        if b >= 0x20 && b != 0x7f && b != quote && b != b'\\' {
-            continue;
-        }
-        if i > from {
-            out.push_str_range_unchecked(text, from, i);
-        }
-        if b == quote || b == b'\\' {
-            out.push('\\');
-            out.push_ascii_unchecked(b);
-        } else if b == b'\n' {
-            out.push_str(&"\\n");
-        } else if b == b'\r' {
-            out.push_str(&"\\r");
-        } else if b == b'\t' {
-            out.push_str(&"\\t");
-        } else {
-            // C0 control / DEL with no named escape: `\u{HEX}`.
-            out.push_str(&`\\u{${b:x}}`);
-        }
-        from = i + 1;
+/// The delimiter a hole landing in `ctx` is escaped for, or none where it is
+/// written as it renders.
+fn hole_quote(ctx: Ctx) -> Option<u8> {
+    return match ctx {
+        Ctx::Code | Ctx::CodeSlash | Ctx::Comment => null,
+        Ctx::Str | Ctx::StrEscape => Option::Some(b'"'),
+        Ctx::Chr | Ctx::ChrEscape => Option::Some(b'\''),
+    };
+}
+
+/// Whether `b` may not stand as itself inside a Wado literal delimited by
+/// `quote`. Every other byte passes through, so printable non-ASCII survives.
+fn needs_escape(b: u8, quote: u8) -> bool {
+    return b < 0x20 || b == 0x7f || b == quote || b == b'\\';
+}
+
+/// Append `b` in the form a Wado literal delimited by `quote` reads back. The
+/// escape set mirrors `Inspect for String` in core's `format.wado`; keep the
+/// two in lockstep (see WEP: Inspect).
+fn write_escaped(out: &mut String, b: u8, quote: u8) {
+    assert needs_escape(b, quote);
+    if b == quote || b == b'\\' {
+        out.push('\\');
+        out.push_ascii_unchecked(b);
+        return;
     }
-    if n > from {
-        out.push_str_range_unchecked(text, from, n);
+    match b {
+        b'\n' => out.push_str(&"\\n"),
+        b'\r' => out.push_str(&"\\r"),
+        b'\t' => out.push_str(&"\\t"),
+        _ => out.push_str(&`\\u{${b:x}}`),
     }
 }
 
 /// Escape in place the text `out` grew past `at` — one hole's rendering — for a
-/// literal delimited by `quote`. Nothing to escape is the common case, and
-/// costs one scan and no copy.
+/// literal delimited by `quote`. Nothing to escape costs one scan and no copy.
 fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     let n = out.len();
     let mut i = at;
-    while i < n {
-        let b = out.get_byte_unchecked(i);
-        if b < 0x20 || b == 0x7f || b == quote || b == b'\\' {
-            break;
-        }
+    while i < n && !needs_escape(out.get_byte_unchecked(i), quote) {
         i += 1;
     }
     if i == n {
@@ -250,41 +244,37 @@ fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     }
     let tail = out.substr_bytes_unchecked(i, n);
     out.truncate_unchecked(i);
-    escape_into(&tail, quote, out);
+    let end = tail.len();
+    let mut from = 0;
+    for let mut j = 0; j < end; j += 1 {
+        let b = tail.get_byte_unchecked(j);
+        if !needs_escape(b, quote) {
+            continue;
+        }
+        if j > from {
+            out.push_str_range_unchecked(&tail, from, j);
+        }
+        write_escaped(out, b, quote);
+        from = j + 1;
+    }
+    if end > from {
+        out.push_str_range_unchecked(&tail, from, end);
+    }
 }
 
-/// Build a fragment of Wado source, escaping each hole for the lexical context
-/// the template put it in (WEP: Tagged Template Literals). A hole inside a
-/// `"..."` or `'...'` literal is escaped so the Wado lexer reads it back as the
-/// interpolated value; a hole in code position, or in a `//` comment, is
-/// written as it renders.
-///
-/// So the template reads as the code it emits, and the quoting cannot be
-/// forgotten — writing the quotes is what asks for it:
-///
-/// ```wado
-/// w.line(&wado`panic("${message}");`);
-/// w.line(&wado`if ch == '${c}' { return; }`);
-/// ```
+/// Build a fragment of Wado source (WEP: Tagged Template Literals), escaping
+/// each hole for the lexical context the template's own text put it in.
 pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
     let mut out = String::with_capacity(64);
     let mut ctx = Ctx::Code;
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit());
-        ctx = advance(ctx, &h.lit());
-        match ctx {
-            Ctx::Code => h.fmt(&t, &mut Formatter::new(&mut out)),
-            Ctx::Comment => h.fmt(&t, &mut Formatter::new(&mut out)),
-            Ctx::Str => {
-                let at = out.len();
-                h.fmt(&t, &mut Formatter::new(&mut out));
-                escape_in_place(&mut out, at, b'"');
-            },
-            Ctx::Chr => {
-                let at = out.len();
-                h.fmt(&t, &mut Formatter::new(&mut out));
-                escape_in_place(&mut out, at, b'\'');
-            },
+        let lit = h.lit();
+        out.push_str(&lit);
+        ctx = advance(ctx, &lit);
+        let at = out.len();
+        h.fmt(&t, &mut Formatter::new(&mut out));
+        if let Some(quote) = hole_quote(ctx) {
+            escape_in_place(&mut out, at, quote);
         }
     }
     out.push_str(&ReflectTemplate::<T>::tail());
@@ -304,8 +294,7 @@ pub fn lit_name(text: String) -> LitName {
 
 impl Display for LitName {
     pub fn fmt(&self, f: &mut Formatter) {
-        let text = *self as String;
-        f.write_str(&wado`'${text}'`);
+        f.write_str(&wado`'${*self as String}'`);
     }
 }
 

@@ -1831,7 +1831,7 @@ fn gen_scan_op_element(
 ) {
     match se {
         Token(t) => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} \{ ${*fail_stmt} \}`);
+            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${*fail_stmt} }`);
             w.line(&"pos += 1;");
         },
         RuleCall(rc) => {
@@ -1870,10 +1870,10 @@ fn gen_scan_op_element(
             } else {
                 w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
             }
-            w.line(&`if pos < 0 \{ ${*fail_stmt} \}`);
+            w.line(&`if pos < 0 { ${*fail_stmt} }`);
         },
         Wildcard => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF \{ ${*fail_stmt} \}`);
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${*fail_stmt} }`);
             w.line(&"pos += 1;");
         },
         Excluded(e) => {
@@ -1888,7 +1888,7 @@ fn gen_scan_op_element(
                 }
                 check.push_str(&check_parts[i]);
             }
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} \{ ${*fail_stmt} \}`);
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${*fail_stmt} }`);
             w.line(&"pos += 1;");
         },
         Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt),
@@ -1903,7 +1903,7 @@ fn gen_scan_op_element(
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     match se {
         Token(t) => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} \{ pos = -1; \} else \{ pos += 1; \}`);
+            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
         },
         RuleCall(rc) => {
             let fn_name = `scan_${rc.target_snake}`;
@@ -1941,7 +1941,7 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
                 }
                 check.push_str(&check_parts[i]);
             }
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} \{ pos = -1; \} else \{ pos += 1; \}`);
+            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { pos = -1; } else { pos += 1; }`);
         },
         Group(ge) => {
             // Group inside a repeat body — emit strict scan so a
@@ -1967,7 +1967,7 @@ fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: 
         return;
     }
     let exit_check = ctx.kind_check_str(exit_first, &"tokens[pos]");
-    w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) \{ pos += 1; \}`);
+    w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) { pos += 1; }`);
 }
 
 /// Scan mirror of `gen_optional_probe_entry`: try the body, then the
@@ -2031,7 +2031,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     w.end();
     gen_scan_rewind(w, ctx, &"ep");
     w.line(&"if ng_exit { break; }");
-    w.line(&`if !(${guard}) \{ break; \}`);
+    w.line(&`if !(${guard}) { break; }`);
     gen_scan_mark(w, ctx, &"sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
@@ -2448,7 +2448,7 @@ fn gen_scan_gate_check(w: &mut CodeWriter, gate_cond: &String, fail_stmt: &Strin
     if gate_cond.is_empty() {
         return;
     }
-    w.line(&`if !(${*gate_cond}) \{ ${*fail_stmt} \}`);
+    w.line(&`if !(${*gate_cond}) { ${*fail_stmt} }`);
 }
 
 /// Enter an inlined scan from parse context: the parser's tokens, where the
@@ -2694,7 +2694,7 @@ fn gen_rule_entry_wrapper(
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
     if returns_vals {
-        w.line(&`if p.recovering \{ return ${*result_type} \{\}; \}`);
+        w.line(&`if p.recovering { return ${*result_type} {}; }`);
     } else {
         w.line(&"if p.recovering { return; }");
     }
@@ -2786,7 +2786,7 @@ fn gen_parse_fn_simple_named(
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     if rule_emits_vals(ctx, rule) {
-        w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
+        w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
     }
     emit_arg_stores(w, rule, ctx);
     emit_span_capture(w, rule, ctx);
@@ -3101,7 +3101,7 @@ fn gen_parse_fn_named(
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if rule_emits_vals(ctx, rule) {
-            w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
+            w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
         }
         emit_arg_stores(w, rule, ctx);
         emit_span_capture(w, rule, ctx);
@@ -3145,6 +3145,18 @@ fn rule_after_for(rule: &ParserRule, lowered_rule: &Rule, ctx: &GenContext) -> O
         return null;
     }
     return rule.after_action;
+}
+
+/// Emit the `trace_pick` line for a committed alternative. An all-single-token
+/// rule emits none: the `enter` line already printed the lookahead token that
+/// names the alt, so `pick literal_value alt#0` after
+/// `enter literal_value @9 '1'` is noise. Tournament and speculative picks, and
+/// picks among alts that consume sub-structure, stay.
+fn gen_trace_pick(w: &mut CodeWriter, rule: &ParserRule, alt_index: i32, ctx: &GenContext) {
+    if !ctx.is_trace() || all_alts_are_single_token(&rule.alternatives) {
+        return;
+    }
+    w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
 }
 
 fn gen_alt_body(
@@ -3242,14 +3254,7 @@ fn gen_multi_alt_body(
         }
 
         let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-        // Suppress the pick line for all-single-token rules: the chosen alt
-        // is self-evident from the lookahead token already printed on the
-        // `enter` line (e.g. `enter literal_value @9 '1'` makes
-        // `pick literal_value alt#0` pure noise). Tournament / speculative
-        // picks, and picks among alts that consume sub-structure, stay.
-        if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-            w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
-        }
+        gen_trace_pick(w, rule, alt_index, ctx);
         let after = rule_after_for(rule, lowered_rule, ctx);
         gen_alt_body(
             w,
@@ -3833,7 +3838,7 @@ fn gen_lr_fn(
         let entry_needs_mut = ctx.emit_actions()
             && (rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } || rule_threads_args(rule));
         let mut_kw = if entry_needs_mut { "mut " } else { "" };
-        w.line(&`let ${mut_kw}vals = ${vals_struct_name(rule)} \{\};`);
+        w.line(&`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
     }
     emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
@@ -4035,7 +4040,7 @@ fn emit_lr_branch_body(
     let emits_vals = rule_emits_vals(ctx, rule);
     if emits_vals {
         w.line(&`let ${lr.prefix_self_ref.name} = _lr_acc;`);
-        w.line(&`let mut vals = ${vals_struct_name(rule)} \{\};`);
+        w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
     }
     // Interleave the alt's actions with the suffix ops. The LR rewrite strips
     // the leading self-ref (element 0), so an action at surface `before_index b`
@@ -4122,8 +4127,8 @@ fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCo
     let verdict = dedup_name(&"ng_exit", nc);
     w.line(&`let mut ${verdict}: bool = false;`);
     gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
-    w.line(&`if ${verdict} \{ break; \}`);
-    w.line(&`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) \{ break; \}`);
+    w.line(&`if ${verdict} { break; }`);
+    w.line(&`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
@@ -4171,14 +4176,14 @@ fn emit_probe_verdict(w: &mut CodeWriter, probe_viable: &List<String>, verdict: 
         if mask == "true" {
             w.line(&`${*verdict} = true;`);
         } else {
-            w.line(&`if ${mask} \{ ${*verdict} = true; \}`);
+            w.line(&`if ${mask} { ${*verdict} = true; }`);
         }
         return;
     }
     w.line(&"let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     let viable = ctx.kind_check_str(probe_viable, &"probe_kind");
     let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
-    w.line(&`if ${cond} \{ ${*verdict} = true; \}`);
+    w.line(&`if ${cond} { ${*verdict} = true; }`);
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -4227,7 +4232,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
                     assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
-                    w.line(&`if ${best} <= p.pos \{ break; \}`);
+                    w.line(&`if ${best} <= p.pos { break; }`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
                     return;
@@ -4235,7 +4240,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             }
             assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
-            w.line(&`if ${scan_pos} < 0 \{ break; \}`);
+            w.line(&`if ${scan_pos} < 0 { break; }`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
             return;
@@ -5035,15 +5040,15 @@ fn gen_repeat_gate_break(w: &mut CodeWriter, inner: &Element, ctx: &mut GenConte
         return;
     };
     if plus_flag.is_empty() {
-        w.line(&`if !(${cond}) \{ break; \}`);
+        w.line(&`if !(${cond}) { break; }`);
         return;
     }
     if group_dispatch_reports(inner) {
-        w.line(&`if !${*plus_flag} && !(${cond}) \{ break; \}`);
+        w.line(&`if !${*plus_flag} && !(${cond}) { break; }`);
         return;
     }
     w.begin(&`if !(${cond})`);
-    w.line(&`if ${*plus_flag} \{ p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); \}`);
+    w.line(&`if ${*plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
     w.line(&"break;");
     w.end();
 }
@@ -6133,7 +6138,7 @@ fn gen_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &R
             // today: recovery is only emitted for a `body_scannable`
             // `LeafRuleCall`, and a scannable RuleRef has a non-empty FIRST —
             // this guards the invariant.)
-            w.line(&`if ${scan_pos} < 0 \{ break; \}`);
+            w.line(&`if ${scan_pos} < 0 { break; }`);
             return;
         }
         w.begin(&`if ${scan_pos} < 0`);
@@ -6163,7 +6168,7 @@ fn gen_rep_break_with_recovery(w: &mut CodeWriter, scan_pos: &String, rep_op: &R
         w.line(&"break;");
         w.end();
     } else {
-        w.line(&`if ${scan_pos} < 0 \{ break; \}`);
+        w.line(&`if ${scan_pos} < 0 { break; }`);
     }
 }
 
@@ -6351,7 +6356,7 @@ fn gen_rep_decline_stranded(
     w.begin(&`if !(${can_continue})`);
     w.line(&`let mut ${dead_end}: bool = false;`);
     gen_viability_probe(w, &duties.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &duties.decline_viable);
-    w.line(&`if ${dead_end} \{ break; \}`);
+    w.line(&`if ${dead_end} { break; }`);
     w.end();
     w.end();
 }
@@ -6449,7 +6454,7 @@ fn gen_rep_reserve_at(
     w.end();
     let kind = dedup_name(&"rep_reserve_kind", nc);
     let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", at, body_admits, ctx);
-    w.line(&`if ${starved} \{ break; \}`);
+    w.line(&`if ${starved} { break; }`);
     w.end();
 }
 
@@ -6487,7 +6492,7 @@ fn gen_scan_rewind_break(
     brk: &String = &PLAIN_BREAK,
 ) {
     if !ctx.emit_scan_gate() {
-        w.line(&`if ${*cond} \{ pos = ${*slot}; ${*brk} \}`);
+        w.line(&`if ${*cond} { pos = ${*slot}; ${*brk} }`);
         return;
     }
     w.begin(&`if ${*cond}`);
@@ -6540,7 +6545,7 @@ fn scan_gate_best_commit(ctx: &GenContext, best: &String, wins: &String, end: &S
     for let line of scan_gate_snapshot(ctx, best) {
         body.push_str(&` ${line}`);
     }
-    return `if ${*wins} \{ ${body} \}`;
+    return `if ${*wins} { ${body} }`;
 }
 
 /// Undo an iteration the scan is abandoning: the position it started at, and
@@ -6568,7 +6573,7 @@ fn gen_scan_gate_restore(w: &mut CodeWriter, ctx: &GenContext, slot: &String) {
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read(w: &mut CodeWriter, name: &String, stream: &String, at: &String) {
-    w.line(&`let ${*name} = if ${*at} < ${*stream}.len() \{ ${*stream}[${*at}] \} else \{ TK_EOF \};`);
+    w.line(&`let ${*name} = if ${*at} < ${*stream}.len() { ${*stream}[${*at}] } else { TK_EOF };`);
 }
 
 /// `kind_check_str` for a set that may be empty — an empty one admits nothing,
@@ -6613,9 +6618,9 @@ fn gen_rep_decided_entry(
     // Every iteration may decline, and one that consumed nothing would come
     // round at the same position forever.
     if plus_flag.is_empty() {
-        w.line(&`if ${best} <= p.pos \{ break; \}`);
+        w.line(&`if ${best} <= p.pos { break; }`);
     } else {
-        w.line(&`if !${*plus_flag} && ${best} <= p.pos \{ break; \}`);
+        w.line(&`if !${*plus_flag} && ${best} <= p.pos { break; }`);
     }
     let refusable = if plus_flag.is_empty() { Refusable::Always } else { Refusable::UnlessFirst(*plus_flag) };
     gen_iteration_duties(
@@ -6636,7 +6641,7 @@ fn gen_rep_decided_entry(
     // prediction picked nothing is there an answer to give here.
     w.begin(&`if ${winner} < 0`);
     let expected_ref = sync_set_ref(ctx, &decision.expected);
-    w.line(&`if ${*plus_flag} \{ p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); \}`);
+    w.line(&`if ${*plus_flag} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
     w.line(&"break;");
     w.end();
     w.line(&`${*plus_flag} = false;`);
@@ -6810,7 +6815,7 @@ fn gen_reserve_check(
     gen_reserve_probe(w, reserve, body_end, &ok, &label, ctx);
     let kind = dedup_name(&`${*body_end}_kind`, name_counts);
     let starved = reserve_starved_cond(w, &ok, &kind, &"tokens", &"pos", body_admits, ctx);
-    w.line(&`if ${starved} \{ ${*fail} \}`);
+    w.line(&`if ${starved} { ${*fail} }`);
 }
 
 fn gen_scan_guard_with_prefix(
@@ -6832,7 +6837,7 @@ fn gen_scan_guard_with_prefix(
     let fail = `break ${scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
-        w.line(&`if pos <= p.pos \{ break ${scan_label}; \}`);
+        w.line(&`if pos <= p.pos { break ${scan_label}; }`);
     }
     // What the alternative still owes past this loop, measured from where the
     // iteration would end. An iteration leaving the suffix unmatchable is one
@@ -7931,7 +7936,7 @@ fn emit_scan_tournament(
         match alt_initial_gate(idx, ctx) {
             Some(gate) => {
                 any_gated = true;
-                w.line(&`let _sd_p_${idx} = if ${gate} \{ ${scan} \} else \{ -1 \};`);
+                w.line(&`let _sd_p_${idx} = if ${gate} { ${scan} } else { -1 };`);
             },
             None => {
                 w.line(&`let _sd_p_${idx} = ${scan};`);
@@ -8307,12 +8312,7 @@ fn gen_multi_alt_body_alt(
             let alt_index = non_lr_indices[group[0]];
             let alt = &rule.alternatives[alt_index];
             let body = rule_alt_body(lowered_rule, alt_index).unwrap();
-            // Match the direct-dispatch path: suppress the pick line for
-            // all-single-token rules (the chosen alt is obvious from the
-            // lookahead token on the `enter` line).
-            if ctx.is_trace() && !all_alts_are_single_token(&rule.alternatives) {
-                w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
-            }
+            gen_trace_pick(w, rule, alt_index, ctx);
             let after = rule_after_for(rule, lowered_rule, ctx);
             gen_alt_body(
                 w,
