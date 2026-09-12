@@ -102,11 +102,12 @@ fn "opt_sroa_intraprocedural.wado/mutable_field_write"(seed) {
 }
 
 fn "opt_sroa_intraprocedural.wado/$cm_export__run"() {
+    let $v0_2: i32;
     let $v1_3: i32;
-    $v1_3 = "opt_sroa_intraprocedural.wado/mutable_field_write"(7);
+    $v1_3 = "opt_sroa_intraprocedural.wado/mutable_field_write"(local.tee $v0_2(black_box(7)));
     if @unlikely($v1_3 != 100) {
         cold_path;
-        "opt_sroa_intraprocedural.wado/run$cold5"(7, $v1_3);
+        "opt_sroa_intraprocedural.wado/run$cold5"($v0_2, $v1_3);
         unreachable;
     }
     "wasi/task-return"(0);

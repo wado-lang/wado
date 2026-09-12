@@ -249,55 +249,75 @@ global global:core:prelude/primitive.wado::$const_obj_327: ref null "core:prelud
 global global:core:prelude/primitive.wado::$const_obj_328: ref null Array<u8> = array.new_fixed<u8>(78, 97, 78);
 
 fn "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit"() {
-    if @unlikely(1 != 1) {
+    let f: bool;
+    let t: bool;
+    let $v1_2: bool;
+    let $v1_4: bool;
+    let $v1_6: bool;
+    let $v1_8: bool;
+    f = black_box(0);
+    t = black_box(1);
+    $v1_2 = f == 0;
+    if @unlikely($v1_2 != 1) {
         cold_path;
-        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold4"(0, 1);
+        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold4"(f, $v1_2);
         unreachable;
     }
-    if @unlikely((0 == 0) == 0) {
+    $v1_4 = t == 0;
+    if @unlikely(($v1_4 == 0) == 0) {
         cold_path;
-        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold3"(1, 0);
+        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold3"(t, $v1_4);
         unreachable;
     }
-    if @unlikely(1 != 1) {
+    $v1_6 = f == 0;
+    if @unlikely($v1_6 != 1) {
         cold_path;
-        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold2"(0, 1);
+        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold2"(f, $v1_6);
         unreachable;
     }
-    if @unlikely((0 == 0) == 0) {
+    $v1_8 = t == 0;
+    if @unlikely(($v1_8 == 0) == 0) {
         cold_path;
-        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold1"(1, 0);
+        "int_operators.wado/$test_8_bitnot_on_a_bool_complements_one_bit$cold1"(t, $v1_8);
         unreachable;
     }
 }
 
 fn "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width"() {
+    let a: i64;
+    let b: u64;
+    let c: i32;
+    let d: u8;
     let $v1_4: i64;
     let $v1_6: u64;
     let $v1_8: i32;
     let $v1_10: u8;
-    $v1_4 = 4_i64 << 3_i64;
+    a = black_box(4_i64);
+    b = black_box(8_i64);
+    c = black_box(4);
+    d = black_box(4);
+    $v1_4 = a << 3_i64;
     if @unlikely($v1_4 != 32_i64) {
         cold_path;
-        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold3"(4_i64, $v1_4);
+        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold3"(a, $v1_4);
         unreachable;
     }
-    $v1_6 = 8_i64 >>u 1_i64;
+    $v1_6 = b >>u 1_i64;
     if @unlikely($v1_6 != 4_i64) {
         cold_path;
-        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold2"(8_i64, $v1_6);
+        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold2"(b, $v1_6);
         unreachable;
     }
-    $v1_8 = 4 << 3;
+    $v1_8 = c << 3;
     if @unlikely($v1_8 != 32) {
         cold_path;
-        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold1"(4, $v1_8);
+        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold1"(c, $v1_8);
         unreachable;
     }
-    $v1_10 = (4 << 3) & 255;
+    $v1_10 = (d << 3) & 255;
     if @unlikely($v1_10 != 32) {
         cold_path;
-        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold0"(4, $v1_10);
+        "int_operators.wado/$test_9_shift_on_a_type_parameter_keeps_the_receiver_width$cold0"(d, $v1_10);
         unreachable;
     }
 }

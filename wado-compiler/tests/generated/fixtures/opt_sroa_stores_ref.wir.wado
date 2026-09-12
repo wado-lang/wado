@@ -110,11 +110,15 @@ fn "opt_sroa_stores_ref.wado/read_point"(p) {
 fn "opt_sroa_stores_ref.wado/$cm_export__run"() {
     let r: i32;
     let $v2: i32;
-    r = "opt_sroa_stores_ref.wado/read_point"(struct.new "opt_sroa_stores_ref.wado//Point" { x: 10, y: 20 });
-    $v2 = 10 + r;
+    let $sroa_p_x: i32;
+    let $sroa_p_y: i32;
+    $sroa_p_x = black_box(10);
+    $sroa_p_y = black_box(20);
+    r = "opt_sroa_stores_ref.wado/read_point"(struct.new "opt_sroa_stores_ref.wado//Point" { x: $sroa_p_x, y: $sroa_p_y });
+    $v2 = $sroa_p_x + r;
     if @unlikely($v2 != 40) {
         cold_path;
-        "opt_sroa_stores_ref.wado/run$cold0"(r, 10, $v2);
+        "opt_sroa_stores_ref.wado/run$cold0"(r, $sroa_p_x, $v2);
         unreachable;
     }
     "wasi/task-return"(0);

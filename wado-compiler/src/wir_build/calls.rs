@@ -774,9 +774,7 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_max" => binary!(self, args, WirInstr::F32Max),
             "builtin::f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
             "builtin::ref_eq" => binary!(self, args, WirInstr::RefEq),
-            // Opaque to the NIR optimizer, gone by codegen: the argument is
-            // emitted where the call stood.
-            "builtin::black_box" => self.translate_operand(args[0].expr),
+            "builtin::black_box" => unary!(self, args, WirInstr::BlackBox),
             "builtin::is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);
                 // The point of the read is to observe the `null` placeholder,

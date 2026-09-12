@@ -130,8 +130,11 @@ fn "opt_bce_const_global_clamped_index.wado/lookup"(x) {
 }
 
 fn "opt_bce_const_global_clamped_index.wado/run"() {
+    let $v0_0: i32;
     let $v1_1: u64;
+    let $v0_3: i32;
     let $v1_4: u64;
+    let $v0_6: i32;
     let $v1_7: u64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_bce_const_global_clamped_index.wado::$modules_initialized);
@@ -140,22 +143,22 @@ fn "opt_bce_const_global_clamped_index.wado/run"() {
         "opt_bce_const_global_clamped_index.wado/$initialize_module"();
         global:opt_bce_const_global_clamped_index.wado::$modules_initialized = 1;
     };
-    $v1_1 = "opt_bce_const_global_clamped_index.wado/lookup"(0);
+    $v1_1 = "opt_bce_const_global_clamped_index.wado/lookup"(local.tee $v0_0(black_box(0)));
     if @unlikely($v1_1 != 1_i64) {
         cold_path;
-        "opt_bce_const_global_clamped_index.wado/run$cold2"(0, $v1_1);
+        "opt_bce_const_global_clamped_index.wado/run$cold2"($v0_0, $v1_1);
         unreachable;
     }
-    $v1_4 = "opt_bce_const_global_clamped_index.wado/lookup"(5);
+    $v1_4 = "opt_bce_const_global_clamped_index.wado/lookup"(local.tee $v0_3(black_box(5)));
     if @unlikely($v1_4 != 100000_i64) {
         cold_path;
-        "opt_bce_const_global_clamped_index.wado/run$cold1"(5, $v1_4);
+        "opt_bce_const_global_clamped_index.wado/run$cold1"($v0_3, $v1_4);
         unreachable;
     }
-    $v1_7 = "opt_bce_const_global_clamped_index.wado/lookup"(19);
+    $v1_7 = "opt_bce_const_global_clamped_index.wado/lookup"(local.tee $v0_6(black_box(19)));
     if @unlikely($v1_7 != 1000000000000000000_i64) {
         cold_path;
-        "opt_bce_const_global_clamped_index.wado/run$cold0"(19, $v1_7);
+        "opt_bce_const_global_clamped_index.wado/run$cold0"($v0_6, $v1_7);
         unreachable;
     }
 }

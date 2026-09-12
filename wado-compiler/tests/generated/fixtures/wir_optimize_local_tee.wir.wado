@@ -115,25 +115,28 @@ fn "wir_optimize_local_tee.wado/square_of"(a, b) {
 }
 
 fn "wir_optimize_local_tee.wado/$test_0"() {
+    let $v0_0: i32;
     let $v1_1: i32;
+    let $v0_3: i32;
     let $v1_4: i32;
+    let $v0_6: i32;
     let $v1_7: i32;
-    $v1_1 = "wir_optimize_local_tee.wado/square_of"(3, 4);
+    $v1_1 = "wir_optimize_local_tee.wado/square_of"(local.tee $v0_0(black_box(3)), 4);
     if @unlikely($v1_1 != 169) {
         cold_path;
-        "wir_optimize_local_tee.wado/$test_0$cold2"(3, $v1_1);
+        "wir_optimize_local_tee.wado/$test_0$cold2"($v0_0, $v1_1);
         unreachable;
     }
-    $v1_4 = "wir_optimize_local_tee.wado/square_of"(0, 0);
+    $v1_4 = "wir_optimize_local_tee.wado/square_of"(local.tee $v0_3(black_box(0)), 0);
     if @unlikely($v1_4 != 1) {
         cold_path;
-        "wir_optimize_local_tee.wado/$test_0$cold1"(0, $v1_4);
+        "wir_optimize_local_tee.wado/$test_0$cold1"($v0_3, $v1_4);
         unreachable;
     }
-    $v1_7 = "wir_optimize_local_tee.wado/square_of"(-2, 5);
+    $v1_7 = "wir_optimize_local_tee.wado/square_of"(local.tee $v0_6(black_box(-2)), 5);
     if @unlikely($v1_7 != 81) {
         cold_path;
-        "wir_optimize_local_tee.wado/$test_0$cold0"(-2, $v1_7);
+        "wir_optimize_local_tee.wado/$test_0$cold0"($v0_6, $v1_7);
         unreachable;
     }
 }

@@ -274,6 +274,8 @@ global global:tagged_template_format_equiv.wado::$const_obj_319: ref null Array<
 global global:tagged_template_format_equiv.wado::$const_obj_321: ref null Array<u8> = array.new_fixed<u8>(40);
 
 fn "tagged_template_format_equiv.wado/run"() with Stdout {
+    let pi: f64;
+    let n_1: i32;
     let s_2: ref "core:prelude/string.wado//String";
     let p: ref "tagged_template_format_equiv.wado//Pt";
     let $hole_0_9: ref "tagged_template_format_equiv.wado//Pt";
@@ -383,16 +385,18 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:tagged_template_format_equiv.wado::$modules_initialized = 1;
     };
-    s_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("あい"), used: 6 };
+    pi = black_box(3.14159);
+    n_1 = black_box(-42);
+    s_2 = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("あい"), used: 6 });
     p = struct.new "tagged_template_format_equiv.wado//Pt" { x: 1, y: 2 };
     $hole_0_9 = struct.new "tagged_template_format_equiv.wado//Pt" { x: 1, y: 2 };
     $hole_0_10 = struct.new "tagged_template_format_equiv.wado//Pt" { x: 1, y: 2 };
     $hole_0_12 = struct.new "core:prelude/types.wado//Box<f64>" { value: 2.5 };
-    tagged = "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_format_equiv.wado/$tmpl$8c07fa04581871ff,[f64,i32,i32,i32,i32,i32,i32,core:prelude/string.wado/String,core:prelude/string.wado/String,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Meters,&core:prelude/string.wado/String,&core:prelude/string.wado/String,bool,char,i32]>"(struct.new "tagged_template_format_equiv.wado//$tmpl$8c07fa04581871ff" { h0: 3.14159, h1: -42, h2: 255, h3: 255, h4: 5, h5: 8, h6: 1200, h7: s_2, h8: s_2, h9: $hole_0_9, h10: $hole_0_10, h11: p, h12: $hole_0_12, h13: s_2, h14: s_2, h15: 1, h16: 99, h17: -42 });
+    tagged = "core:prelude/traits.wado/core/prelude/traits.wado/format<tagged_template_format_equiv.wado/$tmpl$8c07fa04581871ff,[f64,i32,i32,i32,i32,i32,i32,core:prelude/string.wado/String,core:prelude/string.wado/String,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Pt,tagged_template_format_equiv.wado/Meters,&core:prelude/string.wado/String,&core:prelude/string.wado/String,bool,char,i32]>"(struct.new "tagged_template_format_equiv.wado//$tmpl$8c07fa04581871ff" { h0: pi, h1: n_1, h2: 255, h3: 255, h4: 5, h5: 8, h6: 1200, h7: s_2, h8: s_2, h9: $hole_0_9, h10: $hole_0_10, h11: p, h12: $hole_0_12, h13: s_2, h14: s_2, h15: 1, h16: 99, h17: n_1 });
     $local_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(305), used: 0 };
     $local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: 2, indent: 0, buf: $local_30 };
     f_51 = $local_31;
-    "core:prelude/primitive.wado/f64::fmt_into$scalar"(3.14159, f_51);
+    "core:prelude/primitive.wado/f64::fmt_into$scalar"(pi, f_51);
     new_used_59 = $local_30.used + 1;
     if @unlikely(new_used_59 > builtin::array_len($local_30.repr)) {
         cold_path;
@@ -403,7 +407,7 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_30.repr, start_60, global:tagged_template_format_equiv.wado::$const_obj_59, 0, 1);
     $local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 48, align: 2, sign_plus: 0, alternate: 0, zero_pad: 1, width: 8, precision: -2, indent: 0, buf: $local_30 };
     f_63 = $local_31;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(-42, f_63);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(n_1, f_63);
     new_used_73 = $local_30.used + 1;
     if @unlikely(new_used_73 > builtin::array_len($local_30.repr)) {
         cold_path;
@@ -600,7 +604,7 @@ fn "tagged_template_format_equiv.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_30.repr, start_332, global:tagged_template_format_equiv.wado::$const_obj_59, 0, 1);
     $local_31 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 1, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_30 };
     f_335 = $local_31;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(-42, f_335);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(n_1, f_335);
     rx_344 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_345 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tagged_template_format_equiv.wado/$cm_binding__Stdout_write_via_stream"(rx_344);

@@ -94,6 +94,7 @@ fn "opt_enum_constant_forward.wado/describe"(e) {
 }
 
 fn "opt_enum_constant_forward.wado/run"() with Stdout {
+    let at: i32;
     let kind: "opt_enum_constant_forward.wado//enum:ErrorKind";
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
@@ -107,18 +108,21 @@ fn "opt_enum_constant_forward.wado/run"() with Stdout {
     let packed_36: i64;
     let rx_37: i32;
     let tx_38: i32;
-    kind = block -> "opt_enum_constant_forward.wado//enum:ErrorKind" {
+    at = black_box(10);
+    kind = (if at > 5 -> "opt_enum_constant_forward.wado//enum:ErrorKind" {
         1;
-    };
+    } else {
+        0;
+    });
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_16("opt_enum_constant_forward.wado/describe"(struct.new "opt_enum_constant_forward.wado//ParseError" { kind: kind, at: 10 })), $local_3);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_16("opt_enum_constant_forward.wado/describe"(struct.new "opt_enum_constant_forward.wado//ParseError" { kind: kind, at: at })), $local_3);
     rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
     tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
     handle_10 = "opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream"(rx_19);
     "core:rt/write_string_to_stream"(tx_20, $local_3);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_34("opt_enum_constant_forward.wado/describe"(struct.new "opt_enum_constant_forward.wado//ParseError" { kind: 1, at: 10 })), $local_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_34("opt_enum_constant_forward.wado/describe"(struct.new "opt_enum_constant_forward.wado//ParseError" { kind: 1, at: at })), $local_5);
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_28 = "opt_enum_constant_forward.wado/$cm_binding__Stdout_write_via_stream"(rx_37);

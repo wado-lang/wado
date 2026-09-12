@@ -91,6 +91,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:newtype_over_primitive_operator_output.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "newtype_over_primitive_operator_output.wado/run"() with Stdout {
+    let f_1: bool;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
@@ -104,6 +105,7 @@ fn "newtype_over_primitive_operator_output.wado/run"() with Stdout {
     let packed: i64;
     let rx_47: i32;
     let tx_48: i32;
+    f_1 = black_box(1);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
     f_12 = $local_3;
@@ -118,9 +120,11 @@ fn "newtype_over_primitive_operator_output.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_2.repr, start_23, global:newtype_over_primitive_operator_output.wado::$const_obj_0, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
     f_27 = $local_3;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_27, block -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_27, (if f_1 == 0 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
+    }));
     new_used_37 = $local_2.used + 1;
     if @unlikely(new_used_37 > builtin::array_len($local_2.repr)) {
         cold_path;
@@ -131,9 +135,11 @@ fn "newtype_over_primitive_operator_output.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_2.repr, start_38, global:newtype_over_primitive_operator_output.wado::$const_obj_0, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
     f_42 = $local_3;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_42, block -> ref "core:prelude/string.wado//String" {
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_42, (if f_1 == 0 -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
+    }));
     rx_47 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_48 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "newtype_over_primitive_operator_output.wado/$cm_binding__Stdout_write_via_stream"(rx_47);

@@ -1814,6 +1814,8 @@ impl<'a> WirEmitter<'a> {
             }
             // Pure marker consumed during WIR finalization; emits no code.
             WirInstr::ColdPath => {}
+            // The barrier ends here; what the engine folds downstream is its own.
+            WirInstr::BlackBox(o) => self.emit_instr(f, o),
             WirInstr::Drop(o) => {
                 self.emit_instr(f, o);
                 if !o.always_diverges() {

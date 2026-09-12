@@ -138,7 +138,7 @@ fn "opt_const_forward_call_in_if_invalidates.wado/run"() with Stdout {
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_0 };
     f_10 = $local_1;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_11("opt_const_forward_call_in_if_invalidates.wado/f"(0)), f_10);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_11("opt_const_forward_call_in_if_invalidates.wado/f"(black_box(0))), f_10);
     new_used = $local_0.used + 1;
     if @unlikely(new_used > builtin::array_len($local_0.repr)) {
         cold_path;
@@ -149,7 +149,7 @@ fn "opt_const_forward_call_in_if_invalidates.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_0.repr, start_21, global:opt_const_forward_call_in_if_invalidates.wado::$const_obj_1, 0, 1);
     $local_1 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_0 };
     f_25 = $local_1;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_26("opt_const_forward_call_in_if_invalidates.wado/f"(1)), f_25);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_26("opt_const_forward_call_in_if_invalidates.wado/f"(black_box(1))), f_25);
     rx_29 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_30 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_const_forward_call_in_if_invalidates.wado/$cm_binding__Stdout_write_via_stream"(rx_29);

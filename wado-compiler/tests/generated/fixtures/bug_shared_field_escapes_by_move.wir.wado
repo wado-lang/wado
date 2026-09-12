@@ -189,7 +189,7 @@ fn "bug_shared_field_escapes_by_move.wado/moved_out_of_a_local"() {
     let b: ref "core:prelude//List<i32>";
     let elements: ref Array<i32>;
     let $sroa_$sroa_src_buf_used: i32;
-    elements = array.new_fixed<i32>(1, 2, 3);
+    elements = array.new_fixed<i32>(1, 2, black_box(3));
     $sroa_$sroa_src_buf_used = builtin::array_len(elements);
     b = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($sroa_$sroa_src_buf_used); builtin::array_copy<i32>($array_clone_dst_2, 0, elements, 0, $sroa_$sroa_src_buf_used); $array_clone_dst_2), used: $sroa_$sroa_src_buf_used };
     if @unlikely($sroa_$sroa_src_buf_used >= builtin::array_len(b.repr)) {
@@ -223,7 +223,7 @@ fn "bug_shared_field_escapes_by_move.wado/$test_0_a_shared_field_does_not_escape
     let $fuse_at_25: i32;
     let elements: ref Array<i32>;
     let $sroa_s_buf: ref "core:prelude//List<i32>";
-    elements = array.new_fixed<i32>(1, 2, 3);
+    elements = array.new_fixed<i32>(1, 2, black_box(3));
     $sroa_s_buf = struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
     $v1_1 = "bug_shared_field_escapes_by_move.wado/moved_into_a_binding$scalar"($sroa_s_buf);
     if @unlikely($v1_1 != 3) {

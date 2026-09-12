@@ -225,13 +225,15 @@ fn "tagged_template_html.wado/$cm_binding__Stdout_write_via_stream"(data) with S
 
 fn "tagged_template_html.wado/$cm_export__run"() {
     let title: ref "core:prelude/string.wado//String";
+    let n: i32;
     let message_2: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
     let rx_8: i32;
     let tx_9: i32;
-    title = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("say \"hi\" & <bye>"), used: 16 };
-    message_2 = "tagged_template_html.wado/tagged_template_html.wado/html<tagged_template_html.wado/$tmpl$f92522b0648949b5,[core:prelude/string.wado/String,core:prelude/string.wado/String,i32]>"(struct.new "tagged_template_html.wado//$tmpl$f92522b0648949b5" { h0: title, h1: title, h2: 3 });
+    title = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("say \"hi\" & <bye>"), used: 16 });
+    n = black_box(3);
+    message_2 = "tagged_template_html.wado/tagged_template_html.wado/html<tagged_template_html.wado/$tmpl$f92522b0648949b5,[core:prelude/string.wado/String,core:prelude/string.wado/String,i32]>"(struct.new "tagged_template_html.wado//$tmpl$f92522b0648949b5" { h0: title, h1: title, h2: n });
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tagged_template_html.wado/$cm_binding__Stdout_write_via_stream"(rx_8);

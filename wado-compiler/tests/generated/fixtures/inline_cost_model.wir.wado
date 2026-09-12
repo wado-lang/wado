@@ -136,7 +136,7 @@ fn "inline_cost_model.wado/run"() with Stdout {
     let $sroa_b_repr: ref "core:prelude//List<i32>";
     let $sroa_b_used: i32;
     $sroa_b_repr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(0, 0, 0, 0, 0, 0, 0, 0), used: 8 };
-    $sroa_b_used = 0;
+    $sroa_b_used = black_box(0);
     total = 0;
     i = 0;
     b0: block {
@@ -171,7 +171,7 @@ fn "inline_cost_model.wado/run"() with Stdout {
     "core:rt/write_string_to_stream"(tx_40, $local_3);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_54("inline_cost_model.wado/inline_cost_model.wado/Buf::churn"(3)), $local_5);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_54("inline_cost_model.wado/inline_cost_model.wado/Buf::churn"(black_box(3))), $local_5);
     rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
     tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
     handle_48 = "inline_cost_model.wado/$cm_binding__Stdout_write_via_stream"(rx_57);

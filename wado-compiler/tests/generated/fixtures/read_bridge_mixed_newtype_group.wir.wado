@@ -154,8 +154,10 @@ global global:core:prelude/primitive.wado::$const_obj_46: ref null "core:prelude
 global global:core:prelude/primitive.wado::$const_obj_47: ref null Array<u8> = array.new_fixed<u8>(78, 97, 78);
 
 fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
+    let m: f64;
     let fields: ref "core:prelude/string.wado//String";
     let $hole_1_0: ref "core:prelude/types.wado//Box<f64>";
+    let $hole_1_1: f64;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/string.wado//String";
     let new_used_29: i32;
@@ -177,16 +179,19 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
     let packed_81: i64;
     let rx_82: i32;
     let tx_83: i32;
+    let $sroa_s_raw: f64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:read_bridge_mixed_newtype_group.wado::$modules_initialized);
         cold_path;
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:read_bridge_mixed_newtype_group.wado::$modules_initialized = 1;
     };
+    m = black_box(2.5);
+    $sroa_s_raw = black_box(1.5);
     fields = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     $inline_core_prelude_string_wado_String__push_str_2: block {
         $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-        "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(2.5, $local_8);
+        "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(m, $local_8);
         new_used_29 = $local_8.used + 1;
         if @unlikely(new_used_29 > builtin::array_len($local_8.repr)) {
             cold_path;
@@ -208,7 +213,7 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
     };
     $inline_core_prelude_string_wado_String__push_str_14: block {
         $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
-        "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"(1.5, $local_10);
+        "core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar"($sroa_s_raw, $local_10);
         new_used_55 = $local_10.used + 1;
         if @unlikely(new_used_55 > builtin::array_len($local_10.repr)) {
             cold_path;
@@ -233,8 +238,9 @@ fn "read_bridge_mixed_newtype_group.wado/run"() with Stdout {
     handle_67 = "read_bridge_mixed_newtype_group.wado/$cm_binding__Stdout_write_via_stream"(rx_70);
     "core:rt/write_string_to_stream"(tx_71, fields);
     "wasi/future-drop-readable:transmission-cli"(handle_67);
-    $hole_1_0 = struct.new "core:prelude/types.wado//Box<f64>" { value: 2.5 };
-    message_76 = "read_bridge_mixed_newtype_group.wado/read_bridge_mixed_newtype_group.wado/holes<read_bridge_mixed_newtype_group.wado/$tmpl$84e11f47d67f5098,[read_bridge_mixed_newtype_group.wado/Meters,f64]>"(struct.new "read_bridge_mixed_newtype_group.wado//$tmpl$84e11f47d67f5098" { h0: $hole_1_0, h1: 0.5 });
+    $hole_1_0 = struct.new "core:prelude/types.wado//Box<f64>" { value: m };
+    $hole_1_1 = black_box(0.5);
+    message_76 = "read_bridge_mixed_newtype_group.wado/read_bridge_mixed_newtype_group.wado/holes<read_bridge_mixed_newtype_group.wado/$tmpl$84e11f47d67f5098,[read_bridge_mixed_newtype_group.wado/Meters,f64]>"(struct.new "read_bridge_mixed_newtype_group.wado//$tmpl$84e11f47d67f5098" { h0: $hole_1_0, h1: $hole_1_1 });
     rx_82 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
     tx_83 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
     handle_79 = "read_bridge_mixed_newtype_group.wado/$cm_binding__Stdout_write_via_stream"(rx_82);

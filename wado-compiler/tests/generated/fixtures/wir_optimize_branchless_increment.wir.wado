@@ -184,16 +184,20 @@ fn "wir_optimize_branchless_increment.wado/$test_0"() {
     let i_45: i32;
     let count_56: i32;
     let i_57: i32;
+    let $licm_used_66: i32;
     let $licm_repr_67: ref Array<bool>;
+    let $licm_used_68: i32;
     let $licm_repr_69: ref Array<bool>;
+    let $licm_used_70: i32;
     let $licm_repr_71: ref Array<bool>;
-    $v1_1 = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 0, 1, 1, 0), used: 5 };
+    $v1_1 = black_box(struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 0, 1, 1, 0), used: 5 });
     count_32 = 0;
     i_33 = 0;
+    $licm_used_66 = $v1_1.used;
     $licm_repr_67 = $v1_1.repr;
     b0: block {
         l1: loop {
-            break_if b0 i_33 >= 5;
+            break_if b0 i_33 >= $licm_used_66;
             count_32 = count_32 + builtin::array_get_value<bool>($licm_repr_67, i_33);
             i_33 = i_33 + 1;
             continue l1;
@@ -206,13 +210,14 @@ fn "wir_optimize_branchless_increment.wado/$test_0"() {
         unreachable;
     }
     elements_42 = array.new_fixed<bool>();
-    $v1_5 = struct.new "core:prelude//List<bool>" { repr: ref.as_non_null(let $array_clone_dst_2: ref Array<bool>; $array_clone_dst_2 = builtin::array_new<bool>(0); builtin::array_copy<bool>($array_clone_dst_2, 0, elements_42, 0, 0); $array_clone_dst_2), used: 0 };
+    $v1_5 = black_box(struct.new "core:prelude//List<bool>" { repr: ref.as_non_null(let $array_clone_dst_2: ref Array<bool>; $array_clone_dst_2 = builtin::array_new<bool>(0); builtin::array_copy<bool>($array_clone_dst_2, 0, elements_42, 0, 0); $array_clone_dst_2), used: 0 });
     count_44 = 0;
     i_45 = 0;
+    $licm_used_68 = $v1_5.used;
     $licm_repr_69 = $v1_5.repr;
     b3: block {
         l4: loop {
-            break_if b3 i_45 >= 0;
+            break_if b3 i_45 >= $licm_used_68;
             count_44 = count_44 + builtin::array_get_value<bool>($licm_repr_69, i_45);
             i_45 = i_45 + 1;
             continue l4;
@@ -224,13 +229,14 @@ fn "wir_optimize_branchless_increment.wado/$test_0"() {
         "core:rt/panic"($local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(254); $fuse_at_22 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 70); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_22, global:wir_optimize_branchless_increment.wado::$const_obj_15, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_22 + 20, global:wir_optimize_branchless_increment.wado::$const_obj_14, 7); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_22 + 27, global:wir_optimize_branchless_increment.wado::$const_obj_13, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_22 + 31, global:wir_optimize_branchless_increment.wado::$const_obj_12, 38); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_22 + 69, global:wir_optimize_branchless_increment.wado::$const_obj_11, 1); $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, $local_15); $fuse_at_23 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 63); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_23, global:wir_optimize_branchless_increment.wado::$const_obj_23, 56); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_23 + 56, global:wir_optimize_branchless_increment.wado::$const_obj_22, 7); $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14); "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bool>" { repr: elements_42, used: 0 }, $local_15); $fuse_at_24 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 28); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_24, global:wir_optimize_branchless_increment.wado::$const_obj_4, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_24 + 1, global:wir_optimize_branchless_increment.wado::$const_obj_20, 27); $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14); "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/Inspect::inspect"($v1_5, $local_15); $fuse_at_25 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 41); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_25, global:wir_optimize_branchless_increment.wado::$const_obj_4, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_25 + 1, global:wir_optimize_branchless_increment.wado::$const_obj_18, 40); $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: $v2_6 }, $local_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_14, global:wir_optimize_branchless_increment.wado::$const_obj_4); $local_14);
         unreachable;
     }
-    $v1_9 = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 1, 1), used: 3 };
+    $v1_9 = black_box(struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 1, 1), used: 3 });
     count_56 = 0;
     i_57 = 0;
+    $licm_used_70 = $v1_9.used;
     $licm_repr_71 = $v1_9.repr;
     b6: block {
         l7: loop {
-            break_if b6 i_57 >= 3;
+            break_if b6 i_57 >= $licm_used_70;
             count_56 = count_56 + builtin::array_get_value<bool>($licm_repr_71, i_57);
             i_57 = i_57 + 1;
             continue l7;

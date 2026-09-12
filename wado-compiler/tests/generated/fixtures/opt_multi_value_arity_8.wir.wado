@@ -115,11 +115,12 @@ fn "opt_multi_value_arity_8.wado/total"(seed) {
 }
 
 fn "opt_multi_value_arity_8.wado/$cm_export__run"() {
+    let $v0: i32;
     let $v1: i32;
-    $v1 = "opt_multi_value_arity_8.wado/total"(10);
+    $v1 = "opt_multi_value_arity_8.wado/total"(local.tee $v0(black_box(10)));
     if @unlikely($v1 != 75) {
         cold_path;
-        "opt_multi_value_arity_8.wado/run$cold0"(10, $v1);
+        "opt_multi_value_arity_8.wado/run$cold0"($v0, $v1);
         unreachable;
     }
     "wasi/task-return"(0);
