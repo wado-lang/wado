@@ -11,6 +11,7 @@
 
 use std::path::Path;
 
+use crate::common::wir_function_body;
 use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
@@ -39,7 +40,7 @@ export fn run() {
 /// shape the optimizer left them in, and counting the callee name alone would
 /// read the split shape as no check at all.
 fn panic_count(opt_level: OptLevel, file: &str, source: &str, func: &str) -> usize {
-    let body = crate::common::wir_function_body(
+    let body = wir_function_body(
         Path::new(file),
         source,
         opt_level,

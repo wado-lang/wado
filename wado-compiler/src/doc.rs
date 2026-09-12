@@ -3,16 +3,16 @@ use serde::Serialize;
 
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
-    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, SelfKind, StructDecl, StructField,
-    TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
+    ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
 };
-use crate::comment::{CommentKind, TriviaMap};
-use crate::stdlib;
+use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
     unparse_type_into,
 };
+use crate::{ParseResult, ast, parse, stdlib};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocModule {
@@ -538,7 +538,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
 /// A resource's declared members plus, like a struct, whatever an `impl` adds —
 /// `Stream<T>::read_to_end` is not in the `resource` body.
 fn build_doc_resource(
-    r: &crate::ast::ResourceDecl,
+    r: &ResourceDecl,
     impls: &[&ImplBlock],
     trivia: &TriviaMap,
     include_private: bool,
@@ -582,7 +582,7 @@ fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
 /// The lexer stores comment text *after* the `//` prefix.
 /// So `/// foo` → text is `/ foo`, and `//! foo` → text is `! foo`.
 /// We need to strip the leading `/` or `!` and the optional space.
-fn doc_text(comment: &crate::comment::Comment) -> &str {
+fn doc_text(comment: &Comment) -> &str {
     let text = &comment.text;
     let rest = match comment.kind {
         CommentKind::DocLine => text.strip_prefix('/').unwrap_or(text),
@@ -608,7 +608,7 @@ fn extract_doc_comment_with_attrs(
     // start to bridge the gap.
     let item_line = attrs.first().map_or(span.line, |a| a.span.line);
     let mut expected_line = item_line;
-    let mut doc_comments: Vec<&crate::comment::Comment> = Vec::new();
+    let mut doc_comments: Vec<&Comment> = Vec::new();
 
     for comment in leading.iter().rev() {
         if comment.kind != CommentKind::DocLine {
@@ -725,7 +725,7 @@ fn render_param(param: &Param) -> String {
     }
 }
 
-fn render_interface_method_signature(m: &crate::ast::Function) -> String {
+fn render_interface_method_signature(m: &ast::Function) -> String {
     let mut sig = String::new();
     if m.is_async {
         sig.push_str("async ");
@@ -758,8 +758,8 @@ pub fn resolve_stdlib_source(module_name: &str) -> Option<&'static str> {
 /// a recovered lex or parse error here is a compiler bug, so fail loudly
 /// rather than silently produce partial docs (matches `parse_bind_stdlib`
 /// in `loader.rs`).
-fn parse_stdlib_for_doc(label: &str, source: &str) -> crate::ParseResult {
-    let parsed = crate::parse(source);
+fn parse_stdlib_for_doc(label: &str, source: &str) -> ParseResult {
+    let parsed = parse(source);
     assert!(
         parsed.lex_errors.is_empty(),
         "stdlib '{label}' must lex cleanly: {:?}",

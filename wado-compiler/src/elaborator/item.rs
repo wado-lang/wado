@@ -21,6 +21,20 @@ use super::Elaborator;
 use super::scope::{BinderInScope, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, TypeError};
+use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
+use crate::compiler_item::TraitAssocType;
+use crate::defs::{DefId, DefKind};
+use crate::elaborator::method_lookup::{impl_target_args, impl_target_head_args};
+use crate::elaborator::scope::TraitContext;
+use crate::elaborator::sem::decls::FunctionSig;
+use crate::elaborator::sem::types::MethodNames;
+use crate::elaborator::sig;
+use crate::elaborator::sig::{ImplSig, TraitMethod, TraitSig, own_params_of};
+use crate::elaborator::trait_env::get_type_name_static;
+use crate::name::{FqTraitName, test_function_name};
+use crate::resolve::head_site;
+use crate::tir::{ResolvedType, StructDef, TirTypeParam};
+use crate::{hashmap, tir};
 
 /// Extract the [`CompilerItem`] marker — if any — from a declaration's
 /// `#[compiler_item("...")]` attributes, emitting a diagnostic for
@@ -28,7 +42,7 @@ use super::types::{FunctionContext, TypeError};
 /// (in attribute order); subsequent matches are silently dropped — a
 /// declaration may carry at most one marker per the design contract.
 pub(super) fn extract_compiler_item<H: CompilerHost>(
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     decl_span: Span,
     module_source: &ModuleSource,
     logger: &Logger<'_, H>,
@@ -58,7 +72,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         module_source: ModuleSource::default(),
         name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -81,13 +95,13 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         is_cm_export: false,
         is_ambient: false,
         benign_effects: Vec::new(),
-        inline_hint: crate::tir::InlineHint::Auto,
+        inline_hint: tir::InlineHint::Auto,
         compiler_item: None,
         export_name: None,
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -160,7 +174,7 @@ fn check_compiler_item_placement<H: CompilerHost>(
 /// The `#[compiler_item(...)]` this declaration carries, or `None` when it
 /// carries none or names an item that may not sit on a `kind` declaration.
 fn compiler_item_on<H: CompilerHost>(
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     kind: CompilerItemKind,
     module_source: &ModuleSource,
     span: Span,
@@ -191,8 +205,8 @@ fn bind_compiler_item<H: CompilerHost>(
 /// Register a struct declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_struct_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -213,8 +227,8 @@ pub(super) fn register_struct_compiler_item<H: CompilerHost>(
 /// Register a variant declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_variant_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -240,8 +254,8 @@ pub(super) fn register_variant_compiler_item<H: CompilerHost>(
 /// Register an enum declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_enum_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -262,8 +276,8 @@ pub(super) fn register_enum_compiler_item<H: CompilerHost>(
 /// Register a `resource` declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_resource_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -289,8 +303,8 @@ pub(super) fn register_resource_compiler_item<H: CompilerHost>(
 /// Register a `type X = Y;` declaration's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -322,11 +336,11 @@ pub(super) fn register_newtype_compiler_item<H: CompilerHost>(
 /// method name must reach for a dedicated method [`CompilerItem`].
 pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
-    methods: &[crate::ast::Function],
-    assoc_types: &[crate::ast::AssociatedTypeDecl],
+    methods: &[ast::Function],
+    assoc_types: &[AssociatedTypeDecl],
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -350,7 +364,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
     // ends stay rename-stable.
     let assoc_types = assoc_types
         .iter()
-        .map(|a| crate::compiler_item::TraitAssocType {
+        .map(|a| TraitAssocType {
             name: a.name.clone(),
             bound_names: a.bounds.iter().map(|b| b.name.clone()).collect(),
         })
@@ -359,7 +373,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
         .borrow()
         .defs()
         .of_ast_id(decl)
-        .map(|def| crate::name::FqTraitName::declared(type_table.borrow().defs(), def));
+        .map(|def| FqTraitName::declared(type_table.borrow().defs(), def));
     let resolved = Resolved::Trait {
         module_source: module_source.clone(),
         name: name.to_string(),
@@ -376,7 +390,7 @@ pub(super) fn register_trait_compiler_item<H: CompilerHost>(
 /// receiver, so the method form cannot carry it.
 pub(super) fn register_function_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -401,10 +415,10 @@ pub(super) fn register_function_compiler_item<H: CompilerHost>(
 /// Register an impl-block method's `#[compiler_item(...)]` annotation, if any.
 pub(super) fn register_method_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     method_name: &str,
     owner_type: &str,
-    owner_head: &crate::name::FqTypeName,
+    owner_head: &FqTypeName,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -430,7 +444,7 @@ pub(super) fn register_method_compiler_item<H: CompilerHost>(
 /// construction) need in addition to the case name.
 pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     parent_type: &str,
     case_name: &str,
     case_index: u32,
@@ -461,7 +475,7 @@ pub(super) fn register_variant_case_compiler_item<H: CompilerHost>(
 /// payload, different parent kind.
 pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
+    attrs: &[Attribute],
     parent_type: &str,
     case_name: &str,
     case_index: u32,
@@ -490,8 +504,8 @@ pub(super) fn register_enum_case_compiler_item<H: CompilerHost>(
 /// Register a `pub type [..T];` declaration's `#[compiler_item("tuple")]` annotation.
 pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     module_source: &ModuleSource,
     span: Span,
     logger: &Logger<'_, H>,
@@ -518,8 +532,8 @@ pub(super) fn register_tuple_compiler_item<H: CompilerHost>(
 /// `ResolvedType`.
 pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
     type_table: &RefCell<TypeTable>,
-    attrs: &[crate::ast::Attribute],
-    decl: crate::ast::AstId,
+    attrs: &[Attribute],
+    decl: AstId,
     name: &str,
     module_source: &ModuleSource,
     span: Span,
@@ -550,7 +564,7 @@ pub(super) fn register_builtin_type_compiler_item<H: CompilerHost>(
 /// signature) and the body walk (which resolves the method against it)
 /// cannot disagree about slot numbering.
 pub(super) struct MethodFrame {
-    pub(super) impl_type_params: Vec<crate::tir::TirTypeParam>,
+    pub(super) impl_type_params: Vec<TirTypeParam>,
     /// The method's own slots, in index order, starting after the impl's.
     pub(super) method_type_params: Vec<(String, TypeId)>,
 }
@@ -569,7 +583,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         bounds: Vec<String>,
         projected_from: Option<(u32, String)>,
         decl: Option<ast::AstId>,
-    ) -> crate::tir::TirTypeParam {
+    ) -> TirTypeParam {
         let type_id = {
             let mut table = self.tysys.type_table.borrow_mut();
             if is_pack {
@@ -586,7 +600,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 decl,
             },
         );
-        crate::tir::TirTypeParam {
+        TirTypeParam {
             name: name.to_string(),
             is_effect: false,
             is_pack,
@@ -613,7 +627,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         &mut self,
         target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
-    ) -> Vec<crate::tir::TirTypeParam> {
+    ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
         for (index, arg) in target_args.iter().enumerate() {
             let ast::Type::Named(named) = arg else {
@@ -654,9 +668,9 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_blanket_target_param(
         &mut self,
         named: &ast::NamedType,
-        saved: &super::scope::TraitContext,
+        saved: &TraitContext,
         impl_declared_params: &[ast::GenericParam],
-    ) -> Vec<crate::tir::TirTypeParam> {
+    ) -> Vec<TirTypeParam> {
         let Some(&BinderInScope {
             index: target_index,
             ..
@@ -712,8 +726,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         &self,
         target_name: &str,
         impl_declared_params: &[ast::GenericParam],
-    ) -> crate::hashmap::IndexMap<String, String> {
-        let mut out = crate::hashmap::IndexMap::default();
+    ) -> hashmap::IndexMap<String, String> {
+        let mut out = hashmap::IndexMap::default();
         for assoc in impl_declared_params
             .iter()
             .filter(|p| p.name == target_name)
@@ -734,8 +748,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_ref_target_param(
         &mut self,
         inner: &ast::Type,
-        saved: &super::scope::TraitContext,
-    ) -> Vec<crate::tir::TirTypeParam> {
+        saved: &TraitContext,
+    ) -> Vec<TirTypeParam> {
         let ast::Type::Named(named) = inner else {
             return Vec::new();
         };
@@ -751,8 +765,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_tuple_pack_params(
         &mut self,
         elements: &[ast::Type],
-        saved: &super::scope::TraitContext,
-    ) -> Vec<crate::tir::TirTypeParam> {
+        saved: &TraitContext,
+    ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
         for element in elements {
             let ast::Type::TypePackSpread(name, _) = element else {
@@ -780,7 +794,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
-    ) -> Vec<crate::tir::TirTypeParam> {
+    ) -> Vec<TirTypeParam> {
         let saved = &self.saved().clone();
         let impl_type_inner = match impl_type {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
@@ -788,7 +802,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         };
         // However the head is spelled: `Cell<T>` and `ns::Cell<T>` write one
         // target a namespace apart.
-        let head_args = super::method_lookup::impl_target_head_args(impl_type_inner);
+        let head_args = impl_target_head_args(impl_type_inner);
         let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {
@@ -907,7 +921,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         }
         scope.check_impl_params_constrained(impl_block);
 
-        let mut associated_types = crate::hashmap::IndexMap::default();
+        let mut associated_types = hashmap::IndexMap::default();
         for binding in &impl_block.associated_types {
             let type_id = scope.resolve_type(&binding.ty);
             scope
@@ -927,12 +941,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let trait_decl = impl_block
             .trait_type
             .as_ref()
-            .and_then(crate::resolve::head_site)
+            .and_then(head_site)
             .and_then(|site| scope.tysys.resolutions.declared(site));
         let impl_def = scope.def_at(impl_block.id);
         scope.sem.decls.impl_sigs.insert(
             impl_def,
-            super::sig::ImplSig {
+            ImplSig {
                 target_type_args,
                 trait_type_args,
                 associated_types,
@@ -996,21 +1010,19 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     /// named `Deserialize`, and the header would carry no identity — leaving
     /// dispatch comparing spellings two modules can share.
     fn check_impl_trait_resolves(&mut self, impl_block: &ast::ImplBlock, trait_type: &Type) {
-        let implementable = crate::resolve::head_site(trait_type)
+        let implementable = head_site(trait_type)
             .and_then(|site| self.tysys.resolutions.declared(site))
             .is_some_and(|def| {
                 matches!(
                     self.tysys.resolutions.defs().kind(def),
-                    crate::defs::DefKind::Trait
-                        | crate::defs::DefKind::Effect
-                        | crate::defs::DefKind::Resource
+                    DefKind::Trait | DefKind::Effect | DefKind::Resource
                 )
             });
         if implementable {
             return;
         }
         let _ = self.emit(TypeError::UnknownTraitImpl {
-            name: super::trait_env::get_type_name_static(trait_type),
+            name: get_type_name_static(trait_type),
             span: impl_block.span,
         });
     }
@@ -1024,7 +1036,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             Type::Reference(i) | Type::MutReference(i) => i.as_ref(),
             other => other,
         };
-        let Some(args) = super::method_lookup::impl_target_head_args(inner) else {
+        let Some(args) = impl_target_head_args(inner) else {
             return Vec::new();
         };
         args.to_vec()
@@ -1139,7 +1151,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if defaulted.is_empty() {
             return ty;
         }
-        let mut subst = crate::hashmap::IndexMap::default();
+        let mut subst = hashmap::IndexMap::default();
         for (name, default_ty) in defaulted {
             // The index the declaration gave the parameter, not its position
             // among the signature's own: a method's slots follow the impl's.
@@ -1316,7 +1328,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .params
                         .iter()
                         .filter(|p| p.self_kind == ast::SelfKind::None)
-                        .map(|p| super::sig::Param {
+                        .map(|p| sig::Param {
                             name: p.name.clone(),
                             is_mut: p.is_mut,
                             default: p.default.clone(),
@@ -1325,11 +1337,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     declaring_slot_count,
                     method_slot_base,
                     declaring_impl: Some(impl_def),
-                    own_params: super::sig::own_params_of(&method.type_params),
-                    cm_name: method
-                        .attrs
-                        .iter()
-                        .find_map(crate::ast::Attribute::cm_identifier),
+                    own_params: own_params_of(&method.type_params),
+                    cm_name: method.attrs.iter().find_map(Attribute::cm_identifier),
                     is_async: method.is_async,
                     // A trait impl takes the trait's, once every module's
                     // declarations are assembled.
@@ -1363,7 +1372,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     fn type_contains_slice_view_inner(
         &self,
-        type_table: &crate::tir::TypeTable,
+        type_table: &TypeTable,
         type_id: TypeId,
         visited: &mut IndexSet<TypeId>,
     ) -> bool {
@@ -1386,9 +1395,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self.type_contains_slice_view_inner(type_table, *base_type, visited)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                if type_table.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
-                    == Some(*def)
-                {
+                if type_table.compiler_item_def(CompilerItem::Slice) == Some(*def) {
                     return true;
                 }
                 type_args
@@ -1422,7 +1429,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     fn type_contains_closure_inner(
         &self,
-        type_table: &crate::tir::TypeTable,
+        type_table: &TypeTable,
         type_id: TypeId,
         visited: &mut IndexSet<TypeId>,
     ) -> bool {
@@ -1430,21 +1437,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return false;
         }
         match type_table.get(type_id) {
-            crate::tir::ResolvedType::Function { .. } => true,
-            crate::tir::ResolvedType::Ref(t)
-            | crate::tir::ResolvedType::MutRef(t)
-            | crate::tir::ResolvedType::Reactive(t)
-            | crate::tir::ResolvedType::BuiltinArray(t) => {
+            ResolvedType::Function { .. } => true,
+            ResolvedType::Ref(t)
+            | ResolvedType::MutRef(t)
+            | ResolvedType::Reactive(t)
+            | ResolvedType::BuiltinArray(t) => {
                 self.type_contains_closure_inner(type_table, *t, visited)
             }
-            crate::tir::ResolvedType::GenericInstance { type_args, .. }
-            | crate::tir::ResolvedType::GenericResource { type_args, .. } => type_args
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args
                 .iter()
                 .any(|t| self.type_contains_closure_inner(type_table, *t, visited)),
-            crate::tir::ResolvedType::Newtype { base_type, .. } => {
+            ResolvedType::Newtype { base_type, .. } => {
                 self.type_contains_closure_inner(type_table, *base_type, visited)
             }
-            crate::tir::ResolvedType::Struct { .. } => {
+            ResolvedType::Struct { .. } => {
                 // Recurse into the struct's field types via the elaborator's
                 // pre-built field registry. Self-recursive structs are
                 // protected by `visited`.
@@ -1456,7 +1463,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .into_iter()
                     .any(|t| self.type_contains_closure_inner(type_table, t, visited))
             }
-            crate::tir::ResolvedType::Variant { .. } => {
+            ResolvedType::Variant { .. } => {
                 // The per-case payload types live in `all_variant_cases`; look
                 // them up so a variant case payload containing a closure type
                 // fails the CM boundary check too.
@@ -1502,11 +1509,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             struct_field_types.push(type_id);
         }
 
-        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+        let type_params: Vec<TirTypeParam> = struct_decl
             .type_params
             .iter()
             .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
+            .map(|(i, p)| TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
@@ -1534,7 +1541,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert(struct_decl.id, struct_field_types);
 
         TirStruct {
-            def: crate::tir::StructDef::Decl(
+            def: StructDef::Decl(
                 self.tysys
                     .resolutions
                     .defs()
@@ -1654,8 +1661,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }))
             .collect();
 
-        let mut methods: crate::hashmap::IndexMap<String, super::sig::TraitMethod> =
-            crate::hashmap::IndexMap::default();
+        let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
             let mut method_scope = scope.enter_inherited_type_param_scope();
             method_scope
@@ -1704,7 +1710,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let method_def = method_scope.def_at(method.id);
             methods.insert(
                 method.name.clone(),
-                super::sig::TraitMethod {
+                TraitMethod {
                     sig: MethodSig {
                         def: method_def,
                         decl: DeclSig {
@@ -1721,7 +1727,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .params
                             .iter()
                             .filter(|p| p.self_kind == SelfKind::None)
-                            .map(|p| super::sig::Param {
+                            .map(|p| sig::Param {
                                 name: p.name.clone(),
                                 is_mut: p.is_mut,
                                 default: p.default.clone(),
@@ -1732,11 +1738,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // zero, so the count is also where the method's begin.
                         method_slot_base: decl_slots.len() as u32,
                         declaring_impl: None,
-                        own_params: super::sig::own_params_of(&method.type_params),
-                        cm_name: method
-                            .attrs
-                            .iter()
-                            .find_map(crate::ast::Attribute::cm_identifier),
+                        own_params: own_params_of(&method.type_params),
+                        cm_name: method.attrs.iter().find_map(Attribute::cm_identifier),
                         is_async: method.is_async,
                         defaults_module: None,
                     },
@@ -1754,7 +1757,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .sem
             .decls
             .trait_sigs
-            .insert(trait_def, super::sig::TraitSig { module, methods });
+            .insert(trait_def, TraitSig { module, methods });
     }
 
     /// The scope an `interface` / `resource` declaration's operations resolve
@@ -1768,7 +1771,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn enter_operation_scope(
         &mut self,
         type_params: &[ast::GenericParam],
-        resource_self: Option<crate::defs::DefId>,
+        resource_self: Option<DefId>,
     ) -> (TypeParamScope<'_, 'a, H>, Option<TypeId>) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1788,12 +1791,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .expect("type param registered by register_generic_params")
                     })
                     .collect();
-                scope.tysys.type_table.borrow_mut().intern(
-                    crate::tir::ResolvedType::GenericResource {
+                scope
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::GenericResource {
                         def,
                         type_args: type_arg_ids,
-                    },
-                )
+                    })
             } else {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
@@ -1806,13 +1811,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Lower an effect or resource declaration's method list to [`TirEffectOp`]s.
     /// `resource_self` marks a resource decl, whose `&self` shorthand becomes a
-    /// real parameter at index 0 to match `__cm_binding__<R>_<op>(self, args)`;
+    /// real parameter at index 0 to match `$cm_binding__<R>_<op>(self, args)`;
     /// an effect decl takes no receiver.
     pub(super) fn resolve_effect_ops(
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::Function],
-        resource_self: Option<crate::defs::DefId>,
+        resource_self: Option<DefId>,
     ) -> Vec<TirEffectOp> {
         let (mut scope, self_type) = self.enter_operation_scope(type_params, resource_self);
 
@@ -1826,8 +1831,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let table = scope.tysys.type_table.borrow();
                 matches!(
                     table.get(*id),
-                    crate::tir::ResolvedType::TypeParam { .. }
-                        | crate::tir::ResolvedType::TypePack { .. }
+                    ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
                 )
             })
             .map(|(name, b)| (name.clone(), b.type_id))
@@ -1865,7 +1869,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     _ => continue,
                 };
                 let name = if matches!(p.self_kind, SelfKind::None) {
-                    sig_params.push(super::sig::Param {
+                    sig_params.push(sig::Param {
                         name: p.name.clone(),
                         is_mut: p.is_mut,
                         default: p.default.clone(),
@@ -1916,10 +1920,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             // The bare `#[cm("...")]` payload, unsplit on `#`, recorded on the
             // signature so every call site reads the same one.
-            let cm_name = method
-                .attrs
-                .iter()
-                .find_map(crate::ast::Attribute::cm_identifier);
+            let cm_name = method.attrs.iter().find_map(Attribute::cm_identifier);
 
             let self_kind = if self_type.is_some() {
                 method
@@ -2070,7 +2071,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &mut self,
         type_params: &[ast::GenericParam],
         methods: &[ast::Function],
-        resource_self: Option<crate::defs::DefId>,
+        resource_self: Option<DefId>,
     ) {
         if !declares_a_default(methods) {
             return;
@@ -2149,11 +2150,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.register_generic_params(&variant_decl.type_params, 0);
 
-        let type_params: Vec<crate::tir::TirTypeParam> = variant_decl
+        let type_params: Vec<TirTypeParam> = variant_decl
             .type_params
             .iter()
             .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
+            .map(|(i, p)| TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
@@ -2199,7 +2200,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Validate that stores declarations reference valid reference parameters.
-    fn validate_stores(&self, stores: &[String], params: &[TirParam], span: crate::token::Span) {
+    fn validate_stores(&self, stores: &[String], params: &[TirParam], span: Span) {
         let tt = self.tysys.type_table.borrow();
         for store_name in stores {
             if let Some(param) = params.iter().find(|p| p.name == *store_name) {
@@ -2207,9 +2208,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Allow stores on: reference types (&T, &mut T) and type parameters (T may be &U)
                 if !matches!(
                     resolved,
-                    crate::tir::ResolvedType::Ref(_)
-                        | crate::tir::ResolvedType::MutRef(_)
-                        | crate::tir::ResolvedType::TypeParam { .. }
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::TypeParam { .. }
                 ) {
                     let type_name = tt.type_name(param.type_id);
                     let _ = self.emit(TypeError::InvalidStores {
@@ -2241,7 +2240,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let has_real_type_params = func
             .type_params
             .iter()
-            .any(super::super::ast::GenericParam::is_real_type_param);
+            .any(GenericParam::is_real_type_param);
         if !has_real_type_params {
             return;
         }
@@ -2253,10 +2252,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// type on `function_return_types`. The one signature resolution per
     /// function in the decl pass — the body walk re-resolves only to
     /// record per-node facts.
-    pub(super) fn record_function_sig(
-        &mut self,
-        func: &Function,
-    ) -> super::sem::decls::FunctionSig {
+    pub(super) fn record_function_sig(&mut self, func: &Function) -> FunctionSig {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
@@ -2305,8 +2301,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .decls
             .function_return_types
             .insert(func.name.clone(), return_type.unwrap_or(TypeTable::UNIT));
-        super::sem::decls::FunctionSig {
-            decl: super::sig::DeclSig {
+        FunctionSig {
+            decl: DeclSig {
                 type_params: real_type_params,
                 param_types,
                 return_type,
@@ -2315,7 +2311,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             params: func
                 .params
                 .iter()
-                .map(|p| super::sig::Param {
+                .map(|p| sig::Param {
                     name: p.name.clone(),
                     is_mut: p.is_mut,
                     default: p.default.clone(),
@@ -2389,7 +2385,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let has_real_type_params = func
             .type_params
             .iter()
-            .any(super::super::ast::GenericParam::is_real_type_param);
+            .any(GenericParam::is_real_type_param);
         let declared_return_type = if has_real_type_params {
             scope.populate_generic_function_cache(func)
         } else {
@@ -2523,7 +2519,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // index, which matches both the `TypeParam(name, index)` entries in
         // the type table and the positional order of the inference cache.
         let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
+        let type_params: Vec<TirTypeParam> = func
             .type_params
             .iter()
             .filter_map(|p| {
@@ -2535,7 +2531,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 let idx = non_effect_non_fn_idx;
                 non_effect_non_fn_idx += 1;
-                Some(crate::tir::TirTypeParam {
+                Some(TirTypeParam {
                     name: p.name.clone(),
                     is_effect: p.is_effect,
                     is_pack: p.is_pack,
@@ -2594,8 +2590,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             timeout_ms,
             is_synopsis,
         } = meta;
-        let function_name =
-            crate::name::test_function_name(&meta, test_index, test_decl.name.as_deref());
+        let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
         let return_type = TypeTable::UNIT;
         let mut ctx = FunctionContext::new(return_type, function_name.clone());
@@ -2633,7 +2628,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// nothing else: this names the method, matching decides which receivers
     /// reach that name, and a second answer mints one name from two functions.
     pub(super) fn impl_is_concrete_instantiation(&self, impl_ty: &ast::Type) -> bool {
-        let Some(args) = super::method_lookup::impl_target_args(impl_ty) else {
+        let Some(args) = impl_target_args(impl_ty) else {
             return false;
         };
         !args.is_empty() && args.iter().all(|a| self.tysys.impl_arg_pins_a_position(a))
@@ -2649,12 +2644,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         func: &Function,
         struct_name: &str,
         impl_type: &Type,
-        trait_name: Option<&crate::name::FqTraitName>,
+        trait_name: Option<&FqTraitName>,
         trait_type: Option<&Type>,
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
         recorded_sig: Option<&MethodSig>,
-        impl_def: Option<crate::defs::DefId>,
+        impl_def: Option<DefId>,
     ) -> Option<TirFunction> {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -2726,7 +2721,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let method_names_key = func.id;
         scope.sem.types.method_names.insert(
             method_names_key,
-            super::sem::types::MethodNames {
+            MethodNames {
                 display: display_name.clone(),
                 mangled: mangled_name.clone(),
             },
@@ -2742,9 +2737,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         //
         if let Some(name) = base_trait_name.as_deref() {
             let canonical_key = scope.decl_key_or_local(name);
-            let declares = |index: &crate::hashmap::IndexSet<crate::defs::DefId>| {
-                canonical_key.filter(|key| index.contains(key))
-            };
+            let declares =
+                |index: &hashmap::IndexSet<DefId>| canonical_key.filter(|key| index.contains(key));
             let effect_decl = declares(&scope.tysys.trait_env.effect_decl_index);
             let resource_decl = declares(&scope.tysys.trait_env.resource_decl_index);
             if effect_decl.is_some() || resource_decl.is_some() {
@@ -2868,7 +2862,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // generic list; the remaining real type params use dense indices so
         // the substitution map in `substitute_type_params` lines up.
         let mut non_effect_non_fn_idx: u32 = 0;
-        let type_params: Vec<crate::tir::TirTypeParam> = func
+        let type_params: Vec<TirTypeParam> = func
             .type_params
             .iter()
             .filter_map(|p| {
@@ -2880,7 +2874,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 let idx = non_effect_non_fn_idx;
                 non_effect_non_fn_idx += 1;
-                Some(crate::tir::TirTypeParam {
+                Some(TirTypeParam {
                     name: p.name.clone(),
                     is_effect: p.is_effect,
                     is_pack: p.is_pack,

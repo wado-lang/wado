@@ -33,9 +33,9 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//wir_optimize_value_copy_str_bytes_loop.wado/run" = fn();  // TypeId(11)
 
-type "functype//wir_optimize_value_copy_str_bytes_loop.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wir_optimize_value_copy_str_bytes_loop.wado/__cm_export__run" = fn();  // TypeId(13)
+type "functype//wir_optimize_value_copy_str_bytes_loop.wado/$cm_export__run" = fn();  // TypeId(13)
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(14)
 
@@ -72,13 +72,13 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:wir_optimize_value_copy_str_bytes_loop.wado::__const_obj_2: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 45);
-global global:core:prelude/primitive.wado::__const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:wir_optimize_value_copy_str_bytes_loop.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111, 45);
+global global:core:prelude/primitive.wado::$const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let byte_sum: u64;
     let i: i32;
-    let __local_7: ref "core:prelude/string.wado//String";
+    let $local_7: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_19: i32;
     let byte: u8;
@@ -86,34 +86,34 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
     let packed: i64;
     let rx_45: i32;
     let tx_46: i32;
-    let __sroa___iter_3_index: i32;
-    let __tmpl_buf_57: ref "core:prelude/string.wado//String";
-    let __sroa_v_repr: ref Array<u8>;
-    let __sroa_v_used: i32;
+    let $sroa_$iter_1_index: i32;
+    let $tmpl_buf_57: ref "core:prelude/string.wado//String";
+    let $sroa_v_repr: ref Array<u8>;
+    let $sroa_v_used: i32;
     byte_sum = 0_i64;
     i = 0;
-    __tmpl_buf_57 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
+    $tmpl_buf_57 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            __tmpl_buf_57.used = 0;
-            new_used = __tmpl_buf_57.used + 6;
-            if @unlikely(new_used > builtin::array_len(__tmpl_buf_57.repr)) {
+            $tmpl_buf_57.used = 0;
+            new_used = $tmpl_buf_57.used + 6;
+            if @unlikely(new_used > builtin::array_len($tmpl_buf_57.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__tmpl_buf_57, new_used);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_57, new_used);
             }
-            start_19 = __tmpl_buf_57.used;
-            __tmpl_buf_57.used = new_used;
-            builtin::array_copy<u8>(__tmpl_buf_57.repr, start_19, global:wir_optimize_value_copy_str_bytes_loop.wado::__const_obj_2, 0, 6);
-            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, __tmpl_buf_57);
-            __sroa_v_repr = __tmpl_buf_57.repr;
-            __sroa_v_used = __tmpl_buf_57.used;
-            __sroa___iter_3_index = 0;
+            start_19 = $tmpl_buf_57.used;
+            $tmpl_buf_57.used = new_used;
+            builtin::array_copy<u8>($tmpl_buf_57.repr, start_19, global:wir_optimize_value_copy_str_bytes_loop.wado::$const_obj_2, 0, 6);
+            "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_57);
+            $sroa_v_repr = $tmpl_buf_57.repr;
+            $sroa_v_used = $tmpl_buf_57.used;
+            $sroa_$iter_1_index = 0;
             b3: block {
                 l4: loop {
-                    break_if b3 __sroa___iter_3_index >= __sroa_v_used;
-                    byte = builtin::array_get_value<u8>(__sroa_v_repr, __sroa___iter_3_index);
-                    __sroa___iter_3_index = __sroa___iter_3_index + 1;
+                    break_if b3 $sroa_$iter_1_index >= $sroa_v_used;
+                    byte = builtin::array_get_value<u8>($sroa_v_repr, $sroa_$iter_1_index);
+                    $sroa_$iter_1_index = $sroa_$iter_1_index + 1;
                     byte_sum = byte_sum + builtin::i64_extend_i32_u(byte);
                     continue l4;
                 };
@@ -122,20 +122,20 @@ fn "wir_optimize_value_copy_str_bytes_loop.wado/run"() with Stdout {
             continue l1;
         };
     };
-    __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(byte_sum, __local_7);
+    $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(byte_sum, $local_7);
     rx_45 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_46 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wir_optimize_value_copy_str_bytes_loop.wado/__cm_binding__Stdout_write_via_stream"(rx_45);
-    "core:rt/write_string_to_stream"(tx_46, __local_7);
+    handle = "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
+    "core:rt/write_string_to_stream"(tx_46, $local_7);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
-fn "wir_optimize_value_copy_str_bytes_loop.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "wir_optimize_value_copy_str_bytes_loop.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "wir_optimize_value_copy_str_bytes_loop.wado/__cm_export__run"() {
+fn "wir_optimize_value_copy_str_bytes_loop.wado/$cm_export__run"() {
     "wir_optimize_value_copy_str_bytes_loop.wado/run"();
     "wasi/task-return"(0);
 }
@@ -242,26 +242,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let __sroa_data_start: i32;
-    let __sroa_written_count: i32;
-    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
-    let _av_52: i32;
-    let _av_53: i32;
-    _av_52 = data.start;
-    _av_53 = data.end;
-    if (_av_53 - _av_52) == 0 {
+    let $sroa_data_start: i32;
+    let $sroa_written_count: i32;
+    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $av_52: i32;
+    let $av_53: i32;
+    $av_52 = data.start;
+    $av_53 = data.end;
+    if ($av_53 - $av_52) == 0 {
         return;
     }
     repr_2 = data.repr;
-    end_3 = _av_52 + (_av_53 - _av_52);
+    end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
         l27: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b28: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b28: block {
                 l29: loop {
                     break_if b28 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l29;
                 };
@@ -279,21 +279,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            __sroa_written_count = result >> 4;
-            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let __match_scrut_0: i32;
-                __match_scrut_0 = result & 15;
-                if __match_scrut_0 == 0 {
+            $sroa_written_count = result >> 4;
+            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+                let $match_scrut_0: i32;
+                $match_scrut_0 = result & 15;
+                if $match_scrut_0 == 0 {
                     break $inline_cm_copy_result_14: 0;
-                } else if __match_scrut_0 == 1 {
+                } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_14: 1;
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + __sroa_written_count;
-            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+            offset = offset + $sroa_written_count;
+            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
             continue l27;
@@ -314,7 +314,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_7, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_7, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -339,7 +339,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let t: u64;
     let i: i32;
     digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
-    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::__const_obj_7, digit_count_2);
+    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::$const_obj_7, digit_count_2);
     arr = f.repr;
     pos = offset_3 + digit_count_2;
     t = self;
@@ -378,4 +378,4 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     }, start_57 = self.used, self.used = new_used_56, start_57;
 }
 
-export fn "wir_optimize_value_copy_str_bytes_loop.wado/__cm_export__run" as "run"
+export fn "wir_optimize_value_copy_str_bytes_loop.wado/$cm_export__run" as "run"

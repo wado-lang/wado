@@ -9,6 +9,8 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use super::gate::{FunctionGate, GatedPass};
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::Operand;
 
 /// Flatten every block-tailed `let` binding across the package.
 ///
@@ -65,10 +67,10 @@ impl Rule for LetBlockFlattenRule {
             // leaving the orphaned tail statement a `Dead` node — never a shared
             // id, which the parent-map tripwire rejects.
             match tail_op {
-                crate::nir_arena::Operand::Expr(tail_e) => {
+                Operand::Expr(tail_e) => {
                     engine.become_expr(block_expr, tail_e);
                 }
-                op @ crate::nir_arena::Operand::Value(_) => {
+                op @ Operand::Value(_) => {
                     engine.redirect_expr(block_expr, op);
                 }
             }
@@ -118,7 +120,7 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     // immutable local copy (`let a = b`, the inliner's param binding, copy_prop's) or
     // a reference to a *place* (`let r = &x`, ref_elim's). Hoisting one hands the
     // same binding to several rules at once (observed: a hoisted `let self =
-    // get_x` stranded a `get_x.__capture_0` read after the functor was elided);
+    // get_x` stranded a `get_x.$capture_0` read after the functor was elided);
     // once dissolved, the block flattens on a later iteration. A reference to a
     // *fresh value* (`&String { … }`, `&f()`) is nobody's shadow — deferring
     // would strand it block-wrapped forever — so the reference case gates on
@@ -130,7 +132,7 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
         !value.as_expr().is_some_and(|e| match &body.exprs[e].kind {
             ExprKind::Local { .. } => !is_mut,
             ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                 expr: referent,
             } => referent
                 .as_expr()
@@ -155,7 +157,7 @@ mod tests {
     use std::assert_matches;
 
     use crate::hashmap::IndexSet;
-    use crate::nir::NirLocal;
+    use crate::nir::{FuncId, NirLocal};
     use crate::nir_arena::{BlockNode, ExprNode, Operand, StmtNode};
     use crate::tir::TypeTable;
     use crate::token::Span;
@@ -169,7 +171,7 @@ mod tests {
     /// defers on).
     fn call_expr() -> ExprKind {
         ExprKind::Call {
-            func_id: crate::nir::FuncId::from_u32(0),
+            func_id: FuncId::from_u32(0),
             type_args: vec![],
             args: vec![],
             has_receiver: false,

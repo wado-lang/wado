@@ -9,11 +9,11 @@
 // fresh `&mut Formatter` parameter alias. The alias is a pure local copy:
 //
 //     self_N = struct.new "Box<u64>" { value: r.field };
-//     f_M    = __local_K;                                              // intervening copy
+//     f_M    = $local_K;                                              // intervening copy
 //     u64::fmt_decimal(self_N.value, f_M);                             // leftmost use
 //
 // The historical pass skipped only `Nop` placeholders, so the
-// `f_M = __local_K;` blocked the rewrite and `Box<u64>` survived. The
+// `f_M = $local_K;` blocked the rewrite and `Box<u64>` survived. The
 // relaxed pass consults `ModRef::can_move_past` and, finding the
 // intervening copy is `Control::Linear`, neither reads `self_N` nor
 // writes anything `r.field` depends on, performs the substitution.

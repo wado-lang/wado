@@ -1,0 +1,27 @@
+// A tagged template inside another's hole mints its own internal names: each
+// desugaring step takes a fresh serial, so the inner block's label and hoisted
+// holes never shadow the step it sits in (issue #1987).
+use { println, Stdout } from "core:cli";
+
+fn tag<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    return format(t);
+}
+
+fn f() -> i32 {
+    return 7;
+}
+
+fn g() -> i32 {
+    return 9;
+}
+
+export fn run() with Stdout {
+    println(tag`outer ${tag`inner ${f()}`} mid ${g()} end`);
+}
+
+__DATA__
+{
+    "stdout": "outer inner 7 mid 9 end\n",
+    "wir_expect:O0": ["$tagged_0", "$tagged_1", "$hole_1_0", "$hole_0_0"],
+    "wir_not_expect:O0": ["__hole"]
+}

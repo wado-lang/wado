@@ -88,6 +88,7 @@ use gate::GatedPass;
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
+use crate::{OptOverrides, compiler_trace};
 
 /// Configuration for optimization passes
 struct OptConfig {
@@ -143,10 +144,10 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
-    opt: crate::OptOverrides,
+    opt: OptOverrides,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
-    let crate::OptOverrides {
+    let OptOverrides {
         inline_threshold,
         inline_growth,
         iterations: opt_iterations,
@@ -760,14 +761,14 @@ fn run_optimization_passes(
             hoist_template_buffers
         );
         profiler.span_end(&format!("nir/iteration {i}"));
-        crate::compiler_trace!(
+        compiler_trace!(
             "opt_loop",
             "iter {i:>3}: changed_by = [{}]",
             iter_changed.join(", ")
         );
         if iter_changed.is_empty() {
             if inline_holds.release(&mut gate) {
-                crate::compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
+                compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
                 limit = i + config.iterations;
                 continue;
             }
@@ -805,7 +806,7 @@ fn run_optimization_passes(
         profiler,
         scalarize_hot_fields,
     );
-    // Forward the scalarization shadow inits (`__hfs_x = obj.f`) to constants.
+    // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
     // `obj.f` whose field the ValueGraph still knows (`obj` built from a
@@ -860,7 +861,7 @@ fn run_optimization_passes(
         forward_scalar_temps(p, &mut gate)
     });
     // Forward read-only clones that inlining + const-object globalization leave
-    // behind (`array_clone(&array_clone(&__const_obj))` into a read-only
+    // behind (`array_clone(&array_clone(&$const_obj))` into a read-only
     // binding). Runs last: `const_object_globalization` — which creates the
     // const global the residual clone reads — is itself a post-loop pass, so the
     // flat `let t = array_clone(&global.field)` shape only exists here, after the

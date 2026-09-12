@@ -15,6 +15,7 @@ use crate::ir::{
     WadoTypeDef, WadoVariant, WadoVariantCase, WadoWorld, WadoWorldExport, WadoWorldExportFn,
     WadoWorldExportInterface, WadoWorldImport,
 };
+use crate::naming;
 use crate::naming::{to_snake_case, to_upper_camel_case};
 
 pub struct Transformer<'a> {
@@ -310,7 +311,7 @@ impl<'a> Transformer<'a> {
     fn get_wasi_path_for_interface(&self, iface_id: InterfaceId) -> String {
         let iface = &self.resolve.interfaces[iface_id];
         let iface_name = iface.name.as_deref().unwrap_or("unknown");
-        let file_stem = crate::naming::to_snake_case(iface_name);
+        let file_stem = naming::to_snake_case(iface_name);
         if let Some(pkg_id) = iface.package {
             let pkg = &self.resolve.packages[pkg_id];
             let namespace = &pkg.name.namespace;
@@ -628,7 +629,7 @@ impl<'a> Transformer<'a> {
             name,
             doc_comment: ty.docs.contents.clone(),
             cm_attr,
-            extern_handle: false,
+            unrestricted: false,
             extends: None,
             methods,
         }))

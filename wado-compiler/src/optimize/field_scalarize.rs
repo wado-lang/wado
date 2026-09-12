@@ -1,5 +1,5 @@
 //! Hot Field Scalarization: promotes a hot struct field `obj.field` accessed in
-//! a loop to a mutable local `__hfs_<field>_<idx>` hoisted out of the loop. A
+//! a loop to a mutable local `$hfs_<field>_<idx>` hoisted out of the loop. A
 //! dataflow walker tracks which side is canonical (`Both` / `ScalarOnly` /
 //! `FieldOnly`) and emits write-back / re-read sync only at transitions: calls
 //! reaching the field, branch joins, escape paths, and loop back-edges.
@@ -9,13 +9,16 @@
 //! the call graph would remove that cliff for thin forwarding wrappers.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind,
+    StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
+use crate::optimize::alias::copy_edge;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 const MIN_ACCESS_COUNT: usize = 4;
 
@@ -33,7 +36,7 @@ struct FuncUsageEntry {
 }
 
 /// Maps each function (by module + name) to its usage info.
-type FieldUsageCache = IndexMap<crate::nir::FuncId, FuncUsageEntry>;
+type FieldUsageCache = IndexMap<FuncId, FuncUsageEntry>;
 
 pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
@@ -459,7 +462,7 @@ fn scalarize_loop(
     // body (computed on the arena by the caller). These cannot be safely
     // scalarized at this loop level — their owning storage (the GC struct ref)
     // is unbound at the loop's pre-header where the hoisted
-    // `let __hfs_field = local.field;` would run, producing a null-reference
+    // `let $hfs_field = local.field;` would run, producing a null-reference
     // trap. Locals declared in the parent scope (i.e., not listed here) are
     // fine to scalarize.
 
@@ -524,7 +527,7 @@ fn scalarize_loop(
             new_local_index: next_local,
         });
         locals.push(NirLocal {
-            name: format!("__hfs_{}_{}", info.field_name, next_local),
+            name: format!("$hfs_{}_{}", info.field_name, next_local),
             type_id: info.field_type_id,
             is_mut: true,
         });
@@ -541,14 +544,14 @@ fn scalarize_loop(
     *local_count = next_local;
 
     // Step 3: Create pre-loop load statements
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let mut pre_stmts: Vec<StmtId> = Vec::new();
     for c in &candidates {
         let field = field_access_expr(body, c, span);
         let load_stmt = push_stmt(
             body,
             StmtKind::Let {
-                name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
+                name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
                 local_index: c.new_local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -581,8 +584,8 @@ fn scalarize_loop(
 }
 
 /// Push a fresh expression node into the arena and return its id.
-fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
-    body.exprs.push(crate::nir_arena::ExprNode {
+fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
+    body.exprs.push(ExprNode {
         kind,
         type_id,
         span,
@@ -590,17 +593,17 @@ fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: crate::toke
 }
 
 /// Push a fresh statement node into the arena and return its id.
-fn push_stmt(body: &mut Body, kind: StmtKind, span: crate::token::Span) -> StmtId {
-    body.stmts.push(crate::nir_arena::StmtNode { kind, span })
+fn push_stmt(body: &mut Body, kind: StmtKind, span: Span) -> StmtId {
+    body.stmts.push(StmtNode { kind, span })
 }
 
-/// Build a `Local` expression node for the scalar `__hfs_F` local.
-fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
+/// Build a `Local` expression node for the scalar `$hfs_F` local.
+fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
     push_expr(
         body,
         ExprKind::Local {
             index: c.new_local_index,
-            name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
+            name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
         },
         c.type_id,
         span,
@@ -608,7 +611,7 @@ fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
 }
 
 /// Build a `local.field` field-access expression node for the candidate.
-fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
+fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
     let base = push_expr(
         body,
         ExprKind::Local {
@@ -630,12 +633,8 @@ fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
     )
 }
 
-/// `local.field = __hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(
-    body: &mut Body,
-    c: &ScalarizeCandidate,
-    span: crate::token::Span,
-) -> StmtId {
+/// `local.field = $hfs_F;` — commit the scalar back to the GC field.
+fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
     let assign = push_expr(
@@ -650,8 +649,8 @@ fn make_write_back_stmt(
     push_stmt(body, StmtKind::Expr(assign.into()), span)
 }
 
-/// `__hfs_F = local.field;` — refresh the scalar from the GC field.
-fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
+/// `$hfs_F = local.field;` — refresh the scalar from the GC field.
+fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
     let assign = push_expr(
@@ -734,7 +733,7 @@ fn collect_alias_node(
 ) {
     // The name a copy binds to. Its source is marked below, from every binding
     // shape — a store into `x.f` publishes the object with no local to pair.
-    if let Some((dst, value)) = super::alias::copy_edge(body, node)
+    if let Some((dst, value)) = copy_edge(body, node)
         && let Some(ve) = value.as_expr()
     {
         mark_gc_alias_pair(body, Some(dst), ve, type_table, &mut out.locals);
@@ -870,7 +869,7 @@ fn gc_alias_source(body: &Body, value: ExprId, type_table: &TypeTable) -> Option
 /// independently by their own `scalarize_loop` call). Used to filter out
 /// locals whose owning storage is unbound at the loop's pre-header — those
 /// locals must not be scalarized at this loop level, otherwise the hoisted
-/// `let __hfs_field = local.field;` null-derefs at runtime.
+/// `let $hfs_field = local.field;` null-derefs at runtime.
 struct IntroducedLocals<'a> {
     out: &'a mut IndexSet<u32>,
 }
@@ -1165,7 +1164,7 @@ enum CanonState {
 }
 
 impl CanonState {
-    /// Whether `__hfs_F` holds the latest value (scalar reads are safe).
+    /// Whether `$hfs_F` holds the latest value (scalar reads are safe).
     fn scalar_canonical(self) -> bool {
         matches!(self, CanonState::Both | CanonState::ScalarOnly)
     }
@@ -1286,7 +1285,7 @@ struct WalkCtx<'a> {
     cache: &'a FieldUsageCache,
     locals: &'a mut Vec<NirLocal>,
     local_count: &'a mut u32,
-    /// Per-type free pool of `__hfs_call_*` temp local indices. Each call
+    /// Per-type free pool of `$hfs_call_*` temp local indices. Each call
     /// wrap that captures a non-unit return value pulls an index from the
     /// pool of the matching type and returns it when the wrap is fully
     /// constructed. Each temp's def/use are confined to one Block, so
@@ -1337,7 +1336,7 @@ impl WalkCtx<'_> {
         let idx = *self.local_count;
         *self.local_count += 1;
         self.locals.push(NirLocal {
-            name: format!("__hfs_call_{idx}"),
+            name: format!("$hfs_call_{idx}"),
             type_id,
             is_mut: false,
         });
@@ -1349,7 +1348,7 @@ impl WalkCtx<'_> {
     }
 
     fn temp_name(&self, idx: u32) -> String {
-        format!("__hfs_call_{idx}")
+        format!("$hfs_call_{idx}")
     }
 }
 
@@ -1383,7 +1382,7 @@ fn process_loop_body(
         interior_effects: false,
     };
     walk_block(body, block, &mut states, &mut ctx);
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     // Body-end: converge every candidate back to its loop-entry state so the
     // loop's back-edge state matches the entry established by the pre-load.
     // For deferrable (`ScalarOnly`-entry) candidates this is a no-op; for the
@@ -1406,7 +1405,7 @@ fn sync_to_targets(
     states: &mut ScalarStates,
     targets: &[CanonState],
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> Vec<StmtId> {
     let mut out = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -1447,7 +1446,7 @@ fn state_transition_stmt(
     from: CanonState,
     to: CanonState,
     c: &ScalarizeCandidate,
-    span: crate::token::Span,
+    span: Span,
 ) -> Option<StmtId> {
     match transition_sync_action(from, to) {
         None => None,
@@ -1528,7 +1527,7 @@ fn insert_convergence_at_block_end(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     debug_assert_eq!(from.len(), to.len());
     let mut sync_stmts: Vec<StmtId> = Vec::new();
@@ -1553,7 +1552,7 @@ fn capture_for_sync(
     ctx: &mut WalkCtx,
     value: Operand,
     assigned: &IndexSet<u32>,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     if let Some(e) = value.as_expr() {
         let rebuildable = match &body.exprs[e].kind {
@@ -1590,9 +1589,9 @@ fn capture_for_sync(
     bind_for_sync(body, ctx, value, assigned, span)
 }
 
-/// Locals the sync sequence assigns. A re-read (`__hfs_F = local.F`) refreshes
+/// Locals the sync sequence assigns. A re-read (`$hfs_F = local.F`) refreshes
 /// its scalar local, so an operand naming that local must be captured before the
-/// sync; a write-back (`local.F = __hfs_F`) only reads one.
+/// sync; a write-back (`local.F = $hfs_F`) only reads one.
 ///
 /// Read off the statements rather than assumed from the emitter, and read from
 /// the whole subtree rather than the top of each one: a statement is not
@@ -1637,7 +1636,7 @@ fn bind_for_sync(
     ctx: &mut WalkCtx,
     value: Operand,
     assigned: &IndexSet<u32>,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     use crate::nir_value_graph::ValueKind;
     if let Some(v) = value.as_value()
@@ -1654,8 +1653,8 @@ fn bind_for_sync(
         return (Vec::new(), value, Vec::new());
     }
     // Reading the local after the sync yields what reading it before would.
-    // Binding it anyway left the `__hfs_call_N = hit; self.pos = __hfs_pos_M;
-    // return __hfs_call_N` the retired WIR pass had to clean up. Sound for a
+    // Binding it anyway left the `$hfs_call_N = hit; self.pos = $hfs_pos_M;
+    // return $hfs_call_N` the retired WIR pass had to clean up. Sound for a
     // ref-typed local too: the binding copies the reference, not the pointee, so
     // a field the sync writes is visible either way.
     if let Some(e) = value.as_expr()
@@ -1758,7 +1757,7 @@ fn build_convergence_block(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> BlockId {
     let mut stmts: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -1766,8 +1765,7 @@ fn build_convergence_block(
             stmts.push(stmt);
         }
     }
-    body.blocks
-        .push(crate::nir_arena::BlockNode { stmts, span })
+    body.blocks.push(BlockNode { stmts, span })
 }
 
 /// True if any of the candidates' state in `from` differs from `to`.
@@ -1781,7 +1779,7 @@ fn states_differ(from: &ScalarStates, to: &ScalarStates) -> bool {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn walk_block(body: &mut Body, block: BlockId, states: &mut ScalarStates, ctx: &mut WalkCtx) {
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let stmts = std::mem::take(&mut body.blocks[block].stmts);
     let mut new_stmts: Vec<StmtId> = Vec::new();
     // Each statement's sync sink (`new_stmts`) sits exactly before it, so
@@ -1806,7 +1804,7 @@ fn walk_stmt(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     match &body.stmts[sid].kind {
         StmtKind::If {
@@ -1966,7 +1964,7 @@ fn hoist_operand_to_temp(
     value: Operand,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Operand, u32, TypeId) {
     let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
     out.push(let_sid);
@@ -1980,7 +1978,7 @@ fn bind_temp(
     body: &mut Body,
     value: Operand,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (StmtId, Operand, u32, TypeId) {
     let type_id = body.operand_type(value);
     let tmp_idx = ctx.alloc_temp(type_id);
@@ -2019,14 +2017,14 @@ fn commit_scalar_for_escape(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     for (i, c) in ctx.candidates.iter().enumerate() {
         if states[i] == CanonState::ScalarOnly {
             let stmt = make_write_back_stmt(body, c, span);
             out.push(stmt);
             // The escape leaves the loop scope; subsequent code does not
-            // observe `__hfs_F`, but recording the post-commit state keeps
+            // observe `$hfs_F`, but recording the post-commit state keeps
             // the invariant for any downstream walker logic.
             states[i] = CanonState::Both;
         }
@@ -2050,7 +2048,7 @@ fn walk_if_branches(
     else_block: Option<BlockId>,
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut then_states = entry.clone();
@@ -2101,7 +2099,7 @@ fn walk_nested_loop(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     // Commit a reached `ScalarOnly` candidate so inner reads (and a nested
     // HFS's pre-load) observe an up-to-date field. An unreached one keeps its
@@ -2253,7 +2251,7 @@ fn walk_expr(
 ) {
     let span = body.exprs[e].span;
 
-    // Field assignment: `local.field = value` becomes `__hfs_F = value`.
+    // Field assignment: `local.field = value` becomes `$hfs_F = value`.
     if let ExprKind::Assign { target, value } = &body.exprs[e].kind {
         let (target, value) = (*target, *value);
         if let Some((cand_idx, c)) = field_place_to_candidate(body, target, ctx) {
@@ -2262,7 +2260,7 @@ fn walk_expr(
             // Commit the assignment: rewrite target in place and update state.
             body.exprs[target].kind = ExprKind::Local {
                 index: c.new_local_index,
-                name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
+                name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
             };
             body.exprs[target].type_id = c.type_id;
             states[cand_idx] = CanonState::ScalarOnly;
@@ -2275,10 +2273,10 @@ fn walk_expr(
         return;
     }
 
-    // Field read: `local.field` becomes `__hfs_F`. Requires scalar canonical;
+    // Field read: `local.field` becomes `$hfs_F`. Requires scalar canonical;
     // if the state is FieldOnly, the re-read is hoisted to the sink while the
     // statement has had no candidate effects, and otherwise wrapped in place
-    // (`{ __hfs_F = L.F; __hfs_F }`) so it runs at the read's own evaluation
+    // (`{ $hfs_F = L.F; $hfs_F }`) so it runs at the read's own evaluation
     // point — after, not before, whatever made the scalar stale.
     if let Some((cand_idx, c)) = field_place_to_candidate(body, e, ctx) {
         let needs_re_read = !states[cand_idx].scalar_canonical();
@@ -2287,7 +2285,7 @@ fn walk_expr(
         }
         body.exprs[e].kind = ExprKind::Local {
             index: c.new_local_index,
-            name: format!("__hfs_{}_{}", c.field_name, c.new_local_index),
+            name: format!("$hfs_{}_{}", c.field_name, c.new_local_index),
         };
         if needs_re_read {
             if ctx.interior_effects {
@@ -2405,7 +2403,7 @@ fn walk_call_expr(
     }
     // Post-call: candidates the callee may mutate through a whole-struct
     // `&mut T` arg become FieldOnly; candidates whose scalar the callee
-    // writes through a rewritten `&mut __hfs_F` arg become ScalarOnly
+    // writes through a rewritten `&mut $hfs_F` arg become ScalarOnly
     // (applied second — the ref's copy-out lands after the call).
     for &i in &effects.mutated {
         states[i] = CanonState::FieldOnly;
@@ -2427,7 +2425,7 @@ fn hoist_call_inputs(
     body: &mut Body,
     call: ExprId,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Vec<(u32, TypeId)>) {
     enum Slot {
         Callee,
@@ -2495,7 +2493,7 @@ struct CallFieldEffects {
     /// post-call state becomes `FieldOnly`.
     mutated: Vec<usize>,
     /// Candidate indices whose *scalar* the callee may write through a
-    /// `&mut local.field` arg (rewritten to `&mut __hfs_F`) — post-call
+    /// `&mut local.field` arg (rewritten to `&mut $hfs_F`) — post-call
     /// state becomes `ScalarOnly`.
     scalar_mutated: Vec<usize>,
 }
@@ -2543,7 +2541,7 @@ struct SyncFields {
     re_read: IndexSet<(u32, u32)>,
     /// Fields whose scalar the callee may write through a direct
     /// `&mut local.field` arg. The field-read rewrite turns the arg into
-    /// `&mut __hfs_F` (re-reading first if the scalar was stale), so the
+    /// `&mut $hfs_F` (re-reading first if the scalar was stale), so the
     /// callee's copy-out lands in the scalar — post-call it is canonical.
     /// Tracked only for non-GC field types: a GC field's reference is the
     /// object handle the scalar already shares (in-place mutation, never a
@@ -2776,7 +2774,7 @@ fn walk_labeled_block(
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
 ) {
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let prior = ctx.label_breaks.insert(label.to_string(), Vec::new());
     walk_block(body, block, states, ctx);
     let break_records = ctx.label_breaks.swap_remove(label).unwrap_or_default();
@@ -2807,7 +2805,7 @@ fn insert_convergence_before_break(
     record: &BreakRecord,
     target: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let mut sync: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -2851,7 +2849,7 @@ fn walk_expr_branches_switch(
     default: BlockId,
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut arm_states: Vec<ScalarStates> = Vec::new();
@@ -2883,7 +2881,7 @@ fn walk_expr_branches_match(
     states: &mut ScalarStates,
     result_used: bool,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut accumulated_pre = entry;
@@ -2957,7 +2955,7 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), expr_span);
     let mut stmts = prefix;
     stmts.push(expr_stmt);
-    let blk = body.blocks.push(crate::nir_arena::BlockNode {
+    let blk = body.blocks.push(BlockNode {
         stmts,
         span: expr_span,
     });
@@ -2970,7 +2968,7 @@ fn emit_convergence_at_expr_end_operand(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     if let Some(e) = op.as_expr() {
         emit_convergence_at_expr_end(body, e, from, to, ctx, span);
@@ -2989,7 +2987,7 @@ fn emit_convergence_at_expr_end(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let mut sync_stmts: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -3018,7 +3016,7 @@ fn emit_convergence_at_expr_end(
         let mut stmts = Vec::with_capacity(1 + sync_stmts.len());
         stmts.push(expr_stmt);
         stmts.extend(sync_stmts);
-        let blk = body.blocks.push(crate::nir_arena::BlockNode {
+        let blk = body.blocks.push(BlockNode {
             stmts,
             span: body_span,
         });
@@ -3034,7 +3032,7 @@ fn emit_convergence_at_expr_end(
     stmts.extend(bindings);
     stmts.extend(sync_stmts);
     stmts.push(push_stmt(body, StmtKind::Expr(value_after), body_span));
-    let blk = body.blocks.push(crate::nir_arena::BlockNode {
+    let blk = body.blocks.push(BlockNode {
         stmts,
         span: body_span,
     });
@@ -3074,7 +3072,7 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,
-    callee_id: crate::nir::FuncId,
+    callee_id: FuncId,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,
@@ -3144,7 +3142,7 @@ fn add_sync_fields_for_arg(
 
 /// If `arg_expr` is a direct `&mut local.field` of a *non-GC* candidate
 /// field, record it in `SyncFields::scalar_write` — the rewritten
-/// `&mut __hfs_F` lets the callee write the scalar, so post-call the scalar
+/// `&mut $hfs_F` lets the callee write the scalar, so post-call the scalar
 /// is the canonical side. See `SyncFields::scalar_write` for why GC fields
 /// are exempt.
 fn add_scalar_write_for_field_ref_arg(

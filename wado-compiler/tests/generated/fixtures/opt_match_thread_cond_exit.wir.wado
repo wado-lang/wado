@@ -35,9 +35,9 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//opt_match_thread_cond_exit.wado/run" = fn();  // TypeId(12)
 
-type "functype//opt_match_thread_cond_exit.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//opt_match_thread_cond_exit.wado/__cm_export__run" = fn();  // TypeId(14)
+type "functype//opt_match_thread_cond_exit.wado/$cm_export__run" = fn();  // TypeId(14)
 
 type "functype//opt_match_thread_cond_exit.wado/run$cold2" = fn();  // TypeId(15)
 
@@ -69,75 +69,75 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:opt_match_thread_cond_exit.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
+global global:opt_match_thread_cond_exit.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
 
 fn "opt_match_thread_cond_exit.wado/run"() with Stdout {
-    let __cond_3: bool;
+    let $cond_3: bool;
     let v_21: i32;
     let handle: i32;
     let packed: i64;
     let rx_42: i32;
     let tx_43: i32;
-    let __sroa_slot_48: i32;
-    let __sroa_slot_49: i32;
-    let __sroa_slot_50: i32;
-    let __sroa_slot_51: i32;
-    __sroa_slot_50 = 0;
-    __sroa_slot_51 = 0;
+    let $sroa_slot_48: i32;
+    let $sroa_slot_49: i32;
+    let $sroa_slot_50: i32;
+    let $sroa_slot_51: i32;
+    $sroa_slot_50 = 0;
+    $sroa_slot_51 = 0;
     $inline_opt_match_thread_cond_exit_wado_S__run_1: block {
-        __sroa_slot_48 = 0;
-        __sroa_slot_49 = 0;
+        $sroa_slot_48 = 0;
+        $sroa_slot_49 = 0;
         $inline_opt_match_thread_cond_exit_wado_S__pick_2: block {
-            __sroa_slot_48 = 1;
-            __sroa_slot_49 = -1;
+            $sroa_slot_48 = 1;
+            $sroa_slot_49 = -1;
             if break _i0 {
-                __sroa_slot_48 = 0;
-                __sroa_slot_49 = 1;
+                $sroa_slot_48 = 0;
+                $sroa_slot_49 = 1;
                 break $inline_opt_match_thread_cond_exit_wado_S__pick_2;
             }
-            __sroa_slot_48 = 0;
-            __sroa_slot_49 = 2;
+            $sroa_slot_48 = 0;
+            $sroa_slot_49 = 2;
             break $inline_opt_match_thread_cond_exit_wado_S__pick_2;
         };
-        let __match_scrut_0: i32;
-        __match_scrut_0 = __sroa_slot_48;
-        v_21 = (if __match_scrut_0 == 0 -> i32 {
-            __sroa_slot_49;
-        } else if @unlikely(__match_scrut_0 == 1) -> i32 {
+        let $match_scrut_0: i32;
+        $match_scrut_0 = $sroa_slot_48;
+        v_21 = (if $match_scrut_0 == 0 -> i32 {
+            $sroa_slot_49;
+        } else if @unlikely($match_scrut_0 == 1) -> i32 {
             cold_path;
-            __sroa_slot_50 = 1;
-            break $inline_opt_match_thread_cond_exit_wado_S__run_1: __sroa_slot_51 = __sroa_slot_49;
+            $sroa_slot_50 = 1;
+            break $inline_opt_match_thread_cond_exit_wado_S__run_1: $sroa_slot_51 = $sroa_slot_49;
         } else {
             unreachable;
         });
-        __sroa_slot_50 = 0;
-        __sroa_slot_51 = v_21 + 100;
+        $sroa_slot_50 = 0;
+        $sroa_slot_51 = v_21 + 100;
         break $inline_opt_match_thread_cond_exit_wado_S__run_1;
     };
-    let __match_scrut_1: i32;
-    __match_scrut_1 = __sroa_slot_50;
-    __cond_3 = (if select i32(__match_scrut_1 == 1, __sroa_slot_51 == -1, 0) -> bool {
+    let $match_scrut_1: i32;
+    $match_scrut_1 = $sroa_slot_50;
+    $cond_3 = (if select i32($match_scrut_1 == 1, $sroa_slot_51 == -1, 0) -> bool {
         1;
     } else {
         0;
     });
-    if @unlikely(__cond_3 == 0) {
+    if @unlikely($cond_3 == 0) {
         cold_path;
         "opt_match_thread_cond_exit.wado/run$cold2"();
         unreachable;
     }
     rx_42 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_43 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_match_thread_cond_exit.wado/__cm_binding__Stdout_write_via_stream"(rx_42);
-    "core:rt/write_string_to_stream"(tx_43, global:opt_match_thread_cond_exit.wado::__const_obj_1);
+    handle = "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
+    "core:rt/write_string_to_stream"(tx_43, global:opt_match_thread_cond_exit.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
-fn "opt_match_thread_cond_exit.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "opt_match_thread_cond_exit.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "opt_match_thread_cond_exit.wado/__cm_export__run"() {
+fn "opt_match_thread_cond_exit.wado/$cm_export__run"() {
     "opt_match_thread_cond_exit.wado/run"();
     "wasi/task-return"(0);
 }
@@ -187,26 +187,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let __sroa_data_start: i32;
-    let __sroa_written_count: i32;
-    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
-    let _av_52: i32;
-    let _av_53: i32;
-    _av_52 = data.start;
-    _av_53 = data.end;
-    if (_av_53 - _av_52) == 0 {
+    let $sroa_data_start: i32;
+    let $sroa_written_count: i32;
+    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $av_52: i32;
+    let $av_53: i32;
+    $av_52 = data.start;
+    $av_53 = data.end;
+    if ($av_53 - $av_52) == 0 {
         return;
     }
     repr_2 = data.repr;
-    end_3 = _av_52 + (_av_53 - _av_52);
+    end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
         l7: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
                 l9: loop {
                     break_if b8 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l9;
                 };
@@ -224,21 +224,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            __sroa_written_count = result >> 4;
-            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let __match_scrut_0: i32;
-                __match_scrut_0 = result & 15;
-                if __match_scrut_0 == 0 {
+            $sroa_written_count = result >> 4;
+            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+                let $match_scrut_0: i32;
+                $match_scrut_0 = result & 15;
+                if $match_scrut_0 == 0 {
                     break $inline_cm_copy_result_14: 0;
-                } else if __match_scrut_0 == 1 {
+                } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_14: 1;
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + __sroa_written_count;
-            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+            offset = offset + $sroa_written_count;
+            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
             continue l7;
@@ -246,4 +246,4 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     };
 }
 
-export fn "opt_match_thread_cond_exit.wado/__cm_export__run" as "run"
+export fn "opt_match_thread_cond_exit.wado/$cm_export__run" as "run"

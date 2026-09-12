@@ -323,6 +323,7 @@ fn populate_trailing_from_nodes(trivia: &mut TriviaMap, nodes: &[(AstId, Span)])
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstIdSpace;
 
     fn line_comment(text: &str, start: usize, end: usize, line: usize, column: usize) -> Comment {
         Comment {
@@ -345,8 +346,7 @@ mod tests {
     /// assume one space per map, like one parser produces.
     fn aid(local: u32) -> AstId {
         use std::sync::LazyLock;
-        static SPACE: LazyLock<crate::ast::AstIdSpace> =
-            LazyLock::new(crate::ast::AstIdSpace::next);
+        static SPACE: LazyLock<AstIdSpace> = LazyLock::new(AstIdSpace::next);
         AstId::new(*SPACE, local)
     }
 

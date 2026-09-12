@@ -186,17 +186,17 @@ fn chain() -> Definitions {
 }
 
 #[test]
-fn an_interface_is_an_extern_handle_resource_with_its_own_cm_interface() {
+fn an_interface_is_an_unrestricted_resource_with_its_own_cm_interface() {
     let (code, _) = chain().generate();
     assert!(
         code.contains(
-            "#[cm(\"web:dom/event-target\", type = \"extern-handle\")]\npub resource EventTarget {"
+            "#[cm(\"web:dom/event-target\", linearity = \"unrestricted\")]\npub resource EventTarget {"
         ),
         "{code}"
     );
     assert!(
         code.contains(
-            "#[cm(\"web:dom/node\", type = \"extern-handle\")]\npub resource Node extends EventTarget {"
+            "#[cm(\"web:dom/node\", linearity = \"unrestricted\")]\npub resource Node extends EventTarget {"
         ),
         "{code}"
     );

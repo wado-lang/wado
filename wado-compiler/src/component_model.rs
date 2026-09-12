@@ -10,11 +10,22 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-use crate::ast::{Attribute, CmImport, GenericType, Type};
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
+use crate::ast;
+use crate::ast::{
+    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
+    NamedType, NamespacedGenericType, Type, declares_unrestricted,
+};
+use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
+use crate::cm_abi::{
+    CmValType, align_to, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size,
+    cm_size, layout_record_with_registry_scoped, layout_tuple_with_registry_scoped,
+};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::to_kebab;
+use crate::name::{DeclName, DeclPath, to_kebab};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
+use crate::unparse::unparse_type_into;
+use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
 
 /// The one classifier, so every operation on a given `Future<T>` — read, write,
 /// cancel, drop, new — agrees on its component-level future type.
@@ -141,10 +152,7 @@ fn is_trailers_payload(type_table: &TypeTable, type_arg: TypeId) -> bool {
 /// # Panics
 /// On an element it cannot classify. Ask [`stream_payload_rejection`] first,
 /// for a diagnostic instead.
-pub fn classify_stream_payload(
-    type_table: &TypeTable,
-    element: TypeId,
-) -> crate::canonical::CmStreamPayload {
+pub fn classify_stream_payload(type_table: &TypeTable, element: TypeId) -> CmStreamPayload {
     use crate::canonical::CmStreamPayload;
     let element = peel_newtypes(type_table, element);
     if is_u8_stream_element(type_table, element) {
@@ -269,9 +277,9 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
 /// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen, which
 /// works off the export's raw Wado return type.
 pub fn cm_payload_type_from_ast(
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     registry: &CmInterfaceRegistry,
-) -> Option<crate::canonical::CmPayloadType> {
+) -> Option<CmPayloadType> {
     use crate::ast::Type;
     use crate::canonical::CmPayloadType;
     let resolved = registry.resolve_type(ty);
@@ -327,9 +335,9 @@ pub fn cm_payload_type_from_ast(
 /// Classify an AST-`Type` stream element (codegen's `task.return` resolver),
 /// mirroring [`classify_stream_payload`] on resolved types.
 pub fn classify_stream_payload_from_ast(
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     registry: &CmInterfaceRegistry,
-) -> crate::canonical::CmStreamPayload {
+) -> CmStreamPayload {
     use crate::ast::Type;
     use crate::canonical::CmStreamPayload;
     let resolved = registry.resolve_type(ty);
@@ -353,7 +361,7 @@ pub fn classify_stream_payload_from_ast(
 /// export's signature declares, and a disagreement builds a component whose
 /// declared type is not the one the body reads.
 pub fn classify_future_payload_from_ast(
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> CmFuturePayload {
     use crate::ast::Type;
@@ -384,10 +392,10 @@ pub fn classify_future_payload_from_ast(
 }
 
 fn wasi_error_code_source_from_ast(
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> Option<String> {
-    let crate::ast::Type::Named(n) = &registry.resolve_type(ty) else {
+    let ast::Type::Named(n) = &registry.resolve_type(ty) else {
         return None;
     };
     let source = registry.resolve_cm_source_for(n, None)?;
@@ -403,10 +411,7 @@ fn wasi_error_code_source_from_ast(
 }
 
 /// `result<option<resource>, _>`.
-fn is_trailers_payload_from_ast(
-    resolved: &crate::ast::Type,
-    registry: &CmInterfaceRegistry,
-) -> bool {
+fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegistry) -> bool {
     use crate::ast::Type;
     let Type::Generic(g) = resolved else {
         return false;
@@ -434,9 +439,9 @@ fn is_trailers_payload_from_ast(
 }
 
 /// For a diagnostic or a panic message — the `Debug` form dumps spans and ids.
-fn render_ast_type(ty: &crate::ast::Type) -> String {
+fn render_ast_type(ty: &ast::Type) -> String {
     let mut out = String::new();
-    crate::unparse::unparse_type_into(ty, &mut out);
+    unparse_type_into(ty, &mut out);
     out
 }
 
@@ -469,7 +474,7 @@ fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Opti
         return None;
     };
     let ModuleSource::Binding {
-        namespace: crate::module_source::CmNamespace::Wasi,
+        namespace: CmNamespace::Wasi,
         interface,
     } = type_table.def_module(*def)
     else {
@@ -512,7 +517,7 @@ pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Op
 
 /// Preserves acronym casing from the WIT source (e.g., `DNS-timeout`, `TLS-protocol-error`).
 /// Panics if no `#[cm]` attribute is present — all CM names must be metadata-driven.
-fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
+fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
     attrs
         .iter()
         .find_map(|a| match &a.cm_boundary {
@@ -520,39 +525,25 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
             // as the CM name. If the path has no function fragment, fall
             // back to the whole interface path to preserve the previous
             // behaviour.
-            Some(crate::ast::CmBoundary::Import(cm)) => {
+            Some(CmBoundary::Import(cm)) => {
                 Some(cm.function.clone().unwrap_or_else(|| cm.interface_path()))
             }
             // Case-level CM names (variant cases, fields, ...) carry just
             // the CM-side identifier.
-            Some(crate::ast::CmBoundary::Name(s)) => Some(s.clone()),
-            Some(
-                crate::ast::CmBoundary::Canonical { .. } | crate::ast::CmBoundary::WorldImport(_),
-            )
-            | None => None,
+            Some(CmBoundary::Name(s)) => Some(s.clone()),
+            Some(CmBoundary::Canonical { .. } | CmBoundary::WorldImport(_)) | None => None,
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// Whether a resource declares `#[cm(..., type = "extern-handle")]`.
-fn extern_handle_backed(attrs: &[crate::ast::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternHandle))
-}
-
-/// The CM type an extern-handle crosses the boundary as. No CM value type is a
-/// reference, so a copyable handle is an integer — the WEP records why.
-fn extern_handle_type(span: crate::token::Span) -> Type {
-    Type::Named(crate::ast::NamedType::new(
-        crate::ast::AstId::fresh(),
-        "u32".to_string(),
-        span,
-    ))
+/// The CM type an unrestricted resource crosses the boundary as. No CM value
+/// type is a reference, so a copyable handle is an integer.
+fn extern_handle_type(span: Span) -> Type {
+    Type::Named(NamedType::new(AstId::fresh(), "u32".to_string(), span))
 }
 
 /// Extract CM parameter names from a `#[cm_params("param-a", "param-b")]` attribute.
-fn extract_cm_params_attr(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+fn extract_cm_params_attr(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
         .find(|a| a.name == "cm_params")
@@ -834,9 +825,9 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `#[cm(..., type = "extern-handle")]`, registered as
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, registered as
     /// `u32` newtypes rather than in [`Self::resources`].
-    extern_handle_resources: IndexSet<(String, String)>,
+    unrestricted_resources: IndexSet<(String, String)>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
     /// Key: `(source_interface, wado_name)`. Value:
@@ -1094,7 +1085,7 @@ fn substitute_self_in_type(
             if !source_interface.is_empty() {
                 sources.set(n.id, source_interface.to_string());
             }
-            Type::Named(crate::ast::NamedType {
+            Type::Named(NamedType {
                 name: resource_name.to_string(),
                 ..n.clone()
             })
@@ -1146,12 +1137,12 @@ impl InterfaceDeclTable {
         name: &str,
         newtypes: &IndexMap<(String, String), Type>,
         sources: &SourceInterfaces,
-    ) -> Option<crate::world_registry::InterfaceExportLookup> {
+    ) -> Option<InterfaceExportLookup> {
         let entry = self.by_name.get(name)?;
         let methods = entry
             .methods
             .iter()
-            .map(|m| crate::world_registry::InterfaceExportMethod {
+            .map(|m| InterfaceExportMethod {
                 name: m.name.clone(),
                 is_async: m.is_async,
                 params: m
@@ -1167,14 +1158,14 @@ impl InterfaceDeclTable {
                     .or_else(|| m.return_type.clone()),
             })
             .collect();
-        Some(crate::world_registry::InterfaceExportLookup {
+        Some(InterfaceExportLookup {
             cm_interface_fq: entry.cm_interface_fq.clone(),
             methods,
         })
     }
 }
 
-fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> InterfaceDeclTable {
+fn collect_interface_decls(modules: &[(&'static str, ast::Module)]) -> InterfaceDeclTable {
     use crate::ast::Item;
 
     let mut table = InterfaceDeclTable::default();
@@ -1233,7 +1224,7 @@ fn collect_interface_decls(modules: &[(&'static str, crate::ast::Module)]) -> In
 /// and points at the interface prefix before the `#` fragment (e.g.
 /// `"wasi:http/types@0.3.0"`). Effects, structs, variants,
 /// enums, flags, resources, and newtypes are all included.
-fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, String> {
+fn collect_cm_definitions(module: &ast::Module) -> IndexMap<String, String> {
     use crate::ast::Item;
     let mut out: IndexMap<String, String> = IndexMap::default();
     for item in &module.items {
@@ -1264,7 +1255,7 @@ fn collect_cm_definitions(module: &crate::ast::Module) -> IndexMap<String, Strin
 /// `source_interface = None`.
 fn build_local_name_resolver(
     module_path: &str,
-    module: &crate::ast::Module,
+    module: &ast::Module,
     defs_by_module: &IndexMap<&'static str, IndexMap<String, String>>,
 ) -> IndexMap<String, String> {
     use crate::ast::{Item, UseItem};
@@ -1325,7 +1316,7 @@ fn resolve_use_source<'a>(
 
 /// The CM interface each named-type reference site resolves to, keyed by the
 /// reference's own [`crate::ast::AstId`].
-pub type SourceInterfaceBatch = IndexMap<crate::ast::AstId, String>;
+pub type SourceInterfaceBatch = IndexMap<AstId, String>;
 
 /// Which CM interface each named-type reference site resolves to.
 ///
@@ -1353,11 +1344,11 @@ impl SourceInterfaces {
     }
 
     #[must_use]
-    pub fn get(&self, site: crate::ast::AstId) -> Option<String> {
+    pub fn get(&self, site: AstId) -> Option<String> {
         self.read().get(&site).cloned()
     }
 
-    pub fn set(&self, site: crate::ast::AstId, interface: String) {
+    pub fn set(&self, site: AstId, interface: String) {
         self.write().entry(site).or_insert(interface);
     }
 
@@ -1376,7 +1367,7 @@ impl SourceInterfaces {
 /// unanswered — those are primitives (`String`, `bool`, `i32`, ...), generic
 /// type parameters, or names the stdlib never declares.
 fn collect_named_type_sources(
-    module: &crate::ast::Module,
+    module: &ast::Module,
     local_names: &IndexMap<String, String>,
 ) -> SourceInterfaceBatch {
     let mut sources = SourceInterfaceBatch::default();
@@ -1389,7 +1380,7 @@ fn collect_named_type_sources(
 /// Collect the source interfaces of every type reference `item` declares.
 fn collect_item_type_sources(
     sources: &mut SourceInterfaceBatch,
-    item: &crate::ast::Item,
+    item: &Item,
     local_names: &IndexMap<String, String>,
 ) {
     use crate::ast::Item;
@@ -1443,7 +1434,7 @@ fn collect_item_type_sources(
 /// identifier appears in `local_names`.
 fn walk_type(
     sources: &mut SourceInterfaceBatch,
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     local_names: &IndexMap<String, String>,
 ) {
     use crate::ast::Type;
@@ -1484,7 +1475,7 @@ fn walk_type(
 /// `name -> iface_fq` for every top-level type decl in `items`, the input
 /// `walk_type` needs to stamp `source_interface` on lib-local references.
 fn local_type_names<'a>(
-    items: impl Iterator<Item = &'a crate::ast::Item>,
+    items: impl Iterator<Item = &'a Item>,
     iface_fq: &str,
 ) -> IndexMap<String, String> {
     use crate::ast::Item;
@@ -1508,11 +1499,11 @@ impl CmInterfaceRegistry {
         Self::default()
     }
 
-    /// Whether the resource `name` declared in `source` takes the extern-handle
-    /// backing, and so crosses the boundary as the universal handle.
+    /// Whether the resource `name` declared in `source` is unrestricted, and so
+    /// crosses the boundary as the universal handle rather than a CM handle.
     #[must_use]
-    pub fn is_extern_handle_resource(&self, source: &str, name: &str) -> bool {
-        self.extern_handle_resources
+    pub fn is_unrestricted_resource(&self, source: &str, name: &str) -> bool {
+        self.unrestricted_resources
             .contains(&(source.to_string(), name.to_string()))
     }
 
@@ -1536,7 +1527,7 @@ impl CmInterfaceRegistry {
             return ty.clone();
         };
         match self.source_interface(named) {
-            Some(source) if self.is_extern_handle_resource(&source, &named.name) => {
+            Some(source) if self.is_unrestricted_resource(&source, &named.name) => {
                 inner.as_ref().clone()
             }
             _ => ty.clone(),
@@ -1546,12 +1537,12 @@ impl CmInterfaceRegistry {
     /// The CM interface the reference at `named` resolves to, or `None` when
     /// no pass has answered for that site.
     #[must_use]
-    pub fn source_interface(&self, named: &crate::ast::NamedType) -> Option<String> {
+    pub fn source_interface(&self, named: &NamedType) -> Option<String> {
         self.source_interfaces.get(named.id)
     }
 
     /// Record the interface a reference site resolves to.
-    pub fn set_source_interface(&self, site: crate::ast::AstId, interface: String) {
+    pub fn set_source_interface(&self, site: AstId, interface: String) {
         self.source_interfaces.set(site, interface);
     }
 
@@ -1611,10 +1602,10 @@ impl CmInterfaceRegistry {
     /// first `#[cm("...")]` attribute on a stdlib item. Returns an
     /// empty string if no attribute is present (user-authored items
     /// don't carry this).
-    fn cm_source_interface(attrs: &[crate::ast::Attribute]) -> String {
+    fn cm_source_interface(attrs: &[Attribute]) -> String {
         attrs
             .iter()
-            .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::interface_path))
+            .find_map(|a| a.as_cm_import().map(CmImport::interface_path))
             .unwrap_or_default()
     }
 
@@ -1626,16 +1617,10 @@ impl CmInterfaceRegistry {
     /// bootstrap is expensive) and handed out as cheap `Arc` clones. A `--lib`
     /// compile augments its own clone with the package's local types via
     /// `Arc::make_mut`, so the shared stdlib copy is never mutated.
-    pub fn build_from_stdlib() -> (
-        std::sync::Arc<Self>,
-        std::sync::Arc<crate::world_registry::WorldRegistry>,
-    ) {
+    pub fn build_from_stdlib() -> (std::sync::Arc<Self>, std::sync::Arc<WorldRegistry>) {
         use std::sync::{Arc, OnceLock};
 
-        static INSTANCE: OnceLock<(
-            Arc<CmInterfaceRegistry>,
-            Arc<crate::world_registry::WorldRegistry>,
-        )> = OnceLock::new();
+        static INSTANCE: OnceLock<(Arc<CmInterfaceRegistry>, Arc<WorldRegistry>)> = OnceLock::new();
 
         INSTANCE
             .get_or_init(|| {
@@ -1645,7 +1630,7 @@ impl CmInterfaceRegistry {
             .clone()
     }
 
-    fn build_from_stdlib_inner() -> (Self, crate::world_registry::WorldRegistry) {
+    fn build_from_stdlib_inner() -> (Self, WorldRegistry) {
         use crate::ast::Module as AstModule;
         use crate::lexer::lex;
         use crate::parser::Parser;
@@ -1664,7 +1649,7 @@ impl CmInterfaceRegistry {
         // `#[cm(…)]` paths, so pass 2 can resolve a cross-module `use` whose
         // target parses after the importer; pass 2 then builds each module's
         // local name → source_interface map and walks its `Type` nodes.
-        let mut modules: Vec<(&'static str, crate::ast::Module)> = Vec::new();
+        let mut modules: Vec<(&'static str, ast::Module)> = Vec::new();
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
         let kiln = [
@@ -1692,7 +1677,7 @@ impl CmInterfaceRegistry {
         // pass 2 so that `export Foo;` in a world can be expanded against the
         // already-registered interface signatures, even when the interface
         // is declared in a different module than the world.
-        let mut resolved_modules: Vec<(&'static str, crate::ast::Module)> =
+        let mut resolved_modules: Vec<(&'static str, ast::Module)> =
             Vec::with_capacity(modules.len());
         for (path, module) in modules {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
@@ -1719,7 +1704,7 @@ impl CmInterfaceRegistry {
     /// declarations are handled separately by [`Self::register_module_worlds`]
     /// so that interface exports can be expanded against the full set of
     /// interface declarations across modules.
-    fn register_module_decls(&mut self, module: &crate::ast::Module) {
+    fn register_module_decls(&mut self, module: &ast::Module) {
         use crate::ast::Item;
 
         // First, collect newtypes from this module
@@ -1741,14 +1726,12 @@ impl CmInterfaceRegistry {
             if let Item::Resource(resource) = item {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
-                // Extract source interface path from #[cm] attribute
-                // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = Self::cm_source_interface(&resource.attrs);
-                // An extern-handle backing erases the resource: the boundary sees
+                // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if extern_handle_backed(&resource.attrs) {
-                    self.extern_handle_resources
+                if declares_unrestricted(&resource.attrs) {
+                    self.unrestricted_resources
                         .insert((source_interface.clone(), resource.name.clone()));
                     register_unique(
                         &mut self.newtypes,
@@ -2020,7 +2003,7 @@ impl CmInterfaceRegistry {
     /// component import for [`crate::wir::ImportKind::Component`] classification.
     pub fn register_component_decls(
         &mut self,
-        module: &crate::ast::Module,
+        module: &ast::Module,
         interface_fqs: &[String],
         world_func_names: &[String],
         host_leaf_imports: &[String],
@@ -2066,7 +2049,7 @@ impl CmInterfaceRegistry {
     /// resolve them through the registry exactly like WASI types.
     pub fn register_lib_local_decls(
         &mut self,
-        module: &crate::ast::Module,
+        module: &ast::Module,
         iface_fq: &str,
         entry_source: ModuleSource,
     ) {
@@ -2089,13 +2072,13 @@ impl CmInterfaceRegistry {
     /// Errors when an effect's kebab name collides with the library's export.
     pub fn register_lib_guest_effect_imports(
         &mut self,
-        interfaces: &[&crate::ast::InterfaceDecl],
+        interfaces: &[&InterfaceDecl],
         lib_fq: &str,
     ) -> Result<(), String> {
         let Some(base) = CmImport::parse(lib_fq) else {
             return Ok(());
         };
-        let is_guest_effect = |effect: &crate::ast::InterfaceDecl| {
+        let is_guest_effect = |effect: &InterfaceDecl| {
             !effect
                 .methods
                 .iter()
@@ -2160,11 +2143,7 @@ impl CmInterfaceRegistry {
     /// as the entry module's own types, so lift/lower resolves them uniformly.
     /// Each carries the module that defines it, so resolution can locate a
     /// submodule type the entry-FQ mapping cannot.
-    pub fn register_lib_local_items(
-        &mut self,
-        items: &[(ModuleSource, crate::ast::Item)],
-        iface_fq: &str,
-    ) {
+    pub fn register_lib_local_items(&mut self, items: &[(ModuleSource, Item)], iface_fq: &str) {
         let local_names = local_type_names(items.iter().map(|(_, item)| item), iface_fq);
         for (source, item) in items {
             self.register_lib_local_item(item, iface_fq, source, &local_names);
@@ -2173,7 +2152,7 @@ impl CmInterfaceRegistry {
 
     fn register_lib_local_item(
         &mut self,
-        item: &crate::ast::Item,
+        item: &Item,
         iface_fq: &str,
         module_source: &ModuleSource,
         local_names: &IndexMap<String, String>,
@@ -2276,8 +2255,8 @@ impl CmInterfaceRegistry {
     /// signatures.
     fn register_module_worlds(
         &self,
-        module: &crate::ast::Module,
-        world_registry: &mut crate::world_registry::WorldRegistry,
+        module: &ast::Module,
+        world_registry: &mut WorldRegistry,
         interface_decls: &InterfaceDeclTable,
     ) {
         use crate::ast::Item;
@@ -2303,11 +2282,7 @@ impl CmInterfaceRegistry {
     // `Type::Named`. `.expect("<context>")` where the registration must exist.
 
     /// Newtype registered at `(interface, name)`, if any.
-    pub fn get_newtype_by_source(
-        &self,
-        interface: &str,
-        name: &crate::name::DeclName,
-    ) -> Option<&Type> {
+    pub fn get_newtype_by_source(&self, interface: &str, name: &DeclName) -> Option<&Type> {
         let name = name.as_decl_str();
         self.newtypes
             .get(&(interface.to_string(), name.to_string()))
@@ -2551,7 +2526,7 @@ impl CmInterfaceRegistry {
 
     /// Find the source interface of a newtype declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
-    pub fn find_binding_newtype_source(&self, name: &crate::name::DeclName) -> Option<&str> {
+    pub fn find_binding_newtype_source(&self, name: &DeclName) -> Option<&str> {
         find_unique_source_in_binding(&self.newtypes, name.as_decl_str())
     }
 
@@ -2642,7 +2617,7 @@ impl CmInterfaceRegistry {
     /// all of [`CmNamespace`].
     pub fn resolve_binding_source_for(
         &self,
-        named: &crate::ast::NamedType,
+        named: &NamedType,
         package_hint: Option<&str>,
     ) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
@@ -2684,7 +2659,7 @@ impl CmInterfaceRegistry {
     /// `core:kiln/types` record such as `OutputFile`.
     pub fn resolve_cm_source_for(
         &self,
-        named: &crate::ast::NamedType,
+        named: &NamedType,
         wasi_package_hint: Option<&str>,
     ) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
@@ -2714,7 +2689,7 @@ impl CmInterfaceRegistry {
     /// to the world's own. Returns `None` for an empty prefix or no unique match.
     pub fn resolve_cm_source_with_prefix<'a>(
         &'a self,
-        named: &crate::ast::NamedType,
+        named: &NamedType,
         namespace_prefix: &str,
     ) -> Option<&'a str> {
         if namespace_prefix.is_empty() {
@@ -2738,9 +2713,9 @@ impl CmInterfaceRegistry {
     /// interface (`NamedType::source_interface`), so two modules that declare a
     /// same-named newtype resolve to their own base — never a bare-name guess.
     /// A source-less reference is not a known newtype here.
-    fn resolve_newtype_ref(&self, named: &crate::ast::NamedType) -> Option<&Type> {
+    fn resolve_newtype_ref(&self, named: &NamedType) -> Option<&Type> {
         let source = self.source_interface(named)?;
-        self.get_newtype_by_source(&source, &crate::name::DeclName::new(&named.name))
+        self.get_newtype_by_source(&source, &DeclName::new(&named.name))
     }
 
     /// The registration source and base type of a *local* newtype — one
@@ -2986,7 +2961,7 @@ impl CmInterfaceRegistry {
                 // boundary path lowers it to, but it names no CM type: the WIT
                 // spells the handle inline, so no alias declares it.
                 if source.starts_with(interface_prefix)
-                    && !self.is_extern_handle_resource(source, name)
+                    && !self.is_unrestricted_resource(source, name)
                 {
                     Some((name.as_str(), ty))
                 } else {
@@ -3157,7 +3132,7 @@ impl CmInterfaceRegistry {
 
     /// Whether `name` is a world-level function import (Phase 9).
     #[must_use]
-    pub fn is_world_import_function(&self, name: &crate::name::DeclPath) -> bool {
+    pub fn is_world_import_function(&self, name: &DeclPath) -> bool {
         let name = name.as_decl_str();
         self.world_import_functions.contains(name)
     }
@@ -3207,7 +3182,7 @@ impl CmInterfaceRegistry {
     /// Keyed in the declaration namespace — `Resource::method` as the WIT
     /// declares it. A mangled name carries the declaring module, which this
     /// registry never stores, so the key type says which one is wanted.
-    pub fn get_function(&self, name: &crate::name::DeclPath) -> Option<&CmFunctionInfo> {
+    pub fn get_function(&self, name: &DeclPath) -> Option<&CmFunctionInfo> {
         self.effect_to_func.get(name.as_decl_str())
     }
 
@@ -3250,7 +3225,7 @@ impl CmInterfaceRegistry {
     /// Check if a specific interface is in the registry (by interface name, e.g., "monotonic-clock")
     pub fn has_interface(&self, interface_name: &str) -> bool {
         self.interfaces.keys().any(|path| {
-            if let Some(wasi) = crate::ast::CmImport::parse(path) {
+            if let Some(wasi) = CmImport::parse(path) {
                 wasi.interface == interface_name
             } else {
                 false
@@ -3263,20 +3238,20 @@ impl CmInterfaceRegistry {
     /// component import (whose package namespace is arbitrary, so tracked
     /// explicitly).
     pub fn is_cm_source(&self, source: &str) -> bool {
-        crate::module_source::CmNamespace::split_specifier(source).is_some()
+        CmNamespace::split_specifier(source).is_some()
             || source.starts_with("core:kiln/")
             || self.component_interfaces.contains(source)
     }
 
     /// Flatten a CM type into its canonical-ABI core value sequence. Single
     /// source of truth for how a value-type maps to flat core params/results.
-    pub fn cm_flatten(&self, ty: &Type) -> Vec<crate::cm_abi::CmValType> {
+    pub fn cm_flatten(&self, ty: &Type) -> Vec<CmValType> {
         let mut out = Vec::new();
         self.cm_flatten_into(ty, &mut out);
         out
     }
 
-    fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<crate::cm_abi::CmValType>) {
+    fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<CmValType>) {
         use crate::cm_abi::CmValType;
         let resolved = self.resolve_type(ty);
         match &resolved {
@@ -3349,7 +3324,7 @@ impl CmInterfaceRegistry {
     fn push_joined_payloads(
         &self,
         payloads: impl Iterator<Item = Option<Type>>,
-        out: &mut Vec<crate::cm_abi::CmValType>,
+        out: &mut Vec<CmValType>,
     ) {
         use crate::cm_abi::CmValType;
         let groups: Vec<Vec<CmValType>> = payloads
@@ -3464,7 +3439,7 @@ impl CmInterfaceRegistry {
                     || (keep_handles
                         && source
                             .as_deref()
-                            .is_some_and(|s| self.is_extern_handle_resource(s, &named.name)));
+                            .is_some_and(|s| self.is_unrestricted_resource(s, &named.name)));
                 if kept {
                     ty.clone()
                 } else if let Some(aliased_ty) = self.resolve_newtype_ref(named) {
@@ -3514,7 +3489,7 @@ impl CmInterfaceRegistry {
                     .collect();
                 let resolved_return =
                     self.resolve_type_impl(&func_ty.return_type, preserve_local, keep_handles);
-                Type::Function(Box::new(crate::ast::FunctionType {
+                Type::Function(Box::new(FunctionType {
                     is_mut: func_ty.is_mut,
                     params: resolved_params,
                     return_type: resolved_return,
@@ -3530,7 +3505,7 @@ impl CmInterfaceRegistry {
                     .iter()
                     .map(|arg| self.resolve_type_impl(arg, preserve_local, keep_handles))
                     .collect();
-                Type::NamespacedGeneric(Box::new(crate::ast::NamespacedGenericType {
+                Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),
@@ -4374,12 +4349,12 @@ pub fn flatten_cm_param_type(ty: &Type, out: &mut Vec<ValType>, registry: &CmInt
     );
 }
 
-pub fn cm_val_type_to_val_type(v: crate::cm_abi::CmValType) -> ValType {
+pub fn cm_val_type_to_val_type(v: CmValType) -> ValType {
     match v {
-        crate::cm_abi::CmValType::I32 => ValType::I32,
-        crate::cm_abi::CmValType::I64 => ValType::I64,
-        crate::cm_abi::CmValType::F32 => ValType::F32,
-        crate::cm_abi::CmValType::F64 => ValType::F64,
+        CmValType::I32 => ValType::I32,
+        CmValType::I64 => ValType::I64,
+        CmValType::F32 => ValType::F32,
+        CmValType::F64 => ValType::F64,
     }
 }
 
@@ -4620,7 +4595,7 @@ pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 
 /// - payload: at `align_to(1, max_payload_align)`
 /// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
 pub fn cm_variant_size_align(
-    named: &crate::ast::NamedType,
+    named: &NamedType,
     registry: &CmInterfaceRegistry,
 ) -> Option<(u32, u32)> {
     cm_variant_size_align_scoped(named, registry, None)
@@ -4632,7 +4607,7 @@ pub fn cm_variant_size_align(
 /// component import) that exact source is used; otherwise the name is resolved
 /// through the registry, biased by `wasi_package`.
 pub fn cm_variant_size_align_scoped(
-    named: &crate::ast::NamedType,
+    named: &NamedType,
     registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
@@ -4657,9 +4632,9 @@ pub fn cm_variant_size_align_scoped(
         }
     }
     let disc_size = 1u32; // u8 for n ≤ 256 cases
-    let payload_offset = crate::cm_abi::align_to(disc_size, max_payload_align);
+    let payload_offset = align_to(disc_size, max_payload_align);
     let overall_align = max_payload_align; // max(disc_align=1, payload_align)
-    let size = crate::cm_abi::align_to(payload_offset + max_payload_size, overall_align);
+    let size = align_to(payload_offset + max_payload_size, overall_align);
     Some((size, overall_align))
 }
 
@@ -4675,10 +4650,10 @@ pub fn cm_size_with_registry_scoped(
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
-                return crate::cm_abi::cm_size(ty);
+                return cm_size(ty);
             };
             if let Some(resolved) =
-                registry.get_newtype_by_source(&source, &crate::name::DeclName::new(&named.name))
+                registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
             {
                 return cm_size_with_registry_scoped(resolved, registry, wasi_package);
             }
@@ -4687,7 +4662,7 @@ pub fn cm_size_with_registry_scoped(
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
                     .collect();
-                return crate::cm_abi::layout_record_with_registry_scoped(
+                return layout_record_with_registry_scoped(
                     &resolved_fields,
                     registry,
                     wasi_package,
@@ -4698,21 +4673,21 @@ pub fn cm_size_with_registry_scoped(
                 return sa.0;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
-                return crate::cm_abi::cm_enum_byte_size(variants.len());
+                return cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
-                return crate::cm_abi::cm_flags_byte_size(members.len());
+                return cm_flags_byte_size(members.len());
             }
-            crate::cm_abi::cm_size(ty)
+            cm_size(ty)
         }
         Type::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => {
                 let inner = &g.args[0];
                 let payload_align = cm_align_with_registry_scoped(inner, registry, wasi_package);
                 let payload_size = cm_size_with_registry_scoped(inner, registry, wasi_package);
-                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let payload_offset = align_to(1, payload_align);
                 let overall_align = 1u32.max(payload_align);
-                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+                align_to(payload_offset + payload_size, overall_align)
             }
             "Result" if g.args.len() == 2 => {
                 let ok_size = cm_size_with_registry_scoped(&g.args[0], registry, wasi_package);
@@ -4722,16 +4697,16 @@ pub fn cm_size_with_registry_scoped(
                     cm_align_with_registry_scoped(&g.args[0], registry, wasi_package).max(
                         cm_align_with_registry_scoped(&g.args[1], registry, wasi_package),
                     );
-                let payload_offset = crate::cm_abi::align_to(1, payload_align);
+                let payload_offset = align_to(1, payload_align);
                 let overall_align = 1u32.max(payload_align);
-                crate::cm_abi::align_to(payload_offset + payload_size, overall_align)
+                align_to(payload_offset + payload_size, overall_align)
             }
-            _ => crate::cm_abi::cm_size(ty),
+            _ => cm_size(ty),
         },
         Type::Tuple(elems) if !elems.is_empty() => {
-            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).size
+            layout_tuple_with_registry_scoped(elems, registry, wasi_package).size
         }
-        _ => crate::cm_abi::cm_size(ty),
+        _ => cm_size(ty),
     }
 }
 
@@ -4744,10 +4719,10 @@ pub fn cm_align_with_registry_scoped(
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
-                return crate::cm_abi::cm_align(ty);
+                return cm_align(ty);
             };
             if let Some(resolved) =
-                registry.get_newtype_by_source(&source, &crate::name::DeclName::new(&named.name))
+                registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
             {
                 return cm_align_with_registry_scoped(resolved, registry, wasi_package);
             }
@@ -4759,7 +4734,7 @@ pub fn cm_align_with_registry_scoped(
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
                     .collect();
-                return crate::cm_abi::layout_record_with_registry_scoped(
+                return layout_record_with_registry_scoped(
                     &resolved_fields,
                     registry,
                     wasi_package,
@@ -4770,12 +4745,12 @@ pub fn cm_align_with_registry_scoped(
                 return sa.1;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
-                return crate::cm_abi::cm_enum_byte_size(variants.len());
+                return cm_enum_byte_size(variants.len());
             }
             if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
-                return crate::cm_abi::cm_flags_byte_align(members.len());
+                return cm_flags_byte_align(members.len());
             }
-            crate::cm_abi::cm_align(ty)
+            cm_align(ty)
         }
         Type::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => 1u32.max(cm_align_with_registry_scoped(
@@ -4794,12 +4769,12 @@ pub fn cm_align_with_registry_scoped(
                     registry,
                     wasi_package,
                 )),
-            _ => crate::cm_abi::cm_align(ty),
+            _ => cm_align(ty),
         },
         Type::Tuple(elems) if !elems.is_empty() => {
-            crate::cm_abi::layout_tuple_with_registry_scoped(elems, registry, wasi_package).align
+            layout_tuple_with_registry_scoped(elems, registry, wasi_package).align
         }
-        _ => crate::cm_abi::cm_align(ty),
+        _ => cm_align(ty),
     }
 }
 
@@ -4832,6 +4807,10 @@ impl CmPrimitiveType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{AstId, GenericType, NamedType};
+    use crate::lexer::lex;
+    use crate::name::DeclName;
+    use crate::parser;
     use crate::token::Span;
     use std::assert_matches;
 
@@ -4842,9 +4821,9 @@ mod tests {
     /// One binding module, registered the way [`CmInterfaceRegistry::build_from_stdlib`]
     /// registers each of its own.
     fn registry_from(module_path: &'static str, source: &str) -> CmInterfaceRegistry {
-        let lexed = crate::lexer::lex(source);
+        let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lexer error: {:?}", lexed.errors);
-        let module = crate::parser::Parser::new(lexed.tokens)
+        let module = parser::Parser::new(lexed.tokens)
             .parse_strict()
             .expect("parser error");
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
@@ -4878,7 +4857,7 @@ mod tests {
         let registry = registry_from(
             "web:dom",
             r#"
-            #[cm("web:dom/handle", type = "extern-handle")]
+            #[cm("web:dom/handle", linearity = "unrestricted")]
             pub resource Handle {
                 #[cm("web:dom/handle#sibling")]
                 #[cm_params("self", "other")]
@@ -4911,7 +4890,7 @@ mod tests {
         let registry = registry_from(
             "web:dom",
             r#"
-            #[cm("web:dom/node", type = "extern-handle")]
+            #[cm("web:dom/node", linearity = "unrestricted")]
             pub resource Node {}
 
             #[cm("web:dom/types")]
@@ -4925,7 +4904,7 @@ mod tests {
             "#,
         );
         assert_eq!(
-            registry.find_binding_newtype_source(&crate::name::DeclName::new("Node")),
+            registry.find_binding_newtype_source(&DeclName::new("Node")),
             Some("web:dom/node")
         );
         assert_eq!(
@@ -4935,11 +4914,11 @@ mod tests {
     }
 
     fn make_stream_u8_type() -> Type {
-        Type::Generic(crate::ast::GenericType {
-            id: crate::ast::AstId::fresh(),
+        Type::Generic(GenericType {
+            id: AstId::fresh(),
             name: "Stream".to_string(),
-            args: vec![Type::Named(crate::ast::NamedType {
-                id: crate::ast::AstId::fresh(),
+            args: vec![Type::Named(NamedType {
+                id: AstId::fresh(),
                 name: "u8".to_string(),
                 span: make_span(),
             })],
@@ -4948,13 +4927,13 @@ mod tests {
     }
 
     fn make_result_type() -> Type {
-        Type::Generic(crate::ast::GenericType {
-            id: crate::ast::AstId::fresh(),
+        Type::Generic(GenericType {
+            id: AstId::fresh(),
             name: "Result".to_string(),
             args: vec![
                 Type::Tuple(vec![]), // ()
-                Type::Named(crate::ast::NamedType {
-                    id: crate::ast::AstId::fresh(),
+                Type::Named(NamedType {
+                    id: AstId::fresh(),
                     name: "ErrorCode".to_string(),
                     span: make_span(),
                 }),
@@ -5109,10 +5088,10 @@ mod tests {
 
         // List<String> should be supported
         let array_string = Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
+            id: AstId::fresh(),
             name: "List".to_string(),
             args: vec![Type::Named(NamedType {
-                id: crate::ast::AstId::fresh(),
+                id: AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             })],
@@ -5126,18 +5105,18 @@ mod tests {
         // List<[String, String]> should be supported
         let tuple_ss = Type::Tuple(vec![
             Type::Named(NamedType {
-                id: crate::ast::AstId::fresh(),
+                id: AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             }),
             Type::Named(NamedType {
-                id: crate::ast::AstId::fresh(),
+                id: AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             }),
         ]);
         let array_tuple = Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
+            id: AstId::fresh(),
             name: "List".to_string(),
             args: vec![tuple_ss],
             span: make_span(),
@@ -5149,10 +5128,10 @@ mod tests {
 
         // Option<String> should be supported
         let option_string = Type::Generic(GenericType {
-            id: crate::ast::AstId::fresh(),
+            id: AstId::fresh(),
             name: "Option".to_string(),
             args: vec![Type::Named(NamedType {
-                id: crate::ast::AstId::fresh(),
+                id: AstId::fresh(),
                 name: "String".to_string(),
                 span: make_span(),
             })],
@@ -5224,8 +5203,8 @@ mod tests {
     }
 
     fn named(name: &str) -> Type {
-        Type::Named(crate::ast::NamedType {
-            id: crate::ast::AstId::fresh(),
+        Type::Named(NamedType {
+            id: AstId::fresh(),
             name: name.to_string(),
             span: make_span(),
         })

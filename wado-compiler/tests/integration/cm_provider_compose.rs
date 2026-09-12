@@ -9,6 +9,7 @@
 //! provider.export → hlc.import, export hlc's `wrap`, then call it: the host
 //! calls `wrap`, hlc calls its `highlight` import, the provider runs.
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -28,7 +29,7 @@ export fn highlight(code: String, lang: String) -> String {
         lib_interface_export: true,
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new("provider.wado"), source, options)
+    compile_source_with_compiler_options(Path::new("provider.wado"), source, options)
         .expect("compile provider with --implement")
         .wasm
 }
@@ -146,10 +147,9 @@ export fn go(code: String, lang: String) -> String {
         }],
         ..Default::default()
     };
-    let composed =
-        crate::common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
-            .expect("consumer compiles: provider discharges Highlight and composes in")
-            .wasm;
+    let composed = compile_source_with_compiler_options(Path::new(path), consumer_src, options)
+        .expect("consumer compiles: provider discharges Highlight and composes in")
+        .wasm;
 
     // The provider satisfies the import, so the composed component no longer
     // imports the highlight interface.

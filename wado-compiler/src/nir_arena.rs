@@ -9,9 +9,12 @@ use std::ops::ControlFlow;
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
+use crate::hashmap;
 use crate::hashmap::IndexSet;
-use crate::name::plain_block_label;
-use crate::nir::{NirBinaryOp, NirLocal, NirUnaryOp};
+use crate::module_source::ModuleSource;
+use crate::name::{is_template_block, plain_block_label};
+use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
+use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -137,7 +140,7 @@ impl BlockRole {
     /// decides a role; the node answers every question after it.
     #[must_use]
     pub fn of_label(label: &str) -> Self {
-        if crate::name::is_template_block(label) {
+        if is_template_block(label) {
             Self::Template
         } else {
             Self::Plain
@@ -199,11 +202,11 @@ pub enum ExprKind {
         name: String,
     },
     GlobalVarGet {
-        module_source: crate::module_source::ModuleSource,
+        module_source: ModuleSource,
         name: String,
     },
     GlobalVarSet {
-        module_source: crate::module_source::ModuleSource,
+        module_source: ModuleSource,
         name: String,
         value: Operand,
     },
@@ -230,7 +233,7 @@ pub enum ExprKind {
         /// transiently unresolved. The callee's name / module / monomorph / method
         /// identity lives only in the function record at this id (`store[id]`); the
         /// call node carries no `FunctionRef`.
-        func_id: crate::nir::FuncId,
+        func_id: FuncId,
         type_args: Vec<TypeId>,
         /// Arguments in the callee's parameter order — a method's receiver is
         /// `args[0]`, so `args[i]` maps to `params[i]` for every call shape.
@@ -280,7 +283,7 @@ pub enum ExprKind {
         functor: Operand,
         functor_id: u32,
         target_fn_type: TypeId,
-        closure_module: crate::module_source::ModuleSource,
+        closure_module: ModuleSource,
     },
     VariantConstruct {
         variant_type: TypeId,
@@ -347,7 +350,7 @@ impl ExprKind {
     /// Build `recv.m(args)`: the receiver heads the argument list, carrying the
     /// callee's `self` mutability as its own `is_mut`.
     pub fn method_call(
-        func_id: crate::nir::FuncId,
+        func_id: FuncId,
         receiver: Operand,
         receiver_is_mut: bool,
         args: Vec<ArenaCallArg>,
@@ -373,7 +376,7 @@ impl ExprKind {
     /// callee's parameter order, so a pass that treats every argument alike
     /// (traversal, substitution, operand rewriting) matches `Call` directly and
     /// never needs this.
-    pub fn as_method_call(&self) -> Option<(Operand, crate::nir::FuncId, &[ArenaCallArg])> {
+    pub fn as_method_call(&self) -> Option<(Operand, FuncId, &[ArenaCallArg])> {
         let ExprKind::Call {
             func_id,
             args,
@@ -439,7 +442,7 @@ pub enum PatKind {
         local_index: u32,
         type_id: TypeId,
     },
-    Literal(crate::nir::NirLiteralPattern),
+    Literal(NirLiteralPattern),
     Tuple(Vec<PatId>, bool),
     Variant {
         enum_type: TypeId,
@@ -538,7 +541,7 @@ pub struct Body {
     pub values: ValuePool,
     /// The graph build's persisted product. `None` until the first value query
     /// builds it; never cleared after.
-    pub value_graph: Option<crate::nir_value_graph::builder::ValueGraphBuild>,
+    pub value_graph: Option<ValueGraphBuild>,
 }
 
 impl Body {
@@ -641,11 +644,7 @@ impl Body {
     /// value ([`Operand::Value`]) interned into the body's own pool. Used to
     /// build a single-value global initializer (e.g. a `Null` placeholder)
     /// directly in graph form, without a pure `ExprKind`.
-    pub fn wrapping_value(
-        kind: crate::nir_value_graph::ValueKind,
-        type_id: TypeId,
-        span: Span,
-    ) -> Self {
+    pub fn wrapping_value(kind: ValueKind, type_id: TypeId, span: Span) -> Self {
         let mut body = Self::empty();
         let v = body.values.alloc_unshared(kind, type_id);
         let s = body.stmts.push(StmtNode {
@@ -706,11 +705,7 @@ impl ExprBody {
 
     /// Build an `ExprBody` whose sole statement is a promoted pure value (see
     /// [`Body::wrapping_value`]).
-    pub fn wrapping_value(
-        kind: crate::nir_value_graph::ValueKind,
-        type_id: TypeId,
-        span: Span,
-    ) -> Self {
+    pub fn wrapping_value(kind: ValueKind, type_id: TypeId, span: Span) -> Self {
         Self {
             body: Body::wrapping_value(kind, type_id, span),
         }
@@ -1095,11 +1090,11 @@ impl Body {
     /// Every local with a live `&local` / `&mut local`. The canonical
     /// `address_taken_locals` / `stores_aliased_locals` go stale once `inline` /
     /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
-    pub fn collect_address_taken_locals(&self, out: &mut crate::hashmap::IndexSet<u32>) {
+    pub fn collect_address_taken_locals(&self, out: &mut hashmap::IndexSet<u32>) {
         self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node
                 && let ExprKind::Unary {
-                    op: crate::nir::NirUnaryOp::Ref | crate::nir::NirUnaryOp::MutRef,
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                     expr: inner,
                 } = &self.exprs[id].kind
                 && let Some(inner) = inner.as_expr()
@@ -1301,9 +1296,8 @@ impl Body {
     ///
     /// Scoped to *reachable* operands: the pool is append-only, so seeding from
     /// it would keep alive the locals of reads that folded away long ago.
-    fn reachable_operand_values(&self) -> crate::hashmap::IndexMap<ValueId, usize> {
-        let mut slots: crate::hashmap::IndexMap<ValueId, usize> =
-            crate::hashmap::IndexMap::default();
+    fn reachable_operand_values(&self) -> hashmap::IndexMap<ValueId, usize> {
+        let mut slots: hashmap::IndexMap<ValueId, usize> = hashmap::IndexMap::default();
         self.for_each_reachable_node(|node| {
             self.for_each_operand(node, |op| {
                 if let Some(v) = op.as_value() {
@@ -1381,8 +1375,8 @@ impl Body {
     /// a whole-body count against a scoped one. Attribution is per value, so
     /// unlike the union above a shared subtree is walked once per value that
     /// reaches it.
-    pub fn promoted_read_counts(&self) -> crate::hashmap::IndexMap<u32, usize> {
-        let mut counts: crate::hashmap::IndexMap<u32, usize> = crate::hashmap::IndexMap::default();
+    pub fn promoted_read_counts(&self) -> hashmap::IndexMap<u32, usize> {
+        let mut counts: hashmap::IndexMap<u32, usize> = hashmap::IndexMap::default();
         let mut leaves = IndexSet::default();
         for (&v, &slots) in &self.reachable_operand_values() {
             leaves.clear();

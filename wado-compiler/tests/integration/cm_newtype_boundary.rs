@@ -4,6 +4,7 @@
 //! from the component's own types, so a decoded `id-newtype` that reads
 //! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards.
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -20,7 +21,7 @@ fn compile_lib() -> Vec<u8> {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
+    compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
         .expect("compile catalog as --lib")
         .wasm
 }
@@ -83,7 +84,7 @@ fn compile_lib_source(source: &str) -> Vec<u8> {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new(path), source, options)
+    compile_source_with_compiler_options(Path::new(path), source, options)
         .expect("compile inline --lib source")
         .wasm
 }

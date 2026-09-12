@@ -12,6 +12,18 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
+use crate::ast::{RangeKind, StructPatternField};
+use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
+use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::types::{
+    BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
+};
+use crate::name::mangle_local_item_name;
+use crate::symbol_notation::render;
+use crate::tir::{StructDef, TirTypeParam};
+use crate::{IndexMap, hashmap, tir};
 
 /// Tracks the reference binding mode for match ergonomics.
 /// When matching a reference-typed scrutinee, bindings inherit the reference kind.
@@ -125,10 +137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// structs take their identity and a fieldless entry, then the newtypes
     /// resolve — to a fixpoint, so a base may name a later newtype — then the
     /// struct fields are filled in.
-    fn hoist_local_items(
-        &mut self,
-        block: &Block,
-    ) -> Option<crate::IndexMap<String, crate::defs::DefId>> {
+    fn hoist_local_items(&mut self, block: &Block) -> Option<IndexMap<String, DefId>> {
         let items: Vec<&ast::Item> = block
             .stmts
             .iter()
@@ -252,12 +261,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .make_struct(crate::tir::StructDef::Decl(def));
+            .make_struct(StructDef::Decl(def));
         self.tysys
             .type_table
             .borrow_mut()
             .register_decl_type(struct_decl.id, type_id);
-        let mangled_name = crate::name::mangle_local_item_name(&struct_decl.name, struct_decl.id);
+        let mangled_name = mangle_local_item_name(&struct_decl.name, struct_decl.id);
         self.sem
             .decls
             .fn_local_items
@@ -277,7 +286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.sem.decls.local_struct_fields.insert(
             def,
-            super::types::StructFieldInfo {
+            StructFieldInfo {
                 name: mangled_name,
                 module_source: self.current_module_source.clone(),
                 defined_at: struct_decl.id,
@@ -286,14 +295,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 field_defaults: Vec::new(),
                 type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
                 type_param_type_ids,
-                type_param_defaults: super::types::type_param_defaults_of(&struct_decl.type_params),
+                type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
             },
         );
     }
 
-    fn type_param_bounds_of(
-        params: &[ast::GenericParam],
-    ) -> Vec<(String, Vec<super::types::BoundRef>)> {
+    fn type_param_bounds_of(params: &[ast::GenericParam]) -> Vec<(String, Vec<BoundRef>)> {
         params
             .iter()
             .map(|p| {
@@ -301,7 +308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     p.name.clone(),
                     p.bounds
                         .iter()
-                        .map(|b| super::types::BoundRef {
+                        .map(|b| BoundRef {
                             name: b.name.clone(),
                             site: b.id,
                         })
@@ -339,11 +346,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolved here, with the struct's own type params in scope, so a
         // default naming a sibling param (`<A, B = A>`) means what it says —
         // reify has only the enclosing function's params.
-        let type_params: Vec<crate::tir::TirTypeParam> = struct_decl
+        let type_params: Vec<TirTypeParam> = struct_decl
             .type_params
             .iter()
             .enumerate()
-            .map(|(i, p)| crate::tir::TirTypeParam {
+            .map(|(i, p)| TirTypeParam {
                 name: p.name.clone(),
                 is_effect: p.is_effect,
                 is_pack: p.is_pack,
@@ -397,7 +404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return;
                 }
                 if self.resolve_named_type(named.id, &named.name, named.span, false)
-                    != crate::tir::TypeTable::UNKNOWN
+                    != TypeTable::UNKNOWN
                 {
                     return;
                 }
@@ -409,7 +416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Type::Generic(generic) => {
                 // With the head unknown the arguments are noise.
                 if !BUILTIN_GENERIC_HEADS.contains(&generic.name.as_str())
-                    && generic.name != crate::tir::TypeTable::ARRAY_TYPE_NAME
+                    && generic.name != TypeTable::ARRAY_TYPE_NAME
                     && !self
                         .annotate_ctx
                         .trait_ctx
@@ -465,16 +472,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             self.sem.decls.local_generic_newtypes.insert(
                 def,
-                crate::elaborator::types::GenericNewtypeInfo {
+                GenericNewtypeInfo {
                     type_params: newtype_decl
                         .type_params
                         .iter()
                         .map(|p| p.name.clone())
                         .collect(),
                     base_type_ast: newtype_decl.ty.clone(),
-                    type_param_defaults: super::types::type_param_defaults_of(
-                        &newtype_decl.type_params,
-                    ),
+                    type_param_defaults: type_param_defaults_of(&newtype_decl.type_params),
                 },
             );
             self.sem
@@ -484,7 +489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return true;
         }
         let base_type_id = self.resolve_type(&newtype_decl.ty);
-        if base_type_id == crate::tir::TypeTable::UNKNOWN {
+        if base_type_id == TypeTable::UNKNOWN {
             return false;
         }
         // Same as the local struct: the head is this declaration's identity.
@@ -1047,11 +1052,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// shape names no declaration, so no qualifier matches one; a qualifier the
     /// walk could not place is left to the diagnostic its unresolved name earns
     /// elsewhere.
-    fn pattern_qualifier_matches(
-        &self,
-        site: Option<crate::ast::AstId>,
-        head: crate::tir::StructDef,
-    ) -> bool {
+    fn pattern_qualifier_matches(&self, site: Option<AstId>, head: StructDef) -> bool {
         let Some(written) = site.and_then(|site| self.tysys.resolutions.declared_if_walked(site))
         else {
             return true;
@@ -1067,7 +1068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the same rule as [`crate::tir::TypeTable::type_names_for_mismatch`].
     fn pattern_mismatch_names(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         written: &str,
         scrutinee: TypeId,
     ) -> (String, String) {
@@ -1081,8 +1082,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return plain();
         };
         let defs = self.tysys.resolutions.defs();
-        let expected =
-            crate::symbol_notation::render(&defs.module(def).to_string(), defs.name(def));
+        let expected = render(&defs.module(def).to_string(), defs.name(def));
         let qualified = self
             .tysys
             .type_table
@@ -1363,7 +1363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             ast::Condition::LetChain { elements, .. } => {
-                self.record_desugar(if_stmt.id, super::sem::types::DesugarKind::IfLetChain);
+                self.record_desugar(if_stmt.id, DesugarKind::IfLetChain);
                 // Resolve else_block in the outer scope (chain bindings are not
                 // visible there) for its facts.
                 if let Some(b) = &if_stmt.else_block {
@@ -1636,9 +1636,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.check_inherent_member_visibility(
                             assoc.inherent_visibility,
                             Some(&assoc.module),
-                            super::expr::MemberOwner::Written(variant_qualifier.as_ref()),
+                            MemberOwner::Written(variant_qualifier.as_ref()),
                             variant_name,
-                            super::types::ImplMemberKind::AssociatedConstant,
+                            ImplMemberKind::AssociatedConstant,
                             *name_id,
                             *span,
                         );
@@ -1950,11 +1950,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     alt_bindings.sort_by(|a, b| a.0.cmp(&b.0));
 
                     // Validate same names and types
-                    let first_names: Vec<(&str, crate::tir::TypeId)> = first_bindings
+                    let first_names: Vec<(&str, tir::TypeId)> = first_bindings
                         .iter()
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
-                    let alt_names: Vec<(&str, crate::tir::TypeId)> = alt_bindings
+                    let alt_names: Vec<(&str, tir::TypeId)> = alt_bindings
                         .iter()
                         .map(|(n, _, t)| (n.as_str(), *t))
                         .collect();
@@ -1980,8 +1980,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // alternative's pattern, so that LSP jump-to-def on a use
                 // inside the arm body points at the first alternative's
                 // binding (the canonical definition site).
-                let mut first_alt_ast_ids: crate::hashmap::IndexMap<String, AstId> =
-                    crate::hashmap::IndexMap::default();
+                let mut first_alt_ast_ids: hashmap::IndexMap<String, AstId> =
+                    hashmap::IndexMap::default();
                 collect_ast_pattern_binding_ids(first_alt, &mut first_alt_ast_ids);
                 for (name, local_index, _type_id) in &first_bindings {
                     if let Some(scope) = ctx.scopes.last_mut()
@@ -2027,7 +2027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .compiler_variant_case_name(CompilerItem::OptionNone)
             .to_string();
         variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
@@ -2040,7 +2040,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         start: &Pattern,
         end: &Pattern,
-        kind: crate::ast::RangeKind,
+        kind: RangeKind,
         scrutinee_type: TypeId,
         span: Span,
     ) {
@@ -2062,7 +2062,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Check for reversed or empty range
-        let inclusive = matches!(kind, crate::ast::RangeKind::Inclusive);
+        let inclusive = matches!(kind, RangeKind::Inclusive);
         let order = util::range_endpoints_ordered(start_val, end_val, is_unsigned);
         if order.is_gt() {
             let _ = self.emit(TypeError::InvalidPattern {
@@ -2082,7 +2082,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Get payload type for a variant case, substituting type parameters if needed
     pub(super) fn get_variant_case_payload_type(
         &mut self,
-        variant: crate::defs::DefId,
+        variant: DefId,
         case_name: &str,
         type_args: &[TypeId],
         span: Span,
@@ -2184,10 +2184,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
-                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfVariadic);
+                self.record_desugar(for_of.id, DesugarKind::ForOfVariadic);
                 self.resolve_variadic_for_of(for_of, iterable_type_id, is_enumerate, by_ref, ctx);
             } else {
-                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfTuple);
+                self.record_desugar(for_of.id, DesugarKind::ForOfTuple);
                 self.resolve_tuple_for_of(
                     for_of,
                     iterable_type_id,
@@ -2205,9 +2205,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let into_iterator = self
-                .tysys
-                .compiler_trait_def(crate::compiler_item::CompilerItem::IntoIterator);
+            let into_iterator = self.tysys.compiler_trait_def(CompilerItem::IntoIterator);
             let implements_into_iter = into_iterator.is_some_and(|trait_| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
@@ -2236,7 +2234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // supports iteration; tagging an error-path node would lead
             // reify to expand a TIR shape the elaborator never produced.
             if implements_into_iter {
-                self.record_desugar(for_of.id, super::sem::types::DesugarKind::ForOfIterator);
+                self.record_desugar(for_of.id, DesugarKind::ForOfIterator);
             }
             self.resolve_iterator_for_of(for_of, ctx);
         }
@@ -2269,7 +2267,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         // Extract the element type for the loop binding.
         // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
@@ -2319,11 +2317,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the body with the binding having the element type
         let (binding_name, binding_id, binding_name_span) = match &for_of.binding {
-            crate::ast::Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
-            crate::ast::Pattern::Tuple(..) => {
+            Pattern::Ident { id, name, span } => (name.clone(), Some(*id), Some(*span)),
+            Pattern::Tuple(..) => {
                 // For destructuring patterns like [a, b], use a synthetic name
                 // and resolve the destructuring in the body
-                (format!("__pattern_temp_{unique_id}"), None, None)
+                (format!("$pattern_temp_{unique_id}"), None, None)
             }
             _ => {
                 panic!("variadic for-of does not support this binding pattern")
@@ -2331,7 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         let is_mut = for_of.is_mut;
-        let is_destructured = matches!(&for_of.binding, crate::ast::Pattern::Tuple(..));
+        let is_destructured = matches!(&for_of.binding, Pattern::Tuple(..));
 
         ctx.enter_scope();
         ctx.add_local_at(
@@ -2350,7 +2348,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `DesugarKind::ForOfVariadic` tag. This walk binds the loop variable
         // and any destructured sub-bindings into `ctx` (recording their
         // symbols) and walks the body for its facts.
-        if is_destructured && let crate::ast::Pattern::Tuple(tp, _) = &for_of.binding {
+        if is_destructured && let Pattern::Tuple(tp, _) = &for_of.binding {
             let inner_elems = self
                 .tysys
                 .type_table
@@ -2358,7 +2356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_tuple(binding_type)
                 .unwrap_or_else(|| vec![binding_type]);
             for (i, pat_elem) in tp.iter().enumerate() {
-                if let crate::ast::Pattern::Ident {
+                if let Pattern::Ident {
                     id,
                     name,
                     span: name_span,
@@ -2387,19 +2385,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
     /// binding spells one.
-    pub(super) fn enumerate_index_binding_name(binding: &crate::ast::Pattern) -> Option<String> {
-        let crate::ast::Pattern::Tuple(elems, _) = binding else {
+    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<String> {
+        let Pattern::Tuple(elems, _) = binding else {
             return None;
         };
         match elems.first()? {
-            crate::ast::Pattern::Ident { name, .. } => Some(name.clone()),
+            Pattern::Ident { name, .. } => Some(name.clone()),
             _ => None,
         }
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per
-    /// element, binding the tuple to `__tuple_N` and each element to `v` in its
-    /// own block, all inside a `__tuple_for_of_N` label.
+    /// element, binding the tuple to `$tuple_N` and each element to `v` in its
+    /// own block, all inside a `$tuple_for_of_N` label.
     fn resolve_tuple_for_of(
         &mut self,
         for_of: &ForOfStmt,
@@ -2422,13 +2420,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return;
         }
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         // Store iterable in a temp variable to avoid re-evaluation (reify
-        // rebuilds the `__tuple_N` binding; we reserve its local slot here so
+        // rebuilds the `$tuple_N` binding; we reserve its local slot here so
         // the walk-order local indices stay in sync with reify).
         let tuple_type_id = iterable;
-        let temp_name = format!("__tuple_{unique_id}");
+        let temp_name = format!("$tuple_{unique_id}");
         ctx.add_local(temp_name, tuple_type_id, false, None);
 
         // Capture each unrolled element's body facts separately. The
@@ -2439,7 +2437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the maps' pre-loop lengths; after each element, peel off and truncate
         // the freshly recorded tail. See `BodyFacts`.
         let overlay_base = self.sem.types.lens();
-        let mut element_overlays: Vec<super::sem::types::BodyFacts> = Vec::new();
+        let mut element_overlays: Vec<BodyFacts> = Vec::new();
 
         for &elem_type in elems {
             ctx.enter_scope();
@@ -2453,7 +2451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             // Reify rebuilds the per-element block (the
-            // `__tuple_N.i` field access + binding + body) from the AST + the
+            // `$tuple_N.i` field access + binding + body) from the AST + the
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
             // element's facts are captured.
@@ -2543,17 +2541,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Lower a non-tuple `for let v of iterable { body }` into a labelled block
-    /// binding `__iter_N = iterable.into_iter()` around a `loop` that matches
-    /// `__iter_N.next()`, breaking on `None`. The synthetic local and both
+    /// binding `$iter_N = iterable.into_iter()` around a `loop` that matches
+    /// `$iter_N.next()`, breaking on `None`. The synthetic local and both
     /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
     /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
     fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
-        let unique_id = ctx.next_local;
-        let iter_var = format!("__iter_{unique_id}");
-        let label = format!("__for_of_{unique_id}");
+        let unique_id = ctx.fresh_serial();
+        let iter_var = format!("$iter_{unique_id}");
+        let label = format!("$for_of_{unique_id}");
 
         // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
         // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
@@ -2586,9 +2584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        let iterator = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::Iterator);
+        let iterator = self.tysys.compiler_trait_def(CompilerItem::Iterator);
         if !iterator.is_some_and(|trait_| {
             self.tysys.type_implements_trait(
                 &self.annotate_ctx,
@@ -2608,17 +2604,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
+        // `let mut $iter_N = …;` — `defining_ast_id: None` keeps this
         // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
         // we reserve the local slot here for walk-order parity.
         ctx.add_local(iter_var, iter_type, /* is_mut */ true, None);
 
-        // Make `__for_of_N` visible to a body-level `break __for_of_N`
+        // Make `$for_of_N` visible to a body-level `break $for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
         // would otherwise reject it). Pop after the body has been resolved.
         ctx.active_labels.push(label);
 
-        // `__iter_N.next()` — dispatch on the `__iter_N` local, no AST.
+        // `$iter_N.next()` — dispatch on the `$iter_N` local, no AST.
         let next_outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: iter_type,
@@ -2650,12 +2646,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+            .compiler_variant_case_name(CompilerItem::OptionSome)
             .to_string();
         // `.next()` returns `Option<Item>`. Extract the `Some` payload type
         // for the binding scrutinee. Bind out of the borrow first so the
         // `get_variant_case_payload_type` call below can re-borrow `&mut self`.
-        let option_shape: Option<(crate::defs::DefId, Vec<TypeId>)> = {
+        let option_shape: Option<(DefId, Vec<TypeId>)> = {
             let decl = self.tysys.type_def(option_type);
             let is_variant =
                 decl.is_some_and(|def| self.type_lookup().variant_cases_of(def).is_some());
@@ -2713,7 +2709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let (Some(into_iter), Some(next)) = (into_iter_dispatch, next_dispatch) {
             self.record_for_of_iterator(
                 for_of.id,
-                super::sem::types::ForOfIteratorInfo {
+                ForOfIteratorInfo {
                     into_iter_def: into_iter.method_def,
                     into_iter: into_iter.func,
                     into_iter_self_kind: into_iter.self_kind,
@@ -2729,7 +2725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Reify rebuilds the
-        // `__for_of_N: { let mut __iter = …; loop { match __iter.next() { … } } }`
+        // `$for_of_N: { let mut $iter = …; loop { match $iter.next() { … } } }`
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
@@ -2867,7 +2863,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolves the condition / scrutinees and walks the body for facts.
         match &w.condition {
             Condition::Expr(cond_expr) => {
-                self.record_desugar(w.id, super::sem::types::DesugarKind::While);
+                self.record_desugar(w.id, DesugarKind::While);
                 self.resolve_condition_expr(cond_expr, ctx);
                 self.resolve_block(&w.body, ctx, None);
             }
@@ -2875,7 +2871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 elements,
                 span: cond_span,
             } => {
-                self.record_desugar(w.id, super::sem::types::DesugarKind::WhileLetChain);
+                self.record_desugar(w.id, DesugarKind::WhileLetChain);
                 // The else-branch (an unconditional `break`) is rebuilt by reify;
                 // the body walk only binds the chain patterns and walks the
                 // then-body for facts.
@@ -2889,15 +2885,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a C-style `for init; cond; update { B }` into
-    /// `{ init; loop { if !cond { break; } __for_N_body: { B } update; } }`,
+    /// `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
     /// with the `let pat = e` form guarding on a `match` instead. The outer block
     /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
-        self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
-        let loop_id = ctx.next_loop_id;
-        ctx.next_loop_id += 1;
-        let body_label = format!("__for_{loop_id}_body");
+        self.record_desugar(f.id, DesugarKind::CStyleFor);
+        let body_label = format!("$for_{}_body", ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant
@@ -2914,7 +2908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.enter_scope();
 
         // Reify rebuilds the C-style-for desugar
-        // (`{ init; loop { if !cond { break } __for_N_body: { B } update } }`,
+        // (`{ init; loop { if !cond { break } $for_N_body: { B } update } }`,
         // or the `while let` form) from the `DesugarKind::CStyleFor` tag + the
         // AST. This walk resolves `init` / `cond` / scrutinee, binds the
         // for-header let pattern, and walks the body + update for their facts.
@@ -3077,7 +3071,7 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
             type_name_id: *type_name_id,
             fields: fields
                 .iter()
-                .map(|f| crate::ast::StructPatternField {
+                .map(|f| StructPatternField {
                     pattern: mut_bindings_of(&f.pattern),
                     ..f.clone()
                 })
@@ -3113,7 +3107,7 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
 /// in the arm body lands on the first alternative's binding.
 pub(super) fn collect_ast_pattern_binding_ids(
     pattern: &Pattern,
-    out: &mut crate::hashmap::IndexMap<String, AstId>,
+    out: &mut hashmap::IndexMap<String, AstId>,
 ) {
     match pattern {
         Pattern::Ident { id, name, .. } | Pattern::MutIdent { id, name, .. } => {
@@ -3146,7 +3140,7 @@ pub(super) fn collect_ast_pattern_binding_ids(
 /// Collect binding names, local indices, and types from a TIR pattern for or-pattern validation.
 pub(super) fn collect_pattern_bindings_with_index(
     pattern: &TirPattern,
-) -> Vec<(String, u32, crate::tir::TypeId)> {
+) -> Vec<(String, u32, tir::TypeId)> {
     let mut bindings = Vec::new();
     collect_pattern_bindings_with_index_inner(pattern, &mut bindings);
     bindings.sort_by(|a, b| a.0.cmp(&b.0));
@@ -3155,7 +3149,7 @@ pub(super) fn collect_pattern_bindings_with_index(
 
 fn collect_pattern_bindings_with_index_inner(
     pattern: &TirPattern,
-    out: &mut Vec<(String, u32, crate::tir::TypeId)>,
+    out: &mut Vec<(String, u32, tir::TypeId)>,
 ) {
     match pattern {
         TirPattern::Binding {

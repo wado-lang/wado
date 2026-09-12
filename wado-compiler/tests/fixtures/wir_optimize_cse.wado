@@ -4,7 +4,7 @@
 // loop body, CSE computes it once and reuses the result.
 //
 // At O0: `p * p` is computed twice per iteration (guard and body)
-// At O2: `p * p` is computed once into a __cse_ local and reused
+// At O2: `p * p` is computed once into a $cse_ local and reused
 //
 // `#[inline(never)]` keeps `find_sqrt_bound` a standalone function so the
 // WIR pattern check sees the CSE'd loop unchanged regardless of the
@@ -36,5 +36,5 @@ __DATA__
     "test": {},
     "wir_expect:O0": ["last_sq = p * p"],
     "wir_not_expect:O2": ["last_sq = p * p"],
-    "wir_expect:O2": ["__cse_"]
+    "wir_expect:O2": ["$cse_"]
 }

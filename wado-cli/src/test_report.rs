@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::Notify;
 use wado_compiler::hashmap::IndexMap;
 
+use crate::rss::live_suffix;
 use crate::sync::lock;
 use crate::test::{
     self, CompileFailure, LoadFailure, PackageRun, PackageTotals, TestOutcome, TestResult,
@@ -296,7 +297,7 @@ fn print_heartbeat(state: &HeartbeatState) {
     println!(
         "[{}] {done}/{total} files{pct} · {counts}{eta}{}",
         test::format_duration(elapsed),
-        crate::rss::live_suffix().unwrap_or_default()
+        live_suffix().unwrap_or_default()
     );
 }
 
@@ -677,7 +678,7 @@ impl TestReporter for TapReporter {
 
     fn on_compile(&self, path: &str, event: CompileEvent, duration: Duration) {
         let dur = test::format_duration(duration);
-        let rss = crate::rss::live_suffix().unwrap_or_default();
+        let rss = live_suffix().unwrap_or_default();
         match event {
             CompileEvent::Ok => self.comment(&format!("Compiled {path} ({dur}){rss}")),
             CompileEvent::TodoModule => {

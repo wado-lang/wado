@@ -19,6 +19,10 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_item::CompilerItem;
+use crate::compiler_trace;
+use crate::module_source::ModuleSource;
+use crate::nir_visitor::reachable_exprs;
 
 /// Widest result tuple the scalarized return may use, counting the tag. Matches
 /// `super::multi_value_return`'s own cap, so the classifier that turns this
@@ -127,7 +131,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
     let candidates = collect_and_validate(project, gate);
     let mut changed = !candidates.is_empty();
     for &key in candidates.keys() {
-        crate::compiler_trace!(
+        compiler_trace!(
             "sroa_variant_return",
             "scalarizing {}",
             project.functions[key.index()].borrow().name
@@ -172,7 +176,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
 
 /// Wrap every call the fast path did not bind back into the variant it used to
 /// return, so the surrounding context sees the type it was written against:
-/// `f(x)` ⇒ `{ let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }`.
+/// `f(x)` ⇒ `{ let $t = f(x); match $t.0 { 0 => Ok($t.1!), _ => Err($t.2!) } }`.
 /// This is what makes the rewrite sound without validation — `nir/inline` keeps
 /// planting call sites after a callee's signature is already committed.
 fn rebox_stragglers(
@@ -200,7 +204,7 @@ fn rebox_stragglers(
         let targets = straggler_calls(&body, scalarized, &bound);
         let reboxed = !targets.is_empty();
         for call in targets {
-            crate::compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
+            compiler_trace!("sroa_variant_return", "reboxing a call in {}", func.name);
             rebox_call(&mut body, &mut func.locals, call, scalarized, span);
         }
         func.body = Some(body);
@@ -243,7 +247,7 @@ fn rebox_stragglers_in_globals(
         if targets.is_empty() {
             continue;
         }
-        crate::compiler_trace!(
+        compiler_trace!(
             "sroa_variant_return",
             "reboxing {} call(s) in global {name}",
             targets.len()
@@ -530,7 +534,7 @@ fn collect_straggler_calls(
     });
 }
 
-/// Wrap `call` into `{ let __t = call; match __t.0 { k => Case(__t.slot) … } }`,
+/// Wrap `call` into `{ let $t = call; match $t.0 { k => Case($t.slot) … } }`,
 /// typed by the variant the callee used to return.
 fn rebox_call(
     body: &mut Body,
@@ -545,7 +549,7 @@ fn rebox_call(
     let (variant_type, layout) = scalarized[&func_id].clone();
 
     let local_index = u32::try_from(locals.len()).expect("local index overflow");
-    let name = format!("__rebox_{local_index}");
+    let name = format!("$rebox_{local_index}");
     locals.push(NirLocal {
         name: name.clone(),
         type_id: layout.tuple_type,
@@ -1014,12 +1018,12 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
 }
 
 /// Where `Option` is declared, per `#[compiler_item("option")]`.
-fn option_module(project: &NirPackage) -> Option<crate::module_source::ModuleSource> {
+fn option_module(project: &NirPackage) -> Option<ModuleSource> {
     project
         .type_table
         .borrow()
         .compiler_items()
-        .variant_module(crate::compiler_item::CompilerItem::Option)
+        .variant_module(CompilerItem::Option)
         .cloned()
 }
 
@@ -1468,7 +1472,7 @@ fn bound_temps(
 /// them is an immutable binding wearing a `mut` — the residue of a `?`-desugar
 /// or an inlining that `elide_local` did not tidy — and the rewrite, which
 /// retypes the local and every read of it, is exact on it. A local with a
-/// second definition is not: the pooled `__hfs_call_*` temps take one index for
+/// second definition is not: the pooled `$hfs_call_*` temps take one index for
 /// two live bindings, and retyping the index would retype both.
 pub(super) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
@@ -1720,7 +1724,7 @@ impl Rebind {
     fn new(func: &NirFunction, type_table: &TypeTable) -> Self {
         let box_name = type_table
             .compiler_items()
-            .struct_name(crate::compiler_item::CompilerItem::Box)
+            .struct_name(CompilerItem::Box)
             .to_string();
         let local_types: Vec<TypeId> = func.locals.iter().map(|l| l.type_id).collect();
         let boxes = local_types
@@ -2156,7 +2160,7 @@ fn rewrite_call_sites(
 /// a type moved on a node that runs.
 fn retype_candidate_calls(body: &mut Body, candidates: &IndexMap<FuncId, Candidate>) -> bool {
     let mut changed = false;
-    for e in crate::nir_visitor::reachable_exprs(body) {
+    for e in reachable_exprs(body) {
         let node = &mut body.exprs[e];
         if let ExprKind::Call { func_id, .. } = &node.kind
             && let Some(cand) = candidates.get(func_id)
@@ -2221,7 +2225,7 @@ impl SiteCx<'_> {
 }
 
 /// `match f(x) { … }` has no binding for the tuple to land in, so give it one:
-/// `{ let __vr = f(x); match __vr { … } }`. Every call site is then the single
+/// `{ let $vr = f(x); match $vr { … } }`. Every call site is then the single
 /// `let`-bound shape the rest of the rewrite handles.
 fn hoist_call_scrutinees(
     body: &mut Body,
@@ -2251,7 +2255,7 @@ fn hoist_call_scrutinees(
         let call_type = body.exprs[call].type_id;
 
         let local_index = func.local_count();
-        let name = format!("__vr_{local_index}");
+        let name = format!("$vr_{local_index}");
         func.locals.push(NirLocal {
             name: name.clone(),
             type_id: call_type,

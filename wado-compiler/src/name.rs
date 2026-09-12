@@ -4,20 +4,35 @@
 //! Module paths are filesystem representations, not URIs: normalized lexically
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
+use crate::ast::{AstId, TestMetadata};
+use crate::defs::{DefId, DefTable};
+use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::path::{normalize, relative_path};
+use crate::tir::ResolvedType;
+use crate::{ast, tir};
 use std::fmt;
 use std::hash::Hash;
 
-/// Canonical method name of the synthesised `__call` impl on every
+/// The one character every name the compiler mints starts with, whether local,
+/// label, global, or synthesized struct or function. A Wado identifier holds no
+/// dollar sign, so a minted name collides with nothing an author wrote and no
+/// source can `break` to a synthesized label.
+///
+/// The `AsyncCall::__cm_*` fields are the exception: the standard library
+/// declares them in Wado source, which cannot spell the prefix.
+pub const INTERNAL_PREFIX: &str = "$";
+
+/// Canonical method name of the synthesised `$call` impl on every
 /// closure functor struct. Defined as a single constant so the
 /// compiler-internal naming convention has one source of truth — the
 /// closure planner, the translator, and DCE all reach for this
-/// constant instead of writing the literal `"__call"` at each site.
+/// constant instead of writing the literal `"$call"` at each site.
 ///
 /// Unlike stdlib items wired through [`crate::compiler_item`], the
-/// `__call` symbol has no Wado-side declaration, so a `CompilerItem`
+/// `$call` symbol has no Wado-side declaration, so a `CompilerItem`
 /// anchor would have nothing to bind to. A `const` is the right shape.
-pub const CLOSURE_CALL_METHOD: &str = "__call";
+pub const CLOSURE_CALL_METHOD: &str = "$call";
 
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
@@ -46,7 +61,7 @@ pub const LOCAL_ITEM_ID_SEP: char = '@';
 /// items render to two names rather than one.
 /// Only `local` is encoded, never the `AstIdSpace` — that is a process-global
 /// counter, and encoding it would make mangled WIR names non-deterministic.
-pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
+pub fn mangle_local_item_name(name: &str, id: AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
@@ -107,13 +122,24 @@ pub fn display_function_name(name: &str) -> String {
 ///
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
+///
+/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
+/// character rather than a suffix marker.
 #[must_use]
 pub fn diagnostic_function_name(name: &str) -> &str {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name;
     }
     let unqualified = name.rsplit('/').next().unwrap_or(name);
-    unqualified.split('$').next().unwrap_or(unqualified)
+    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
+        INTERNAL_PREFIX.len()
+    } else {
+        0
+    };
+    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
+        Some(suffix) => &unqualified[..prefix_len + suffix],
+        None => unqualified,
+    }
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -170,6 +196,23 @@ pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
     format!("$hole_fmt${mangled_shape}")
+}
+
+/// Whether `name` is a per-type bridge — a helper synthesis mints for a *type*
+/// rather than for a call site: the value-copy pair, the reflect accessors
+/// ([`case_extract_helper_name`] and its siblings), an effect operation's
+/// default. No TIR body names one: lowering rewrites a `builtin::…` call to it,
+/// or the dispatch reaches it, so a reachability walk over TIR bodies must root
+/// them all.
+///
+/// Every such helper spells the mangle of the type it belongs to after its
+/// kind, so a second [`INTERNAL_PREFIX`] is what tells one from the plainly
+/// synthesized functions that carry no type (`$initialize_module`, `$test_0`,
+/// `$cm_export__run`).
+#[must_use]
+pub fn is_type_bridge(name: &str) -> bool {
+    name.strip_prefix(INTERNAL_PREFIX)
+        .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
 /// Prefix of a template shape's mangled name; the rest is the shape's hash.
@@ -248,24 +291,16 @@ pub fn to_kebab(name: &str) -> String {
 }
 
 /// Prefix the compiler stamps onto every synthesised closure-functor
-/// struct (`__Closure_0`, `__Closure_1`, …). Like
+/// struct (`$Closure_0`, `$Closure_1`, …). Like
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal
 /// convention — there is no Wado-side declaration to anchor it to.
-pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
-
-/// Prefix every compiler-synthesised block label carries.
-///
-/// `$` begins no Wado identifier, so the source cannot spell one of these
-/// whatever it tries — a pass that recognises a synthesised block by name
-/// cannot be fooled by a hand-written block wearing the same label, and the
-/// parser needs no rule to keep it that way.
-pub const SYNTHETIC_LABEL_PREFIX: &str = "$";
+pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
 /// The label a block no `break` names carries: `what` says which construct put
 /// the block there, `id` makes it unique within the body.
 #[must_use]
 pub fn plain_block_label(what: &str, id: usize) -> String {
-    format!("{SYNTHETIC_LABEL_PREFIX}{what}_{id}")
+    format!("{INTERNAL_PREFIX}{what}_{id}")
 }
 
 /// Label the template-string synthesiser stamps on the block wrapping an
@@ -283,27 +318,27 @@ pub fn is_template_block(label: &str) -> bool {
 
 /// Name of the result accumulator local in an expanded template block.
 /// Recognised by the template-hoist optimizer; single-sourced here.
-pub const TEMPLATE_RESULT_LOCAL: &str = "__r";
+pub const TEMPLATE_RESULT_LOCAL: &str = "$r";
 
 /// Name of the `Formatter` local in an expanded template block. Producer-only
 /// today, kept beside its siblings so the template-local convention lives in
 /// one place.
-pub const TEMPLATE_FORMATTER_LOCAL: &str = "__f";
+pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
 
 /// Per-module initializer function the lowering phase synthesises to run a
 /// module's global initializers. The optimizer's liveness / const-object
 /// passes treat it as a root, so producer and consumers share this name.
-pub const MODULE_INIT_FUNCTION: &str = "__initialize_module";
+pub const MODULE_INIT_FUNCTION: &str = "$initialize_module";
 
 /// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
 /// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
 /// over the latter still covers both.
-pub const MODULES_INIT_FUNCTION: &str = "__initialize_modules";
+pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
-/// constant aggregates into (`__const_obj_0`, …). It both mints and rescans
+/// constant aggregates into (`$const_obj_0`, …). It both mints and rescans
 /// these names, so the prefix lives here rather than as a repeated literal.
-pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
+pub const CONST_OBJ_GLOBAL_PREFIX: &str = "$const_obj_";
 
 /// Maximum UTF-8 byte length for an `InlineRef`-hoisted global (see
 /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`]) to override the
@@ -515,10 +550,10 @@ pub struct LocalMethodName {
     /// recorded outside of impl-block method context. The dispatch
     /// synthesis consumes this to produce **per-monomorphisation**
     /// dispatch infrastructure: each unique `(base_trait, trait_type_args)`
-    /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
+    /// pair gets its own `$Dispatch_<R>__<args>` struct + global +
     /// per-op wrappers, with the resource's operation types substituted
     /// for that combination.
-    pub trait_type_args: Vec<crate::tir::TypeId>,
+    pub trait_type_args: Vec<tir::TypeId>,
     /// The receiver's type arguments, structured. Together with `receiver`
     /// they *are* `struct_name`: [`Self::fq_struct_name`] rebuilds the
     /// instantiated receiver from them rather than reading the rendered
@@ -562,20 +597,20 @@ impl RefKind {
 
     /// The ref kind of an AST type, or `None` for a non-reference.
     #[must_use]
-    pub fn from_ast(ty: &crate::ast::Type) -> Option<Self> {
+    pub fn from_ast(ty: &ast::Type) -> Option<Self> {
         match ty {
-            crate::ast::Type::Reference(_) => Some(RefKind::Shared),
-            crate::ast::Type::MutReference(_) => Some(RefKind::Mut),
+            ast::Type::Reference(_) => Some(RefKind::Shared),
+            ast::Type::MutReference(_) => Some(RefKind::Mut),
             _ => None,
         }
     }
 
     /// The ref kind of a resolved type, or `None` for a non-reference.
     #[must_use]
-    pub fn from_resolved(ty: &crate::tir::ResolvedType) -> Option<Self> {
+    pub fn from_resolved(ty: &ResolvedType) -> Option<Self> {
         match ty {
-            crate::tir::ResolvedType::Ref(_) => Some(RefKind::Shared),
-            crate::tir::ResolvedType::MutRef(_) => Some(RefKind::Mut),
+            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::MutRef(_) => Some(RefKind::Mut),
             _ => None,
         }
     }
@@ -725,7 +760,7 @@ impl LocalMethodName {
     /// keyed by identity. `None` for an inherent method, or where the
     /// reference reached no declaration.
     #[must_use]
-    pub fn trait_decl(&self) -> Option<crate::defs::DefId> {
+    pub fn trait_decl(&self) -> Option<DefId> {
         self.trait_name.as_ref().and_then(FqTraitName::canonical)
     }
 
@@ -1079,7 +1114,7 @@ impl LocalMethodName {
         self.trait_name.is_some()
     }
 
-    /// True for the synthesized `__call` on a `__Closure_N` functor struct.
+    /// True for the synthesized `$call` on a `$Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
     /// closure's canonical type, whose Wasm signature is fixed — so a caller
     /// that reshapes ABIs must filter them out or the signature will no longer
@@ -1240,7 +1275,7 @@ pub fn normalize_module_path(path: &str) -> String {
     if has_special_prefix(path) {
         return path.to_string();
     }
-    crate::path::normalize(path)
+    normalize(path)
 }
 
 /// [`normalize_module_path`] gated by [`validate_module_path`]. Normalization
@@ -1294,7 +1329,7 @@ pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
     }
     // `relative_path` normalizes both arguments, so the anchored join needs no
     // separate normalize pass.
-    crate::path::relative_path(entry_dir, &format!("{entry_dir}/{resolved}"))
+    relative_path(entry_dir, &format!("{entry_dir}/{resolved}"))
 }
 
 /// The entry directory of an entry [`ModuleSource`], for use as the
@@ -1356,7 +1391,7 @@ pub fn resolve_import_with_invocations(
     from_module: &ModuleSource,
     import_source: &str,
     entry_module: Option<&ModuleSource>,
-    invocations: &crate::kiln::InvocationIndex,
+    invocations: &InvocationIndex,
 ) -> ModuleSource {
     if !invocations.is_empty() {
         let decl_file = match from_module {
@@ -1661,7 +1696,7 @@ impl MangledName {
     /// it is emitted under. The one way `func_map` keys are built, so a caller
     /// cannot assemble the pair in a namespace the map does not store.
     #[must_use]
-    pub fn in_module(module: &crate::module_source::ModuleSource, local_name: &str) -> Self {
+    pub fn in_module(module: &ModuleSource, local_name: &str) -> Self {
         Self(format!("{module}/{local_name}"))
     }
 
@@ -1905,28 +1940,28 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 /// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
 ///
 /// Examples:
-/// - `dispatch_struct_name("Counter")` → `"__Dispatch_Counter"`
-/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch_Stream<u8>"`
+/// - `dispatch_struct_name("Counter")` → `"$Dispatch_Counter"`
+/// - `dispatch_struct_name("Stream<u8>")` → `"$Dispatch_Stream<u8>"`
 pub fn dispatch_struct_name(label: &str) -> String {
-    format!("__Dispatch_{label}")
+    format!("$Dispatch_{label}")
 }
 
 /// Build the per-instantiation effect-dispatch global name.
 ///
 /// Examples:
-/// - `dispatch_global_name("Counter")` → `"__effect_Counter"`
-/// - `dispatch_global_name("Stream<u8>")` → `"__effect_Stream<u8>"`
+/// - `dispatch_global_name("Counter")` → `"$effect_Counter"`
+/// - `dispatch_global_name("Stream<u8>")` → `"$effect_Stream<u8>"`
 pub fn dispatch_global_name(label: &str) -> String {
-    format!("__effect_{label}")
+    format!("$effect_{label}")
 }
 
 /// Build the per-operation effect-dispatch wrapper function name.
 ///
 /// Examples:
-/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch__Counter__next"`
-/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch__Stream<u8>__read"`
+/// - `dispatch_wrapper_name("Counter", "next")` → `"$effect_dispatch__Counter__next"`
+/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"$effect_dispatch__Stream<u8>__read"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("__effect_dispatch__{label}__{op_name}")
+    format!("$effect_dispatch__{label}__{op_name}")
 }
 
 /// Build the dispatch struct's per-operation field name.
@@ -1939,7 +1974,7 @@ pub fn dispatch_field_name(op_name: &str) -> String {
 }
 
 pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("__cm_wrap_async__{interface_name}_{method_name}")
+    format!("$cm_wrap_async__{interface_name}_{method_name}")
 }
 
 /// Convert a `test "name"` string into the snake-case segment of the internal
@@ -1954,23 +1989,23 @@ pub fn test_name_to_snake(name: &str) -> String {
         .to_lowercase()
 }
 
-/// Build a test block's exported name: `__test_{index}[_{snake}]`, with the
-/// prefix encoding attributes — `__test_trap_…` for `#[expect_trap]`,
-/// `__test_todo_…` for `#[TODO]`, `__test_tm{ms}_…` for `#[timeout_ms]`, and
-/// combinations such as `__test_trap_tm{ms}_…`. Both the annotate walk and reify
+/// What every test function's name opens with; what follows encodes the test's
+/// attributes.
+const TEST_PREFIX: &str = "$test";
+
+/// Build a test block's exported name: `$test_{index}[_{snake}]`, with the
+/// prefix encoding attributes — `$test_trap_…` for `#[expect_trap]`,
+/// `$test_todo_…` for `#[TODO]`, `$test_tm{ms}_…` for `#[timeout_ms]`, and
+/// combinations such as `$test_trap_tm{ms}_…`. Both the annotate walk and reify
 /// call here, so the two cannot drift.
-pub fn test_function_name(
-    meta: &crate::ast::TestMetadata,
-    test_index: usize,
-    name: Option<&str>,
-) -> String {
+pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&str>) -> String {
     let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
-        (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
-        (true, _, None) => "__test_todo".to_string(),
-        (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
-        (_, true, None) => "__test_trap".to_string(),
-        (_, _, Some(ms)) => format!("__test_tm{ms}"),
-        (_, _, None) => "__test".to_string(),
+        (true, _, Some(ms)) => format!("{TEST_PREFIX}_todo_tm{ms}"),
+        (true, _, None) => format!("{TEST_PREFIX}_todo"),
+        (_, true, Some(ms)) => format!("{TEST_PREFIX}_trap_tm{ms}"),
+        (_, true, None) => format!("{TEST_PREFIX}_trap"),
+        (_, _, Some(ms)) => format!("{TEST_PREFIX}_tm{ms}"),
+        (_, _, None) => TEST_PREFIX.to_string(),
     };
     match name {
         Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
@@ -1978,15 +2013,52 @@ pub fn test_function_name(
     }
 }
 
+/// Whether `name` is what [`test_function_name`] built, whatever attributes its
+/// prefix encodes.
+#[must_use]
+pub fn is_test_function(name: &str) -> bool {
+    name.starts_with(TEST_PREFIX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
+
+    #[test]
+    fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
+        assert_eq!(
+            diagnostic_function_name("core:prelude/string.wado/String::grow$scalar"),
+            "String::grow"
+        );
+        assert_eq!(diagnostic_function_name("main.wado/run"), "run");
+        // A minted name opens with the prefix; cutting there would leave nothing.
+        assert_eq!(diagnostic_function_name("$test_0_adds"), "$test_0_adds");
+        assert_eq!(
+            diagnostic_function_name("main.wado/$cm_export__run"),
+            "$cm_export__run"
+        );
+        assert_eq!(
+            diagnostic_function_name("$value_copy$Point$shallow"),
+            "$value_copy"
+        );
+    }
+
+    #[test]
+    fn type_bridges_are_told_from_plainly_synthesized_functions() {
+        assert!(is_type_bridge(&value_copy_helper_name("main.wado/Point")));
+        assert!(is_type_bridge(&effect_default_impl_name("Log", "event")));
+        assert!(is_type_bridge(&hole_fmt_helper_name("$tmpl$abc")));
+        assert!(!is_type_bridge(MODULE_INIT_FUNCTION));
+        assert!(!is_type_bridge("$test_0_adds"));
+        assert!(!is_type_bridge("run"));
+    }
 
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
         let mut interner = ModuleSourceInterner::new();
-        let mut index = crate::compiler_host::DependencyIndex::default();
+        let mut index = DependencyIndex::default();
         index
             .resolved
             .insert("logger".to_string(), "../logger/src/lib.wado".to_string());
@@ -2380,20 +2452,14 @@ pub enum TypeHead {
     /// A shape no declaration names — an anonymous literal's, a closure
     /// environment's, a synthesised adapter's. Nothing declares it, so the
     /// rendering *is* the identity, scoped by the declaring module.
-    Shape {
-        module: crate::module_source::ModuleSource,
-        name: String,
-    },
+    Shape { module: ModuleSource, name: String },
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
     /// a function type. Every mangler spells one the same way.
     Builtin(String),
     /// The index bucket one module's `impl` blocks binding a parameter of this
     /// spelling share. Its own head: spelled as a shape, an `impl` on an
     /// undeclared type of the same name would land in a blanket's bucket.
-    ParamBucket {
-        module: crate::module_source::ModuleSource,
-        name: String,
-    },
+    ParamBucket { module: ModuleSource, name: String },
     /// A template's own type-parameter binder (`T`, a pack member `F`), with
     /// the `impl` block that binds it. Without `owner`, `impl<T: A> Tr for T`
     /// and `impl<T: B> Tr for T` share one template and one silently replaces
@@ -2413,7 +2479,7 @@ impl TypeHead {
     /// (`List<…/Token>`). No declaration names one, so its rendering is its
     /// identity — the same rule [`Self::Shape`] carries.
     #[must_use]
-    pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
+    pub fn instance(module: &ModuleSource, mangled: &str) -> Self {
         Self::Shape {
             module: module.clone(),
             name: mangled.to_string(),
@@ -2452,7 +2518,7 @@ impl TypeHead {
     /// The declaration this head names, or `None` for a head that names none.
     /// This is identity: compare these, never [`Self::name`].
     #[must_use]
-    pub fn def(&self) -> Option<crate::defs::DefId> {
+    pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared(head) => Some(head.def()),
             Self::Shape { .. }
@@ -2465,7 +2531,7 @@ impl TypeHead {
 
     /// The declaring module, or `None` for a head no module declares.
     #[must_use]
-    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+    pub fn module(&self) -> Option<&ModuleSource> {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
@@ -2487,7 +2553,7 @@ impl FqTypeName {
     /// `Module/Head<args>` but bare `[a,b]`, and no impl is registered under
     /// the qualified form.
     #[must_use]
-    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn declared(defs: &DefTable, def: DefId) -> Self {
         if defs.name(def) == TUPLE_TYPE_NAME {
             return Self::of_head_kind(TypeHead::Tuple);
         }
@@ -2496,7 +2562,7 @@ impl FqTypeName {
 
     /// `module` and `name` are the pair the type table interns the shape under.
     #[must_use]
-    pub fn shape(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+    pub fn shape(module: &ModuleSource, name: &str) -> Self {
         if name == TUPLE_TYPE_NAME {
             return Self::of_head_kind(TypeHead::Tuple);
         }
@@ -2525,11 +2591,7 @@ impl FqTypeName {
     /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
     /// callers can build two.
     #[must_use]
-    pub fn binder_of_impl(
-        defs: &crate::defs::DefTable,
-        def: crate::defs::DefId,
-        name: &str,
-    ) -> Self {
+    pub fn binder_of_impl(defs: &DefTable, def: DefId, name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
             owner: Some(BinderOwner::of_impl(defs.module(def), defs.ast_id(def))),
@@ -2540,7 +2602,7 @@ impl FqTypeName {
     /// parameter spelled `name`. Keyed by the spelling, since that is the
     /// question it answers; not a binder, which is one parameter of one item.
     #[must_use]
-    pub fn param_bucket(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+    pub fn param_bucket(module: &ModuleSource, name: &str) -> Self {
         Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
@@ -2573,7 +2635,7 @@ impl FqTypeName {
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
-    pub fn of_head(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn of_head(defs: &DefTable, def: DefId) -> Self {
         if is_builtin_shape_name(defs.name(def)) {
             Self::builtin(defs.name(def))
         } else {
@@ -2621,7 +2683,7 @@ impl FqTypeName {
 
     /// The module that declares this type, or `None` for a builtin or binder.
     #[must_use]
-    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+    pub fn module(&self) -> Option<&ModuleSource> {
         self.head.module()
     }
 
@@ -2744,7 +2806,7 @@ impl std::fmt::Display for FqTypeName {
 /// template names whatever letter each spells its parameter (#1932).
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
-    id: crate::ast::AstId,
+    id: AstId,
     /// What a mangle embeds: the declaring module plus the node's
     /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
     /// process-global counter and would make mangled names non-deterministic
@@ -2768,7 +2830,7 @@ impl std::hash::Hash for BinderOwner {
 
 impl BinderOwner {
     /// The receiver binder of the `impl` block declared at `id` in `module`.
-    fn of_impl(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
+    fn of_impl(module: &ModuleSource, id: AstId) -> Self {
         Self {
             id,
             rendered: format!("{module}/{}", id.local()),
@@ -2785,7 +2847,7 @@ impl BinderOwner {
 /// Equality and hashing read the [`crate::defs::DefId`] alone.
 #[derive(Debug, Clone)]
 pub struct DeclaredHead {
-    def: crate::defs::DefId,
+    def: DefId,
     module: ModuleSource,
     /// As source writes it. Diagnostics.
     name: String,
@@ -2812,7 +2874,7 @@ impl DeclaredHead {
     /// Render `def`. The declaring module and the declared name come off the
     /// table, never from a caller.
     #[must_use]
-    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn new(defs: &DefTable, def: DefId) -> Self {
         let name = defs.name(def).to_string();
         let rendered = if defs.is_function_local(def) {
             mangle_local_item_name(&name, defs.ast_id(def))
@@ -2834,7 +2896,7 @@ impl DeclaredHead {
     }
 
     #[must_use]
-    pub fn def(&self) -> crate::defs::DefId {
+    pub fn def(&self) -> DefId {
         self.def
     }
 
@@ -2885,7 +2947,7 @@ impl TraitHead {
 
 impl FqTraitName {
     #[must_use]
-    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn declared(defs: &DefTable, def: DefId) -> Self {
         Self {
             head: TraitHead::Declared(DeclaredHead::new(defs, def)),
             args: Vec::new(),
@@ -2928,7 +2990,7 @@ impl FqTraitName {
     /// The trait this names, or `None` for a binder. This is the identity —
     /// compare these, never [`Self::base_name`].
     #[must_use]
-    pub fn canonical(&self) -> Option<crate::defs::DefId> {
+    pub fn canonical(&self) -> Option<DefId> {
         match &self.head {
             TraitHead::Declared(head) => Some(head.def()),
             TraitHead::Binder(_) => None,

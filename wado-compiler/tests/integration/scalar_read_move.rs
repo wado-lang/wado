@@ -3,6 +3,7 @@
 //! `if it.tag == -1 { … } else { out.push(it) }` made the whole-value read
 //! non-final, so the element the iterator had already copied was copied twice.
 
+use crate::common::{assert_pushes_by_move, wir_function_body};
 use std::path::Path;
 
 const SOURCE: &str = r#"
@@ -32,11 +33,11 @@ export fn run() {
 
 #[test]
 fn a_scalar_read_leaves_the_whole_value_moving() {
-    let body = crate::common::wir_function_body(
+    let body = wir_function_body(
         Path::new("scalar_read_move_test.wado"),
         SOURCE,
         wado_compiler::OptLevel::O2,
         "fn \"scalar_read_move_test.wado/keep\"",
     );
-    crate::common::assert_pushes_by_move(&body, "out");
+    assert_pushes_by_move(&body, "out");
 }

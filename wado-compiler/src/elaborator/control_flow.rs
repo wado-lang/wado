@@ -12,6 +12,8 @@ use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::types::LoopJump;
+use crate::ast::AstId;
+use crate::tir::agree_branch_types;
 
 /// Lookup context for AST control-flow walks. Holds the per-AstId
 /// type table; `expression_types` is keyed by globally-unique `AstId`,
@@ -20,7 +22,7 @@ use super::types::LoopJump;
 /// indefinite types too.
 #[derive(Clone, Copy)]
 pub(super) struct CtrlFlowCtx<'a> {
-    pub(super) expression_types: &'a IndexMap<crate::ast::AstId, TypeId>,
+    pub(super) expression_types: &'a IndexMap<AstId, TypeId>,
     pub(super) type_table: &'a RefCell<TypeTable>,
 }
 
@@ -29,7 +31,7 @@ impl CtrlFlowCtx<'_> {
         self.type_of_id(expr.id())
     }
 
-    fn type_of_id(&self, id: crate::ast::AstId) -> Option<TypeId> {
+    fn type_of_id(&self, id: AstId) -> Option<TypeId> {
         self.expression_types.get(&id).copied()
     }
 
@@ -168,7 +170,7 @@ pub(super) fn block_result_type(ctx: CtrlFlowCtx<'_>, block: &ast::Block) -> Typ
                     block_result_type(ctx, &if_stmt.then_block),
                     block_result_type(ctx, else_block),
                 );
-                crate::tir::agree_branch_types(&ctx.type_table.borrow(), then_type, else_type)
+                agree_branch_types(&ctx.type_table.borrow(), then_type, else_type)
             }),
             ast::Stmt::Return(_) | ast::Stmt::Break(_) | ast::Stmt::Continue(_) => {
                 Some(TypeTable::NEVER)

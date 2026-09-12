@@ -6,6 +6,7 @@ use super::ownership::BuiltinDeclarations;
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy::place::is_reference;
 use crate::module_source::ModuleSource;
 use crate::tir::{TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
@@ -349,7 +350,7 @@ impl TirRefVisitor for Walker<'_> {
             // Re-seating a reference writes no storage.
             TirExprKind::Assign { target, .. } => {
                 let reseats = matches!(target.kind, TirExprKind::Local { .. })
-                    && super::place::is_reference(target.type_id, self.type_table);
+                    && is_reference(target.type_id, self.type_table);
                 if !reseats {
                     let names = self.resolver.names(target);
                     self.record(&names, WholeOf::Lent);

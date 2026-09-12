@@ -1,21 +1,29 @@
 //! Effect handler dispatch synthesis (WEP 2026-04-11 phase 4). For every effect
-//! with a user-written `impl E for T`, emit a `__Dispatch_<E>` struct (a chain
-//! through `outer`, one closure field per op), an `__effect_<E>` global, and an
-//! `__effect_dispatch__<E>__<op>` wrapper per op; then route every call site
+//! with a user-written `impl E for T`, emit a `$Dispatch_<E>` struct (a chain
+//! through `outer`, one closure field per op), an `$effect_<E>` global, and an
+//! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
+use crate::ast::{RestClause, Visibility};
+use crate::compiler_item::CompilerItem;
+use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::LocalMethodName;
+use crate::name::{
+    DeclName, DeclPath, FqTypeName, LocalMethodName, MethodName, cm_wrap_async_func_name,
+    dispatch_field_name, dispatch_global_name, dispatch_struct_name, dispatch_wrapper_name,
+    effect_default_impl_name, mangle_generic_name,
+};
 use crate::package::Package;
-use crate::synthesis::common::{alloc_local, option_some, ref_expr, synth_span};
+use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, InlineHint, TirBlock, TirCapture, TirEffectOp,
-    TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
-    TypeTable,
+    CallArg, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint, ResolvedType, StructDef,
+    TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
+    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::{Span, hashmap, tir, token};
 
 /// Canonical identity of an effect or resource **declaration**:
 /// `(defining_module, base_name)`. It stays bound to the declaration —
@@ -52,7 +60,7 @@ struct EffectMeta {
 /// covering both `effect` and `resource` declarations. Resources participate
 /// in the dispatch protocol identically to effects — same operation list,
 /// same wrapper synthesis, same call-site rewriting against
-/// `__cm_binding__<R>_<op>` adapters — so they share a single index. The
+/// `$cm_binding__<R>_<op>` adapters — so they share a single index. The
 /// `is_resource` flag distinguishes the kinds where it matters (currently
 /// only the wrapper's declared `effects` list).
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
@@ -113,7 +121,7 @@ fn identify_uncovered_effects(
     // whole interface either way.
     //
     // One bare name, one owner: the triple is named after the name alone, so
-    // activating a second declaration under it emits `__Dispatch_<E>` twice.
+    // activating a second declaration under it emits `$Dispatch_<E>` twice.
     // A name an active instantiation owns is left to it — the call lands on
     // that dispatch and traps there when no handler is installed.
     let owned: IndexSet<&String> = active
@@ -177,24 +185,24 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
 /// late synthesis half does not re-derive it.
 #[derive(Debug, Clone)]
 pub struct DispatchPlan {
-    /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
+    /// `TypeId` of the synthesised `$Dispatch_<E>` struct.
     pub struct_type_id: TypeId,
-    /// `TypeId` of `Option<&__Dispatch_<E>>` — the global's runtime type
+    /// `TypeId` of `Option<&$Dispatch_<E>>` — the global's runtime type
     /// and the type of `outer` / dispatch wrapper-saved values.
     pub nullable_ref_type_id: TypeId,
-    /// `TypeId` of `&__Dispatch_<E>` — handed to `Option::Some` when
+    /// `TypeId` of `&$Dispatch_<E>` — handed to `Option::Some` when
     /// installing a fresh dispatch record.
     pub inner_ref_type_id: TypeId,
-    /// Name of the synthesised `__effect_<E>` mutable global.
+    /// Name of the synthesised `$effect_<E>` mutable global.
     pub global_name: String,
     /// Operation name → dispatch wrapper function name
-    /// (`__effect_dispatch__<E>__<op>`).
+    /// (`$effect_dispatch__<E>__<op>`).
     pub wrapper_names: IndexMap<String, String>,
     /// Operation name → dispatch struct field name (`op_<op>`).
     pub field_names: IndexMap<String, String>,
     /// Operation name → field type (`fn(<op_params>) -> <op_ret>`).
     pub field_types: IndexMap<String, TypeId>,
-    /// Operation name → 0-based field index in `__Dispatch_<E>`. The
+    /// Operation name → 0-based field index in `$Dispatch_<E>`. The
     /// `outer` field always sits at index 0; ops start at 1.
     pub field_indices: IndexMap<String, u32>,
     /// Cached operation declarations (cloned from `EffectMeta`) so the
@@ -223,7 +231,7 @@ fn instantiation_label(base: &str, type_args: &[TypeId], type_table: &TypeTable)
             .iter()
             .map(|tid| type_table.mangle_type_name(*tid))
             .collect();
-        crate::name::mangle_generic_name(base, &arg_strings)
+        mangle_generic_name(base, &arg_strings)
     }
 }
 
@@ -288,7 +296,7 @@ fn substitute_operations(
         .collect()
 }
 
-/// Synthesise the `__Dispatch_<E>` struct — `outer: Option<&__Dispatch_<E>>`
+/// Synthesise the `$Dispatch_<E>` struct — `outer: Option<&$Dispatch_<E>>`
 /// plus one `fn(<op_params>) -> <op_ret>` field per operation — into the entry
 /// module, where all dispatch infrastructure lives. The recursive `outer` field
 /// needs two phases: `make_struct` interns a forward-declared id first, then the
@@ -321,14 +329,13 @@ fn synthesize_dispatch_struct(
     {
         let mut tt = tt_rc.borrow_mut();
         label = instantiation_label(base_name, type_args, &tt);
-        struct_name = crate::name::dispatch_struct_name(&label);
-        global_name = crate::name::dispatch_global_name(&label);
+        struct_name = dispatch_struct_name(&label);
+        global_name = dispatch_global_name(&label);
         // The dispatch struct is minted here, under a name this pass assigns:
         // it declares nothing, so its head is the shape, as a closure
         // environment's is.
-        struct_head = crate::tir::StructDef::Anon(
-            tt.intern_synthetic_struct(entry_source.clone(), struct_name.clone()),
-        );
+        struct_head =
+            StructDef::Anon(tt.intern_synthetic_struct(entry_source.clone(), struct_name.clone()));
         struct_type_id = tt.make_struct(struct_head);
         inner_ref_type_id = tt.make_ref(struct_type_id);
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
@@ -344,7 +351,7 @@ fn synthesize_dispatch_struct(
     let mut fields: Vec<TirField> = Vec::with_capacity(meta.operations.len() + 1);
     fields.push(TirField {
         name: "outer".to_string(),
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         type_id: outer_field_type,
         index: 0,
         span: synth_span(),
@@ -361,12 +368,12 @@ fn synthesize_dispatch_struct(
     let mut field_indices: IndexMap<String, u32> = IndexMap::default();
 
     for (i, op) in meta.operations.iter().enumerate() {
-        let field_name = crate::name::dispatch_field_name(&op.name);
+        let field_name = dispatch_field_name(&op.name);
         let field_type = op_field_types[i];
         let field_index = (i + 1) as u32;
         fields.push(TirField {
             name: field_name.clone(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             type_id: field_type,
             index: field_index,
             span: synth_span(),
@@ -376,10 +383,7 @@ fn synthesize_dispatch_struct(
             serde_positional: false,
             default_expr: None,
         });
-        wrapper_names.insert(
-            op.name.clone(),
-            crate::name::dispatch_wrapper_name(&label, &op.name),
-        );
+        wrapper_names.insert(op.name.clone(), dispatch_wrapper_name(&label, &op.name));
         field_names.insert(op.name.clone(), field_name);
         field_types.insert(op.name.clone(), field_type);
         field_indices.insert(op.name.clone(), field_index);
@@ -390,7 +394,7 @@ fn synthesize_dispatch_struct(
         type_args: Vec::new(),
         name: struct_name,
         module_source: entry_source.clone(),
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         type_params: vec![],
         monomorph_info: None,
         fields,
@@ -415,9 +419,9 @@ fn synthesize_dispatch_struct(
     }
 }
 
-/// Synthesise the `__effect_<E>` mutable global for one effect.
+/// Synthesise the `$effect_<E>` mutable global for one effect.
 ///
-/// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
+/// The slot stores `Option<&$Dispatch_<E>>` and starts at `null`
 /// (meaning: no handler installed). `is_nullable: true` makes the Wasm
 /// validator accept the `ref.null` initializer for the `(mut (ref null
 /// $Dispatch))` slot, and keeps codegen from narrowing `global.get` reads
@@ -435,10 +439,10 @@ fn synthesize_dispatch_global(
     let global = TirGlobal {
         name: plan.global_name.clone(),
         ty: plan.nullable_ref_type_id,
-        init: crate::tir::GlobalInit::Direct(initializer),
+        init: GlobalInit::Direct(initializer),
         param: None,
         wado_mutable: true,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
         locals: Vec::new(),
@@ -450,7 +454,7 @@ fn synthesize_dispatch_global(
     entry_module.globals.push(global);
 }
 
-/// Synthesise the `__effect_dispatch__<E>__<op>` wrapper functions, each with
+/// Synthesise the `$effect_dispatch__<E>__<op>` wrapper functions, each with
 /// the operation's own signature so call-site rewriting is a name swap. A
 /// wrapper installs `d.outer` for the duration of the closure call — that is
 /// what lets a handler method delegate to the outer chain without recursing —
@@ -479,8 +483,8 @@ fn synthesize_dispatch_wrappers(
             is_open
                 && project
                     .cm_interface_registry
-                    .get_function(&crate::name::DeclPath::method_of(
-                        &crate::name::DeclName::new(base_name.clone()),
+                    .get_function(&DeclPath::method_of(
+                        &DeclName::new(base_name.clone()),
                         &op.name,
                     ))
                     .is_some()
@@ -542,12 +546,12 @@ fn build_dispatch_wrapper_function(
     let nullable_ref_type_id = plan.nullable_ref_type_id;
     let inner_ref_type_id = plan.inner_ref_type_id;
 
-    // Allocate locals: params, then __saved, __d (if-let binding), __result.
+    // Allocate locals: params, then $saved, $d (if-let binding), $result.
     let mut params: Vec<TirParam> = Vec::with_capacity(op.params.len());
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut next_local: u32 = 0;
     for p in &op.params {
-        let local_index = crate::synthesis::common::alloc_named_local(
+        let local_index = alloc_named_local(
             &mut next_local,
             &mut locals,
             Some(p.name.clone()),
@@ -587,7 +591,7 @@ fn build_dispatch_wrapper_function(
 
     let mut stmts: Vec<TirStmt> = Vec::new();
 
-    // let __saved = global.get __effect_<E>;
+    // let $saved = global.get $effect_<E>;
     let global_get_expr = TirExpr::new(
         TirExprKind::GlobalVarGet {
             module_source: entry_source.clone(),
@@ -598,7 +602,7 @@ fn build_dispatch_wrapper_function(
     );
     stmts.push(TirStmt::new(
         TirStmtKind::Let {
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
             local_index: saved_local,
             is_mut: false,
             is_reactive: false,
@@ -615,14 +619,14 @@ fn build_dispatch_wrapper_function(
         TirExpr::new(
             TirExprKind::Local {
                 index: d_local,
-                name: "__d".to_string(),
+                name: "$d".to_string(),
             },
             inner_ref_type_id,
             span,
         )
     };
 
-    // global.set __effect_<E> = d.outer;
+    // global.set $effect_<E> = d.outer;
     let outer_field_access = TirExpr::new(
         TirExprKind::FieldAccess {
             expr: Box::new(d_local_expr()),
@@ -645,7 +649,7 @@ fn build_dispatch_wrapper_function(
         span,
     ));
 
-    // let __result = (d.op_<op>)(args);
+    // let $result = (d.op_<op>)(args);
     let op_field_index = *plan.field_indices.get(op_name).expect("op field index");
     let op_field_name = plan
         .field_names
@@ -674,7 +678,7 @@ fn build_dispatch_wrapper_function(
     if let Some(rl) = result_local {
         then_stmts.push(TirStmt::new(
             TirStmtKind::Let {
-                name: "__result".to_string(),
+                name: "$result".to_string(),
                 local_index: rl,
                 is_mut: false,
                 is_reactive: false,
@@ -688,11 +692,11 @@ fn build_dispatch_wrapper_function(
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(indirect_call), span));
     }
 
-    // global.set __effect_<E> = __saved;
+    // global.set $effect_<E> = $saved;
     let saved_expr = TirExpr::new(
         TirExprKind::Local {
             index: saved_local,
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
         },
         nullable_ref_type_id,
         span,
@@ -710,12 +714,12 @@ fn build_dispatch_wrapper_function(
         span,
     ));
 
-    // return __result;  /  return;
+    // return $result;  /  return;
     if let Some(rl) = result_local {
         let result_expr = TirExpr::new(
             TirExprKind::Local {
                 index: rl,
-                name: "__result".to_string(),
+                name: "$result".to_string(),
             },
             return_type,
             span,
@@ -753,7 +757,7 @@ fn build_dispatch_wrapper_function(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
                     module_source: effect_module.clone(),
-                    name: crate::name::effect_default_impl_name(base_name, op_name),
+                    name: effect_default_impl_name(base_name, op_name),
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -835,8 +839,8 @@ fn build_dispatch_wrapper_function(
         // effect-check.
         let string_type_id = {
             let tt = type_table.borrow();
-            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::String);
-            tt.find_struct_type(crate::tir::StructDef::Decl(def))
+            let def = tt.require_compiler_item_def(CompilerItem::String);
+            tt.find_struct_type(StructDef::Decl(def))
                 .unwrap_or_else(|| {
                     panic!(
                         "core:prelude/string.wado String type missing from \
@@ -868,25 +872,25 @@ fn build_dispatch_wrapper_function(
     }
     let else_block = TirBlock::new(else_stmts, span);
 
-    // if let Some(d) = __saved { ... } else { fallback }.
+    // if let Some(d) = $saved { ... } else { fallback }.
     let saved_pattern_scrutinee = TirExpr::new(
         TirExprKind::Local {
             index: saved_local,
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
         },
         nullable_ref_type_id,
         span,
     );
     let some_case_name = {
         let tt = type_table.borrow();
-        tt.compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionSome)
+        tt.compiler_variant_case_name(CompilerItem::OptionSome)
             .to_string()
     };
     let pattern = TirPattern::Variant {
         enum_type: nullable_ref_type_id,
         variant_name: some_case_name,
         bindings: vec![TirPattern::Binding {
-            name: "__d".to_string(),
+            name: "$d".to_string(),
             local_index: d_local,
             type_id: inner_ref_type_id,
         }],
@@ -926,7 +930,7 @@ fn build_dispatch_wrapper_function(
         module_source: entry_source.clone(),
         name: wrapper_name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),
@@ -940,7 +944,7 @@ fn build_dispatch_wrapper_function(
         // every effect / resource call site — propagates nothing to the caller.
         // The wrapper is what satisfies the effect: its `if let Some(d)` branch
         // dispatches into the installed handler, its `else` branch emits the
-        // placeholder cm_binding rewrites. `__cm_binding__*` adapters likewise.
+        // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
         stores: vec![],
         body: Some(body),
@@ -961,7 +965,7 @@ fn build_dispatch_wrapper_function(
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -979,7 +983,7 @@ fn build_resource_fallback_call(
     arg_exprs: &[TirExpr],
     type_table: &TypeTable,
     return_type: TypeId,
-    span: crate::Span,
+    span: Span,
 ) -> TirExpr {
     let cm_name = op
         .cm_name
@@ -996,12 +1000,12 @@ fn build_resource_fallback_call(
     let _ = type_table;
     // The receiver is the resource declaration, so both the base head and the
     // instantiation label carry the module that declares it.
-    let label_fq = crate::name::FqTypeName::shape(effect_module, label);
-    let mangled_method_name = crate::name::MethodName::format_local(&label_fq, None, &op.name);
+    let label_fq = FqTypeName::shape(effect_module, label);
+    let mangled_method_name = MethodName::format_local(&label_fq, None, &op.name);
 
     // The label is the receiver: a rendered name has nowhere to be stored now,
     // and `struct_name()` derives this exact spelling from it.
-    let mut method_info = crate::name::LocalMethodName::new(label_fq, None, op.name.clone());
+    let mut method_info = LocalMethodName::new(label_fq, None, op.name.clone());
     method_info.cm_name = Some(cm_name);
 
     // Carry the instantiation's type args as `monomorph_info.impl_type_args`,
@@ -1012,7 +1016,7 @@ fn build_resource_fallback_call(
     let monomorph_info = if type_args.is_empty() {
         None
     } else {
-        Some(crate::tir::MonomorphInfo {
+        Some(tir::MonomorphInfo {
             generic_name: base_name.to_string(),
             impl_type_args: type_args.to_vec(),
             method_type_args: vec![],
@@ -1074,7 +1078,7 @@ struct DispatchEnv<'a> {
 }
 
 /// Mutable context threaded through the dispatch-aware lowering walker, holding
-/// the local table the desugarer allocates `__h_<E>` / `__save_<E>` / `__d_<E>`
+/// the local table the desugarer allocates `$h_<E>` / `$save_<E>` / `$d_<E>`
 /// from. Descending into a `Closure` body pushes a fresh scope so a nested
 /// `WithHandler` lands in the closure's local-index space.
 struct LowerCtx {
@@ -1105,10 +1109,10 @@ impl LowerCtx {
                 let idx = *next_local;
                 *next_local += 1;
                 locals.push(TirLocal {
-                    name: format!("__local_{idx}"),
+                    name: format!("$local_{idx}"),
                     type_id: ty,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: token::Span::default(),
                 });
                 idx
             }
@@ -1389,7 +1393,7 @@ impl MaxLocalIndex {
         }
     }
 
-    fn walk_pattern(&mut self, pattern: &crate::tir::TirPattern) {
+    fn walk_pattern(&mut self, pattern: &TirPattern) {
         use crate::tir::TirPattern;
         match pattern {
             TirPattern::Binding { local_index, .. } => self.note(*local_index),
@@ -1417,7 +1421,7 @@ impl MaxLocalIndex {
     }
 }
 
-impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
+impl TirRefVisitor for MaxLocalIndex {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::Local { index, .. } => self.note(*index),
@@ -1456,7 +1460,7 @@ impl crate::tir_visitor::TirRefVisitor for MaxLocalIndex {
 
 /// Replace a `WithHandler { bindings, body }` in place with the dispatch
 /// protocol: per binding, in source order, bind the handler, save the global,
-/// build a `__Dispatch_<E>` whose `outer` is the saved value and whose op fields
+/// build a `$Dispatch_<E>` whose `outer` is the saved value and whose op fields
 /// forward to the handler's methods, and install it — then restore in reverse
 /// order after the body. A binding with no matching plan panics: annotate and
 /// this pass are out of sync.
@@ -1474,7 +1478,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut prelude: Vec<TirStmt> = Vec::new();
     let mut restore: Vec<TirStmt> = Vec::new();
     // bundle_group id -> (h_local, h_name). Bindings expanded from one
-    // bundled `with &mut h do` clause share a single `__h_<bundle>` local
+    // bundled `with &mut h do` clause share a single `$h_<bundle>` local
     // so the handler expression is evaluated exactly once and mutations
     // through any installed effect are observed by every other effect's
     // dispatch closure (closures all capture the same local).
@@ -1558,15 +1562,15 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // Mangled instantiation label, e.g. `Stream<u8>` for
         // `(Stream, [u8])`. Used both as the struct-literal type name
         // (must agree with `synthesize_dispatch_struct`) and for the
-        // synthesised local names (`__h_<label>` etc.) so dumps stay
+        // synthesised local names (`$h_<label>` etc.) so dumps stay
         // readable when multiple instantiations of the same base
         // resource are installed in nested `with` blocks.
         let label =
             instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
 
-        // 1. let __h_<E> = handler_expr;
+        // 1. let $h_<E> = handler_expr;
         //
-        // Bundled bindings share one `__h_<bundle>` local: the first
+        // Bundled bindings share one `$h_<bundle>` local: the first
         // binding in the group emits the `Let`, subsequent bindings
         // reuse the local without re-evaluating the handler expression.
         // Explicit `Effect => handler` bindings always get their own
@@ -1577,7 +1581,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 (*existing_local, existing_name.clone())
             } else {
                 let local = ctx.alloc_local(handler_type);
-                let name = format!("__h_bundle_{group_id}");
+                let name = format!("$h_bundle_{group_id}");
                 prelude.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1595,7 +1599,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             }
         } else {
             let local = ctx.alloc_local(handler_type);
-            let name = format!("__h_{label}");
+            let name = format!("$h_{label}");
             prelude.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: name.clone(),
@@ -1611,9 +1615,9 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             (local, name)
         };
 
-        // 2. let __save_<E> = global.get __effect_<E>;
+        // 2. let $save_<E> = global.get $effect_<E>;
         let save_local = ctx.alloc_local(plan.nullable_ref_type_id);
-        let save_name = format!("__save_{label}");
+        let save_name = format!("$save_{label}");
         let global_get = TirExpr::new(
             TirExprKind::GlobalVarGet {
                 module_source: env.entry_source.clone(),
@@ -1635,7 +1639,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 3. let __d_<E> = __Dispatch_<E> { outer: __save_<E>, op_n: ..., ... };
+        // 3. let $d_<E> = $Dispatch_<E> { outer: $save_<E>, op_n: ..., ... };
         let mut struct_fields: Vec<TirStructField> = Vec::new();
         struct_fields.push(TirStructField {
             name: "outer".to_string(),
@@ -1663,7 +1667,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                     &env.entry_source,
                     &env.type_table,
                 )
-            } else if impl_info.rest == Some(crate::ast::RestClause::Forward) {
+            } else if impl_info.rest == Some(RestClause::Forward) {
                 build_forward_closure(op, plan, &env.entry_source, &env.type_table)
             } else if impl_info.rest.is_none()
                 && op.has_default
@@ -1686,11 +1690,11 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             });
         }
         let d_local = ctx.alloc_local(plan.struct_type_id);
-        let d_name = format!("__d_{label}");
+        let d_name = format!("$d_{label}");
         let struct_lit = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: plan.struct_type_id,
-                struct_name: crate::name::dispatch_struct_name(&label),
+                struct_name: dispatch_struct_name(&label),
                 fields: struct_fields,
             },
             plan.struct_type_id,
@@ -1709,7 +1713,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 4. global.set __effect_<E> = Some(&__d_<E>);
+        // 4. global.set $effect_<E> = Some(&$d_<E>);
         let d_local_expr = TirExpr::new(
             TirExprKind::Local {
                 index: d_local,
@@ -1787,7 +1791,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // matching `synthesis::resource_cleanup::append_block_drops`.
         let body_span = body.span;
         let local = ctx.alloc_local(result_type);
-        let name = format!("__with_result_{local}");
+        let name = format!("$with_result_{local}");
         let body_expr = TirExpr::new(TirExprKind::Block(body), result_type, body_span);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -1819,7 +1823,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 /// Splice the restore sequence in front of every jump that leaves the `with`
 /// body and would otherwise skip the fall-through restore: any `Return`, and a
 /// `Break`/`Continue` whose target is not open inside the body. A value-carrying
-/// jump binds its value to `__early_jump_<n>` first, so `return Counter::next()`
+/// jump binds its value to `$early_jump_<n>` first, so `return Counter::next()`
 /// evaluates under the do-block's handler. `Closure` bodies are skipped.
 struct RestoreInjector<'a, 'b> {
     /// The restore statements to splice in front of every exit, in
@@ -1883,7 +1887,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                 let value_expr =
                     std::mem::replace(v, TirExpr::new(TirExprKind::Unit, value_type, stmt_span));
                 let temp_local = self.ctx.alloc_local(value_type);
-                let temp_name = format!("__early_jump_{temp_local}");
+                let temp_name = format!("$early_jump_{temp_local}");
                 to_insert.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -2104,7 +2108,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 }
 
 /// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
-/// site reads, through the interface's `__cm_wrap_async__<E>__<op>` adapter.
+/// site reads, through the interface's `$cm_wrap_async__<E>__<op>` adapter.
 /// The adapter takes no argument when `T` is unit, so the method call becomes a
 /// statement and the wrap is the block's trailing expression.
 fn wrap_async_result(
@@ -2113,12 +2117,12 @@ fn wrap_async_result(
     method_ret: TypeId,
     base_name: &str,
     entry_source: &ModuleSource,
-    span: crate::token::Span,
+    span: token::Span,
 ) -> TirExpr {
     assert!(
         op.cm_name.is_some(),
         "handled async op `{}` without a CM import binding — no \
-         `__cm_wrap_async__` adapter exists to repackage the handler's result \
+         `$cm_wrap_async__` adapter exists to repackage the handler's result \
          (the elaborator rejects handler impls for user-defined async effects)",
         op.name
     );
@@ -2134,7 +2138,7 @@ fn wrap_async_result(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: crate::name::cm_wrap_async_func_name(base_name, &op.name),
+                name: cm_wrap_async_func_name(base_name, &op.name),
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -2157,11 +2161,11 @@ fn wrap_async_result(
     )
 }
 
-/// Build the `op_<n>` closure `|<op_params>| __h_<E>.<E>::<op>(<op_params>)` for
+/// Build the `op_<n>` closure `|<op_params>| $h_<E>.<E>::<op>(<op_params>)` for
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
-/// holding whatever `__h_<E>` holds, which the lower-phase closure pass turns
+/// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
 /// into a field access on the functor struct. Typed at the call-site type, so an
-/// async operation wraps the result in `__cm_wrap_async__<E>__<op>`.
+/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
@@ -2200,7 +2204,7 @@ fn build_handler_op_closure(
         })
         .collect();
 
-    // Body: __h.<E>::<op>(<args>)
+    // Body: $h.<E>::<op>(<args>)
     let receiver = TirExpr::new(
         TirExprKind::Capture {
             index: 0,
@@ -2258,7 +2262,7 @@ fn build_handler_op_closure(
             body: Box::new(body),
             captures,
             functor_id: None,
-            address_taken_locals: crate::hashmap::IndexSet::default(),
+            address_taken_locals: hashmap::IndexSet::default(),
             // Synthetic dispatch closure; no body-level let-bindings.
             body_locals: Vec::new(),
             declared_effects: None,
@@ -2309,7 +2313,7 @@ fn build_trap_closure(
             body: Box::new(trap_call),
             captures: Vec::new(),
             functor_id: None,
-            address_taken_locals: crate::hashmap::IndexSet::default(),
+            address_taken_locals: hashmap::IndexSet::default(),
             // Synthetic trap stub; no body-level let-bindings.
             body_locals: Vec::new(),
             declared_effects: None,
@@ -2360,7 +2364,7 @@ fn build_default_closure(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: plan.decl_module.clone(),
-                name: crate::name::effect_default_impl_name(interface_name, &op.name),
+                name: effect_default_impl_name(interface_name, &op.name),
                 monomorph_info: None,
                 method_info: None,
             }),
@@ -2383,7 +2387,7 @@ fn build_default_closure(
             body: Box::new(body),
             captures: Vec::new(),
             functor_id: None,
-            address_taken_locals: crate::hashmap::IndexSet::default(),
+            address_taken_locals: hashmap::IndexSet::default(),
             body_locals: Vec::new(),
             declared_effects: None,
         },
@@ -2444,7 +2448,7 @@ fn build_forward_closure(
             body: Box::new(body),
             captures: Vec::new(),
             functor_id: None,
-            address_taken_locals: crate::hashmap::IndexSet::default(),
+            address_taken_locals: hashmap::IndexSet::default(),
             // Synthetic forwarding stub; no body-level let-bindings.
             body_locals: Vec::new(),
             declared_effects: None,
@@ -2458,7 +2462,7 @@ fn build_forward_closure(
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
 /// elaborator emits: a `Call` in `ModuleSource::Local { path: "<E>" }` for
 /// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
-/// op. Calls inside `__effect_dispatch__*` are left alone.
+/// op. Calls inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,
@@ -2541,7 +2545,7 @@ fn build_wrapper_indexes(
 
 /// Post-monomorphize half of [`rewrite_call_sites_to_wrappers`]: a `#[cm]` call
 /// whose receiver was a type parameter matched no instantiation until now.
-pub fn rewrite_resource_calls_monomorphized(flat: &mut crate::flat_package::FlatPackage) {
+pub fn rewrite_resource_calls_monomorphized(flat: &mut FlatPackage) {
     if flat.resource_wrappers.is_empty() {
         return;
     }
@@ -2770,13 +2774,13 @@ fn rewrite_calls_in_expr(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 let receiver_value = receiver.clone();
                 let is_already_ref = matches!(
                     ctx.type_table.borrow().get(receiver_value.type_id),
-                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 );
                 let receiver_arg = if is_already_ref {
                     receiver_value
                 } else {
                     let ref_type_id = ctx.type_table.borrow_mut().make_ref(receiver_value.type_id);
-                    crate::synthesis::common::ref_expr(receiver_value, ref_type_id, expr.span)
+                    ref_expr(receiver_value, ref_type_id, expr.span)
                 };
                 let mut all_args: Vec<CallArg> = Vec::with_capacity(args.len() + 1);
                 all_args.push(CallArg::new(receiver_arg, false));
@@ -2803,7 +2807,7 @@ fn wrapper_call(
     wrapper_name: String,
     args: Vec<CallArg>,
     return_type: TypeId,
-    span: crate::Span,
+    span: Span,
     entry_source: &ModuleSource,
 ) -> TirExpr {
     TirExpr::new(
@@ -3114,7 +3118,7 @@ struct HandlerImplInfo {
     /// The block's `..trap` / `..forward`, deciding what an operation absent
     /// from `methods` does. `None` behaves as `..trap`: a block that lists
     /// every operation never reaches the stub either way.
-    rest: Option<crate::ast::RestClause>,
+    rest: Option<RestClause>,
 }
 
 /// The TIR function a synthesised dispatch call must target for

@@ -5,12 +5,17 @@
 //! produces a [`crate::flat_package::FlatPackage`] for WIR building and codegen.
 
 use crate::builtin_registry::BuiltinRegistry;
+use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
+use crate::synthesis::effect_dispatch;
+use crate::synthesis::effect_dispatch::{DispatchPlan, ResourceWrapperIndex};
 use crate::tir::TirModule;
+use crate::token::Span;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
 use std::sync::Arc;
 
@@ -51,7 +56,7 @@ pub struct Package {
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Threaded unchanged through to the WIR emitter, which consults them to
     /// pick alternative lowerings (e.g. native `array.copy`).
-    pub codegen_flags: crate::codegen_flags::CodegenFlags,
+    pub codegen_flags: CodegenFlags,
     /// When true, skip Wasm validation after code generation.
     /// Returns raw bytes even if invalid — useful for debugging codegen.
     pub skip_validation: bool,
@@ -71,7 +76,7 @@ pub struct Package {
 
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
-    /// For example: `"run"` → `"__cm_export__run"`.
+    /// For example: `"run"` → `"$cm_export__run"`.
     pub export_binding_names: IndexMap<String, String>,
     /// Maps world export name → `post-return` function name, for the sync-lifted
     /// exports that return indirectly. Populated alongside
@@ -87,7 +92,7 @@ pub struct Package {
     /// the codegen `embed_imported_wasm_modules` pass and (in a follow-up)
     /// by the elaborator, which synthesises Wado declarations from each
     /// asset's exports.
-    pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+    pub wasm_assets: IndexMap<String, WasmAsset>,
 
     /// Per-instantiation effect-dispatch plans, populated by the early
     /// `synthesis::effect_dispatch::synthesize_pre_cm_binding` half and
@@ -96,14 +101,11 @@ pub struct Package {
     /// `Package` avoids re-deriving the same `(struct_type_id,
     /// global_name, wrapper_names, …)` triple from existing TIR
     /// declarations between the two halves.
-    pub dispatch_plans: IndexMap<
-        crate::synthesis::effect_dispatch::InstantiationKey,
-        crate::synthesis::effect_dispatch::DispatchPlan,
-    >,
+    pub dispatch_plans: IndexMap<effect_dispatch::InstantiationKey, DispatchPlan>,
 
     /// The resource half of the wrapper index the same early pass built, kept
     /// past link for the calls monomorphize has yet to make concrete.
-    pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
+    pub resource_wrappers: ResourceWrapperIndex,
 
     /// `ModuleSource` interner shared with the elaborator. Synthesis
     /// passes (`cm_binding`, `effect_dispatch`) borrow this when they
@@ -118,7 +120,7 @@ pub struct Package {
     /// move-eligible local, so the value-copy planner elides the defensive copy
     /// (a move). Produced by `elaborator::liveness`; threaded on to
     /// `FlatPackage`.
-    pub moved_local_spans: IndexSet<crate::token::Span>,
+    pub moved_local_spans: IndexSet<Span>,
 }
 
 /// Decide whether a `test "name"` block is selected by the active
@@ -168,7 +170,7 @@ impl Package {
             used_wasi_functions: IndexSet::default(),
             // Codegen options
             strip_names: false,
-            codegen_flags: crate::codegen_flags::CodegenFlags::default(),
+            codegen_flags: CodegenFlags::default(),
             skip_validation: false,
             target_world: "wasi:cli/command".to_string(),
             lib_world_info: None,

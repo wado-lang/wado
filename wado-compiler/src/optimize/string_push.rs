@@ -10,6 +10,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::tir;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
@@ -21,13 +22,13 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 
 pub(super) struct Ctx {
     /// `FuncId` of `push_str`, one of the two appends a fused run absorbs.
-    push_str_id: crate::nir::FuncId,
+    push_str_id: FuncId,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
-    push_char_id: crate::nir::FuncId,
+    push_char_id: FuncId,
     /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
     /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
     /// recognises. Absent (`None`) disables both.
-    push_ascii_id: Option<crate::nir::FuncId>,
+    push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
     fused: Option<FusedIds>,
@@ -44,9 +45,9 @@ pub(super) struct FusedIds {
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str_id: Option<crate::nir::FuncId> = None;
-        let mut push_char_id: Option<crate::nir::FuncId> = None;
-        let mut push_ascii_id: Option<crate::nir::FuncId> = None;
+        let mut push_str_id: Option<FuncId> = None;
+        let mut push_char_id: Option<FuncId> = None;
+        let mut push_ascii_id: Option<FuncId> = None;
         let mut len_id: Option<FuncId> = None;
         let mut reserve_id: Option<FuncId> = None;
         let mut set_byte_id: Option<FuncId> = None;
@@ -100,8 +101,8 @@ impl Ctx {
 /// dispatch: a constant ASCII scalar is always one byte. The rewrite is an
 /// in-place call edit — swap the callee, coerce the `char` to its `u8`.
 pub(super) struct ConstAsciiPushRule {
-    push_char_id: crate::nir::FuncId,
-    push_ascii_id: crate::nir::FuncId,
+    push_char_id: FuncId,
+    push_ascii_id: FuncId,
 }
 
 impl ConstAsciiPushRule {
@@ -146,7 +147,7 @@ impl Rule for ConstAsciiPushRule {
             return false;
         }
         let byte_arg = engine.const_operand(
-            crate::nir_value_graph::ValueKind::Int(u64::from(code), TypeTable::U8),
+            ValueKind::Int(u64::from(code), TypeTable::U8),
             TypeTable::U8,
         );
         engine.replace_expr_kind(
@@ -274,7 +275,7 @@ impl AppendFuseRule {
 
         let total = self.sum_expr(engine, &terms, span);
         let at = engine.alloc_local(
-            format!("__fuse_at_{}", engine.locals().len()),
+            format!("$fuse_at_{}", engine.locals().len()),
             TypeTable::I32,
             /* is_mut */ false,
         );
@@ -336,7 +337,7 @@ impl AppendFuseRule {
         stmts: &mut Vec<StmtId>,
     ) -> u32 {
         let local = engine.alloc_local(
-            format!("__fuse_len_{}", engine.locals().len()),
+            format!("$fuse_len_{}", engine.locals().len()),
             TypeTable::I32,
             /* is_mut */ false,
         );
@@ -436,7 +437,7 @@ impl AppendFuseRule {
         recv: ExprId,
         receiver_is_mut: bool,
         args: Vec<Operand>,
-        type_id: crate::tir::TypeId,
+        type_id: tir::TypeId,
         span: Span,
     ) -> Operand {
         let receiver = engine.clone_expr(recv);
@@ -522,7 +523,7 @@ fn groups(run: Vec<(StmtId, Piece)>) -> Vec<Vec<(StmtId, Piece)>> {
 fn let_stmt(
     engine: &mut Engine,
     local: u32,
-    type_id: crate::tir::TypeId,
+    type_id: tir::TypeId,
     value: Operand,
     span: Span,
 ) -> StmtId {

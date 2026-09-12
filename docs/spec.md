@@ -655,10 +655,10 @@ for let item of collection {
 
 // Desugars to
 scope: {
-    let mut __iter = collection.into_iter();
+    let mut $iter = collection.into_iter();
     loop {
-        if let Some(__item) = __iter.next() {
-            let item = __item;
+        if let Some($item) = $iter.next() {
+            let item = $item;
             body(item);
         } else {
             break;
@@ -1076,6 +1076,10 @@ test "sign extension folds the redundant mask" {
 ```
 
 Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
+
+The barrier holds for the whole Wado pipeline: every NIR and WIR pass sees an
+unknown value. It ends at codegen, which emits the operand where the call stood,
+so the Wasm engine downstream is free to fold the constant.
 
 ## Memory Model
 
@@ -5381,25 +5385,27 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 }
 ```
 
-#### Resource handle backing
+#### Resource linearity
 
-A `#[cm(...)]` resource may declare how its handle is represented: `type = "i32"`, a Component Model handle, or `type = "extern-handle"`, an opaque index into a host table. Omitting the field reads as `i32`.
+A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`.
 
-An extern-handle is a copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope. An `i32` handle is move-only, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md).
+An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
+
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain integer the host interprets.
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `type = "extern-handle"`; single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
-#[cm("web:dom/event-target", type = "extern-handle")]
+#[cm("web:dom/event-target", linearity = "unrestricted")]
 resource EventTarget {
     #[cm("web:dom/event-target#add-event-listener")]
     #[cm_params("self", "kind")]
     fn add_event_listener(&self, kind: String);
 }
 
-#[cm("web:dom/node", type = "extern-handle")]
+#[cm("web:dom/node", linearity = "unrestricted")]
 resource Node extends EventTarget {
     #[cm("web:dom/node#text-content")]
     #[cm_params("self")]
@@ -5414,12 +5420,47 @@ fn use_it(n: Node) {
 
 Rules:
 
-- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant, and there is no implicit downcast.
+- The upcast is implicit wherever a value, a `return`, or a `&T` referent is expected, and where branches of an `if` or `match` meet. `&mut T`, container elements (`List<T>`, `Option<T>`, …) and function types are invariant.
+- Narrowing back to a child is never implicit. It is written as a type pattern (below, not yet implemented), which asks the host whether the handle really is one.
 - A child may not redeclare a method it inherits, and a name reachable through both the chain and a trait impl is ambiguous — write `Declaring::method(&value)` or `Trait::method(&value)` to pick one.
 - Static methods (no `&self`) are not inherited, and `Self` in an inherited method names the resource that declares it.
 - Generic resources take no part in `extends` yet.
 
-See [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
+See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md) for the design and what is not built yet.
+
+### Type Patterns
+
+Note: not yet implemented. The `let` annotation is still its own grammar slot, and no pattern position accepts an ascription. See [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md).
+
+A pattern may ascribe a type: `p: T` matches when the subject is a `T`, and `p` binds it. The ascription on a `let` is this pattern, so one rule covers both spellings.
+
+Whether the pattern can fail is decided statically, from the subject's type `S`:
+
+| Relation          | Meaning                                                              |
+| ----------------- | -------------------------------------------------------------------- |
+| `S <: T`          | irrefutable — an upcast, or an ordinary type annotation              |
+| `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
+| otherwise         | a type error, as a mismatched annotation is today                    |
+
+An irrefutable ascription still drives type context, so `let x: i64 = 42` coerces the literal as before. A refutable one needs a pattern position that admits failure, so `let` rejects it exactly as it rejects `let Some(x) = opt`:
+
+```wado
+let n: Node = el;                                   // Element <: Node — irrefutable upcast
+let input: HtmlInputElement = el;                   // ERROR: refutable pattern in `let`
+let input: HtmlInputElement = el else { return; };  // the guard form
+if let input: HtmlInputElement = el { ... }
+if e matches { _: KeyboardEvent } { ... }           // the predicate form
+
+match e {
+    ke: KeyboardEvent => ke.key(),
+    me: MouseEvent => `${me.client_x()}`,
+    _ => "other",                                   // required: the hierarchy is open
+}
+```
+
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+
+This is not [`match type`](./wep-2026-09-05-total-reflection.md), which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
 
 ## Compiler Attributes
 

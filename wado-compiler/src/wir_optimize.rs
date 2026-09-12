@@ -219,8 +219,8 @@ fn optimize_scoped(
     });
     profiler.span_end(&scope.name("phase5_peephole"));
 
-    // Phase 6: strip write-only WIR-synthesised locals (`__match_scrut_N`,
-    // multi-value temps, `__pair_temp_N`) that no TIR pass can reach, so codegen
+    // Phase 6: strip write-only WIR-synthesised locals (`$match_scrut_N`,
+    // multi-value temps, `$pair_temp_N`) that no TIR pass can reach, so codegen
     // doesn't emit dead locals.
     wir_pass(scope, "elide_write_only_locals", module, profiler, |m| {
         elide_write_only_locals(m);
@@ -230,7 +230,7 @@ fn optimize_scoped(
     // `DeclareLocal`s, dead code after `Unreachable`) before codegen.
     profiler.span_start(&scope.name("phase7_global_cleanup"));
     // Promote now-constant global inits to eager Wasm constants first, so the
-    // emptied `__initialize_module` and its guard become reclaimable here.
+    // emptied `$initialize_module` and its guard become reclaimable here.
     wir_pass(scope, "promote_const_global_inits", module, profiler, |m| {
         promote_const_global_inits(m);
     });

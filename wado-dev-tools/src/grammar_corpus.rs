@@ -22,6 +22,7 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
+use crate::data_section::should_skip_file;
 use lexopt::Arg::{Long, Value};
 
 /// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
@@ -199,7 +200,7 @@ fn declares_compile_error(path: &str) -> bool {
     let Ok(source) = fs::read_to_string(path) else {
         return false;
     };
-    crate::data_section::should_skip_file(&source)
+    should_skip_file(&source)
 }
 
 fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {

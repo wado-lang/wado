@@ -1,5 +1,7 @@
 // AST definitions for Wado
 
+use crate::defs::DefId;
+use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
@@ -1361,12 +1363,13 @@ impl Attribute {
         self.args.iter().any(|arg| arg.name() == name)
     }
 
-    /// The backing `#[cm(..., type=...)]` declares, if any.
-    pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
+    /// The linearity `#[cm(..., linearity=...)]` declares, if any.
+    pub fn cm_resource_linearity(&self) -> Option<CmResourceLinearity> {
         if self.name != "cm" {
             return None;
         }
-        self.kv_value("type").and_then(CmResourceBacking::parse)
+        self.kv_value("linearity")
+            .and_then(CmResourceLinearity::parse)
     }
 
     /// Returns the parsed CM interface import (`namespace:package/interface[@v][#fn]`)
@@ -1407,22 +1410,29 @@ pub enum CmBoundary {
     Name(String),
 }
 
-/// How a `#[cm(..., type=...)]` resource is represented at the CM boundary.
+/// `Affine` is move-only with a drop obligation, `Unrestricted` a copyable value.
 /// See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CmResourceBacking {
-    ExternHandle,
-    I32,
+pub enum CmResourceLinearity {
+    Affine,
+    Unrestricted,
 }
 
-impl CmResourceBacking {
+impl CmResourceLinearity {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "extern-handle" => Some(Self::ExternHandle),
-            "i32" => Some(Self::I32),
+            "affine" => Some(Self::Affine),
+            "unrestricted" => Some(Self::Unrestricted),
             _ => None,
         }
     }
+}
+
+/// Whether these attributes declare `#[cm(..., linearity = "unrestricted")]`.
+pub fn declares_unrestricted(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|a| a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted))
 }
 
 impl CmBoundary {
@@ -2581,7 +2591,7 @@ impl Expr {
     /// reference to an earlier parameter (`fn make_rect(w, h = w)`) into the
     /// caller's value. Traverses only the forms a simple, pure default may
     /// contain; blocks, closures and match/if cannot appear in one.
-    pub fn substitute_idents(&mut self, subs: &crate::hashmap::IndexMap<String, Expr>) {
+    pub fn substitute_idents(&mut self, subs: &hashmap::IndexMap<String, Expr>) {
         match self {
             Expr::Ident(ident) => {
                 if let Some(replacement) = subs.get(&ident.name) {
@@ -3511,7 +3521,7 @@ pub struct TraitBound {
     /// at its own site by the resolve pass; a bound the compiler rebuilds
     /// already knows its referent, and recording it here is what keeps that
     /// referent from being re-derived out of `name`.
-    pub resolved: Option<crate::defs::DefId>,
+    pub resolved: Option<DefId>,
 }
 
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`

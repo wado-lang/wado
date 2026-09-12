@@ -12,6 +12,8 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::has_break_to;
+use crate::nir_value_graph::ValueKind;
+use crate::optimize::arena_query::is_pure_nontrapping_operand_typed;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum PruneMode {
@@ -291,9 +293,8 @@ fn stmt_dominated(body: &Body, stmt: StmtId, mode: PruneMode) -> bool {
             label, block, role, ..
         } => unused_label_flattenable(body, label, *block, *role, mode),
         StmtKind::Expr(e)
-            if e.as_value().is_some_and(|v| {
-                matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)
-            }) =>
+            if e.as_value()
+                .is_some_and(|v| matches!(body.values.kind(v), ValueKind::Unit)) =>
         {
             true
         }
@@ -327,7 +328,7 @@ fn is_empty_if(body: &Body, stmt: StmtId) -> bool {
     };
     body.blocks[*then_block].stmts.is_empty()
         && else_block.is_none_or(|b| body.blocks[b].stmts.is_empty())
-        && super::arena_query::is_pure_nontrapping_operand_typed(body, *condition, None)
+        && is_pure_nontrapping_operand_typed(body, *condition, None)
 }
 
 fn const_if_branch(body: &Body, stmt: StmtId) -> Option<ConstIf> {
@@ -412,12 +413,9 @@ fn eliminate_dead_stmts(engine: &mut Engine, block: BlockId, mode: PruneMode) ->
         }
         // Unit expression statement → drop.
         if let StmtKind::Expr(op) = &engine.body.stmts[stmt].kind
-            && op.as_value().is_some_and(|v| {
-                matches!(
-                    engine.body.values.kind(v),
-                    crate::nir_value_graph::ValueKind::Unit
-                )
-            })
+            && op
+                .as_value()
+                .is_some_and(|v| matches!(engine.body.values.kind(v), ValueKind::Unit))
         {
             continue;
         }

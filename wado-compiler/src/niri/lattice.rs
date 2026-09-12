@@ -20,6 +20,7 @@ use super::CtfeBuiltin;
 use super::pattern::PatternMatch;
 use super::place::named_local;
 use super::{GlobalKey, Interpreter, Lattice, PatBindings, let_ref_global};
+use crate::nir_arena::StmtId;
 
 impl Interpreter<'_> {
     /// What an operand denotes: the promoted constant for `Operand::Value`,
@@ -436,7 +437,7 @@ impl Interpreter<'_> {
         // nothing observable, so the block is worth its tail. A statement the
         // frame cannot value leaves the block undecided rather than dropping
         // whatever it did.
-        let bound_const = |stmt: &crate::nir_arena::StmtId| match &body.stmts[*stmt].kind {
+        let bound_const = |stmt: &StmtId| match &body.stmts[*stmt].kind {
             StmtKind::Let { local_index, .. } => {
                 matches!(self.frame.env.get(local_index), Some(Lattice::Const(_)))
             }

@@ -168,9 +168,9 @@ pub struct WadoResource {
     pub name: String,
     pub doc_comment: Option<String>,
     pub cm_attr: String,
-    /// `type = "extern-handle"`: an opaque host-table index rather than a CM
-    /// resource handle. Required on both sides of `extends`.
-    pub extern_handle: bool,
+    /// `linearity = "unrestricted"`: a copyable handle that owns nothing,
+    /// rather than an affine CM handle. Required on both sides of `extends`.
+    pub unrestricted: bool,
     /// The parent resource of a `resource X extends Y`.
     pub extends: Option<String>,
     pub methods: Vec<WadoFunction>,

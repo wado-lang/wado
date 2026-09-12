@@ -190,12 +190,12 @@ impl WadoCodeGenerator {
 
     fn write_resource(&mut self, resource: &WadoResource) {
         self.write_doc_comment(resource.doc_comment.as_ref());
-        let backing = if resource.extern_handle {
-            ", type = \"extern-handle\""
+        let linearity = if resource.unrestricted {
+            ", linearity = \"unrestricted\""
         } else {
             ""
         };
-        self.writeln(&format!("#[cm(\"{}\"{backing})]", resource.cm_attr));
+        self.writeln(&format!("#[cm(\"{}\"{linearity})]", resource.cm_attr));
         let extends = resource
             .extends
             .as_ref()

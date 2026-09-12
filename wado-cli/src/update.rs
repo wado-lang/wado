@@ -6,7 +6,8 @@ use std::fs;
 use wado_manifest::LockFile;
 
 use crate::args::{self, CliExit};
-use crate::manifest::discover;
+use crate::build_dep::resolve_build_dependencies;
+use crate::manifest::{discover, emit_manifest_warnings};
 use crate::registry::FilesystemProvider;
 
 #[derive(Debug)]
@@ -44,7 +45,7 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     let project = discover(&cwd)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
-    crate::manifest::emit_manifest_warnings(&project);
+    emit_manifest_warnings(&project);
 
     let provider = FilesystemProvider::new(project.root.clone());
     let packages = wado_manifest::resolve(&project.manifest, &provider)
@@ -53,7 +54,7 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     // `update` re-resolves build-dependencies fresh (empty lock) so a new
     // published version is picked up, then pins each with its integrity digest.
     let resolved_build_deps =
-        crate::build_dep::resolve_build_dependencies(&project.manifest, &indexmap::IndexMap::new())
+        resolve_build_dependencies(&project.manifest, &indexmap::IndexMap::new())
             .await
             .map_err(|e| CliExit::error(format!("resolving build-dependencies: {e}")))?;
     let mut build_dependencies = Vec::with_capacity(resolved_build_deps.len());

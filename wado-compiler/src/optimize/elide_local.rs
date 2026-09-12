@@ -9,6 +9,8 @@ use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
 use super::arena_query;
+use crate::optimize::dce::deletable_value;
+use crate::optimize::mod_ref::FnEffect;
 
 /// What to do with a statement that binds / assigns a write-only local.
 enum Action {
@@ -25,7 +27,7 @@ pub(super) struct ElideRule<'a> {
     /// Whole-function effect summaries, so a dead binding whose value is a call
     /// can still go: the structural purity predicate refuses every call on
     /// sight, while a summary can prove one has no effect and cannot trap.
-    effects: &'a [super::mod_ref::FnEffect],
+    effects: &'a [FnEffect],
 }
 
 impl<'a> ElideRule<'a> {
@@ -35,10 +37,7 @@ impl<'a> ElideRule<'a> {
     /// before the engine borrows its body. Every other live read comes from
     /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
     /// / `ref_elim` — is deliberately not consulted.
-    pub(super) fn new(
-        stores_aliased: &'a IndexSet<u32>,
-        effects: &'a [super::mod_ref::FnEffect],
-    ) -> Self {
+    pub(super) fn new(stores_aliased: &'a IndexSet<u32>, effects: &'a [FnEffect]) -> Self {
         Self {
             stores_aliased,
             effects,
@@ -106,7 +105,7 @@ fn classify(
     stmt: StmtId,
     is_tail: bool,
     stores_aliased: &IndexSet<u32>,
-    effects: &[super::mod_ref::FnEffect],
+    effects: &[FnEffect],
 ) -> Action {
     match &engine.body.stmts[stmt].kind {
         StmtKind::Let {
@@ -182,7 +181,7 @@ fn classify(
 /// first; a call it refuses on sight is answered by its whole-function summary
 /// ([`super::dce::deletable_value`]), which is what lets a dead call to a pure
 /// helper leave rather than linger as a `drop(f(x))`.
-fn deletable(engine: &Engine, value: Operand, effects: &[super::mod_ref::FnEffect]) -> bool {
+fn deletable(engine: &Engine, value: Operand, effects: &[FnEffect]) -> bool {
     if arena_query::is_pure_nontrapping_operand_typed(
         engine.body,
         value,
@@ -192,7 +191,7 @@ fn deletable(engine: &Engine, value: Operand, effects: &[super::mod_ref::FnEffec
     }
     engine
         .value_graph_type_table()
-        .is_some_and(|types| super::dce::deletable_value(engine.body, value, types, effects))
+        .is_some_and(|types| deletable_value(engine.body, value, types, effects))
 }
 
 /// A local is kept (not elidable) when its reference escaped via a `stores`

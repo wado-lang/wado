@@ -11,6 +11,7 @@
 //! These tests inspect the compiled component bytes to hold both contracts
 //! honest: the surviving test exports and the names recorded in the section.
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 
 const SOURCE: &str = r#"
@@ -43,7 +44,7 @@ fn compiled_test_names(filters: &[&str]) -> Vec<(String, Option<String>)> {
     };
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/__test_name_filter__.wado");
-    let result = crate::common::compile_source_with_compiler_options(&path, SOURCE, options)
+    let result = compile_source_with_compiler_options(&path, SOURCE, options)
         .expect("compile should succeed");
     // The section is present whenever at least one test survives; a fully
     // filtered-out build exports no tests and carries no section, which reads

@@ -13,6 +13,14 @@ The Wado compiler crate. The NIR optimizer has its own guide:
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go
   through it.
+- Every name the compiler mints for itself starts with one `$`
+  (`name::INTERNAL_PREFIX`), which no Wado identifier can spell: a local, a label,
+  a global, a synthesized struct or function.
+  `mise run check-internal-names` gates it.
+- What makes such a name unique is a serial that advances on read
+  (`FunctionContext::fresh_serial`), never a local index the site has yet to
+  allocate. A step that reads one before recursing hands its own names to
+  whatever nests inside it (issue #1987).
 - A declaration is identified by its `DefId`, never by its name — see
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver

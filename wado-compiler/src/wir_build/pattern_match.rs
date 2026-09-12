@@ -12,7 +12,13 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};
 use super::translate::{FunctionTranslator, LabelEntry, declare_and_set_local};
+use crate::name::{
+    VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_type_key, wir_variant_case_key,
+};
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
+use crate::wir::{WirTypeDef, WirVariantType};
+use crate::wir_build::translate::ref_binding_needs_boxing;
+use crate::wir_build::types::generic_instance_name;
 use std::assert_matches;
 
 /// Build `if condition { then_body } else { else_body }`, collapsing the
@@ -264,7 +270,7 @@ impl FunctionTranslator<'_, '_> {
                 let type_id = self.ref_type_id(value_ty);
                 let mut instrs = Vec::new();
 
-                let temp_name = self.unshadowed(format!("__let_pattern_{}", self.match_counter));
+                let temp_name = self.unshadowed(format!("$let_pattern_{}", self.match_counter));
                 self.match_counter += 1;
                 instrs.extend(declare_and_set_local(
                     temp_name.clone(),
@@ -322,7 +328,7 @@ impl FunctionTranslator<'_, '_> {
         let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
-        let scrut_local_name = self.unshadowed(format!("__match_scrut_{match_id}"));
+        let scrut_local_name = self.unshadowed(format!("$match_scrut_{match_id}"));
         let scrut_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));
@@ -593,7 +599,7 @@ impl FunctionTranslator<'_, '_> {
                 self.type_table.def_module(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
-                let mangled = super::types::generic_instance_name(
+                let mangled = generic_instance_name(
                     self.type_table,
                     self.type_table.def_name(*def),
                     type_args,
@@ -622,10 +628,9 @@ impl FunctionTranslator<'_, '_> {
         variant_name: &str,
         module_source: &ModuleSource,
     ) -> Option<CaseIndexer> {
-        let fq = crate::name::wir_type_key(module_source, variant_name);
+        let fq = wir_type_key(module_source, variant_name);
         let variant_type_id = self.ctx.type_map.get(&fq)?;
-        let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize]
-        else {
+        let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize] else {
             return None;
         };
         let names: Vec<String> = vt.cases.iter().map(|c| c.name.clone()).collect();
@@ -642,17 +647,17 @@ impl FunctionTranslator<'_, '_> {
     #[track_caller]
     fn variant_type_key(&self, type_id: TypeId) -> String {
         match self.type_table.get(type_id) {
-            ResolvedType::Variant { def } => crate::name::wir_type_key(
+            ResolvedType::Variant { def } => wir_type_key(
                 self.type_table.def_module(*def),
                 self.type_table.def_name(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
-                let mangled = super::types::generic_instance_name(
+                let mangled = generic_instance_name(
                     self.type_table,
                     self.type_table.def_name(*def),
                     type_args,
                 );
-                crate::name::wir_type_key(self.type_table.def_module(*def), &mangled)
+                wir_type_key(self.type_table.def_module(*def), &mangled)
             }
             other => panic!("[WIR] expected a variant type, got {other:?}"),
         }
@@ -664,13 +669,12 @@ impl FunctionTranslator<'_, '_> {
     /// a miss — testing a discriminant nothing wrote, or projecting a payload
     /// out of the base type — is a miscompile the validator rarely catches.
     #[track_caller]
-    fn variant_def(&self, type_id: TypeId) -> (String, &crate::wir::WirVariantType) {
+    fn variant_def(&self, type_id: TypeId) -> (String, &WirVariantType) {
         let key = self.variant_type_key(type_id);
         let Some(wir_type_id) = self.ctx.type_map.get(&key) else {
             panic!("[WIR] variant `{key}` is not registered");
         };
-        let crate::wir::WirTypeDef::Variant(vt) = &self.ctx.types[wir_type_id.index() as usize]
-        else {
+        let WirTypeDef::Variant(vt) = &self.ctx.types[wir_type_id.index() as usize] else {
             panic!("[WIR] `{key}` is registered as a non-variant WIR type");
         };
         (key, vt)
@@ -682,7 +686,7 @@ impl FunctionTranslator<'_, '_> {
     /// variant struct and is told apart by its discriminant.
     #[track_caller]
     fn variant_case_type_id(&self, variant_key: &str, case_name: &str) -> WirTypeId {
-        let case_key = crate::name::wir_variant_case_key(variant_key, case_name);
+        let case_key = wir_variant_case_key(variant_key, case_name);
         let Some(case_type_id) = self.ctx.type_map.get(&case_key) else {
             panic!("[WIR] payload case `{case_key}` is not registered");
         };
@@ -693,7 +697,7 @@ impl FunctionTranslator<'_, '_> {
     fn variant_discriminant(&self, variant_type_id: TypeId, expr: WirInstr) -> WirInstr {
         WirInstr::StructGet {
             type_id: self.ref_type_id(variant_type_id),
-            field_name: crate::name::VARIANT_DISCRIMINANT_FIELD.to_string(),
+            field_name: VARIANT_DISCRIMINANT_FIELD.to_string(),
             expr: Box::new(expr),
             result_ty: WirType::I32,
         }
@@ -945,7 +949,7 @@ impl FunctionTranslator<'_, '_> {
                         })
                         .count();
                     // For a single consumer, inline the `ref.cast` into the
-                    // `struct.get`'s receiver: avoids the temp `__cast_N`
+                    // `struct.get`'s receiver: avoids the temp `$cast_N`
                     // local plus its `LocalSet` / `LocalGet` pair.
                     //
                     // For two or more consumers, keep the temp: each
@@ -953,7 +957,7 @@ impl FunctionTranslator<'_, '_> {
                     // type check, which is more expensive than a
                     // `local.get`.
                     let cast_local = if consumers >= 2 {
-                        let cast_local = self.fresh_local("__cast");
+                        let cast_local = self.fresh_local("$cast");
                         instrs.extend(declare_and_set_local(
                             cast_local.clone(),
                             WirType::Ref {
@@ -1049,7 +1053,7 @@ impl FunctionTranslator<'_, '_> {
                             let payload_tid = *payload_type;
                             let payload_wir =
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
-                            let temp_name = self.fresh_local("__variant_payload");
+                            let temp_name = self.fresh_local("$variant_payload");
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 payload_wir,
@@ -1118,7 +1122,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("__tuple_elem");
+                            let temp_name = self.fresh_local("$tuple_elem");
                             let elem_type = tuple_element_type(&element_types, i);
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
@@ -1156,7 +1160,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("__struct_field");
+                            let temp_name = self.fresh_local("$struct_field");
                             let field_type =
                                 self.resolve_struct_field_type(scrut_type, &field.field_name);
                             let field_wir_type =
@@ -1222,7 +1226,7 @@ impl FunctionTranslator<'_, '_> {
         source: WirInstr,
         instrs: &mut Vec<WirInstr>,
     ) {
-        let needs_boxing = super::translate::ref_binding_needs_boxing(binding_wir, source_wir);
+        let needs_boxing = ref_binding_needs_boxing(binding_wir, source_wir);
         let value = if needs_boxing {
             let WirType::Ref {
                 type_id: box_tid, ..
@@ -1262,13 +1266,9 @@ impl FunctionTranslator<'_, '_> {
     /// "unknown" instead would silently disable the boxing decision in
     /// [`Self::emit_pattern_binding_set`].
     #[track_caller]
-    fn get_case_payload_wir_type(
-        &self,
-        case_type_id: &crate::wir::WirTypeId,
-        payload_index: usize,
-    ) -> WirType {
+    fn get_case_payload_wir_type(&self, case_type_id: &WirTypeId, payload_index: usize) -> WirType {
         let type_def = &self.ctx.types[case_type_id.index() as usize];
-        let crate::wir::WirTypeDef::Struct(s) = type_def else {
+        let WirTypeDef::Struct(s) = type_def else {
             panic!("[WIR] variant case type {case_type_id:?} is not registered as a struct");
         };
         let Some(field) = s.fields.get(payload_index + 1) else {
@@ -1382,10 +1382,10 @@ impl FunctionTranslator<'_, '_> {
             expr: Box::new(val),
         };
         let payload_result_ty =
-            self.struct_field_wir_type(&case_type_id, &crate::name::variant_payload_field(0));
+            self.struct_field_wir_type(&case_type_id, &variant_payload_field(0));
         let get = WirInstr::StructGet {
             type_id: case_type_id,
-            field_name: crate::name::variant_payload_field(0),
+            field_name: variant_payload_field(0),
             expr: Box::new(cast),
             result_ty: payload_result_ty.clone(),
         };

@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use crate::common::compile_source_with_compiler_options;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// Any program pulls in the allocator, so the bodies under test are the bundled
@@ -29,7 +30,7 @@ fn mem_module_wat_with_allocator(opt_level: OptLevel, allocator: Option<&str>) -
         allocator: allocator.map(String::from),
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
+    let result = compile_source_with_compiler_options(
         Path::new("wasm_module_optimize_test.wado"),
         SOURCE,
         options,

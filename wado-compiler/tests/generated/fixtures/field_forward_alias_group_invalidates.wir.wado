@@ -8,7 +8,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
-type "functype//field_forward_alias_group_invalidates.wado/__cm_export__run" = fn();  // TypeId(2)
+type "functype//field_forward_alias_group_invalidates.wado/$cm_export__run" = fn();  // TypeId(2)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
@@ -16,11 +16,11 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "field_forward_alias_group_invalidates.wado/__cm_export__run"() {
+fn "field_forward_alias_group_invalidates.wado/$cm_export__run"() {
     let x: ref "core:prelude/types.wado//Box<i32>";
     x = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     x.value = 7;
     "wasi/task-return"(0);
 }
 
-export fn "field_forward_alias_group_invalidates.wado/__cm_export__run" as "run"
+export fn "field_forward_alias_group_invalidates.wado/$cm_export__run" as "run"

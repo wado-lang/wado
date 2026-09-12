@@ -7,10 +7,16 @@
 use std::ops::ControlFlow;
 
 use super::arena_query::local_written_by;
-use crate::nir::{NirBinaryOp, NirUnaryOp};
+use crate::const_eval::Value;
+use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
-use crate::nir_value_graph::ValueKind;
+use crate::nir_package::NirPackage;
+use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
+use crate::optimize::arena_query::{is_pure_nontrapping_expr_typed, storage_root};
+use crate::tir::TypeTable;
+use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
 /// The combined `licm` session reuses its (value-preserving) `ValueGraph`, so
@@ -47,9 +53,7 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
 /// Resolved once per pass run so the panic-block matcher identifies a diverging
 /// callee by id. The driver hands the result to the engine via
 /// [`Engine::set_panic_callee_ids`].
-pub(super) fn resolve_panic_ids(
-    project: &crate::nir_package::NirPackage,
-) -> crate::hashmap::IndexSet<crate::nir::FuncId> {
+pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncId> {
     let type_table = project.type_table.borrow();
     project
         .functions
@@ -74,12 +78,12 @@ pub(super) fn resolve_panic_ids(
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
 /// never sees the promoted bound. The caller pairs this with `const_branch_prune`
 /// to fixpoint so the newly-`false` checks' panic blocks go too.
-pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackage) -> bool {
+pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
@@ -98,7 +102,7 @@ pub(super) fn eliminate_post_promote(project: &mut crate::nir_package::NirPackag
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -131,14 +135,14 @@ pub(super) enum BoundKey {
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
 /// `let t = <op>` maps to `<op>`. Lets the structural matcher see through the
-/// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
-pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
+/// `let $cond = i < n; if !$cond { panic }` shape CSE produces.
+pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
 
 /// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
 /// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,
 /// so resolving through it can never read a stale value.
-pub(super) fn build_copy_bindings(body: &crate::nir_arena::Body) -> Binds {
-    let mut reassigned = crate::hashmap::IndexSet::default();
+pub(super) fn build_copy_bindings(body: &nir_arena::Body) -> Binds {
+    let mut reassigned = hashmap::IndexSet::default();
     body.for_each_reachable_node(|n| {
         if let Some(r) = local_written_by(body, n) {
             reassigned.insert(r);
@@ -177,10 +181,9 @@ pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
 
 /// The `Local idx` an `Opaque` value sources from, if any (pool read — not
 /// `value_of`).
-pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<u32> {
+pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
     if let ValueKind::Opaque(o) = engine.body.values.kind(v)
-        && let Some(crate::nir_value_graph::OpaqueSource::Local(i)) =
-            engine.body.values.opaque_source(*o)
+        && let Some(OpaqueSource::Local(i)) = engine.body.values.opaque_source(*o)
     {
         Some(i)
     } else {
@@ -192,7 +195,7 @@ pub(super) fn opaque_local(engine: &Engine, v: crate::nir_value_graph::ValueId) 
 /// key is `(root, field_index)`, the walk must not collapse a variant-payload
 /// projection (whose field 0 is not the scrutinee's field 0), so it does not use
 /// `arena_query::storage_root`.
-fn field_bound_root(body: &crate::nir_arena::Body, expr: ExprId) -> Option<u32> {
+fn field_bound_root(body: &nir_arena::Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         ExprKind::Unary { expr: inner, .. }
@@ -312,7 +315,7 @@ fn parse_var_offset_depth(
 }
 
 /// Decompose a pooled value as `Opaque(Local) + const` (pool read, not `value_of`).
-fn parse_value_offset(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<(u32, i64)> {
+fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
     match engine.body.values.kind(v) {
         ValueKind::Opaque(_) => opaque_local(engine, v).map(|i| (i, 0)),
         ValueKind::Binary {
@@ -611,7 +614,7 @@ fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
 }
 
 /// A pooled value's constant `i64`, if it is an `Int` (pool read, not `value_of`).
-fn pool_int_const(engine: &Engine, v: crate::nir_value_graph::ValueId) -> Option<i64> {
+fn pool_int_const(engine: &Engine, v: ValueId) -> Option<i64> {
     if let Some((val, _)) = engine.body.values.kind(v).as_int() {
         Some(val as i64)
     } else {
@@ -646,7 +649,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
         if let NodeRef::Expr(e) = node {
             match &engine.body.exprs[e].kind {
                 ExprKind::Assign { target, .. } => {
-                    if let Some(root) = super::arena_query::storage_root(engine.body, *target)
+                    if let Some(root) = storage_root(engine.body, *target)
                         && is_root(root)
                     {
                         hit = true;
@@ -657,7 +660,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
                     expr: inner,
                 } => {
                     if let Some(ie) = inner.as_expr()
-                        && let Some(root) = super::arena_query::storage_root(engine.body, ie)
+                        && let Some(root) = storage_root(engine.body, ie)
                         && is_root(root)
                     {
                         hit = true;
@@ -669,7 +672,7 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
                     ..
                 } => {
                     if let Some(re) = args.first().and_then(|a| a.expr.as_expr())
-                        && let Some(root) = super::arena_query::storage_root(engine.body, re)
+                        && let Some(root) = storage_root(engine.body, re)
                         && is_root(root)
                     {
                         hit = true;
@@ -976,7 +979,7 @@ fn stmt_always_exits(engine: &Engine, s: StmtId) -> bool {
 
 /// Promote the condition at `cond` to the constant `false` in its parent slot.
 fn set_false(engine: &mut Engine, cond: ExprId) {
-    engine.replace_expr_with_value(cond, crate::const_eval::Value::Bool(false));
+    engine.replace_expr_with_value(cond, Value::Bool(false));
 }
 
 /// Set the `if` condition held by `holder` (a `StmtKind::If` or `ExprKind::If`)
@@ -988,7 +991,7 @@ fn force_condition_false(engine: &mut Engine, holder: NodeRef) {
     let false_v = engine
         .body
         .values
-        .alloc_unshared(ValueKind::Bool(false), crate::tir::TypeTable::BOOL);
+        .alloc_unshared(ValueKind::Bool(false), TypeTable::BOOL);
     match holder {
         NodeRef::Stmt(s) => {
             if let StmtKind::If { condition, .. } = &mut engine.body.stmts[s].kind {
@@ -1121,11 +1124,7 @@ fn index_upper_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64>
     // The eliminated bounds check drops this inline clamp with its branch, so a
     // trapping (or effectful) arm would erase a trap the program takes: the
     // deletion predicate must be non-trapping, not just pure.
-    if !super::arena_query::is_pure_nontrapping_expr_typed(
-        engine.body,
-        e,
-        engine.value_graph_type_table(),
-    ) {
+    if !is_pure_nontrapping_expr_typed(engine.body, e, engine.value_graph_type_table()) {
         return None;
     }
     let (condition, then_branch, else_branch) = (*condition, *then_branch, *else_branch);
@@ -1184,7 +1183,7 @@ fn operand_same(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> bool 
     }
 }
 
-fn block_id_tail(body: &crate::nir_arena::Body, block: BlockId) -> Option<Operand> {
+fn block_id_tail(body: &nir_arena::Body, block: BlockId) -> Option<Operand> {
     match &body.stmts[*body.blocks[block].stmts.last()?].kind {
         StmtKind::Expr(op) => Some(*op),
         _ => None,

@@ -2,8 +2,8 @@
 // function's `Result` boxed.
 //
 // field_scalarize hoists the loop-carried `self.pos`, so every in-loop return
-// becomes `__hfs_call = struct.new Err {..}; self.pos = __hfs_pos; return
-// __hfs_call`. Variant-return SROA can't relocate that value past the
+// becomes `$hfs_call = struct.new Err {..}; self.pos = $hfs_pos; return
+// $hfs_call`. Variant-return SROA can't relocate that value past the
 // write-back — it calls, and `ref.as_non_null(call)` reads as trap-capable —
 // so `scan` stayed boxed on every path, including the hot `Ok`.
 

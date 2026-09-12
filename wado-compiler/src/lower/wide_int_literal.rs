@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_item::CompilerItem;
+use crate::elaborator::reify::ord_bool_from_cmp;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
 use crate::tir::{
@@ -220,7 +221,7 @@ pub(crate) fn compare(
             type_table,
             span,
         );
-        crate::elaborator::reify::ord_bool_from_cmp(cmp, op, span, type_table)
+        ord_bool_from_cmp(cmp, op, span, type_table)
     };
     Some(match op {
         TirBinaryOp::Eq => eq(),

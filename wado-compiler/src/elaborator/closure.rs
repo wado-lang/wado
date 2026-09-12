@@ -1,5 +1,5 @@
 //! Annotation pass for closure expressions. The body walk allocates the
-//! synthetic `__ref_<var>` locals, address-takes their outer bindings, walks the
+//! synthetic `$ref_<var>` locals, address-takes their outer bindings, walks the
 //! body so its `ModuleSemantics` lands, projects the closure's `fn(…)` type for
 //! the caller's typecheck, and records the
 //! [`super::sem::types::ClosureCaptureInfo`] reify rebuilds from.
@@ -12,6 +12,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
 /// Expected function-type info extracted from an `expected_type` hint.
@@ -31,7 +32,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn is_rigid_type_param(&self, ty: TypeId) -> bool {
         matches!(
             self.tysys.type_table.borrow().get(ty),
-            crate::tir::ResolvedType::TypeParam { .. }
+            ResolvedType::TypeParam { .. }
         )
     }
 
@@ -105,13 +106,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Self::collect_mutated_vars(&closure.body, &mut assigned_names);
 
         // For each assigned name that resolves to an outer `mut` local,
-        // record a `MutCapture` (so reify replays the `__ref_<var>`
+        // record a `MutCapture` (so reify replays the `$ref_<var>`
         // materialisation in the same order) and mark the outer local
-        // address-taken. The `__ref_<var>` local slot is also reserved on
+        // address-taken. The `$ref_<var>` local slot is also reserved on
         // the outer `ctx` so any subsequent local-index accounting in the
         // parent function stays consistent with what reify will produce.
         let mut deref_overrides: IndexMap<String, (String, TypeId)> = IndexMap::default();
-        let mut mut_captures: Vec<super::sem::types::MutCapture> = Vec::new();
+        let mut mut_captures: Vec<MutCapture> = Vec::new();
         let mut any_mutating_capture = false;
 
         for var_name in &assigned_names {
@@ -122,11 +123,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
-                let ref_name = format!("__ref_{var_name}");
+                let ref_name = format!("$ref_{var_name}");
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
-                mut_captures.push(super::sem::types::MutCapture {
+                mut_captures.push(MutCapture {
                     var_name: var_name.clone(),
                     ref_name: ref_name.clone(),
                     inner_type,
@@ -186,10 +187,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Build the recorded capture list from the closure scope's captures.
-        let recorded_captures: Vec<super::sem::types::CaptureEntry> = closure_ctx
+        let recorded_captures: Vec<CaptureEntry> = closure_ctx
             .get_captures()
             .into_iter()
-            .map(|(name, _index, local)| super::sem::types::CaptureEntry {
+            .map(|(name, _index, local)| CaptureEntry {
                 name,
                 outer_index: local.index,
                 type_id: local.type_id,
@@ -201,7 +202,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // for the closure's capture analysis.
         self.record_closure_captures(
             closure.id,
-            super::sem::types::ClosureCaptureInfo {
+            ClosureCaptureInfo {
                 mut_captures,
                 captures: recorded_captures,
                 is_mutating: any_mutating_capture,
