@@ -17,21 +17,12 @@ use { from_string, to_string_pretty } from "core:json";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
 
-/// A file the walk could not measure. The walk goes on, so the report is an
-/// effect rather than a return value, and no frame between the failure and
-/// whoever tallies it carries the tally.
+/// A file the walk could not measure. No default implementation, so an
+/// unhandled report traps rather than let a run pass with files unmeasured.
 interface Unmeasured {
-    fn file(path: String, why: String) {
-        report_unmeasured(&path, &why);
-    }
+    fn file(path: String, why: String);
 }
 
-fn report_unmeasured(path: &String, why: &String) {
-    log_stderr(`error: ${*path}: ${*why}`);
-}
-
-/// Counts what it reports, so a caller reads the tally off the handler instead
-/// of threading a counter down the walk.
 struct Failures {
     count: i32 = 0,
 }
@@ -39,7 +30,7 @@ struct Failures {
 impl Unmeasured for Failures {
     fn file(&mut self, path: String, why: String) {
         self.count += 1;
-        report_unmeasured(&path, &why);
+        log_stderr(`error: ${path}: ${why}`);
     }
 }
 
@@ -132,14 +123,11 @@ pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
 /// The inline paths `path` carries. A file that cannot be read or parsed is
 /// reported as unmeasured, never returned as a clean count.
 fn scan(root: &Descriptor, path: &String) -> List<InlinePath> with Unmeasured {
-    let source = match read_file(root, path) {
-        Ok(text) => text,
-        Err(why) => {
-            Unmeasured::file(*path, why);
-            return [];
-        },
+    let found = match read_file(root, path) {
+        Ok(source) => find_inline_paths(&source),
+        Err(why) => Result::Err(why),
     };
-    return match find_inline_paths(&source) {
+    return match found {
         Ok(hits) => hits,
         Err(why) => {
             Unmeasured::file(*path, why);

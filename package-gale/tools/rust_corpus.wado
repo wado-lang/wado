@@ -71,9 +71,8 @@ pub fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
     return Option::Some(dirs[0].0);
 }
 
-/// The contents of `path`, or why it could not be read. The reason is returned
-/// rather than printed, so a walk that reports a failure and goes on reports it
-/// in one place.
+/// The contents of `path`, or why it could not be read. The caller reports it,
+/// so a walk that goes on past a failure still reports it once.
 pub fn read_file(root: &Descriptor, path: &String) -> Result<String, String> {
     let file = match root.open_at(
         PathFlags::none(),
@@ -91,15 +90,13 @@ pub fn read_file(root: &Descriptor, path: &String) -> Result<String, String> {
     read_stream.drop();
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
-        Err(e) => {
-            return Result::Err(`not UTF-8: ${e}`);
-        },
+        Err(e) => Result::Err(`not UTF-8: ${e}`),
     };
 }
 
 /// The `.rs` files an argument list names, directly or through
 /// `--paths-from <file>`, which reads one path per line.
-pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with Stderr {
+pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> {
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" {
@@ -109,8 +106,7 @@ pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> wit
             // a clean run. Keep it as the one path that reports itself.
             let list = match read_file(root, &argv[i]) {
                 Ok(text) => text,
-                Err(why) => {
-                    eprintln(`error: ${argv[i]}: ${why}`);
+                Err(_) => {
                     paths.push(argv[i]);
                     continue;
                 },
