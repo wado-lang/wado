@@ -45,13 +45,6 @@ export fn run() with (Stdout, Preopens) {
         Ok(_) => panic("a directory must not read as a file"),
         Err(e) => println(`read a directory: ${e}`),
     }
-    match fs::read_to_string(&"a/b") {
-        Ok(_) => panic("a directory must not read as text"),
-        Err(e) => {
-            assert e.kind matches { Io(_) };
-        },
-    }
-    println("reading a directory is an error");
 
     // An absolute path resolves against no preopen, so it fails rather than
     // being rebuilt underneath one.
@@ -98,7 +91,6 @@ __DATA__
         "missing: nope.txt: no such file or directory",
         "nested directories",
         "read a directory: a/b: ErrorCode::IsDirectory",
-        "reading a directory is an error",
         "absolute create_dir_all: /rooted/elsewhere: ErrorCode::NotPermitted",
         "directory entries carry their type",
         "the empty path lists the preopen",

@@ -105,9 +105,10 @@ changing their signatures.
 ### Whole files only
 
 `read` buffers, `write` creates-truncates-and-closes. `read` also checks that
-the path names a regular file: `read_via_stream` traps on anything else, and a
-`Result` that a directory turns into an abort is not one. Every other operation
-states what it expects in its open flags, so the host makes that check.
+the path names a regular file. `read_via_stream` traps on anything else, which
+aborts the program instead of returning the `Result` the signature promises.
+Every other operation states what it expects in its open flags, so the host
+makes that check.
 
 Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read stream straight to
 stdout and never holds the file in memory. This module would break that shape

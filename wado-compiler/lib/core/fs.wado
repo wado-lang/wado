@@ -115,17 +115,19 @@ pub fn root() -> Result<Descriptor, FsError> with Preopens {
 /// — a directory, a device, a pipe — fails rather than reading.
 pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens {
     let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
-    // The one operation the host cannot check for us: no open flag says "a
-    // regular file", and `read_via_stream` traps rather than failing.
-    let kind = match file.get_type().wait() {
-        Ok(k) => k,
+    // No open flag says "a regular file", and `read_via_stream` traps rather
+    // than failing on anything else, so the kind is checked here instead.
+    match file.get_type().wait() {
+        Ok(RegularFile) => (),
+        Ok(Directory) => {
+            return Result::Err(failure(path, ErrorCode::IsDirectory));
+        },
+        Ok(_) => {
+            return Result::Err(failure(path, ErrorCode::Invalid));
+        },
         Err(e) => {
             return Result::Err(failure(path, e));
         },
-    };
-    if !kind matches { RegularFile } {
-        let code = if kind matches { Directory } { ErrorCode::IsDirectory } else { ErrorCode::Invalid };
-        return Result::Err(failure(path, code));
     }
     let [stream, done] = file.read_via_stream(0 as Filesize);
     let bytes = stream.read_to_end();
@@ -184,9 +186,8 @@ pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens 
 /// Create the directory `path` names, and every parent it needs. A directory
 /// that already exists is not a failure.
 pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
-    // The one operation that splits the path rather than handing it to the
-    // host, so the loop below would skip the empty component a leading `/`
-    // makes and build the tree inside the preopen.
+    // The loop below skips an empty component, so a leading `/` would build
+    // the tree inside the preopen rather than failing as it does elsewhere.
     if path.starts_with("/") {
         return Result::Err(failure(path, ErrorCode::NotPermitted));
     }

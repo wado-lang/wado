@@ -101,11 +101,11 @@ fn highlight_file(
     return Option::Some(elapsed as u64);
 }
 
-/// The directory part of `path`, empty when it names no directory. The
-/// output tree is created one file at a time, so this is what `create_dir_all`
-/// is given.
+/// The directory part of `path`, empty when it names none. The output tree is
+/// created one file at a time, so this is what `create_dir_all` is given.
 fn parent_of(path: &String) -> String {
-    let mut components: List<String> = path.split("/").collect();
-    components.pop();  // drop the filename; only its parent dirs are created
-    return components.join("/");
+    let Some(cut) = path.rfind("/") else {
+        return "";
+    };
+    return path.substr_bytes(0, cut);
 }

@@ -8,7 +8,7 @@
 //! path per line — the only form that survives a path containing a space.
 
 use { parse } from "../src/lib.wado";
-use { collect_paths } from "lib:gale";
+use { collect_paths, line_of } from "lib:gale";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
@@ -40,19 +40,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
         }
     }
     eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);
-}
-
-/// 1-based line number of byte offset `at`.
-fn line_of(src: &String, at: i32) -> i32 {
-    let mut line = 1;
-    let mut i = 0;
-    while i < at && i < src.len() {
-        if src.get_byte_unchecked(i) == b'\n' {
-            line += 1;
-        }
-        i += 1;
-    }
-    return line;
 }
 
 /// The source line containing byte offset `at`, trimmed.

@@ -1,9 +1,8 @@
 use { FsError, FsErrorKind } from "core:fs";
 use { ErrorCode } from "wasi:filesystem";
 
-// The operations themselves need a real directory, so they are covered by
-// `wado-compiler/tests/fixtures/core_fs.wado`, which runs against a scratch
-// preopen.
+// The operations need a real directory. `tests/fixtures/core_fs.wado` covers
+// them, against a scratch preopen it writes before it reads.
 
 test "an error renders its path and its cause" {
     let e = FsError { path: "build/out.json", kind: FsErrorKind::NotFound };

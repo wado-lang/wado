@@ -4,23 +4,10 @@
 //! first preopen, so run it from the repository root.
 
 use { parse_rust } from "./rust_corpus.wado";
-use { collect_paths } from "../src/corpus.wado";
+use { collect_paths, line_of } from "../src/corpus.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
-
-/// The 1-based line holding byte offset `at`.
-fn line_of(source: &String, at: i32) -> i32 {
-    let mut line = 1;
-    let mut i = 0;
-    while i < at && i < source.len() {
-        if source.get_byte_unchecked(i) == b'\n' {
-            line += 1;
-        }
-        i += 1;
-    }
-    return line;
-}
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
     let paths = collect_paths(&args(), &".rs");
