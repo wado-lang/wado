@@ -238,13 +238,15 @@ pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
             None => target.output.clone(),
         };
         build_world_component(&target, &output, &opts.knobs, opts.embed).await?;
+        compile::announce_artifact(&output);
     }
     Ok(())
 }
 
 /// The single project-build path: compile one world with `[package]` metadata
 /// embedded, write it to `output`, and return its bytes. Shared by `wado build`
-/// and the run/serve drivers so a run artifact matches a built one.
+/// and the run/serve drivers so a run artifact matches a built one. Silent —
+/// announcing the artifact is `wado build`'s, not a driver's.
 pub async fn build_world_component(
     target: &BuildTarget,
     output: &Path,
@@ -263,7 +265,7 @@ pub async fn build_world_component(
     // concurrent build (e.g. parallel `serve` drivers sharing this project's
     // `build/<world>.wasm`) could leave the file torn or holding another
     // world's module.
-    compile::run_returning_bytes(opts).await
+    Ok(compile::compile_to_artifact(opts).await?.bytes)
 }
 
 /// Produce the runnable component for a driver (`run` / `serve`). In a project

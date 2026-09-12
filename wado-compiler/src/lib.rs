@@ -1,3 +1,17 @@
+//! The Wado compiler.
+//!
+//! Nothing here writes to a stream. A user-facing message goes through
+//! [`logger::Logger`] and reaches the [`compiler_host::CompilerHost`]; a
+//! developer trace goes through [`trace`] to the sink the host installed; and
+//! what cannot happen — a broken stdlib — is an `assert!`, not a message. A
+//! hosted compiler (LSP, browser, Kiln generator) has no stderr to print to,
+//! and a `run` / `serve` driver has a user's program to keep quiet for.
+//!
+//! The ban lives here rather than in `Cargo.toml`: cargo refuses a `[lints]`
+//! table that both inherits the workspace's and adds to it, and the workspace
+//! list is shared with the crates that do own a terminal.
+#![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]
+
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
@@ -109,6 +123,7 @@ pub use package::Package;
 pub use parser::{ParseError, Parser};
 pub use resource_move_check::{ResourceMoveError, check_resource_moves_semantic};
 pub use token::Span;
+pub use trace::{TraceSink, set_sink as set_trace_sink};
 
 /// Build the diagnostic message for an unresolved `Type^Trait::method` call —
 /// `Type` does not implement `Trait` (see the WIR-build trait-bound check).

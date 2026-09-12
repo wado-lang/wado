@@ -995,16 +995,34 @@ fn read_license_text(
         .map_err(|e| format!("cannot read license-file {}: {e}", path.display()))
 }
 
-pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
-    run_returning_bytes(opts).await.map(|_| ())
+/// A finished build: the emitted component, and where it was written.
+/// `--wat-to-stdout` writes no artifact, so both are empty there.
+pub struct Artifact {
+    pub bytes: Vec<u8>,
+    pub output_path: Option<std::path::PathBuf>,
 }
 
-/// Like [`run`], but also returns the emitted component bytes. A run / serve
-/// driver uses its own compilation directly instead of reading the artifact
-/// back from `build/`, where a concurrent build could leave it torn or serve a
-/// different world's bytes. Returns an empty `Vec` on the `--wat-to-stdout`
-/// path, which writes no artifact.
-pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExit> {
+/// Report an artifact to the user. This belongs to the commands that exist to
+/// produce a file — `compile`, `build`, `publish`. A `run` / `serve` driver
+/// builds one on the way to executing it and says nothing, leaving the
+/// program's own output as the only thing it writes.
+pub fn announce_artifact(output: &Path) {
+    eprintln!("Generated: {}", output.display());
+}
+
+pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
+    let artifact = compile_to_artifact(opts).await?;
+    if let Some(output) = &artifact.output_path {
+        announce_artifact(output);
+    }
+    Ok(())
+}
+
+/// Like [`run`], but silent, and returning the emitted component bytes. A run /
+/// serve driver uses its own compilation directly instead of reading the
+/// artifact back from `build/`, where a concurrent build could leave it torn or
+/// serve a different world's bytes.
+pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliExit> {
     // Output format is independent of the compiled bytes; resolve it first so we
     // know whether to retain WIR (only the wasm-output embedding path needs it).
     let format = opts
@@ -1039,7 +1057,10 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
     if opts.wat_to_stdout {
         let wat = wasm_to_wat(&wasm)?;
         print!("{wat}");
-        return Ok(Vec::new());
+        return Ok(Artifact {
+            bytes: Vec::new(),
+            output_path: None,
+        });
     }
 
     // Discover the package manifest once, reused for the default output path and
@@ -1078,8 +1099,10 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
     }
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
-    eprintln!("Generated: {}", output_path.display());
-    Ok(bytes)
+    Ok(Artifact {
+        bytes,
+        output_path: Some(output_path),
+    })
 }
 
 /// The `<root>/build/<segment>.wasm` artifact path for a publish build, where

@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, Item, Module, Type};
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{Code, CompilerHost};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
@@ -1051,6 +1051,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             &all_struct_fields,
             &type_table.borrow(),
             resolutions.defs(),
+            logger,
         );
 
         let (cm_interface_registry, world_registry) = {
@@ -2107,6 +2108,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
         type_table: &TypeTable,
         defs: &crate::defs::DefTable,
+        logger: &Logger<'_, H>,
     ) -> Vec<ModuleSource> {
         // Collect and sort sources for deterministic ordering
         let mut sources: Vec<&ModuleSource> = modules.keys().collect();
@@ -2176,9 +2178,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .filter(|i| !sorted_set.contains(i))
                 .collect();
             let cycle_modules: Vec<_> = in_cycle.iter().map(|&i| sources[i].to_string()).collect();
-            eprintln!(
-                "Warning: circular struct dependencies detected among modules: {}",
-                cycle_modules.join(", ")
+            logger.warn(
+                Code::CircularDependency,
+                format!(
+                    "circular struct dependencies detected among modules: {}",
+                    cycle_modules.join(", ")
+                ),
             );
             // Append remaining in deterministic order (already sorted by index)
             sorted_indices.extend(in_cycle);

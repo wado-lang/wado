@@ -244,16 +244,14 @@ impl CompilerHost for SnapshotHost {
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        // Surface stdlib diagnostics so a stray error or warning during
-        // snapshot construction is visible to the user rather than
-        // swallowed behind the `expect` in `build_snapshot`. The
-        // `Logger` already filters by `LogLevel`, so anything that
-        // reaches us here is worth printing.
+        // The stdlib is ours and compiles clean; the `Logger` filters below
+        // `Warn`, so anything reaching here is a broken stdlib, not something
+        // a user's program can provoke or act on.
         let where_ = diagnostic.span.as_ref().map_or_else(
             || "<stdlib>".to_string(),
             |s| format!("{}:{}:{}", s.file, s.line, s.column),
         );
-        eprintln!(
+        panic!(
             "stdlib snapshot {}: {} at {}",
             diagnostic.severity, diagnostic.message, where_
         );

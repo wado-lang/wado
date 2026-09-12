@@ -1,9 +1,14 @@
 //! Compiler-internal tracing for development debugging, selected by the
-//! `WADO_TRACE` env var — a comma-separated target list, or `*` — and written to
-//! stderr under a `[target]` prefix. `compiler_trace!` expands to a guarded
-//! `eprintln!` and is for *developer* diagnostics only; user-facing ones still
-//! flow through `Logger`. On `wasm32-unknown-unknown` the filter is always empty.
+//! `WADO_TRACE` env var — a comma-separated target list, or `*` — and rendered
+//! under a `[target]` prefix. `compiler_trace!` is for *developer* diagnostics
+//! only; user-facing ones still flow through `Logger`. On
+//! `wasm32-unknown-unknown` the filter is always empty.
+//!
+//! Where a trace lands is the host's business, not the compiler's: a host
+//! installs a [`TraceSink`] and, without one, every trace is dropped. The
+//! compiler writes to no stream of its own — an LSP or browser host has none.
 
+use std::fmt::Arguments;
 use std::sync::OnceLock;
 
 #[derive(Debug, Default)]
@@ -57,20 +62,47 @@ fn parse_filter(raw: Option<&str>) -> TraceFilter {
     TraceFilter { all, targets }
 }
 
-/// Emit a developer trace to stderr if the given target is enabled by
-/// `WADO_TRACE`.
+/// Where a developer trace lands. A host installs one with [`set_sink`].
+pub trait TraceSink: Send + Sync {
+    /// Write one trace line. The newline is the sink's to add.
+    fn trace(&self, line: &str);
+}
+
+static SINK: OnceLock<&'static dyn TraceSink> = OnceLock::new();
+
+/// Install the process-wide trace sink. The first host to call wins, so a
+/// process running many compiles keeps one destination.
+pub fn set_sink(sink: &'static dyn TraceSink) {
+    let _ = SINK.set(sink);
+}
+
+/// Write one line to the installed sink, or drop it when no host installed
+/// one. The caller has already decided the line is wanted — [`emit`] against
+/// `WADO_TRACE`, a pass dump against `WADO_DUMP_PASS_*`.
+pub fn write(line: &str) {
+    if let Some(sink) = SINK.get() {
+        sink.trace(line);
+    }
+}
+
+/// Write a developer trace when `WADO_TRACE` selects `target`. Prefer
+/// [`compiler_trace!`], which keeps the formatting lazy.
+pub fn emit(target: &str, args: Arguments<'_>) {
+    if filter().enabled(target) {
+        write(&format!("[{target}] {args}"));
+    }
+}
+
+/// Emit a developer trace if the given target is enabled by `WADO_TRACE`.
 ///
 /// ```ignore
 /// compiler_trace!("sroa_variant_return", "rewrite return at {span:?}");
 /// ```
 #[macro_export]
 macro_rules! compiler_trace {
-    ($target:expr, $($arg:tt)*) => {{
-        let filter = $crate::trace::filter();
-        if filter.enabled($target) {
-            eprintln!("[{}] {}", $target, format_args!($($arg)*));
-        }
-    }};
+    ($target:expr, $($arg:tt)*) => {
+        $crate::trace::emit($target, format_args!($($arg)*))
+    };
 }
 
 #[cfg(test)]

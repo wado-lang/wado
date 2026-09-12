@@ -5,6 +5,10 @@ The Wado compiler crate. The NIR optimizer has its own guide:
 
 ## Rules
 
+- Nothing in this crate writes to a stream: `println!` / `eprintln!` / `dbg!`
+  are denied at the crate root. A user-facing message goes through `Logger` to
+  the host, a developer trace through `compiler_trace!` to the sink the host
+  installed, and what cannot happen — a broken stdlib — is an `assert!`.
 - `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go

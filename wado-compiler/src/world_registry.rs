@@ -254,8 +254,8 @@ impl WorldRegistry {
     /// Register a world from a parsed declaration, keyed by the `#[cm("…")]`
     /// fully-qualified name or, failing that, the `PascalCase` name. The
     /// `lookup_interface_*` callbacks resolve an `export Foo;` / `import Foo;`
-    /// to its CM FQ; `None` skips the entry. A duplicate `fq_name` keeps the
-    /// first registrant and warns — overwriting would hide it from codegen.
+    /// to its CM FQ; `None` skips the entry. Only the stdlib declares worlds,
+    /// so a duplicate `fq_name` is a broken stdlib rather than a user error.
     pub fn register(
         &mut self,
         world: &WorldDecl,
@@ -264,14 +264,12 @@ impl WorldRegistry {
     ) {
         let fq_name = fq_name_from_attrs(&world.attrs).unwrap_or_else(|| world.name.clone());
 
-        if self.worlds.contains_key(&fq_name) {
-            eprintln!(
-                "WorldRegistry: duplicate world `{fq_name}` (also declared as `{}`). \
-                 Keeping the first registrant.",
-                world.name,
-            );
-            return;
-        }
+        assert!(
+            !self.worlds.contains_key(&fq_name),
+            "WorldRegistry: duplicate world `{fq_name}` (also declared as `{}`). \
+             Each world must be declared exactly once across the stdlib.",
+            world.name,
+        );
 
         let mut exports: Vec<WorldExportInfo> = Vec::new();
         for export in &world.exports {
@@ -280,22 +278,17 @@ impl WorldRegistry {
                     exports.push(WorldExportInfo::from_function_ast(func));
                 }
                 WorldExport::Interface(iface) => {
+                    // The two-pass stdlib bootstrap registers every `pub
+                    // interface Foo` before any world, so a missing lookup here
+                    // is a broken stdlib: a mismatched name, or a missing
+                    // `#[cm("...")]`.
                     let Some(lookup) = lookup_interface_export(&iface.interface_name) else {
-                        // The two-pass stdlib bootstrap registers every
-                        // `pub interface Foo` before any world, so a missing
-                        // lookup at this point is an actual problem
-                        // (mismatched name, missing `#[cm(...)]`, an
-                        // out-of-tree world that names an undeclared
-                        // interface). Warn so the failure is diagnosable;
-                        // the world is still registered with the rest of
-                        // its exports rather than aborting.
-                        eprintln!(
+                        panic!(
                             "WorldRegistry: interface export `{}` in world `{fq_name}` \
-                             references an unknown interface; skipping. \
+                             references an unknown interface. \
                              Check for a missing `pub interface {}` or `#[cm(\"...\")]`.",
                             iface.interface_name, iface.interface_name,
                         );
-                        continue;
                     };
                     for method in lookup.methods {
                         exports.push(WorldExportInfo {
