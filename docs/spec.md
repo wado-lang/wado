@@ -77,7 +77,7 @@ TODO: the parser keeps comments in the AST.
 ### Shebang
 
 ```wado
-#!/usr/bin/env wado
+#!/usr/bin/env -S wado run
 export fn run() { ... }
 ```
 
