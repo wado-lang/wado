@@ -344,6 +344,39 @@ MISE_JOBS=1 mise run syntax-highlight
 MISE_JOBS=1 mise run gale-gen
 """
 
+[tasks.all-wado]
+description = "Run the Wado arm of every benchmark, without the reference arms"
+# The references run the same binary whatever the compiler does, so a compiler
+# A/B spends most of its wall clock on rows that cannot move. Re-timing them is
+# also what lets the host drift between the arms. Name benchmarks to narrow it
+# further: `mise run all-wado json_catalog syntax_highlight`.
+run = """
+#!/usr/bin/env bash
+set -e
+source ./wado.sh
+FILES="count_prime/count_prime.wado mandelbrot/mandelbrot.wado sieve/sieve.wado
+fts/fts.wado json_twitter/json_twitter.wado cbor/cbor_twitter.wado
+cbor/cbor_canada.wado cbor/cbor_catalog.wado json_canada/json_canada.wado
+json_catalog/json_catalog.wado json_catalog/json_catalog_v2.wado
+zlib/zlib_bench.wado sqlite_parse/sqlite_parse.wado
+syntax_highlight/syntax_highlight.wado gale_gen/gale_gen.wado"
+for f in $FILES; do
+    if [ $# -gt 0 ]; then
+        keep=""
+        for want in "$@"; do
+            case "$f" in *$want*) keep=1 ;; esac
+        done
+        [ -n "$keep" ] || continue
+    fi
+    # `logs.ts` keys a row by (task, impl, phase) and mise prints one marker
+    # for the whole task, so the loop prints one per benchmark.
+    name=${f##*/}
+    echo "[${name%.wado}] \\$ wado run -O2 $f"
+    echo "=== Wado ==="
+    wado run -O2 $WADO_BENCH_FLAGS "$f"
+done
+"""
+
 [tasks.clean]
 description = "Clean benchmark artifacts"
 run = """

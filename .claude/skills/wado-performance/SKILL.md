@@ -158,9 +158,10 @@ paid on a benchmark `fts` never touched.
   then tests them: `peek_after_whitespace_run` in `core:json` is that shape,
   worth 12.6% on json-catalog deserialize. It pays in proportion to the run it
   covers, against the one partial block it always wastes — under ~16 bytes per
-  run it is a loss (`dead-ends.md`). **`array.set` shares nothing**: a store may
-  write the header as far as Cranelift knows, so four adjacent sets reload the
-  length four times. Only `array.copy` / `array.fill` amortise a write.
+  run it is a loss. **Four is where the sharing stops**: a wider block only adds
+  lone gets, and measures worse the wider it gets (`dead-ends.md`).
+  **`array.set` shares nothing**: a store may write the header as far as
+  Cranelift knows, so four adjacent sets reload the length four times. Only `array.copy` / `array.fill` amortise a write.
 - **SROA is priced by the aggregate's width, not by the allocation it removes.**
   Splitting a 40-slot tuple into locals deletes one `struct.new` per struct and
   costs 6.5% on cbor-twitter: past the register file, forty `ref` locals live
@@ -265,6 +266,23 @@ WADO_BIN=$base mise run benchmark-all > b1.log 2>&1
 mise run benchmark-all > h1.log 2>&1  # …and so on, 3 each
 node benchmark/ab.ts --base b1.log b2.log b3.log --head h1.log h2.log h3.log
 ```
+
+**Time the Wado rows alone, with `mise run all-wado`.** The reference arms (C,
+Rust, JavaScript, the Java ones) run the same binary whatever the compiler does,
+so re-timing them buys nothing and stretches a round from seconds to minutes.
+That is the gap the host drifts across: a three-arm `benchmark-all` comparison
+came back with `ANTLR4 (Java)` at -2.2%, `count-prime / JavaScript` at +1.4% and
+a prime sieve 4.3% "faster" from a string-append change, all unreadable. The
+same arms over `all-wado`, six rounds seconds apart, settled every row. Keep
+`sieve` in the selection as the in-band control, and run `benchmark-all` once at
+the end for the record.
+
+```sh
+mise run all-wado                                # every Wado row
+mise run all-wado json_catalog sieve             # those, by name
+```
+
+Its log feeds `ab.ts` and `pick.ts` like any other, one row per benchmark file.
 
 **Hash the wasm before you time anything.** Compile every benchmark under both
 compilers and compare. A row whose bytes are identical cannot have moved, so
