@@ -1,8 +1,8 @@
-//! Two composed string-append rewrites over the shared peephole session:
-//! [`ConstAsciiPushRule`] retargets each constant-ASCII `push` to
+//! Two string-append rewrites over the shared peephole session:
+//! [`ConstAsciiPushRule`] retargets a constant-ASCII `push` to
 //! `push_ascii_unchecked`, and [`AppendFuseRule`] collapses a run of adjacent
-//! appends into one reservation. Must run *before* `inline`, which replaces the
-//! call node the literal-recogniser matches.
+//! appends into one reservation. Both must run *before* `inline`, which
+//! replaces the call node they match.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -14,9 +14,7 @@ use crate::tir::TypeTable;
 use crate::token::Span;
 
 /// Resolve the whole-package context for the append rules, or `None` when the
-/// `String::push_str` / `push` markers are absent. Public to the `optimize`
-/// module so the unified [`super::peephole`] pass can build the rules alongside
-/// the other peephole rules over one shared engine session.
+/// `String::push_str` / `push` markers are absent.
 pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
     Ctx::resolve(project)
 }
