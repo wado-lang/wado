@@ -761,25 +761,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset"
     let $licm_start_8: i32;
     len = bytes.end - bytes.start;
     i = 0;
-<<<<<<< HEAD
     $licm_repr_7 = bytes.repr;
     $licm_start_8 = bytes.start;
-    b66: block {
-        l67: loop {
-            break_if b66 i >= len;
-||||||| 3856bdb0b
-    _licm_repr_7 = bytes.repr;
-    _licm_start_8 = bytes.start;
-    b66: block {
-        l67: loop {
-            break_if b66 i >= len;
-=======
-    _licm_repr_7 = bytes.repr;
-    _licm_start_8 = bytes.start;
     b85: block {
         l86: loop {
             break_if b85 i >= len;
->>>>>>> origin/main
             advance = 1;
             if builtin::array_get_value<u8>($licm_repr_7, $licm_start_8 + i) >=u 128 {
                 advance = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len);
@@ -910,28 +896,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
-<<<<<<< HEAD
-        l90: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b91: block {
-                l92: loop {
-                    break_if b91 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
-||||||| 3856bdb0b
-        l90: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b91: block {
-                l92: loop {
-                    break_if b91 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
-=======
         l109: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b110: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b110: block {
                 l111: loop {
                     break_if b110 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
->>>>>>> origin/main
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l111;
                 };
@@ -994,48 +964,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let i: i32;
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
-<<<<<<< HEAD
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break $inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t_9 = abs_val;
-        b98: block {
-            l99: loop {
-                break_if b98 t_9 <=u 0_i64;
-                n = n + 1;
-                t_9 = t_9 /u 10_i64;
-                continue l99;
-            };
-        };
-        break $inline_count_digits_u64_1: n;
-    };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, digit_count_4);
-||||||| 3856bdb0b
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break $inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t_9 = abs_val;
-        b98: block {
-            l99: loop {
-                break_if b98 t_9 <=u 0_i64;
-                n = n + 1;
-                t_9 = t_9 /u 10_i64;
-                continue l99;
-            };
-        };
-        break $inline_count_digits_u64_1: n;
-    };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count_4);
-=======
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count_4);
->>>>>>> origin/main
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, digit_count_4);
     arr = f.buf.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;

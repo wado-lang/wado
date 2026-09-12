@@ -31,23 +31,11 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
 
 type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
 
-type "functype//inlining_test.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//inlining_test.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-<<<<<<< HEAD
-type "functype//inlining_test.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
-||||||| 3856bdb0b
-type "functype//inlining_test.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
-=======
-type "functype//inlining_test.wado/__cm_export__run" = fn();  // TypeId(12)
->>>>>>> origin/main
+type "functype//inlining_test.wado/$cm_export__run" = fn();  // TypeId(12)
 
-<<<<<<< HEAD
-type "functype//inlining_test.wado/$cm_export__run" = fn();  // TypeId(13)
-||||||| 3856bdb0b
-type "functype//inlining_test.wado/__cm_export__run" = fn();  // TypeId(13)
-=======
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(13)
->>>>>>> origin/main
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(14)
 
@@ -72,62 +60,20 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-<<<<<<< HEAD
-global global:inlining_test.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 117, 108, 116, 61, 52, 50), used: 9 };
-
-fn "inlining_test.wado/run"() with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_63: i32;
-    let tx_64: i32;
-    rx_63 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_64 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "inlining_test.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
-    "core:rt/write_string_to_stream"(tx_64, global:inlining_test.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-}
-
 fn "inlining_test.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
-||||||| 3856bdb0b
-global global:inlining_test.wado::__const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 115, 117, 108, 116, 61, 52, 50), used: 9 };
-
-fn "inlining_test.wado/run"() with Stdout {
-    let handle: i32;
-    let packed: i64;
-    let rx_63: i32;
-    let tx_64: i32;
-    rx_63 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_64 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "inlining_test.wado/__cm_binding__Stdout_write_via_stream"(rx_63);
-    "core:rt/write_string_to_stream"(tx_64, global:inlining_test.wado::__const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-}
-
-fn "inlining_test.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
-=======
-fn "inlining_test.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
->>>>>>> origin/main
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-<<<<<<< HEAD
 fn "inlining_test.wado/$cm_export__run"() {
-    "inlining_test.wado/run"();
-||||||| 3856bdb0b
-fn "inlining_test.wado/__cm_export__run"() {
-    "inlining_test.wado/run"();
-=======
-fn "inlining_test.wado/__cm_export__run"() {
     let handle: i32;
     let packed: i64;
     let rx_25: i32;
     let tx_26: i32;
     rx_25 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_26 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "inlining_test.wado/__cm_binding__Stdout_write_via_stream"(rx_25);
+    handle = "inlining_test.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
     "core:rt/write_string_to_stream"(tx_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("result=42"), used: 9 });
     "wasi/future-drop-readable:transmission-cli"(handle);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

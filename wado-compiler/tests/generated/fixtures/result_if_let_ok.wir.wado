@@ -85,14 +85,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-<<<<<<< HEAD
-global global:core:prelude/primitive.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-||||||| 3856bdb0b
-global global:core:prelude/primitive.wado::__const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-=======
-global global:result_if_let_ok.wado::__const_obj_1: ref null Array<u8> = array.new_fixed<u8>(79, 107, 58, 32);
-global global:core:prelude/primitive.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
->>>>>>> origin/main
+global global:result_if_let_ok.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(79, 107, 58, 32);
+global global:core:prelude/primitive.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "result_if_let_ok.wado/run"() with Stdout {
     let r: ref "core:prelude/types.wado//Result<i32,core:prelude/string.wado/String>";
@@ -112,40 +106,14 @@ fn "result_if_let_ok.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used);
     }
-<<<<<<< HEAD
-    start = $local_2.used;
+    start_18 = $local_2.used;
     $local_2.used = new_used;
-    builtin::array_set_u8($local_2.repr, start, 79);
-    builtin::array_set_u8($local_2.repr, start + 1, 107);
-    builtin::array_set_u8($local_2.repr, start + 2, 58);
-    builtin::array_set_u8($local_2.repr, start + 3, 32);
+    builtin::array_copy<u8>($local_2.repr, start_18, global:result_if_let_ok.wado::$const_obj_1, 0, 4);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(x, $local_2);
-    rx_46 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_47 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "result_if_let_ok.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
-    "core:rt/write_string_to_stream"(tx_47, $local_2);
-||||||| 3856bdb0b
-    start = __local_2.used;
-    __local_2.used = new_used;
-    builtin::array_set_u8(__local_2.repr, start, 79);
-    builtin::array_set_u8(__local_2.repr, start + 1, 107);
-    builtin::array_set_u8(__local_2.repr, start + 2, 58);
-    builtin::array_set_u8(__local_2.repr, start + 3, 32);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(x, __local_2);
-    rx_46 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_47 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_46);
-    "core:rt/write_string_to_stream"(tx_47, __local_2);
-=======
-    start_18 = __local_2.used;
-    __local_2.used = new_used;
-    builtin::array_copy<u8>(__local_2.repr, start_18, global:result_if_let_ok.wado::__const_obj_1, 0, 4);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(x, __local_2);
     rx_26 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_27 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "result_if_let_ok.wado/__cm_binding__Stdout_write_via_stream"(rx_26);
-    "core:rt/write_string_to_stream"(tx_27, __local_2);
->>>>>>> origin/main
+    handle = "result_if_let_ok.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
+    "core:rt/write_string_to_stream"(tx_27, $local_2);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -274,28 +242,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
-<<<<<<< HEAD
-        l4: loop {
-            $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b5: block {
-                l6: loop {
-                    break_if b5 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
-||||||| 3856bdb0b
-        l4: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b5: block {
-                l6: loop {
-                    break_if b5 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
-=======
         l23: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
                 l25: loop {
                     break_if b24 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
->>>>>>> origin/main
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l25;
                 };
@@ -347,48 +299,8 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let i: i32;
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
-<<<<<<< HEAD
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break $inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t_9 = abs_val;
-        b12: block {
-            l13: loop {
-                break_if b12 t_9 <=u 0_i64;
-                n = n + 1;
-                t_9 = t_9 /u 10_i64;
-                continue l13;
-            };
-        };
-        break $inline_count_digits_u64_1: n;
-    };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_3, digit_count_4);
-||||||| 3856bdb0b
-    abs_val = select i64(val_6 < 0_i64, 0_i64 - val_6, val_6);
-    digit_count_4 = $inline_count_digits_u64_1: block -> i32 {
-        if abs_val == 0_i64 {
-            break $inline_count_digits_u64_1: 1;
-        }
-        n = 0;
-        t_9 = abs_val;
-        b12: block {
-            l13: loop {
-                break_if b12 t_9 <=u 0_i64;
-                n = n + 1;
-                t_9 = t_9 /u 10_i64;
-                continue l13;
-            };
-        };
-        break $inline_count_digits_u64_1: n;
-    };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_3, digit_count_4);
-=======
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count_4);
->>>>>>> origin/main
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
