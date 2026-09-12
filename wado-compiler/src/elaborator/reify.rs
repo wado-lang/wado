@@ -7639,7 +7639,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &mut args,
                 &dispatch.param_defaults,
                 &dispatch.param_types,
-                &[],
                 &callee_module,
                 static_call.span,
                 ctx,
@@ -7764,7 +7763,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             args,
             &dispatch.param_defaults,
             &dispatch.param_types,
-            &[],
             &module,
             span,
             ctx,
@@ -7793,7 +7791,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             args,
             &func_params,
             param_types,
-            &[],
             callee_module,
             callee.span(),
             ctx,
@@ -7804,14 +7801,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the call omitted. `func_params` is the callee's `(name, default)` list in
     /// declaration order, `callee_module` its defining module (for the
     /// perspective swap), and `call_span` the call site (for location literals).
-    /// An absent `param_types` / `param_is_mut` entry means no expected type and
-    /// a by-value argument.
+    /// An absent `param_types` entry means no expected type.
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<CallArg>,
         func_params: &[(String, Option<ast::Expr>)],
         param_types: &[tir::TypeId],
-        param_is_mut: &[bool],
         callee_module: &ModuleSource,
         call_span: Span,
         ctx: &mut FunctionContext,
@@ -7881,8 +7876,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
-            let is_mut = param_is_mut.get(i).copied().unwrap_or(false);
-            args.push(CallArg::new(resolved, is_mut));
+            // `CallArg::is_mut` says the callee may write the caller's storage
+            // through this slot. A default is a value synthesized here, so
+            // there is no caller storage behind it.
+            args.push(CallArg::new(resolved, false));
         }
 
         if let Some((src, items, sem)) = saved {
@@ -8756,22 +8753,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Pad missing trailing args with the method's defaults, standing in the
         // module that declared them — the same walk the free-function path takes.
-        let method_params: Vec<(String, Option<ast::Expr>)> = dispatch
-            .param_defaults
-            .iter()
-            .enumerate()
-            .map(|(i, d)| {
-                (
-                    dispatch.param_names.get(i).cloned().unwrap_or_default(),
-                    d.clone(),
-                )
-            })
-            .collect();
         self.reify_apply_param_defaults(
             &mut args,
-            &method_params,
+            &dispatch.param_defaults,
             &[],
-            &dispatch.param_is_mut,
             &dispatch.defaults_module,
             method_call.span,
             ctx,

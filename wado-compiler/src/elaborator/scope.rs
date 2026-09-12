@@ -238,9 +238,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Run `body` with [`Scope::resolving_home`] replaced by
-    /// `module`. Unlike [`Self::with_self_type`], `None` here is
-    /// a value: it clears the fallback.
+    /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
+    /// [`Self::with_self_type`], `None` here is a value: it returns the walk to
+    /// its own module.
     pub(super) fn with_resolving_home<R>(
         &mut self,
         module: Option<ModuleSource>,

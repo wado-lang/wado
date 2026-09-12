@@ -234,16 +234,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// global becomes an indirect call; any other type gets a clear
     /// not-callable diagnostic instead of "unknown function").
     fn global_var_type(&self, site: ast::AstId, name: &str) -> Option<TypeId> {
-        // `sem.decls` holds the walk's own module, which a travelled expression
-        // is not written in.
-        let home = self.home_module(site);
-        if home != self.current_module_source {
-            return self.global_type_in(name, &home);
-        }
-        self.sem
-            .decls
-            .lookup_global(name, &self.current_module_source)
-            .map(|(_, _, ty, _)| ty)
+        self.global_type_in(name, &self.home_module(site))
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -2117,6 +2108,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee_module: Option<ModuleSource>,
         ctx: &mut FunctionContext,
     ) {
+        // The check below is for a default that resolved to `()` with nothing
+        // reported. One that did report has already said why, so let it stand
+        // rather than replacing its diagnostic with a panic.
+        let errors_before = self.logger.error_count();
         self.fill_trailing_defaults(
             args,
             param_types,
@@ -2129,10 +2124,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
                     && expected_type != TypeTable::UNKNOWN
+                    && s.logger.error_count() == errors_before
                 {
                     let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
+                    let name = &defaults[i].0;
                     panic!(
-                        "compiler bug: default expression for parameter {i} \
+                        "compiler bug: default expression for parameter '{name}' \
                          re-resolved to () at call site but parameter expects '{expected_name}'. \
                          Likely cause: the default references callee-only scope \
                          (e.g. a callee type parameter like `T::default()`) that is \

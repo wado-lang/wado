@@ -683,13 +683,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| inherent_impl_module.clone())
             .unwrap_or_else(|| struct_module.clone());
 
-        // Pad missing trailing args with declared parameter defaults. An
-        // earlier-parameter reference is answered by that parameter's type, as
-        // in the free-function path (`apply_param_defaults`).
-        let defaults: Vec<(String, Option<Expr>)> = param_defaults
+        let defaults: Vec<(String, Option<Expr>)> = param_names
             .iter()
-            .enumerate()
-            .map(|(i, d)| (param_names.get(i).cloned().unwrap_or_default(), d.clone()))
+            .cloned()
+            .zip(param_defaults.iter().cloned())
             .collect();
         self.fill_trailing_defaults(
             &mut args,
@@ -1116,8 +1113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut,
-                param_names,
-                param_defaults,
+                defaults,
                 callee_module,
                 return_type,
                 method_type_args,

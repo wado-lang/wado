@@ -33,11 +33,10 @@ pub(crate) struct MethodDispatch {
     /// Reify zips this with the reified argument exprs to build
     /// [`crate::tir::CallArg`]s with the same `is_mut` shape annotate produced.
     pub(crate) param_is_mut: Vec<bool>,
-    /// Parameter names in declaration order. Used as substitution keys
-    /// when a default references an earlier parameter (`fn f(w, h = w)`).
-    pub(crate) param_names: Vec<String>,
-    /// Per-parameter default expression ASTs (`None` for required).
-    pub(crate) param_defaults: Vec<Option<Expr>>,
+    /// Each parameter's name and default expression, in declaration order;
+    /// `None` for a required parameter. The name is what a later default
+    /// naming this parameter (`fn f(w, h = w)`) is keyed by.
+    pub(crate) param_defaults: Vec<(String, Option<Expr>)>,
     /// The module that wrote `param_defaults`, which is where they resolve.
     /// Reify stands in it while reifying one, as the free-function path does
     /// in `reify_pad_args_with_defaults`: a default naming its own module's

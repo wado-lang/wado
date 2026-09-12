@@ -154,11 +154,20 @@ A default expression resolves its names in the scope of the declaration (the fun
 
 Compile-time literals that read a file follow the declaration too: `#include_str`, `#include_bytes` and `#data` all name the file that wrote them, which is the only file whose paths and `__DATA__` section the loader read.
 
-The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and a default may name an earlier parameter (next section). Naming a parameter means the value the call supplied for it, which the caller wrote in its own scope and may well have read its own locals to build. It does not put the caller's scope inside the default: every other name in the default still resolves at the declaration.
+Two exceptions are deliberate and syntactic, not scoped lookups. Location literals (`#file`/`#line`/`#function`) evaluate at the call site; see the interaction table below. And a default may name an earlier parameter, covered in the next section. That name means the value the call supplied for it. The caller built that value in its own scope, so it may have read its own locals to do so, but nothing else in the default sees the caller: every other name still resolves at the declaration.
 
 The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all.
 
-This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site. Regression fixtures: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default), `field_default_private_callee.wado` and `field_default_namespaced_callee.wado` (a field default's private items and import aliases), `default_arg_namespaced_callee.wado` (a parameter default's), `default_arg_caller_local_not_in_scope.wado` (a caller's locals), and `default_arg_compile_time_literal.wado` (the file-reading literals).
+This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site.
+
+Regression fixtures, by what each pins:
+
+- Variant cases and private types across a module boundary: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default).
+- A field default's private items and import aliases: `field_default_private_callee.wado`, `field_default_namespaced_callee.wado`.
+- A parameter default's import aliases: `default_arg_namespaced_callee.wado`.
+- A caller's locals, which never reach a default: `default_arg_caller_local_not_in_scope.wado`.
+- A method default, resolved where declared rather than where called: `default_arg_xmod_method.wado`.
+- The file-reading literals: `default_arg_compile_time_literal.wado`.
 
 Default expressions may reference earlier parameters in the same function:
 
@@ -526,6 +535,14 @@ let resp = Fetch::fetch(url, init).read();
 - [x] Parameter and struct-field defaults end-to-end (AST / parser / elaborator / TIR / trait propagation / purity check). Covered by the `default_arg_*` and `default_field_*` fixtures in `wado-compiler/tests/fixtures/`.
 - [x] Auto-derive `Default` for all-defaulted non-generic structs. Generic structs are a follow-up.
 - [ ] `wado-from-idl`: emit `= default` instead of `Option<T>` for WebIDL parameters with IDL defaults, and map WebIDL dictionaries to structs with field defaults. Blocked on WebIDL support in `wado-from-idl` itself (currently WIT-only).
+
+## Known gaps
+
+A value default cannot name the callee's own type parameter. `fn info<T: Default>(msg: String, fields: T = T::default())` is rejected with "unknown function `T::default`". A value default is re-resolved at each call site, and the callee's generic parameters are not in scope there. A _type_ parameter's default (`<T, U = T>`) does see them, so the two kinds differ here.
+
+Closing the gap means resolving a value default once per monomorphization instead of once per call site, which is what binds `T` to the concrete argument. Registering the callee's parameters at the call site is not enough on its own: the default would then resolve against `T` as a binder, but nothing downstream puts the call site's concrete type in its place, so the value would be wrong rather than rejected. Whether to do the per-monomorphization work is undecided.
+
+The interaction table says defaults are "monomorphized per call site". That describes the defaults the language accepts today, which are the ones naming no type parameter.
 
 ## See Also
 

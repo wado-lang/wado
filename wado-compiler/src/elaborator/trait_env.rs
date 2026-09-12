@@ -788,9 +788,8 @@ pub struct TraitEnv {
     /// standing in a foreign module's perspective reads them instead of
     /// re-walking its `use` declarations. See [`namespace_imports_of`].
     pub(super) module_namespace_imports: IndexMap<ModuleSource, NamespaceImports>,
-    /// Which module each `AstIdSpace` was parsed from. One module is one space
-    /// (`AstIdSpace`), so this says where any node was written, which is the
-    /// module it resolves in however far its AST has travelled.
+    /// Which module each `AstIdSpace` was parsed from, so any node says where
+    /// it was written — the module it resolves in however far its AST travels.
     ///
     /// Rebuilt per load: a re-parse mints a new space.
     space_modules: IndexMap<ast::AstIdSpace, ModuleSource>,
@@ -915,7 +914,12 @@ impl TraitEnv {
                 module_source.clone(),
                 namespace_imports_of(interner, module, module_source, entry_module, invocations),
             );
-            space_modules.insert(module.ast_id_space(), module_source.clone());
+            let claimed = space_modules.insert(module.ast_id_space(), module_source.clone());
+            assert!(
+                claimed.is_none(),
+                "one module is one `AstIdSpace`, but {module_source} shares one with {}",
+                claimed.expect("just checked")
+            );
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();

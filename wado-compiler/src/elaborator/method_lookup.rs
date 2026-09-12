@@ -3134,8 +3134,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             method_is_ref_impl,
             method_param_is_mut,
-            method_param_names,
-            method_param_defaults,
+            method_param_names
+                .into_iter()
+                .zip(method_param_defaults)
+                .collect(),
             defaults_module
                 .or_else(|| impl_module.clone())
                 .unwrap_or_else(|| self.current_module_source.clone()),

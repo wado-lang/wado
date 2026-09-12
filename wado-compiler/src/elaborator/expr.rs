@@ -884,9 +884,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// The declared type of the global `name` names as written in `home`, for
-    /// a walk standing somewhere else — `sem.decls` answers only for where it
-    /// stands, while the signature tables answer for any module.
+    /// The declared type of the global `name` names as written in `home`. Reads
+    /// the signature tables, which answer for any module, rather than
+    /// `sem.decls`, which answers only for the one the walk stands in.
     pub(super) fn global_type_in(&self, name: &str, home: &ModuleSource) -> Option<TypeId> {
         let (owner, name) = self.declaring_module_of_ident(name, home);
         self.tysys

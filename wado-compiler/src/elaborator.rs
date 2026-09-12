@@ -392,9 +392,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// The module `node` was written in, which is the module it resolves in
-    /// however far its AST has travelled. Each node carries the space it was
-    /// parsed in, so a caller's argument spliced into a default stays the
-    /// caller's. A synthesized node answers with the current module.
+    /// however far its AST has travelled. A synthesized node, carrying no space
+    /// of its own, answers with the current module.
     pub(super) fn home_module(&self, node: ast::AstId) -> ModuleSource {
         self.tysys
             .trait_env
@@ -915,8 +914,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
         param_is_mut: Vec<bool>,
-        param_names: Vec<String>,
-        param_defaults: Vec<Option<ast::Expr>>,
+        param_defaults: Vec<(String, Option<ast::Expr>)>,
         defaults_module: ModuleSource,
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
@@ -932,7 +930,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut,
-                param_names,
                 param_defaults,
                 defaults_module,
                 return_type,
@@ -1677,8 +1674,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::impl_target`] for a receiver written at a reference site, so
-    /// `Type::method` keys to what `Type` names *in the module that wrote it* —
-    /// a default spliced into a same-named caller is where the two come apart.
+    /// `Type::method` keys to what `Type` names *in the module that wrote it*.
+    /// A default taken in a module declaring the same name is where the two
+    /// come apart.
     ///
     /// A binder answers nothing, so `Self::` / `T::` falls through to the
     /// spelling, by then the concrete name the rewrite produced.

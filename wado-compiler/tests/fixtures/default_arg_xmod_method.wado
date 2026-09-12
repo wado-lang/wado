@@ -1,13 +1,11 @@
-// Regression: a method's default expression is written at the declaration and
-// must resolve there, the same as a free function's. Reify swapped module
-// perspective for the free-function path but not the method one, so a method
-// default naming its own module's global was answered in the caller's module
-// instead: a caller declaring that name got its value, and a caller declaring
-// nothing panicked the compiler in `lower::translate`.
+// Regression: a method's default expression resolves where it is declared, the
+// same as a free function's. A method default naming its own module's global
+// used to be answered in the caller's module instead — the caller's value when
+// it spelled the name, a compiler panic when it spelled nothing.
 //
-// The caller's `BASE` is deliberately a different value from the callee's, so
-// resolving at the wrong end is a wrong number rather than a tie. A caller with
-// no `BASE` at all is the `no_base` module next door.
+// The two modules give `BASE` different values on purpose, so answering at the
+// wrong end is a wrong number rather than a tie. `without_base` is the caller
+// that spells it nowhere.
 
 use { Box3 } from "./sub/default_arg_xmod_method_lib.wado";
 use { without_base } from "./sub/default_arg_xmod_method_no_base.wado";
