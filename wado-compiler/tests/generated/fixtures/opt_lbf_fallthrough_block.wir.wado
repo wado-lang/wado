@@ -58,23 +58,23 @@ import fn wasi/task-return from "wasi/task-return";
 global mut global:opt_lbf_fallthrough_block.wado::__const_obj_1: ref null Array<u8> = ref.null none;
 
 fn "opt_lbf_fallthrough_block.wado/run"() with Stdout {
-    let handle_10: i32;
-    let packed_47: i64;
-    let rx_48: i32;
-    let tx_49: i32;
-    let new_repr_67: ref Array<u8>;
+    let handle_9: i32;
+    let packed_27: i64;
+    let rx_28: i32;
+    let tx_29: i32;
+    let new_repr_47: ref Array<u8>;
     if ref.is_null(global:opt_lbf_fallthrough_block.wado::__const_obj_1) {
         global:opt_lbf_fallthrough_block.wado::__const_obj_1 = array.new_data<u8>("OK: 42");
     }
-    rx_48 = builtin::i32_wrap_i64(local.tee packed_47("wasi/stream-new"()));
-    tx_49 = builtin::i32_wrap_i64(packed_47 >> 32_i64);
-    handle_10 = "opt_lbf_fallthrough_block.wado/__cm_binding__Stdout_write_via_stream"(rx_48);
-    new_repr_67 = builtin::array_new<u8>(7);
-    builtin::array_copy<u8>(new_repr_67, 0, global:opt_lbf_fallthrough_block.wado::__const_obj_1, 0, 6);
-    builtin::array_set_u8(new_repr_67, 6, 10);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_49, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr_67, start: 0, end: 7 });
-    "wasi/stream-drop-writable"(tx_49);
-    "wasi/future-drop-readable:transmission-cli"(handle_10);
+    rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
+    tx_29 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
+    handle_9 = "opt_lbf_fallthrough_block.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
+    new_repr_47 = builtin::array_new<u8>(7);
+    builtin::array_copy<u8>(new_repr_47, 0, global:opt_lbf_fallthrough_block.wado::__const_obj_1, 0, 6);
+    builtin::array_set_u8(new_repr_47, 6, 10);
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_29, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr_47, start: 0, end: 7 });
+    "wasi/stream-drop-writable"(tx_29);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
 }
 
 fn "opt_lbf_fallthrough_block.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -14,6 +14,7 @@ use {
     lenient_int_error,
 } from "core:prelude/intparse.wado";
 use { count_digits_u64, write_decimal_digits } from "core:prelude/primitive.wado";
+use { u64_bit_len } from "core:prelude/fpfmt.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
@@ -156,7 +157,7 @@ impl u128 {
     /// float conversions; mirrors compiler-rt's `__floatuntidf`.
     fn round_to_mantissa(&self, mant_bits: i32) -> [u64, i64] {
         assert self.high != 0;
-        let hbits = 64 - builtin::i64_clz(self.high as i64);  // 1..=64
+        let hbits = u64_bit_len(self.high) as i64;  // 1..=64
         // Shift down to mant_bits + 2 bits: the mantissa, a guard bit,
         // and one bit for the rest.
         let shift = hbits + (62 - mant_bits) as i64;
@@ -409,11 +410,7 @@ impl u128 {
         let digit_count = if is_zero {
             1;
         } else {
-            let highest_bit = if self.high != 0 {
-                127 - builtin::i64_clz(self.high as i64) as i32;
-            } else {
-                63 - builtin::i64_clz(self.low as i64) as i32;
-            };
+            let highest_bit = if self.high != 0 { 63 + u64_bit_len(self.high) } else { u64_bit_len(self.low) - 1 };
             highest_bit / bits_per_digit + 1;
         };
 

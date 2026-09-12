@@ -280,12 +280,8 @@ fn compute_function_reachability(
     let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
-    // Optimizer passes (e.g. `nir/string_push`) may *synthesize* new calls
-    // during the optimization loop. Functions those passes call must
-    // survive the early DCE that runs before the loop, otherwise the
-    // synthesis target is gone and the rewrite cannot fire. The virtual
-    // edges are gated by compiler-item markers so each rule names its
-    // canonical pair (`string_push_str` → `string_push_char`, etc.).
+    // A pass may *synthesize* calls during the optimization loop. Their targets
+    // must survive the DCE that runs before it, or the rewrite cannot fire.
     extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
@@ -312,12 +308,8 @@ fn compute_reachable_positions(
         .collect()
 }
 
-/// Add functions that the NIR optimizer's rewrites may *synthesize* calls
-/// to. For now this is a single pair: `nir/string_push` rewrites
-/// `String::push_str("short")` calls into `String::push(c)` calls, so
-/// `String::push` (the function flagged with `string_push_char`) must
-/// survive early DCE whenever the function flagged with `string_push_str`
-/// is reachable.
+/// Add functions the NIR optimizer's rewrites reach without a call edge:
+/// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     descriptors: &[FunctionRef],
@@ -326,17 +318,20 @@ fn extend_reachable_for_optimizer_passes(
 ) {
     use crate::compiler_item::CompilerItem;
 
+<<<<<<< HEAD
     let mut push_str: Option<(FunctionId, FuncId)> = None;
+||||||| 3856bdb0b
+    let mut push_str: Option<(FunctionId, crate::nir::FuncId)> = None;
+=======
+    let mut push_str_id: Option<FunctionId> = None;
+>>>>>>> origin/main
     let mut push_char_id: Option<FunctionId> = None;
     let mut fused: Vec<FunctionId> = Vec::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         match func.compiler_item {
             Some(CompilerItem::StringPushStr) => {
-                push_str = Some((
-                    function_id_for(&func),
-                    func.id.expect("func_id assigned at lower"),
-                ));
+                push_str_id = Some(function_id_for(&func));
             }
             Some(CompilerItem::StringPushChar) => {
                 push_char_id = Some(function_id_for(&func));
@@ -352,25 +347,16 @@ fn extend_reachable_for_optimizer_passes(
             _ => {}
         }
     }
-    // Keep `String::push` reachable only while a `nir/string_push` rewrite could
-    // still fire — it turns a short constant `push_str` into per-byte `push`
-    // calls, so the target must survive the pre-loop DCE. Gating on a surviving
-    // candidate makes the edge self-limiting. The `$value_copy$` half is not
-    // gated: WIR build names those helpers after the final DCE.
-    if let (Some((str_id, str_func_id)), Some(char_id)) = (&push_str, &push_char_id)
-        && reachable.contains(str_id)
-        && !reachable.contains(char_id)
-        && has_short_push_str_candidate(project, *str_func_id)
-    {
-        reachable.extend(compute_reachable(call_graph, char_id));
-    }
-
     // `nir/string_push`'s append fusion writes a run of appends in terms of the
     // four `String` primitives above, so they must survive the pre-loop DCE
     // wherever an append is reachable at all. Ungated beyond that: the fusion
     // reads a run out of a block rather than a single recognisable call, and a
     // later DCE drops the four again when no run fused.
-    if push_str.is_some_and(|(id, _)| reachable.contains(&id))
+    //
+    // `push_ascii_unchecked` needs no root: both rules only recognise it, and
+    // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
+    // place.
+    if push_str_id.is_some_and(|id| reachable.contains(&id))
         || push_char_id.is_some_and(|id| reachable.contains(&id))
     {
         for id in fused {
@@ -437,6 +423,7 @@ fn extend_reachable_for_optimizer_passes(
     }
 }
 
+<<<<<<< HEAD
 /// Whether any function body still holds a `nir/string_push`-rewritable call:
 /// `buf.push_str(&"…")` with a 1..=[`SHORT_PUSH_STR_MAX_LEN`]-byte ASCII
 /// constant literal. This mirrors the match shape of
@@ -492,6 +479,64 @@ fn body_has_short_push_str(body: &Body, push_str_id: FuncId) -> bool {
     .is_some()
 }
 
+||||||| 3856bdb0b
+/// Whether any function body still holds a `nir/string_push`-rewritable call:
+/// `buf.push_str(&"…")` with a 1..=[`SHORT_PUSH_STR_MAX_LEN`]-byte ASCII
+/// constant literal. This mirrors the match shape of
+/// `optimize::string_push::try_split_stmt` (minus its receiver-duplicability
+/// refinement, which only ever narrows the set — so this stays a sound
+/// superset that never drops `push_char` while a rewrite could still fire).
+/// The pre-loop DCE sees such candidates; the final DCE, after the loop has
+/// consumed them, sees none — which is what gates the `String::push` virtual
+/// root to the invocation that needs it.
+fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::FuncId) -> bool {
+    project.functions.iter().any(|func_rc| {
+        let func = func_rc.borrow();
+        func.body
+            .as_ref()
+            .is_some_and(|body| body_has_short_push_str(body, push_str_id))
+    })
+}
+
+/// Byte-length ceiling for a `push_str` literal the `nir/string_push` rule
+/// expands. Must stay in sync with `string_push::MAX_SHORT_PUSH_STR_LEN`; a
+/// value at least as large keeps [`has_short_push_str_candidate`] a sound gate
+/// (an over-estimate only risks a little residual bloat, never a dropped
+/// rewrite target).
+const SHORT_PUSH_STR_MAX_LEN: usize = 8;
+
+fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
+    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
+        if let NodeRef::Expr(e) = node
+            && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
+            && func_id == push_str_id
+            && args.len() == 1
+            && let Some(arg) = args[0].expr.as_expr()
+            && let ExprKind::Unary {
+                op: crate::nir::NirUnaryOp::Ref,
+                expr: inner,
+            } = &body.exprs[arg].kind
+            && let Some(inner_e) = inner.as_expr()
+            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner_e].kind
+            && let Some(repr) = fields
+                .iter()
+                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
+                .map(|f| f.value)
+            && let Some(repr_e) = repr.as_expr()
+            && let ExprKind::PackedArray(bytes) = &body.exprs[repr_e].kind
+            && !bytes.is_empty()
+            && bytes.len() <= SHORT_PUSH_STR_MAX_LEN
+            && bytes.is_ascii()
+        {
+            return Some(());
+        }
+        None
+    })
+    .is_some()
+}
+
+=======
+>>>>>>> origin/main
 /// Walk `block`'s expression tree and collect every `T` such that
 /// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$` helper has to survive DCE because

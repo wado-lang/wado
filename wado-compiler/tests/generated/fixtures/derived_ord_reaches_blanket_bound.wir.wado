@@ -127,6 +127,8 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:derived_ord_reaches_blanket_bound.wado::__const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
+
 fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     let p_2: ref "derived_ord_reaches_blanket_bound.wado//P";
     let __cond_3: bool;
@@ -141,13 +143,13 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
     let self_31: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/P>";
     let self_32: bool;
     let new_used: i32;
-    let start_40: i32;
-    let f_50: ref "core:prelude/format.wado//Formatter";
-    let self_51: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>";
-    let self_54: bool;
+    let start_42: i32;
+    let f_46: ref "core:prelude/format.wado//Formatter";
+    let self_47: ref "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>";
+    let self_50: bool;
     let packed: i64;
-    let rx_57: i32;
-    let tx_58: i32;
+    let rx_53: i32;
+    let tx_54: i32;
     let __sroa_xs_repr: ref "Array<derived_ord_reaches_blanket_bound.wado/P>";
     let __sroa_cs_repr: ref "Array<derived_ord_reaches_blanket_bound.wado/Color>";
     __sroa_xs_repr = array.new_fixed<ref "derived_ord_reaches_blanket_bound.wado//P">(struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 1 }, struct.new "derived_ord_reaches_blanket_bound.wado//P" { n: 3 });
@@ -198,25 +200,25 @@ fn "derived_ord_reaches_blanket_bound.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_10, new_used);
     }
-    start_40 = __local_10.used;
+    start_42 = __local_10.used;
     __local_10.used = new_used;
-    builtin::array_set_u8(__local_10.repr, start_40, 32);
+    builtin::array_copy<u8>(__local_10.repr, start_42, global:derived_ord_reaches_blanket_bound.wado::__const_obj_1, 0, 1);
     __local_11 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_10 };
-    f_50 = __local_11;
-    self_51 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: __sroa_cs_repr, index: 0, end: 2 };
+    f_46 = __local_11;
+    self_47 = struct.new "core:prelude/slice.wado//SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>" { repr: __sroa_cs_repr, index: 0, end: 2 };
     let __vr_13_mv_0: i32;
     let __vr_13_mv_1: "derived_ord_reaches_blanket_bound.wado//enum:Color";
-    multivalue_bind [__vr_13_mv_0, __vr_13_mv_1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$__Closure_2"(self_51);
-    self_54 = __vr_13_mv_0 == 0;
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_50, (if self_54 -> ref "core:prelude/string.wado//String" {
+    multivalue_bind [__vr_13_mv_0, __vr_13_mv_1] = "derived_ord_reaches_blanket_bound.wado/core:prelude/slice.wado/SliceValueIter<derived_ord_reaches_blanket_bound.wado/Color>^core:prelude/traits.wado/Iterator::min_by$__Closure_2"(self_47);
+    self_50 = __vr_13_mv_0 == 0;
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad"(f_46, (if self_50 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     }));
-    rx_57 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_58 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "derived_ord_reaches_blanket_bound.wado/__cm_binding__Stdout_write_via_stream"(rx_57);
-    "core:rt/write_string_to_stream"(tx_58, __local_10);
+    rx_53 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_54 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "derived_ord_reaches_blanket_bound.wado/__cm_binding__Stdout_write_via_stream"(rx_53);
+    "core:rt/write_string_to_stream"(tx_54, __local_10);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

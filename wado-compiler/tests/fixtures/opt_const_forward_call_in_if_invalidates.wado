@@ -3,9 +3,9 @@
 // that local's field facts: `a.len()` is 5 or 6 depending on `c` and
 // must not fold to the pre-branch constant 5.
 //
-// Lengths are >= 5 so the not-expected constants don't collide with the
-// UTF-8 byte-length returns (1-4) of the string encoder that `println`'s
-// formatting pulls into the WIR.
+// `black_box` keeps CTFE from running `f` on a constant and erasing it, and
+// `wir_scope` holds the patterns to `f`, so a bare `return 5;` elsewhere in
+// the whole-program dump cannot answer for the code under test.
 
 use { println, Stdout } from "core:cli";
 
@@ -24,12 +24,13 @@ fn f(c: bool) -> i32 {
 }
 
 export fn run() with Stdout {
-    println(`${f(false)} ${f(true)}`);
+    println(`${f(builtin::black_box(false))} ${f(builtin::black_box(true))}`);
 }
 
 __DATA__
 {
     "stdout": "5 6\n",
+    "wir_scope": "opt_const_forward_call_in_if_invalidates.wado/f",
     "wir_not_expect:O2": [
         "return 5;",
         "return 6;"

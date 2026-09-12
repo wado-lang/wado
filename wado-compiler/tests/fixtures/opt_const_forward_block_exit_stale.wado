@@ -4,9 +4,9 @@
 // survive the block: `a.len()` below is 5 when `c` breaks early and 6
 // otherwise, and must not fold to either constant.
 //
-// Lengths are >= 5 so the not-expected constants don't collide with the
-// UTF-8 byte-length returns (1-4) of the string encoder that `println`'s
-// formatting pulls into the WIR.
+// `wir_scope` holds the patterns to `f`. The whole-program dump carries a bare
+// `return 5;` in the string encoder and another in the decimal-digit counter,
+// and neither can answer for the code under test.
 
 use { println, Stdout } from "core:cli";
 
@@ -29,6 +29,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "5 6\n",
+    "wir_scope": "opt_const_forward_block_exit_stale.wado/f",
     "wir_not_expect:O2": [
         "return 6;",
         "return 5;"
