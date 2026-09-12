@@ -28,7 +28,9 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
             exit_error();
         },
     };
-    let files = match collect_files(&cli.paths) {
+    // No path argument walks the whole preopened tree, which is the root path.
+    let roots: List<String> = if cli.paths.is_empty() { [""] } else { cli.paths };
+    let files = match resolve_paths(&roots) {
         Ok(f) => f,
         Err(e) => {
             eprintln(`marl-format: cannot read directory ${e}`);
@@ -70,17 +72,6 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
 }
 
-/// Every `*.md` file to format: the whole tree when the command line names no
-/// path, and what each argument resolves to otherwise.
-fn collect_files(paths: &List<String>) -> Result<List<String>, fs::FsError> with Preopens {
-    if paths.is_empty() {
-        let mut all = collect_md_files(&"")?;
-        all.sort();
-        return Result::Ok(all);
-    }
-    return resolve_paths(paths);
-}
-
 /// Recursively collects `*.md` files under `dir`, skipping `EXCLUDED_DIRS`.
 /// `dir` is the path from the preopened root, empty at the root itself.
 fn collect_md_files(dir: &String) -> Result<List<String>, fs::FsError> with Preopens {
@@ -110,7 +101,7 @@ fn is_excluded_dir(name: &String) -> bool {
 }
 
 fn join_path(prefix: &String, name: &String) -> String {
-    if prefix.len() == 0 {
+    if prefix.is_empty() {
         return *name;
     }
     return `${prefix}/${name}`;
@@ -149,7 +140,7 @@ fn unique_sorted(items: List<String>) -> List<String> {
 
 test "a directory that cannot be walked fails the collection" {
     let paths: List<String> = ["no-such-directory"];
-    assert collect_files(&paths).is_err();
+    assert resolve_paths(&paths).is_err();
 }
 
 test "unique_sorted removes duplicates and sorts" {

@@ -201,24 +201,31 @@ pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
             prefix.push('/');
         }
         prefix.push_str(&component);
-        if let Err(e) = dir.create_directory_at(prefix).wait() {
-            if !e matches { Exist } {
-                return Result::Err(failure(&prefix, e));
-            }
-            // `Exist` says something is at the path, not that it is the
-            // directory the path names.
-            let found = match dir.stat_at(PathFlags::none(), prefix).wait() {
-                Ok(stat) => stat.type,
-                Err(e) => {
-                    return Result::Err(failure(&prefix, e));
-                },
-            };
-            if !found matches { Directory } {
-                return Result::Err(failure(&prefix, ErrorCode::NotDirectory));
-            }
-        }
+        create_dir(&dir, &prefix)?;
     }
     return Result::Ok(());
+}
+
+/// Create the directory `path` names under `dir`. One already there is not a
+/// failure, and anything else there is `NotDirectory`.
+fn create_dir(dir: &Descriptor, path: &String) -> Result<(), FsError> {
+    let Err(e) = dir.create_directory_at(*path).wait() else {
+        return Result::Ok(());
+    };
+    if !e matches { Exist } {
+        return Result::Err(failure(path, e));
+    }
+    // `Exist` says something is at the path, not that it is a directory.
+    let found = match dir.stat_at(PathFlags::none(), *path).wait() {
+        Ok(stat) => stat.type,
+        Err(e) => {
+            return Result::Err(failure(path, e));
+        },
+    };
+    if found matches { Directory } {
+        return Result::Ok(());
+    }
+    return Result::Err(failure(path, ErrorCode::NotDirectory));
 }
 
 fn open_dir(path: &String) -> Result<Descriptor, FsError> with Preopens {

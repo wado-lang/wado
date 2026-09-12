@@ -1504,8 +1504,8 @@ for let entry of fs::read_dir(&"src")? {           // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }
 }
 
-if let Err(e) = fs::read(&"icon.png") {
-    eprintln(`error: ${e}`);            // "icon.png: no such file or directory"
+if let Err(e) = fs::read_to_string(&"missing.txt") {
+    eprintln(`error: ${e}`);            // "missing.txt: no such file or directory"
 }
 
 let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem does

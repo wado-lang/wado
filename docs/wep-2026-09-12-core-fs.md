@@ -20,12 +20,11 @@ The last row is a bug rather than verbosity. `read_via_stream` returns a stream
 and a future, and the future is where a mid-read I/O error is reported. 22 of
 the 27 call sites drop it, so a failed read there is a short file rather than an
 error. The issue reports this for `--paths-from`, where one package fixed it and
-the other could not share the fix. Only the five sites that happened to get it
-right are fixed.
+the other could not share the fix.
 
-So the module is not sugar. It is the one place that can know which of the four
-values (`file`, `rx`, `tx`, `sub`) owes a `drop()`, and that a completion future
-has to be read.
+So the module is not sugar. It is the one place that knows which of a
+transfer's handles owes a `drop()`, and that its completion future has to be
+read.
 
 ## Decision
 
@@ -49,11 +48,11 @@ pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens;
 ### Paths, not descriptors
 
 Every one of the 24 sites resolves against the first preopened directory, so
-that is the default and the descriptor leaves the signatures. A path is
-resolved by the host from that descriptor, which already accepts multiple
-components (`scripts/rust-inline-paths.json` is an existing call), so a
-recursive directory walk needs no descriptor either: `read_dir("a/b")` is what
-`open_dir` + `read_directory` was.
+that is the default and the descriptor leaves the signatures. The host resolves
+a path from that descriptor, and a path may name several components;
+`scripts/rust-inline-paths.json` is a call the repository already makes. A
+recursive walk therefore needs no descriptor either: `read_dir("a/b")` replaces
+`open_dir` followed by `read_directory`.
 
 The empty path and `"."` name the preopen itself, so a walk has a root case. An
 absolute path resolves against no preopen and fails. The host answers that for
@@ -90,11 +89,11 @@ A kind earns its name by a branch that exists: `NoPreopen` is reported at 7
 sites, `NotFound` is what a tool distinguishes from a real fault, and `NotUtf8`
 has no `ErrorCode` at all because it is not an I/O failure. Everything else
 stays `Io(ErrorCode)`, which loses nothing: the code is the one WASI gave.
-`create_dir_all` swallows `Exist` itself, which is why `AlreadyExists` is not a
-kind.
+`create_dir_all` settles `Exist` itself, either as the directory it asked for or
+as `NotDirectory`, which is why `AlreadyExists` is not a kind.
 
 `impl Display for FsError` renders `path: message`, so a caller writes
-`eprintln(`error: ${e}`)` and gets what it used to spell out.
+`eprintln(`error: ${e}`)` and the message names the file.
 
 ### Effects stay `Preopens`
 
@@ -108,22 +107,22 @@ changing their signatures.
 
 ### Whole files only
 
-`read` buffers, `write` creates-truncates-and-closes. `read` also checks that
-the path names a regular file. `read_via_stream` traps on anything else, which
-aborts the program instead of returning the `Result` the signature promises.
-Every other operation states what it expects in its open flags, so the host
-makes that check.
+`read` buffers the whole file, and `write` creates or truncates one and closes
+it. `read` also checks that the path names a regular file, because
+`read_via_stream` traps on anything else, and a trap aborts the program instead
+of returning the `Result` the signature promises. Every other operation states
+what it expects in its open flags, so the host makes that check.
 
-Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read stream straight to
-stdout and never holds the file in memory. This module would break that shape
-rather than shorten it, so the example keeps its raw WASI code on purpose, as
-the worked case of the boundary.
+Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read
+stream straight to stdout and never holds the file in memory. This module would
+break that shape rather than shorten it, so the example keeps its raw WASI code
+on purpose.
 
 `write` takes any `AsByteSlice` (`String`, `ByteList`, `ByteSlice`,
 `ByteArray`), so text and bytes are one function. It writes through
 `write_raw_all`, which hands the CM lowering a view instead of copying the
-buffer first. That copy is the `content.bytes().collect()` every current writer
-pays for.
+buffer first. A writer that calls `content.bytes().collect()` pays for that
+copy.
 
 Deliberately absent: append, rename, symlink, `remove_dir`, metadata / `stat`,
 file times, permissions, random access, and reading a file that does not fit in
@@ -169,6 +168,9 @@ caller in the repository needs them, not because they would not fit.
   effect (`docs/spec.md`, "Beyond a name, parameters and a return type, an
   operation declares nothing else"), after which these functions become the
   defaults of an `interface FileSystem`.
+- A symlink is not followed: every path opens with `PathFlags::none()`, so
+  reading one fails with `Loop`. Closing it means passing `SymlinkFollow` and
+  deciding what a link that points out of the preopen does.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Closing it means a message
   per `ErrorCode`, which is 40 strings for the codes no caller branches on.
