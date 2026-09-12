@@ -251,10 +251,10 @@ impl WorldRegistry {
         Self::default()
     }
 
-    /// Register a world from a parsed declaration, keyed by the `#[cm("…")]`
-    /// fully-qualified name or, failing that, the `PascalCase` name. The
-    /// `lookup_interface_*` callbacks resolve an `export Foo;` / `import Foo;`
-    /// to its CM FQ; `None` skips the entry.
+    /// Register a world from a parsed declaration, keyed by its `#[cm("…")]`
+    /// fully-qualified name, or failing that its `PascalCase` name. An
+    /// `import Foo;` that `lookup_interface_import` leaves unresolved keeps its
+    /// entry, with no CM FQ.
     pub fn register(
         &mut self,
         world: &WorldDecl,
