@@ -15,6 +15,7 @@ use wado_compiler::wit_emit::{self, WitEmitOptions, WitEmitSnapshot, WitScope};
 use crate::args::{self, CliExit, OptSpec};
 use crate::compile::{
     announce_artifact, attach_manifest_and_component_deps, load_nearest_manifest,
+    maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::manifest::{self, EntryPointKind};
@@ -219,7 +220,7 @@ async fn run_generators(
     host: &FilesystemCompilerHost,
     manifest_pair: Option<manifest::ProjectManifest>,
 ) -> Result<wado_compiler::kiln::InvocationIndex, CliExit> {
-    crate::compile::maybe_run_pipeline(entry_file, host, false, manifest_pair)
+    maybe_run_pipeline(entry_file, host, false, manifest_pair)
         .await
         .map(|outcome| outcome.invocations)
         .map_err(|e| CliExit::error(format!("wado wit: running kiln generators: {e}")))
@@ -292,7 +293,7 @@ fn wir_imports(wir_package: Option<wado_compiler::wir::WirPackage>) -> Vec<Strin
 /// The default interface name: the manifest `[package].name` when the input
 /// resolves through a project, otherwise the entry file stem.
 pub(crate) fn default_interface_name(input: &str) -> String {
-    if let Some(project) = crate::compile::load_nearest_manifest(Path::new(input))
+    if let Some(project) = load_nearest_manifest(Path::new(input))
         && let Some(package) = project.manifest.package
     {
         return package.name;

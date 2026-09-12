@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{Position, Range};
+use crate::{Diagnostic, Position, Range};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextDocumentIdentifier {
@@ -110,7 +110,7 @@ pub struct SemanticTokens {
 #[serde(rename_all = "camelCase")]
 pub struct PublishDiagnosticsParams {
     pub uri: String,
-    pub diagnostics: Vec<crate::Diagnostic>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize)]

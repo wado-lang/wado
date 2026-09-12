@@ -7,6 +7,7 @@
 
 use std::path::Path;
 
+use crate::common::{compile_source_with_compiler_options, run_wasm, wir_text};
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// The archetype: a hot append whose growth arm carries several calls and a
@@ -90,7 +91,7 @@ export fn run() {
 const PATH: &str = "cold_outline_test.wado";
 
 fn wir_of(source: &str, opt_level: OptLevel) -> String {
-    crate::common::wir_text(Path::new(PATH), source, opt_level)
+    wir_text(Path::new(PATH), source, opt_level)
 }
 
 /// The assertions inside `source` hold at every level, split or not — which is
@@ -101,11 +102,10 @@ fn runs_at_every_level(source: &str) {
             opt_level,
             ..Default::default()
         };
-        let wasm =
-            crate::common::compile_source_with_compiler_options(Path::new(PATH), source, options)
-                .expect("compilation should succeed")
-                .wasm;
-        crate::common::run_wasm(wasm).unwrap_or_else(|e| panic!("{opt_level:?} should run: {e}"));
+        let wasm = compile_source_with_compiler_options(Path::new(PATH), source, options)
+            .expect("compilation should succeed")
+            .wasm;
+        run_wasm(wasm).unwrap_or_else(|e| panic!("{opt_level:?} should run: {e}"));
     }
 }
 

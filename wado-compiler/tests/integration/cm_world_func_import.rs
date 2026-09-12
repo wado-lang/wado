@@ -7,6 +7,7 @@
 //!
 //! See `docs/wep-2026-06-26-wasm-cm-component-import.md` (Phase 9).
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -27,10 +28,9 @@ export fn go(source: String) -> String {
         lib_world: Some("test:consumer/consumer@0.1.0".to_string()),
         ..Default::default()
     };
-    let composed =
-        crate::common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
-            .expect("consumer imports a world-level function export and composes it in")
-            .wasm;
+    let composed = compile_source_with_compiler_options(Path::new(path), consumer_src, options)
+        .expect("consumer imports a world-level function export and composes it in")
+        .wasm;
 
     // The dependency is composed in, so the world-level function is no longer imported.
     let decoded = wit_component::decode(&composed).expect("decode composed");
@@ -88,10 +88,9 @@ export fn go(source: String) -> String {
         lib_world: Some("test:consumer/consumer@0.1.0".to_string()),
         ..Default::default()
     };
-    let composed =
-        crate::common::compile_source_with_compiler_options(Path::new(path), consumer_src, options)
-            .expect("multi-word world-level function composes")
-            .wasm;
+    let composed = compile_source_with_compiler_options(Path::new(path), consumer_src, options)
+        .expect("multi-word world-level function composes")
+        .wasm;
 
     let decoded = wit_component::decode(&composed).expect("decode composed");
     let wit_component::DecodedWasm::Component(resolve, world) = decoded else {

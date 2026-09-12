@@ -5,11 +5,14 @@
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind, TirField, TirLocal, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId, TypeTable,
+    MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField, TirFunction,
+    TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TypeTable,
 };
 use crate::token::Span;
 
@@ -40,7 +43,7 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
     let box_module_source = flat
         .type_table
         .borrow()
-        .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
+        .compiler_struct_module(CompilerItem::Box)
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let mut builder = TypeBuilder::new(box_module_source);
@@ -80,7 +83,7 @@ pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize
     }
 }
 
-fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
+fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
     let address_taken = func.address_taken_locals.clone();
     let param_count = u32::try_from(func.params.len()).unwrap();
 
@@ -98,10 +101,10 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
             func.locals.push(TirLocal {
-                name: format!("__boxed_param_{local_idx}"),
+                name: format!("$boxed_param_{local_idx}"),
                 type_id: box_type_id,
                 is_mut: false,
-                span: crate::token::Span::default(),
+                span: Span::default(),
             });
             effective_address_taken.swap_remove(&local_idx);
             effective_address_taken.insert(shadow_idx);
@@ -151,7 +154,7 @@ fn shadow_one_function(func: &mut crate::tir::TirFunction, plan: &BoxPlan, type_
             );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("__boxed_param_{param_idx}"),
+                    name: format!("$boxed_param_{param_idx}"),
                     local_index: *shadow_idx,
                     is_mut: false,
                     is_reactive: false,
@@ -241,9 +244,9 @@ impl TypeBuilder {
         let struct_name = mangle_generic_name("Box", &[inner_name]);
 
         // Register under the Box definition's module source (from #[compiler_item("box")]).
-        let head = crate::tir::StructDef::Decl(
+        let head = StructDef::Decl(
             type_table
-                .compiler_item_def(crate::compiler_item::CompilerItem::Box)
+                .compiler_item_def(CompilerItem::Box)
                 .expect("the `Box` compiler item is declared"),
         );
         let struct_type_id =
@@ -255,7 +258,7 @@ impl TypeBuilder {
             type_args: vec![inner_type_id],
             name: struct_name,
             module_source: self.box_module_source.clone(),
-            visibility: crate::ast::Visibility::Public,
+            visibility: Visibility::Public,
             type_params: Vec::new(),
             monomorph_info: Some(MonomorphInfo {
                 generic_name: "Box".to_string(),
@@ -265,7 +268,7 @@ impl TypeBuilder {
             }),
             fields: vec![TirField {
                 name: "value".to_string(),
-                visibility: crate::ast::Visibility::Private,
+                visibility: Visibility::Private,
                 type_id: inner_type_id,
                 index: 0,
                 span: Span::new(0, 0, 0, 0),
@@ -505,7 +508,7 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         TirExprKind::LabeledBlock { block, .. } => remap_locals_in_block(block, remap),
         TirExprKind::TemplateString { parts } => {
             for part in parts {
-                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                if let TirTemplatePart::Interpolation { expr, .. } = part {
                     remap_locals_in_expr(expr, remap);
                 }
             }

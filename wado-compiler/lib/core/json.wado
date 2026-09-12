@@ -328,10 +328,14 @@ impl SerializeMap for JsonMapSerializer {
     }
 }
 
-/// Writes `"name":`, preceded by `,` when the struct already has a field.
+/// Writes `"name":`, preceded by `,` when the struct already has a field. Each
+/// arm repeats the tail so it stays one append run, which fuses to one check.
 fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     if count > 0 {
-        buf.push(',');
+        buf.push_str(&",\"");
+        buf.push_str(name);
+        buf.push_str(&"\":");
+        return;
     }
     buf.push('"');
     buf.push_str(name);
@@ -346,7 +350,8 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
     buf.push(':');
 }
 
-/// The indented twins, on the same split so a constant key folds there too.
+/// The indented twins, on the same plain/escaping split so a constant key folds
+/// here too.
 fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
     if count > 0 {
         buf.push(',');
@@ -834,17 +839,18 @@ fn scanned_to_f64(n: &ScannedNumber) -> f64 {
     return if n.neg { -v } else { v };
 }
 
-/// True when `b` is one of JSON's four whitespace bytes.
-///
-/// Every call site reads `b > b' ' || !is_json_ws(b)`: `' '` is the widest of
-/// the four, so that leading compare settles the common case — a structural
-/// byte, the run is over — without the shift, and it is what keeps `b` under
-/// 64. Making the function stand alone instead costs json-catalog deserialize
-/// 6% as `b < 64 &&` and 19% as four compares; the assert costs nothing.
+/// True when `b` is one of JSON's four whitespace bytes. `json_ws_end` is the
+/// only caller, and the `b > b' '` it tests first is what bounds `b` here.
 fn is_json_ws(b: i32) -> bool {
     assert b < 64;
     let ws_set = 1 as u64 << b' ' | 1 as u64 << b'\t' | 1 as u64 << b'\n' | 1 as u64 << b'\r';
     return ws_set >> b as u64 & 1 != 0;
+}
+
+/// Whether a whitespace scan stops on `b`. Testing the space first wins on
+/// indented input and loses on minified (`dead-ends.md`).
+fn json_ws_end(b: i32) -> bool {
+    return b != b' ' && (b > b' ' || !is_json_ws(b));
 }
 
 /// The decimal value of `b`, or a value above 9 when `b` is not a digit —
@@ -852,6 +858,13 @@ fn is_json_ws(b: i32) -> bool {
 fn digit_value(b: i32) -> u32 {
     return (b - b'0') as u32;
 }
+
+/// The most decimal digits that fit an i64 whatever they are, so a fold over
+/// that many needs no overflow check.
+global I64_SAFE_DIGITS: i32 = 18;
+
+// The three digit-accumulating loops below are deliberately not shared: the
+// body is a loop, so the inliner declines the call (`dead-ends.md`).
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
 /// needs the float-based integer fallback.
@@ -975,14 +988,26 @@ impl JsonDeserializer {
     /// the input costs another bounds check and load.
     pub fn peek_after_whitespace(&mut self) -> i32 {
         let pos = self.pos;
-        if pos >= self.input.len() {
+        let len = self.input.len();
+        if pos >= len {
             return -1;
         }
         let b = self.input.get_unchecked(pos) as i32;
-        if b > b' ' || !is_json_ws(b) {
+        if json_ws_end(b) {
             return b;
         }
-        return self.peek_after_whitespace_run(pos + 1);
+        if pos + 1 >= len {
+            self.pos = len;
+            return -1;
+        }
+        // A lone space separates a key from its value, a large share of the
+        // runs on indented input. Settling it here spares the call.
+        let next = self.input.get_unchecked(pos + 1) as i32;
+        if json_ws_end(next) {
+            self.pos = pos + 1;
+            return next;
+        }
+        return self.peek_after_whitespace_run(pos + 2);
     }
 
     /// `peek_after_whitespace` once the byte under `pos` is known to be
@@ -1000,19 +1025,19 @@ impl JsonDeserializer {
             let b1 = self.input.get_unchecked(pos + 1) as i32;
             let b2 = self.input.get_unchecked(pos + 2) as i32;
             let b3 = self.input.get_unchecked(pos + 3) as i32;
-            if b0 > b' ' || !is_json_ws(b0) {
+            if json_ws_end(b0) {
                 self.pos = pos;
                 return b0;
             }
-            if b1 > b' ' || !is_json_ws(b1) {
+            if json_ws_end(b1) {
                 self.pos = pos + 1;
                 return b1;
             }
-            if b2 > b' ' || !is_json_ws(b2) {
+            if json_ws_end(b2) {
                 self.pos = pos + 2;
                 return b2;
             }
-            if b3 > b' ' || !is_json_ws(b3) {
+            if json_ws_end(b3) {
                 self.pos = pos + 3;
                 return b3;
             }
@@ -1020,7 +1045,7 @@ impl JsonDeserializer {
         }
         while pos < len {
             let b = self.input.get_unchecked(pos) as i32;
-            if b > b' ' || !is_json_ws(b) {
+            if json_ws_end(b) {
                 self.pos = pos;
                 return b;
             }
@@ -1425,7 +1450,6 @@ impl JsonDeserializer {
         // Integer part, in three runs so the accumulating loop carries neither
         // a significance test nor a budget test per digit: leading zeros, the
         // digits that fit the mantissa budget, then the ones past it.
-        let mut digits: u64 = 0;
         let zeros_start = pos;
         if first == b'0' {
             while pos < len && input.get_unchecked(pos) as i32 == b'0' {
@@ -1438,6 +1462,7 @@ impl JsonDeserializer {
         if cap > len {
             cap = len;
         }
+        let mut digits: u64 = 0;
         while pos < cap {
             let d = digit_value(input.get_unchecked(pos) as i32);
             if d > 9 {
@@ -1579,6 +1604,51 @@ impl JsonDeserializer {
     }
 
     fn parse_i64_with_lead(&mut self, lead: i32) -> Result<i64, DeserializeError> {
+        fast: {
+            // A plain integer that cannot overflow: one pass, no scratch, none
+            // of the bookkeeping a fraction or an exponent needs. Any other
+            // shape breaks to the scanner below, which `pos` still suits.
+            let neg = lead == b'-';
+            let input = self.input;
+            let len = input.len();
+            let mut pos = self.pos;
+            if neg {
+                pos += 1;
+            }
+            let digits_start = pos;
+            let mut cap = pos + I64_SAFE_DIGITS;
+            if cap > len {
+                cap = len;
+            }
+            let mut v: u64 = 0;
+            while pos < cap {
+                let d = digit_value(input.get_unchecked(pos) as i32);
+                if d > 9 {
+                    break;
+                }
+                v = v * 10 + d as u64;
+                pos += 1;
+            }
+            if pos == digits_start {
+                break fast;
+            }
+            // A leading zero stands only for the whole integer part.
+            if pos - digits_start > 1 && input.get_unchecked(digits_start) as i32 == b'0' {
+                break fast;
+            }
+            if pos < len {
+                let tail = input.get_unchecked(pos) as i32;
+                if tail == b'.' || tail == b'e' || tail == b'E' || digit_value(tail) <= 9 {
+                    break fast;
+                }
+            }
+            self.pos = pos;
+            if neg {
+                return Result::Ok(0 - v as i64);
+            }
+            return Result::Ok(v as i64);
+        }
+        builtin::cold_path();
         let start = self.pos as i64;
         let mut n = ScannedNumber::empty();
         self.scan_number_into(lead, &mut n)?;

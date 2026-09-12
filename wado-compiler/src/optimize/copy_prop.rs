@@ -22,6 +22,10 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use super::arena_query::{MutRefAliases, RootMutation, for_each_mutated_root};
 use super::gate::{FunctionGate, GatedPass};
 use super::value_copy::mutation::MutationOracle;
+use crate::optimize::arena_query::{
+    bare_promoted_local, buried_promoted_reads, promoted_local_reads, reachable_nodes,
+};
+use crate::optimize::value_copy::mutation::build_param_mut;
 
 #[derive(Debug, Clone)]
 struct CopyBinding {
@@ -361,11 +365,11 @@ fn analyze_function_body(body: &Body, ctx: &AnalysisCtx<'_>) -> AnalysisResult {
     // invisible to the skeleton walk above; count it so copy-prop does not treat
     // the local as dead / single-use and eliminate it out from under the promoted
     // read. Empty (behavior-neutral) until operand promotion runs.
-    super::arena_query::promoted_local_reads(body, &mut result.promoted_reads);
+    promoted_local_reads(body, &mut result.promoted_reads);
     for idx in result.promoted_reads.clone() {
         result.usage.entry(idx).or_default().read_count += 2;
     }
-    let buried = super::arena_query::buried_promoted_reads(body);
+    let buried = buried_promoted_reads(body);
     for binding in &mut result.bindings {
         binding.promoted_reads_substitutable = matches!(
             binding.source,
@@ -643,7 +647,7 @@ fn can_propagate_copy(
         }
         CopySource::Ref { index, .. } | CopySource::MutRef { index, .. } => {
             if target_usage.read_count != 1 {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "copy_prop",
                     "borrow {} of {index}: {} reads",
                     binding.target_local,
@@ -654,7 +658,7 @@ fn can_propagate_copy(
             if let Some(su) = usage.get(index)
                 && su.is_assigned
             {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "copy_prop",
                     "borrow {} of {index}: referent is assigned",
                     binding.target_local
@@ -678,11 +682,11 @@ fn can_propagate_copy(
 /// [`CopyBinding::promoted_reads_substitutable`] approved.
 fn substitute_promoted_reads(engine: &mut Engine, substitutions: &IndexMap<u32, CopySource>) {
     let mut plan: Vec<(NodeRef, ValueId, CopySource)> = Vec::new();
-    for node in super::arena_query::reachable_nodes(engine.body) {
+    for node in reachable_nodes(engine.body) {
         let body = &*engine.body;
         body.for_each_operand(node, |op| {
             if let Some(v) = op.as_value()
-                && let Some(target) = super::arena_query::bare_promoted_local(body, op)
+                && let Some(target) = bare_promoted_local(body, op)
                 && let Some(source) = substitutions.get(&target)
             {
                 plan.push((node, v, source.clone()));
@@ -951,7 +955,7 @@ impl Rule for CopyPropRule<'_> {
 pub fn propagate_copies(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let copy_value_id = project.builtin_func_id("copy_value");
     let type_table = project.type_table.borrow();
-    let param_mut = super::value_copy::mutation::build_param_mut(project);
+    let param_mut = build_param_mut(project);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::CopyProp, len, |fid| {

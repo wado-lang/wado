@@ -5,8 +5,7 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::MangledName;
-use crate::name::global_name;
+use crate::name::{MangledName, global_name};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
@@ -17,6 +16,15 @@ use crate::wir::{
 
 use super::context::{PendingFunctionBody, WirContext};
 use super::translate::OPTION_NONE_CASE;
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
+};
+use crate::name::wir_func_type_key;
+use crate::nir::FuncId;
+use crate::nir_package::NirPackage;
+use crate::nir_visitor::reachable_exprs;
+use crate::wir::{WirAbstractHeapType, WirExport, WirExportDesc, WirLocals};
+use crate::{nir, nir_arena, tir};
 
 /// Collect all functions from the `NirPackage`, register imports, and create function stubs.
 pub fn collect_functions(ctx: &mut WirContext<'_>) {
@@ -29,7 +37,7 @@ pub fn collect_functions(ctx: &mut WirContext<'_>) {
         for (i, func_rc) in ctx.package.functions.iter().enumerate() {
             assert_eq!(
                 func_rc.borrow().id,
-                Some(crate::nir::FuncId::new(i)),
+                Some(FuncId::new(i)),
                 "FuncId must equal store position at codegen (function #{i})"
             );
         }
@@ -80,10 +88,7 @@ fn register_imports(ctx: &mut WirContext<'_>) {
             vec![ctx.type_id_to_wir_type(type_table, import.return_type)]
         };
 
-        let type_fq = crate::name::wir_func_type_key(&format!(
-            "{}/{}",
-            import.namespace, import.canonical_name
-        ));
+        let type_fq = wir_func_type_key(&format!("{}/{}", import.namespace, import.canonical_name));
         let type_id = ctx.register_func_type(type_fq, params, results);
 
         let name = WirName {
@@ -122,8 +127,8 @@ fn register_imports(ctx: &mut WirContext<'_>) {
 /// What `canon lower` produces for this function, which the core module must
 /// import by exactly that type. Interface methods and world functions share it.
 fn cm_import_core_func_type(
-    func: &crate::component_model::CmFunctionInfo,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    func: &CmFunctionInfo,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> (Vec<WirType>, Vec<WirType>) {
     // WASI P3 async functions with > MAX_FLAT_ASYNC_PARAMS (4) flat params use
     // indirect calling: all params are passed via a single params_ptr (i32) plus
@@ -133,11 +138,7 @@ fn cm_import_core_func_type(
     let mut param_vts: Vec<wasm_encoder::ValType> = Vec::new();
     for (_, _, ty) in &func.params {
         let resolved_ty = cm_interface_registry.resolve_type(ty);
-        crate::component_model::flatten_cm_param_type(
-            &resolved_ty,
-            &mut param_vts,
-            cm_interface_registry,
-        );
+        flatten_cm_param_type(&resolved_ty, &mut param_vts, cm_interface_registry);
     }
 
     // Per CM spec `flatten_functype('lower')`, an async lowering appends the
@@ -162,16 +163,12 @@ fn cm_import_core_func_type(
     let mut results: Vec<WirType> = Vec::new();
     if let Some(ret_ty) = &func.return_type {
         let resolved_ret_ty = cm_interface_registry.resolve_type(ret_ty);
-        if crate::component_model::cm_return_needs_outptr(&resolved_ret_ty, cm_interface_registry) {
+        if cm_return_needs_outptr(&resolved_ret_ty, cm_interface_registry) {
             // Complex return via outptr — the function itself returns nothing.
             param_vts.push(wasm_encoder::ValType::I32);
         } else {
             let mut out = Vec::new();
-            crate::component_model::flatten_cm_param_type(
-                &resolved_ret_ty,
-                &mut out,
-                cm_interface_registry,
-            );
+            flatten_cm_param_type(&resolved_ret_ty, &mut out, cm_interface_registry);
             results = out.into_iter().map(valtype_to_wir_type).collect();
         }
     }
@@ -226,7 +223,7 @@ fn register_wasi_imports(ctx: &mut WirContext<'_>) {
 
     // World-level function imports: register the raw core import under the same
     // lowered type as an interface method, so the adapter's `CmRawCall` resolves.
-    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = cm_interface_registry
+    let world_funcs: Vec<CmFunctionInfo> = cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
         .collect();
@@ -438,12 +435,12 @@ fn register_single_function(
     //   `optimize::multi_value_return` for aggregate-returning functions
     //   whose every call site destructures the result.
     let results: Vec<WirType> = match &tir_func.return_abi {
-        crate::nir::ReturnAbi::MultiValue { result_types, .. } => result_types
+        nir::ReturnAbi::MultiValue { result_types, .. } => result_types
             .iter()
             .map(|&t| ctx.type_id_to_wir_type(type_table, t))
             .filter(|t| !matches!(t, WirType::Unit))
             .collect(),
-        crate::nir::ReturnAbi::Single => {
+        nir::ReturnAbi::Single => {
             if type_table.is_stackless(tir_func.return_type) {
                 Vec::new()
             } else {
@@ -455,7 +452,7 @@ fn register_single_function(
 
     // Register function type
     let fq = fq.into_string();
-    let type_fq = crate::name::wir_func_type_key(&fq);
+    let type_fq = wir_func_type_key(&fq);
     let type_id = ctx.register_func_type(type_fq, params, results);
 
     let wir_func = WirFunction {
@@ -463,7 +460,7 @@ fn register_single_function(
         type_id,
         param_names,
         body: None, // Filled later by translate phase
-        locals: crate::wir::WirLocals::default(),
+        locals: WirLocals::default(),
         meta: WirMeta {
             module_source: Some(module_source.clone()),
             ..WirMeta::default()
@@ -533,13 +530,10 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
 /// literals no source literal accounts for — so NIR is the authority, appended
 /// after the recorded lists to keep their indices. Only what the module emits
 /// counts: a dead function or a displaced arena node would leave a dead segment.
-fn synthesized_packed_payloads(
-    package: &crate::nir_package::NirPackage,
-    threshold: usize,
-) -> Vec<Vec<u8>> {
-    fn collect(body: &crate::nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
-        for e in crate::nir_visitor::reachable_exprs(body) {
-            if let crate::nir_arena::ExprKind::PackedArray(bytes) = &body.exprs[e].kind
+fn synthesized_packed_payloads(package: &NirPackage, threshold: usize) -> Vec<Vec<u8>> {
+    fn collect(body: &nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
+        for e in reachable_exprs(body) {
+            if let ExprKind::PackedArray(bytes) = &body.exprs[e].kind
                 && bytes.len() > threshold
             {
                 out.push(bytes.clone());
@@ -573,9 +567,9 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         let fq = MangledName::in_module(entry_source, core_func_name);
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export with export.name (component-level name), using core_func_name's function
-            ctx.exports.push(crate::wir::WirExport {
+            ctx.exports.push(WirExport {
                 name: export.name.clone(),
-                desc: crate::wir::WirExportDesc::Func {
+                desc: WirExportDesc::Func {
                     func_id: func_id.clone(),
                 },
             });
@@ -594,9 +588,9 @@ fn register_exports(ctx: &mut WirContext<'_>) {
                     ctx.func_map.keys().collect::<Vec<_>>()
                 );
             };
-            ctx.exports.push(crate::wir::WirExport {
+            ctx.exports.push(WirExport {
                 name: post_return.clone(),
-                desc: crate::wir::WirExportDesc::Func {
+                desc: WirExportDesc::Func {
                     func_id: func_id.clone(),
                 },
             });
@@ -609,9 +603,9 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         let fq = MangledName::in_module(entry_source, &test.core_func_name);
         if let Some(func_id) = ctx.func_map.get(&fq) {
             // Export test function with its core function name
-            ctx.exports.push(crate::wir::WirExport {
+            ctx.exports.push(WirExport {
                 name: test.function_name.clone(),
-                desc: crate::wir::WirExportDesc::Func {
+                desc: WirExportDesc::Func {
                     func_id: func_id.clone(),
                 },
             });
@@ -710,7 +704,7 @@ fn is_null_operand(body: &Body, op: Operand) -> bool {
 /// The primitive a value of `type_id` is stored as. `enum` and `flags` hold a
 /// discriminant, so their slot is an `i32` even though the declared type is not
 /// a primitive.
-fn storage_prim_of(type_id: crate::tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
+fn storage_prim_of(type_id: tir::TypeId, type_table: &TypeTable) -> Option<PrimitiveType> {
     use crate::tir::ResolvedType;
 
     if let Some(prim) = prim_of(type_id, type_table) {
@@ -791,12 +785,12 @@ fn option_none(wir_type: &WirType) -> WirInstr {
 /// The value a slot starts at when its initializer is assigned by the module
 /// initialization function instead of being reduced here. It has to inhabit the
 /// slot's own Wasm type: `ref.null` is a value only for a reference slot.
-fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
+fn init_placeholder(wir_type: &WirType) -> WirInstr {
     use crate::wir::WirInstr;
 
     match wir_type {
         WirType::Ref { .. } | WirType::AbstractRef { .. } => WirInstr::RefNull {
-            heap_type: crate::wir::WirAbstractHeapType::None,
+            heap_type: WirAbstractHeapType::None,
         },
         WirType::I64 | WirType::U64 => WirInstr::I64Const(0),
         WirType::F32 => WirInstr::F32Const(0.0),
@@ -823,10 +817,10 @@ fn init_placeholder(wir_type: &WirType) -> crate::wir::WirInstr {
 fn translate_global_init(
     body: &Body,
     op: Operand,
-    type_id: crate::tir::TypeId,
+    type_id: tir::TypeId,
     type_table: &TypeTable,
     wir_type: &WirType,
-) -> crate::wir::WirInstr {
+) -> WirInstr {
     use crate::tir::ResolvedType;
     use crate::wir::WirInstr;
 
@@ -882,7 +876,7 @@ fn valtype_to_wir_type(vt: wasm_encoder::ValType) -> WirType {
         wasm_encoder::ValType::F32 => WirType::F32,
         wasm_encoder::ValType::F64 => WirType::F64,
         wasm_encoder::ValType::Ref(_) => WirType::AbstractRef {
-            heap_type: crate::wir::WirAbstractHeapType::Any,
+            heap_type: WirAbstractHeapType::Any,
             nullable: true,
         },
         _ => WirType::I32,

@@ -15,6 +15,7 @@
 
 use std::path::Path;
 
+use crate::common::compile_source_with_compiler_options;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 const SOURCE: &str = r#"
@@ -44,7 +45,7 @@ fn wir_without_inlining() -> String {
         retain_wir: true,
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
+    let result = compile_source_with_compiler_options(
         Path::new("const_global_builder_alias_test.wado"),
         SOURCE,
         options,

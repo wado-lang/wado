@@ -53,8 +53,13 @@ use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 
+use crate::build_dep::{
+    GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
+};
+use crate::cache::{generator_path, write_atomic};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
+use crate::kiln_wit::options_descriptor_from_component;
 use crate::oci;
 use crate::run_cache::RunCache;
 use crate::sync::lock;
@@ -248,7 +253,7 @@ impl CliGeneratorProvider {
         index.generators.sort_keys();
         if let Ok(mut bytes) = serde_json::to_vec_pretty(&index) {
             bytes.push(b'\n');
-            let _ = crate::cache::write_atomic(&path, &bytes);
+            let _ = write_atomic(&path, &bytes);
         }
         // Content-addressed names are never reused, so nothing else would ever
         // reclaim this. Two modules with identical sources share a component,
@@ -354,7 +359,7 @@ impl CliGeneratorProvider {
                     // every build since build/kiln is gitignored, so the O2
                     // compile cost is repaid many times over by faster generation.
                     opt_level: wado_compiler::OptLevel::O2,
-                    target_world: Some(crate::build_dep::GENERATOR_WORLD_FQ.to_string()),
+                    target_world: Some(GENERATOR_WORLD_FQ.to_string()),
                     skip_validation: false,
                     log_level: Some(LogLevel::Warn),
                     ..CompilerOptions::default()
@@ -412,7 +417,7 @@ impl CliGeneratorProvider {
 
         // Best-effort: the caller holds the fresh bytes, so a refusal costs
         // the next run a rebuild.
-        let _ = crate::cache::write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
+        let _ = write_atomic(&self.component_path(&combined_hash), &artifacts.wasm);
         self.write_index(
             &path_str_for_index,
             &IndexedGenerator {
@@ -590,7 +595,7 @@ impl CompilerHost for SilentHost {
 /// Build a [`ResolvedGenerator`] from a prebuilt generator component: recover
 /// the options descriptor from its WIT and hash the bytes as the source hash.
 fn resolved_generator_from_wasm(wasm: Vec<u8>) -> Result<ResolvedGenerator, String> {
-    let descriptor = crate::kiln_wit::options_descriptor_from_component(&wasm)?;
+    let descriptor = options_descriptor_from_component(&wasm)?;
     let source_hash = hex32(&sha256_of(&wasm));
     Ok(ResolvedGenerator {
         wasm,
@@ -781,7 +786,7 @@ impl CliGeneratorProvider {
         &self,
         spec: &wado_compiler::kiln::GeneratorSpec,
     ) -> Result<ResolvedGenerator, ProviderError> {
-        let parts = crate::build_dep::parse_spec(&spec.spec);
+        let parts = parse_spec(&spec.spec);
         if parts.submodule.is_some() {
             return Err(ProviderError::Unsupported {
                 message: format!(
@@ -855,13 +860,9 @@ impl CliGeneratorProvider {
             return Ok(resolved);
         }
 
-        let reference = oci::world_reference(
-            &registry_url,
-            package,
-            crate::build_dep::GENERATOR_WORLD_SEGMENT,
-            &version,
-        )
-        .map_err(|message| ProviderError::Internal { message })?;
+        let reference =
+            oci::world_reference(&registry_url, package, GENERATOR_WORLD_SEGMENT, &version)
+                .map_err(|message| ProviderError::Internal { message })?;
         let wasm = oci::pull_component(&reference)
             .await
             .map_err(|e| ProviderError::Internal {
@@ -899,7 +900,7 @@ impl CliGeneratorProvider {
                 ),
             });
         };
-        crate::build_dep::resolve_generator_version(registry_url, package, req)
+        resolve_generator_version(registry_url, package, req)
             .await
             .map_err(|message| ProviderError::Unsupported { message })
     }
@@ -928,16 +929,16 @@ impl CliGeneratorProvider {
         coordinate: &str,
         version: &str,
     ) -> Option<ResolvedGenerator> {
-        let path = crate::cache::generator_path(registry_url, coordinate, version).ok()?;
+        let path = generator_path(registry_url, coordinate, version).ok()?;
         let wasm = std::fs::read(path).ok()?;
         resolved_generator_from_wasm(wasm).ok()
     }
 
     fn write_spec_cache(&self, registry_url: &str, coordinate: &str, version: &str, wasm: &[u8]) {
-        let Ok(cache_path) = crate::cache::generator_path(registry_url, coordinate, version) else {
+        let Ok(cache_path) = generator_path(registry_url, coordinate, version) else {
             return;
         };
-        let _ = crate::cache::write_atomic(&cache_path, wasm);
+        let _ = write_atomic(&cache_path, wasm);
     }
 
     /// Compile (or read from cache) a generator at a manifest-root-relative
@@ -1034,6 +1035,7 @@ impl CliGeneratorProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kiln_provider::{make_relative_sources, normalize_path};
     use wado_compiler::kiln::InvocationPath;
 
     fn runtime() -> tokio::runtime::Runtime {
@@ -1054,7 +1056,7 @@ mod tests {
         ];
         for (input, expected) in cases {
             assert_eq!(
-                super::normalize_path(Path::new(input)),
+                normalize_path(Path::new(input)),
                 Path::new(expected),
                 "normalizing {input:?}"
             );
@@ -1086,14 +1088,14 @@ mod tests {
         ];
         for (base, recorded, expected) in cases {
             let base = Path::new(base);
-            let out = super::make_relative_sources(base, vec![(recorded.to_string(), [0u8; 32])]);
+            let out = make_relative_sources(base, vec![(recorded.to_string(), [0u8; 32])]);
             assert_eq!(
                 out[0].0, expected,
                 "base {base:?} + recorded {recorded:?} must record {expected:?}"
             );
             assert_eq!(
-                super::normalize_path(&base.join(&out[0].0)),
-                super::normalize_path(&base.join(recorded)),
+                normalize_path(&base.join(&out[0].0)),
+                normalize_path(&base.join(recorded)),
                 "the entry must resolve back to the recorded file"
             );
         }

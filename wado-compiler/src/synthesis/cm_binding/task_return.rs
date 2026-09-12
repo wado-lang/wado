@@ -135,12 +135,12 @@ struct ResultSlot {
 }
 
 /// The local a reduced `task return` writes its value into.
-const TASK_RESULT_LOCAL: &str = "__task_result";
+const TASK_RESULT_LOCAL: &str = "$task_result";
 
 /// The copy of an `export async fn` that the export binding calls. Its
 /// `task return` delivers through the CM canonical op, so it returns nothing.
 pub(super) fn task_entry_func_name(export_name: &str) -> String {
-    format!("__cm_task_entry__{export_name}")
+    format!("$cm_task_entry__{export_name}")
 }
 
 /// Split that copy off, leaving the user's own function to keep a lowering its
@@ -267,7 +267,7 @@ fn walk_outside_closures(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -
     opt_walk_expr(visitor, expr)
 }
 
-/// `match __task_result { Some(v) => return v, None => unreachable() }`. A body
+/// `match $task_result { Some(v) => return v, None => unreachable() }`. A body
 /// that reaches the end without delivering has no result to give, which for the
 /// task entry is a CM protocol error either way.
 fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
@@ -331,7 +331,7 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
 }
 
 /// The local the `Some` arm binds the delivered value to.
-const TASK_VALUE_LOCAL: &str = "__task_value";
+const TASK_VALUE_LOCAL: &str = "$task_value";
 
 fn declared_result(return_type: Option<&Type>) -> &Type {
     return_type.expect("a flat slot comes from a declared result")
@@ -417,7 +417,7 @@ fn generate_inline_task_return(
         drop(tt);
 
         let result_local = alloc_local(next_local, locals, value_type_id);
-        stmts.push(let_stmt("__task_ret", result_local, value_type_id, value));
+        stmts.push(let_stmt("$task_ret", result_local, value_type_id, value));
 
         // Allocate mutable flat value locals (initialized to zero)
         let flat_locals: Vec<(u32, String)> = flat_return_types
@@ -426,7 +426,7 @@ fn generate_inline_task_return(
             .map(|(i, &vt)| {
                 let type_id = cm_val_type_to_type_id(vt);
                 let local = alloc_local(next_local, locals, type_id);
-                let name = format!("__tv_{i}");
+                let name = format!("$tv_{i}");
                 stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
                 (local, name)
             })
@@ -448,7 +448,7 @@ fn generate_inline_task_return(
         // is bound but never read, which is fine — `wir_build` won't
         // emit a spurious read.
         let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
-        let ok_payload_name = format!("__ok_val_{ok_payload_local}");
+        let ok_payload_name = format!("$ok_val_{ok_payload_local}");
 
         // === Ok arm body ===
         let mut ok_stmts: Vec<TirStmt> = Vec::new();
@@ -474,7 +474,7 @@ fn generate_inline_task_return(
                 if 1 + i < flat_locals.len() {
                     let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                     let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                    let mut val = local_ref(flat_val.index, "__flat", source_type);
+                    let mut val = local_ref(flat_val.index, "$flat", source_type);
                     if flat_val.cm_type != flat_return_types[1 + i] {
                         val = cast(val, target_type);
                     }
@@ -495,7 +495,7 @@ fn generate_inline_task_return(
 
         // === Err arm body ===
         let err_payload_local = alloc_local(next_local, locals, err_type_id);
-        let err_payload_name = format!("__err_val_{err_payload_local}");
+        let err_payload_name = format!("$err_val_{err_payload_local}");
         let mut err_stmts: Vec<TirStmt> = Vec::new();
         err_stmts.push(expr_stmt(assign(
             local_ref(
@@ -544,7 +544,7 @@ fn generate_inline_task_return(
                 if 1 + i < flat_locals.len() {
                     let target_type = cm_val_type_to_type_id(flat_return_types[1 + i]);
                     let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                    let mut val = local_ref(flat_val.index, "__flat", source_type);
+                    let mut val = local_ref(flat_val.index, "$flat", source_type);
                     if flat_val.cm_type != flat_return_types[1 + i] {
                         val = cast(val, target_type);
                     }
@@ -565,8 +565,8 @@ fn generate_inline_task_return(
         // Combine Ok/Err arms in a single TIR `Match` over the
         // materialised result. Each arm's pattern binds the payload
         // local that the arm body reads from, replacing the previous
-        // `let __ok_val = variant_payload(result, Ok)` /
-        // `let __err_val = variant_payload(result, Err)` extractions.
+        // `let $ok_val = variant_payload(result, Ok)` /
+        // `let $err_val = variant_payload(result, Err)` extractions.
         let span = synth_span();
         let ok_arm = TirMatchArm {
             pattern: TirPattern::Variant {
@@ -608,7 +608,7 @@ fn generate_inline_task_return(
         };
         let match_expr = TirExpr::new(
             TirExprKind::Match {
-                expr: Box::new(local_ref(result_local, "__task_ret", value_type_id)),
+                expr: Box::new(local_ref(result_local, "$task_ret", value_type_id)),
                 arms: vec![ok_arm, err_arm],
             },
             TypeTable::UNIT,
@@ -659,7 +659,7 @@ fn generate_inline_task_return(
             for (flat_val, &target_vt) in lowered.iter().zip(flat_return_types.iter()) {
                 let target_type = cm_val_type_to_type_id(target_vt);
                 let source_type = cm_val_type_to_type_id(flat_val.cm_type);
-                let mut arg = local_ref(flat_val.index, "__flat", source_type);
+                let mut arg = local_ref(flat_val.index, "$flat", source_type);
                 if flat_val.cm_type != target_vt {
                     arg = cast(arg, target_type);
                 }

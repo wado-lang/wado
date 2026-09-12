@@ -410,6 +410,7 @@ impl SyntaxDefinition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lexer::lex;
     use crate::token::TokenKind;
     use std::assert_matches;
 
@@ -436,7 +437,7 @@ mod tests {
                 Some(*text),
                 "'{text}' does not round-trip through as_keyword_str"
             );
-            let r = crate::lexer::lex(text);
+            let r = lex(text);
             assert!(
                 r.errors.is_empty(),
                 "lexer error on '{text}': {:?}",
@@ -458,7 +459,7 @@ mod tests {
                 TokenKind::from_keyword(text).is_none(),
                 "contextual keyword '{text}' must not be a lexer keyword"
             );
-            let r = crate::lexer::lex(text);
+            let r = lex(text);
             assert_matches!(
                 r.tokens[0].kind,
                 TokenKind::Ident(_),
@@ -490,7 +491,7 @@ mod tests {
     #[test]
     fn operators_round_trip_through_lexer() {
         for (text, cat) in OPERATORS {
-            let r = crate::lexer::lex(text);
+            let r = lex(text);
             let kind = &r.tokens[0].kind;
             assert_eq!(
                 kind.operator_str(),
@@ -512,11 +513,7 @@ mod tests {
     fn highlight_operator_set_is_pinned() {
         let highlighted: Vec<&str> = OPERATORS
             .iter()
-            .filter(|(text, _)| {
-                crate::lexer::lex(text).tokens[0]
-                    .kind
-                    .is_highlight_operator()
-            })
+            .filter(|(text, _)| lex(text).tokens[0].kind.is_highlight_operator())
             .map(|(text, _)| *text)
             .collect();
         let mut expected = vec![

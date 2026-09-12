@@ -9,10 +9,12 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::diagnostic_function_name;
 use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
@@ -232,7 +234,7 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
     let mut scan = ParamGateScan {
         params: &params,
         module: package.entry_module_source.clone(),
-        reported: crate::hashmap::IndexSet::default(),
+        reported: hashmap::IndexSet::default(),
         remarks: Vec::new(),
     };
     for func_rc in &package.functions {
@@ -254,7 +256,7 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
 ///
 /// The second kind is what `core:log` reads at its gate
 /// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`).
-/// `globals::extract` has moved such an initializer into `__initialize_module`
+/// `globals::extract` has moved such an initializer into `$initialize_module`
 /// by now, so the assignment is an ordinary `GlobalVarSet` in a body.
 fn parameter_decided_globals(package: &NirPackage) -> IndexMap<GlobalKey, ParamOrigin> {
     let mut decided: IndexMap<GlobalKey, ParamOrigin> = package
@@ -306,7 +308,7 @@ struct ParamOrigin {
 
 /// Every `GlobalVarSet` reachable from `body`'s root, as the global it writes
 /// and the operand it writes there.
-fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)> {
+fn global_assignments(body: &Body) -> Vec<(GlobalKey, Operand)> {
     let mut out = Vec::new();
     body.for_each_reachable_node(|node| {
         if let NodeRef::Expr(e) = node
@@ -325,7 +327,7 @@ fn global_assignments(body: &Body) -> Vec<(GlobalKey, crate::nir_arena::Operand)
 /// The parameter deciding some global that the expression rooted at `op` reads.
 fn reads_decided_global(
     body: &Body,
-    op: crate::nir_arena::Operand,
+    op: Operand,
     decided: &IndexMap<GlobalKey, ParamOrigin>,
 ) -> Option<String> {
     body.find_in_live_node_under(NodeRef::Expr(op.as_expr()?), |node| {
@@ -353,7 +355,7 @@ struct ParamGateScan<'a> {
     /// source gate yields one remark however many times a scrutinee reads the
     /// parameter and however many callers inlining copied it into. The module
     /// is in the key because a span carries no file.
-    reported: crate::hashmap::IndexSet<(String, ModuleSource, Span)>,
+    reported: hashmap::IndexSet<(String, ModuleSource, Span)>,
     remarks: Vec<Remark>,
 }
 
@@ -417,12 +419,10 @@ impl ParamGateScan<'_> {
 
 /// The operand whose value picks a branch, with the span a remark about it
 /// should point at. `None` for every non-branching node.
-fn branch_gate(body: &Body, node: NodeRef) -> Option<(crate::nir_arena::Operand, Span)> {
+fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
     match node {
         NodeRef::Stmt(s) => match &body.stmts[s].kind {
-            crate::nir_arena::StmtKind::If { condition, .. } => {
-                Some((*condition, body.stmts[s].span))
-            }
+            StmtKind::If { condition, .. } => Some((*condition, body.stmts[s].span)),
             _ => None,
         },
         NodeRef::Expr(e) => match &body.exprs[e].kind {
@@ -539,7 +539,7 @@ fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            is_ctfe_runnable(&f).then(|| crate::name::diagnostic_function_name(&f.name).to_string())
+            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name).to_string())
         })
         .collect()
 }

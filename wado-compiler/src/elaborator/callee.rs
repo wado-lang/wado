@@ -1,7 +1,9 @@
 //! Resolved call-target identities: a free function callee is the declaration
 //! it names (WEP 2026-08-12), a static method callee what dispatch picked.
 
+use crate::defs::{DefId, DefTable};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::FqTraitName;
 
 /// Identity of a free function callee. `Declared` carries the module and name
 /// its one constructor reads off the table, so TIR emission needs none at hand;
@@ -9,7 +11,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(super) enum CalleeRef {
     Declared {
-        def: crate::defs::DefId,
+        def: DefId,
         module: ModuleSource,
         name: String,
     },
@@ -21,7 +23,7 @@ pub(super) enum CalleeRef {
 
 impl CalleeRef {
     /// The free function `def` declares, rendered once from the table.
-    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn declared(defs: &DefTable, def: DefId) -> Self {
         Self::Declared {
             def,
             module: defs.module(def).clone(),
@@ -47,7 +49,7 @@ impl CalleeRef {
     }
 
     /// The declaration this names, or `None` for a [`Self::Rendered`] callee.
-    pub fn def(&self) -> Option<crate::defs::DefId> {
+    pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared { def, .. } => Some(*def),
             Self::Rendered { .. } => None,
@@ -75,10 +77,10 @@ pub(super) struct StaticMethodRef {
     pub module: ModuleSource,
     pub type_name: String,
     pub method_name: String,
-    pub trait_name: Option<crate::name::FqTraitName>,
+    pub trait_name: Option<FqTraitName>,
     /// The method this selection picked. `None` when no declaration backs
     /// it — the auto-derived `Default::default`.
-    pub method_id: Option<crate::defs::DefId>,
+    pub method_id: Option<DefId>,
 }
 
 impl StaticMethodRef {
@@ -86,8 +88,8 @@ impl StaticMethodRef {
         module: ModuleSource,
         type_name: impl Into<String>,
         method_name: impl Into<String>,
-        trait_name: Option<crate::name::FqTraitName>,
-        method_id: Option<crate::defs::DefId>,
+        trait_name: Option<FqTraitName>,
+        method_id: Option<DefId>,
     ) -> Self {
         Self {
             module,

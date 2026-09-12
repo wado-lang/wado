@@ -3,6 +3,10 @@
 //! All invocations come from inline `use ... with { generator: ... }` clauses;
 //! the manifest no longer declares any. See WEP 2026-04-12 §"Use-site syntax".
 
+use crate::ast::AttrValue;
+use crate::kiln::cache::encode_options_canonical;
+use crate::kiln::options_check::CanonicalOptions;
+use crate::token::Span;
 use std::fmt;
 
 /// The `core:kiln/generator` world FQ name: what a generator package declares
@@ -201,7 +205,7 @@ pub struct Invocation {
     /// invocation cache key. Empty until the generator's `OptionsDescriptor`
     /// is known (inline when it is available, otherwise the driver's
     /// typed-encode pass).
-    pub options: crate::kiln::options_check::CanonicalOptions,
+    pub options: CanonicalOptions,
     /// Raw `options` `AttrValue` recovered from the inline
     /// `with { generator: { options: { ... } } }` clause. Stashed so the
     /// driver's typed-encode pass can re-validate against the generator's
@@ -209,12 +213,12 @@ pub struct Invocation {
     /// re-parsing the source. `None` when no `options` clause was supplied.
     /// Excluded from [`Invocation::identity_tuple`] — equivalence is decided
     /// by `options_canonical` alone.
-    pub raw_options: Option<crate::ast::AttrValue>,
+    pub raw_options: Option<AttrValue>,
     /// Span of the inline `options:` key, or of the whole `use` clause when
     /// the clause wrote none: what the driver blames when it re-validates
     /// `raw_options`, long after the AST is gone. Diagnostics only; excluded
     /// from [`Invocation::identity_tuple`].
-    pub options_span: crate::token::Span,
+    pub options_span: Span,
 }
 
 impl Invocation {
@@ -236,7 +240,7 @@ impl Invocation {
     /// [`crate::kiln::cache::encode_options_canonical`]).
     #[must_use]
     pub fn options_canonical(&self) -> Vec<u8> {
-        crate::kiln::cache::encode_options_canonical(&self.options)
+        encode_options_canonical(&self.options)
     }
 
     /// The tuple used for dedup and cycle detection.
@@ -258,6 +262,8 @@ impl Invocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kiln::options_check::CanonicalOptions;
+    use crate::token::Span;
 
     #[test]
     fn parse_spec_splits_version_and_submodule() {
@@ -327,9 +333,9 @@ mod tests {
             from: InvocationPath::normalize("s.proto"),
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
-            options: crate::kiln::options_check::CanonicalOptions::default(),
+            options: CanonicalOptions::default(),
             raw_options: None,
-            options_span: crate::token::Span::default(),
+            options_span: Span::default(),
         };
         let inv_b = Invocation {
             decl_sites: vec![DeclSite {

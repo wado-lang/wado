@@ -12,7 +12,20 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
+use crate::canonical::CanonicalIntrinsic;
+use crate::compiler_item::CompilerItem;
+use crate::name::{
+    CLOSURE_CALL_METHOD, FqTraitName, FqTypeName, MangledName, MethodName, StructName,
+};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_value_graph::{OpaqueSource, ValueId};
+use crate::optimize::multi_value_return::block_tail_call;
+use crate::token::Span;
+use crate::wir::{
+    CmImportViolation, TraitBoundViolation, WirAbstractHeapType, WirFuncId, WirLocals, WirMeta,
+};
+use crate::wir_build::context::{CANONICAL_INSPECT_SLOT, ClosureWrapperFuncs};
+use crate::{nir, tir};
 
 pub(super) fn ref_binding_needs_boxing(
     binding_wir: &WirType,
@@ -120,15 +133,15 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
 }
 
 /// Register one wrapper per `CanonicalClosure_K` vtable slot for each reachable
-/// functor — `__closure_wrapper_N` forwarding to `__call`, plus
-/// `__closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
+/// functor — `$closure_wrapper_N` forwarding to `$call`, plus
+/// `$closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
 /// `^Inspect` impls — each refcasting its args first. Must run before
 /// `translate_function_bodies`, which resolves `ClosureToCanonical` against it.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     use crate::wir::WirType;
 
     // Snapshot the functor list so we can mutate ctx inside the loop.
-    let functors: Vec<crate::nir::ClosureFunctor> = ctx.package.closure_functors.clone();
+    let functors: Vec<nir::ClosureFunctor> = ctx.package.closure_functors.clone();
 
     for functor in &functors {
         let module_source = &functor.module_source;
@@ -137,17 +150,17 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Look up the __call func_id, scoped to the correct module.
-        // If __call was removed by DCE (closure never used), skip this functor entirely.
+        // Look up the $call func_id, scoped to the correct module.
+        // If $call was removed by DCE (closure never used), skip this functor entirely.
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
-        let call_method_local = crate::name::MethodName::format_local(
-            &crate::name::FqTypeName::shape(module_source, functor_name),
+        let call_method_local = MethodName::format_local(
+            &FqTypeName::shape(module_source, functor_name),
             None,
-            crate::name::CLOSURE_CALL_METHOD,
+            CLOSURE_CALL_METHOD,
         );
-        let call_method_fq = crate::name::MangledName::in_module(module_source, &call_method_local);
+        let call_method_fq = MangledName::in_module(module_source, &call_method_local);
         let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
             Some(id) => id,
             None => continue,
@@ -157,7 +170,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // closure signature — the param / return types of the user-written
         // closure literal — not by the live `call_method.params`, which
         // TIR DAE may have shrunk. Decoupling here is what lets DAE drop
-        // an unused `self` (no captures) or unused user args from `__call`
+        // an unused `self` (no captures) or unused user args from `$call`
         // without desynchronising the function-table slot type from the
         // typed-fn callers that dispatch through it.
         let user_param_count = functor.canonical_user_params.len();
@@ -177,8 +190,8 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                 user_params.push(wir_type);
             }
         }
-        let result_wirs: Vec<WirType> = if functor.canonical_return == crate::tir::TypeTable::UNIT
-            || functor.canonical_return == crate::tir::TypeTable::NEVER
+        let result_wirs: Vec<WirType> = if functor.canonical_return == TypeTable::UNIT
+            || functor.canonical_return == TypeTable::NEVER
         {
             vec![]
         } else {
@@ -223,8 +236,8 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // in the wrapper. Position 0 is always self (env, refcast); the
         // other positions match canonical_user_params by name. The mapping
         // tells `register_call_wrapper` exactly which wrapper-local to
-        // forward into the inner `__call` per surviving param, so DAE can
-        // freely shrink `__call.params` without breaking the wrapper.
+        // forward into the inner `$call` per surviving param, so DAE can
+        // freely shrink `$call.params` without breaking the wrapper.
         let call_func = functor.call_method.borrow();
         // Map each surviving `call_method.params` entry back to its source.
         // The synthesised env self always lives at position 0 with name
@@ -248,7 +261,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                     .position(|(name, _)| name == &p.name)
                     .unwrap_or_else(|| {
                         panic!(
-                            "closure {functor_name}::__call param `{}` has no matching \
+                            "closure {functor_name}::$call param `{}` has no matching \
                              canonical user param (canonical: {:?})",
                             p.name,
                             functor
@@ -259,7 +272,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                         )
                     });
                 // A unit-typed param is erased from both the wrapper and
-                // `__call`'s own WIR signature, so nothing is forwarded.
+                // `$call`'s own WIR signature, so nothing is forwarded.
                 canonical_to_wrapper[idx].map(CallWrapperArg::UserParam)
             })
             .collect();
@@ -267,7 +280,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
         // Register the call wrapper.
         let global_id = ctx.closure_wrapper_funcs.len();
-        let call_wrapper_fq = format!("closure/{module_source}/__closure_wrapper_{global_id}");
+        let call_wrapper_fq = format!("closure/{module_source}/$closure_wrapper_{global_id}");
         let call_wrapper_id = register_call_wrapper(
             ctx,
             &call_wrapper_fq,
@@ -282,7 +295,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         );
 
         // Register the inspect wrapper only when the functor's signature is
-        // inspectable. It forwards to the per-functor `__Closure_N^Inspect`
+        // inspectable. It forwards to the per-functor `$Closure_N^Inspect`
         // impl synthesised in lower (Phase 2). When DCE pruned that impl or
         // the `Formatter` struct isn't registered, the wrapper body falls back
         // to `Unreachable` — the slot stays populated so the canonical struct
@@ -291,7 +304,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             let callback_fn_type_id = ctx.get_or_create_canonical_callback_fn_type();
             let inspect_trait = {
                 let tt = ctx.package.type_table.borrow();
-                tt.compiler_trait_fq(crate::compiler_item::CompilerItem::Inspect)
+                tt.compiler_trait_fq(CompilerItem::Inspect)
             };
             Some(register_inspect_wrapper(
                 ctx,
@@ -309,7 +322,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
         ctx.closure_wrapper_funcs.insert(
             functor_key,
-            crate::wir_build::context::ClosureWrapperFuncs {
+            ClosureWrapperFuncs {
                 call: call_wrapper_id,
                 inspect: inspect_wrapper_id,
             },
@@ -317,40 +330,40 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Source of an argument the wrapper forwards into the inner `__call`.
+/// Source of an argument the wrapper forwards into the inner `$call`.
 /// One entry per surviving `call_method.params` slot.
 #[derive(Debug, Clone, Copy)]
 enum CallWrapperArg {
-    /// The refcast `__typed_env` local — corresponds to `__call`'s `self`.
+    /// The refcast `$typed_env` local — corresponds to `$call`'s `self`.
     TypedEnv,
-    /// The wrapper's `__pN` user-param local at the given canonical index.
+    /// The wrapper's `$pN` user-param local at the given canonical index.
     UserParam(usize),
 }
 
-/// Build a call wrapper: refcast `env` to `&__Closure_N` (only when the
-/// surviving `__call` still expects `self`), then `call __Closure_N::__call`
+/// Build a call wrapper: refcast `env` to `&$Closure_N` (only when the
+/// surviving `$call` still expects `self`), then `call $Closure_N::$call`
 /// with the surviving args. The wrapper's external signature stays
 /// `(env, canonical_user_params...) -> canonical_return` regardless of
-/// which `__call` params have been DAE'd.
+/// which `$call` params have been DAE'd.
 #[allow(clippy::too_many_arguments)]
 fn register_call_wrapper(
     ctx: &mut WirContext<'_>,
     wrapper_fq: &str,
-    fn_type_id: crate::wir::WirTypeId,
-    functor_struct_type_id: crate::wir::WirTypeId,
-    functor_wir_type: crate::wir::WirType,
+    fn_type_id: WirTypeId,
+    functor_struct_type_id: WirTypeId,
+    functor_wir_type: WirType,
     user_param_count: usize,
-    user_params: Vec<crate::wir::WirType>,
+    user_params: Vec<WirType>,
     has_result: bool,
-    call_func_id: crate::wir::WirFuncId,
+    call_func_id: WirFuncId,
     live_param_sources: &[CallWrapperArg],
-) -> crate::wir::WirFuncId {
+) -> WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    let env_local = "__env".to_string();
-    let typed_env_local = "__typed_env".to_string();
+    let env_local = "$env".to_string();
+    let typed_env_local = "$typed_env".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
-        heap_type: crate::wir::WirAbstractHeapType::Struct,
+        heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
 
@@ -388,7 +401,7 @@ fn register_call_wrapper(
                 result_ty: functor_wir_type.clone(),
             },
             CallWrapperArg::UserParam(idx) => WirInstr::LocalGet {
-                name: format!("__p{idx}"),
+                name: format!("$p{idx}"),
                 result_ty: user_params[*idx].clone(),
             },
         })
@@ -408,7 +421,7 @@ fn register_call_wrapper(
 
     let mut param_names = vec![env_local];
     for i in 0..user_param_count {
-        param_names.push(format!("__p{i}"));
+        param_names.push(format!("$p{i}"));
     }
 
     let func = WirFunction {
@@ -418,13 +431,13 @@ fn register_call_wrapper(
         type_id: fn_type_id,
         param_names,
         body: Some(body),
-        meta: crate::wir::WirMeta::default(),
+        meta: WirMeta::default(),
         generic_origin: None,
         effects: Vec::new(),
         stores: Vec::new(),
         compiler_item: None,
         export_name: None,
-        locals: crate::wir::WirLocals::default(),
+        locals: WirLocals::default(),
     };
 
     ctx.register_function(func, None)
@@ -440,29 +453,29 @@ fn register_inspect_wrapper(
     ctx: &mut WirContext<'_>,
     module_source: &ModuleSource,
     functor_name: &str,
-    trait_name: &crate::name::FqTraitName,
+    trait_name: &FqTraitName,
     method_name: &str,
     global_id: usize,
-    callback_fn_type_id: crate::wir::WirTypeId,
-    functor_struct_type_id: crate::wir::WirTypeId,
-) -> crate::wir::WirFuncId {
+    callback_fn_type_id: WirTypeId,
+    functor_struct_type_id: WirTypeId,
+) -> WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    let env_local = "__env".to_string();
-    let formatter_local = "__formatter".to_string();
+    let env_local = "$env".to_string();
+    let formatter_local = "$formatter".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
-        heap_type: crate::wir::WirAbstractHeapType::Struct,
+        heap_type: WirAbstractHeapType::Struct,
         nullable: true,
     };
 
     // The per-functor impl's local name is `<fq functor>^Trait::method`;
     // module + local name together form its `func_map` key.
-    let impl_local_name = crate::name::MethodName::format_local(
-        &crate::name::FqTypeName::shape(module_source, functor_name),
+    let impl_local_name = MethodName::format_local(
+        &FqTypeName::shape(module_source, functor_name),
         Some(trait_name),
         method_name,
     );
-    let target_fq = crate::name::MangledName::in_module(module_source, &impl_local_name);
+    let target_fq = MangledName::in_module(module_source, &impl_local_name);
     let target_func_id = ctx.func_map.get(&target_fq).cloned();
 
     // Look up the Formatter struct WIR type id once; needed to
@@ -470,7 +483,7 @@ fn register_inspect_wrapper(
     // `&Formatter` the per-functor impl expects.
     let formatter_struct_type_id = ctx
         .struct_type_map
-        .get(&crate::name::StructName::new(
+        .get(&StructName::new(
             ModuleSource::format(),
             "Formatter".to_string(),
         ))
@@ -508,8 +521,8 @@ fn register_inspect_wrapper(
                     "[WIR] `{functor_name}^{trait_name}::{method_name}` is in `func_map` but has no live function record"
                 )
             });
-            let typed_env_local = "__typed_env".to_string();
-            let typed_formatter_local = "__typed_formatter".to_string();
+            let typed_env_local = "$typed_env".to_string();
+            let typed_formatter_local = "$typed_formatter".to_string();
             let needs_typed_env = impl_params.iter().any(|n| n == "self");
             let needs_typed_formatter = impl_params.iter().any(|n| n == "f");
 
@@ -588,19 +601,19 @@ fn register_inspect_wrapper(
         }
     };
 
-    let wrapper_fq = format!("closure/{module_source}/__closure_{method_name}_wrapper_{global_id}");
+    let wrapper_fq = format!("closure/{module_source}/$closure_{method_name}_wrapper_{global_id}");
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,
         param_names: vec![env_local, formatter_local],
         body: Some(body),
-        meta: crate::wir::WirMeta::default(),
+        meta: WirMeta::default(),
         generic_origin: None,
         effects: Vec::new(),
         stores: Vec::new(),
         compiler_item: None,
         export_name: None,
-        locals: crate::wir::WirLocals::default(),
+        locals: WirLocals::default(),
     };
 
     ctx.register_function(func, None)
@@ -660,7 +673,7 @@ fn build_fn_canonical_dispatch_body(
 
     // Local that holds the refcast `self` so we can read both
     // `env` and the chosen vtable slot off it without re-casting.
-    let typed_self = "__typed_self".to_string();
+    let typed_self = "$typed_self".to_string();
     Some(vec![
         WirInstr::DeclareLocal {
             name: typed_self.clone(),
@@ -681,7 +694,7 @@ fn build_fn_canonical_dispatch_body(
             type_id: callback_fn_type_id.clone(),
             func_ref: Box::new(WirInstr::StructGet {
                 type_id: base_type_id.clone(),
-                field_name: super::context::CANONICAL_INSPECT_SLOT.to_string(),
+                field_name: CANONICAL_INSPECT_SLOT.to_string(),
                 expr: Box::new(WirInstr::LocalGet {
                     name: typed_self.clone(),
                     result_ty: WirType::Ref {
@@ -947,9 +960,9 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) resolved_local_names: IndexMap<u32, String>,
     /// TIR locals holding a multi-value-call result, mapped to the WIR split
     /// locals they were unpacked into and keyed by field name. A later
-    /// `FieldAccess(LocalGet(__tmp), name)` reads the matching split local
-    /// instead of `StructGet(__tmp, name)`, which would panic at codegen —
-    /// `__tmp` was never assigned a struct ref.
+    /// `FieldAccess(LocalGet($tmp), name)` reads the matching split local
+    /// instead of `StructGet($tmp, name)`, which would panic at codegen —
+    /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
     /// Set while lowering a call whose N results have a taker: the split locals
     /// of a `let` bind, the wildcards of a discard, or the enclosing
@@ -968,14 +981,14 @@ pub(super) struct FunctionTranslator<'a, 'b> {
 
 impl FunctionTranslator<'_, '_> {
     /// The WIR local name for `index`, as [`resolve_local_names`] computed it,
-    /// falling back to `__local_N`. Codegen resolves locals by name, so two
+    /// falling back to `$local_N`. Codegen resolves locals by name, so two
     /// sharing one would silently mis-resolve — hence the disambiguation there,
     /// which mirrors `wir_build::functions`' construction of `param_names`.
     pub(super) fn local_name(&self, index: u32) -> String {
         self.resolved_local_names
             .get(&index)
             .cloned()
-            .unwrap_or_else(|| format!("__local_{index}"))
+            .unwrap_or_else(|| format!("$local_{index}"))
     }
 
     /// Build a `LocalGet` with the WIR type resolved from a TIR local index.
@@ -1075,11 +1088,7 @@ impl FunctionTranslator<'_, '_> {
         // through to a regular `LocalSet`, which cannot bind N results into one
         // local.
         let mut prefix: Vec<StmtId> = Vec::new();
-        let (func_id, _, call) = crate::optimize::multi_value_return::block_tail_call(
-            self.body,
-            Operand::Expr(value),
-            &mut prefix,
-        )?;
+        let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
         let func = self.callee_descriptor(func_id);
         let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
@@ -1132,7 +1141,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether the callee returns its aggregate as N Wasm results.
-    fn callee_returns_multi_value(&self, func: &crate::nir::FunctionRef) -> bool {
+    fn callee_returns_multi_value(&self, func: &nir::FunctionRef) -> bool {
         self.ctx
             .multi_value_return_funcs
             .contains_key(&(func.name.clone(), func.module_source.clone()))
@@ -1161,7 +1170,7 @@ impl FunctionTranslator<'_, '_> {
     /// what a tail [`lift_leaves_to_returns`] cannot reach lowers to instead,
     /// at the cost of the struct the lift would have avoided.
     fn multi_value_return_by_fields(&mut self, value: WirInstr) -> WirInstr {
-        let crate::nir::ReturnAbi::MultiValue {
+        let nir::ReturnAbi::MultiValue {
             result_types,
             field_names,
         } = &self.tir_func.return_abi
@@ -1189,7 +1198,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
         let type_id = type_id.clone();
-        let name = self.fresh_local("__mv_return");
+        let name = self.fresh_local("$mv_return");
         let fields: Vec<WirInstr> = field_names
             .iter()
             .zip(&result_types)
@@ -1224,8 +1233,7 @@ impl FunctionTranslator<'_, '_> {
     /// falls through to that ordinary `Drop`.
     fn try_emit_multi_value_discard(&mut self, value: Operand) -> Option<WirInstr> {
         let mut prefix: Vec<StmtId> = Vec::new();
-        let (func_id, _, call) =
-            crate::optimize::multi_value_return::block_tail_call(self.body, value, &mut prefix)?;
+        let (func_id, _, call) = block_tail_call(self.body, value, &mut prefix)?;
         let func = self.callee_descriptor(func_id);
         let key = (func.name.clone(), func.module_source);
         let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
@@ -1247,10 +1255,10 @@ impl FunctionTranslator<'_, '_> {
     /// for the heap-resident path).
     fn tuple_constructor_args(
         &mut self,
-        tuple_type_id: crate::tir::TypeId,
+        tuple_type_id: tir::TypeId,
         elements: &[Operand],
     ) -> (WirTypeId, Vec<WirInstr>) {
-        let elem_type_ids: Vec<crate::tir::TypeId> =
+        let elem_type_ids: Vec<tir::TypeId> =
             elements.iter().map(|e| self.operand_type_id(*e)).collect();
         // A tuple interned by CM binding synthesis can carry `TypeId`s the
         // registrar never saw, so this miss is recoverable: search for a
@@ -1302,7 +1310,7 @@ impl FunctionTranslator<'_, '_> {
     /// `struct.new List<T> { repr, used: N }` where the node is `List`-typed.
     fn build_array_literal(
         &mut self,
-        array_type_id: crate::tir::TypeId,
+        array_type_id: tir::TypeId,
         elements: &[Operand],
     ) -> WirInstr {
         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, array_type_id);
@@ -1313,7 +1321,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let is_raw_array = matches!(
             self.type_table.get(array_type_id),
-            crate::tir::ResolvedType::BuiltinArray(_)
+            ResolvedType::BuiltinArray(_)
         );
         let element_instrs: Vec<WirInstr> = elements
             .iter()
@@ -1390,9 +1398,9 @@ impl FunctionTranslator<'_, '_> {
             .collect();
 
         // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
-        // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
-        let ref_local = self.fresh_local("__expr_deref_ref");
-        let val_local = self.fresh_local("__expr_deref_val");
+        // not clash with the lower path's `$deref_ref_{nir_idx}` temps.
+        let ref_local = self.fresh_local("$expr_deref_ref");
+        let val_local = self.fresh_local("$expr_deref_val");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -1797,10 +1805,7 @@ impl FunctionTranslator<'_, '_> {
                 if let Some(expr) = value {
                     let outer = std::mem::replace(
                         &mut self.multi_value_results_taken,
-                        matches!(
-                            self.tir_func.return_abi,
-                            crate::nir::ReturnAbi::MultiValue { .. }
-                        ),
+                        matches!(self.tir_func.return_abi, nir::ReturnAbi::MultiValue { .. }),
                     );
                     let value_instr = self.translate_operand(*expr);
                     self.multi_value_results_taken = outer;
@@ -1809,10 +1814,7 @@ impl FunctionTranslator<'_, '_> {
                     // return value so the function pushes the N field
                     // values directly onto the stack instead of wrapping
                     // them in a heap struct.
-                    if matches!(
-                        self.tir_func.return_abi,
-                        crate::nir::ReturnAbi::MultiValue { .. }
-                    ) {
+                    if matches!(self.tir_func.return_abi, nir::ReturnAbi::MultiValue { .. }) {
                         match value_instr {
                             // Direct StructNew → Return { Seq(fields) }.
                             WirInstr::StructNew { fields, .. } => Some(WirInstr::Return {
@@ -1932,35 +1934,31 @@ impl FunctionTranslator<'_, '_> {
     /// and a `#[cm(...)]` member with no backing import — and `panic` on the rest.
     fn unresolved_call_or_trap(
         &mut self,
-        func: &crate::nir::FunctionRef,
-        span: crate::token::Span,
+        func: &nir::FunctionRef,
+        span: Span,
         panic_msg: impl FnOnce() -> String,
     ) -> WirInstr {
         let Some(method) = func.method_info.as_ref() else {
             panic!("{}", panic_msg());
         };
         if let Some(trait_name) = method.trait_name.as_ref() {
-            self.ctx
-                .trait_bound_violations
-                .push(crate::wir::TraitBoundViolation {
-                    type_display: method.fq_struct_name().to_display(),
-                    trait_display: trait_name.to_display(),
-                    span,
-                });
+            self.ctx.trait_bound_violations.push(TraitBoundViolation {
+                type_display: method.fq_struct_name().to_display(),
+                trait_display: trait_name.to_display(),
+                span,
+            });
             return WirInstr::Unreachable;
         }
         if let Some(cm_name) = method.cm_name.as_ref() {
-            self.ctx
-                .cm_import_violations
-                .push(crate::wir::CmImportViolation {
-                    call_display: format!(
-                        "{}::{}",
-                        method.fq_struct_name().to_display(),
-                        method.method_name
-                    ),
-                    cm_name: cm_name.clone(),
-                    span,
-                });
+            self.ctx.cm_import_violations.push(CmImportViolation {
+                call_display: format!(
+                    "{}::{}",
+                    method.fq_struct_name().to_display(),
+                    method.method_name
+                ),
+                cm_name: cm_name.clone(),
+                span,
+            });
             return WirInstr::Unreachable;
         }
         panic!("{}", panic_msg());
@@ -2026,7 +2024,7 @@ impl FunctionTranslator<'_, '_> {
                 let ty = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-                let name = self.fresh_local("__arg_spill");
+                let name = self.fresh_local("$arg_spill");
                 let value = self.translate_operand(op);
                 prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
                 call_args.push(WirInstr::LocalGet {
@@ -2068,7 +2066,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// The NIR type of an operand — the `ExprNode` type for a skeleton subtree,
     /// or the pool-recorded source type for a promoted pure value.
-    pub(super) fn operand_type_id(&self, op: Operand) -> crate::tir::TypeId {
+    pub(super) fn operand_type_id(&self, op: Operand) -> tir::TypeId {
         match op {
             Operand::Expr(e) => self.body.exprs[e].type_id,
             Operand::Value(v) => self
@@ -2152,7 +2150,7 @@ impl FunctionTranslator<'_, '_> {
     /// Each kind lowers from the pool using the source
     /// type recorded by the builder; composite kinds (`Binary`, `Select`,
     /// `FieldAccess`, …) recurse on their operands. Kinds not yet promotable panic.
-    pub(super) fn extract_value(&mut self, v: crate::nir_value_graph::ValueId) -> WirInstr {
+    pub(super) fn extract_value(&mut self, v: ValueId) -> WirInstr {
         use crate::nir_value_graph::ValueKind;
         use crate::wir::WirAbstractHeapType;
         let kind = self.body.values.kind(v).clone();
@@ -2228,7 +2226,7 @@ impl FunctionTranslator<'_, '_> {
                     .values
                     .type_of(operand)
                     .expect("promoted Cast operand has no recorded type");
-                self.translate_cast(crate::nir_arena::Operand::Value(operand), from_ty, target)
+                self.translate_cast(Operand::Value(operand), from_ty, target)
             }
             // An `Opaque` stands for a leaf the graph cannot reconstruct (a
             // local read, a call result). It is re-emitted from the recorded
@@ -2286,7 +2284,7 @@ impl FunctionTranslator<'_, '_> {
                     panic!("extract_value FieldAccess: receiver not a Ref: {wir_type:?}");
                 };
                 let field_name = match self.ctx.types.get(struct_tid.index() as usize) {
-                    Some(crate::wir::WirTypeDef::Struct(st)) => st
+                    Some(WirTypeDef::Struct(st)) => st
                         .fields
                         .get(field_index as usize)
                         .map(|f| f.name.clone())
@@ -2298,8 +2296,7 @@ impl FunctionTranslator<'_, '_> {
                 // materialised), read the split local directly — a `StructGet`
                 // would read an uninitialised slot. Mirrors `translate_expr_inner`.
                 if let ValueKind::Opaque(oid) = self.body.values.kind(receiver)
-                    && let Some(crate::nir_value_graph::OpaqueSource::Local(idx)) =
-                        self.body.values.opaque_source(*oid)
+                    && let Some(OpaqueSource::Local(idx)) = self.body.values.opaque_source(*oid)
                     && let Some(splits) = self.multi_value_split_locals.get(&idx)
                     && let Some((name, ty)) = splits.get(&field_name)
                 {
@@ -2733,14 +2730,14 @@ impl FunctionTranslator<'_, '_> {
                 // where the declaring signature states no result. One binding
                 // both types the import and drops the value it returns.
                 let discards_result = expr.type_id == TypeTable::UNIT
-                    && target.canonical().is_some_and(
-                        crate::canonical::CanonicalIntrinsic::returns_discarded_result,
-                    );
+                    && target
+                        .canonical()
+                        .is_some_and(CanonicalIntrinsic::returns_discarded_result);
                 // Look up in WASI imports (registered by register_imports from TIR imports)
                 let func_id = if let Some(func_id) = self
                     .ctx
                     .func_map
-                    .get(&crate::name::MangledName::wasi_import(&import_name))
+                    .get(&MangledName::wasi_import(&import_name))
                 {
                     func_id.clone()
                 } else {

@@ -17,6 +17,7 @@ use wado_compiler::semantics::semantics_for_world;
 use wado_manifest::DependencySource;
 
 use crate::DiagnosticCollector;
+use crate::host::discovery::resolve_member_manifest;
 
 /// Validate every invocation's options and emit each complaint through `host`.
 ///
@@ -94,7 +95,7 @@ async fn read_manifest<H: CompilerHost>(dir: &Path, host: &H) -> Option<wado_man
     let path = dir.join(wado_manifest::MANIFEST_FILENAME);
     let bytes = host.load_source(&path.display().to_string()).await.ok()?;
     let content = String::from_utf8(bytes).ok()?;
-    crate::host::discovery::resolve_member_manifest(dir, &content).ok()
+    resolve_member_manifest(dir, &content).ok()
 }
 
 /// Analyze the generator's source, under the generator world as `wado compile`

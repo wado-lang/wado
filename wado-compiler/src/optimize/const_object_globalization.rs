@@ -22,6 +22,21 @@ use super::arena_query::{
     bare_promoted_local, bare_promoted_reads, buried_promoted_reads, collect_reads,
     expr_mentions_local, is_local, promoted_local_reads, reachable_nodes, strip_refs,
 };
+use crate::ast::Visibility;
+use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::nir::{ArrayElementAccess, FuncId, NirParam, NirStruct};
+use crate::nir_arena::{ArenaCallArg, PatId, PatKind};
+use crate::nir_value_graph::builder::is_const_value;
+use crate::nir_value_graph::{ValueId, ValueKind};
+use crate::niri::is_ctfe_eligible;
+use crate::optimize::arena_query::projected_const_field;
+use crate::optimize::mod_ref::compute_fn_effects;
+use crate::optimize::multi_value_return::aggregate_field_info;
+use crate::tir::{GlobalInit, PrimitiveType};
+use crate::token::Span;
+use crate::wir_build::packed_array_is_eager;
+use crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT;
+use crate::{compiler_trace, nir};
 
 /// A hoisting candidate, identified by its owning function. Resolved in an
 /// immutable analysis phase, applied in a later mutation phase to avoid
@@ -133,7 +148,7 @@ fn deref_const_field_borrows(project: &mut NirPackage) {
         let Some(body) = func.body.as_mut() else {
             continue;
         };
-        let edits: Vec<(ExprId, Operand)> = super::arena_query::reachable_nodes(body)
+        let edits: Vec<(ExprId, Operand)> = reachable_nodes(body)
             .into_iter()
             .filter_map(|node| {
                 let NodeRef::Expr(id) = node else { return None };
@@ -144,7 +159,7 @@ fn deref_const_field_borrows(project: &mut NirPackage) {
                 else {
                     return None;
                 };
-                let proj = super::arena_query::projected_const_field(body, *inner)?;
+                let proj = projected_const_field(body, *inner)?;
                 Some((id, proj))
             })
             .collect();
@@ -161,7 +176,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     deref_const_field_borrows(project);
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
-    let is_uninitialized = project.intern_extern(&crate::nir::FunctionRef {
+    let is_uninitialized = project.intern_extern(&nir::FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "is_uninitialized".to_string(),
         monomorph_info: None,
@@ -169,13 +184,12 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
     });
 
     // Phase 1 — analysis (all immutable borrows).
-    let fn_effects =
-        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let fn_effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let hoistable_pure: Vec<bool> = project
         .functions
         .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
+        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
         .collect();
     // A bodyless callee `mod_ref` did not mark opaque is a Wasm instruction:
     // `leaf_effect` opaques every component-model builtin and every bodyless
@@ -188,13 +202,12 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         .collect();
     // Fixed per function, and asked of every `Call` node on every walk of the
     // fixpoint, so it is classified once here rather than per query.
-    let element_access: Vec<Option<crate::nir::ArrayElementAccess>> = project
+    let element_access: Vec<Option<ArrayElementAccess>> = project
         .functions
         .iter()
         .map(|f| {
             let f = f.borrow();
-            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-                .array_element_access()
+            nir::FunctionRef::from_resolved(&f, f.module_source.clone()).array_element_access()
         })
         .collect();
     let gate = Gate {
@@ -218,22 +231,22 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let Some(body) = &f.body else {
             continue;
         };
-        crate::compiler_trace!("const_object_globalization", "fn {}", f.name);
+        compiler_trace!("const_object_globalization", "fn {}", f.name);
         collect_candidates(body, &gate, fi, &f.module_source, &mut candidates);
     }
     if candidates.is_empty() {
         return false;
     }
 
-    // Phase 2 — mutation. Number from the count of pre-existing `__const_obj_*`
+    // Phase 2 — mutation. Number from the count of pre-existing `$const_obj_*`
     // globals so names stay unique across invocations.
     let base = project
         .globals
         .iter()
-        .filter(|g| g.name.starts_with(crate::name::CONST_OBJ_GLOBAL_PREFIX))
+        .filter(|g| g.name.starts_with(CONST_OBJ_GLOBAL_PREFIX))
         .count();
     for (n, cand) in (base..).zip(candidates) {
-        let name = format!("{}{n}", crate::name::CONST_OBJ_GLOBAL_PREFIX);
+        let name = format!("{CONST_OBJ_GLOBAL_PREFIX}{n}");
         let Candidate {
             func_idx,
             ty,
@@ -244,7 +257,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
-        crate::compiler_trace!(
+        compiler_trace!(
             "const_object_globalization",
             "  {} hoists {} as {name} (guarded={guarded})",
             func.name,
@@ -316,15 +329,15 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             ty,
             // The hoisted value is written by the `GlobalVarSet` this pass
             // emits at the use site, so the storage starts at a placeholder.
-            init: crate::tir::GlobalInit::Deferred(ExprBody::wrapping_value(
-                crate::nir_value_graph::ValueKind::Null,
+            init: GlobalInit::Deferred(ExprBody::wrapping_value(
+                ValueKind::Null,
                 ty,
-                crate::token::Span::new(0, 0, 1, 1),
+                Span::new(0, 0, 1, 1),
             )),
             wado_mutable: false,
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             module_source,
-            span: crate::token::Span::new(0, 0, 1, 1),
+            span: Span::new(0, 0, 1, 1),
             locals: Vec::new(),
             prefer_fixed_string_repr: prefer_fixed_repr,
             // Synthesized storage for a hoisted literal, not a user parameter.
@@ -466,7 +479,7 @@ fn collect_candidates(
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
 /// referent's storage back out, or writes through it. [`is_readonly_body`] only
-/// sees the caller, where `__b."…build"()` reads.
+/// sees the caller, where `$b."…build"()` reads.
 fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
@@ -687,7 +700,7 @@ fn hoist_value_arg(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    guarded: Option<crate::nir::FuncId>,
+    guarded: Option<FuncId>,
 ) {
     let span = body.exprs[arg_expr].span;
     let inner_kind = std::mem::replace(
@@ -715,8 +728,8 @@ fn set_then_get_block(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    guarded: Option<crate::nir::FuncId>,
-    span: crate::token::Span,
+    guarded: Option<FuncId>,
+    span: Span,
 ) -> BlockId {
     let set_expr = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarSet {
@@ -793,7 +806,7 @@ fn hoist_inline_ref(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    guarded: Option<crate::nir::FuncId>,
+    guarded: Option<FuncId>,
 ) {
     let ExprKind::Unary {
         expr: Operand::Expr(inner),
@@ -820,8 +833,8 @@ fn hoist_inline_ref(
 fn skip_function(f: &NirFunction) -> bool {
     f.is_cm_binding
         || f.is_dispatch_wrapper
-        || f.name == crate::name::MODULE_INIT_FUNCTION
-        || f.name == crate::name::MODULES_INIT_FUNCTION
+        || f.name == MODULE_INIT_FUNCTION
+        || f.name == MODULES_INIT_FUNCTION
         || f.value_copy_type().is_some()
         // `wir_build::register_globals` asserts no `NirGlobal` has a WASI
         // `module_source` — a plain helper function can live in a
@@ -861,7 +874,7 @@ fn let_stmt_qualifies(
     };
     let (local_index, value, type_id) = (*local_index, *value, *type_id);
     let decline = |why: &str| -> Option<Vec<StmtId>> {
-        crate::compiler_trace!(
+        compiler_trace!(
             "const_object_globalization",
             "  {name}#{local_index} declined: {why}"
         );
@@ -1242,7 +1255,7 @@ fn is_globalizable_const_operand(
         // into a shared global would re-initialize it per activation, so an outer
         // recursive frame would observe an inner frame's value. Only a genuine
         // constant is safe.
-        Operand::Value(v) => crate::nir_value_graph::builder::is_const_value(&body.values, v),
+        Operand::Value(v) => is_const_value(&body.values, v),
         Operand::Expr(e) => is_globalizable_const(body, e, gate, bound),
     }
 }
@@ -1390,8 +1403,8 @@ struct Gate<'a> {
     instruction_leaf: &'a [bool],
     /// Indexed by `func_id.index()`: how the callee reaches an array element,
     /// or `None` when it is not an accessor.
-    element_access: &'a [Option<crate::nir::ArrayElementAccess>],
-    structs: &'a [crate::nir::NirStruct],
+    element_access: &'a [Option<ArrayElementAccess>],
+    structs: &'a [NirStruct],
     /// `(callee index, parameter position)` → [`Gate::callee_param_readonly`].
     /// Each verdict costs two walks of the callee body, and one helper taking a
     /// constant is typically called from many sites.
@@ -1465,7 +1478,7 @@ impl Gate<'_> {
             drop(tt);
             return self.owns_heap_storage_inner(inner, seen);
         }
-        let fields = super::multi_value_return::aggregate_field_info(ty, &tt, self.structs);
+        let fields = aggregate_field_info(ty, &tt, self.structs);
         drop(tt);
         match fields {
             Some((field_types, _, _)) => field_types
@@ -1475,7 +1488,7 @@ impl Gate<'_> {
         }
     }
 
-    fn is_hoistable_pure(&self, func_id: crate::nir::FuncId) -> bool {
+    fn is_hoistable_pure(&self, func_id: FuncId) -> bool {
         self.hoistable_pure
             .get(func_id.index())
             .copied()
@@ -1485,7 +1498,7 @@ impl Gate<'_> {
     /// `Some(true)` when `func`'s `self` parameter is `&mut self`,
     /// `Some(false)` when it is `&self` / by-value, `None` when unresolvable
     /// (conservatively treated as mutating).
-    fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
+    fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
         use cranelift_entity::EntityRef;
         let f = self.funcs.get(func_id.index())?.borrow();
         Some(self.param_borrows_mutably(f.params.first()?))
@@ -1499,7 +1512,7 @@ impl Gate<'_> {
     /// passed — the write that used to travel through `&mut S` travels through
     /// the field. [`NirParam::is_mut_ref`] is captured before that rewrite (and
     /// before boxing) and outlives it, so it is the reliable half of the test.
-    fn param_borrows_mutably(&self, param: &crate::nir::NirParam) -> bool {
+    fn param_borrows_mutably(&self, param: &NirParam) -> bool {
         param.is_mut_ref
             || matches!(
                 self.type_table.borrow().get(param.type_id),
@@ -1510,7 +1523,7 @@ impl Gate<'_> {
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
     /// takes it over (a by-value `self`). An unknown callee answers `false`.
-    fn callee_borrows_self(&self, func_id: crate::nir::FuncId) -> bool {
+    fn callee_borrows_self(&self, func_id: FuncId) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
@@ -1525,7 +1538,7 @@ impl Gate<'_> {
     }
 
     /// Whether `func_id` is one of the array element accessors.
-    fn element_accessor(&self, func_id: crate::nir::FuncId) -> bool {
+    fn element_accessor(&self, func_id: FuncId) -> bool {
         use cranelift_entity::EntityRef;
         self.element_access
             .get(func_id.index())
@@ -1534,10 +1547,10 @@ impl Gate<'_> {
 
     /// Whether `func_id` reaches an array element without writing through it.
     /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
-    fn reads_element(&self, func_id: crate::nir::FuncId) -> bool {
+    fn reads_element(&self, func_id: FuncId) -> bool {
         use cranelift_entity::EntityRef;
         self.element_access.get(func_id.index()).copied().flatten()
-            == Some(crate::nir::ArrayElementAccess::Read)
+            == Some(ArrayElementAccess::Read)
     }
 
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
@@ -1548,7 +1561,7 @@ impl Gate<'_> {
     /// call site hands over — is what names the operand.
     fn instruction_passes_through(
         &self,
-        func_id: crate::nir::FuncId,
+        func_id: FuncId,
         param_pos: usize,
         arg_ty: TypeId,
     ) -> bool {
@@ -1567,7 +1580,7 @@ impl Gate<'_> {
     /// Whether the callee may write through parameter `param_pos`. Boxing
     /// erases `&` / `&mut` from the parameter type, so the body — not the
     /// passing mode — is what answers.
-    fn callee_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn callee_param_writes_through(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.param_writes_through.borrow().get(&key) {
@@ -1581,7 +1594,7 @@ impl Gate<'_> {
         verdict
     }
 
-    fn compute_param_writes_through(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn compute_param_writes_through(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return true;
@@ -1606,7 +1619,7 @@ impl Gate<'_> {
     /// here can prove what it does with the value. A `&` / `&mut` parameter
     /// answers `false` too — a by-value argument never lands there, and `&mut`
     /// writes the caller's storage outright.
-    fn callee_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn callee_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.param_readonly.borrow().get(&key) {
@@ -1624,7 +1637,7 @@ impl Gate<'_> {
     /// to, so a recursive helper re-enters this query for a key already in
     /// flight. Seeding the memo with the leaking verdict cuts the cycle the
     /// conservative way.
-    fn callee_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn callee_ref_param_leaks(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.ref_param_leaks.borrow().get(&key) {
@@ -1643,7 +1656,7 @@ impl Gate<'_> {
     /// This is the argument-position dual of [`Self::callee_borrows_self`]. A
     /// `&mut` parameter is excluded — the callee may write through it, which
     /// the shared global must never see.
-    fn callee_only_borrows_arg(&self, func_id: crate::nir::FuncId, pos: usize) -> bool {
+    fn callee_only_borrows_arg(&self, func_id: FuncId, pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
@@ -1672,7 +1685,7 @@ impl Gate<'_> {
     /// and each gets a gate: what it returns must be a primitive, and what it
     /// moves elementwise (`array.copy`) means the argument may only be a
     /// primitive or an array of them.
-    fn instruction_arg_captures(&self, func_id: crate::nir::FuncId, arg_ty: TypeId) -> bool {
+    fn instruction_arg_captures(&self, func_id: FuncId, arg_ty: TypeId) -> bool {
         use cranelift_entity::EntityRef;
         if !self
             .instruction_leaf
@@ -1716,7 +1729,7 @@ impl Gate<'_> {
         }
     }
 
-    fn compute_ref_param_leaks(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn compute_ref_param_leaks(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return true;
@@ -1730,7 +1743,7 @@ impl Gate<'_> {
             .is_none_or(|body| param_storage_escapes(body, param.local_index, self))
     }
 
-    fn compute_param_readonly(&self, func_id: crate::nir::FuncId, param_pos: usize) -> bool {
+    fn compute_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
         use cranelift_entity::EntityRef;
         let Some(f) = self.funcs.get(func_id.index()) else {
             return false;
@@ -1748,7 +1761,7 @@ impl Gate<'_> {
         let Some(body) = f.body.as_ref() else {
             // Nothing to walk: only the builtins that state a read-only
             // parameter on the reference itself pass, everything else fails.
-            return crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+            return nir::FunctionRef::from_resolved(&f, f.module_source.clone())
                 .reads_param_only(param_pos);
         };
         is_readonly_body(body, param.local_index, self)
@@ -2059,10 +2072,10 @@ fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'
 }
 
 /// Every local a pattern binds, appended to `out` if not already there.
-fn collect_pattern_bindings(body: &Body, pattern: crate::nir_arena::PatId, out: &mut Vec<u32>) {
+fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Vec<u32>) {
     body.for_each_live_node_under(NodeRef::Pat(pattern), |node| {
         if let NodeRef::Pat(p) = node
-            && let crate::nir_arena::PatKind::Binding { local_index, .. } = &body.pats[p].kind
+            && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
             && !out.contains(local_index)
         {
             out.push(*local_index);
@@ -2409,11 +2422,7 @@ fn reads_local(body: &Body, idx: u32) -> bool {
 /// How many of `node`'s operand slots hold `value`. Counted before any is
 /// replaced: a read minted for a slot that is not there would linger in the
 /// append-only arena as an orphan.
-fn operand_slots_holding(
-    body: &Body,
-    node: NodeRef,
-    value: crate::nir_value_graph::ValueId,
-) -> usize {
+fn operand_slots_holding(body: &Body, node: NodeRef, value: ValueId) -> usize {
     let mut slots = 0;
     body.for_each_operand(node, |op| {
         if op.as_value() == Some(value) {
@@ -2461,8 +2470,8 @@ fn rewrite_promoted_reads(
 
 /// Move a candidate's sibling const `let`s into the hoisted set's value,
 /// rebuilding the self-contained initializer block the pre-normal-form shape
-/// carried: `G = *__b` (sibling `__b` outside) becomes
-/// `G = { let __b = <literal>; *__b }`. Confinement (checked at candidacy)
+/// carried: `G = *$b` (sibling `$b` outside) becomes
+/// `G = { let $b = <literal>; *$b }`. Confinement (checked at candidacy)
 /// guarantees the moved bindings have no other readers.
 fn inline_sibling_lets(
     body: &mut Body,
@@ -2515,14 +2524,11 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
                 Some(())
             }
-            ExprKind::PackedArray(bytes) => (!crate::wir_build::packed_array_is_eager(
-                bytes.len(),
-                gate.string_inline_max_bytes,
-                prefer_fixed,
-            ))
-            .then_some(()),
-            ExprKind::ArrayLiteral { elements } => (elements.len()
-                > crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT
+            ExprKind::PackedArray(bytes) => {
+                (!packed_array_is_eager(bytes.len(), gate.string_inline_max_bytes, prefer_fixed))
+                    .then_some(())
+            }
+            ExprKind::ArrayLiteral { elements } => (elements.len() > ARRAY_NEW_FIXED_LIMIT
                 || array_literal_promotes_to_data(body, elements, gate))
             .then_some(()),
             _ => None,
@@ -2569,8 +2575,8 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
                 (width, operand)
             }
             ValueKind::Float(_, ty) => match type_table.get(*ty) {
-                ResolvedType::Primitive(crate::tir::PrimitiveType::F32) => (4, ConstOperand::F32),
-                ResolvedType::Primitive(crate::tir::PrimitiveType::F64) => (8, ConstOperand::F64),
+                ResolvedType::Primitive(PrimitiveType::F32) => (4, ConstOperand::F32),
+                ResolvedType::Primitive(PrimitiveType::F64) => (8, ConstOperand::F64),
                 _ => return false,
             },
             _ => return false,
@@ -2604,8 +2610,8 @@ fn guard_set_on_uninit(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    is_uninitialized: crate::nir::FuncId,
-    span: crate::token::Span,
+    is_uninitialized: FuncId,
+    span: Span,
 ) -> StmtId {
     let global_get = body.exprs.push(ExprNode {
         kind: ExprKind::GlobalVarGet {
@@ -2619,7 +2625,7 @@ fn guard_set_on_uninit(
         kind: ExprKind::Call {
             func_id: is_uninitialized,
             type_args: vec![ty],
-            args: vec![crate::nir_arena::ArenaCallArg {
+            args: vec![ArenaCallArg {
                 expr: global_get.into(),
                 is_mut: false,
             }],
@@ -2658,7 +2664,7 @@ fn replace_let_with_set(
     module_source: &ModuleSource,
     name: &str,
     ty: TypeId,
-    guarded: Option<crate::nir::FuncId>,
+    guarded: Option<FuncId>,
 ) -> bool {
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {

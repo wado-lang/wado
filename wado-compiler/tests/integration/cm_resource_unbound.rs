@@ -1,6 +1,7 @@
 //! A call to a `#[cm(...)]` member a user module declares has no import behind
 //! it. Reported as a diagnostic; it used to panic the WIR build.
 
+use crate::common::compile_source;
 const UNKNOWN_INTERFACE: &str = r#"
 #[cm("wasi:demo/types@0.1.0#handle")]
 resource Handle {
@@ -30,7 +31,7 @@ export fn run() with MyFields {
 #[test]
 fn calling_a_user_declared_cm_member_is_rejected() {
     for source in [UNKNOWN_INTERFACE, KNOWN_INTERFACE] {
-        let err = crate::common::compile_source(source)
+        let err = compile_source(source)
             .err()
             .unwrap_or_else(|| panic!("expected a diagnostic for {source}"));
         let message = err.to_string();
@@ -55,7 +56,7 @@ resource Handle {
 export fn run() {}
 "#;
     assert!(
-        crate::common::compile_source(source).is_ok(),
+        compile_source(source).is_ok(),
         "an uncalled binding declaration lowers nothing"
     );
 }

@@ -2,25 +2,30 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
-    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
-    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
-    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
-    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
-    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
-    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
-    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
-    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
-    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
-    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
-    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
-    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
-    WorldExportFn, WorldExportInterface, WorldImport,
+    AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
+    AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
+    BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
+    ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt,
+    EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
+    FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
+    FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
+    ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
+    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
+    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,
+    SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
+    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TryOpExpr,
+    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
+    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
-use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+use crate::comment::{Comment, TriviaMap};
+use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::lexer::{LexResult, lex_interpolation};
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
+use crate::{ast, format_spec, hashmap};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -38,7 +43,7 @@ pub struct Parser {
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
     /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
-    include_paths: crate::hashmap::IndexSet<String>,
+    include_paths: hashmap::IndexSet<String>,
     /// Inner attributes parsed before items. Retained even if parsing fails later,
     /// so callers can check `has_todo()` after a parse error.
     parsed_inner_attributes: Vec<InnerAttribute>,
@@ -46,7 +51,7 @@ pub struct Parser {
     /// in. Fresh per top-level parser; template-interpolation sub-parsers
     /// inherit the parent's space (see `parse_interpolation_expr`) so a
     /// module's tree carries exactly one space.
-    ast_id_space: crate::ast::AstIdSpace,
+    ast_id_space: AstIdSpace,
     /// Local half of the next [`AstId`] to allocate. Allocated densely
     /// starting from `0` in DFS parse order.
     next_ast_id: u32,
@@ -55,12 +60,12 @@ pub struct Parser {
     /// `alloc_ast_id`, all still-unattached comments whose `span.start`
     /// precedes the next-to-consume token's start are attached to the new
     /// id's leading trivia. See [`crate::comment::TriviaMap`].
-    comments: Vec<crate::comment::Comment>,
+    comments: Vec<Comment>,
     /// Index of the next unattached comment in `comments`.
     comment_cursor: usize,
     /// Trivia attached to AST nodes during parsing. Exposed via
     /// [`Parser::take_trivia`] for the formatter pipeline.
-    trivia: crate::comment::TriviaMap,
+    trivia: TriviaMap,
     /// Syntax errors collected during error recovery. Drained via
     /// [`Parser::take_errors`] after [`Parser::parse`].
     errors: Vec<ParseError>,
@@ -85,7 +90,7 @@ pub struct ParseError {
     pub span: Span,
 }
 
-impl From<ParseError> for crate::compiler_host::Diagnostic {
+impl From<ParseError> for Diagnostic {
     fn from(e: ParseError) -> Self {
         Self {
             severity: Severity::Error,
@@ -132,13 +137,7 @@ impl Parser {
     /// interpolation re-parser continues its parent's space through
     /// [`Parser::build`] rather than minting one here.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self::build(
-            crate::ast::AstIdSpace::next(),
-            tokens,
-            None,
-            None,
-            Vec::new(),
-        )
+        Self::build(AstIdSpace::next(), tokens, None, None, Vec::new())
     }
 
     /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
@@ -147,7 +146,7 @@ impl Parser {
     /// here — callers route them through [`crate::ParseResult::lex_errors`]
     /// so the wire format keeps the `lexer error:` prefix distinct from
     /// `parse error:`.
-    pub fn from_lex(lex: crate::lexer::LexResult) -> Self {
+    pub fn from_lex(lex: LexResult) -> Self {
         Self::build(
             lex.space,
             lex.tokens,
@@ -161,7 +160,7 @@ impl Parser {
     /// loader and other non-formatter paths where trivia is allocated then
     /// thrown away — clearing it up front skips the per-AST-id comment-cursor
     /// walk and `Comment::clone` into [`crate::comment::TriviaMap`].
-    pub fn from_lex_no_trivia(lex: crate::lexer::LexResult) -> Self {
+    pub fn from_lex_no_trivia(lex: LexResult) -> Self {
         Self::build(
             lex.space,
             lex.tokens,
@@ -172,11 +171,11 @@ impl Parser {
     }
 
     fn build(
-        ast_id_space: crate::ast::AstIdSpace,
+        ast_id_space: AstIdSpace,
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
-        comments: Vec<crate::comment::Comment>,
+        comments: Vec<Comment>,
     ) -> Self {
         // Filter `TokenKind::Error` tokens at construction time so no parser
         // path can mistake one for an identifier or generate a duplicate
@@ -194,13 +193,13 @@ impl Parser {
             restrict_struct_literals: false,
             shebang,
             data_section,
-            include_paths: crate::hashmap::IndexSet::default(),
+            include_paths: hashmap::IndexSet::default(),
             parsed_inner_attributes: Vec::new(),
             ast_id_space,
             next_ast_id: 0,
             comments,
             comment_cursor: 0,
-            trivia: crate::comment::TriviaMap::new(),
+            trivia: TriviaMap::new(),
             errors: Vec::new(),
             contextual_keywords: Vec::new(),
             recovering: false,
@@ -229,8 +228,8 @@ impl Parser {
     /// not-yet-attached comment preceding the next token as leading trivia on
     /// the returned id: DFS parse order means the outermost node at a source
     /// position allocates first, so the comment lands where it belongs.
-    fn alloc_ast_id(&mut self) -> crate::ast::AstId {
-        let id = crate::ast::AstId::new(self.ast_id_space, self.next_ast_id);
+    fn alloc_ast_id(&mut self) -> AstId {
+        let id = AstId::new(self.ast_id_space, self.next_ast_id);
         self.next_ast_id += 1;
         // Comment-stream lockstep: pure tokenisations skip the Vec
         // allocation entirely. Most AST nodes have no preceding
@@ -243,7 +242,7 @@ impl Parser {
                 .map(|t| t.span.start)
                 .unwrap_or(usize::MAX);
             if self.comments[self.comment_cursor].span.start < next_token_start {
-                let mut leading: Vec<crate::comment::Comment> = Vec::new();
+                let mut leading: Vec<Comment> = Vec::new();
                 while self.comment_cursor < self.comments.len()
                     && self.comments[self.comment_cursor].span.start < next_token_start
                 {
@@ -260,7 +259,7 @@ impl Parser {
     /// after `parse()` returns Ok so the formatter pipeline can read
     /// leading-comment attachments. Sets file-tail dangling comments to
     /// any unattached residue.
-    pub fn take_trivia(&mut self) -> crate::comment::TriviaMap {
+    pub fn take_trivia(&mut self) -> TriviaMap {
         let mut comments = std::mem::take(&mut self.comments);
         let dangling = comments.split_off(self.comment_cursor);
         self.comment_cursor = 0;
@@ -307,7 +306,7 @@ impl Parser {
         self.pos = cp.pos;
         self.comment_cursor = cp.comment_cursor;
         self.trivia
-            .discard_from(crate::ast::AstId::new(self.ast_id_space, cp.next_ast_id));
+            .discard_from(AstId::new(self.ast_id_space, cp.next_ast_id));
         self.next_ast_id = cp.next_ast_id;
         self.pending_gt = cp.pending_gt;
         // Drop errors recorded inside the speculative branch being rolled back.
@@ -500,7 +499,7 @@ impl Parser {
             self.advance();
         }
         let end = self.tokens[self.pos.saturating_sub(1)].span;
-        Item::Error(crate::ast::ErrorItem {
+        Item::Error(ErrorItem {
             id,
             span: start.merge(&end),
         })
@@ -708,7 +707,7 @@ impl Parser {
     /// Build an [`Expr::Error`] placeholder spanning `span`, allocating a fresh
     /// [`AstId`] so the node participates in the dense id space like any other.
     fn error_expr(&mut self, span: Span) -> Expr {
-        Expr::Error(crate::ast::ErrorExpr {
+        Expr::Error(ErrorExpr {
             id: self.alloc_ast_id(),
             span,
         })
@@ -717,7 +716,7 @@ impl Parser {
     /// Build a [`Stmt::Error`] placeholder spanning `span`, allocating a fresh
     /// [`AstId`] so the node participates in the dense id space like any other.
     fn error_stmt(&mut self, span: Span) -> Stmt {
-        Stmt::Error(crate::ast::ErrorStmt {
+        Stmt::Error(ErrorStmt {
             id: self.alloc_ast_id(),
             span,
         })
@@ -858,7 +857,7 @@ impl Parser {
     }
 
     /// Parse a `+`-separated list of trait bounds: `Bound1 + Bound2 + ...`
-    fn parse_trait_bounds(&mut self) -> ParseResult<Vec<crate::ast::TraitBound>> {
+    fn parse_trait_bounds(&mut self) -> ParseResult<Vec<TraitBound>> {
         let mut bounds = vec![self.parse_trait_bound()?];
         while self.check(&TokenKind::Plus) {
             self.advance();
@@ -1096,7 +1095,7 @@ impl Parser {
         };
 
         if !self.check(&TokenKind::Resource) {
-            reject_resource_backing(&attrs)?;
+            reject_resource_linearity(&attrs)?;
         }
 
         // Check for contextual keyword "test" (identifier followed by string or block)
@@ -1270,8 +1269,7 @@ impl Parser {
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
-            // `as_ident_name`, so a contextual keyword can be a key:
-            // `#[cm(..., type="extern-handle")]`.
+            // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
                 (_, TokenKind::StringLit(raw)) => {
@@ -1634,7 +1632,7 @@ impl Parser {
     }
 
     /// Parse a single [`AttrValue`]: scalar, array, or nested object.
-    fn parse_attr_value(&mut self) -> ParseResult<crate::ast::AttrValue> {
+    fn parse_attr_value(&mut self) -> ParseResult<AttrValue> {
         let span = self.peek().span;
         // Handle unary minus on numeric literals (e.g. `-3`, `-1.5`).
         let negate = if matches!(self.peek_kind(), TokenKind::Minus) {
@@ -1652,7 +1650,7 @@ impl Parser {
                     });
                 }
                 let s = self.consume_string()?;
-                Ok(crate::ast::AttrValue::String(s))
+                Ok(AttrValue::String(s))
             }
             TokenKind::NumberLit(repr) => {
                 self.advance();
@@ -1666,7 +1664,7 @@ impl Parser {
                     });
                 }
                 self.advance();
-                Ok(crate::ast::AttrValue::Bool(true))
+                Ok(AttrValue::Bool(true))
             }
             TokenKind::False => {
                 if negate {
@@ -1676,7 +1674,7 @@ impl Parser {
                     });
                 }
                 self.advance();
-                Ok(crate::ast::AttrValue::Bool(false))
+                Ok(AttrValue::Bool(false))
             }
             TokenKind::LBracket => {
                 if negate {
@@ -1700,7 +1698,7 @@ impl Parser {
                     }
                 }
                 self.expect(&TokenKind::RBracket)?;
-                Ok(crate::ast::AttrValue::Array(items))
+                Ok(AttrValue::Array(items))
             }
             TokenKind::LBrace => {
                 if negate {
@@ -1710,7 +1708,7 @@ impl Parser {
                     });
                 }
                 self.advance();
-                let mut obj = crate::ast::AttrObject::default();
+                let mut obj = AttrObject::default();
                 if !self.check(&TokenKind::RBrace) {
                     loop {
                         let (key, key_span) = self.consume_ident_with_span()?;
@@ -1727,7 +1725,7 @@ impl Parser {
                     }
                 }
                 self.expect(&TokenKind::RBrace)?;
-                Ok(crate::ast::AttrValue::Object(obj))
+                Ok(AttrValue::Object(obj))
             }
             other => Err(ParseError {
                 message: format!(
@@ -1761,7 +1759,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -2276,7 +2274,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let expr = self.parse_with_handler_expr()?;
         let span = expr.span();
-        Ok(Stmt::Expr(crate::ast::ExprStmt { id, expr, span }))
+        Ok(Stmt::Expr(ExprStmt { id, expr, span }))
     }
 
     /// Parse an expression statement in a block, with optional trailing semicolon
@@ -4069,7 +4067,7 @@ impl Parser {
                 self.advance(); // consume ':'
                 let block = self.parse_block()?;
                 let end_span = block.span;
-                return Ok(Expr::LabeledBlock(Box::new(crate::ast::LabeledBlockExpr {
+                return Ok(Expr::LabeledBlock(Box::new(LabeledBlockExpr {
                     id: self.alloc_ast_id(),
                     label: name,
                     block,
@@ -4413,7 +4411,7 @@ impl Parser {
         let body = self.parse_block()?;
         let span = start_span.merge(&body.span);
 
-        Ok(Expr::WithHandler(Box::new(crate::ast::WithHandlerExpr {
+        Ok(Expr::WithHandler(Box::new(WithHandlerExpr {
             id,
             handlers,
             body,
@@ -4427,7 +4425,7 @@ impl Parser {
     ///   any type expression, so `Stdout => ...` and `Stream<u8> => ...` both
     ///   parse here. Later compiler phases decide which forms they support.
     /// - `handler_expr` (no `=>`) — bundled handler.
-    fn parse_effect_handler_binding(&mut self) -> ParseResult<crate::ast::EffectHandlerBinding> {
+    fn parse_effect_handler_binding(&mut self) -> ParseResult<EffectHandlerBinding> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
 
@@ -4445,7 +4443,7 @@ impl Parser {
                     // directly in handler position; wrap them in `()`.
                     let handler = self.parse_unary_expr()?;
                     let span = start_span.merge(&handler.span());
-                    return Ok(crate::ast::EffectHandlerBinding {
+                    return Ok(EffectHandlerBinding {
                         id,
                         effect: Some(ty),
                         handler,
@@ -4464,7 +4462,7 @@ impl Parser {
         // Bundled handler form: `with &mut value do { ... }`
         let handler = self.parse_unary_expr()?;
         let span = start_span.merge(&handler.span());
-        Ok(crate::ast::EffectHandlerBinding {
+        Ok(EffectHandlerBinding {
             id,
             effect: None,
             handler,
@@ -4483,11 +4481,7 @@ impl Parser {
         let id = self.alloc_ast_id();
         let value = self.parse_expr()?;
         let span = start_span.merge(&value.span());
-        Ok(Expr::Resume(Box::new(crate::ast::ResumeExpr {
-            id,
-            value,
-            span,
-        })))
+        Ok(Expr::Resume(Box::new(ResumeExpr { id, value, span })))
     }
 
     /// Parse match expression: `match expr { pattern => body, ... }`
@@ -4561,7 +4555,7 @@ impl Parser {
             } else {
                 Some(self.parse_expr()?)
             };
-            let ret_end = value.as_ref().map_or(ret_start, super::ast::Expr::span);
+            let ret_end = value.as_ref().map_or(ret_start, Expr::span);
             let ret_span = ret_start.merge(&ret_end);
             let ret_stmt = Stmt::Return(ReturnStmt {
                 id: self.alloc_ast_id(),
@@ -4658,15 +4652,13 @@ impl Parser {
         self.expect(&TokenKind::RBrace)?;
         let end_span = self.expect(&TokenKind::RBracket)?.span;
 
-        Ok(Expr::TupleComprehension(Box::new(
-            crate::ast::TupleComprehensionExpr {
-                id,
-                binding,
-                iterable,
-                body,
-                span: start_span.merge(&end_span),
-            },
-        )))
+        Ok(Expr::TupleComprehension(Box::new(TupleComprehensionExpr {
+            id,
+            binding,
+            iterable,
+            body,
+            span: start_span.merge(&end_span),
+        })))
     }
 
     /// Parse a tuple element: either a spread `..expr` or a regular expression.
@@ -4732,7 +4724,7 @@ impl Parser {
     /// than parsed and discarded, which would mint an `AstId` the canonical
     /// spelling does not have. A closure keeps its `-> ()`: `None` means
     /// "infer" there.
-    fn parse_optional_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
+    fn parse_optional_return_type(&mut self) -> ParseResult<Option<ast::Type>> {
         if !self.check(&TokenKind::Arrow) {
             return Ok(None);
         }
@@ -4748,7 +4740,7 @@ impl Parser {
         Ok(Some(self.parse_type()?))
     }
 
-    fn parse_optional_closure_return_type(&mut self) -> ParseResult<Option<crate::ast::Type>> {
+    fn parse_optional_closure_return_type(&mut self) -> ParseResult<Option<ast::Type>> {
         if self.check(&TokenKind::Arrow) {
             self.advance();
             Ok(Some(self.parse_type()?))
@@ -5029,7 +5021,7 @@ impl Parser {
     }
 
     /// Parse generic type parameters: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Ord + Clone>`, `<T = Default>`
-    fn parse_generic_params(&mut self) -> ParseResult<Vec<crate::ast::GenericParam>> {
+    fn parse_generic_params(&mut self) -> ParseResult<Vec<GenericParam>> {
         if !self.check(&TokenKind::Lt) {
             return Ok(Vec::new());
         }
@@ -5064,7 +5056,7 @@ impl Parser {
                 ));
             }
 
-            if is_pack && params.iter().any(|p: &crate::ast::GenericParam| p.is_pack) {
+            if is_pack && params.iter().any(|p: &GenericParam| p.is_pack) {
                 return Err(self.error_at_span(
                     start_span,
                     "only one type pack parameter is allowed per generic parameter list",
@@ -5089,7 +5081,7 @@ impl Parser {
                 None
             };
 
-            params.push(crate::ast::GenericParam {
+            params.push(GenericParam {
                 id: self.alloc_ast_id(),
                 name,
                 name_span,
@@ -5118,14 +5110,14 @@ impl Parser {
     ///   closure-type bound. In bound position `with` consumes a single
     ///   identifier by default; multiple effects require explicit
     ///   parens because comma already separates trait bounds.
-    fn parse_trait_bound(&mut self) -> ParseResult<crate::ast::TraitBound> {
+    fn parse_trait_bound(&mut self) -> ParseResult<TraitBound> {
         let span = self.peek().span;
 
         // Closure-type bound: `fn(...)` or `fn mut(...)`.
         if self.check(&TokenKind::Fn) {
             let fn_signature = self.parse_fn_type_for_bound(span)?;
             let bound_name = if fn_signature.is_mut { "FnMut" } else { "Fn" };
-            return Ok(crate::ast::TraitBound {
+            return Ok(TraitBound {
                 id: self.alloc_ast_id(),
                 name: bound_name.to_string(),
                 assoc_types: Vec::new(),
@@ -5147,7 +5139,7 @@ impl Parser {
                 let assoc_name = self.consume_ident()?;
                 self.expect(&TokenKind::Eq)?;
                 let ty = self.parse_type()?;
-                assoc.push(crate::ast::AssocTypeBound {
+                assoc.push(AssocTypeBound {
                     id: self.alloc_ast_id(),
                     name: assoc_name,
                     ty,
@@ -5164,7 +5156,7 @@ impl Parser {
         } else {
             Vec::new()
         };
-        Ok(crate::ast::TraitBound {
+        Ok(TraitBound {
             id: self.alloc_ast_id(),
             name,
             assoc_types,
@@ -5294,7 +5286,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
-            reject_resource_backing(&attrs)?;
+            reject_resource_linearity(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -5382,7 +5374,7 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5419,7 +5411,7 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
-            reject_resource_backing(&flag_attrs)?;
+            reject_resource_linearity(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -5495,7 +5487,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5782,10 +5774,7 @@ impl Parser {
     /// `impl List<T: Ord>` extracts T: Ord into `type_params` and returns Generic("List", [Named("T")]).
     /// `impl Foo<List<String>, V>` parses `List<String>` as a full nested generic type.
     /// Falls back to normal `parse_type()` for non-identifier starts (e.g., reference types).
-    fn parse_impl_target_type(
-        &mut self,
-        type_params: &mut Vec<crate::ast::GenericParam>,
-    ) -> ParseResult<Type> {
+    fn parse_impl_target_type(&mut self, type_params: &mut Vec<GenericParam>) -> ParseResult<Type> {
         // If not starting with an identifier, fall back to normal type parsing
         if !matches!(self.peek_kind(), TokenKind::Ident(_)) {
             return self.parse_type();
@@ -5821,7 +5810,7 @@ impl Parser {
                 self.advance(); // consume ':'
                 let bounds = self.parse_trait_bounds()?;
                 if !type_params.iter().any(|p| p.name == param_name) {
-                    type_params.push(crate::ast::GenericParam {
+                    type_params.push(GenericParam {
                         id: self.alloc_ast_id(),
                         name: param_name.clone(),
                         name_span: param_name_span,
@@ -5832,7 +5821,7 @@ impl Parser {
                         span: param_span,
                     });
                 }
-                args.push(Type::Named(crate::ast::NamedType {
+                args.push(Type::Named(NamedType {
                     id: self.alloc_ast_id(),
                     name: param_name,
                     span: param_span,
@@ -5852,7 +5841,7 @@ impl Parser {
         self.expect_gt()?;
         let end_span = self.tokens[self.pos - 1].span; // span of >
 
-        Ok(Type::Generic(crate::ast::GenericType {
+        Ok(Type::Generic(GenericType {
             id: self.alloc_ast_id(),
             name,
             args,
@@ -6141,7 +6130,7 @@ impl Parser {
     /// starts in the file, so the offset [`crate::format_spec`] reports lands on
     /// the offending character.
     fn check_format_spec(&mut self, spec: &str, origin: Position) -> ParseResult<()> {
-        let Err(error) = crate::format_spec::parse(spec) else {
+        let Err(error) = format_spec::parse(spec) else {
             return Ok(());
         };
         let at = origin.advance(&spec[..error.offset]);
@@ -6174,7 +6163,7 @@ impl Parser {
             });
         }
 
-        let lex_result = crate::lexer::lex_interpolation(expr_str, origin, self.ast_id_space);
+        let lex_result = lex_interpolation(expr_str, origin, self.ast_id_space);
         // Lex errors inside the interpolation surface alongside the outer
         // parser's diagnostics, at the offending byte rather than the whole
         // `{…}`.
@@ -6212,7 +6201,7 @@ impl Parser {
     /// Merge `comments` into this parse's stream, keeping it ordered by
     /// position. A comment already there — the same fragment re-parsed after a
     /// speculative branch backtracked — is skipped.
-    fn absorb_comments(&mut self, comments: Vec<crate::comment::Comment>) {
+    fn absorb_comments(&mut self, comments: Vec<Comment>) {
         for comment in comments {
             let at = self
                 .comments
@@ -6354,7 +6343,7 @@ impl Parser {
 
 /// The span of `ch` at `at` in `space`'s text; zero-width when there is no
 /// character left to blame, so an error past the end of the text claims no byte.
-fn span_of(at: Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Span {
+fn span_of(at: Position, ch: Option<char>, space: AstIdSpace) -> Span {
     let width = ch.map_or(0, char::len_utf8);
     Span::with_end(
         at.offset,
@@ -6369,7 +6358,7 @@ fn span_of(at: Position, ch: Option<char>, space: crate::ast::AstIdSpace) -> Spa
 
 /// The span of the `${` whose expression starts at `origin` — both ASCII, and
 /// always on the expression's own line, so the opening column is two back.
-fn span_of_open_brace(origin: Position, space: crate::ast::AstIdSpace) -> Span {
+fn span_of_open_brace(origin: Position, space: AstIdSpace) -> Span {
     assert!(
         origin.offset >= 2 && origin.column >= 3,
         "an interpolation origin always follows `${{`"
@@ -6385,12 +6374,12 @@ fn span_of_open_brace(origin: Position, space: crate::ast::AstIdSpace) -> Span {
     .in_space(space)
 }
 
-/// The backing is a property of the handle type, so it has one home: the
+/// Linearity is a property of the handle type, so it has one home: the
 /// `resource` declaration. Anything else carrying it is rejected.
-fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
-    match attrs.iter().find(|a| a.cm_resource_backing().is_some()) {
+fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
+    match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
         Some(attr) => Err(ParseError {
-            message: "#[cm(..., type=...)] declares a resource's handle backing; \
+            message: "#[cm(..., linearity=...)] declares a resource's linearity; \
                 it belongs on a `resource` declaration"
                 .to_string(),
             span: attr.span,
@@ -6427,24 +6416,24 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
-        let mut seen_type = false;
+        let mut seen_linearity = false;
         for field in fields {
             let AttrArg::KeyValue(key, value) = field else {
                 return Err(
                     "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
                 );
             };
-            if key != "type" {
+            if key != "linearity" {
                 return Err(format!(
-                    "unknown #[cm] field `{key}`; the only field is `type`"
+                    "unknown #[cm] field `{key}`; the only field is `linearity`"
                 ));
             }
-            if std::mem::replace(&mut seen_type, true) {
-                return Err("#[cm] takes one `type` field".to_string());
+            if std::mem::replace(&mut seen_linearity, true) {
+                return Err("#[cm] takes one `linearity` field".to_string());
             }
-            if CmResourceBacking::parse(value).is_none() {
+            if CmResourceLinearity::parse(value).is_none() {
                 return Err(format!(
-                    "unknown #[cm] type `{value}`; expected \"extern-handle\" or \"i32\""
+                    "unknown #[cm] linearity `{value}`; expected \"affine\" or \"unrestricted\""
                 ));
             }
         }
@@ -6456,7 +6445,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
     Ok(None)
 }
 
-fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate::ast::AttrValue> {
+fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<AttrValue> {
     // Strip numeric underscores for parsing; keep them in the original repr for errors.
     let cleaned: String = repr.chars().filter(|c| *c != '_').collect();
     // Float if it contains '.' or 'e'/'E' (but not hex prefix).
@@ -6469,7 +6458,7 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate:
             span,
         })?;
         let v = if negate { -f } else { f };
-        Ok(crate::ast::AttrValue::Float(v))
+        Ok(AttrValue::Float(v))
     } else {
         let n: i64 = if let Some(hex) = cleaned
             .strip_prefix("0x")
@@ -6494,7 +6483,7 @@ fn parse_attr_number(repr: &str, negate: bool, span: Span) -> ParseResult<crate:
             span,
         })?;
         let v = if negate { -n } else { n };
-        Ok(crate::ast::AttrValue::Int(v))
+        Ok(AttrValue::Int(v))
     }
 }
 
@@ -6548,9 +6537,10 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstVisitor;
+    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
     use crate::lexer::lex;
-    use crate::name::SYNTHETIC_LABEL_PREFIX;
+    use crate::name::INTERNAL_PREFIX;
+    use crate::{ast, format};
     use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
@@ -7025,7 +7015,7 @@ mod tests {
     #[test]
     fn resource_declares_a_parent() {
         let source = r#"
-            #[cm("web:dom/node", type="extern-handle")]
+            #[cm("web:dom/node", linearity="unrestricted")]
             pub resource Node extends EventTarget {}
         "#;
         let module = parse(source).unwrap();
@@ -7058,9 +7048,9 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_carries_a_resource_backing() {
+    fn cm_attribute_carries_a_resource_linearity() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle")]
+            #[cm("web:dom/element", linearity="unrestricted")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -7069,15 +7059,15 @@ mod tests {
         };
         let attr = &decl.attrs[0];
         assert_eq!(
-            attr.cm_resource_backing(),
-            Some(CmResourceBacking::ExternHandle)
+            attr.cm_resource_linearity(),
+            Some(CmResourceLinearity::Unrestricted)
         );
         let cm = attr.as_cm_import().expect("cm boundary import");
         assert_eq!(cm.interface, "element");
     }
 
     #[test]
-    fn cm_attribute_backing_defaults_to_none() {
+    fn cm_attribute_linearity_defaults_to_none() {
         let source = r#"
             #[cm("wasi:http/types@0.3.0#request")]
             pub resource Request {}
@@ -7086,32 +7076,32 @@ mod tests {
         let Item::Resource(decl) = &module.items[0] else {
             panic!("expected resource declaration");
         };
-        assert_eq!(decl.attrs[0].cm_resource_backing(), None);
+        assert_eq!(decl.attrs[0].cm_resource_linearity(), None);
     }
 
     #[test]
-    fn cm_attribute_rejects_an_unknown_backing() {
+    fn cm_attribute_rejects_an_unknown_linearity() {
         let source = r#"
-            #[cm("web:dom/element", type="handle")]
+            #[cm("web:dom/element", linearity="extern-handle")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
         assert!(
-            err.message.contains("extern-handle") && err.message.contains("i32"),
+            err.message.contains("affine") && err.message.contains("unrestricted"),
             "expected the allowed values in the message, got: {}",
             err.message
         );
     }
 
     #[test]
-    fn cm_attribute_backing_is_rejected_on_every_other_site() {
+    fn cm_attribute_linearity_is_rejected_on_every_other_site() {
         for source in [
-            "struct S { #[cm(\"a:b/c\", type=\"i32\")] f: i32 }",
-            "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
-            "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
-            "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
-            "flags F { #[cm(\"a:b/c\", type=\"i32\")] A }",
-            "#[cm(\"a:b/c\", type=\"i32\")] test \"t\" { assert true; }",
+            "struct S { #[cm(\"a:b/c\", linearity=\"affine\")] f: i32 }",
+            "enum E { #[cm(\"a:b/c\", linearity=\"affine\")] Case }",
+            "variant V { #[cm(\"a:b/c\", linearity=\"affine\")] Case(i32) }",
+            "resource R { #[cm(\"a:b/c\", linearity=\"affine\")] fn m(&self); }",
+            "flags F { #[cm(\"a:b/c\", linearity=\"affine\")] A }",
+            "#[cm(\"a:b/c\", linearity=\"affine\")] test \"t\" { assert true; }",
         ] {
             let err = parse(source).unwrap_err();
             assert!(
@@ -7123,14 +7113,14 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_rejects_a_repeated_type_field() {
+    fn cm_attribute_rejects_a_repeated_linearity_field() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle", type="i32")]
+            #[cm("web:dom/element", linearity="unrestricted", linearity="affine")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
         assert!(
-            err.message.contains("one `type` field"),
+            err.message.contains("one `linearity` field"),
             "a second value must not be silently dropped, got: {}",
             err.message
         );
@@ -7139,7 +7129,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_an_unknown_field() {
         let source = r#"
-            #[cm("web:dom/element", backing="extern-handle")]
+            #[cm("web:dom/element", backing="unrestricted")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7151,9 +7141,9 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_backing_belongs_on_a_resource() {
+    fn cm_attribute_linearity_belongs_on_a_resource() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle")]
+            #[cm("web:dom/element", linearity="unrestricted")]
             pub struct Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7384,7 +7374,7 @@ mod tests {
             .items
             .iter()
             .find_map(|it| match it {
-                crate::ast::Item::Impl(b) => Some(b),
+                Item::Impl(b) => Some(b),
                 _ => None,
             })
             .expect("impl block");
@@ -7538,7 +7528,7 @@ mod tests {
                     span.column,
                 ));
             }
-            crate::ast::walk_expr(self, expr);
+            ast::walk_expr(self, expr);
         }
     }
 
@@ -7670,12 +7660,13 @@ mod tests {
         }
     }
 
-    /// The compiler's label namespace needs no reservation rule: no Wado
-    /// identifier starts with [`SYNTHETIC_LABEL_PREFIX`], so a pass that knows a
-    /// synthesised block by its label cannot be fooled by a written one.
+    /// The compiler's own namespace needs no reservation rule: no Wado
+    /// identifier starts with [`INTERNAL_PREFIX`], so a pass that knows a
+    /// synthesised block by its label cannot be fooled by a written one, and a
+    /// synthesised local or function can never shadow one an author wrote.
     #[test]
-    fn test_synthetic_label_prefix_is_unwritable() {
-        let source = format!("fn f() {{ {SYNTHETIC_LABEL_PREFIX}tmpl: {{}} }}");
+    fn test_internal_prefix_is_unwritable() {
+        let source = format!("fn f() {{ {INTERNAL_PREFIX}tmpl: {{}} }}");
         assert!(!lex(&source).errors.is_empty(), "{source} must not lex");
 
         // Every label the source *can* spell is its own, `__` included.
@@ -7836,7 +7827,7 @@ line 2
             let body = func.body.as_ref().unwrap();
             if let Stmt::If(if_stmt) = &body.stmts[0]
                 && let Condition::LetChain { elements, .. } = &if_stmt.condition
-                && let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0]
+                && let ConditionElement::Let { pattern, .. } = &elements[0]
             {
                 return (**pattern).clone();
             }
@@ -8235,7 +8226,7 @@ line 2
         let source = r#"#![generated(by = "tool", sources = ["a.wit", "b.wit"])]
 "#;
         let module = parse(source).unwrap();
-        let formatted = crate::format(source).unwrap();
+        let formatted = format(source).unwrap();
         // The attribute must round-trip unchanged through the formatter.
         assert!(
             formatted.starts_with(r#"#![generated(by = "tool", sources = ["a.wit", "b.wit"])]"#,),
@@ -8438,7 +8429,7 @@ line 2
         assert_eq!(slice(source, &let_stmt.name_span), "foo");
     }
 
-    fn binding_effect_name(b: &crate::ast::EffectHandlerBinding) -> Option<&str> {
+    fn binding_effect_name(b: &EffectHandlerBinding) -> Option<&str> {
         match b.effect.as_ref()? {
             Type::Named(t) => Some(t.name.as_str()),
             Type::Generic(t) => Some(t.name.as_str()),

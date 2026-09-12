@@ -14,6 +14,7 @@ use crate::tir::{TypeId, TypeTable};
 use super::ProgramFacts;
 use super::callee::{CallSite, Callee};
 use super::place::write_root_local;
+use crate::{hashmap, niri};
 
 /// Record the local each `&mut` parameter of `site` writes. `None` when the
 /// site does not match the signature, or when no local roots a write's place.
@@ -62,7 +63,7 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
 /// One recognizer for two consumers, which must agree: the store inside the pair
 /// does not refuse the region around it, and the pair itself is not a region.
 #[must_use]
-pub fn materialization_pair(body: &Body, block: BlockId) -> Option<super::GlobalKey> {
+pub fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalKey> {
     let [set, get] = body.blocks[block].stmts.as_slice() else {
         return None;
     };
@@ -85,7 +86,7 @@ pub fn materialization_pair(body: &Body, block: BlockId) -> Option<super::Global
 
 /// The global an expression names, whether it reads or writes it.
 #[must_use]
-pub fn global_mention(body: &Body, e: ExprId) -> Option<super::GlobalKey> {
+pub fn global_mention(body: &Body, e: ExprId) -> Option<niri::GlobalKey> {
     match &body.exprs[e].kind {
         ExprKind::GlobalVarGet {
             module_source,
@@ -272,7 +273,7 @@ pub(super) fn region_needs(
             let Operand::Value(v) = op else {
                 return;
             };
-            let mut visited = crate::hashmap::IndexSet::default();
+            let mut visited = hashmap::IndexSet::default();
             body.values
                 .for_each_opaque_local(v, &mut visited, |index, leaf| {
                     if seen.insert(index) {

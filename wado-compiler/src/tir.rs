@@ -14,9 +14,18 @@ use crate::compiler_item::CompilerItem;
 use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::{AstId, RestClause, Visibility};
+use crate::compiler_item::CompilerItems;
+use crate::defs::{DefId, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::{LocalMethodName, RefKind, TypeNameInfo, format_type_name};
+use crate::name::{
+    FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
+    TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
+    mangle_local_item_name, mangle_stores_member, mangle_tuple_type,
+};
+use crate::symbol_notation::render;
 use crate::token::Span;
+use crate::{hashmap, name};
 
 /// `ReflectNewtype`'s only associated type (`type Base`): what the newtype
 /// wraps. Sealed and compiler-defined, so its spelling is fixed rather than
@@ -395,14 +404,14 @@ struct AnonEntry {
 /// `DefId` that would have to be invented for the second.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum StructDef {
-    Decl(crate::defs::DefId),
+    Decl(DefId),
     Anon(AnonStructId),
 }
 
 impl StructDef {
     /// The declaration this head names, or `None` for a shape that names none.
     #[must_use]
-    pub fn decl(self) -> Option<crate::defs::DefId> {
+    pub fn decl(self) -> Option<DefId> {
         match self {
             Self::Decl(def) => Some(def),
             Self::Anon(_) => None,
@@ -428,14 +437,14 @@ pub enum ResolvedType {
         type_args: Vec<TypeId>,
     },
     Enum {
-        def: crate::defs::DefId,
+        def: DefId,
     },
     /// Resource type - opaque handle (i32) to a Component Model resource
     Resource {
-        def: crate::defs::DefId,
+        def: DefId,
     },
     Variant {
-        def: crate::defs::DefId,
+        def: DefId,
     },
     // `Option<T>` is a `GenericInstance`, not a variant here — see
     // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
@@ -447,7 +456,7 @@ pub enum ResolvedType {
     /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
     /// Represents opaque i32 handles to Component Model resources with type parameters.
     GenericResource {
-        def: crate::defs::DefId,
+        def: DefId,
         type_args: Vec<TypeId>,
     },
     Ref(TypeId),
@@ -498,7 +507,7 @@ pub enum ResolvedType {
     /// Used to track instantiation sites before monomorphization
     GenericInstance {
         /// The generic declaration this instantiates.
-        def: crate::defs::DefId,
+        def: DefId,
         /// Concrete type arguments (e.g., [i32])
         type_args: Vec<TypeId>,
     },
@@ -514,12 +523,12 @@ pub enum ResolvedType {
         /// projection built under one module's `FromStr` cannot be answered by
         /// another's. `None` where the builder had no trait, which makes
         /// resolution require the name to be unambiguous.
-        owning_trait: Option<crate::defs::DefId>,
+        owning_trait: Option<DefId>,
         /// Trait bounds on this associated type, named by the declarations the
         /// trait's own `type A: Bound` references resolve to. A projection
         /// outlives the frame that built it, so a spelling here would be read
         /// back from a vantage that never wrote it.
-        bounds: Vec<crate::name::FqTraitName>,
+        bounds: Vec<FqTraitName>,
         /// Resolved associated type bindings (e.g., [("Item", `u8_typeid`)] for `I::Iter`
         /// when I: `IntoIterator`<Item = u8> and `IntoIterator::Iter`: Iterator<Item = `Self::Item`>)
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -531,7 +540,7 @@ pub enum ResolvedType {
     /// Created by `type T = U;` declarations.
     /// Newtypes are distinct from their base types but can be cast between them.
     Newtype {
-        def: crate::defs::DefId,
+        def: DefId,
         /// What this instantiation was made with; empty for a declaration
         /// written as such. The same head/arguments split `Struct` has — the
         /// stored name used to bake them into the head (`MyArray<i32>`), which
@@ -544,7 +553,7 @@ pub enum ResolvedType {
     /// Created by `flags F { A, B, C }` declarations.
     /// Distinct from Newtype so flags can be detected without name-based lookup.
     Flags {
-        def: crate::defs::DefId,
+        def: DefId,
     },
     Unknown,
     Error,
@@ -656,13 +665,13 @@ impl TypeSet {
 /// declared defaults, so a bound — writing none — is always [`TraitRef::bare`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct TraitRef {
-    pub decl: crate::defs::DefId,
+    pub decl: DefId,
     pub args: Vec<TypeId>,
 }
 
 impl TraitRef {
     #[must_use]
-    pub fn bare(decl: crate::defs::DefId) -> Self {
+    pub fn bare(decl: DefId) -> Self {
         Self {
             decl,
             args: Vec::new(),
@@ -670,7 +679,7 @@ impl TraitRef {
     }
 
     #[must_use]
-    pub fn new(decl: crate::defs::DefId, args: Vec<TypeId>) -> Self {
+    pub fn new(decl: DefId, args: Vec<TypeId>) -> Self {
         Self { decl, args }
     }
 }
@@ -679,8 +688,8 @@ impl TraitRef {
 /// than an instantiated type.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct GenericAssocTypeKey {
-    target_decl: crate::ast::AstId,
-    trait_decl: crate::defs::DefId,
+    target_decl: AstId,
+    trait_decl: DefId,
     assoc_name: String,
 }
 
@@ -690,7 +699,7 @@ struct GenericAssocTypeKey {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct AssocTypeKey {
     receiver: TypeId,
-    trait_decl: crate::defs::DefId,
+    trait_decl: DefId,
     assoc_name: String,
 }
 
@@ -748,7 +757,7 @@ pub struct TypeTable {
     /// (Box, Option, Default, `push_str`, …). Populated during the
     /// annotate pass from `#[compiler_item("...")]` attributes; see
     /// [`crate::compiler_item`].
-    compiler_items: crate::compiler_item::CompilerItems,
+    compiler_items: CompilerItems,
     /// Associated type resolutions:
     /// `(concrete_type_id, declaring trait, assoc_name)` → `resolved_type_id`.
     /// Populated when impl blocks with associated type bindings are processed.
@@ -804,25 +813,24 @@ pub struct TypeTable {
     /// [`AstId`](crate::ast::AstId) to its type without searching by name.
     /// Monomorphized instances are not entered — the base generic's key still
     /// resolves to the base id; `symbol_of_type` walks the other way.
-    type_by_symbol: IndexMap<crate::ast::AstId, TypeId>,
+    type_by_symbol: IndexMap<AstId, TypeId>,
     /// Inverse of `type_by_symbol` plus monomorphization tracking: every
     /// decl-backed `TypeId` — including monomorphized instances —
     /// maps to the [`AstId`](crate::ast::AstId) of its declaring AST node.
     ///
     /// A sparse [`TypeMap`] keyed by the decl-backed `TypeId`.
-    symbol_by_type: TypeMap<crate::ast::AstId>,
+    symbol_by_type: TypeMap<AstId>,
     /// `(receiver head, module, trait)` triples that satisfied a `Serialize` /
     /// `Deserialize` / `Eq` / `Ord` bound structurally during elaboration
     /// (bound-driven synthesis, WEP 2026-06-25). Keyed by the receiver's head
     /// rather than by `TypeId`, so a generic records once against its
     /// declaration. Lives on the shared `TypeTable` because elaboration runs one
     /// `Elaborator` per module.
-    bound_driven_synth_requests:
-        IndexSet<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)>,
+    bound_driven_synth_requests: IndexSet<(TypeHead, ModuleSource, DefId)>,
     /// Variant case templates: `(variant name, module)` → `(case name, case
     /// index, payload TypeId)`. Payload ids are in the declaring template's
     /// terms; unit cases use `TypeTable::UNIT`.
-    variant_case_index: IndexMap<crate::defs::DefId, Vec<(String, u32, TypeId)>>,
+    variant_case_index: IndexMap<DefId, Vec<(String, u32, TypeId)>>,
     /// Every struct shape the compiler minted, by [`AnonStructId`].
     anon_structs: Vec<AnonEntry>,
     /// Dedup for the above: the same shape in the same module is one id.
@@ -833,19 +841,19 @@ pub struct TypeTable {
     /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
-    decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
-    /// Resources declared `#[cm(..., type = "extern-handle")]`: a copyable handle
-    /// to a host object, outside the affine resource discipline.
-    extern_handle_resources: IndexSet<crate::defs::DefId>,
+    decl_index: IndexMap<(String, ModuleSource), DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
+    /// handle to a host object, outside the affine resource discipline.
+    unrestricted_resources: IndexSet<DefId>,
     /// `resource Child extends Parent`, child → parent.
-    resource_parents: IndexMap<crate::defs::DefId, crate::defs::DefId>,
+    resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
     ///
     /// A name comes out of an identity and never goes back in. Attached where
     /// [`crate::resolve::Resolutions`] is built, and again on the snapshot
     /// restore path with the seeded table — which is what keeps a `DefId` a
     /// cached type carries pointing at the same declaration.
-    defs: std::sync::Arc<crate::defs::DefTable>,
+    defs: std::sync::Arc<DefTable>,
 }
 
 impl Default for TypeTable {
@@ -904,7 +912,7 @@ impl TypeTable {
     /// writable type name, so it can never collide with a user-defined
     /// `struct Tuple` — that is what makes the name-only [`Self::is_tuple_type`]
     /// check sound. User-facing spelling is `[T1, T2, …]`.
-    pub const TUPLE_TYPE_NAME: &'static str = crate::name::TUPLE_TYPE_NAME;
+    pub const TUPLE_TYPE_NAME: &'static str = TUPLE_TYPE_NAME;
 
     /// Canonical name for the unit type `()` used in method lookup and impl indexing.
     /// Must match what `format_type_name(TypeNameInfo::Unit)` returns, and matches
@@ -947,7 +955,7 @@ impl TypeTable {
         let mut table = Self {
             types: TypeMap::default(),
             intern_map: IndexMap::default(),
-            compiler_items: crate::compiler_item::CompilerItems::new(),
+            compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
@@ -963,7 +971,7 @@ impl TypeTable {
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
-            extern_handle_resources: IndexSet::default(),
+            unrestricted_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1114,19 +1122,19 @@ impl TypeTable {
             .copied()
     }
 
-    pub fn mark_extern_handle_resource(&mut self, def: crate::defs::DefId) {
-        self.extern_handle_resources.insert(def);
+    pub fn mark_unrestricted_resource(&mut self, def: DefId) {
+        self.unrestricted_resources.insert(def);
     }
 
-    /// Whether `def` declares an extern-handle-backed resource, which no affine
-    /// check and no cleanup pass owns.
+    /// Whether `def` declares an unrestricted resource, which no affine check
+    /// and no cleanup pass owns.
     #[must_use]
-    pub fn is_extern_handle_resource(&self, def: crate::defs::DefId) -> bool {
-        self.extern_handle_resources.contains(&def)
+    pub fn is_unrestricted_resource(&self, def: DefId) -> bool {
+        self.unrestricted_resources.contains(&def)
     }
 
     /// Record `child extends parent`, already validated by the caller.
-    pub fn set_resource_parent(&mut self, child: crate::defs::DefId, parent: crate::defs::DefId) {
+    pub fn set_resource_parent(&mut self, child: DefId, parent: DefId) {
         assert_ne!(child, parent, "a resource cannot extend itself");
         assert!(
             !self.is_resource_subtype(parent, child),
@@ -1136,7 +1144,7 @@ impl TypeTable {
     }
 
     #[must_use]
-    pub fn resource_parent(&self, def: crate::defs::DefId) -> Option<crate::defs::DefId> {
+    pub fn resource_parent(&self, def: DefId) -> Option<DefId> {
         self.resource_parents.get(&def).copied()
     }
 
@@ -1163,22 +1171,19 @@ impl TypeTable {
     }
 
     /// `def` and every resource it extends, nearest first.
-    pub fn resource_chain(
-        &self,
-        def: crate::defs::DefId,
-    ) -> impl Iterator<Item = crate::defs::DefId> {
+    pub fn resource_chain(&self, def: DefId) -> impl Iterator<Item = DefId> {
         std::iter::successors(Some(def), |&current| self.resource_parent(current))
     }
 
     /// Whether `sub` is `sup` or extends it, directly or transitively.
     #[must_use]
-    pub fn is_resource_subtype(&self, sub: crate::defs::DefId, sup: crate::defs::DefId) -> bool {
+    pub fn is_resource_subtype(&self, sub: DefId, sup: DefId) -> bool {
         self.resource_chain(sub).any(|current| current == sup)
     }
 
     /// Attach the program's declarations, so a nominal type can render its
     /// head once it carries one instead of a spelling.
-    pub fn attach_defs(&mut self, defs: std::sync::Arc<crate::defs::DefTable>) {
+    pub fn attach_defs(&mut self, defs: std::sync::Arc<DefTable>) {
         // A module-level declaration is entered first and kept: a
         // function-local item shares its module, and a spelling that reaches
         // both means the module-level one everywhere this index is consulted.
@@ -1196,13 +1201,13 @@ impl TypeTable {
 
     /// Every declaration in the program.
     #[must_use]
-    pub fn defs(&self) -> &crate::defs::DefTable {
+    pub fn defs(&self) -> &DefTable {
         &self.defs
     }
 
     /// The name `def` writes — a rendering, for a diagnostic or a mangle.
     #[must_use]
-    pub fn def_name(&self, def: crate::defs::DefId) -> &str {
+    pub fn def_name(&self, def: DefId) -> &str {
         self.defs.name(def)
     }
 
@@ -1217,17 +1222,17 @@ impl TypeTable {
     /// Point`, and a registry keyed on the declared name would hold one entry
     /// for two types.
     #[must_use]
-    pub fn decl_render_name(&self, def: crate::defs::DefId) -> String {
+    pub fn decl_render_name(&self, def: DefId) -> String {
         let name = self.defs.name(def);
         if self.defs.is_function_local(def) {
-            return crate::name::mangle_local_item_name(name, self.defs.ast_id(def));
+            return mangle_local_item_name(name, self.defs.ast_id(def));
         }
         name.to_string()
     }
 
     /// The module that declares `def`.
     #[must_use]
-    pub fn def_module(&self, def: crate::defs::DefId) -> &ModuleSource {
+    pub fn def_module(&self, def: DefId) -> &ModuleSource {
         self.defs.module(def)
     }
 
@@ -1362,7 +1367,7 @@ impl TypeTable {
     }
 
     /// The spelling an anonymous struct shows a reader —
-    /// `__anon_{x:i32,y:i32}`. The declaration namespace;
+    /// `$anon_{x:i32,y:i32}`. The declaration namespace;
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
@@ -1400,7 +1405,7 @@ impl TypeTable {
                     .iter()
                     .map(|(n, ty)| format!("{n}:{}", field_type(self, *ty)))
                     .collect();
-                format!("__anon_{{{}}}", parts.join(","))
+                format!("$anon_{{{}}}", parts.join(","))
             }
             // The literal text is arbitrary, so the name is a digest of the
             // shape, its hole types rendered through `field_type`. It names a
@@ -1425,7 +1430,7 @@ impl TypeTable {
                     digest_str(&mut h, &hole.source);
                 }
                 let bytes: [u8; 32] = h.finalize().into();
-                let mut mangle = crate::name::TEMPLATE_SHAPE_PREFIX.to_string();
+                let mut mangle = TEMPLATE_SHAPE_PREFIX.to_string();
                 for b in &bytes[..8] {
                     let _ = write!(mangle, "{b:02x}");
                 }
@@ -1446,13 +1451,12 @@ impl TypeTable {
     /// A struct head as a mangled name embeds it: the declaration when it names
     /// one, the interned shape otherwise.
     #[must_use]
-    pub fn fq_struct_head(&self, head: StructDef) -> crate::name::FqTypeName {
+    pub fn fq_struct_head(&self, head: StructDef) -> FqTypeName {
         match head {
-            StructDef::Decl(def) => crate::name::FqTypeName::declared(&self.defs, def),
-            StructDef::Anon(id) => crate::name::FqTypeName::shape(
-                self.anon_struct_module(id),
-                &self.anon_struct_mangle(id),
-            ),
+            StructDef::Decl(def) => FqTypeName::declared(&self.defs, def),
+            StructDef::Anon(id) => {
+                FqTypeName::shape(self.anon_struct_module(id), &self.anon_struct_mangle(id))
+            }
         }
     }
 
@@ -1482,10 +1486,7 @@ impl TypeTable {
     /// type of its own, so this answers at any point in the pipeline and for
     /// any stdlib type the compiler knows — no site has to spell one.
     #[must_use]
-    pub fn compiler_item_def(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> Option<crate::defs::DefId> {
+    pub fn compiler_item_def(&self, item: CompilerItem) -> Option<DefId> {
         self.compiler_items
             .decl(item)
             .and_then(|ast| self.defs.of_ast_id(ast))
@@ -1494,10 +1495,7 @@ impl TypeTable {
     /// Like [`Self::compiler_item_def`], but ICEs rather than answering `None`
     /// — for the items the compiler requires to be registered.
     #[must_use]
-    pub fn require_compiler_item_def(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> crate::defs::DefId {
+    pub fn require_compiler_item_def(&self, item: CompilerItem) -> DefId {
         self.compiler_item_def(item)
             .unwrap_or_else(|| panic!("compiler item `{item}` names no declaration"))
     }
@@ -1506,7 +1504,7 @@ impl TypeTable {
     ///
     /// This is identity: compare these, never the names below.
     #[must_use]
-    pub fn nominal_def(&self, id: TypeId) -> Option<crate::defs::DefId> {
+    pub fn nominal_def(&self, id: TypeId) -> Option<DefId> {
         match self.get(id) {
             ResolvedType::Struct { def, .. } => def.decl(),
             ResolvedType::Enum { def }
@@ -1543,7 +1541,7 @@ impl TypeTable {
         }
     }
 
-    pub fn register_decl_type(&mut self, key: crate::ast::AstId, type_id: TypeId) {
+    pub fn register_decl_type(&mut self, key: AstId, type_id: TypeId) {
         self.type_by_symbol.insert(key, type_id);
         self.symbol_by_type.set_growing(type_id, key);
     }
@@ -1555,7 +1553,7 @@ impl TypeTable {
     /// `symbol_by_type` lets LSP queries walk any decl-backed `TypeId` back to
     /// the declaring AST node. The forward `type_by_symbol` index is NOT
     /// updated: that keeps the base generic's `TypeId` as the canonical entry.
-    pub fn register_mono_type(&mut self, base_key: crate::ast::AstId, type_id: TypeId) {
+    pub fn register_mono_type(&mut self, base_key: AstId, type_id: TypeId) {
         self.symbol_by_type.set_growing(type_id, base_key);
     }
 
@@ -1563,7 +1561,7 @@ impl TypeTable {
     ///
     /// Returns `None` if the symbol is not a decl-backed type, or if the
     /// elaborator has not yet created a `TypeId` for it.
-    pub fn type_of_symbol(&self, key: &crate::ast::AstId) -> Option<TypeId> {
+    pub fn type_of_symbol(&self, key: &AstId) -> Option<TypeId> {
         self.type_by_symbol.get(key).copied()
     }
 
@@ -1574,7 +1572,7 @@ impl TypeTable {
     ///
     /// Panics if `collect_types` has not run for this declaration; both that and
     /// a non-decl-backed `AstId` are compiler bugs, not recoverable conditions.
-    pub fn type_id_of_decl(&self, key: crate::ast::AstId) -> TypeId {
+    pub fn type_id_of_decl(&self, key: AstId) -> TypeId {
         self.type_of_symbol(&key).unwrap_or_else(|| {
             panic!(
                 "type_id_of_decl: no TypeId registered for {key:?} — \
@@ -1585,7 +1583,7 @@ impl TypeTable {
 
     /// Walk a decl-backed `TypeId` (including monomorphizations) back to the
     /// declaring [`AstId`](crate::ast::AstId).
-    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&crate::ast::AstId> {
+    pub fn symbol_of_type(&self, type_id: TypeId) -> Option<&AstId> {
         self.symbol_by_type.get(type_id)
     }
 
@@ -1594,7 +1592,7 @@ impl TypeTable {
     ///
     /// `Node<i32>` and `Node<String>` answer with the one `Node` they were
     /// spelled from; a `Node` in another module answers with a different id.
-    pub fn decl_of_type(&self, type_id: TypeId) -> Option<crate::ast::AstId> {
+    pub fn decl_of_type(&self, type_id: TypeId) -> Option<AstId> {
         let type_id = self.peel_refs(type_id);
         if let Some(key) = self.symbol_by_type.get(type_id) {
             return Some(*key);
@@ -1605,9 +1603,7 @@ impl TypeTable {
         // declaration by identity — a primitive needs no such step because its
         // declaration and its instantiation are the same type.
         if matches!(self.get(type_id), ResolvedType::BuiltinArray(_)) {
-            return self
-                .compiler_items
-                .decl(crate::compiler_item::CompilerItem::Array);
+            return self.compiler_items.decl(CompilerItem::Array);
         }
         // An instantiation records the declaration it came from, so the
         // answer is read off the type rather than re-derived from a spelling
@@ -1620,11 +1616,7 @@ impl TypeTable {
 
     /// The declaring [`AstId`](crate::ast::AstId) of the type named `name` in
     /// `module_source`.
-    pub fn decl_by_name(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<crate::ast::AstId> {
+    pub fn decl_by_name(&self, name: &str, module_source: &ModuleSource) -> Option<AstId> {
         let type_id = self.find_decl_type_by_name(name, module_source)?;
         self.symbol_by_type.get(type_id).copied()
     }
@@ -1635,7 +1627,7 @@ impl TypeTable {
     ///
     /// Matched by declaration, so a user type spelled `StructField` stays
     /// reflectable.
-    pub fn is_sealed_reflect_member(&self, decl: crate::ast::AstId) -> bool {
+    pub fn is_sealed_reflect_member(&self, decl: AstId) -> bool {
         use crate::compiler_item::CompilerItem;
         [
             CompilerItem::ReflectStructField,
@@ -1833,7 +1825,7 @@ impl TypeTable {
     }
 
     /// The declaration a non-struct nominal type interns under.
-    fn nominal_key(ty: &ResolvedType) -> Option<crate::defs::DefId> {
+    fn nominal_key(ty: &ResolvedType) -> Option<DefId> {
         match ty {
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
@@ -1850,14 +1842,14 @@ impl TypeTable {
     }
 
     /// Access the registry of compiler-recognised stdlib items.
-    pub fn compiler_items(&self) -> &crate::compiler_item::CompilerItems {
+    pub fn compiler_items(&self) -> &CompilerItems {
         &self.compiler_items
     }
 
     /// Mutable handle on the registry. Used by the elaborator during the
     /// annotate pass to register each `#[compiler_item("...")]`
     /// declaration.
-    pub fn compiler_items_mut(&mut self) -> &mut crate::compiler_item::CompilerItems {
+    pub fn compiler_items_mut(&mut self) -> &mut CompilerItems {
         &mut self.compiler_items
     }
 
@@ -1868,9 +1860,9 @@ impl TypeTable {
     /// [`crate::defs::DefId`], a shape by its rendering.
     pub fn record_bound_driven_synth_request(
         &mut self,
-        head: &crate::name::TypeHead,
+        head: &TypeHead,
         module_source: &ModuleSource,
-        trait_key: &crate::defs::DefId,
+        trait_key: &DefId,
     ) {
         let already_recorded = self
             .bound_driven_synth_requests
@@ -1892,7 +1884,7 @@ impl TypeTable {
         &mut self,
         receiver: TypeId,
         module_source: &ModuleSource,
-        trait_key: &crate::defs::DefId,
+        trait_key: &DefId,
     ) {
         let head = self.fq_base_type_name(receiver).head().clone();
         self.record_bound_driven_synth_request(&head, module_source, trait_key);
@@ -1906,8 +1898,8 @@ impl TypeTable {
     /// means each caller only clones the entries it keeps.
     pub fn bound_driven_synth_requests(
         &self,
-        mut matches: impl FnMut(&crate::defs::DefId) -> bool,
-    ) -> Vec<(crate::name::TypeHead, ModuleSource, crate::defs::DefId)> {
+        mut matches: impl FnMut(&DefId) -> bool,
+    ) -> Vec<(TypeHead, ModuleSource, DefId)> {
         self.bound_driven_synth_requests
             .iter()
             .filter(|(_, _, trait_key)| matches(trait_key))
@@ -1919,25 +1911,22 @@ impl TypeTable {
     /// [`CompilerItem`](crate::compiler_item::CompilerItem), forwarded from the
     /// registry so call sites read `tt.compiler_struct_name(item)` instead of
     /// chaining through `compiler_items()`.
-    pub fn compiler_struct_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+    pub fn compiler_struct_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.struct_name(item)
     }
 
     /// The fq name of a compiler-item struct: its declaring module plus its
     /// name, the form any name that embeds a receiver expects.
-    pub fn compiler_struct_fq_name(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> crate::name::FqTypeName {
+    pub fn compiler_struct_fq_name(&self, item: CompilerItem) -> FqTypeName {
         let decl = self
             .compiler_items
             .struct_decl(item)
             .expect("a registered struct item records its declaring node");
         let def = self.defs.def_at(decl);
-        crate::name::FqTypeName::declared(&self.defs, def)
+        FqTypeName::declared(&self.defs, def)
     }
 
-    pub fn compiler_trait_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+    pub fn compiler_trait_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.trait_name(item)
     }
 
@@ -1953,13 +1942,13 @@ impl TypeTable {
             ResolvedType::Primitive(
                 PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
             )
-        ) || self.wide_int_item(base_id) == Some(crate::compiler_item::CompilerItem::U128)
+        ) || self.wide_int_item(base_id) == Some(CompilerItem::U128)
     }
 
     /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
     /// By declaration identity: a name match also answers for a user type.
     #[must_use]
-    pub fn wide_int_item(&self, type_id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
+    pub fn wide_int_item(&self, type_id: TypeId) -> Option<CompilerItem> {
         use crate::compiler_item::CompilerItem;
         let ResolvedType::Struct {
             def: StructDef::Decl(def),
@@ -1977,14 +1966,11 @@ impl TypeTable {
     /// The compiler trait item as a mangled method name embeds it — named by
     /// the module that declares it.
     #[must_use]
-    pub fn compiler_trait_fq(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> crate::name::FqTraitName {
+    pub fn compiler_trait_fq(&self, item: CompilerItem) -> FqTraitName {
         self.compiler_items.trait_fq(item)
     }
 
-    pub fn compiler_variant_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+    pub fn compiler_variant_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.variant_name(item)
     }
 
@@ -1993,12 +1979,12 @@ impl TypeTable {
     /// Compares declarations. The spelling alone answered yes for any module's
     /// `Result`, which is the mis-identification this table exists to prevent.
     pub fn is_result(&self, id: TypeId) -> bool {
-        self.is_compiler_item_type(id, crate::compiler_item::CompilerItem::Result)
+        self.is_compiler_item_type(id, CompilerItem::Result)
     }
 
     /// Whether `id` is an instance of the compiler's `List` struct.
     pub fn is_list(&self, id: TypeId) -> bool {
-        self.is_compiler_item_type(id, crate::compiler_item::CompilerItem::List)
+        self.is_compiler_item_type(id, CompilerItem::List)
     }
 
     /// Whether `id` is the compiler's `String` struct.
@@ -2006,7 +1992,7 @@ impl TypeTable {
     /// Compares declarations; `name == "String"` answered yes for any module's
     /// own `String`.
     pub fn is_string(&self, id: TypeId) -> bool {
-        self.is_compiler_item_type(id, crate::compiler_item::CompilerItem::String)
+        self.is_compiler_item_type(id, CompilerItem::String)
     }
 
     /// Whether `id` is the type a compiler item declares.
@@ -2017,7 +2003,7 @@ impl TypeTable {
     /// node for only the first, so [`Self::decl_of_type`] answers no for every
     /// other spelling of the same type. A table built without defs — an
     /// anonymous-struct unit fixture — has no identity, and asks the node.
-    fn is_compiler_item_type(&self, id: TypeId, item: crate::compiler_item::CompilerItem) -> bool {
+    fn is_compiler_item_type(&self, id: TypeId, item: CompilerItem) -> bool {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
@@ -2028,54 +2014,39 @@ impl TypeTable {
         }
     }
 
-    pub fn compiler_enum_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+    pub fn compiler_enum_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.enum_name(item)
     }
 
     /// Owned `(module, name)` for a registered struct / enum item — forwards
     /// the registry's `CompilerItems::struct_owned` so single-expression
     /// callers query the table directly instead of through `compiler_items()`.
-    pub fn compiler_struct_owned(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> (ModuleSource, String) {
+    pub fn compiler_struct_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
         self.compiler_items.struct_owned(item)
     }
 
-    pub fn compiler_enum_owned(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> (ModuleSource, String) {
+    pub fn compiler_enum_owned(&self, item: CompilerItem) -> (ModuleSource, String) {
         self.compiler_items.enum_owned(item)
     }
 
     /// Module source of a registered struct item, if present.
-    pub fn compiler_struct_module(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> Option<&ModuleSource> {
+    pub fn compiler_struct_module(&self, item: CompilerItem) -> Option<&ModuleSource> {
         self.compiler_items.struct_module(item)
     }
 
     /// Case name of a registered variant-case item (e.g. `Option::Some`).
-    pub fn compiler_variant_case_name(&self, item: crate::compiler_item::CompilerItem) -> &str {
+    pub fn compiler_variant_case_name(&self, item: CompilerItem) -> &str {
         self.compiler_items.variant_case_name(item)
     }
 
     /// Module + variant name + case name + discriminant of a registered
     /// variant-case item.
-    pub fn compiler_variant_case(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> (&ModuleSource, &str, &str, u32) {
+    pub fn compiler_variant_case(&self, item: CompilerItem) -> (&ModuleSource, &str, &str, u32) {
         self.compiler_items.require_variant_case(item)
     }
 
     /// Module + owner-type name + method name of a registered method item.
-    pub fn compiler_method(
-        &self,
-        item: crate::compiler_item::CompilerItem,
-    ) -> (&ModuleSource, &str, &str) {
+    pub fn compiler_method(&self, item: CompilerItem) -> (&ModuleSource, &str, &str) {
         self.compiler_items.require_method(item)
     }
 
@@ -2083,8 +2054,7 @@ impl TypeTable {
     /// the stdlib has registered it. Thin wrapper around
     /// `CompilerItems::trait_module`.
     pub fn default_trait_module_source(&self) -> Option<&ModuleSource> {
-        self.compiler_items
-            .trait_module(crate::compiler_item::CompilerItem::Default)
+        self.compiler_items.trait_module(CompilerItem::Default)
     }
 
     /// Make the struct type for a registered `CompilerItem` variant
@@ -2092,7 +2062,7 @@ impl TypeTable {
     /// source and the struct name from the registry so the call site
     /// does not hard-code either. Panics with a clear ICE message when
     /// the item is not registered or has the wrong kind.
-    pub fn make_compiler_struct(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
+    pub fn make_compiler_struct(&mut self, item: CompilerItem) -> TypeId {
         let decl = self
             .compiler_items
             .struct_decl(item)
@@ -2105,7 +2075,7 @@ impl TypeTable {
     /// of kind `CompilerItemKind::Enum` (currently `Ordering`).
     /// Same shape as [`Self::make_compiler_struct`]: routes both name
     /// and module through the registry.
-    pub fn make_compiler_enum(&mut self, item: crate::compiler_item::CompilerItem) -> TypeId {
+    pub fn make_compiler_enum(&mut self, item: CompilerItem) -> TypeId {
         let def = self.require_compiler_item_def(item);
         self.make_enum(def)
     }
@@ -2114,7 +2084,7 @@ impl TypeTable {
     /// via `#[compiler_item("option")]`.
     pub fn make_option(&mut self, inner: TypeId) -> TypeId {
         let def = self
-            .compiler_item_def(crate::compiler_item::CompilerItem::Option)
+            .compiler_item_def(CompilerItem::Option)
             .expect("the Option declaration is a registered compiler item");
         self.make_generic_instance(def, vec![inner])
     }
@@ -2123,14 +2093,14 @@ impl TypeTable {
     /// via `#[compiler_item("result")]`.
     pub fn make_result(&mut self, ok: TypeId, err: TypeId) -> TypeId {
         let def = self
-            .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+            .compiler_item_def(CompilerItem::Result)
             .expect("the Result declaration is a registered compiler item");
         self.make_generic_instance(def, vec![ok, err])
     }
 
     /// Create a `Future<T>` generic resource type.
     pub fn make_future(&mut self, inner: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Future);
+        let def = self.require_compiler_item_def(CompilerItem::Future);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -2139,8 +2109,7 @@ impl TypeTable {
 
     /// Create a `FutureWritable<T>` generic resource type.
     pub fn make_future_writable(&mut self, inner: TypeId) -> TypeId {
-        let def =
-            self.require_compiler_item_def(crate::compiler_item::CompilerItem::FutureWritable);
+        let def = self.require_compiler_item_def(CompilerItem::FutureWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -2149,7 +2118,7 @@ impl TypeTable {
 
     /// Create a `Stream<T>` generic resource type.
     pub fn make_stream(&mut self, inner: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Stream);
+        let def = self.require_compiler_item_def(CompilerItem::Stream);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -2158,8 +2127,7 @@ impl TypeTable {
 
     /// Create a `StreamWritable<T>` generic resource type.
     pub fn make_stream_writable(&mut self, inner: TypeId) -> TypeId {
-        let def =
-            self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamWritable);
+        let def = self.require_compiler_item_def(CompilerItem::StreamWritable);
         self.intern(ResolvedType::GenericResource {
             def,
             type_args: vec![inner],
@@ -2168,7 +2136,7 @@ impl TypeTable {
 
     /// The `StreamChunk<T>` a `Stream<T>::read` returns.
     pub fn make_stream_chunk(&mut self, elem: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::StreamChunk);
+        let def = self.require_compiler_item_def(CompilerItem::StreamChunk);
         self.make_generic_instance(def, vec![elem])
     }
 
@@ -2179,7 +2147,7 @@ impl TypeTable {
     /// handle and the result buffer, so it is represented as a
     /// `GenericInstance`, not a `GenericResource`.
     pub fn make_async_call(&mut self, inner: TypeId) -> TypeId {
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::AsyncCall);
+        let def = self.require_compiler_item_def(CompilerItem::AsyncCall);
         self.make_generic_instance(def, vec![inner])
     }
 
@@ -2220,7 +2188,7 @@ impl TypeTable {
             return None;
         }
         let inner = type_args[0];
-        self.is_compiler_item_type(type_id, crate::compiler_item::CompilerItem::Option)
+        self.is_compiler_item_type(type_id, CompilerItem::Option)
             .then_some(inner)
     }
 
@@ -2235,12 +2203,12 @@ impl TypeTable {
         let [ok, err] = type_args[..] else {
             return None;
         };
-        self.is_compiler_item_type(head, crate::compiler_item::CompilerItem::Result)
+        self.is_compiler_item_type(head, CompilerItem::Result)
             .then_some((ok, err))
     }
 
     pub fn make_tuple(&mut self, elements: Vec<TypeId>) -> TypeId {
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::Tuple);
+        let def = self.require_compiler_item_def(CompilerItem::Tuple);
         self.intern(ResolvedType::GenericInstance {
             def,
             type_args: elements,
@@ -2334,7 +2302,7 @@ impl TypeTable {
             .iter()
             .map(|&a| self.mangle_type_arg_for_generic(a))
             .collect();
-        crate::name::mangle_generic_name(&decl_name, &args)
+        mangle_generic_name(&decl_name, &args)
     }
 
     /// Intern the instantiation of `def` with `type_args`, deriving its
@@ -2348,7 +2316,7 @@ impl TypeTable {
         self.intern(ResolvedType::Struct { def, type_args })
     }
 
-    pub fn make_variant(&mut self, def: crate::defs::DefId) -> TypeId {
+    pub fn make_variant(&mut self, def: DefId) -> TypeId {
         self.intern(ResolvedType::Variant { def })
     }
 
@@ -2363,31 +2331,24 @@ impl TypeTable {
 
     /// Register a variant declaration's case templates for
     /// [`Self::variant_template_cases`].
-    pub fn register_variant_cases(
-        &mut self,
-        def: crate::defs::DefId,
-        cases: Vec<(String, u32, TypeId)>,
-    ) {
+    pub fn register_variant_cases(&mut self, def: DefId, cases: Vec<(String, u32, TypeId)>) {
         self.variant_case_index.insert(def, cases);
     }
 
     /// Case templates of a variant declaration (see `variant_case_index`).
-    pub fn variant_template_cases(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&[(String, u32, TypeId)]> {
+    pub fn variant_template_cases(&self, def: DefId) -> Option<&[(String, u32, TypeId)]> {
         self.variant_case_index.get(&def).map(Vec::as_slice)
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two variant types share a name.
-    pub fn find_variant_type(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub fn find_variant_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map.get(&ResolvedType::Variant { def }).copied()
     }
 
     /// Find a resource type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two resource types share a name.
-    pub fn find_resource_type(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub fn find_resource_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map
             .get(&ResolvedType::Resource { def })
             .copied()
@@ -2395,13 +2356,13 @@ impl TypeTable {
 
     /// Find an enum type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two enum types share a name.
-    pub fn find_enum_type(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub fn find_enum_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map.get(&ResolvedType::Enum { def }).copied()
     }
 
     /// Find a flags type by (name, `module_source`) pair via `intern_map` (O(1)).
     /// Collision-safe across modules when two flags types share a name.
-    pub fn find_flags_type(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub fn find_flags_type(&self, def: DefId) -> Option<TypeId> {
         self.intern_map.get(&ResolvedType::Flags { def }).copied()
     }
 
@@ -2423,11 +2384,7 @@ impl TypeTable {
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].
     #[must_use]
-    pub(crate) fn cm_decl_in(
-        &self,
-        name: &str,
-        module: &ModuleSource,
-    ) -> Option<crate::defs::DefId> {
+    pub(crate) fn cm_decl_in(&self, name: &str, module: &ModuleSource) -> Option<DefId> {
         self.decl_index
             .get(&(name.to_string(), module.clone()))
             .copied()
@@ -2548,11 +2505,11 @@ impl TypeTable {
         None
     }
 
-    pub fn make_enum(&mut self, def: crate::defs::DefId) -> TypeId {
+    pub fn make_enum(&mut self, def: DefId) -> TypeId {
         self.intern(ResolvedType::Enum { def })
     }
 
-    pub fn make_resource(&mut self, def: crate::defs::DefId) -> TypeId {
+    pub fn make_resource(&mut self, def: DefId) -> TypeId {
         self.intern(ResolvedType::Resource { def })
     }
 
@@ -2743,7 +2700,7 @@ impl TypeTable {
         &mut self,
         param_id: TypeId,
         assoc_name: String,
-        bounds: Vec<crate::name::FqTraitName>,
+        bounds: Vec<FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.make_assoc_type_projection_of_trait(
@@ -2760,9 +2717,9 @@ impl TypeTable {
     pub fn make_assoc_type_projection_of_trait(
         &mut self,
         param_id: TypeId,
-        owning_trait: Option<crate::defs::DefId>,
+        owning_trait: Option<DefId>,
         assoc_name: String,
-        bounds: Vec<crate::name::FqTraitName>,
+        bounds: Vec<FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
     ) -> TypeId {
         self.intern(ResolvedType::AssocTypeProjection {
@@ -2800,7 +2757,7 @@ impl TypeTable {
     pub fn resolve_assoc_type_of_trait(
         &self,
         concrete_id: TypeId,
-        trait_key: &crate::defs::DefId,
+        trait_key: &DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         // `ReflectNewtype::Base` is the type itself: every newtype carries what
@@ -2851,7 +2808,7 @@ impl TypeTable {
     pub fn resolve_assoc_type_qualified(
         &self,
         concrete_id: TypeId,
-        owning_trait: &Option<crate::defs::DefId>,
+        owning_trait: &Option<DefId>,
         assoc_name: &str,
     ) -> Option<TypeId> {
         if let Some(trait_key) = owning_trait
@@ -2891,7 +2848,7 @@ impl TypeTable {
     /// another.
     pub fn register_generic_assoc_type_def(
         &mut self,
-        base_decl: crate::ast::AstId,
+        base_decl: AstId,
         trait_ref: TraitRef,
         assoc_name: String,
         type_param_id: TypeId,
@@ -2912,10 +2869,10 @@ impl TypeTable {
     /// [`Self::resolve_assoc_type`] applies to resolved types.
     fn generic_assoc_type_def(
         &self,
-        base_decl: crate::ast::AstId,
+        base_decl: AstId,
         assoc_name: &str,
-    ) -> Option<(crate::defs::DefId, TypeId)> {
-        let mut candidates: Vec<(bool, crate::defs::DefId, TypeId)> = self
+    ) -> Option<(DefId, TypeId)> {
+        let mut candidates: Vec<(bool, DefId, TypeId)> = self
             .generic_assoc_type_defs
             .iter()
             .filter(|(key, _)| key.target_decl == base_decl && key.assoc_name == assoc_name)
@@ -2941,8 +2898,8 @@ impl TypeTable {
     /// [`Self::generic_assoc_type_def`] for a caller that knows the trait.
     fn generic_assoc_type_def_of_trait(
         &self,
-        base_decl: crate::ast::AstId,
-        trait_key: &crate::defs::DefId,
+        base_decl: AstId,
+        trait_key: &DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         self.generic_assoc_type_defs
@@ -2962,7 +2919,7 @@ impl TypeTable {
     pub fn register_monomorphized_assoc_types(
         &mut self,
         concrete_id: TypeId,
-        base_decl: crate::ast::AstId,
+        base_decl: AstId,
         substitution: &IndexMap<u32, TypeId>,
     ) {
         let defs: Vec<(TraitRef, String, TypeId)> = self
@@ -3098,11 +3055,7 @@ impl TypeTable {
 
     /// [`Self::has_generic_assoc_type_def`] for a caller that already holds the
     /// declaring [`AstId`](crate::ast::AstId).
-    pub fn has_generic_assoc_type_def_for_decl(
-        &self,
-        decl: crate::ast::AstId,
-        assoc_name: &str,
-    ) -> bool {
+    pub fn has_generic_assoc_type_def_for_decl(&self, decl: AstId, assoc_name: &str) -> bool {
         self.generic_assoc_type_def(decl, assoc_name).is_some()
     }
 
@@ -3131,7 +3084,7 @@ impl TypeTable {
     pub fn resolve_trait_assoc_type_of_instance(
         &mut self,
         concrete_id: TypeId,
-        trait_key: &crate::defs::DefId,
+        trait_key: &DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
         if let Some(resolved) = self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
@@ -3461,11 +3414,7 @@ impl TypeTable {
     }
 
     /// Create a generic instance (e.g., `Box<i32>`)
-    pub fn make_generic_instance(
-        &mut self,
-        def: crate::defs::DefId,
-        type_args: Vec<TypeId>,
-    ) -> TypeId {
+    pub fn make_generic_instance(&mut self, def: DefId, type_args: Vec<TypeId>) -> TypeId {
         // The instantiation carries the declaration it came from, so nothing
         // has to be registered beside it and nothing re-derives the answer
         // from a spelling whose base `prune` may already have dropped.
@@ -3475,7 +3424,7 @@ impl TypeTable {
     /// Create a `List<T>` type (`GenericInstance` { name: "List", ... })
     pub fn make_list(&mut self, element: TypeId) -> TypeId {
         let def = self
-            .compiler_item_def(crate::compiler_item::CompilerItem::List)
+            .compiler_item_def(CompilerItem::List)
             .expect("the List declaration is a registered compiler item");
         self.make_generic_instance(def, vec![element])
     }
@@ -3483,12 +3432,12 @@ impl TypeTable {
     /// Create the `ByteList` newtype (`type ByteList = List<u8>`).
     pub fn make_byte_list(&mut self) -> TypeId {
         let base = self.make_list(TypeTable::U8);
-        let def = self.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteList);
+        let def = self.require_compiler_item_def(CompilerItem::ByteList);
         self.make_newtype(def, base)
     }
 
     /// Create a newtype wrapping a base type
-    pub fn make_newtype(&mut self, def: crate::defs::DefId, base_type: TypeId) -> TypeId {
+    pub fn make_newtype(&mut self, def: DefId, base_type: TypeId) -> TypeId {
         self.intern(ResolvedType::Newtype {
             def,
             type_args: Vec::new(),
@@ -3500,7 +3449,7 @@ impl TypeTable {
     /// applied to, so the head stays the one an `impl` header writes.
     pub fn make_newtype_instance(
         &mut self,
-        def: crate::defs::DefId,
+        def: DefId,
         type_args: Vec<TypeId>,
         base_type: TypeId,
     ) -> TypeId {
@@ -3512,7 +3461,7 @@ impl TypeTable {
     }
 
     /// Create a flags type (bitmask over u32)
-    pub fn make_flags(&mut self, def: crate::defs::DefId) -> TypeId {
+    pub fn make_flags(&mut self, def: DefId) -> TypeId {
         self.intern(ResolvedType::Flags { def })
     }
 
@@ -3592,7 +3541,7 @@ impl TypeTable {
     /// takes its declaration's kind — `Pair<i32>` is a struct because `Pair` is.
     ///
     /// The sealed member handles are the one declared struct it withholds.
-    pub fn reflect_kind(&self, id: TypeId) -> Option<crate::compiler_item::CompilerItem> {
+    pub fn reflect_kind(&self, id: TypeId) -> Option<CompilerItem> {
         use crate::compiler_item::CompilerItem;
         if self
             .decl_of_type(id)
@@ -4057,10 +4006,10 @@ impl TypeTable {
     }
 
     /// The declared name of `def`, qualified by its module when `qualified`.
-    fn head_name(&self, def: crate::defs::DefId, qualified: bool) -> String {
+    fn head_name(&self, def: DefId, qualified: bool) -> String {
         let name = self.def_name(def);
         if qualified {
-            crate::symbol_notation::render(&self.def_module(def).to_string(), name)
+            render(&self.def_module(def).to_string(), name)
         } else {
             name.to_string()
         }
@@ -4092,7 +4041,7 @@ impl TypeTable {
                         .iter()
                         .map(|&a| self.mangle_type_arg_for_generic(a))
                         .collect();
-                    crate::name::mangle_generic_name(&head, &args)
+                    mangle_generic_name(&head, &args)
                 }
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
@@ -4176,16 +4125,15 @@ impl TypeTable {
                 // A tuple is module-independent; every other instance is named
                 // by the module declaring its base.
                 if Self::is_tuple_type(name) {
-                    crate::name::mangle_tuple_type(&args)
+                    mangle_tuple_type(&args)
                 } else {
-                    let unqualified =
-                        crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
+                    let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
                     format!("{module_source}/{unqualified}")
                 }
             }
             ResolvedType::BuiltinArray(elem) => {
                 let elem_name = self.mangle_type_name_resolving_newtypes(*elem);
-                crate::name::mangle_builtin_array_type(&elem_name)
+                mangle_builtin_array_type(&elem_name)
             }
             _ => self.mangle_type_name(base),
         }
@@ -4294,16 +4242,15 @@ impl TypeTable {
                     .collect();
                 let name = self.def_name(*def);
                 if Self::is_tuple_type(name) {
-                    return crate::name::mangle_tuple_type(&args);
+                    return mangle_tuple_type(&args);
                 }
-                let unqualified =
-                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args);
+                let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
                 format!("{}/{unqualified}", self.def_module(*def))
             }
             ResolvedType::Ref(inner) => format!("&{}", self.mangle_type_arg_erased(*inner)),
             ResolvedType::MutRef(inner) => format!("&mut {}", self.mangle_type_arg_erased(*inner)),
             ResolvedType::BuiltinArray(elem) => {
-                crate::name::mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
+                mangle_builtin_array_type(&self.mangle_type_arg_erased(*elem))
             }
             _ => self.mangle_type_arg_for_generic(id),
         }
@@ -4351,9 +4298,9 @@ impl TypeTable {
                     .collect();
                 let name = self.def_name(*def);
                 Some(if Self::is_tuple_type(name) {
-                    crate::name::mangle_tuple_type(&args)
+                    mangle_tuple_type(&args)
                 } else {
-                    crate::name::mangle_generic_name(&self.decl_render_name(*def), &args)
+                    mangle_generic_name(&self.decl_render_name(*def), &args)
                 })
             }
             _ => None,
@@ -4368,18 +4315,16 @@ impl TypeTable {
     /// [`crate::name::Receiver::decl_key`] for the name an `impl` header
     /// writes, [`crate::name::Receiver::head_key`] for the mangled identity.
     #[must_use]
-    pub fn impl_receiver_key(&self, id: TypeId) -> crate::name::Receiver {
+    pub fn impl_receiver_key(&self, id: TypeId) -> name::Receiver {
         use crate::name::{FqTypeName, Receiver};
-        let declared =
-            |def: crate::defs::DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
+        let declared = |def: DefId| Receiver::Type(FqTypeName::declared(&self.defs, def));
         let builtin = |name: &str| Receiver::Type(FqTypeName::builtin(name));
         // Unerased: which impls a type has is a fact about its identity, and
         // erasure rewrites a newtype / flags id to the representation it is
         // stored as, whose impls are a different set.
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                crate::name::RefKind::from_resolved(self.get(id))
-                    .map_or_else(|| builtin(""), Receiver::Ref)
+                RefKind::from_resolved(self.get(id)).map_or_else(|| builtin(""), Receiver::Ref)
             }
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // The head is the declaration, arguments never spelled into it — an
@@ -4414,7 +4359,7 @@ impl TypeTable {
     ) -> TypeNameInfo {
         let mut with_clause: Vec<String> =
             effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
-        with_clause.extend(stores.iter().map(|i| crate::name::mangle_stores_member(*i)));
+        with_clause.extend(stores.iter().map(|i| mangle_stores_member(*i)));
         TypeNameInfo::Function {
             is_mut,
             params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
@@ -4426,7 +4371,7 @@ impl TypeTable {
 
     /// The receiver a `fn(..)` value dispatches through: its own name.
     #[must_use]
-    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> crate::name::FqTypeName {
+    pub fn fn_receiver_name(&self, resolved: &ResolvedType) -> FqTypeName {
         let ResolvedType::Function {
             is_mut,
             params,
@@ -4438,7 +4383,7 @@ impl TypeTable {
             panic!("fn_receiver_name expects a function type");
         };
         let info = self.fn_type_name_info(*is_mut, params, *return_type, effects, stores);
-        crate::name::FqTypeName::builtin(&crate::name::format_type_name(info))
+        FqTypeName::builtin(&format_type_name(info))
     }
 
     /// The declaration a type's head names, with any arguments dropped. Read
@@ -4446,7 +4391,7 @@ impl TypeTable {
     /// header writes, and erasure would answer `u32` for a `flags` type and the
     /// base's name for a newtype — templates no impl declares.
     #[must_use]
-    pub fn fq_base_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+    pub fn fq_base_type_name(&self, id: TypeId) -> FqTypeName {
         use crate::name::FqTypeName;
         match self.get_unerased(id) {
             ResolvedType::Struct { def, .. } => self.fq_struct_head(*def),
@@ -4491,27 +4436,27 @@ impl TypeTable {
     /// `ModuleSource` cannot be rebuilt from a string without the interner — so
     /// the name stays structured all the way to its consumers.
     #[must_use]
-    pub fn fq_type_name(&self, id: TypeId) -> crate::name::FqTypeName {
+    pub fn fq_type_name(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled(id, false)
     }
 
     /// [`Self::fq_type_name`] as the type read *before* `boxing::prepare_types`
     /// redefined every borrowed `TypeId` into `Box<T>`. Every shape recurses,
     /// so a borrow nested anywhere in the spelling comes back as one.
-    pub fn fq_type_name_unboxed(&self, id: TypeId) -> crate::name::FqTypeName {
+    pub fn fq_type_name_unboxed(&self, id: TypeId) -> FqTypeName {
         self.fq_type_name_spelled(id, true)
     }
 
-    fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> crate::name::FqTypeName {
+    fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
         use crate::name::FqTypeName;
         if unboxed && let Some(&is_shared) = self.boxed_ref_shared.get(id) {
             let payload = self
                 .box_payload_of(id)
                 .expect("boxing registers a payload with every reference it redefines");
             let kind = if is_shared {
-                crate::name::RefKind::Shared
+                RefKind::Shared
             } else {
-                crate::name::RefKind::Mut
+                RefKind::Mut
             };
             return self
                 .fq_type_name_spelled(payload, unboxed)
@@ -4562,10 +4507,10 @@ impl TypeTable {
                 .with_args(vec![self.fq_type_name_spelled(*elem, unboxed)]),
             ResolvedType::Ref(inner) => self
                 .fq_type_name_spelled(*inner, unboxed)
-                .with_reference(crate::name::RefKind::Shared),
+                .with_reference(RefKind::Shared),
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled(*inner, unboxed)
-                .with_reference(crate::name::RefKind::Mut),
+                .with_reference(RefKind::Mut),
             // Shapes that name no declaration — assoc-type projections, packs,
             // `Unknown`. They carry no module, so the rendered spelling is
             // already their whole identity.
@@ -5065,7 +5010,7 @@ pub enum TirExprKind {
         /// parent function's, so the parent's set would mis-box. Empty
         /// for synthesised closures (e.g. effect-handler dispatch),
         /// which never take addresses.
-        address_taken_locals: crate::hashmap::IndexSet<u32>,
+        address_taken_locals: hashmap::IndexSet<u32>,
         /// Body-level let-bindings inside the closure, in declaration order,
         /// occupying `params.len()..` in its local-index namespace (the params
         /// themselves live in `params`). Captured at resolve time so pattern
@@ -5210,7 +5155,7 @@ pub struct TirHandlerBinding {
     pub span: Span,
     /// `Some(id)` marks a binding from a bundled `with &mut h do` expansion; all
     /// bindings from one clause share the id, so dispatch synthesis can allocate
-    /// a single `__h_<bundle>` local that every per-effect closure captures —
+    /// a single `$h_<bundle>` local that every per-effect closure captures —
     /// the handler is evaluated once and one effect's mutations are seen by the
     /// rest. `None` for an explicit `Effect => handler`. Unique per `WithHandler`.
     pub bundle_group: Option<u32>,
@@ -5659,7 +5604,7 @@ pub struct TirGlobal {
     /// Whether the program may assign to this global — `global mut`. The Wasm
     /// slot's mutability is wider and derived when the module is built.
     pub wado_mutable: bool,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
@@ -5674,12 +5619,12 @@ pub struct TirFunction {
     pub name: String,
     /// The source declaration reify emitted this from. `None` for anything the
     /// compiler synthesizes, which declares nothing and so identifies nothing.
-    pub def_id: Option<crate::defs::DefId>,
+    pub def_id: Option<DefId>,
     /// Module this function belongs to. Set by the link phase when flattening
     /// per-module TIR into flat lists; before link, the `module_source` is
     /// carried implicitly by the parent `TirModule`.
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// Whether this function is exported at the Component Model boundary (world export)
     pub is_export: bool,
     /// Whether this is an async function (`export async fn`).
@@ -5731,12 +5676,12 @@ pub struct TirFunction {
     /// Whether this function is a synthesised effect-dispatch wrapper
     /// (generated by `synthesis::effect_dispatch`). Effect-operation
     /// call-site rewriting must skip these — their fallback path
-    /// directly calls `__cm_binding__<E>_<op>`, which would loop back
+    /// directly calls `$cm_binding__<E>_<op>`, which would loop back
     /// through the wrapper if rewritten.
     pub is_dispatch_wrapper: bool,
 
     /// Whether this function is a synthesized CM *export* binding (world export wrapper).
-    /// When true, the global initializer (`__initialize_modules`) is injected at the start
+    /// When true, the global initializer (`$initialize_modules`) is injected at the start
     /// of this function's body during lowering.
     pub is_cm_export: bool,
 
@@ -5758,7 +5703,7 @@ pub struct TirFunction {
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].
-    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
+    pub compiler_item: Option<CompilerItem>,
 
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
@@ -5882,17 +5827,17 @@ impl TirFunction {
     pub fn is_trait_method(&self) -> bool {
         self.method_info
             .as_ref()
-            .is_some_and(super::name::LocalMethodName::is_trait_method)
+            .is_some_and(LocalMethodName::is_trait_method)
     }
 
-    /// Returns true if this is the synthesized `__call` method on a
-    /// `__Closure_N` functor struct. See
+    /// Returns true if this is the synthesized `$call` method on a
+    /// `$Closure_N` functor struct. See
     /// [`LocalMethodName::is_closure_call`] for the rationale.
     #[inline]
     pub fn is_closure_call(&self) -> bool {
         self.method_info
             .as_ref()
-            .is_some_and(super::name::LocalMethodName::is_closure_call)
+            .is_some_and(LocalMethodName::is_closure_call)
     }
 
     /// Returns true if this function has type params that need monomorphization
@@ -5935,7 +5880,7 @@ impl TirFunction {
 /// onto `Closure { body_locals }`, whose params stay in `params` instead.
 #[derive(Debug, Clone)]
 pub struct TirLocal {
-    /// Source-level name of the binding (or a synthesised `__name` for
+    /// Source-level name of the binding (or a synthesised `$name` for
     /// elaborator-generated temporaries that have no surface syntax).
     pub name: String,
     pub type_id: TypeId,
@@ -5947,11 +5892,11 @@ pub struct TirLocal {
 
 impl TirLocal {
     /// Build a `TirLocal` for a synthesised slot whose name follows the
-    /// `__local_N` convention used by `wir_build` when no source-level
+    /// `$local_N` convention used by `wir_build` when no source-level
     /// name is available.
     pub fn synth(index: u32, type_id: TypeId, is_mut: bool) -> Self {
         Self {
-            name: format!("__local_{index}"),
+            name: format!("$local_{index}"),
             type_id,
             is_mut,
             span: Span::default(),
@@ -5983,7 +5928,7 @@ pub struct TirStruct {
     pub type_args: Vec<TypeId>,
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// Generic type parameters (empty for non-generic structs)
     pub type_params: Vec<TirTypeParam>,
     /// If this struct was created by monomorphization, contains the origin info
@@ -5997,7 +5942,7 @@ pub struct TirStruct {
 #[derive(Debug, Clone)]
 pub struct TirField {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     pub type_id: TypeId,
     pub index: u32,
     pub span: Span,
@@ -6020,10 +5965,10 @@ pub struct TirField {
 #[derive(Debug, Clone)]
 pub struct TirEnum {
     /// The declaration this was reified from.
-    pub def: crate::defs::DefId,
+    pub def: DefId,
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// Generic type parameters (empty for non-generic enums)
     pub type_params: Vec<TirTypeParam>,
     /// If this enum was created by monomorphization, contains the origin info
@@ -6051,10 +5996,10 @@ pub struct TirEnumCase {
 #[derive(Debug, Clone)]
 pub struct TirFlags {
     /// The declaration this was reified from.
-    pub def: crate::defs::DefId,
+    pub def: DefId,
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// The newtype `TypeId` (base type is u32)
     pub type_id: TypeId,
     pub members: Vec<TirFlagsMember>,
@@ -6077,10 +6022,10 @@ pub struct TirFlagsMember {
 pub struct TirVariantDecl {
     /// The declaration this was reified from. Case indices are looked up
     /// through it, so a same-named variant in another module cannot answer.
-    pub def: crate::defs::DefId,
+    pub def: DefId,
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     /// Generic type parameters (e.g., `T` in `variant Option<T>`)
     pub type_params: Vec<TirTypeParam>,
     /// Cases of the variant (e.g., Some, None for Option)
@@ -6113,8 +6058,8 @@ pub struct TirVariantCase {
 pub struct TirNewtype {
     pub name: String,
     pub module_source: ModuleSource,
-    pub visibility: crate::ast::Visibility,
-    pub def: crate::defs::DefId,
+    pub visibility: Visibility,
+    pub def: DefId,
     /// Empty for `type N = T`; the declaration's parameters for `type N<T> = …`,
     /// which is then one declaration over many types.
     pub type_params: Vec<TirTypeParam>,
@@ -6135,7 +6080,7 @@ pub struct TirNewtype {
 pub struct TirTest {
     /// The original test name from source (None if unnamed)
     pub name: Option<String>,
-    /// Generated function name (e.g., "__`test_0`", "__`test_trap_0`", or "__`test_todo_0`")
+    /// Generated function name (e.g., "$`test_0`", "$`test_trap_0`", or "$`test_todo_0`")
     pub function_name: String,
     /// Source line number for unnamed test identification
     pub line: usize,
@@ -6156,7 +6101,7 @@ pub struct TirTest {
 #[derive(Debug, Clone)]
 pub struct TirEffect {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub span: Span,
 }
@@ -6191,9 +6136,9 @@ pub struct TirEffectOp {
 #[derive(Debug, Clone)]
 pub struct TirResource {
     /// The declaration this was reified from.
-    pub def: crate::defs::DefId,
+    pub def: DefId,
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
     pub is_generic: bool,
     pub span: Span,
@@ -6203,7 +6148,7 @@ pub struct TirResource {
 #[derive(Debug, Clone)]
 pub struct TirTrait {
     pub name: String,
-    pub visibility: crate::ast::Visibility,
+    pub visibility: Visibility,
     pub type_params: Vec<TirTypeParam>,
     pub methods: Vec<TirTraitMethod>,
     pub span: Span,
@@ -6252,7 +6197,7 @@ pub struct TirImpl {
     /// key in the effect-dispatch handler index.
     pub struct_name: String,
     /// `..trap` / `..forward`, when the block ends with a rest clause.
-    pub rest: Option<crate::ast::RestClause>,
+    pub rest: Option<RestClause>,
     pub span: Span,
 }
 
@@ -6276,14 +6221,14 @@ pub struct ClosureFunctor {
     pub module_source: ModuleSource,
     /// Unique closure ID (matches the order closures are visited in the module)
     pub id: u32,
-    /// Name of the generated functor struct (e.g., `__Closure_0`)
+    /// Name of the generated functor struct (e.g., `$Closure_0`)
     pub struct_name: String,
     /// Type ID of the generated functor struct (bare struct type for definitions)
     pub struct_type_id: TypeId,
     /// Type ID of reference to functor struct (for expression/local types)
     /// Functors are reference types, so variables holding them have this type.
     pub ref_type_id: TypeId,
-    /// The `__call` method for this closure (with body transformed:
+    /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
     pub call_method: Rc<RefCell<TirFunction>>,
     /// Captures from the original closure
@@ -6292,7 +6237,7 @@ pub struct ClosureFunctor {
     /// captured at functor creation and never mutated. `register_closure_wrappers`
     /// derives the wrapper's external signature
     /// (`fn(env, ..canonical_user_params) -> canonical_return`) from this
-    /// snapshot, so a later DAE shrink of `__call` cannot desynchronise it.
+    /// snapshot, so a later DAE shrink of `$call` cannot desynchronise it.
     pub canonical_user_params: Vec<(String, TypeId)>,
     /// Canonical return type of the closure literal. Same role as
     /// `canonical_user_params` — drives the wrapper external signature.
@@ -6326,7 +6271,7 @@ pub struct InstantiationKey {
     /// `struct Box<T>` in one module, and a `(name, module)` lookup answers
     /// with whichever was declared first — collapsing two distinct types onto
     /// one. `None` for a function or enum instantiation, which key by name.
-    pub def: Option<crate::defs::DefId>,
+    pub def: Option<DefId>,
     /// Name of the generic item (struct, function, or enum)
     pub name: String,
     /// Module where the generic item is defined.
@@ -6544,6 +6489,7 @@ impl TirProgram {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{AstId, AstIdSpace};
     use std::assert_matches;
 
     #[test]
@@ -6565,7 +6511,7 @@ mod tests {
     #[should_panic(expected = "type_id_of_decl")]
     fn type_id_of_decl_panics_when_unregistered() {
         let table = TypeTable::new();
-        let unregistered = crate::ast::AstId::new(crate::ast::AstIdSpace::next(), 0);
+        let unregistered = AstId::new(AstIdSpace::next(), 0);
         let _ = table.type_id_of_decl(unregistered);
     }
 

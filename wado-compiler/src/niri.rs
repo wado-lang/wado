@@ -14,7 +14,9 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
+use crate::{compiler_trace, nir_arena};
 
 /// Three-state lattice over compile-time evaluation results, ordered
 /// `Unevaluated` ⊑ `Const(v)` ⊑ `NonConst` — the SCCP lattice with
@@ -177,9 +179,9 @@ pub trait EditSink {
     /// whose surviving operand is promoted and so has no node to move; declined
     /// on the scratch backend, which writes nothing back.
     fn redirect_to_value(&mut self, e: ExprId, v: ValueId) -> bool;
-    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId;
-    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId;
-    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId;
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId;
+    fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId;
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId;
     fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>);
 }
 
@@ -213,17 +215,17 @@ impl EditSink for BodySink<'_> {
     fn redirect_to_value(&mut self, _e: ExprId, _v: ValueId) -> bool {
         false
     }
-    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
         self.body.exprs.push(ExprNode {
             kind,
             type_id,
             span,
         })
     }
-    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId {
+    fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         self.body.stmts.push(StmtNode { kind, span })
     }
-    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: crate::token::Span) -> BlockId {
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         self.body.blocks.push(BlockNode { stmts, span })
     }
     fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
@@ -316,9 +318,7 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 /// when it wants to hold the result.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    func.return_type != crate::tir::TypeTable::UNIT
-        && func.stores.is_empty()
-        && is_ctfe_runnable(func)
+    func.return_type != TypeTable::UNIT && func.stores.is_empty() && is_ctfe_runnable(func)
 }
 
 /// Derive the [`MaterializingGlobals`] set: pair a global on every block that
@@ -666,7 +666,7 @@ impl<'a> Interpreter<'a> {
     ///
     /// Recording the aliasing analysis first is what lets [`Self::bind_local`]
     /// keep an unaliased `elements = […]` rather than demote it.
-    pub fn bind_block_lets(&mut self, body: &crate::nir_arena::Body, block: BlockId) {
+    pub fn bind_block_lets(&mut self, body: &nir_arena::Body, block: BlockId) {
         use crate::nir_arena::StmtKind;
         let stmts = body.blocks[block].stmts.clone();
         let Some((_, lets)) = stmts.split_last() else {
@@ -781,7 +781,7 @@ impl<'a> Interpreter<'a> {
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {
-            crate::compiler_trace!(
+            compiler_trace!(
                 "region_seed",
                 "local {index} binds an aggregate the frame cannot track"
             );
@@ -942,7 +942,7 @@ fn place_roots_at_reference(body: &Body, place: Operand, type_table: &TypeTable)
             _ => {
                 return matches!(
                     type_table.get(body.exprs[e].type_id),
-                    crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                 );
             }
         }

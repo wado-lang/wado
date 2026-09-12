@@ -18,6 +18,117 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Sharing `core:json`'s three digit-accumulating loops (2026-09-12)
+
+Folding them into one `fold_digits` helper costs json-canada deserialize 1.5%:
+9.738 ms/iter with the helper against 9.594 without, four alternating rounds.
+The body is a loop, so the inliner declines the call and every digit pays one.
+
+It first measured flat because it was measured on json-catalog, whose numbers
+are integers where the change was to the float scanner.
+
+Generalizes: a loop body is not a candidate for extraction, whatever the
+duplication looks like. Run a scanner change on the corpus whose values reach
+that scanner.
+
+## Making `json_ws_end` cost nothing on minified input (2026-09-12)
+
+The predicate tests `b != b' '` first, settling a skipped byte in one compare
+and a stopping byte in two. citm_catalog is 71% whitespace and wins; canada.json
+is minified, 24 whitespace bytes in 2.25 MB, and only pays. Five alternating
+rounds against `origin/main`'s `core:json`, one dev compiler:
+
+| `core:json`                           | catalog de | canada de |
+| ------------------------------------- | ---------- | --------- |
+| main's `b > b' ' \|\| !is_json_ws(b)` | +12.1%     | **-1.0%** |
+| space-first (today)                   | **+19.3%** | -2.8%     |
+
+The ordering is worth 7.2 points on the pretty corpus and 1.8 on the minified
+one. Four attempts to keep both failed:
+
+- **Reorder to `b > b' ' || (b != b' ' && !is_json_ws(b))`.** Costs what it
+  recovers: catalog de 3.9 → 4.2 ms.
+- **Two predicates, one per call site**, structural-first at the scan's entry
+  and space-first inside the run. Neutral on both corpora.
+- **Inline the body at all six sites.** Also neutral, which rules the call out:
+  the ordering is the cost, not the call.
+- **Branchless**: `((b' ' - b) >> 31 | (ws_set >> b & 1) ^ 1) != 0`, correct for
+  all 256 bytes, the sign term rescuing the shift aliasing `assert b < 64`
+  guards. Ten canada rounds put it at main −4.0% against head's −4.2%, beating
+  head 6 of 10. The branch it removes is well-predicted on both corpora, so
+  eight unconditional ops lose to two behind a taken guess.
+
+One compare cannot decide it either: a compare against a constant splits the
+byte range into two intervals, and `{0x09, 0x0A, 0x0D, 0x20}` is neither an
+interval nor the complement of one. SIMD does not apply, `v128_load` wanting a
+linear-memory address where a `String` is a GC `Array<u8>`. All four arms sit
+within two points of each other, and main's own canada median moved
+9.376 → 9.056 between clean sessions, so this size of effect needs a better rig.
+
+Generalizes: a byte-frequency assumption belongs to the corpus, not the format.
+Check a scan predicate on a minified corpus and an indented one; they move in
+opposite directions here.
+
+## Reading more than four bytes per bounds check (2026-09-12)
+
+citm_catalog's whitespace runs average 24 bytes, well over the 16-byte floor the
+entry on short runs sets for batching, so widening `peek_after_whitespace_run`'s
+block past four should pay. It does not. json-catalog deserialize, three
+alternating rounds against the four-wide arm at 4.21 ms/iter:
+
+| block                 | ms/iter          |
+| --------------------- | ---------------- |
+| 4 (today)             | **4.21**         |
+| 6                     | 4.31, 4.36, 4.31 |
+| 8                     | 4.40, 4.52, 4.50 |
+| 8, then 4, then 1     | 4.89, 4.60, 4.62 |
+| 16, then 8, 4, then 1 | 4.88, 4.86, 4.89 |
+
+Monotonic in the width, on the input whose runs are longest. wasmtime shares the
+base, length and null check across about four gets and no further, so every get
+past that is a lone one the block issues whether the run needs it or not.
+
+Generalizes: four is the number, not a starting point. The run length decides
+whether to batch at all; it does not buy a wider block.
+
+## Two digits at a time in `write_decimal_digits` (2026-09-12)
+
+The twin of the `fpfmt` loop in the entry on `write_digits_at`, coming out the
+same way on a corpus of 8.8-digit integers. json-catalog serialize, three
+alternating rounds against 0.822 ms/iter:
+
+- **`t / 100`, then the pair's two digits off the remainder**: 0.956, 0.956,
+  1.045. Same store count, half the divisions and half the loop trips.
+- **`array.copy` of the pair out of a 200-byte `DIGIT_PAIRS` global**, which
+  trades the two `array.set`s for one copy: 0.888, 0.978, 0.999, 1.002.
+
+A two-byte `array.copy` does beat two `array.set`s elsewhere: retiring
+`string_push`'s per-byte expansion, so a constant key's `":` stays one copy, is
+worth 3-4% on this row. The difference is the index. A copy from a constant
+offset in a global is not a copy whose source offset was just computed.
+
+Generalizes: the digit loop is store-bound, and no digit-generation scheme has
+yet removed a store from it. Three attempts now, two functions, two corpora.
+
+## Splitting a hot leaf so its fast path fits the inline budget (2026-09-12)
+
+Two tries on the theory that a call per token is worth removing, both flat:
+
+- **`Formatter::prepare_int_write`.** Holding the padded half in its own
+  function leaves the fast half about ten instructions — a sign and a
+  reservation. json-catalog serialize measured 0.823 against 0.817 over four
+  alternating rounds, its best round behind the baseline's.
+- **`JsonDeserializer::peek_after_whitespace`.** Reduced to a length check, one
+  `array.get` and `b > b' '`, the rest behind `peek_after_whitespace_cold`.
+  `wado dump -O2` shows the split worked and the 21 call sites still call: a
+  tail call is priced like any other operand, so the fast path is over budget
+  with it. `#[inline(never)]` on the cold half changed nothing; `#[inline]` on
+  the fast half measured 4.26–4.44 against 4.26.
+
+Generalizes: shrinking a leaf is not the same as getting it inlined. The dump
+tells the two apart, so read it before spending a measurement. The entry on
+`HighlightVisitor::classify` says the same thing from the other end.
+
 ## A shared helper that hands back a value most callers discard (2026-09-10)
 
 `core:json`'s three container accesses open an entry the same way, and
@@ -455,8 +566,8 @@ traversal about the root reads like closing a gap.
 
 The benchmark does not move: `sieve` swaps which arm wins across three
 alternating pairs, `json-catalog` de differs by under 0.2%. The WIR A/B says
-why — the whole diff is one new `__initialize_modules$cold0`, the
-`__initialize_module` it swallowed, and TypeId renumbering. **The parse and
+why — the whole diff is one new `$initialize_modules$cold0`, the
+`$initialize_module` it swallowed, and TypeId renumbering. **The parse and
 serialize loops are identical.** What a top-level marker reaches is every
 module's init guard: one call site, behind a branch, run once. Only then does
 size decide, and it decides against: every program grew (hello_world +5,

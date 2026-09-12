@@ -137,11 +137,11 @@ representation, which is the Wasm builder's business.
 
 ### Multi-module initialization
 
-Each module with deferred globals gets a `pub fn __initialize_module()`
+Each module with deferred globals gets a `pub fn $initialize_module()`
 assigning them, ordered topologically so a global is assigned after everything
 it depends on. A cycle is a compile-time error.
 
-The entry module gets a `fn __initialize_modules()` that calls each linked
+The entry module gets a `fn $initialize_modules()` that calls each linked
 module's, guarded by a flag so repeated entry — an HTTP handler invoked many
 times on one instance — initializes once. Every entry point calls it first.
 Those calls are ordered the same way, by the globals each module's initializers

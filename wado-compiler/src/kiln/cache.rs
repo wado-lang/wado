@@ -275,6 +275,7 @@ fn write_file_hash(h: &mut Sha256, f: &FileHash) {
 mod tests {
     use super::*;
     use crate::kiln::invocation::{DeclSite, GeneratorModule, Invocation};
+    use crate::token::Span;
 
     fn fh(path: &str, hash_byte: u8) -> FileHash {
         FileHash {
@@ -385,9 +386,9 @@ mod tests {
             from: InvocationPath::normalize("schema.proto"),
             inputs: vec![InvocationPath::normalize("dep.proto")],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
-            options: crate::kiln::options_check::CanonicalOptions::default(),
+            options: CanonicalOptions::default(),
             raw_options: None,
-            options_span: crate::token::Span::default(),
+            options_span: Span::default(),
         };
         let result: Result<(FileHash, Vec<FileHash>), &'static str> =
             gather_file_hashes(&inv, |_| Err("oops"), |_| Ok(vec![]));

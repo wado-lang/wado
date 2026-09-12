@@ -3,13 +3,13 @@
 // The hot loop of `fts.wado` iterates a String's bytes with
 // `for let b of s.bytes()`. Before the fix, a stale `value_copy
 // StrUtf8ByteIter` was left inside the body of the byte loop (the
-// for-let desugars to `__iter = value_copy(source.into_iter())`).
+// for-let desugars to `$iter = value_copy(source.into_iter())`).
 // That copy happens on every iteration of the *outer* 500K-iteration
 // loop, which is the regression.
 //
 // The copy is unnecessary because `s.bytes()` returns a fresh value
 // (Call result) and the iterator's mutation of its own `index` field
-// is observable only through `__iter` itself — the source local is
+// is observable only through `$iter` itself — the source local is
 // dead after the copy.
 
 use { println, Stdout } from "core:cli";

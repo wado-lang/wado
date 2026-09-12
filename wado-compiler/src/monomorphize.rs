@@ -14,8 +14,9 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
-use crate::name::FreeFunctionName;
+use crate::name::{FqTypeName, FreeFunctionName};
 
 /// Key used to store/look up a generic function in the global function map.
 ///
@@ -149,7 +150,7 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
     // `expected (ref $type), found (ref $type)`. Catch it at its origin.
     let mut seen_functions: IndexMap<
         (ModuleSource, String),
-        (Option<crate::defs::DefId>, Option<MonomorphInfo>),
+        (Option<DefId>, Option<MonomorphInfo>),
     > = IndexMap::default();
     for func_rc in &flat.functions {
         let f = func_rc.borrow();
@@ -201,7 +202,7 @@ fn dispatch_receiver_type(tt: &TypeTable, type_id: TypeId) -> TypeId {
 /// The receiver *head* a dispatch template is named after: no type arguments,
 /// for keys that carry them in `impl_type_args`. Prefer it over a
 /// struct-instantiation key's `name`, which carries no module.
-fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> FqTypeName {
     tt.fq_base_type_name(dispatch_receiver_type(tt, type_id))
 }
 
@@ -210,7 +211,7 @@ fn dispatch_receiver_head(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTyp
 /// (`StructField<Thing,i32>::get`). Using the bare head here would collapse
 /// every instantiation onto one key and mint an instance whose body still
 /// carries the impl's type parameters.
-fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> crate::name::FqTypeName {
+fn dispatch_receiver_name(tt: &TypeTable, type_id: TypeId) -> FqTypeName {
     let tid = dispatch_receiver_type(tt, type_id);
     // `fq_type_name` spells the representation, which answers `u32` for a
     // `flags` type and names a template no impl declares — impls on a `flags`

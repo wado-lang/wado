@@ -10,10 +10,14 @@ use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;
 use super::types::FunctionContext;
+use crate::compiler_item::CompilerItem;
+use crate::elaborator::sem::ModuleSemantics;
+use crate::elaborator::sem::types::{AssertCaptureInfo, AssertSlot, DesugarKind};
+use crate::tir::TypeTable;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
-        self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
+        self.record_desugar(assert_stmt.id, DesugarKind::Assert);
 
         let mut scanner = CaptureScanner::new();
         scanner.scan_root(&assert_stmt.condition);
@@ -34,9 +38,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let cond_type = self.resolve_condition_expr(&assert_stmt.condition, ctx);
 
-        // Reserved here because `reify_assert` allocates `__cond` at this
+        // Reserved here because `reify_assert` allocates `$cond` at this
         // point too, and the two walks must stay in local-index lockstep.
-        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
+        let _cond_local_index = ctx.add_local("$cond".to_string(), cond_type, false, None);
 
         // Matches the cold-branch allocation in `reify_assert`.
         let conditional_names: Vec<String> = ctx
@@ -52,7 +56,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+            .make_compiler_struct(CompilerItem::String);
         for name in conditional_names {
             ctx.add_local(name, string_type, false, None);
         }
@@ -72,20 +76,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("assert_capture_ctx must survive resolution");
 
         // WEP 2026-05-26: record the capture-slot table
-        // so reify can pick the same sub-expressions for `let __vK = …;`
+        // so reify can pick the same sub-expressions for `let $vK = …;`
         // materialisation. Invert `ast_id_to_slot` so the recorded `slots`
-        // vector is indexed by slot (matching `__vK` naming).
+        // vector is indexed by slot (matching `$vK` naming).
         let mut slot_ast_ids: Vec<Option<AstId>> = vec![None; slots.len()];
         for (&ast_id, &slot_idx) in &ast_id_to_slot {
             if let Some(entry) = slot_ast_ids.get_mut(slot_idx) {
                 *entry = Some(ast_id);
             }
         }
-        let stage5_slots: Vec<super::sem::types::AssertSlot> = slots
+        let stage5_slots: Vec<AssertSlot> = slots
             .iter()
             .enumerate()
             .filter_map(|(i, c)| {
-                slot_ast_ids[i].map(|ast_id| super::sem::types::AssertSlot {
+                slot_ast_ids[i].map(|ast_id| AssertSlot {
                     ast_id,
                     capture_label: c.source.clone(),
                     conditional: c.conditional,
@@ -96,7 +100,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.record_assert_captures(
             assert_stmt.id,
-            super::sem::types::AssertCaptureInfo {
+            AssertCaptureInfo {
                 condition_source: unparse_expr_source(&assert_stmt.condition),
                 line: assert_stmt.span.line,
                 slots: stage5_slots,
@@ -104,9 +108,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         ctx.exit_scope();
-
-        // Keeps reify's `__assert_N` labels in source order.
-        ctx.next_assert_id += 1;
     }
 
     /// Hook the body walk calls on an `AstId` flagged for capture: resolves
@@ -150,12 +151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
             if conditional {
-                ctx.add_local(
-                    seen_local_name(&cap_name),
-                    crate::tir::TypeTable::BOOL,
-                    true,
-                    None,
-                );
+                ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None);
             }
         }
 
@@ -177,7 +173,7 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
 /// Render every recorded capture plan, for `wado dump --assert-plan`.
-pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
+pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
     let mut out = String::new();
     for info in sem.types.assert_captures.values() {
         out.push_str(&format!(
@@ -200,7 +196,7 @@ pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
                 (false, false) => "in-place",
             };
             out.push_str(&format!(
-                "  __v{i}  {reach:<11}  {bind:<8}  {}\n",
+                "  $v{i}  {reach:<11}  {bind:<8}  {}\n",
                 slot.capture_label
             ));
         }
@@ -210,7 +206,7 @@ pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
-    /// Variable name (`__v0`, `__v1`, …) the rewritten condition refers to.
+    /// Variable name (`$v0`, `$v1`, …) the rewritten condition refers to.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
@@ -300,7 +296,7 @@ impl AssertCaptureContext {
 struct CaptureScanner {
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
-    /// The condition itself, which `__cond` already holds.
+    /// The condition itself, which `$cond` already holds.
     is_root: bool,
     /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
@@ -345,7 +341,7 @@ impl CaptureScanner {
         } else {
             let idx = self.slots.len();
             self.slots.push(Capture {
-                name: format!("__v{idx}"),
+                name: format!("$v{idx}"),
                 source,
                 conditional,
                 is_place,

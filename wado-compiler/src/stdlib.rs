@@ -178,6 +178,7 @@ pub fn get_stdlib_module(import_path: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::hashmap;
 
     /// A flat package path and a sub-interface path both resolve, and each
     /// lands on the module that declares the named item.
@@ -225,7 +226,7 @@ mod tests {
 
     #[test]
     fn import_paths_are_unique() {
-        let mut seen = crate::hashmap::IndexSet::default();
+        let mut seen = hashmap::IndexSet::default();
         for import in CORE_MODULE_PATHS.iter().chain(BINDING_MODULE_PATHS) {
             assert!(seen.insert(*import), "duplicate import path {import}");
         }

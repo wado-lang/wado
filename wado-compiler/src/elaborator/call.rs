@@ -23,6 +23,14 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
+use crate::ast::{AstId, GenericParam};
+use crate::compiler_item::CompilerItem;
+use crate::defs::{DefId, DefKind};
+use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::sem::types::DesugarKind;
+use crate::elaborator::trait_env::ImplMethodEntry;
+use crate::elaborator::types::{ImplMemberKind, VariantCaseData, VariantInfo};
+use crate::{Span, token};
 
 /// The parameter an associated-type equality binds: a bare parameter
 /// (`Builder<Output = T>`) or a pack spelt as the whole tuple
@@ -63,11 +71,7 @@ pub(super) fn turbofish_has_hole(ast_args: &[Type]) -> bool {
 
 /// One span per resolved argument. An argument the source does not spell — a
 /// tagged template's, which is the template itself — reports at the call.
-pub(super) fn arg_spans_of(
-    raw_args: &[Expr],
-    resolved: usize,
-    call_span: crate::Span,
-) -> Vec<crate::Span> {
+pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<Span> {
     (0..resolved)
         .map(|i| raw_args.get(i).map_or(call_span, Expr::span))
         .collect()
@@ -126,7 +130,7 @@ pub(super) struct FnSignature {
 /// prefix already substituted, so `resolve_call` can look up parameter types and
 /// resolve arguments once with the right expected-type hints. Re-entering
 /// `resolve_call` with a synthetic `CallExpr` instead fired the assert-capture
-/// hook twice per sub-expression, emitting each `let __vK = …` binding twice.
+/// hook twice per sub-expression, emitting each `let $vK = …` binding twice.
 enum CalleeIdentKind<'a> {
     /// No prefix substitution needed. Covers plain ident calls
     /// (`foo(x)`), already-concrete qualified calls (`Type::method(x)`,
@@ -140,10 +144,7 @@ enum CalleeIdentKind<'a> {
     /// A bare case call (`Some(x)`), the expected type having supplied the
     /// case. `owner` is the variant declaring it and `spelled` its
     /// `Variant::Case` form, so the qualified constructor path serves it.
-    Case {
-        owner: crate::defs::DefId,
-        spelled: String,
-    },
+    Case { owner: DefId, spelled: String },
     /// `T::suffix(...)` where `T` is still an abstract type parameter
     /// constrained only by trait bounds. Dispatched independently via
     /// `resolve_type_param_static_call`.
@@ -171,7 +172,7 @@ impl CalleeIdentKind<'_> {
 
     /// The variant a bare case call constructs; `None` for every other shape,
     /// whose receiver is read from its own segment.
-    fn case_owner(&self) -> Option<crate::defs::DefId> {
+    fn case_owner(&self) -> Option<DefId> {
         match self {
             Self::Case { owner, .. } => Some(*owner),
             Self::AsIs(_) | Self::Rewritten(_) | Self::AbstractTypeParam { .. } => None,
@@ -362,7 +363,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `name` is a declared effect (`interface`) or resource —
     /// the set of identifiers `resolve_call`'s qualified-call fallback may
     /// treat as a deferred effect operation (`Stdout::write()`, etc.).
-    fn is_effect_or_resource_decl(&self, def: crate::defs::DefId) -> bool {
+    fn is_effect_or_resource_decl(&self, def: DefId) -> bool {
         self.tysys.trait_env.effect_decl_index.contains(&def)
             || self.tysys.trait_env.resource_decl_index.contains(&def)
     }
@@ -370,7 +371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The effect / resource declaration a qualified callee's receiver segment
     /// names — answered by the site the walk resolved, so an import alias needs
     /// no translation back into a spelling.
-    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<crate::defs::DefId> {
+    fn effect_or_resource_decl_at(&self, site: Option<ast::AstId>) -> Option<DefId> {
         let def = self.tysys.resolutions.declared(site?)?;
         self.is_effect_or_resource_decl(def).then_some(def)
     }
@@ -382,7 +383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee_kind: &CalleeIdentKind<'_>,
         receiver_site: Option<ast::AstId>,
         prefix: &str,
-    ) -> Option<&super::types::VariantInfo> {
+    ) -> Option<&VariantInfo> {
         match callee_kind.case_owner() {
             Some(owner) => self.type_lookup().variant_cases_of(owner),
             None => self.lookup_variant_cases_at(receiver_site, prefix),
@@ -927,8 +928,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let tt = self.tysys.type_table.borrow();
                         matches!(
                             tt.get(tt.peel_refs(arg_type)),
-                            crate::tir::ResolvedType::GenericInstance { .. }
-                                | crate::tir::ResolvedType::GenericResource { .. }
+                            ResolvedType::GenericInstance { .. }
+                                | ResolvedType::GenericResource { .. }
                         )
                     };
                     let is_reflexive = if arg_is_generic {
@@ -939,10 +940,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         arg_type_name == prefix
                     };
                     if is_reflexive {
-                        self.record_desugar(
-                            call.id,
-                            super::sem::types::DesugarKind::NewtypeFromCollapse,
-                        );
+                        self.record_desugar(call.id, DesugarKind::NewtypeFromCollapse);
                         return args[0];
                     }
 
@@ -951,10 +949,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(base_id) = base_of_arg
                         && self.tysys.type_table.borrow().type_name(base_id) == prefix
                     {
-                        self.record_desugar(
-                            call.id,
-                            super::sem::types::DesugarKind::NewtypeFromUnwrap,
-                        );
+                        self.record_desugar(call.id, DesugarKind::NewtypeFromUnwrap);
                         // Reify rebuilds the newtype `Cast` from the
                         // recorded `DesugarKind`; project only the result type.
                         return base_id;
@@ -970,10 +965,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if let Some(base_id) = base_opt
                             && self.tysys.type_table.borrow().type_name(base_id) == arg_type_name
                         {
-                            self.record_desugar(
-                                call.id,
-                                super::sem::types::DesugarKind::NewtypeFromWrap,
-                            );
+                            self.record_desugar(call.id, DesugarKind::NewtypeFromWrap);
                             // Reify rebuilds the newtype `Cast` from
                             // the recorded `DesugarKind`; project only the type.
                             return newtype_type_id;
@@ -1212,7 +1204,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .compiler_trait_name(crate::compiler_item::CompilerItem::From)
+                        .compiler_trait_name(CompilerItem::From)
                         .to_string();
                     // `impl From<X> for Prefix;` — a body-less derivation
                     // request. Both the flag and the trait reference are
@@ -1654,13 +1646,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The call's own reference site, answered by the module that wrote it
         // (WEP 2026-08-12) — not by the module the walk is standing in, which
         // for a parameter default is the caller's.
-        else if let Some(callee) =
-            self.tysys
-                .resolutions
-                .declared_if_walked(ident.id)
-                .filter(|def| {
-                    self.tysys.resolutions.defs().kind(*def) == crate::defs::DefKind::Function
-                })
+        else if let Some(callee) = self
+            .tysys
+            .resolutions
+            .declared_if_walked(ident.id)
+            .filter(|def| self.tysys.resolutions.defs().kind(*def) == DefKind::Function)
         {
             self.record_reference_to_decl(ident.id, callee);
             (Some(self.callee_of(callee)), effective_name.to_string())
@@ -1969,7 +1959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// kinds as a [`MethodSig`] in the declaration's own frame.
     fn resolve_effect_op_signature(
         &self,
-        effect: crate::defs::DefId,
+        effect: DefId,
         operation: &str,
     ) -> Option<(Vec<TypeId>, Option<TypeId>)> {
         let sig = self
@@ -1984,7 +1974,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String)
+            .make_compiler_struct(CompilerItem::String)
     }
 
     /// Get the return type of a builtin function
@@ -2256,7 +2246,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
-        span: crate::token::Span,
+        span: token::Span,
     ) -> Vec<TypeId> {
         let func_name = callee.name();
         // Builtin functions: pull type-param / param / return info from the
@@ -2413,7 +2403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params: Vec<ast::GenericParam> = self
             .lookup_function_type_params(callee)
             .into_iter()
-            .filter(super::super::ast::GenericParam::is_real_type_param)
+            .filter(GenericParam::is_real_type_param)
             .collect();
         self.project_assoc_bound_args(&params, type_args);
     }
@@ -2453,7 +2443,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         callee: &CalleeRef,
         type_args: &[TypeId],
-        span: crate::token::Span,
+        span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
         let inferable: Vec<&ast::GenericParam> = params
@@ -2513,7 +2503,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         suffix: &str,
         impl_type_args: &[TypeId],
         method_type_args: &[TypeId],
-        span: crate::token::Span,
+        span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) {
         // This report runs before any resolution, so where several impls
@@ -2649,7 +2639,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &mut Vec<TypeId>,
         args: &[TypeId],
         expected_type: Option<TypeId>,
-        span: crate::token::Span,
+        span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
         // Dense type-argument index space (matches `populate_generic_function_cache`):
@@ -2811,11 +2801,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// tuple `[i32, bool]` — the per-param shape inference produces. A no-op when
     /// the call has no pack or the args are already in per-param form (arg count
     /// ≤ param count), so inference results and single-arg packs pass through.
-    fn group_variadic_type_args(
-        &mut self,
-        callee: &super::callee::CalleeRef,
-        type_args: &mut Vec<TypeId>,
-    ) {
+    fn group_variadic_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let real: Vec<ast::GenericParam> = self
             .lookup_function_type_params(callee)
             .into_iter()
@@ -2867,7 +2853,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
-        span: crate::token::Span,
+        span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let probe = CalleeRef::rendered(self.current_module_source.clone(), suffix);
@@ -2898,7 +2884,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         raw_args: &[Expr],
         args: &[TypeId],
         expected_type: Option<TypeId>,
-        span: crate::token::Span,
+        span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
         let Some(sig) =
@@ -2948,10 +2934,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// re-derived from the spelling, which a splice can make mean another type.
     pub(super) fn check_static_call_visibility(
         &mut self,
-        receiver: &super::trait_env::ImplTargetKey,
+        receiver: &ImplTargetKey,
         effective_name: &str,
-        node: Option<crate::ast::AstId>,
-        span: crate::token::Span,
+        node: Option<AstId>,
+        span: token::Span,
     ) {
         let Some((struct_name, method_name)) = effective_name.rsplit_once("::") else {
             return;
@@ -2974,9 +2960,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.check_inherent_member_visibility(
             visibility,
             Some(&module),
-            super::expr::MemberOwner::Named(&owner),
+            MemberOwner::Named(&owner),
             method_name,
-            super::types::ImplMemberKind::Method,
+            ImplMemberKind::Method,
             node,
             span,
         );
@@ -2987,9 +2973,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// it, and at what visibility.
     pub(super) fn static_method_entry(
         &self,
-        receiver: &super::trait_env::ImplTargetKey,
+        receiver: &ImplTargetKey,
         method_name: &str,
-    ) -> Option<&super::trait_env::ImplMethodEntry> {
+    ) -> Option<&ImplMethodEntry> {
         self.impl_method_entries(receiver, method_name).next()
     }
 
@@ -3109,10 +3095,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_name: &str,
         method: &str,
-        call_id: crate::AstId,
+        call_id: AstId,
         args: &[TypeId],
         raw_args: &[Expr],
-        span: crate::Span,
+        span: Span,
     ) -> Option<TypeId> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
         // rewriting, which no source segment names.
@@ -3173,8 +3159,8 @@ impl TypeSystem {
     pub(super) fn infer_variant_type_args(
         &mut self,
         ctx: &Scope,
-        variant_info: &super::types::VariantInfo,
-        case_data: &super::types::VariantCaseData,
+        variant_info: &VariantInfo,
+        case_data: &VariantCaseData,
         payload: Option<TypeId>,
         expected_type: Option<TypeId>,
         explicit_args: &[TypeId],

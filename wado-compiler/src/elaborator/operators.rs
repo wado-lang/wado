@@ -13,6 +13,14 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
+use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
+use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
+use crate::elaborator::synth::ArgClass;
+use crate::elaborator::trait_env::ImplHeader;
+use crate::elaborator::types::RequiredTrait;
+use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
+use crate::name::FqTraitName;
+use crate::resolve::Resolution;
 
 /// `-<integer literal>`, with the source text its range is judged against.
 fn negated_int_literal(unary: &ast::UnaryExpr) -> Option<(&ast::LiteralExpr, &str)> {
@@ -330,7 +338,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A type that erases to a scalar is still its own type, so an impl
             // it writes — or inherits from a link below — answers the
             // comparison before the erased form's instruction does.
-            let comparison_impl_link = super::tysys::operator_compiler_item(&op)
+            let comparison_impl_link = operator_compiler_item(&op)
                 .and_then(|item| self.tysys.compiler_trait_def(item))
                 .and_then(|trait_| self.tysys.own_impl_link(left, trait_));
             // The receiver for trait lookup, named by its declaring module and
@@ -616,7 +624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(trait_) = self.operator_trait_decl(&op) else {
                     return TypeTable::ERROR;
                 };
-                let Some((_, method_name)) = super::tysys::operator_trait_method(&op) else {
+                let Some((_, method_name)) = operator_trait_method(&op) else {
                     return TypeTable::ERROR;
                 };
 
@@ -627,7 +635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // The right operand is resolved by now, so its type selects
                 // among the receiver's `Add<Rhs>` impls (WEP 2026-07-31).
-                let rhs_class = super::synth::ArgClass::Exact(right);
+                let rhs_class = ArgClass::Exact(right);
                 let mut admitted = self.find_arithmetic_trait_impls(
                     &struct_name,
                     left,
@@ -649,7 +657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .get_newtype_base(right)
                             .unwrap_or(right)
                     });
-                    let rhs_class = super::synth::ArgClass::Exact(rhs_base);
+                    let rhs_class = ArgClass::Exact(rhs_base);
                     admitted = self.find_arithmetic_trait_impls(
                         &lookup_name,
                         lookup_type_id,
@@ -692,7 +700,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             if let ResolvedType::TypeParam { name, .. } = &left_type
-                && let Some((item, method_name)) = super::tysys::operator_trait_method(&op)
+                && let Some((item, method_name)) = operator_trait_method(&op)
             {
                 let bounds = self
                     .annotate_ctx
@@ -754,7 +762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
 
         if is_shift {
-            let Some((shift_item, shift_method)) = super::tysys::operator_trait_method(&op) else {
+            let Some((shift_item, shift_method)) = operator_trait_method(&op) else {
                 return TypeTable::ERROR;
             };
             // A type parameter dispatches through its bounds, as the arithmetic
@@ -1441,7 +1449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         &lookup_name,
                         lookup_type_id,
-                        super::Elaborator::find_index_assign_trait_impl,
+                        Elaborator::find_index_assign_trait_impl,
                     );
                     if let Some((trait_info, matched_type_id)) = assign_info {
                         if let Some(key_type) = trait_info.index_type
@@ -1489,7 +1497,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // `arr[i] OP= v`.
                         self.record_index_assign_dispatch(
                             index_expr.id,
-                            super::sem::types::OperatorDispatch {
+                            OperatorDispatch {
                                 function_ref: func,
                                 method_def: Some(trait_info.method_def),
                                 self_kind: trait_info.self_kind,
@@ -1528,9 +1536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // carries the resolved mutability.
         let global_assign = if let ast::Expr::Ident(id) = target_ast {
             match self.assign_place_of(id.id) {
-                Some(super::sem::types::AssignPlace::Global { name, mutable, .. }) => {
-                    Some((name.clone(), *mutable))
-                }
+                Some(AssignPlace::Global { name, mutable, .. }) => Some((name.clone(), *mutable)),
                 _ => None,
             }
         } else {
@@ -1587,7 +1593,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // An identifier target classified by the place fact `resolve_ident`
             // recorded: a function-frame `Local`, or a `&mut`-captured ident
-            // (`*__ref` deref-capture, assignable iff the captured ref is
+            // (`*$ref` deref-capture, assignable iff the captured ref is
             // `&mut`). Globals returned above; anything else (function /
             // variant / enum / const ident, or a non-ident expression) is not
             // a place.
@@ -1595,8 +1601,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Clone to release the `&self` borrow before the diagnostic's
                 // `&mut self.logger` use.
                 match self.assign_place_of(id.id).cloned() {
-                    Some(super::sem::types::AssignPlace::Local) => true,
-                    Some(super::sem::types::AssignPlace::DerefCapture { through_mut_ref }) => {
+                    Some(AssignPlace::Local) => true,
+                    Some(AssignPlace::DerefCapture { through_mut_ref }) => {
                         if through_mut_ref {
                             true
                         } else {
@@ -1639,7 +1645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         compound: &ast::CompoundAssignExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        self.record_desugar(compound.id, super::sem::types::DesugarKind::CompoundAssign);
+        self.record_desugar(compound.id, DesugarKind::CompoundAssign);
         let op = match compound.op {
             ast::CompoundAssignOp::Add => BinaryOp::Add,
             ast::CompoundAssignOp::Sub => BinaryOp::Sub,
@@ -1652,20 +1658,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        // Reserve reify's `__caN` locals, resolving each impure sub-piece once
+        // Reserve reify's `$caN` locals, resolving each impure sub-piece once
         // (a subscript against its index key type) so the annotate and reify
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
         ctx.enter_scope();
         let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
-        let mut hoists: Vec<super::reify::CompoundHoist<'_>> = Vec::new();
-        super::reify::collect_compound_hoists(&compound.target, &mut hoists);
+        let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
+        collect_compound_hoists(&compound.target, &mut hoists);
         for (idx, hoist) in hoists.iter().enumerate() {
             let expected = hoist
                 .index_ctx
                 .and_then(|ix| self.compound_index_key_type(ix, ctx));
             let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
-            let _local_index = ctx.add_local(format!("__ca{idx}"), piece_type, false, None);
+            let _local_index = ctx.add_local(format!("$ca{idx}"), piece_type, false, None);
             ctx.compound_hoist_types
                 .insert(hoist.piece.id(), piece_type);
         }
@@ -1703,7 +1709,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`, which reify emits.
     ///
     /// Middle terms appear in two comparisons each, so each is bound to a
-    /// `__mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
+    /// `$mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1744,10 +1750,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Multi-comparison: actual chain expansion. Tag the node so the
         // future `reify` pass can replay the same `(a < b) && (b < c)`
-        // shape with the same `__mK` middle bindings.
-        self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
+        // shape with the same `$mK` middle bindings.
+        self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
-        // Enter a fresh scope for the `__mK` bindings so they don't leak
+        // Enter a fresh scope for the `$mK` bindings so they don't leak
         // into the surrounding function's local namespace.
         ctx.enter_scope();
 
@@ -1762,7 +1768,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         );
 
-        // Bind `right0` to `__m0` — it is reused by the next comparison.
+        // Bind `right0` to `$m0` — it is reused by the next comparison.
         self.bind_chain_middle(0, right0_tir, ctx);
         let mut acc = self.resolve_binary_op(
             first_tir,
@@ -1799,20 +1805,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `__mK` local for a comparison-chain middle term. The `Let`
+    /// Allocate a `$mK` local for a comparison-chain middle term. The `Let`
     /// binding itself is rebuilt by reify; the body walk needs only the
     /// `add_local` side effect (walk-order parity) and the local's type.
     fn bind_chain_middle(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
-        let name = format!("__m{idx}");
+        let name = format!("$m{idx}");
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 
     /// The operator trait a dispatch means, as a requirement the bound search
     /// must match.
-    fn required_operator_trait(&self, item: CompilerItem) -> Option<super::types::RequiredTrait> {
+    fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
         let def = self.tysys.compiler_trait_def(item)?;
-        Some(super::types::RequiredTrait {
-            decl: crate::resolve::Resolution::Def(def),
+        Some(RequiredTrait {
+            decl: Resolution::Def(def),
             args: None,
             display: self.tysys.resolutions.defs().name(def).to_string(),
         })
@@ -1824,7 +1830,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn operator_output_type(
         &mut self,
         operand_type_id: TypeId,
-        found_trait: &crate::name::FqTraitName,
+        found_trait: &FqTraitName,
     ) -> TypeId {
         let Some(trait_) = self.tysys.trait_env.trait_def_of_fq(found_trait) else {
             return operand_type_id;
@@ -1947,7 +1953,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_env
                 .impl_headers
                 .get(def)
-                .is_some_and(super::trait_env::ImplHeader::is_concrete)
+                .is_some_and(ImplHeader::is_concrete)
         });
         let module_source = match concrete_impl {
             Some(def) => defs.module(def).clone(),
@@ -1974,7 +1980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(ast_id) = origin {
             self.record_operator_dispatch(
                 ast_id,
-                super::sem::types::OperatorDispatch {
+                OperatorDispatch {
                     function_ref,
                     method_def: resolved.method_def,
                     self_kind: resolved.self_kind,

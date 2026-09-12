@@ -3,7 +3,7 @@
 // String literals lower to `StructLiteral String { repr: PackedArray, used }`
 // (a const aggregate), so a constant read-only `List<String>` lookup table
 // indexed dynamically in a loop is hoisted to a shared immutable
-// `global:__const_obj_*` — built once at instantiation, not rebuilt per
+// `global:$const_obj_*` — built once at instantiation, not rebuilt per
 // iteration — via the same `const_object_globalization` path as a `List<i32>`,
 // with no string-specific code.
 
@@ -30,5 +30,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "38\n",
-    "wir_expect:O2": ["__const_obj"]
+    "wir_expect:O2": ["$const_obj"]
 }

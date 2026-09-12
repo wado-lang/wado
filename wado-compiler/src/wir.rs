@@ -11,7 +11,9 @@ use std::rc::Rc;
 use crate::canonical::CanonicalIntrinsic;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::tir::EffectRef;
 use crate::token::Span;
 
 /// How a CM interface is imported, so codegen dispatches to the right encoding.
@@ -139,7 +141,7 @@ pub struct TraitBoundViolation {
     /// re-deriving both halves from a string built for Wasm.
     pub type_display: String,
     pub trait_display: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 /// A call to a `#[cm("...")]` member left unresolved at WIR build: only the
@@ -150,7 +152,7 @@ pub struct CmImportViolation {
     /// [`TraitBoundViolation::type_display`].
     pub call_display: String,
     pub cm_name: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 impl CmImportViolation {
@@ -217,7 +219,7 @@ impl WasmModuleInfo {
 
         // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
-            let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
+            let fq: Rc<str> = Rc::from(format!("$wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName { fq: fq.to_string() },
                 params: vec![WirType::I32; func.param_names.len()],
@@ -229,7 +231,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
-                Rc::from(format!("__wasm_mod_type_{i}")),
+                Rc::from(format!("$wasm_mod_type_{i}")),
             );
             let mut body = func.body.clone();
             for instr in &mut body {
@@ -265,7 +267,7 @@ impl WasmModuleInfo {
                     desc: WirExportDesc::Func {
                         func_id: WirFuncId::new(
                             u32::try_from(i).unwrap(),
-                            Rc::from(format!("__wasm_mod_func_{i}")),
+                            Rc::from(format!("$wasm_mod_func_{i}")),
                         ),
                     },
                 });
@@ -843,14 +845,14 @@ pub struct WirFunction {
     /// Generic instantiation origin.
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
-    pub effects: Vec<crate::tir::EffectRef>,
+    pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].
-    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
+    pub compiler_item: Option<CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
     /// Declared locals the emitter allocates from, finalized once per producer
@@ -1499,6 +1501,11 @@ pub enum WirInstr {
     /// reaching the marker is hinted cold (see that pass for the recognized
     /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
     ColdPath,
+    /// Optimization barrier for `builtin::black_box(value)`: every WIR pass
+    /// reads it as an unknown value, and codegen emits the operand in its place.
+    /// Opaque to what the operand *is*, transparent to what it *emits* — see
+    /// [`WirInstr::emitted`].
+    BlackBox(Box<WirInstr>),
     /// Drop a value.
     Drop(Box<WirInstr>),
     /// Select between two values.
@@ -1632,7 +1639,7 @@ impl WirInstr {
     /// Returns true if this instruction always diverges (all execution paths
     /// end with `return` or `unreachable` before producing a value).
     pub fn always_diverges(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
                 true
             }
@@ -1654,6 +1661,29 @@ impl WirInstr {
 
     fn seq_always_diverges(instrs: &[Self]) -> bool {
         instrs.iter().any(Self::always_diverges)
+    }
+
+    /// The instruction codegen actually writes, with every transparent wrapper
+    /// peeled off. [`BlackBox`] and [`BranchHint`] emit their operand and
+    /// nothing besides, so a predicate describing the emitted Wasm —
+    /// [`always_diverges`], [`produces_stack_value`], [`ends_with_terminator`] —
+    /// answers for the operand. Answering for the wrapper describes a node no
+    /// binary holds.
+    ///
+    /// Not [`peel_hint`], which peels one hint so a pass can match a
+    /// condition's shape. This peels the whole chain.
+    ///
+    /// [`BlackBox`]: WirInstr::BlackBox
+    /// [`BranchHint`]: WirInstr::BranchHint
+    /// [`always_diverges`]: WirInstr::always_diverges
+    /// [`produces_stack_value`]: WirInstr::produces_stack_value
+    /// [`ends_with_terminator`]: WirInstr::ends_with_terminator
+    /// [`peel_hint`]: WirInstr::peel_hint
+    pub fn emitted(&self) -> &WirInstr {
+        match self {
+            Self::BlackBox(inner) | Self::BranchHint { expr: inner, .. } => inner.emitted(),
+            other => other,
+        }
     }
 
     /// The instruction with any `BranchHint` wrapper peeled off.
@@ -1704,7 +1734,7 @@ impl WirInstr {
     /// NOT consider `If` blocks where both branches diverge — those still need
     /// an explicit `Unreachable` after them for Wasm stack validation.
     pub fn ends_with_terminator(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Return { .. } | Self::Unreachable | Self::Br { .. } | Self::BrTable { .. } => {
                 true
             }
@@ -1716,7 +1746,7 @@ impl WirInstr {
     /// Returns true if this instruction leaves a value on the Wasm stack.
     /// Used to guard `Drop` emission — a `Block{result: None}` produces no value.
     pub fn produces_stack_value(&self) -> bool {
-        match self {
+        match self.emitted() {
             Self::Block { result, .. } | Self::If { result, .. } => result.is_some(),
             Self::Loop { .. } => false,
             Self::Seq(body) => body.last().is_some_and(WirInstr::produces_stack_value),
@@ -1834,7 +1864,8 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
-            Self::Drop(o)
+            Self::BlackBox(o)
+            | Self::Drop(o)
             | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
@@ -2416,7 +2447,8 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
-            Self::Drop(o)
+            Self::BlackBox(o)
+            | Self::Drop(o)
             | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
@@ -3011,7 +3043,7 @@ pub struct WirGlobal {
     pub mutable: bool,
     /// Whether the user declared this global as `global mut`. A
     /// user-immutable global (`false`) is currently Wasm-mutable only
-    /// because its initializer was extracted into `__initialize_module`;
+    /// because its initializer was extracted into `$initialize_module`;
     /// `wir_optimize::const_global` promotes it back to an eager Wasm
     /// constant when that init folds to a const expression.
     pub wado_mutable: bool,
@@ -3128,4 +3160,73 @@ pub struct WirMemoryConfig {
     pub has_memory: bool,
     /// Minimum memory pages.
     pub min_pages: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{WirInstr, WirType};
+
+    /// Every wrapper `emitted` peels, as a constructor over one operand.
+    fn transparent_wrappers() -> Vec<(&'static str, fn(WirInstr) -> WirInstr)> {
+        vec![
+            ("BlackBox", |inner| WirInstr::BlackBox(Box::new(inner))),
+            ("BranchHint", |inner| WirInstr::BranchHint {
+                likely: true,
+                expr: Box::new(inner),
+            }),
+        ]
+    }
+
+    /// Operands that answer the shape predicates differently, so a wrapper
+    /// that fails to delegate reports the wrong one for at least one of them.
+    fn operands() -> Vec<WirInstr> {
+        vec![
+            WirInstr::I32Const(0),
+            WirInstr::Nop,
+            WirInstr::Unreachable,
+            WirInstr::Seq(vec![WirInstr::I32Const(0), WirInstr::Unreachable]),
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![],
+            },
+            WirInstr::Block {
+                label: None,
+                result: Some(WirType::I32),
+                body: vec![WirInstr::I32Const(0)],
+            },
+        ]
+    }
+
+    /// Codegen writes the operand and nothing besides, so a predicate about
+    /// the emitted Wasm must answer for the operand at any nesting depth.
+    #[test]
+    fn shape_predicates_see_through_transparent_wrappers() {
+        for operand in operands() {
+            for (name, wrap) in transparent_wrappers() {
+                for depth in 1..=2 {
+                    let mut wrapped = operand.clone();
+                    for _ in 0..depth {
+                        wrapped = wrap(wrapped);
+                    }
+                    let at = format!("{name} x{depth} over {operand:?}");
+                    assert_eq!(
+                        wrapped.always_diverges(),
+                        operand.always_diverges(),
+                        "always_diverges: {at}"
+                    );
+                    assert_eq!(
+                        wrapped.produces_stack_value(),
+                        operand.produces_stack_value(),
+                        "produces_stack_value: {at}"
+                    );
+                    assert_eq!(
+                        wrapped.ends_with_terminator(),
+                        operand.ends_with_terminator(),
+                        "ends_with_terminator: {at}"
+                    );
+                }
+            }
+        }
+    }
 }

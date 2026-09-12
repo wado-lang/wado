@@ -353,7 +353,7 @@ fn record_impl_name_spans(index: &mut AstIndex, imp: &ImplBlock) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Stmt;
+    use crate::ast::{Condition, ConditionElement, Pattern, Stmt};
     use crate::lexer::lex;
     use crate::parser::Parser;
 
@@ -660,18 +660,18 @@ mod tests {
         let Stmt::If(if_stmt) = &body.stmts[0] else {
             panic!("expected if-let");
         };
-        let crate::ast::Condition::LetChain { elements, .. } = &if_stmt.condition else {
+        let Condition::LetChain { elements, .. } = &if_stmt.condition else {
             panic!("expected let-chain");
         };
-        let crate::ast::ConditionElement::Let { pattern, .. } = &elements[0] else {
+        let ConditionElement::Let { pattern, .. } = &elements[0] else {
             panic!("expected let element");
         };
         // pattern should be `Some(v)`; the binding pattern is the first
         // child.
-        let crate::ast::Pattern::Variant { bindings, .. } = pattern.as_ref() else {
+        let Pattern::Variant { bindings, .. } = pattern.as_ref() else {
             panic!("expected variant pattern");
         };
-        let crate::ast::Pattern::Ident { id, span, .. } = &bindings[0] else {
+        let Pattern::Ident { id, span, .. } = &bindings[0] else {
             panic!("expected ident pattern");
         };
         assert_eq!(index.name_span_of(*id), Some(*span));

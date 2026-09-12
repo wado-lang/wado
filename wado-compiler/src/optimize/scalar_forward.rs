@@ -15,6 +15,8 @@ use crate::tir::{TypeId, TypeTable};
 use super::arena_query::is_pure_expr;
 use super::gate::{FunctionGate, GatedPass};
 use super::mod_ref::ModRef;
+use crate::nir_arena::Operand;
+use crate::nir_value_graph::ValueKind;
 
 /// Forward single-use pure scalar `let`s into their uses across every function.
 ///
@@ -247,15 +249,15 @@ fn is_forwardable_value(body: &Body, root: ExprId) -> bool {
 /// divide-by-zero nor the `INT_MIN / -1` overflow trap can fire) or any float
 /// constant (Wasm float division never traps). Conservative — a non-constant or
 /// out-of-range divisor is treated as possibly-trapping.
-fn is_safe_const_divisor(body: &Body, divisor: crate::nir_arena::Operand) -> bool {
-    let crate::nir_arena::Operand::Value(vid) = divisor else {
+fn is_safe_const_divisor(body: &Body, divisor: Operand) -> bool {
+    let Operand::Value(vid) = divisor else {
         return false;
     };
     match body.values.kind(vid) {
         // Non-zero and fitting in positive `i32` range (`try_from` admits
         // `0..=i32::MAX`; excluding `0` leaves `1..=i32::MAX`).
-        crate::nir_value_graph::ValueKind::Int(v, _) => *v != 0 && i32::try_from(*v).is_ok(),
-        crate::nir_value_graph::ValueKind::Float(_, _) => true,
+        ValueKind::Int(v, _) => *v != 0 && i32::try_from(*v).is_ok(),
+        ValueKind::Float(_, _) => true,
         _ => false,
     }
 }

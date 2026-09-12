@@ -6,7 +6,10 @@
 //! rewritten with it. Runs before SROA.
 
 use crate::hashmap::IndexMap;
-use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
+use crate::name::{VARIANT_DISCRIMINANT_FIELD, is_variant_payload_field};
+use crate::wir::{
+    WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantCase, WirVariantRepr,
+};
 
 /// Lower eligible variants to the `NullableRef` representation. Mandatory at every
 /// `-O` — not gated like the optimization passes.
@@ -71,7 +74,7 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
 /// Determine whether a variant is eligible for `NullableRef` optimization.
 ///
 /// Returns `(payload_case_idx, nullable_payload_type)` if eligible, `None` otherwise.
-fn is_nullable_ref_eligible(cases: &[crate::wir::WirVariantCase]) -> Option<(u32, WirType)> {
+fn is_nullable_ref_eligible(cases: &[WirVariantCase]) -> Option<(u32, WirType)> {
     if cases.len() != 2 {
         return None;
     }
@@ -266,7 +269,7 @@ fn transform_instr(
         WirInstr::DeclareLocal { ty, .. } => {
             // Update if it's the variant BASE type.
             substitute_type(ty, nullable_map);
-            // Also update if it's a CASE STRUCT type (pattern match temporaries like __cast_2).
+            // Also update if it's a CASE STRUCT type (pattern match temporaries like $cast_2).
             if let WirType::Ref { type_id, .. } = ty
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, ref nullable_payload)) = nullable_map.get(&variant_idx)
@@ -364,7 +367,7 @@ fn transform_instr(
         }
 
         // RefCast to a payload case struct → RefAsNonNull(expr).
-        // This handles the pattern where RefCast is stored in a local (e.g., __cast_2).
+        // This handles the pattern where RefCast is stored in a local (e.g., $cast_2).
         WirInstr::RefCast { type_id, expr, .. } => {
             if let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, _)) = nullable_map.get(&variant_idx)
@@ -401,7 +404,7 @@ fn transform_instr(
                 expr: inner,
                 ..
             } = lhs.as_ref()
-                && field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
+                && field_name == VARIANT_DISCRIMINANT_FIELD
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
                 && let WirInstr::I32Const(case_idx) = rhs.as_ref()
             {
@@ -431,7 +434,7 @@ fn transform_instr(
             expr,
             result_ty,
         } => {
-            if crate::name::is_variant_payload_field(field_name)
+            if is_variant_payload_field(field_name)
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, _)) = nullable_map.get(&variant_idx)
                 && case_idx == payload_case
@@ -446,7 +449,7 @@ fn transform_instr(
             // guard) materialise the tag itself and compare it later, against
             // a local. There is no discriminant field to read, so compute the
             // tag from the null check.
-            if field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
+            if field_name == VARIANT_DISCRIMINANT_FIELD
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
             {
                 transform_instr(expr, types, vci, nullable_map);
@@ -521,7 +524,7 @@ fn transform_instr(
         WirInstr::LocalGet { result_ty, .. } | WirInstr::GlobalGet { result_ty, .. } => {
             substitute_type(result_ty, nullable_map);
             // Also handle case struct types — same substitution as DeclareLocal special case.
-            // e.g., `__cast_N: Ref { CaseStruct, non-null }` becomes `nullable_payload` after
+            // e.g., `$cast_N: Ref { CaseStruct, non-null }` becomes `nullable_payload` after
             // NullableRef, so result_ty must reflect this to avoid stale is_nonnull_result().
             if let WirType::Ref { type_id, .. } = result_ty
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())

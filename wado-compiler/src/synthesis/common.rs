@@ -9,13 +9,16 @@ use crate::canonical::{CanonicalIntrinsic, CmCallTarget};
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::hashmap::IndexSet;
 
+use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName};
+use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, MonomorphInfo, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
+use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 
 /// Synthetic span used for all generated code.
@@ -323,7 +326,7 @@ pub fn block(stmts: Vec<TirStmt>) -> TirBlock {
 }
 
 /// Allocate a local variable, returning its index. The synthesised local
-/// is named `__local_N` (matching the codegen fallback convention) and
+/// is named `$local_N` (matching the codegen fallback convention) and
 /// marked immutable; sites that need a more descriptive name should use
 /// `alloc_named_local` instead.
 pub fn alloc_local(next_local: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId) -> u32 {
@@ -331,7 +334,7 @@ pub fn alloc_local(next_local: &mut u32, locals: &mut Vec<TirLocal>, ty: TypeId)
 }
 
 /// Allocate a local with an explicit name and mutability. Pass `name = None`
-/// to get the default `__local_N` synthesised name.
+/// to get the default `$local_N` synthesised name.
 pub fn alloc_named_local(
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
@@ -341,12 +344,12 @@ pub fn alloc_named_local(
 ) -> u32 {
     let idx = *next_local;
     *next_local += 1;
-    let name = name.unwrap_or_else(|| format!("__local_{idx}"));
+    let name = name.unwrap_or_else(|| format!("$local_{idx}"));
     locals.push(TirLocal {
         name,
         type_id: ty,
         is_mut,
-        span: crate::token::Span::default(),
+        span: Span::default(),
     });
     idx
 }
@@ -362,7 +365,7 @@ pub fn locals_from_params(params: &[TirParam]) -> Vec<TirLocal> {
             name: p.name.clone(),
             type_id: p.type_id,
             is_mut: p.is_mut,
-            span: crate::token::Span::default(),
+            span: Span::default(),
         })
         .collect()
 }
@@ -375,7 +378,7 @@ pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
         name: name.to_string(),
         type_id,
         is_mut,
-        span: crate::token::Span::default(),
+        span: Span::default(),
     }
 }
 
@@ -490,7 +493,7 @@ pub fn make_synthetic_free_function(
         module_source: ModuleSource::default(),
         name,
         def_id: None,
-        visibility: crate::ast::Visibility::Public,
+        visibility: Visibility::Public,
         is_export: false,
         is_async: false,
         type_params: Vec::new(),
@@ -520,7 +523,7 @@ pub fn make_synthetic_free_function(
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -714,7 +717,7 @@ impl RemapLocals<'_> {
     }
 }
 
-impl crate::tir_visitor::TirMutVisitor for RemapLocals<'_> {
+impl TirMutVisitor for RemapLocals<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
             TirExprKind::Local { index, .. } => {

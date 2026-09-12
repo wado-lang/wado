@@ -9,6 +9,7 @@
 //!
 //! See `docs/wep-2026-07-25-async-stream-canonical.md`.
 
+use crate::common::compile_source_with_opts;
 use wado_compiler::OptLevel;
 
 /// Reads and writes a stream, so both copy canonicals survive DCE.
@@ -25,13 +26,10 @@ export fn run() with (Stdout, Stdin) {
 "#;
 
 fn component_wat(opt_level: OptLevel) -> String {
-    let wasm = crate::common::compile_source_with_opts(
-        std::path::Path::new("stream_canon.wado"),
-        SOURCE,
-        opt_level,
-    )
-    .expect("source failed to compile")
-    .wasm;
+    let wasm =
+        compile_source_with_opts(std::path::Path::new("stream_canon.wado"), SOURCE, opt_level)
+            .expect("source failed to compile")
+            .wasm;
     wasmprinter::print_bytes(&wasm).expect("failed to print component")
 }
 

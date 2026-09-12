@@ -22,12 +22,12 @@ The compiler directly emits an efficient sequence using a mutable string and lab
 
 ```wado
 $tmpl: {
-    let mut __r = "Hello, ";
-    name.fmt(&mut Formatter::new(&mut __r));
-    __r.push_str("! You are ");
-    age.fmt(&mut Formatter::new(&mut __r));
-    __r.push_str(".");
-    __r
+    let mut $r = "Hello, ";
+    name.fmt(&mut Formatter::new(&mut $r));
+    $r.push_str("! You are ");
+    age.fmt(&mut Formatter::new(&mut $r));
+    $r.push_str(".");
+    $r
 }
 ```
 
@@ -53,12 +53,12 @@ Desugars to:
 
 ```wado
 $tmpl: {
-    let mut __r = "Pi is ";
+    let mut $r = "Pi is ";
     pi.fmt(&mut Formatter {
         fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false,
-        zero_pad: false, width: -1, precision: 2, indent: 0, buf: &mut __r,
+        zero_pad: false, width: -1, precision: 2, indent: 0, buf: &mut $r,
     });
-    __r
+    $r
 }
 ```
 

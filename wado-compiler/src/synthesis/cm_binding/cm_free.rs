@@ -350,7 +350,7 @@ fn slot_i32(slots: &[FlatSlot], index: usize) -> TirExpr {
     coerce_flat_lift(
         local_ref(
             slot.local,
-            "__free_slot",
+            "$free_slot",
             cm_val_type_to_type_id(slot.cm_type),
         ),
         slot.cm_type,
@@ -395,11 +395,11 @@ fn free_buffer(
     locals: &mut Vec<TirLocal>,
 ) -> Vec<TirStmt> {
     let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
-    let mut stmts = vec![let_stmt("__free_ptr", ptr_local, TypeTable::I32, ptr)];
+    let mut stmts = vec![let_stmt("$free_ptr", ptr_local, TypeTable::I32, ptr)];
     let len_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt("__free_len", len_local, TypeTable::I32, len));
-    let ptr_ref = || local_ref(ptr_local, "__free_ptr", TypeTable::I32);
-    let len_ref = || local_ref(len_local, "__free_len", TypeTable::I32);
+    stmts.push(let_stmt("$free_len", len_local, TypeTable::I32, len));
+    let ptr_ref = || local_ref(ptr_local, "$free_ptr", TypeTable::I32);
+    let len_ref = || local_ref(len_local, "$free_len", TypeTable::I32);
 
     if elem.owns_memory() {
         stmts.extend(free_elements(elem, &ptr_ref, &len_ref, next_local, locals));
@@ -440,7 +440,7 @@ fn free_elements(
     locals: &mut Vec<TirLocal>,
 ) -> Vec<TirStmt> {
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    let i_ref = || local_ref(i_local, "__free_i", TypeTable::I32);
+    let i_ref = || local_ref(i_local, "$free_i", TypeTable::I32);
 
     let mut body = vec![if_stmt(
         binary(TirBinaryOp::GtEq, i_ref(), len_ref(), TypeTable::BOOL),
@@ -449,7 +449,7 @@ fn free_elements(
     )];
     let elem_addr_local = alloc_local(next_local, locals, TypeTable::I32);
     body.push(let_stmt(
-        "__free_elem_addr",
+        "$free_elem_addr",
         elem_addr_local,
         TypeTable::I32,
         binary_add(
@@ -464,7 +464,7 @@ fn free_elements(
     ));
     body.extend(synthesize_free_cm_value(
         &elem.shape,
-        &local_ref(elem_addr_local, "__free_elem_addr", TypeTable::I32),
+        &local_ref(elem_addr_local, "$free_elem_addr", TypeTable::I32),
         next_local,
         locals,
     ));
@@ -473,7 +473,7 @@ fn free_elements(
         binary_add(i_ref(), i32_const(1)),
     )));
     vec![
-        let_mut_stmt("__free_i", i_local, TypeTable::I32, i32_const(0)),
+        let_mut_stmt("$free_i", i_local, TypeTable::I32, i32_const(0)),
         loop_stmt(block(body)),
     ]
 }
@@ -493,7 +493,7 @@ fn free_variant_in_memory(
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     let mut stmts = vec![let_stmt(
-        "__free_disc",
+        "$free_disc",
         disc_local,
         TypeTable::I32,
         builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
@@ -506,7 +506,7 @@ fn free_variant_in_memory(
             locals,
         );
         stmts.push(case_guard(
-            local_ref(disc_local, "__free_disc", TypeTable::I32),
+            local_ref(disc_local, "$free_disc", TypeTable::I32),
             index,
             payload,
         ));

@@ -1,10 +1,8 @@
-//! Three composed string-append rewrites over the shared peephole session:
-//! [`ShortPushStrRule`] expands `buf.push_str("short_constant")` (≤8 ASCII bytes)
-//! into per-byte `buf.push(ch)` calls, [`ConstAsciiPushRule`] retargets each
-//! constant-ASCII `push` to `push_ascii_unchecked`, and [`AppendFuseRule`]
-//! collapses the run of adjacent appends they leave behind into one reservation.
-//! Must run *before* `inline`, which replaces the call node the
-//! literal-recogniser matches.
+//! Two string-append rewrites over the shared peephole session:
+//! [`ConstAsciiPushRule`] retargets a constant-ASCII `push` to
+//! `push_ascii_unchecked`, and [`AppendFuseRule`] collapses a run of adjacent
+//! appends into one reservation. Both must run *before* `inline`, which
+//! replaces the call node they match.
 
 use crate::compiler_item::{CompilerItem, SeqField};
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -12,33 +10,25 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::tir;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
-/// Maximum byte length of the literal that triggers the rewrite.
-/// Matches the threshold of the former WIR pass; the per-byte
-/// `push` is faster than `push_str` only when the cost saved by
-/// avoiding the string allocation outweighs the per-`push` overhead.
-const MAX_SHORT_PUSH_STR_LEN: usize = 8;
-
-/// Resolve the whole-package context for the short-`push_str` rule, or `None`
-/// when the `String::push_str` / `push` markers are absent. Public to the
-/// `optimize` module so the unified [`super::peephole`] pass can build the rule
-/// alongside the other peephole rules over one shared engine session.
+/// Resolve the whole-package context for the append rules, or `None` when the
+/// `String::push_str` / `push` markers are absent.
 pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
     Ctx::resolve(project)
 }
 
 pub(super) struct Ctx {
-    /// `FuncId` of `push_str`, the call this rule recognizes.
-    push_str_id: crate::nir::FuncId,
-    /// `FuncId` of `push_char`, captured at resolution so the synthesized
-    /// per-byte `push(ch)` calls are born resolved.
-    push_char_id: crate::nir::FuncId,
-    /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
-    /// `push`. Independent of the two above: absent (`None`) it only disables
-    /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
-    push_ascii_id: Option<crate::nir::FuncId>,
+    /// `FuncId` of `push_str`, one of the two appends a fused run absorbs.
+    push_str_id: FuncId,
+    /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
+    push_char_id: FuncId,
+    /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
+    /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
+    /// recognises. Absent (`None`) disables both.
+    push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
     fused: Option<FusedIds>,
@@ -55,9 +45,9 @@ pub(super) struct FusedIds {
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str_id: Option<crate::nir::FuncId> = None;
-        let mut push_char_id: Option<crate::nir::FuncId> = None;
-        let mut push_ascii_id: Option<crate::nir::FuncId> = None;
+        let mut push_str_id: Option<FuncId> = None;
+        let mut push_char_id: Option<FuncId> = None;
+        let mut push_ascii_id: Option<FuncId> = None;
         let mut len_id: Option<FuncId> = None;
         let mut reserve_id: Option<FuncId> = None;
         let mut set_byte_id: Option<FuncId> = None;
@@ -106,44 +96,13 @@ impl Ctx {
     }
 }
 
-pub(super) struct ShortPushStrRule {
-    ctx: Ctx,
-}
-
-impl ShortPushStrRule {
-    pub(super) fn new(ctx: Ctx) -> Self {
-        Self { ctx }
-    }
-}
-
-impl Rule for ShortPushStrRule {
-    fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
-        let stmts = engine.body.blocks[id].stmts.clone();
-        let mut new_stmts: Vec<StmtId> = Vec::with_capacity(stmts.len());
-        let mut changed = false;
-        for stmt in stmts {
-            if let Some(replacements) = try_split_stmt(engine, stmt, &self.ctx) {
-                new_stmts.extend(replacements);
-                changed = true;
-            } else {
-                new_stmts.push(stmt);
-            }
-        }
-        if changed {
-            engine.set_block_stmts(id, new_stmts);
-        }
-        changed
-    }
-}
-
 /// Retarget `buf.push(<const char < 0x80>)` to
 /// `buf.push_ascii_unchecked(<byte>)`, skipping `encode_char`'s UTF-8 width
-/// dispatch: a constant ASCII scalar is always one byte. Composes with
-/// [`ShortPushStrRule`], whose per-byte output is all ASCII. The rewrite is an
+/// dispatch: a constant ASCII scalar is always one byte. The rewrite is an
 /// in-place call edit — swap the callee, coerce the `char` to its `u8`.
 pub(super) struct ConstAsciiPushRule {
-    push_char_id: crate::nir::FuncId,
-    push_ascii_id: crate::nir::FuncId,
+    push_char_id: FuncId,
+    push_ascii_id: FuncId,
 }
 
 impl ConstAsciiPushRule {
@@ -188,7 +147,7 @@ impl Rule for ConstAsciiPushRule {
             return false;
         }
         let byte_arg = engine.const_operand(
-            crate::nir_value_graph::ValueKind::Int(u64::from(code), TypeTable::U8),
+            ValueKind::Int(u64::from(code), TypeTable::U8),
             TypeTable::U8,
         );
         engine.replace_expr_kind(
@@ -207,94 +166,8 @@ impl Rule for ConstAsciiPushRule {
     }
 }
 
-/// If `stmt` is a `place.push_str("short")` statement with a duplicable
-/// receiver and a short ASCII literal, build the equivalent per-byte
-/// `place.push(ch)` statements and return them; otherwise `None`.
-fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
-    let StmtKind::Expr(Operand::Expr(expr_id)) = engine.body.stmts[stmt].kind else {
-        return None;
-    };
-
-    let (receiver, arg0) = {
-        let (receiver, func_id, args) = engine.body.exprs[expr_id].kind.as_method_call()?;
-        if func_id != ctx.push_str_id || args.len() != 1 {
-            return None;
-        }
-        (receiver, args[0].expr)
-    };
-
-    let receiver_expr = receiver.as_expr()?;
-    if !is_duplicable_receiver(&*engine.body, receiver_expr) {
-        return None;
-    }
-
-    // `push_str` takes `&String`, so every call site — source-level
-    // `push_str(&"...")` and template lowering alike — passes the literal
-    // through an explicit `Ref`. Match through it to reach the string literal,
-    // now a `StructLiteral String { repr: PackedArray(bytes), used }`, and read
-    // the bytes off its packed `repr`. The expansion is byte-wise (each byte
-    // becomes a `push_char`) and only fires for short ASCII literals, so we
-    // gate on the borrowed `&[u8]` directly — no `String`/UTF-8 round-trip —
-    // and copy out only the (bounded) bytes we will actually expand.
-    let bytes: Vec<u8> = {
-        let arg0_expr = arg0.as_expr()?;
-        let ExprKind::Unary {
-            op: NirUnaryOp::Ref,
-            expr: inner,
-        } = &engine.body.exprs[arg0_expr].kind
-        else {
-            return None;
-        };
-        let inner_e = inner.as_expr()?;
-        let repr = {
-            let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[inner_e].kind else {
-                return None;
-            };
-            fields
-                .iter()
-                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
-                .map(|f| f.value)?
-        };
-        let repr_e = repr.as_expr()?;
-        let ExprKind::PackedArray(bytes) = &engine.body.exprs[repr_e].kind else {
-            return None;
-        };
-        if bytes.is_empty() || bytes.len() > MAX_SHORT_PUSH_STR_LEN || !bytes.is_ascii() {
-            return None;
-        }
-        bytes.clone()
-    };
-
-    let span = engine.body.exprs[expr_id].span;
-    let mut stmts = Vec::with_capacity(bytes.len());
-    for &byte in &bytes {
-        let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver_expr);
-        let char_arg =
-            engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
-        let call = engine.alloc_expr(
-            ExprKind::method_call(
-                ctx.push_char_id,
-                recv_clone.into(),
-                true,
-                vec![ArenaCallArg {
-                    expr: char_arg,
-                    is_mut: false,
-                }],
-            ),
-            TypeTable::UNIT,
-            span,
-        );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
-    }
-    Some(stmts)
-}
-
-/// Receivers safe to clone N times — deliberately narrow, excluding anything
-/// that may allocate, trap, or be observably stateful. `push_str`'s `&mut self`
-/// already forces a place, so in practice only a `Local`, an `&mut`-wrapped one,
-/// or a `FieldAccess` chain rooted at one appears; `GlobalVarGet` is accepted
-/// defensively, being a pure read.
+/// Receivers safe to clone N times: deliberately narrow, admitting nothing that
+/// may allocate, trap, or be observably stateful.
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,
@@ -402,7 +275,7 @@ impl AppendFuseRule {
 
         let total = self.sum_expr(engine, &terms, span);
         let at = engine.alloc_local(
-            format!("__fuse_at_{}", engine.locals().len()),
+            format!("$fuse_at_{}", engine.locals().len()),
             TypeTable::I32,
             /* is_mut */ false,
         );
@@ -464,7 +337,7 @@ impl AppendFuseRule {
         stmts: &mut Vec<StmtId>,
     ) -> u32 {
         let local = engine.alloc_local(
-            format!("__fuse_len_{}", engine.locals().len()),
+            format!("$fuse_len_{}", engine.locals().len()),
             TypeTable::I32,
             /* is_mut */ false,
         );
@@ -564,7 +437,7 @@ impl AppendFuseRule {
         recv: ExprId,
         receiver_is_mut: bool,
         args: Vec<Operand>,
-        type_id: crate::tir::TypeId,
+        type_id: tir::TypeId,
         span: Span,
     ) -> Operand {
         let receiver = engine.clone_expr(recv);
@@ -650,7 +523,7 @@ fn groups(run: Vec<(StmtId, Piece)>) -> Vec<Vec<(StmtId, Piece)>> {
 fn let_stmt(
     engine: &mut Engine,
     local: u32,
-    type_id: crate::tir::TypeId,
+    type_id: tir::TypeId,
     value: Operand,
     span: Span,
 ) -> StmtId {

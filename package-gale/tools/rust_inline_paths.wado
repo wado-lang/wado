@@ -1,0 +1,335 @@
+//! Every `crate::` / `super::` path a Rust file writes where its item is read
+//! (`AGENTS.md` > General Rules), read off the grammar rather than off bytes.
+
+use rust from "../tests/grammars/RustLexer.g4"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            inputs: ["../tests/grammars/RustParser.g4"],
+            output_dir: "../tests/generated/cst_rust",
+        },
+    };
+use { parse_rust, corpus_root, read_file, collect_paths } from "./rust_corpus.wado";
+use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use { TreeMap } from "core:collections";
+use { from_string, to_string_pretty } from "core:json";
+
+global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
+
+/// One path written where its item is read, at a 1-based line and column.
+pub struct InlinePath {
+    pub line: i32,
+    pub column: i32,
+    pub text: String,
+}
+
+/// The character offset of every `crate` / `super` that opens a path where its
+/// item is read, paired with the text a report quotes for it.
+fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
+    let cst = &result.cst;
+    let toks = &result.tokens;
+    let mut out: List<[i32, String]> = [];
+    let mut depth = 0;
+    // A `use` item is where a path belongs, and a `pub(in ...)` names a scope
+    // rather than reading an item, so Rust admits no import there. Neither
+    // nests the other, so one depth marks where the exempt subtree closes.
+    let mut exempt_depth = -1;
+    for let mut row = 0; row < cst.row_count(); row += 1 {
+        match cst.tag[row] {
+            Open => {
+                depth += 1;
+                let kind = cst.kind(row);
+                if exempt_depth < 0 && (kind == rust::RK_USEDECLARATION || kind == rust::RK_VISIBILITY) {
+                    exempt_depth = depth;
+                }
+            },
+            Close => {
+                if exempt_depth == depth {
+                    exempt_depth = -1;
+                }
+                depth -= 1;
+            },
+            Tok => {
+                if exempt_depth < 0 {
+                    let tok = cst.token_index(row);
+                    let kind = toks.kind_at(tok);
+                    let root = kind == rust::TK_KW_CRATE || kind == rust::TK_KW_SUPER;
+                    if root && tok + 1 < toks.len() && toks.kind_at(tok + 1) == rust::TK_PATHSEP {
+                        let text = if kind == rust::TK_KW_CRATE { "crate::" } else { "super::" };
+                        out.push([toks.span_at(tok).start, text]);
+                    }
+                }
+            },
+            Miss => {
+            },
+            Skip => {
+            },
+        }
+    }
+    return out;
+}
+
+fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
+    let mut out: List<InlinePath> = List::with_capacity(roots.len());
+    let mut line = 1;
+    let mut column = 1;
+    let mut i = 0;
+    for let mut k = 0; k < roots.len(); k += 1 {
+        let at = roots[k].0;
+        assert at >= i, "path roots must arrive in source order";
+        while i < at {
+            if chars[i] == '\n' {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+            i += 1;
+        }
+        out.push(InlinePath { line, column, text: roots[k].1 });
+    }
+    return out;
+}
+
+/// Every inline path in `source`, or why it could not be parsed: recovery drops
+/// tokens, so a count taken from a broken tree would license what it missed.
+pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
+    let result = parse_rust(source);
+    if result.diagnostics.len() > 0 {
+        let first = result.diagnostics[0];
+        return Result::Err(`${first.message} at ${first.rule_path()}`);
+    }
+    return Result::Ok(locate(result.tokens.chars, &path_roots(&result)));
+}
+
+/// The inline paths `path` carries. A file that cannot be read or parsed lands
+/// in `failed`, never in a clean count.
+fn scan(root: &Descriptor, path: &String, failed: &mut i32) -> List<InlinePath> with Stderr {
+    let Some(source) = read_file(root, path) else {
+        *failed += 1;
+        return [];
+    };
+    return match find_inline_paths(&source) {
+        Ok(hits) => hits,
+        Err(why) => {
+            eprintln(`error: ${*path}: ${why}`);
+            *failed += 1;
+            return [];
+        },
+    };
+}
+
+fn write_file(root: &Descriptor, path: &String, content: &String) -> bool with Stderr {
+    let file = match root.open_at(
+        PathFlags::none(),
+        *path,
+        OpenFlags::Create | OpenFlags::Truncate,
+        DescriptorFlags::Read | DescriptorFlags::Write,
+    ).wait() {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln(`error: ${*path}: cannot create: ${e:?}`);
+            return false;
+        },
+    };
+    let bytes: List<u8> = content.bytes().collect();
+    let [rx, tx] = Stream::<u8>::new();
+    let sub = file.write_via_stream(rx, 0 as Filesize);
+    tx.write_all(bytes);
+    tx.drop();
+    let written = sub.read();
+    sub.drop();
+    if let Some(Err(e)) = written {
+        eprintln(`error: ${*path}: cannot write: ${e:?}`);
+        return false;
+    }
+    return true;
+}
+
+/// File path to the number of inline paths it carries, omitting the clean ones.
+/// The baseline is serialized straight from this, so the walk is sorted.
+fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with Stderr {
+    let mut sorted = *paths;
+    sorted.sort();
+    let mut counts = TreeMap::<String, i32>::new();
+    for let path of &sorted {
+        let found = scan(root, path, failed).len();
+        if found > 0 {
+            counts[*path] = found;
+        }
+    }
+    return counts;
+}
+
+fn read_baseline(root: &Descriptor) -> Option<TreeMap<String, i32>> with Stderr {
+    let Some(text) = read_file(root, &BASELINE_PATH) else {
+        return null;
+    };
+    return match from_string::<TreeMap<String, i32>>(text) {
+        Ok(map) => Option::Some(map),
+        Err(e) => {
+            eprintln(`error: ${BASELINE_PATH}: ${e:?}`);
+            return null;
+        },
+    };
+}
+
+fn write_baseline(root: &Descriptor, counts: &TreeMap<String, i32>) -> bool with Stderr {
+    let text = match to_string_pretty(counts, Option::Some('\n')) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: cannot serialize the baseline: ${e:?}`);
+            return false;
+        },
+    };
+    return write_file(root, &BASELINE_PATH, &text);
+}
+
+fn total(counts: &TreeMap<String, i32>) -> i32 {
+    let mut sum = 0;
+    for let [_path, n] of counts.entries() {
+        sum += *n;
+    }
+    return sum;
+}
+
+/// Every file carrying more than its baseline allows, as `[file, was, now]`.
+fn grown(counts: &TreeMap<String, i32>, baseline: &TreeMap<String, i32>) -> List<[String, i32, i32]> {
+    let mut out: List<[String, i32, i32]> = [];
+    for let [path, now] of counts.entries() {
+        let was = match baseline.get(*path) {
+            Some(n) => n,
+            None => 0,
+        };
+        if *now > was {
+            out.push([*path, was, *now]);
+        }
+    }
+    return out;
+}
+
+fn report_grown(rows: &List<[String, i32, i32]>) with Stderr {
+    eprintln("error: inline `crate::` / `super::` paths added; import them with `use`:");
+    for let row of rows {
+        eprintln(`  ${row.0}: ${row.1} -> ${row.2}`);
+    }
+    eprintln("");
+    eprintln("Run `scripts/check-rust-paths.sh <file>` to list them.");
+}
+
+fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with (Stdout, Stderr) {
+    let mut found = 0;
+    let mut failed = 0;
+    for let path of paths {
+        for let hit of scan(root, path, &mut failed) {
+            println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
+            found += 1;
+        }
+    }
+    println(`${found} inline paths`);
+    return if failed > 0 { 1 } else { 0 };
+}
+
+fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr) {
+    let mut failed = 0;
+    let counts = census(root, paths, &mut failed);
+    if failed > 0 {
+        eprintln(`error: ${failed} of ${paths.len()} files could not be measured`);
+        return 1;
+    }
+    let Some(baseline) = read_baseline(root) else {
+        return 1;
+    };
+    // The baseline only ever ratchets down. Recording a file that grew would
+    // license the paths `--check` is there to refuse.
+    let rows = grown(&counts, &baseline);
+    if rows.len() > 0 {
+        report_grown(&rows);
+        return 1;
+    }
+    if update {
+        if !write_baseline(root, &counts) {
+            return 1;
+        }
+        println(`baseline: ${total(&counts)} inline paths in ${counts.len()} files`);
+        return 0;
+    }
+    let left = total(&counts);
+    let shrunk = total(&baseline) - left;
+    let ratchet = if shrunk > 0 { `, ${shrunk} fewer than the baseline — run --update` } else { "" };
+    println(`ok: no file gained an inline path (${left} left${ratchet})`);
+    return 0;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
+    let Some(root) = corpus_root() else {
+        exit(1);
+    };
+    let argv = args();
+    let paths = collect_paths(&root, &argv);
+    let update = argv.into_iter().any(|a: String| a == "--update");
+    let check = argv.into_iter().any(|a: String| a == "--check");
+    let status = if update || check { ratchet_mode(&root, &paths, update) } else { list_mode(&root, &paths) };
+    if status != 0 {
+        exit(status as u8);
+    }
+}
+
+test "a path outside a use item is reported with its position" {
+    let hits = find_inline_paths(&"fn f() -> super::T { crate::g() }\n").unwrap();
+    assert hits.len() == 2;
+    assert hits[0].line == 1 && hits[0].column == 11 && hits[0].text == "super::";
+    assert hits[1].line == 1 && hits[1].column == 22 && hits[1].text == "crate::";
+}
+
+test "a use item may name any path" {
+    let hits = find_inline_paths(&"use crate::a::B;\nuse super::c::D;\nuse crate::{e, f::G};\n").unwrap();
+    assert hits.len() == 0;
+}
+
+test "a use item inside a function body is still a use item" {
+    let hits = find_inline_paths(&"fn f() {\n    use crate::a::B;\n    B::new();\n}\n").unwrap();
+    assert hits.len() == 0;
+}
+
+test "comments and strings hold no paths" {
+    let source = "// crate::a\n/* super::b */\nfn f() -> String { \"crate::c\".to_string() }\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "a raw string holds no paths" {
+    let source = "fn f() -> &'static str { r#\"crate::a and super::b\"# }\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "macro hygiene is not an import" {
+    let source = "macro_rules! m {\n    () => { $crate::a::B };\n}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+// `RustParser.g4` predates edition-2024 precise capturing, so `use<..>` in a
+// bound position is a parse error today — reported as an unmeasurable file
+// rather than silently counted wrong. Remove the `#[TODO]` once the grammar
+// gains `useBound`.
+#[TODO]
+test "a precise capture list is not a use item" {
+    let source = "fn f<T>(t: T) -> impl Sized + use<T> { crate::wrap(t) }\n";
+    let hits = find_inline_paths(&source).unwrap();
+    assert hits.len() == 1;
+    assert hits[0].text == "crate::";
+}
+
+test "a visibility names a scope, which no import can stand in for" {
+    let source = "pub(crate) fn f() {}\npub(super) fn g() {}\npub(in crate::a) fn h() {}\n";
+    assert find_inline_paths(&source).unwrap().len() == 0;
+}
+
+test "every path root in a chain counts" {
+    let hits = find_inline_paths(&"fn f() -> super::super::T { crate::a::crate_b() }\n").unwrap();
+    assert hits.len() == 3;
+}
+
+test "a file that does not parse is an error, not a clean count" {
+    assert find_inline_paths(&"fn f( {\n").is_err();
+}

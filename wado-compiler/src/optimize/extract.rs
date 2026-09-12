@@ -15,6 +15,23 @@ use crate::trace::filter;
 
 use super::arena_query::value_may_trap;
 use super::census;
+use crate::const_eval::{Value, prim_of};
+use crate::hashmap;
+use crate::nir::NirUnaryOp;
+use crate::nir_arena::{BlockId, Operand, StmtId};
+use crate::nir_engine::FieldValues;
+#[cfg(test)]
+use crate::nir_engine::Rule;
+use crate::nir_package::NirPackage;
+use crate::nir_value_graph::builder::is_const_value;
+use crate::nir_value_graph::{OpaqueSource, ValuePool, value_kind_to_const};
+use crate::optimize::alias::{
+    CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
+};
+use crate::optimize::arena_query::storage_root;
+use crate::tir;
+use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+use crate::token::Span;
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into
 /// that literal. Idempotent: an expression already holding the target literal
@@ -23,7 +40,7 @@ use super::census;
 pub(super) struct ExtractLiteralRule;
 
 #[cfg(test)]
-impl crate::nir_engine::Rule for ExtractLiteralRule {
+impl Rule for ExtractLiteralRule {
     fn apply_expr(&self, e: &mut Engine, id: ExprId) -> bool {
         // An assign target is a place, not a value — never materialize it.
         if e.is_assign_target(id) {
@@ -67,9 +84,7 @@ fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
         ExprKind::Binary { .. }
             | ExprKind::Cast { .. }
             | ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::Neg
-                    | crate::nir::NirUnaryOp::Not
-                    | crate::nir::NirUnaryOp::BitNot,
+                op: NirUnaryOp::Neg | NirUnaryOp::Not | NirUnaryOp::BitNot,
                 ..
             }
     ) || (include_fields && matches!(&e.body.exprs[id].kind, ExprKind::FieldAccess { .. }))
@@ -83,14 +98,14 @@ fn is_pure_arith(e: &Engine, id: ExprId, include_fields: bool) -> bool {
 /// the uses lie under a common chain of enclosing blocks — the basis for the
 /// nearest-common-dominator placement in [`materialise_point`]. `None` if `expr`
 /// has no enclosing statement (it is not inside the body).
-fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId, usize)>> {
+fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(BlockId, usize)>> {
     let mut path = Vec::new();
     let mut node = NodeRef::Expr(expr);
     // The most recent `Stmt` crossed on the way up; it is the direct child of
     // the next enclosing `Block`. Updated as the walk passes each statement, so
     // an expression-form block (`let x = if c { … }`, where a `Block` is the
     // child of an `Expr`) records the right statement at the outer block.
-    let mut last_stmt: Option<crate::nir_arena::StmtId> = None;
+    let mut last_stmt: Option<StmtId> = None;
     loop {
         match node {
             NodeRef::Stmt(s) => {
@@ -114,7 +129,7 @@ fn block_path(e: &Engine, expr: ExprId) -> Option<Vec<(crate::nir_arena::BlockId
 }
 
 /// Whether `b` is the body of a `Loop`, i.e. re-entered per iteration.
-fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
+fn is_loop_body(e: &Engine, b: BlockId) -> bool {
     matches!(
         e.parent_of(NodeRef::Block(b)),
         Some(NodeRef::Stmt(s)) if matches!(&e.body.stmts[s].kind, StmtKind::Loop { body } if *body == b)
@@ -126,11 +141,8 @@ fn is_loop_body(e: &Engine, b: crate::nir_arena::BlockId) -> bool {
 /// enclosing block, at the earliest statement any use descends through.
 /// Structured control flow makes that a dominator, and the shared `ValueId`
 /// means no heap bump separates the uses. `None` if any use lacks a path.
-fn materialise_point(
-    e: &Engine,
-    ids: &[ExprId],
-) -> Option<(crate::nir_arena::StmtId, crate::nir_arena::BlockId)> {
-    let paths: Vec<Vec<(crate::nir_arena::BlockId, usize)>> = ids
+fn materialise_point(e: &Engine, ids: &[ExprId]) -> Option<(StmtId, BlockId)> {
+    let paths: Vec<Vec<(BlockId, usize)>> = ids
         .iter()
         .map(|&id| block_path(e, id))
         .collect::<Option<_>>()?;
@@ -162,10 +174,7 @@ fn materialise_point(
 /// The structured-control path from the root down to `stmt`'s enclosing chain:
 /// an outermost-first list of `(block, stmt_index)`. Like [`block_path`] but
 /// rooted at a statement, for the def-dominance check.
-fn stmt_block_path(
-    e: &Engine,
-    stmt: crate::nir_arena::StmtId,
-) -> Vec<(crate::nir_arena::BlockId, usize)> {
+fn stmt_block_path(e: &Engine, stmt: StmtId) -> Vec<(BlockId, usize)> {
     let mut path = Vec::new();
     let mut last = stmt;
     let mut node = e.parent_of(NodeRef::Stmt(stmt));
@@ -194,11 +203,7 @@ fn stmt_block_path(
 /// `before_stmt` does not enter) and `def_stmt` must sit strictly earlier there.
 /// Used to admit a non-param `FieldAccess` receiver only when its single-assignment
 /// def is live at the materialisation point (the receiver-availability gate).
-fn def_dominates(
-    e: &Engine,
-    def_stmt: crate::nir_arena::StmtId,
-    before_stmt: crate::nir_arena::StmtId,
-) -> bool {
+fn def_dominates(e: &Engine, def_stmt: StmtId, before_stmt: StmtId) -> bool {
     let dp = stmt_block_path(e, def_stmt);
     let mp = stmt_block_path(e, before_stmt);
     let mut l = 0;
@@ -215,8 +220,8 @@ fn def_dominates(
 fn leaf_available_at(
     e: &Engine,
     local: u32,
-    before_stmt: crate::nir_arena::StmtId,
-    param_set: &crate::hashmap::IndexSet<u32>,
+    before_stmt: StmtId,
+    param_set: &hashmap::IndexSet<u32>,
 ) -> bool {
     if param_set.contains(&local) {
         return true;
@@ -232,8 +237,8 @@ fn leaf_available_at(
 fn receiver_available_at(
     e: &Engine,
     rep: ValueId,
-    before_stmt: crate::nir_arena::StmtId,
-    param_set: &crate::hashmap::IndexSet<u32>,
+    before_stmt: StmtId,
+    param_set: &hashmap::IndexSet<u32>,
 ) -> bool {
     let ValueKind::FieldAccess { receiver, .. } = e.body.values.kind(rep) else {
         return false;
@@ -243,7 +248,7 @@ fn receiver_available_at(
         ValueKind::Opaque(o) => e.body.values.opaque_source(*o),
         _ => None,
     };
-    let Some(crate::nir_value_graph::OpaqueSource::Local(i)) = local else {
+    let Some(OpaqueSource::Local(i)) = local else {
         return false;
     };
     leaf_available_at(e, i, before_stmt, param_set)
@@ -258,7 +263,7 @@ fn receiver_available_at(
 /// freezing this use would extract it at the wrong width, so the caller skips
 /// it. (`Cast` never appears — excluded by `value_fully_reemittable_locally`.)
 #[must_use]
-fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::TypeId) -> bool {
+fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: tir::TypeId) -> bool {
     use crate::nir_value_graph::ValueKind;
     match e.body.values.type_of(v) {
         Some(existing) if existing != type_id => return false,
@@ -274,7 +279,7 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
         ValueKind::Select { cond, then, else_ } => {
             record_value_tree_types(e, then, type_id)
                 && record_value_tree_types(e, else_, type_id)
-                && record_value_tree_types(e, cond, crate::tir::TypeTable::BOOL)
+                && record_value_tree_types(e, cond, TypeTable::BOOL)
         }
         _ => true,
     }
@@ -286,7 +291,7 @@ fn record_value_tree_types(e: &mut Engine, v: ValueId, type_id: crate::tir::Type
 /// local-read skeleton nodes become unreachable from the root and are not
 /// emitted.
 pub(super) fn freeze_pure_arith(
-    project: &mut crate::nir_package::NirPackage,
+    project: &mut NirPackage,
     include_fields: bool,
     // `Early` runs before the optimize loop, on each function's freshly-built
     // (clean, un-restructured) graph. Only then is it sound to freeze a
@@ -300,8 +305,8 @@ pub(super) fn freeze_pure_arith(
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
     let mut refusals = Refusals::new();
@@ -322,8 +327,8 @@ pub(super) fn freeze_pure_arith(
         let body = body.as_mut().expect("checked above");
         // Address-taken locals (`&x` / `&mut x`): excluded as `FieldAccess`
         // receivers by the receiver-stability gate. Cloned before `Engine::new`.
-        let address_taken: crate::hashmap::IndexSet<u32> = address_taken_locals.clone();
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        let address_taken: hashmap::IndexSet<u32> = address_taken_locals.clone();
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -334,15 +339,14 @@ pub(super) fn freeze_pure_arith(
         );
         let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let local_count = locals.len();
-        let param_set: crate::hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
+        let param_set: hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
         // Locals a call may mutate through a `&mut` escape (`reference`'s
         // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
         // build-once graph cannot keep it across the structural passes; an
         // *immutable*-`&`-escaped local (licm's `&config`) is stable and its field
         // constant freezes soundly. Keep a copy before `set_alias_sets` moves it.
         let mut_escaped_leaf = mut_escaped.clone();
-        let verdicts =
-            super::alias::call_verdicts(body, &type_table, &first_param_types, &call_immutability);
+        let verdicts = call_verdicts(body, &type_table, &first_param_types, &call_immutability);
         let mut engine = Engine::new(body, &mut buffers, locals);
         engine.set_alias_sets(aliased, untrackable, mut_escaped);
         engine.set_value_graph_type_table(&type_table);
@@ -352,7 +356,7 @@ pub(super) fn freeze_pure_arith(
 
         // Locals a frozen value may not name, from the same predicate that
         // decides whether a `Local` read resolves at all.
-        let multi_version_locals: crate::hashmap::IndexSet<u32> = (0..local_count as u32)
+        let multi_version_locals: hashmap::IndexSet<u32> = (0..local_count as u32)
             .filter(|&i| !engine.local_has_one_version(i))
             .collect();
 
@@ -360,9 +364,9 @@ pub(super) fn freeze_pure_arith(
         let found = if include_fields {
             engine.scoped_field_values()
         } else {
-            crate::nir_engine::FieldValues::default()
+            FieldValues::default()
         };
-        let field_values: crate::hashmap::IndexMap<ExprId, ValueId> =
+        let field_values: hashmap::IndexMap<ExprId, ValueId> =
             found.reads.iter().copied().collect();
 
         // Phase 1: decide every freeze on the clean, unedited graph. A value
@@ -399,8 +403,7 @@ pub(super) fn freeze_pure_arith(
         // use. `record_value_tree_types` stamps the tree's width and skips a
         // width-conflicting value; the two apply strategies then diverge on whether
         // the representative is a `FieldAccess`.
-        let mut by_rep: crate::hashmap::IndexMap<ValueId, Vec<ExprId>> =
-            crate::hashmap::IndexMap::default();
+        let mut by_rep: hashmap::IndexMap<ValueId, Vec<ExprId>> = hashmap::IndexMap::default();
         for (id, rep) in to_freeze {
             by_rep.entry(rep).or_default().push(id);
         }
@@ -493,21 +496,21 @@ impl Refusals {
 /// computed once in [`freeze_pure_arith`]'s setup; the decision reads them and
 /// never mutates the skeleton.
 struct FreezeCtx<'a> {
-    type_table: &'a crate::tir::TypeTable,
+    type_table: &'a TypeTable,
     /// Locals a call may mutate through a retained `&mut` escape — a constant
     /// read of one is point-specific and unstable across the structural passes.
-    mut_escaped_leaf: &'a crate::hashmap::IndexSet<u32>,
+    mut_escaped_leaf: &'a hashmap::IndexSet<u32>,
     /// Locals not provably holding one value: a frozen value's `local.get idx`
     /// must read the version the opaque denotes, which only a single-assignment
     /// local guarantees.
-    multi_version_locals: &'a crate::hashmap::IndexSet<u32>,
+    multi_version_locals: &'a hashmap::IndexSet<u32>,
     /// `&x` / `&mut x` locals — excluded as `FieldAccess` receivers.
-    address_taken: &'a crate::hashmap::IndexSet<u32>,
+    address_taken: &'a hashmap::IndexSet<u32>,
     /// Parameter locals — entry-defined and available at every point.
-    param_set: &'a crate::hashmap::IndexSet<u32>,
+    param_set: &'a hashmap::IndexSet<u32>,
     /// The `FieldAccess` representative of each field read, from the scratch
     /// re-walk ([`Engine::scoped_field_values`]). Empty unless `include_fields`.
-    field_values: &'a crate::hashmap::IndexMap<ExprId, ValueId>,
+    field_values: &'a hashmap::IndexMap<ExprId, ValueId>,
     phase: FreezePhase,
     include_fields: bool,
 }
@@ -572,15 +575,16 @@ fn classify_candidate(
     // `&mut` makes the constant point-specific — but `&`-escaped is stable.
     let leaf_root_stable = match &engine.body.exprs[id].kind {
         ExprKind::Local { index, .. } => !ctx.mut_escaped_leaf.contains(index),
-        ExprKind::FieldAccess { .. } => super::arena_query::storage_root(engine.body, id)
-            .is_none_or(|root| !ctx.mut_escaped_leaf.contains(&root)),
+        ExprKind::FieldAccess { .. } => {
+            storage_root(engine.body, id).is_none_or(|root| !ctx.mut_escaped_leaf.contains(&root))
+        }
         _ => false,
     };
     if ctx.phase == FreezePhase::Early
         && leaf_root_stable
         && !is_place_read(engine, id)
         && let Some(vid) = engine.value(id)
-        && crate::nir_value_graph::builder::is_const_value(&engine.body.values, vid)
+        && is_const_value(&engine.body.values, vid)
     {
         return Ok((id, vid));
     }
@@ -621,11 +625,11 @@ fn classify_candidate(
             }
             .and_then(|o| engine.body.values.opaque_source(o));
             let recv_stable = match recv_src {
-                Some(crate::nir_value_graph::OpaqueSource::Local(i)) => {
+                Some(OpaqueSource::Local(i)) => {
                     let owned_enough = ctx.param_set.contains(&i)
                         || !matches!(
                             ctx.type_table.get(engine.locals()[i as usize].type_id),
-                            crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+                            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
                         );
                     owned_enough
                         && !ctx.multi_version_locals.contains(&i)
@@ -661,9 +665,9 @@ fn apply_field_materialise(
     engine: &mut Engine,
     rep: ValueId,
     ids: &[ExprId],
-    id_ty: crate::tir::TypeId,
-    param_set: &crate::hashmap::IndexSet<u32>,
-    found: &crate::nir_engine::FieldValues,
+    id_ty: tir::TypeId,
+    param_set: &hashmap::IndexSet<u32>,
+    found: &FieldValues,
 ) -> bool {
     if ids.len() < 2 {
         return false;
@@ -680,16 +684,16 @@ fn apply_field_materialise(
         return false;
     }
     let span = engine.body.exprs[ids[0]].span;
-    let name = format!("_av_{}", engine.locals().len());
+    let name = format!("$av_{}", engine.locals().len());
     let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
     let let_stmt = engine.alloc_stmt(
-        crate::nir_arena::StmtKind::Let {
+        StmtKind::Let {
             name: name.clone(),
             local_index: av,
             is_mut: false,
             is_reactive: false,
             type_id: id_ty,
-            value: crate::nir_arena::Operand::Value(rep),
+            value: Operand::Value(rep),
             skip_value_copy: true,
         },
         span,
@@ -709,7 +713,7 @@ fn apply_field_materialise(
             id_ty,
             span,
         );
-        changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Expr(lread));
+        changed |= engine.redirect_expr(id, Operand::Expr(lread));
     }
     changed
 }
@@ -723,8 +727,8 @@ fn apply_field_materialise(
 /// A stand-in for the extraction cost model, on the conservative side: refusing
 /// leaves the value re-emitted, which is what every use did before it was a
 /// candidate.
-fn worth_materialising(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
-    fn count(pool: &crate::nir_value_graph::ValuePool, v: ValueId, n: &mut u32) {
+fn worth_materialising(pool: &ValuePool, v: ValueId) -> bool {
+    fn count(pool: &ValuePool, v: ValueId, n: &mut u32) {
         if *n >= 2 {
             return;
         }
@@ -761,10 +765,10 @@ fn apply_value_freeze(
     engine: &mut Engine,
     rep: ValueId,
     ids: &[ExprId],
-    id_ty: crate::tir::TypeId,
-    param_set: &crate::hashmap::IndexSet<u32>,
+    id_ty: tir::TypeId,
+    param_set: &hashmap::IndexSet<u32>,
 ) -> bool {
-    let mut leaves = crate::hashmap::IndexSet::default();
+    let mut leaves = hashmap::IndexSet::default();
     engine.body.values.collect_opaque_locals(rep, &mut leaves);
     // Sharing decides first: it is cheap, and `materialise_point` is not.
     let shareable = ids.len() > 1 && worth_materialising(&engine.body.values, rep);
@@ -780,35 +784,35 @@ fn apply_value_freeze(
     let mut changed = false;
     if materialize {
         let (anchor, block) = point.expect("`anchorable` holds only with a point");
-        let name = format!("_av_{}", engine.locals().len());
+        let name = format!("$av_{}", engine.locals().len());
         let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
         let read = engine
             .body
             .values
-            .fresh_opaque_with_source(crate::nir_value_graph::OpaqueSource::Local(av));
+            .fresh_opaque_with_source(OpaqueSource::Local(av));
         engine.body.values.set_type(read, id_ty);
         let let_stmt = engine.alloc_stmt(
-            crate::nir_arena::StmtKind::Let {
+            StmtKind::Let {
                 name,
                 local_index: av,
                 is_mut: false,
                 is_reactive: false,
                 type_id: id_ty,
-                value: crate::nir_arena::Operand::Value(rep),
+                value: Operand::Value(rep),
                 skip_value_copy: true,
             },
-            crate::token::Span::default(),
+            Span::default(),
         );
         let mut stmts = engine.body.blocks[block].stmts.clone();
         let pos = stmts.iter().position(|&x| x == anchor).unwrap_or(0);
         stmts.insert(pos, let_stmt);
         engine.set_block_stmts(block, stmts);
         for &id in ids {
-            changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(read));
+            changed |= engine.redirect_expr(id, Operand::Value(read));
         }
     } else {
         for &id in ids {
-            changed |= engine.redirect_expr(id, crate::nir_arena::Operand::Value(rep));
+            changed |= engine.redirect_expr(id, Operand::Value(rep));
         }
     }
     changed
@@ -817,11 +821,7 @@ fn apply_value_freeze(
 /// The constant [`Value`] for `rep` if its representative kind is a scalar
 /// constant, using `at`'s NIR type for integer width. `None` for a non-constant
 /// representative or when folding is disabled (no type table).
-pub(super) fn extract_const(
-    e: &mut Engine,
-    rep: ValueId,
-    at: ExprId,
-) -> Option<crate::const_eval::Value> {
+pub(super) fn extract_const(e: &mut Engine, rep: ValueId, at: ExprId) -> Option<Value> {
     if !matches!(
         e.value_kind(rep),
         ValueKind::Int(_, _) | ValueKind::Float(_, _) | ValueKind::Bool(_) | ValueKind::Char(_)
@@ -832,15 +832,14 @@ pub(super) fn extract_const(
     let type_id = e.body.exprs[at].type_id;
     let prim = e
         .value_graph_type_table()
-        .and_then(|tt| crate::const_eval::prim_of(type_id, tt))
+        .and_then(|tt| prim_of(type_id, tt))
         // An enum case is its discriminant, which lowers to `i32`; the type
         // itself is not a primitive, so `prim_of` cannot name its width.
         .or_else(|| {
             let tt = e.value_graph_type_table()?;
-            matches!(tt.get(type_id), crate::tir::ResolvedType::Enum { .. })
-                .then_some(crate::tir::PrimitiveType::I32)
+            matches!(tt.get(type_id), ResolvedType::Enum { .. }).then_some(PrimitiveType::I32)
         });
-    crate::nir_value_graph::value_kind_to_const(&vk, prim)
+    value_kind_to_const(&vk, prim)
 }
 
 /// Whether `expr` sits in a **place** (lvalue / reference) position, where its
@@ -853,7 +852,7 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
         return false;
     };
     use crate::nir::NirUnaryOp;
-    let op = crate::nir_arena::Operand::Expr(expr);
+    let op = Operand::Expr(expr);
     match &e.body.exprs[parent].kind {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
@@ -876,8 +875,9 @@ pub(super) fn is_place_read(e: &Engine, expr: ExprId) -> bool {
 mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirLocal};
-    use crate::nir_arena::{BlockNode, Body, ExprNode, StmtKind, StmtNode};
+    use crate::nir_arena::{BlockId, BlockNode, Body, ExprNode, StmtId, StmtKind, StmtNode};
     use crate::nir_engine::{EngineBuffers, Rule};
+    use crate::tir;
     use crate::tir::TypeTable;
     use crate::token::Span;
     use std::assert_matches;
@@ -886,7 +886,7 @@ mod tests {
         ei(body, kind, TypeTable::UNIT)
     }
 
-    fn ei(body: &mut Body, kind: ExprKind, type_id: crate::tir::TypeId) -> ExprId {
+    fn ei(body: &mut Body, kind: ExprKind, type_id: tir::TypeId) -> ExprId {
         body.exprs.push(ExprNode {
             kind,
             type_id,
@@ -941,7 +941,7 @@ mod tests {
 
     /// A read `Local` statement, returning the statement id and the value-read
     /// expr id (the materialisation use).
-    fn read_stmt(body: &mut Body, name: &str) -> (crate::nir_arena::StmtId, ExprId) {
+    fn read_stmt(body: &mut Body, name: &str) -> (StmtId, ExprId) {
         let r = ei(
             body,
             ExprKind::Local {
@@ -957,7 +957,7 @@ mod tests {
         (s, r)
     }
 
-    fn block(body: &mut Body, stmts: Vec<crate::nir_arena::StmtId>) -> crate::nir_arena::BlockId {
+    fn block(body: &mut Body, stmts: Vec<StmtId>) -> BlockId {
         body.blocks.push(BlockNode {
             stmts,
             span: Span::default(),

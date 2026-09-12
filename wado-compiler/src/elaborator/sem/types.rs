@@ -4,10 +4,14 @@
 //! instantiations, capture tables. Facts derivable from the AST alone belong on
 //! [`crate::ast_index::AstIndex`], decl-level ones on [`super::decls::ModuleDecls`].
 
-use crate::ast::{self, AstId};
+use crate::ast::{self, AstId, Expr};
+use crate::defs::DefId;
+use crate::elaborator::sig;
 use crate::hashmap::IndexMap;
-use crate::name::Receiver;
-use crate::tir::{FunctionRef, TypeId};
+use crate::module_source::ModuleSource;
+use crate::name::{FqTraitName, FqTypeName, MethodName, Receiver};
+use crate::tir;
+use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
@@ -18,7 +22,7 @@ use crate::tir::{FunctionRef, TypeId};
 pub(crate) struct MethodDispatch {
     /// The declaration dispatch selected. Per-walk, unlike the use→def edge the
     /// spelled name records: a tuple `for-of` body walks one node per element.
-    pub(crate) method_def: Option<crate::defs::DefId>,
+    pub(crate) method_def: Option<DefId>,
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
     /// True when the resolved method's impl was found on a reference type
@@ -33,7 +37,7 @@ pub(crate) struct MethodDispatch {
     /// when a default references an earlier parameter (`fn f(w, h = w)`).
     pub(crate) param_names: Vec<String>,
     /// Per-parameter default expression ASTs (`None` for required).
-    pub(crate) param_defaults: Vec<Option<crate::ast::Expr>>,
+    pub(crate) param_defaults: Vec<Option<Expr>>,
     /// The resolved method's return [`TypeId`] — the authoritative result
     /// type of the call. Reify uses this for the call's
     /// `type_id` rather than the per-`AstId` `expression_types` entry,
@@ -297,7 +301,7 @@ pub(crate) struct TypeAnnotations {
     /// the result here, so reify drops the `Vec<EffectRef>` straight into
     /// [`crate::tir::TirFunction::effects`] — it has no
     /// `current_effect_param_decls` scope to redo the lookup faithfully.
-    pub(crate) function_effects: IndexMap<AstId, Vec<crate::tir::EffectRef>>,
+    pub(crate) function_effects: IndexMap<AstId, Vec<EffectRef>>,
     /// The result `task return` delivers, per `async` function / method, keyed
     /// by [`AstId`]. Reify sets `TirFunction::task_return_type` from it, so
     /// resource-store inference sees the `Response` in a `Result<Response, _>`.
@@ -311,20 +315,20 @@ pub(crate) struct TypeAnnotations {
     /// for the scheme is the elaborator. Reify reads it only for
     /// explicitly-written methods (unique key); default-method bodies land
     /// under their owning module.
-    pub(crate) method_impl_type_params: IndexMap<AstId, Vec<crate::tir::TirTypeParam>>,
+    pub(crate) method_impl_type_params: IndexMap<AstId, Vec<TirTypeParam>>,
     /// Resolved parameter types per function/method `AstId`, in declaration
     /// order (for impl methods, including the receiver `&self` → `&Self`), as
     /// `resolve_function` / `resolve_method` resolved them. Reify reads these
     /// instead of re-resolving each param.
-    pub(crate) fn_param_types: IndexMap<AstId, Vec<crate::tir::TypeId>>,
+    pub(crate) fn_param_types: IndexMap<AstId, Vec<tir::TypeId>>,
     /// Resolved return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
-    pub(crate) fn_return_types: IndexMap<AstId, crate::tir::TypeId>,
+    pub(crate) fn_return_types: IndexMap<AstId, tir::TypeId>,
     /// Resolved operation signatures per effect / resource decl `AstId`
     /// (params, return type, `cm` name), as the body walk resolved them
     /// with the decl's type-param / `Self` scope in place. Reify reads these
     /// instead of re-resolving the op signatures itself.
-    pub(crate) effect_ops: IndexMap<AstId, Vec<crate::tir::TirEffectOp>>,
+    pub(crate) effect_ops: IndexMap<AstId, Vec<TirEffectOp>>,
     /// TIR type params per declaration `AstId` (function, method, struct,
     /// variant), with each `default` resolved while the decl's type-param scope
     /// was alive (so a default referencing an earlier param resolves
@@ -332,7 +336,7 @@ pub(crate) struct TypeAnnotations {
     /// dense. Reify reads these instead of re-projecting / re-resolving them
     /// after its own scope is torn down. `AstId` is dense per module across all
     /// item kinds, so function and decl entries never collide.
-    pub(crate) decl_type_params: IndexMap<AstId, Vec<crate::tir::TirTypeParam>>,
+    pub(crate) decl_type_params: IndexMap<AstId, Vec<TirTypeParam>>,
     /// The `(name, slot)` of the type pack a spread operand's static call is
     /// made on (`..F::method()`), keyed by the spread's inner expression. Only
     /// the scope that wrote `F` can say it is a pack rather than a plain type
@@ -349,7 +353,7 @@ pub(crate) struct TypeAnnotations {
     /// static decl-field pass — that runs before import scopes exist and cannot
     /// follow `pub use` chains, so a field typed by a re-exported decl lands
     /// there as UNKNOWN.
-    pub(crate) struct_field_types: IndexMap<AstId, Vec<crate::tir::TypeId>>,
+    pub(crate) struct_field_types: IndexMap<AstId, Vec<tir::TypeId>>,
     /// Place classification for each identifier that resolves to one — local,
     /// `&mut`-deref-capture, or global — so `assign_to_target` can validate
     /// l-values and global mutability without reading the now-placeholder
@@ -380,7 +384,7 @@ impl std::ops::DerefMut for TypeAnnotations {
 pub(crate) enum AssignPlace {
     /// A function-frame local — always a valid l-value.
     Local,
-    /// A `&mut`-captured outer binding accessed through `*__ref` inside a
+    /// A `&mut`-captured outer binding accessed through `*$ref` inside a
     /// closure body. Assignable iff the captured reference is `&mut T`
     /// (`through_mut_ref`); a shared-`&` capture is not assignable.
     DerefCapture { through_mut_ref: bool },
@@ -399,7 +403,7 @@ impl BodyFacts {
     /// A pair is absent where no declaration backs the callee — an auto-derived
     /// `Eq` / `Ord`, a `From` impl synthesis mints later, a receiver that is a
     /// type parameter whose block monomorphization picks.
-    fn dispatch_edges(&self) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
+    fn dispatch_edges(&self) -> impl Iterator<Item = (AstId, DefId)> + '_ {
         let methods = self
             .method_dispatch
             .iter()
@@ -478,18 +482,14 @@ impl TypeAnnotations {
 
     /// Every callee a dispatch decision names, as `(use site, declaration)`
     /// pairs, over every walk — see [`BodyFacts::dispatch_edges`].
-    pub(crate) fn dispatched_callees(
-        &self,
-    ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
+    pub(crate) fn dispatched_callees(&self) -> impl Iterator<Item = (AstId, DefId)> + '_ {
         self.walks().flat_map(BodyFacts::dispatch_edges)
     }
 
     /// The `impl <effect> for <handler>` blocks each handler binding installs.
     /// Apart from [`Self::dispatched_callees`] because the target is a block,
     /// not one method — the caller expands it through the declaration table.
-    pub(crate) fn handler_impl_blocks(
-        &self,
-    ) -> impl Iterator<Item = (AstId, crate::defs::DefId)> + '_ {
+    pub(crate) fn handler_impl_blocks(&self) -> impl Iterator<Item = (AstId, DefId)> + '_ {
         self.walks()
             .flat_map(|facts| facts.handler_bindings.iter())
             .flat_map(|(id, facts)| {
@@ -540,22 +540,22 @@ pub(crate) struct MethodNames {
 #[derive(Clone)]
 pub(crate) struct FromCallFacts {
     /// The `from` method the conversion calls.
-    pub(crate) method_def: Option<crate::defs::DefId>,
+    pub(crate) method_def: Option<DefId>,
     /// Module that hosts the `impl From<From> for Target` block (or
     /// the auto-derived synthesis site).
-    pub(crate) module_source: crate::module_source::ModuleSource,
+    pub(crate) module_source: ModuleSource,
     /// `MethodName::format_local(target_name, Some(from_trait), "from")` —
     /// the mangled `Target^From<From>::from` name the monomorphizer
     /// keys on.
     pub(crate) mangled_name: String,
     /// `type_name(target_type)` — the call's struct prefix
     /// (`LocalMethodName::struct_name` / `base_struct_name`).
-    pub(crate) target_name: crate::name::FqTypeName,
+    pub(crate) target_name: FqTypeName,
     /// `fq_type_name(from_type)` — the conversion source type, used to build
     /// `LocalMethodName::trait_name`'s `From<…>` form.
-    pub(crate) from_name: crate::name::FqTypeName,
+    pub(crate) from_name: FqTypeName,
     /// The `From` trait, named by the module that declares it.
-    pub(crate) from_trait_name: crate::name::FqTraitName,
+    pub(crate) from_trait_name: FqTraitName,
 }
 
 /// The trait method a literal lowers to (WEP 2026-08-24): an
@@ -564,20 +564,20 @@ pub(crate) struct FromCallFacts {
 pub(crate) struct LiteralCallee {
     /// The method the literal calls. A literal spells no name, so nothing else
     /// names it.
-    pub(crate) method_def: Option<crate::defs::DefId>,
+    pub(crate) method_def: Option<DefId>,
     /// Module that hosts the impl block.
-    pub(crate) impl_module_source: crate::module_source::ModuleSource,
+    pub(crate) impl_module_source: ModuleSource,
     /// The trait as the impl block declares it — the spelling the method
     /// template is registered under, and what the mangled name discriminates
     /// on. A generic impl writes its own parameter here (`From<Array<T>>`), so
     /// it must not be rebuilt from the call's types.
-    pub(crate) trait_name: crate::name::FqTraitName,
+    pub(crate) trait_name: FqTraitName,
     /// The target's base head name, fq (e.g. `core:prelude/list.wado/List`).
-    pub(crate) target_base_name: crate::name::FqTypeName,
+    pub(crate) target_base_name: FqTypeName,
     /// Type-arg `TypeId`s on the target (e.g. `[i32]` for `List<i32>`).
-    pub(crate) type_arg_ids: Vec<crate::tir::TypeId>,
+    pub(crate) type_arg_ids: Vec<tir::TypeId>,
     /// Type-arg names parallel to `type_arg_ids`, kept structured.
-    pub(crate) type_arg_names: Vec<crate::name::FqTypeName>,
+    pub(crate) type_arg_names: Vec<FqTypeName>,
     pub(crate) method: &'static str,
     /// `Target^Trait::method`'s mangled name.
     pub(crate) mangled_name: String,
@@ -587,7 +587,7 @@ impl LiteralCallee {
     /// Recompute the names from the recorded `TypeId`s. They are a function of
     /// the types alone, so the module-end sweep calls this once a solved
     /// inference variable changes one.
-    pub(crate) fn remangle(&mut self, tt: &crate::tir::TypeTable) {
+    pub(crate) fn remangle(&mut self, tt: &TypeTable) {
         self.type_arg_names = self
             .type_arg_ids
             .iter()
@@ -597,8 +597,7 @@ impl LiteralCallee {
             .target_base_name
             .clone()
             .with_args(self.type_arg_names.clone());
-        self.mangled_name =
-            crate::name::MethodName::format_local(&target, Some(&self.trait_name), self.method);
+        self.mangled_name = MethodName::format_local(&target, Some(&self.trait_name), self.method);
     }
 }
 
@@ -607,10 +606,10 @@ impl LiteralCallee {
 pub(crate) struct LiteralFromCall {
     /// What `from` receives: the `Array<…>` a literal materializes, or a
     /// leaf's own type where an element converts into its slot.
-    pub(crate) from_type: crate::tir::TypeId,
+    pub(crate) from_type: tir::TypeId,
     /// What `from` returns. Equal to [`Self::from_type`] when the target is an
     /// `Array<E>` itself, which needs no conversion at all.
-    pub(crate) output_type: crate::tir::TypeId,
+    pub(crate) output_type: tir::TypeId,
     pub(crate) callee: LiteralCallee,
 }
 
@@ -619,10 +618,10 @@ pub(crate) struct LiteralFromCall {
 #[derive(Clone)]
 pub(crate) struct SequenceCoercionFacts {
     /// The type each element takes — `E`.
-    pub(crate) element_type: crate::tir::TypeId,
+    pub(crate) element_type: tir::TypeId,
     /// When `Some`, the literal targets a newtype over the call's output type
     /// and reify casts the `from` result to it.
-    pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+    pub(crate) newtype_cast_to: Option<tir::TypeId>,
     pub(crate) call: LiteralFromCall,
 }
 
@@ -631,12 +630,12 @@ pub(crate) struct SequenceCoercionFacts {
 #[derive(Clone)]
 pub(crate) struct KeyValueCoercionFacts {
     /// `V` — the type each value takes.
-    pub(crate) value_type: crate::tir::TypeId,
+    pub(crate) value_type: tir::TypeId,
     /// `[K, V]` — one entry of the array the literal materializes.
-    pub(crate) pair_type: crate::tir::TypeId,
+    pub(crate) pair_type: tir::TypeId,
     /// When `Some`, the literal targets a newtype over the call's output type
     /// and reify casts the `from` result to it.
-    pub(crate) newtype_cast_to: Option<crate::tir::TypeId>,
+    pub(crate) newtype_cast_to: Option<tir::TypeId>,
     pub(crate) call: LiteralFromCall,
     /// The merge a `..base` member lowers to; `None` when the literal has no
     /// spread.
@@ -650,11 +649,11 @@ pub(crate) struct StaticMethodDispatch {
     /// The declaration dispatch selected. A static call through a blanket
     /// (`Point::tag()` answered by `impl<T: Marker> Tag for T`) names it here
     /// and nowhere else.
-    pub(crate) method_def: Option<crate::defs::DefId>,
+    pub(crate) method_def: Option<DefId>,
     /// The resolved callee — `module_source`, mangled `name`,
     /// `method_info`, `monomorph_info` — as the elaborator constructed
     /// it after impl lookup and mangling.
-    pub(crate) function_ref: crate::tir::FunctionRef,
+    pub(crate) function_ref: tir::FunctionRef,
     /// Per-argument `is_mut` flag, from the callee's parameters. Reify zips it
     /// with the reified argument exprs to build [`crate::tir::CallArg`]s with
     /// the same `is_mut` shape annotate produced.
@@ -668,19 +667,19 @@ pub(crate) struct StaticMethodDispatch {
     /// `generic_instantiations`, which would (wrongly) feed the impl args
     /// in as method-level type args and mangle `Container<i32>::make` as
     /// `Container::make<i32>`.
-    pub(crate) type_args: Vec<crate::tir::TypeId>,
+    pub(crate) type_args: Vec<tir::TypeId>,
     /// The callee's `(param_name, default_expr)` list in declaration order,
     /// used by reify to pad trailing arguments the call omitted. Empty when
     /// the method declares no defaults (or for variant / builtin dispatches).
-    pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    pub(crate) param_defaults: Vec<(String, Option<Expr>)>,
     /// The module a default in [`Self::param_defaults`] resolves in: the
     /// declaring one. Usually `function_ref.module_source`, but that names the
     /// caller wherever the callee is minted per call site rather than declared.
-    pub(crate) defaults_module: crate::module_source::ModuleSource,
+    pub(crate) defaults_module: ModuleSource,
     /// The callee's resolved parameter types in declaration order, which reify
     /// needs to type a default it materializes — a default on a trait method
     /// has no body for annotate to walk, so nothing recorded its type.
-    pub(crate) param_types: Vec<crate::tir::TypeId>,
+    pub(crate) param_types: Vec<tir::TypeId>,
     /// The receiver is spelled as the first call-site argument — the
     /// trait-qualified (UFCS) shape `Trait::method(recv, …)` — so the
     /// arguments align with the callee's *full* parameter list including
@@ -696,13 +695,13 @@ pub(crate) struct StaticMethodDispatch {
 #[derive(Default)]
 pub(crate) struct CalleeParams {
     pub(crate) param_is_mut: Vec<bool>,
-    pub(crate) param_defaults: Vec<(String, Option<crate::ast::Expr>)>,
+    pub(crate) param_defaults: Vec<(String, Option<Expr>)>,
     pub(crate) param_types: Vec<TypeId>,
     pub(crate) self_in_args: bool,
     /// The module the defaults were written in, when that is not the callee's
     /// own: the trait it implements. See
     /// [`StaticMethodDispatch::defaults_module`].
-    pub(crate) defaults_module: Option<crate::module_source::ModuleSource>,
+    pub(crate) defaults_module: Option<ModuleSource>,
 }
 
 impl CalleeParams {
@@ -714,7 +713,7 @@ impl CalleeParams {
     /// `sig` is `None` for a callee no signature lookup answers — a trait static
     /// on a primitive receiver, say. The lists are empty and a consumer reads
     /// the call's own arguments instead.
-    pub(crate) fn of_signature(sig: Option<&crate::elaborator::sig::MethodSig>) -> Self {
+    pub(crate) fn of_signature(sig: Option<&sig::MethodSig>) -> Self {
         let Some(sig) = sig else {
             return Self::default();
         };
@@ -723,12 +722,12 @@ impl CalleeParams {
             param_is_mut: receiver
                 .then(|| sig.self_kind == ast::SelfKind::MutRef)
                 .into_iter()
-                .chain(crate::elaborator::sig::Param::is_mut_flags(&sig.params))
+                .chain(sig::Param::is_mut_flags(&sig.params))
                 .collect(),
             param_defaults: receiver
                 .then(|| ("self".to_string(), None))
                 .into_iter()
-                .chain(crate::elaborator::sig::Param::named_defaults(&sig.params))
+                .chain(sig::Param::named_defaults(&sig.params))
                 .collect(),
             // Whole list: it leads with the receiver exactly where the callee
             // declares one, which is exactly where the spelling writes one.
@@ -743,7 +742,7 @@ impl StaticMethodDispatch {
     /// The dispatch a call records, from the same [`CalleeParams`] its site
     /// checked against, so the recorded fact says what the call was built to.
     pub(crate) fn of_params(
-        method_def: Option<crate::defs::DefId>,
+        method_def: Option<DefId>,
         function_ref: FunctionRef,
         type_args: Vec<TypeId>,
         params: CalleeParams,
@@ -789,14 +788,14 @@ pub(crate) struct GenericInstantiation {
 
 /// A single mutating outer-binding captured by a closure. The closure
 /// pre-pass materialises a
-/// `let __ref_<var_name> = &mut <var_name>;` in the outer scope before
+/// `let $ref_<var_name> = &mut <var_name>;` in the outer scope before
 /// opening the closure body; reify replays the same `add_local` at the
 /// same point. The fields below carry every value the replay needs.
 #[derive(Clone)]
 pub(crate) struct MutCapture {
     /// Original outer-binding name (the source-level identifier).
     pub(crate) var_name: String,
-    /// Synthesised reference binding name (`__ref_<var_name>`).
+    /// Synthesised reference binding name (`$ref_<var_name>`).
     pub(crate) ref_name: String,
     /// `TypeId` of the inner value (`T`).
     pub(crate) inner_type: TypeId,
@@ -831,7 +830,7 @@ pub(crate) struct CaptureEntry {
 pub(crate) struct ClosureCaptureInfo {
     /// Mut-captures the outer scope must materialise before the closure
     /// body opens, in declaration order. Reify replays each as
-    /// `let __ref_<var> = &mut <var>;`.
+    /// `let $ref_<var> = &mut <var>;`.
     pub(crate) mut_captures: Vec<MutCapture>,
     /// Final capture list the closure surfaces to its caller, in the
     /// order `FunctionContext::get_captures` produced.
@@ -872,7 +871,7 @@ pub(crate) struct AssertSlot {
 /// Power-assert capture map recorded by
 /// [`super::super::Elaborator::desugar_assert`]. Reify walks the
 /// condition AST and consults `slots` to decide which sub-expressions
-/// become `let __vK = …;` (slots whose AST evaporated during
+/// become `let $vK = …;` (slots whose AST evaporated during
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
 pub(crate) struct AssertCaptureInfo {
@@ -901,7 +900,7 @@ pub(crate) struct HandlerBindingFacts {
     /// bundled clause. `None` for the explicit form. Reify
     /// writes this onto every emitted `TirHandlerBinding`'s
     /// `bundle_group` field so dispatch synthesis allocates one
-    /// shared `__h_<bundle>` local across all the effects this
+    /// shared `$h_<bundle>` local across all the effects this
     /// bundled clause installs.
     pub(crate) bundle_group: Option<u32>,
     /// The handler value's underlying type after reference
@@ -919,9 +918,9 @@ pub(crate) struct HandlerBindingFacts {
 pub(crate) struct HandlerEffectEntry {
     /// The `impl <effect> for <handler>` block this binding installs — the only
     /// thing naming the methods dispatch synthesis routes operations to.
-    pub(crate) impl_def: Option<crate::defs::DefId>,
+    pub(crate) impl_def: Option<DefId>,
     pub(crate) name: String,
-    pub(crate) module_source: crate::module_source::ModuleSource,
+    pub(crate) module_source: ModuleSource,
     pub(crate) trait_type_args: Vec<TypeId>,
 }
 
@@ -940,7 +939,7 @@ pub(crate) struct ImplFacts {
     /// The declaration and the instantiated spelling travel together, so two
     /// modules' same-named traits stay apart in the `trait_env` dispatch
     /// indices and in the method mangle alike.
-    pub(crate) trait_name: Option<crate::name::FqTraitName>,
+    pub(crate) trait_name: Option<FqTraitName>,
     /// Concrete `TypeId`s of the trait/resource type arguments at the
     /// impl site (`impl Future<i32> for …` → `[i32]`; `impl<T> Stream<T>`
     /// → the impl's `TypeParam` id). Written onto each method's
@@ -948,7 +947,7 @@ pub(crate) struct ImplFacts {
     /// keys its handler index on `(struct, effect_module, base_trait,
     /// trait_type_args)`, so a generic-effect handler needs the args to
     /// match the binding's instantiation.
-    pub(crate) trait_type_args: Vec<crate::tir::TypeId>,
+    pub(crate) trait_type_args: Vec<tir::TypeId>,
     /// True iff the impl's trait reference names an effect
     /// (`interface`) declaration — i.e. this is an effect handler
     /// impl. Reify writes onto `FunctionContext::in_handler_method`
@@ -964,7 +963,7 @@ pub(crate) struct ImplFacts {
     /// Reify reads it verbatim rather than rebuilding it from [`Self::self_type`],
     /// which would mean re-encoding the `&` / `&mut` / tuple cases and the
     /// `&T`-blanket carve-out that `get_type_name` already handles.
-    pub(crate) struct_name: crate::name::FqTypeName,
+    pub(crate) struct_name: FqTypeName,
     /// The impl target's typed receiver, decided from the AST type at record
     /// time (`Receiver::Ref` for `&T` / `&mut T`, `Receiver::Type` otherwise).
     /// Reify builds the method's `LocalMethodName` from this so a ref impl's
@@ -979,7 +978,7 @@ pub(crate) struct ImplFacts {
     /// declared impl type params excluded) so it agrees with method dispatch's
     /// `from_concrete_impl`, regardless of how `self_type` resolved a param
     /// that happens to be named like a known type.
-    pub(crate) concrete_owner: Option<crate::name::FqTypeName>,
+    pub(crate) concrete_owner: Option<FqTypeName>,
 }
 
 /// Operator-dispatch decision recorded when the elaborator lowers a binary
@@ -993,7 +992,7 @@ pub(crate) struct OperatorDispatch {
     /// the elaborator already populated.
     pub(crate) function_ref: FunctionRef,
     /// The declaration the dispatch selected.
-    pub(crate) method_def: Option<crate::defs::DefId>,
+    pub(crate) method_def: Option<DefId>,
     /// Self-kind of the trait method's receiver. Reify feeds this
     /// (with `is_ref_impl = false` — operator trait methods are
     /// always dispatched on the value type, not on a ref-impl) into
@@ -1033,8 +1032,8 @@ pub(crate) struct OperatorDispatch {
 pub(crate) struct ForOfIteratorInfo {
     /// The `into_iter` and `next` declarations dispatch chose. The loop spells
     /// no method name, so nothing else names them.
-    pub(crate) into_iter_def: Option<crate::defs::DefId>,
-    pub(crate) next_def: Option<crate::defs::DefId>,
+    pub(crate) into_iter_def: Option<DefId>,
+    pub(crate) next_def: Option<DefId>,
     /// Resolved `IntoIterator::into_iter` dispatch target.
     pub(crate) into_iter: FunctionRef,
     /// Receiver-adjustment kind for the `.into_iter()` call.
@@ -1054,7 +1053,7 @@ pub(crate) struct ForOfIteratorInfo {
     /// Iterator type — the resolved return type of
     /// `iterable.into_iter()` (`info.into_iter` returns this).
     /// Reify uses this to type the synthesised iterator local
-    /// `let mut __iter_N: <iter_type> = …;` without re-running
+    /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
 }
@@ -1094,7 +1093,7 @@ pub(crate) enum DesugarKind {
     IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
-    /// `container[i].method()` → materialise `let __index_mut_val =
+    /// `container[i].method()` → materialise `let $index_mut_val =
     /// &mut container[i];` + dispatch the method through it
     /// (`method_lookup.rs::try_resolve_index_mut_method_call`). Tagged
     /// on the [`crate::ast::MethodCallExpr`]'s [`AstId`]; the receiver

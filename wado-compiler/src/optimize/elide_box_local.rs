@@ -12,6 +12,9 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, Rule};
 
 use super::mod_ref::{ModRef, can_move_past};
+use crate::nir_arena::PatId;
+use crate::nir_value_graph::ValueKind;
+use crate::optimize::arena_query::expr_node_may_trap;
 
 /// Adjacent-use single-field struct local elimination, as a rule on the unified
 /// post-inline peephole session. `build_elide_box_local` computes the
@@ -240,11 +243,7 @@ fn stats_expr(body: &Body, id: ExprId, stats: &mut IndexMap<u32, LocalStats>) {
     }
 }
 
-fn record_pattern_defs(
-    body: &Body,
-    pat: crate::nir_arena::PatId,
-    stats: &mut IndexMap<u32, LocalStats>,
-) {
+fn record_pattern_defs(body: &Body, pat: PatId, stats: &mut IndexMap<u32, LocalStats>) {
     match &body.pats[pat].kind {
         PatKind::Binding { local_index, .. } => {
             stats.entry(*local_index).or_default().defs += 1;
@@ -262,7 +261,7 @@ fn record_pattern_defs(
             }
         }
         PatKind::Struct { fields, .. } => {
-            let fields: Vec<crate::nir_arena::PatId> = fields.iter().map(|f| f.pattern).collect();
+            let fields: Vec<PatId> = fields.iter().map(|f| f.pattern).collect();
             for p in fields {
                 record_pattern_defs(body, p, stats);
             }
@@ -345,7 +344,7 @@ fn find_use_site(
 
 fn is_placeholder(body: &Body, stmt: StmtId) -> bool {
     matches!(&body.stmts[stmt].kind, StmtKind::Expr(e)
-        if e.as_value().is_some_and(|v| matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit)))
+        if e.as_value().is_some_and(|v| matches!(body.values.kind(v), ValueKind::Unit)))
 }
 
 // -----------------------------------------------------------------------
@@ -575,7 +574,7 @@ fn walk_expr_for_leftmost(
 /// substituted inner, exactly as before elision). Consumes the single per-node
 /// taxonomy instead of re-listing which ops trap.
 fn finish_leftmost(body: &Body, expr: ExprId, walked: LeftmostWalk) -> LeftmostWalk {
-    if super::arena_query::expr_node_may_trap(body, expr) {
+    if expr_node_may_trap(body, expr) {
         observable_propagate(walked)
     } else {
         walked
@@ -668,6 +667,7 @@ mod tests {
     use super::*;
     use crate::nir::{NirBinaryOp, NirUnaryOp};
     use crate::nir_arena::ExprNode;
+    use crate::nir_value_graph::ValueKind;
     use crate::tir::TypeId;
     use crate::token::Span;
     use std::assert_matches;
@@ -701,14 +701,14 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("__l{index}"),
+                name: format!("$l{index}"),
             },
         )
     }
     fn int(body: &mut Body, v: i64) -> Operand {
         Operand::Value(
             body.values
-                .alloc_unshared(crate::nir_value_graph::ValueKind::Int(v as u64, ty()), ty()),
+                .alloc_unshared(ValueKind::Int(v as u64, ty()), ty()),
         )
     }
     fn field(body: &mut Body, receiver: ExprId, name: &str) -> ExprId {

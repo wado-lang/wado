@@ -1,7 +1,7 @@
 // Test: a candidate called inside an `if` condition stays SROA'd.
 //
 // `if get(n)? == 1` lowers the call into the condition expression
-// (`Seq([__m = call, if ref.test(__m, Ok) ...]) == 1`). The rewriter's
+// (`Seq([$m = call, if ref.test($m, Ok) ...]) == 1`). The rewriter's
 // `recurse_rewrite_call_sites` treats that `Seq` as a statement list, so the
 // validator must too — blanket-invalidating condition calls kept `get`
 // boxed while `check` got the multi-value ABI.

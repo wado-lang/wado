@@ -3,6 +3,7 @@
 //! packing encodes smaller than inline operands, and splitting one past the
 //! threshold into `array.new_default` + sets.
 
+use crate::tir::PrimitiveType;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
 use crate::wir_visitor::WirMutVisitor;
 
@@ -181,7 +182,7 @@ fn try_pack_constant_elements(element_type: &WirType, elements: &[WirInstr]) -> 
 /// lowering, asked by `const_object_globalization` before it. `bool` is not a
 /// `PrimitiveType`; an enum or flags element is four bytes, like the `u32` it
 /// lowers to.
-pub(crate) fn primitive_byte_width(prim: crate::tir::PrimitiveType) -> Option<usize> {
+pub(crate) fn primitive_byte_width(prim: PrimitiveType) -> Option<usize> {
     use crate::tir::PrimitiveType as P;
     Some(match prim {
         P::I8 | P::U8 => 1,
@@ -267,7 +268,7 @@ pub(crate) const ARRAY_NEW_FIXED_LIMIT: usize = 256;
 /// `ArrayNewDefault` + `ArraySet` sequence, naming locals from a module-level
 /// counter. Global initializers are skipped: none of those instructions is a
 /// valid Wasm constant, so a const array literal keeps `array.new_fixed` while a
-/// dynamic one is reached inside `__initialize_module`.
+/// dynamic one is reached inside `$initialize_module`.
 pub(super) fn split_large_array_literals(module: &mut WirPackage) {
     let mut visitor = SplitLargeArrays { counter: 0 };
     for func in &mut module.functions {
@@ -308,7 +309,7 @@ fn rewrite_large_array_new_fixed(instr: &mut WirInstr, counter: &mut u32) {
     };
 
     *counter += 1;
-    let arr_local = format!("__wir_arr_init_{counter}");
+    let arr_local = format!("$wir_arr_init_{counter}");
     let len = i32::try_from(elements.len()).expect("array length fits i32");
     let raw_ref_type = WirType::Ref {
         type_id: type_id.clone(),

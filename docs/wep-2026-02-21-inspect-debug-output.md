@@ -139,7 +139,7 @@ substitution: the per-literal information must travel with the value.
 Wado closures lower to two complementary representations (see
 [WEP: Closure Implementation](./wep-2026-01-16-closure-implementation.md)):
 
-1. Specialised: the local has type `&__Closure_N` (the per-literal functor
+1. Specialised: the local has type `&$Closure_N` (the per-literal functor
    struct). Used when every reference to the local is in callee position.
 2. Canonical: the value is wrapped in `CanonicalClosure_K` so any holder of a
    `fn(..)` value can invoke or inspect it. The lowering escape analysis
@@ -171,20 +171,20 @@ reach the same dispatch stub without per-signature tables.
 
 Per-literal artifacts, synthesised at lower time:
 
-1. `__Closure_N` struct — holds captures.
-2. `__call` method — the closure body.
-3. `__Closure_N^Inspect::inspect(&self, &mut Formatter)` — writes the
+1. `$Closure_N` struct — holds captures.
+2. `$call` method — the closure body.
+3. `$Closure_N^Inspect::inspect(&self, &mut Formatter)` — writes the
    signature, e.g. `|i32, i32| -> i32`, or under `f.alternate` the
    TIR-unparsed source, e.g. `|x: i32| (x + 1)`. A capturing closure's
    captured bindings appear as free variables in that source.
-4. `__Closure_N^Display::fmt` — delegates to the `Inspect` impl.
+4. `$Closure_N^Display::fmt` — delegates to the `Inspect` impl.
 
 Per-literal canonical-path wrappers, registered in WIR build for inspectable
 signatures only:
 
-1. `__closure_wrapper_N` — casts env, calls `__call`.
-2. `__closure_inspect_wrapper_N` — casts env, calls
-   `__Closure_N^Inspect::inspect`.
+1. `$closure_wrapper_N` — casts env, calls `$call`.
+2. `$closure_inspect_wrapper_N` — casts env, calls
+   `$Closure_N^Inspect::inspect`.
 
 Dispatch stubs, one per inspectable `(N, Ret)`:
 
@@ -196,7 +196,7 @@ Dispatch stubs, one per inspectable `(N, Ret)`:
   `inline(never)` workaround is needed.
 
 The specialised path takes a redirect at lowering: `fn(..)^Inspect` calls on a
-known-local closure receiver rewrite to direct calls on `__Closure_N^Inspect`.
+known-local closure receiver rewrite to direct calls on `$Closure_N^Inspect`.
 The dispatch stub and canonical vtable are bypassed entirely; standard DCE then
 removes the per-literal impls when no inspect call site survives.
 
@@ -211,7 +211,7 @@ for the runtime-dispatch machinery:
    no inspect field, and no per-literal wrappers.
 2. Per-functor gate, per `(N, Ret)`: a pre-DCE scan collects the
    `(arity, return_type)` signatures an `Inspect` call actually reaches. TIR
-   DCE roots `__Closure_N^Inspect` from `ClosureToCanonical` only for those, so
+   DCE roots `$Closure_N^Inspect` from `ClosureToCanonical` only for those, so
    a program that never prints a closure of that shape drops the impl and its
    per-literal strings.
 
@@ -221,7 +221,7 @@ keep the wrappers reachable and defeat post-emission DCE.
 
 ### Bare function references
 
-A bare `&fn_name` lowers to a synthetic zero-capture closure (a `__Closure_N`
+A bare `&fn_name` lowers to a synthetic zero-capture closure (a `$Closure_N`
 whose body forwards every parameter to `fn_name`) so that fn-typed slots accept
 it uniformly with user-written closures. For inspect output, that synthetic body
 is rendered as `&fn_name` rather than the lowering-internal forwarder text —

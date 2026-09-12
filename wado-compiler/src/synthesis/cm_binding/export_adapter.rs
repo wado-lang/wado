@@ -40,10 +40,14 @@ use super::types::{
     flat_types_from_ast_type, flat_types_from_type_id, flatten_export_type, struct_decl_of,
     type_id_to_ast_type, variant_decl_of, variant_payload, variant_tag, variant_test,
 };
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::name::FqTypeName;
 
 /// Build the export binding function name for a world export.
 pub fn export_binding_func_name(export_name: &str) -> String {
-    format!("__cm_export__{export_name}")
+    format!("$cm_export__{export_name}")
 }
 
 /// Lower a Wado-typed value to flat CM ABI args (i32 / i64 / f32 / f64).
@@ -89,7 +93,7 @@ fn lower_to_flat_inner(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) -> Vec<FlatLocal> {
-    let names = super::types::CmStdlibNames::from_type_table(&ctx.type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     match resolved {
         ResolvedType::Primitive(p) => {
             let (flat_type_id, cm_type) = match p {
@@ -114,7 +118,7 @@ fn lower_to_flat_inner(
                 cast(value, flat_type_id)
             };
             let local = alloc_local(next_local, locals, flat_type_id);
-            stmts.push(let_stmt("__flat", local, flat_type_id, cast_value));
+            stmts.push(let_stmt("$flat", local, flat_type_id, cast_value));
             vec![FlatLocal {
                 index: local,
                 cm_type,
@@ -127,7 +131,7 @@ fn lower_to_flat_inner(
             // Resource handles (incl. Future/Stream/Own/Borrow), enums, and
             // flags bitmasks are i32
             let local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt("__flat", local, TypeTable::I32, value));
+            stmts.push(let_stmt("$flat", local, TypeTable::I32, value));
             vec![FlatLocal {
                 index: local,
                 cm_type: cm_abi::CmValType::I32,
@@ -139,14 +143,14 @@ fn lower_to_flat_inner(
             // String → cm_lower_string → packed i64, split to ptr(i32) and len(i32)
             let packed = internal_call("cm_lower_string", vec![value], TypeTable::I64);
             let packed_local = alloc_local(next_local, locals, TypeTable::I64);
-            stmts.push(let_stmt("__packed", packed_local, TypeTable::I64, packed));
+            stmts.push(let_stmt("$packed", packed_local, TypeTable::I64, packed));
 
             let (ptr, len) =
-                split_packed_ptr_len(local_ref(packed_local, "__packed", TypeTable::I64));
+                split_packed_ptr_len(local_ref(packed_local, "$packed", TypeTable::I64));
             let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt("__ptr", ptr_local, TypeTable::I32, ptr));
+            stmts.push(let_stmt("$ptr", ptr_local, TypeTable::I32, ptr));
             let len_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt("__len", len_local, TypeTable::I32, len));
+            stmts.push(let_stmt("$len", len_local, TypeTable::I32, len));
 
             vec![
                 FlatLocal {
@@ -177,29 +181,29 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size = crate::component_model::cm_size_with_registry_scoped(
+            let elem_size = cm_size_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
                 Some(ctx.cm_package),
             );
-            let elem_align = crate::component_model::cm_align_with_registry_scoped(
+            let elem_align = cm_align_with_registry_scoped(
                 &elem_ast_type,
                 ctx.cm_interface_registry,
                 Some(ctx.cm_package),
             );
 
-            // __arr = value
+            // $arr = value
             let arr_local = alloc_local(next_local, locals, type_id);
-            stmts.push(let_stmt("__arr_val", arr_local, type_id, value));
+            stmts.push(let_stmt("$arr_val", arr_local, type_id, value));
 
-            // __len = List::len(__arr)
+            // $len = List::len($arr)
             let len_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
-                "__arr_len",
+                "$arr_len",
                 len_local,
                 TypeTable::I32,
                 generic_method_call(
-                    local_ref(arr_local, "__arr_val", type_id),
+                    local_ref(arr_local, "$arr_val", type_id),
                     &names.array_fq,
                     "len",
                     ModuleSource::list(),
@@ -208,25 +212,25 @@ fn lower_to_flat_inner(
                 ),
             ));
 
-            // __bytes = __len * elem_size
+            // $bytes = $len * elem_size
             let bytes_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
-                "__arr_bytes",
+                "$arr_bytes",
                 bytes_local,
                 TypeTable::I32,
                 binary(
                     TirBinaryOp::Mul,
-                    local_ref(len_local, "__arr_len", TypeTable::I32),
+                    local_ref(len_local, "$arr_len", TypeTable::I32),
                     i32_const(elem_size as i32),
                     TypeTable::I32,
                 ),
             ));
 
-            // __ptr = builtin::realloc(0, 0, elem_align, __bytes)  — i.e.
+            // $ptr = builtin::realloc(0, 0, elem_align, $bytes)  — i.e.
             // allocate `bytes` fresh bytes with `elem_align` alignment.
             let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_stmt(
-                "__arr_ptr",
+                "$arr_ptr",
                 ptr_local,
                 TypeTable::I32,
                 builtin_call(
@@ -235,22 +239,22 @@ fn lower_to_flat_inner(
                         i32_const(0),
                         i32_const(0),
                         i32_const(elem_align as i32),
-                        local_ref(bytes_local, "__arr_bytes", TypeTable::I32),
+                        local_ref(bytes_local, "$arr_bytes", TypeTable::I32),
                     ],
                     TypeTable::I32,
                 ),
             ));
 
-            // for let mut __i = 0; __i < __len; __i += 1 {
-            //   let __elem = __arr[__i];
+            // for let mut $i = 0; $i < $len; $i += 1 {
+            //   let $elem = $arr[$i];
             //   synthesize_lower_wasi_type_to_memory(
-            //     elem_ast_type, __elem,
-            //     __ptr + __i * elem_size,
+            //     elem_ast_type, $elem,
+            //     $ptr + $i * elem_size,
             //   );
             // }
             let i_local = alloc_local(next_local, locals, TypeTable::I32);
             stmts.push(let_mut_stmt(
-                "__arr_i",
+                "$arr_i",
                 i_local,
                 TypeTable::I32,
                 i32_const(0),
@@ -260,33 +264,33 @@ fn lower_to_flat_inner(
             loop_stmts.push(if_stmt(
                 binary(
                     TirBinaryOp::GtEq,
-                    local_ref(i_local, "__arr_i", TypeTable::I32),
-                    local_ref(len_local, "__arr_len", TypeTable::I32),
+                    local_ref(i_local, "$arr_i", TypeTable::I32),
+                    local_ref(len_local, "$arr_len", TypeTable::I32),
                     TypeTable::BOOL,
                 ),
                 block(vec![break_stmt()]),
                 None,
             ));
 
-            // __elem = (__arr[__i]) via the IndexValue<i32> trait method.
+            // $elem = ($arr[$i]) via the IndexValue<i32> trait method.
             let elem_local = alloc_local(next_local, locals, elem_type_id);
             let iv_info = LocalMethodName::new(
                 names.array_fq.clone(),
                 Some(
                     names
                         .index_value
-                        .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
+                        .with_args(vec![FqTypeName::builtin("i32")]),
                 ),
                 "index_value".to_string(),
             );
             let iv_mangled = iv_info.to_mangled_name();
             loop_stmts.push(let_stmt(
-                "__arr_elem",
+                "$arr_elem",
                 elem_local,
                 elem_type_id,
                 TirExpr::new(
                     TirExprKind::method_call(
-                        Box::new(local_ref(arr_local, "__arr_val", type_id)),
+                        Box::new(local_ref(arr_local, "$arr_val", type_id)),
                         FunctionRef {
                             module_source: ModuleSource::list(),
                             name: iv_mangled,
@@ -295,7 +299,7 @@ fn lower_to_flat_inner(
                         },
                         vec![],
                         vec![CallArg::new(
-                            local_ref(i_local, "__arr_i", TypeTable::I32),
+                            local_ref(i_local, "$arr_i", TypeTable::I32),
                             false,
                         )],
                     ),
@@ -304,17 +308,17 @@ fn lower_to_flat_inner(
                 ),
             ));
 
-            // __elem_addr = __ptr + __i * elem_size
+            // $elem_addr = $ptr + $i * elem_size
             let elem_addr_local = alloc_local(next_local, locals, TypeTable::I32);
             loop_stmts.push(let_stmt(
-                "__arr_elem_addr",
+                "$arr_elem_addr",
                 elem_addr_local,
                 TypeTable::I32,
                 binary_add(
-                    local_ref(ptr_local, "__arr_ptr", TypeTable::I32),
+                    local_ref(ptr_local, "$arr_ptr", TypeTable::I32),
                     binary(
                         TirBinaryOp::Mul,
-                        local_ref(i_local, "__arr_i", TypeTable::I32),
+                        local_ref(i_local, "$arr_i", TypeTable::I32),
                         i32_const(elem_size as i32),
                         TypeTable::I32,
                     ),
@@ -324,17 +328,17 @@ fn lower_to_flat_inner(
             // Lower the element into the allocated slot.
             loop_stmts.extend(synthesize_lower_wasi_type_to_memory(
                 &elem_ast_type,
-                local_ref(elem_local, "__arr_elem", elem_type_id),
-                local_ref(elem_addr_local, "__arr_elem_addr", TypeTable::I32),
+                local_ref(elem_local, "$arr_elem", elem_type_id),
+                local_ref(elem_addr_local, "$arr_elem_addr", TypeTable::I32),
                 next_local,
                 locals,
                 &lower_ctx,
             ));
 
-            // __i += 1
+            // $i += 1
             loop_stmts.push(expr_stmt(assign(
-                local_ref(i_local, "__arr_i", TypeTable::I32),
-                binary_add(local_ref(i_local, "__arr_i", TypeTable::I32), i32_const(1)),
+                local_ref(i_local, "$arr_i", TypeTable::I32),
+                binary_add(local_ref(i_local, "$arr_i", TypeTable::I32), i32_const(1)),
             )));
 
             stmts.push(loop_stmt(block(loop_stmts)));
@@ -359,13 +363,13 @@ fn lower_to_flat_inner(
 
             // Save value to a local for reuse
             let opt_local = alloc_local(next_local, locals, type_id);
-            stmts.push(let_stmt("__opt_val", opt_local, type_id, value));
+            stmts.push(let_stmt("$opt_val", opt_local, type_id, value));
 
             // Discriminant: VariantTest(Some) → 1 = Some, 0 = None
             let disc_expr = TirExpr::new(
                 TirExprKind::Cast {
                     expr: Box::new(variant_test(
-                        local_ref(opt_local, "__opt_val", type_id),
+                        local_ref(opt_local, "$opt_val", type_id),
                         names.some_index,
                         &names.some_name,
                     )),
@@ -375,12 +379,7 @@ fn lower_to_flat_inner(
                 synth_span(),
             );
             let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt(
-                "__opt_disc",
-                disc_local,
-                TypeTable::I32,
-                disc_expr,
-            ));
+            stmts.push(let_stmt("$opt_disc", disc_local, TypeTable::I32, disc_expr));
             result.push(FlatLocal {
                 index: disc_local,
                 cm_type: cm_abi::CmValType::I32,
@@ -399,7 +398,7 @@ fn lower_to_flat_inner(
                     .map(|(i, &vt)| {
                         let tid = cm_val_type_to_type_id(vt);
                         let l = alloc_local(next_local, locals, tid);
-                        let name = format!("__opt_inner_{i}");
+                        let name = format!("$opt_inner_{i}");
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                         (l, name)
                     })
@@ -408,7 +407,7 @@ fn lower_to_flat_inner(
                 // if disc != 0 { lower(variant_payload(value)) → inner_locals }
                 let mut then_stmts: Vec<TirStmt> = Vec::new();
                 let unwrapped = variant_payload(
-                    local_ref(opt_local, "__opt_val", type_id),
+                    local_ref(opt_local, "$opt_val", type_id),
                     names.some_index,
                     inner_type_id,
                 );
@@ -431,7 +430,7 @@ fn lower_to_flat_inner(
                 stmts.push(if_stmt(
                     binary(
                         TirBinaryOp::NotEq,
-                        local_ref(disc_local, "__opt_disc", TypeTable::I32),
+                        local_ref(disc_local, "$opt_disc", TypeTable::I32),
                         i32_const(0),
                         TypeTable::BOOL,
                     ),
@@ -461,34 +460,27 @@ fn lower_to_flat_inner(
             let mut result = Vec::new();
 
             let res_local = alloc_local(next_local, locals, type_id);
-            stmts.push(let_stmt("__res_val", res_local, type_id, value));
+            stmts.push(let_stmt("$res_val", res_local, type_id, value));
 
             let (ok_index, err_name, err_index) = {
                 let tt = ctx.type_table.borrow();
                 let items = tt.compiler_items();
-                let (_, _, _, ok_i) =
-                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-                let (_, _, err_n, err_i) =
-                    items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+                let (_, _, _, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
+                let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
                 (ok_i, err_n.to_string(), err_i)
             };
 
             // disc: variant_test(Err) → 1 when Err, 0 when Ok.
             let disc_expr = cast(
                 variant_test(
-                    local_ref(res_local, "__res_val", type_id),
+                    local_ref(res_local, "$res_val", type_id),
                     err_index,
                     &err_name,
                 ),
                 TypeTable::I32,
             );
             let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt(
-                "__res_disc",
-                disc_local,
-                TypeTable::I32,
-                disc_expr,
-            ));
+            stmts.push(let_stmt("$res_disc", disc_local, TypeTable::I32, disc_expr));
             result.push(FlatLocal {
                 index: disc_local,
                 cm_type: cm_abi::CmValType::I32,
@@ -508,7 +500,7 @@ fn lower_to_flat_inner(
                     .map(|(i, &vt)| {
                         let tid = cm_val_type_to_type_id(vt);
                         let l = alloc_local(next_local, locals, tid);
-                        let name = format!("__res_slot_{i}");
+                        let name = format!("$res_slot_{i}");
                         stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                         (l, name)
                     })
@@ -521,7 +513,7 @@ fn lower_to_flat_inner(
                  -> Vec<TirStmt> {
                     let mut arm_stmts: Vec<TirStmt> = Vec::new();
                     let payload = variant_payload(
-                        local_ref(res_local, "__res_val", type_id),
+                        local_ref(res_local, "$res_val", type_id),
                         case_index,
                         payload_tid,
                     );
@@ -549,7 +541,7 @@ fn lower_to_flat_inner(
                 stmts.push(if_stmt(
                     binary(
                         TirBinaryOp::Eq,
-                        local_ref(disc_local, "__res_disc", TypeTable::I32),
+                        local_ref(disc_local, "$res_disc", TypeTable::I32),
                         i32_const(ok_index as i32),
                         TypeTable::BOOL,
                     ),
@@ -582,7 +574,7 @@ fn lower_to_flat_inner(
             };
 
             let value_local = alloc_local(next_local, locals, type_id);
-            stmts.push(let_stmt("__variant_val", value_local, type_id, value));
+            stmts.push(let_stmt("$variant_val", value_local, type_id, value));
 
             let slot_locals: Vec<(u32, String)> = flat_types
                 .iter()
@@ -590,7 +582,7 @@ fn lower_to_flat_inner(
                 .map(|(i, &vt)| {
                     let tid = cm_val_type_to_type_id(vt);
                     let l = alloc_local(next_local, locals, tid);
-                    let name = format!("__variant_slot_{i}");
+                    let name = format!("$variant_slot_{i}");
                     stmts.push(let_mut_stmt(&name, l, tid, cm_zero(vt)));
                     (l, name)
                 })
@@ -628,11 +620,11 @@ fn lower_to_flat_inner(
 
                 // Save value to a local
                 let struct_local = alloc_local(next_local, locals, type_id);
-                stmts.push(let_stmt("__struct_val", struct_local, type_id, value));
+                stmts.push(let_stmt("$struct_val", struct_local, type_id, value));
 
                 for field in &struct_decl.fields {
                     let field_value = field_access(
-                        local_ref(struct_local, "__struct_val", type_id),
+                        local_ref(struct_local, "$struct_val", type_id),
                         &field.name,
                         field.index,
                         field.type_id,
@@ -698,7 +690,7 @@ fn assign_flat_values_into_slots(
         let slot_type_id = cm_val_type_to_type_id(slot_vt);
         let source_type_id = cm_val_type_to_type_id(flat_val.cm_type);
         let val = coerce_flat_lower(
-            local_ref(flat_val.index, "__flat", source_type_id),
+            local_ref(flat_val.index, "$flat", source_type_id),
             flat_val.cm_type,
             slot_vt,
         );
@@ -727,7 +719,7 @@ pub(super) fn synthesize_lift_from_flat_params(
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
     let type_table_cell = lift_ctx.type_table;
-    let names = super::types::CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let names = CmStdlibNames::from_type_table(&type_table_cell.borrow());
     match ty {
         Type::Named(named) if named.name == names.string => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
@@ -735,11 +727,11 @@ pub(super) fn synthesize_lift_from_flat_params(
             // is the guest's to release once it has been copied onto the GC
             // heap. Nested strings are released by the lift site that reads
             // them; this arm is the only top-level one.
-            let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-            let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
+            let ptr = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
+            let len = local_ref(flat_param_locals[1], "$p", TypeTable::I32);
             let lifted_local = alloc_local(next_local, locals, target_type_id);
             stmts.push(let_stmt(
-                "__lifted_string",
+                "$lifted_string",
                 lifted_local,
                 target_type_id,
                 internal_call(
@@ -757,10 +749,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 ))]),
                 None,
             ));
-            (
-                local_ref(lifted_local, "__lifted_string", target_type_id),
-                2,
-            )
+            (local_ref(lifted_local, "$lifted_string", target_type_id), 2)
         }
         Type::Named(_)
             if matches!(
@@ -796,19 +785,19 @@ pub(super) fn synthesize_lift_from_flat_params(
             )
         }
         Type::Named(named) => match named.name.as_str() {
-            "i32" | "u32" => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
-            "i64" | "u64" => (local_ref(flat_param_locals[0], "__p", TypeTable::I64), 1),
-            "f32" => (local_ref(flat_param_locals[0], "__p", TypeTable::F32), 1),
-            "f64" => (local_ref(flat_param_locals[0], "__p", TypeTable::F64), 1),
+            "i32" | "u32" => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
+            "i64" | "u64" => (local_ref(flat_param_locals[0], "$p", TypeTable::I64), 1),
+            "f32" => (local_ref(flat_param_locals[0], "$p", TypeTable::F32), 1),
+            "f64" => (local_ref(flat_param_locals[0], "$p", TypeTable::F64), 1),
             "i8" | "u8" | "i16" | "u16" => {
-                (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
+                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
             }
             "bool" => {
-                let raw = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+                let raw = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
                 let lifted = binary(TirBinaryOp::NotEq, raw, i32_const(0), TypeTable::BOOL);
                 (lifted, 1)
             }
-            "char" => (local_ref(flat_param_locals[0], "__p", TypeTable::CHAR), 1),
+            "char" => (local_ref(flat_param_locals[0], "$p", TypeTable::CHAR), 1),
             "()" => {
                 let unit = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span());
                 (unit, 0)
@@ -880,13 +869,13 @@ pub(super) fn synthesize_lift_from_flat_params(
                     // value to the user function without re-evaluation.
                     let result_local = alloc_local(next_local, locals, struct_type_id);
                     stmts.push(let_stmt(
-                        "__struct_lift",
+                        "$struct_lift",
                         result_local,
                         struct_type_id,
                         struct_expr,
                     ));
                     return (
-                        local_ref(result_local, "__struct_lift", struct_type_id),
+                        local_ref(result_local, "$struct_lift", struct_type_id),
                         offset,
                     );
                 }
@@ -909,7 +898,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     );
                 }
                 // Resource handles, enums, unknown types → i32 passthrough
-                (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
+                (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
             }
         },
         Type::Generic(generic) => match generic.name.as_str() {
@@ -919,12 +908,12 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // bare `Array<u8>` mislabeled as `List<u8>`; the general path below
                 // builds the real `List<T>` struct, so all element types share it.)
                 // Write ptr/len to a temp memory block so we can reuse synthesize_lift
-                let ptr = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
-                let len = local_ref(flat_param_locals[1], "__p", TypeTable::I32);
+                let ptr = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
+                let len = local_ref(flat_param_locals[1], "$p", TypeTable::I32);
                 // Allocate 8 bytes for ptr+len
                 let tmp_ptr_local = alloc_local(next_local, locals, TypeTable::I32);
                 stmts.push(let_stmt(
-                    "__lift_tmp",
+                    "$lift_tmp",
                     tmp_ptr_local,
                     TypeTable::I32,
                     builtin_call(
@@ -936,7 +925,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // Write ptr at offset 0
                 stmts.push(expr_stmt(builtin_call(
                     "i32_store",
-                    vec![local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32), ptr],
+                    vec![local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32), ptr],
                     TypeTable::UNIT,
                 )));
                 // Write len at offset 4
@@ -944,7 +933,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     "i32_store",
                     vec![
                         binary_add(
-                            local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                            local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
                             i32_const(4),
                         ),
                         len,
@@ -957,7 +946,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 // GC `TypeId` and mismatch the parameter.
                 let lifted = synthesize_lift_list(
                     &generic.args[0],
-                    local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                    local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
                     Some(target_type_id),
                     next_local,
                     stmts,
@@ -968,7 +957,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 stmts.push(expr_stmt(builtin_call(
                     "realloc",
                     vec![
-                        local_ref(tmp_ptr_local, "__lift_tmp", TypeTable::I32),
+                        local_ref(tmp_ptr_local, "$lift_tmp", TypeTable::I32),
                         i32_const(8),
                         i32_const(4),
                         i32_const(0),
@@ -988,7 +977,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 };
                 let total_flat = 1 + inner_flat.len();
 
-                let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+                let disc = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
 
                 // if disc == 0 { None } else { Some(lift(inner_flat)) }
                 let result_local = alloc_local(next_local, locals, target_type_id);
@@ -998,7 +987,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 };
                 // Default: None
                 stmts.push(let_mut_stmt(
-                    "__opt_result",
+                    "$opt_result",
                     result_local,
                     target_type_id,
                     opt_none_expr,
@@ -1014,7 +1003,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         option_some(unit, target_type_id, tt.compiler_items())
                     };
                     then_stmts.push(expr_stmt(assign(
-                        local_ref(result_local, "__opt_result", target_type_id),
+                        local_ref(result_local, "$opt_result", target_type_id),
                         opt_some_unit,
                     )));
                 } else {
@@ -1034,7 +1023,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                         option_some(inner_lifted, target_type_id, tt.compiler_items())
                     };
                     then_stmts.push(expr_stmt(assign(
-                        local_ref(result_local, "__opt_result", target_type_id),
+                        local_ref(result_local, "$opt_result", target_type_id),
                         opt_some_inner,
                     )));
                 }
@@ -1046,7 +1035,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 ));
 
                 (
-                    local_ref(result_local, "__opt_result", target_type_id),
+                    local_ref(result_local, "$opt_result", target_type_id),
                     total_flat,
                 )
             }
@@ -1068,7 +1057,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 )
             }
             // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
-            _ => (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1),
+            _ => (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1),
         },
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => {
@@ -1108,7 +1097,7 @@ pub(super) fn synthesize_lift_from_flat_params(
             (tuple_expr, total_consumed)
         }
         Type::Reference(_) | Type::MutReference(_) => {
-            (local_ref(flat_param_locals[0], "__p", TypeTable::I32), 1)
+            (local_ref(flat_param_locals[0], "$p", TypeTable::I32), 1)
         }
         Type::NamespacedGeneric(_)
         | Type::Function(_)
@@ -1131,13 +1120,9 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         _ => (TypeTable::UNIT, TypeTable::UNIT),
     };
     let items = type_table.compiler_items();
-    let (_, _, ok_name, ok_index) =
-        items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-    let (_, _, err_name, err_index) =
-        items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
-    let result_name = items
-        .variant_name(crate::compiler_item::CompilerItem::Result)
-        .to_string();
+    let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
+    let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
+    let result_name = items.variant_name(CompilerItem::Result).to_string();
     let case = |name: &str, index: u32, payload: TypeId| TirVariantCase {
         name: name.to_string(),
         index,
@@ -1146,13 +1131,13 @@ fn synthetic_result_variant_decl(type_table: &TypeTable, result_type_id: TypeId)
         wire_name_override: None,
     };
     let def = type_table
-        .compiler_item_def(crate::compiler_item::CompilerItem::Result)
+        .compiler_item_def(CompilerItem::Result)
         .expect("the `Result` compiler item is declared");
     TirVariantDecl {
         def,
         name: result_name,
         module_source: type_table.def_module(def).clone(),
-        visibility: crate::ast::Visibility::Public,
+        visibility: Visibility::Public,
         type_params: Vec::new(),
         cases: vec![
             case(ok_name, ok_index, ok_tid),
@@ -1197,9 +1182,9 @@ fn coerce_payload_slots(
         } else {
             let have_tid = cm_val_type_to_type_id(have);
             let want_tid = cm_val_type_to_type_id(want);
-            let coerced = coerce_flat_lift(local_ref(slot_local, "__p", have_tid), have, want);
+            let coerced = coerce_flat_lift(local_ref(slot_local, "$p", have_tid), have, want);
             let l = alloc_local(next_local, locals, want_tid);
-            stmts.push(let_stmt("__coerce", l, want_tid, coerced));
+            stmts.push(let_stmt("$coerce", l, want_tid, coerced));
             out_locals.push(l);
         }
     }
@@ -1238,7 +1223,7 @@ fn lift_variant_from_flat_params(
 
     let result_local = alloc_local(next_local, locals, variant_type_id);
     stmts.push(let_mut_stmt(
-        "__var_lift",
+        "$var_lift",
         result_local,
         variant_type_id,
         null_expr(variant_type_id),
@@ -1254,9 +1239,9 @@ fn lift_variant_from_flat_params(
             .collect()
     };
 
-    let disc = local_ref(flat_param_locals[0], "__p", TypeTable::I32);
+    let disc = local_ref(flat_param_locals[0], "$p", TypeTable::I32);
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt("__var_disc", disc_local, TypeTable::I32, disc));
+    stmts.push(let_stmt("$var_disc", disc_local, TypeTable::I32, disc));
 
     // Build the if/else chain from the last case backwards: the final case is
     // the trailing `else`, earlier cases test `disc == i`.
@@ -1295,7 +1280,7 @@ fn lift_variant_from_flat_params(
             Some(Box::new(lifted))
         };
         case_stmts.push(expr_stmt(assign(
-            local_ref(result_local, "__var_lift", variant_type_id),
+            local_ref(result_local, "$var_lift", variant_type_id),
             TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type: variant_type_id,
@@ -1313,7 +1298,7 @@ fn lift_variant_from_flat_params(
         } else {
             let cond = binary(
                 TirBinaryOp::Eq,
-                local_ref(disc_local, "__var_disc", TypeTable::I32),
+                local_ref(disc_local, "$var_disc", TypeTable::I32),
                 i32_const(case.index as i32),
                 TypeTable::BOOL,
             );
@@ -1327,7 +1312,7 @@ fn lift_variant_from_flat_params(
     }
 
     (
-        local_ref(result_local, "__var_lift", variant_type_id),
+        local_ref(result_local, "$var_lift", variant_type_id),
         total_flat,
     )
 }
@@ -1355,7 +1340,7 @@ fn build_export_adapter_params(
             .iter()
             .enumerate()
             .map(|(i, &vt)| TirParam {
-                name: format!("__p{i}"),
+                name: format!("$p{i}"),
                 type_id: cm_val_type_to_type_id(vt),
                 local_index: i as u32,
                 is_mut: false,
@@ -1475,7 +1460,7 @@ impl<'a> ExportBindingEnv<'a> {
             cm_interface_registry: self.cm_interface_registry,
             type_table: self.type_table,
             wasi_package: self.cm_package,
-            names: super::types::CmStdlibNames::from_type_table(&self.type_table.borrow()),
+            names: CmStdlibNames::from_type_table(&self.type_table.borrow()),
         }
     }
 
@@ -1666,25 +1651,19 @@ fn push_sync_return_epilogue(
             .expect("multi-flat result implies a return type");
         let result_local = alloc_local(next_local, locals, user_return_type);
         body_stmts.push(let_stmt(
-            "__result",
+            "$result",
             result_local,
             user_return_type,
             call_user,
         ));
 
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            ty,
-            env.cm_interface_registry,
-            Some(env.cm_package),
-        );
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            ty,
-            env.cm_interface_registry,
-            Some(env.cm_package),
-        );
+        let size =
+            cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+        let align =
+            cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
         let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
         body_stmts.push(let_stmt(
-            "__ret_ptr",
+            "$ret_ptr",
             ptr_local,
             TypeTable::I32,
             builtin_call(
@@ -1701,28 +1680,28 @@ fn push_sync_return_epilogue(
 
         body_stmts.extend(synthesize_lower_wasi_type_to_memory(
             ty,
-            local_ref(result_local, "__result", user_return_type),
-            local_ref(ptr_local, "__ret_ptr", TypeTable::I32),
+            local_ref(result_local, "$result", user_return_type),
+            local_ref(ptr_local, "$ret_ptr", TypeTable::I32),
             next_local,
             locals,
             &env.lower_ctx(),
         ));
         body_stmts.push(return_stmt(Some(local_ref(
             ptr_local,
-            "__ret_ptr",
+            "$ret_ptr",
             TypeTable::I32,
         ))));
         TypeTable::I32
     } else {
         let result_local = alloc_local(next_local, locals, user_return_type);
         body_stmts.push(let_stmt(
-            "__result",
+            "$result",
             result_local,
             user_return_type,
             call_user,
         ));
         let flat = synthesize_lower_to_flat(
-            local_ref(result_local, "__result", user_return_type),
+            local_ref(result_local, "$result", user_return_type),
             user_return_type,
             next_local,
             body_stmts,
@@ -1734,7 +1713,7 @@ fn push_sync_return_epilogue(
             None => TypeTable::UNIT,
             Some(f) => {
                 let tid = cm_val_type_to_type_id(f.cm_type);
-                body_stmts.push(return_stmt(Some(local_ref(f.index, "__flat", tid))));
+                body_stmts.push(return_stmt(Some(local_ref(f.index, "$flat", tid))));
                 tid
             }
         }
@@ -1744,7 +1723,7 @@ fn push_sync_return_epilogue(
 /// The core function named by a sync lift's `post-return` canonical option.
 /// Distinct from [`export_binding_func_name`] so the core module exports both.
 pub(super) fn post_return_func_name(export_name: &str) -> String {
-    format!("__cm_post_return__{export_name}")
+    format!("$cm_post_return__{export_name}")
 }
 
 /// Synthesize a sync-lifted export's `post-return`, or `None` when nothing was
@@ -1766,26 +1745,18 @@ pub(super) fn synthesize_post_return(
         return None;
     }
 
-    let names = super::types::CmStdlibNames::from_type_table(&env.type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&env.type_table.borrow());
     let shape_ctx = env.shape_ctx(&names);
     let shape = cm_shape(ty, &shape_ctx);
 
-    let ptr = param_local("__ret_ptr", TypeTable::I32, false);
+    let ptr = param_local("$ret_ptr", TypeTable::I32, false);
     let mut locals = vec![ptr];
     let mut next_local = 1;
-    let addr = local_ref(0, "__ret_ptr", TypeTable::I32);
+    let addr = local_ref(0, "$ret_ptr", TypeTable::I32);
 
     let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
-    let size = crate::component_model::cm_size_with_registry_scoped(
-        ty,
-        env.cm_interface_registry,
-        Some(env.cm_package),
-    );
-    let align = crate::component_model::cm_align_with_registry_scoped(
-        ty,
-        env.cm_interface_registry,
-        Some(env.cm_package),
-    );
+    let size = cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+    let align = cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
     body.push(expr_stmt(builtin_call(
         "realloc",
         vec![
@@ -1800,7 +1771,7 @@ pub(super) fn synthesize_post_return(
     Some(finalize_export_binding(
         post_return_func_name(export_name),
         vec![TirParam {
-            name: "__ret_ptr".to_string(),
+            name: "$ret_ptr".to_string(),
             type_id: TypeTable::I32,
             local_index: 0,
             is_mut: false,
@@ -1837,7 +1808,7 @@ fn push_result_task_return_epilogue(
 
     let result_local = alloc_local(next_local, locals, user_return_type);
     body_stmts.push(let_stmt(
-        "__result",
+        "$result",
         result_local,
         user_return_type,
         call_user,
@@ -1850,7 +1821,7 @@ fn push_result_task_return_epilogue(
         }
         other => panic!("expected Result type for export binding return, got: {other:?}"),
     };
-    let names = super::types::CmStdlibNames::from_type_table(&tt);
+    let names = CmStdlibNames::from_type_table(&tt);
     drop(tt);
 
     // Mutable flat slots holding the flattened task-return args, zeroed.
@@ -1860,7 +1831,7 @@ fn push_result_task_return_epilogue(
         .map(|(i, &vt)| {
             let type_id = cm_val_type_to_type_id(vt);
             let local = alloc_local(next_local, locals, type_id);
-            let name = format!("__tv_{i}");
+            let name = format!("$tv_{i}");
             body_stmts.push(let_mut_stmt(&name, local, type_id, cm_zero(vt)));
             (local, name)
         })
@@ -1870,7 +1841,7 @@ fn push_result_task_return_epilogue(
     // patterns can reference them even when the payload has no flat slots
     // (`Ok(())`-style); a bound-but-unused binding is fine for wir_build.
     let ok_payload_local = alloc_local(next_local, locals, ok_type_id);
-    let ok_payload_name = format!("__ok_val_{ok_payload_local}");
+    let ok_payload_name = format!("$ok_val_{ok_payload_local}");
     let ok_stmts = lower_result_arm(
         0,
         ok_payload_local,
@@ -1885,7 +1856,7 @@ fn push_result_task_return_epilogue(
     );
 
     let err_payload_local = alloc_local(next_local, locals, err_type_id);
-    let err_payload_name = format!("__err_val_{err_payload_local}");
+    let err_payload_name = format!("$err_val_{err_payload_local}");
     let err_stmts = lower_result_arm(
         1,
         err_payload_local,
@@ -1925,7 +1896,7 @@ fn push_result_task_return_epilogue(
     };
     let match_expr = TirExpr::new(
         TirExprKind::Match {
-            expr: Box::new(local_ref(result_local, "__result", user_return_type)),
+            expr: Box::new(local_ref(result_local, "$result", user_return_type)),
             arms: vec![
                 arm(
                     &names.ok_name,
@@ -2076,7 +2047,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "__variant_val", value_type_id)),
+            variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
         )));
     }
 
@@ -2098,7 +2069,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
             Vec::new()
         } else {
             let payload_local = alloc_local(next_local, locals, case.payload);
-            let payload_name = format!("__case_payload_{payload_local}");
+            let payload_name = format!("$case_payload_{payload_local}");
             let lowered = synthesize_lower_to_flat(
                 local_ref(payload_local, &payload_name, case.payload),
                 case.payload,
@@ -2140,7 +2111,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
     if !arms.is_empty() {
         let match_expr = TirExpr::new(
             TirExprKind::Match {
-                expr: Box::new(local_ref(value_local, "__variant_val", value_type_id)),
+                expr: Box::new(local_ref(value_local, "$variant_val", value_type_id)),
                 arms,
             },
             TypeTable::UNIT,

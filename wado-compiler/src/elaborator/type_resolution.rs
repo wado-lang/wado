@@ -9,11 +9,17 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::TypeError;
+use crate::ast;
+use crate::ast::{NamespacedGenericType, StoresEntry, TraitBound};
+use crate::defs::DefId;
+use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
+use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
+use crate::tir::TraitRef;
 
 /// A bound reachable from a frame, paired with the trait that wrote it —
 /// `None` for one the frame wrote itself.
-type FrameBound = (crate::ast::TraitBound, Option<crate::defs::DefId>);
+type FrameBound = (TraitBound, Option<DefId>);
 
 /// Substitute named type parameters in an AST type.
 /// `params[i]` is replaced by `args[i]` throughout the type.
@@ -77,8 +83,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .stores
                     .iter()
                     .filter_map(|e| match e {
-                        crate::ast::StoresEntry::Index(n) => Some(*n),
-                        crate::ast::StoresEntry::Name(_) => None, // Names only valid in fn decls
+                        StoresEntry::Index(n) => Some(*n),
+                        StoresEntry::Name(_) => None, // Names only valid in fn decls
                     })
                     .collect();
                 // Resolve effect names in function type position
@@ -137,11 +143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `param_name::assoc_name` mean `<param_name as ThatTrait>::assoc_name`.
     /// Resolution needs the qualifier: one type may implement two traits that
     /// declare the same associated-type name.
-    fn bound_declaring_assoc_type(
-        &self,
-        param_name: &str,
-        assoc_name: &str,
-    ) -> Option<crate::defs::DefId> {
+    fn bound_declaring_assoc_type(&self, param_name: &str, assoc_name: &str) -> Option<DefId> {
         let bounds = self
             .annotate_ctx
             .trait_ctx
@@ -177,10 +179,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// instantiation a bound reaches, `impl Add<Inch> for Cm` keys its own.
     pub(super) fn impl_trait_ref(
         &mut self,
-        trait_type: &crate::ast::Type,
-        target: &crate::ast::Type,
-        trait_decl: crate::defs::DefId,
-    ) -> crate::tir::TraitRef {
+        trait_type: &ast::Type,
+        target: &ast::Type,
+        trait_decl: DefId,
+    ) -> TraitRef {
         let Some(params) = self
             .tysys
             .trait_env
@@ -188,20 +190,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(&trait_decl)
             .map(|header| header.type_params.clone())
         else {
-            return crate::tir::TraitRef::bare(trait_decl);
+            return TraitRef::bare(trait_decl);
         };
-        let kept = super::trait_env::non_default_arg_count(
-            trait_type,
-            target,
-            &params,
-            &self.tysys.resolutions,
-        );
-        let args = super::trait_env::written_arg_nodes(trait_type)
+        let kept = non_default_arg_count(trait_type, target, &params, &self.tysys.resolutions);
+        let args = written_arg_nodes(trait_type)
             .iter()
             .take(kept)
             .map(|arg| self.resolve_type(arg))
             .collect();
-        crate::tir::TraitRef::new(trait_decl, args)
+        TraitRef::new(trait_decl, args)
     }
 
     /// Report `T::Output` where two of `T`'s bounds declare `Output`, and say
@@ -221,7 +218,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if bounds.len() < 2 {
             return false;
         }
-        let declaring: Vec<&crate::ast::TraitBound> = bounds
+        let declaring: Vec<&TraitBound> = bounds
             .iter()
             .filter(|bound| {
                 self.trait_assoc_type_decl(&bound.name, assoc_name)
@@ -234,16 +231,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Bounds that all pin the name to one type name one answer between
         // them: `T: Add<Output = T> + Mul<Output = T>` is not a coin toss,
         // where `Add<Output = Cm> + Mul<Output = Area>` is.
-        let pins: Vec<Option<crate::name::FqTypeName>> = declaring
+        let pins: Vec<Option<FqTypeName>> = declaring
             .iter()
             .map(|bound| {
                 bound
                     .assoc_types
                     .iter()
                     .find(|constraint| constraint.name == assoc_name)
-                    .map(|constraint| {
-                        super::trait_env::written_type_arg(&constraint.ty, &self.tysys.resolutions)
-                    })
+                    .map(|constraint| written_type_arg(&constraint.ty, &self.tysys.resolutions))
             })
             .collect();
         if pins.iter().all(|pin| pin.is_some() && *pin == pins[0]) {
@@ -260,7 +255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Which trait declares `assoc_name` for the `impl` block being elaborated:
     /// the trait it names, or the supertrait the name is inherited from.
-    fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<crate::defs::DefId> {
+    fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<DefId> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
         if self
             .trait_assoc_type_decl(self.tysys.trait_env.defs.name(self_trait), assoc_name)
@@ -282,7 +277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
     pub(super) fn resolve_namespaced_generic_type(
         &mut self,
-        namespaced: &crate::ast::NamespacedGenericType,
+        namespaced: &NamespacedGenericType,
     ) -> TypeId {
         // Handle Self::AssociatedType
         if namespaced.namespace.as_str() == "Self" {
@@ -434,8 +429,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
-            let alias =
-                crate::name::namespace_member_alias(&namespaced.namespace, &namespaced.name);
+            let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
                 self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)
             } else {
@@ -555,7 +549,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// How many type arguments the declaration `def` requires, when it requires
     /// any. The three kinds are asked of one declaration, so "is this generic"
     /// and "whose parameters are these" can never be about two of them.
-    pub(super) fn bare_generic_type_arity(&self, def: crate::defs::DefId) -> Option<usize> {
+    pub(super) fn bare_generic_type_arity(&self, def: DefId) -> Option<usize> {
         if let Some(info) = self.lookup_struct_fields_of_decl(def)
             && !info.type_param_bounds.is_empty()
         {
@@ -793,11 +787,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Look up the trait bounds on an associated type declaration.
     /// Given a type parameter `param_id` (e.g., `S: Serializer`), find the trait that
     /// declares the associated type `assoc_name` and return its full bounds (with assoc types).
-    fn find_assoc_type_bounds(
-        &self,
-        param_id: TypeId,
-        assoc_name: &str,
-    ) -> Vec<crate::ast::TraitBound> {
+    fn find_assoc_type_bounds(&self, param_id: TypeId, assoc_name: &str) -> Vec<TraitBound> {
         let param_type = self.tysys.type_table.borrow().get(param_id).clone();
         if !matches!(param_type, ResolvedType::TypeParam { .. }) {
             return Vec::new();
@@ -852,7 +842,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// A bound's right-hand side, resolved in this frame. `Self` inside one is
     /// the bounded type, which the frame files under `base_name`.
-    fn resolve_bound_binding(&mut self, base_name: &str, ty: &crate::ast::Type) -> TypeId {
+    fn resolve_bound_binding(&mut self, base_name: &str, ty: &ast::Type) -> TypeId {
         match self
             .annotate_ctx
             .trait_ctx
@@ -893,7 +883,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the asking frame can answer `ty` at all: an inherited bound may
     /// name its writer's own type parameters, which a bound cannot supply. Only
     /// `Self` crosses, being the bounded type here.
-    fn frame_can_answer(&self, writer: Option<crate::defs::DefId>, ty: &crate::ast::Type) -> bool {
+    fn frame_can_answer(&self, writer: Option<DefId>, ty: &ast::Type) -> bool {
         let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
         else {
             return true;
@@ -908,7 +898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What every bound in the closure binds `assoc` to. A binding the asking
     /// frame cannot answer is dropped.
-    fn frame_assoc_bindings_of(&mut self, base_name: &str, assoc: &str) -> Vec<crate::ast::Type> {
+    fn frame_assoc_bindings_of(&mut self, base_name: &str, assoc: &str) -> Vec<ast::Type> {
         self.bound_closure_of(base_name)
             .unwrap_or_default()
             .iter()
@@ -942,11 +932,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         base: TypeId,
         base_name: &str,
-        owning_trait: Option<crate::defs::DefId>,
+        owning_trait: Option<DefId>,
         assoc: &str,
     ) -> TypeId {
         let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
-        let bound_names: Vec<crate::name::FqTraitName> = assoc_bounds
+        let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_at(b.id, &b.name))
             .collect();
@@ -969,7 +959,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn frame_projection_of_trait(
         &mut self,
         base_name: &str,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         assoc: &str,
     ) -> Option<TypeId> {
         let bounds = self.bound_closure_of(base_name)?;
@@ -996,13 +986,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         base: TypeId,
         base_name: &str,
-        bounds: &[crate::ast::TraitBound],
+        bounds: &[TraitBound],
     ) -> Vec<(String, TypeId)> {
         let projections: Vec<(String, String)> = bounds
             .iter()
             .flat_map(|bound| &bound.assoc_types)
             .filter_map(|binding| match &binding.ty {
-                crate::ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
+                ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
                     Some((binding.name.clone(), ns.name.clone()))
                 }
                 _ => None,

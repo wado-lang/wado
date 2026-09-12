@@ -6,9 +6,11 @@
 
 use std::cell::Cell;
 
+use crate::ast::AstIdSpace;
 use crate::compiler_host::{
     Code, CompilerHost, Diagnostic, DiagnosticSpan, LogLevel, Severity, SpanEmitter,
 };
+use crate::hashmap;
 use crate::module_source::ModuleSource;
 
 /// Maximum number of errors before compilation is aborted
@@ -47,10 +49,10 @@ pub struct Logger<'a, H: CompilerHost> {
     /// Error diagnostics already emitted. A signature is walked by more than
     /// one phase, and the same message at the same place is the same fault —
     /// saying it twice gives the reader nothing to act on.
-    reported: std::cell::RefCell<crate::hashmap::IndexSet<String>>,
+    reported: std::cell::RefCell<hashmap::IndexSet<String>>,
     /// Which module's parse minted each id space, over the loaded set. What
     /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
-    parses: std::cell::RefCell<crate::hashmap::IndexMap<crate::ast::AstIdSpace, ModuleSource>>,
+    parses: std::cell::RefCell<hashmap::IndexMap<AstIdSpace, ModuleSource>>,
 }
 
 /// Drops error diagnostics for as long as it lives. See [`Logger::quiet`].
@@ -80,17 +82,14 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Record which module each loaded parse belongs to, so a diagnostic's span
     /// can name its own file. Called once the loader has the set; a span from a
     /// parse not in it falls back to the reporting caller's module.
-    pub fn register_parses(
-        &self,
-        parses: impl IntoIterator<Item = (crate::ast::AstIdSpace, ModuleSource)>,
-    ) {
+    pub fn register_parses(&self, parses: impl IntoIterator<Item = (AstIdSpace, ModuleSource)>) {
         self.parses.borrow_mut().extend(parses);
     }
 
     /// The file a span's own parse indexes, if that parse is a loaded module
     /// with a loadable path. A synthetic entry (`<stdin>`, `<entry>`) has none,
     /// and answering with its empty path would blank a file the caller knew.
-    fn file_of_parse(&self, space: crate::ast::AstIdSpace) -> Option<String> {
+    fn file_of_parse(&self, space: AstIdSpace) -> Option<String> {
         let file = self.parses.borrow().get(&space)?.source_path();
         (!file.is_empty()).then_some(file)
     }
@@ -466,7 +465,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler_host::InMemoryCompilerHost;
+    use crate::ast::AstIdSpace;
+    use crate::compiler_host::{DiagnosticSpan, InMemoryCompilerHost};
 
     #[test]
     fn test_logger_levels() {
@@ -595,13 +595,13 @@ mod tests {
                 severity: Severity::Error,
                 code: Code::TypeMismatch,
                 message: "error".to_string(),
-                span: Some(crate::compiler_host::DiagnosticSpan {
+                span: Some(DiagnosticSpan {
                     file: String::new(),
                     line: 10,
                     column: 5,
                     end_line: None,
                     end_column: None,
-                    space: crate::ast::AstIdSpace::FRESH,
+                    space: AstIdSpace::FRESH,
                 }),
             },
         );
@@ -621,13 +621,13 @@ mod tests {
                 severity: Severity::Error,
                 code: Code::TypeMismatch,
                 message: "error".to_string(),
-                span: Some(crate::compiler_host::DiagnosticSpan {
+                span: Some(DiagnosticSpan {
                     file: "inner.wado".to_string(),
                     line: 10,
                     column: 5,
                     end_line: None,
                     end_column: None,
-                    space: crate::ast::AstIdSpace::FRESH,
+                    space: AstIdSpace::FRESH,
                 }),
             },
         );

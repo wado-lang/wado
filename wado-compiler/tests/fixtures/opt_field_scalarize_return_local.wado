@@ -1,13 +1,13 @@
 // A return whose value is a local the field write-back does not touch.
 //
-// `field_scalarize` hoists `self.pos` into `__hfs_pos`, so a `return` inside the
+// `field_scalarize` hoists `self.pos` into `$hfs_pos`, so a `return` inside the
 // loop has to write it back before the jump. The returned value is captured
 // first so the write-back cannot run before it is evaluated — but `hit` is a
 // local the write-back only reads past, never assigns, so reading it after the
 // sync yields exactly what reading it before would.
 //
-// Capturing it anyway left `__hfs_call_N = hit; self.pos = __hfs_pos; return
-// __hfs_call_N`, a temp the retired `wir_optimize` return-temp pass used to
+// Capturing it anyway left `$hfs_call_N = hit; self.pos = $hfs_pos; return
+// $hfs_call_N`, a temp the retired `wir_optimize` return-temp pass used to
 // clean up afterwards.
 internal struct Cursor {
     pos: i32,
@@ -48,5 +48,5 @@ __DATA__
 {
     "stdout": "",
     "wir_expect:O2": ["return hit;"],
-    "wir_not_expect:O2": ["__hfs_call"]
+    "wir_not_expect:O2": ["$hfs_call"]
 }

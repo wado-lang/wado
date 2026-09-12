@@ -18,6 +18,10 @@ use super::infer::unify;
 use super::stmt::collect_ast_pattern_binding_ids;
 use super::types::{FunctionContext, MethodOwner};
 use super::util::is_float_only_literal;
+use crate::elaborator::trait_env::ImplTargetKey;
+use crate::name::{DeclName, RefKind};
+use crate::tir::StructDef;
+use crate::token::Span;
 
 /// What a call site knows about one argument's type. Each variant denotes a
 /// *set* of types (see the module docs); a candidate survives selection when
@@ -310,7 +314,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args_ast: &[ast::Expr],
         ctx: &FunctionContext,
         args: &[TypeId],
-        span: crate::token::Span,
+        span: Span,
     ) {
         // Once an error is reported the arguments carry recovery types, which
         // say nothing about synthesis.
@@ -721,12 +725,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// real dispatch uses — a concrete ref impl, the inherent method, the base
     /// type's trait impls. Another order would answer with a signature the call
     /// never selects.
-    fn method_return_type(
-        &mut self,
-        receiver: TypeId,
-        method: &str,
-        span: crate::token::Span,
-    ) -> Option<TypeId> {
+    fn method_return_type(&mut self, receiver: TypeId, method: &str, span: Span) -> Option<TypeId> {
         let base = self.tysys.get_base_type(receiver);
         let name = self.tysys.struct_name_for_type(base)?;
         let type_args = match self.tysys.type_table.borrow().get(base) {
@@ -734,12 +733,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
             _ => None,
         };
-        let ref_kind = crate::name::RefKind::from_resolved(
-            &self.tysys.type_table.borrow().get(receiver).clone(),
-        );
+        let ref_kind =
+            RefKind::from_resolved(&self.tysys.type_table.borrow().get(receiver).clone());
         if let Some(ref_kind) = ref_kind
             && let Some(found) = self.find_trait_method_for_type(
-                &super::trait_env::ImplTargetKey::Ref(ref_kind),
+                &ImplTargetKey::Ref(ref_kind),
                 method,
                 type_args.as_deref(),
                 Some(base),
@@ -755,7 +753,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(info) = self.lookup_method_info(receiver, method) {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
         }
-        let target = self.impl_target_of(base, &crate::name::DeclName::new(&name));
+        let target = self.impl_target_of(base, &DeclName::new(&name));
         let found = self.find_trait_method_for_type(
             &target,
             method,
@@ -849,8 +847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// types apart from a plain index.
     fn synth_range(&mut self, range: &ast::RangeExpr, scope: &mut SynthScope<'_>) -> ArgClass {
         let item = match range.kind {
-            ast::RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
-            ast::RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
+            ast::RangeKind::Exclusive => CompilerItem::RangeExclusive,
+            ast::RangeKind::Inclusive => CompilerItem::RangeInclusive,
         };
         let range_decl = self.tysys.type_table.borrow().compiler_item_def(item);
         let start = self.synth(&range.start, scope);
@@ -1069,7 +1067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .find_struct_type(crate::tir::StructDef::Decl(def));
+            .find_struct_type(StructDef::Decl(def));
         if let Some(type_id) = found {
             return self.class_of_type(type_id);
         }

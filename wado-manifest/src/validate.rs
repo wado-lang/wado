@@ -1,5 +1,7 @@
-use crate::manifest::{DependencySource, Manifest, ManifestError, WorkspacePackage};
-use crate::version::{Version, VersionSpecifier};
+use crate::manifest::{
+    DependencySource, GitPin, Manifest, ManifestError, Package, WorkspacePackage,
+};
+use crate::version::{Version, VersionError, VersionSpecifier};
 
 /// Validate a parsed manifest for semantic consistency.
 ///
@@ -47,7 +49,7 @@ pub(crate) fn validate_workspace_package(p: &WorkspacePackage) -> Result<(), Man
     Ok(())
 }
 
-fn validate_package(pkg: &crate::manifest::Package) -> Result<(), ManifestError> {
+fn validate_package(pkg: &Package) -> Result<(), ManifestError> {
     validate_name("package.name", &pkg.name)?;
     if let Some(ns) = &pkg.namespace {
         validate_name("package.namespace", ns)?;
@@ -248,7 +250,7 @@ fn validate_dep_source(
 ) -> Result<(), ManifestError> {
     match source {
         DependencySource::Git { pin, .. } => {
-            if let crate::manifest::GitPin::Version(v) = pin {
+            if let GitPin::Version(v) = pin {
                 validate_version_specifier(name, v)?;
             }
         }
@@ -286,7 +288,7 @@ fn validate_dep_source(
 fn validate_version_specifier(dep_name: &str, version: &str) -> Result<(), ManifestError> {
     VersionSpecifier::parse(version).map_err(|e| {
         // Distinguish bare version from other parse errors
-        if matches!(e, crate::version::VersionError::BareVersion { .. }) {
+        if matches!(e, VersionError::BareVersion { .. }) {
             ManifestError::BareVersion {
                 dep_name: dep_name.to_string(),
                 version: version.to_string(),
@@ -305,6 +307,8 @@ fn validate_version_specifier(dep_name: &str, version: &str) -> Result<(), Manif
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Manifest;
+    use crate::validate::{PublishError, validate_for_publish};
     use std::assert_matches;
 
     #[test]
@@ -341,7 +345,7 @@ version = "0.1.0"
 [dependencies]
 regex = { package = "docs:regex", version = "^0.1.0" }
 "#;
-        let err = toml.parse::<crate::Manifest>().unwrap_err();
+        let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(err, ManifestError::NoDefaultRegistry { .. });
     }
 
@@ -358,7 +362,7 @@ default = "https://wa.dev"
 [dependencies]
 regex = { package = "docs:regex", version = "^0.1.0" }
 "#;
-        assert!(toml.parse::<crate::Manifest>().is_ok());
+        assert!(toml.parse::<Manifest>().is_ok());
     }
 
     #[test]
@@ -374,7 +378,7 @@ custom = "https://registry.example.com"
 [dependencies]
 lib = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
 "#;
-        assert!(toml.parse::<crate::Manifest>().is_ok());
+        assert!(toml.parse::<Manifest>().is_ok());
     }
 
     #[test]
@@ -384,7 +388,7 @@ lib = { registry = "custom", package = "ns:lib", version = "^1.0.0" }
 name = "my app"
 version = "0.1.0"
 "#;
-        let err = toml.parse::<crate::Manifest>().unwrap_err();
+        let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(err, ManifestError::InvalidName { .. });
     }
 
@@ -395,7 +399,7 @@ version = "0.1.0"
 name = "app"
 version = "not-a-version"
 "#;
-        let err = toml.parse::<crate::Manifest>().unwrap_err();
+        let err = toml.parse::<Manifest>().unwrap_err();
         assert_matches!(err, ManifestError::InvalidVersion { .. });
     }
 
@@ -411,15 +415,15 @@ repository = "https://github.com/myorg/app"
 license = "MIT"
 authors = ["Alice"]
 "#;
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        assert!(super::validate_for_publish(&m).is_empty());
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(validate_for_publish(&m).is_empty());
     }
 
     #[test]
     fn publish_collects_all_missing_requirements() {
         let toml = "[package]\nname = \"app\"\nversion = \"0.1.0\"\n";
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        let errs = super::validate_for_publish(&m);
+        let m = toml.parse::<Manifest>().unwrap();
+        let errs = validate_for_publish(&m);
         use super::PublishError::*;
         assert!(errs.contains(&MissingNamespace), "{errs:?}");
         assert!(errs.contains(&MissingLicense), "{errs:?}");
@@ -454,8 +458,8 @@ license = "MIT"
 authors = ["Alice"]
 publish = false
 "#;
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        assert!(super::validate_for_publish(&m).contains(&super::PublishError::PublishDisabled));
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(validate_for_publish(&m).contains(&PublishError::PublishDisabled));
     }
 
     #[test]
@@ -470,8 +474,8 @@ repository = "https://github.com/myorg/app"
 license-file = "LICENSE-COMMERCIAL"
 authors = ["Alice"]
 "#;
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        assert!(super::validate_for_publish(&m).is_empty());
+        let m = toml.parse::<Manifest>().unwrap();
+        assert!(validate_for_publish(&m).is_empty());
     }
 
     #[test]
@@ -489,12 +493,12 @@ authors = ["Alice"]
 [dependencies]
 "ns:shared" = { workspace = true }
 "#;
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        let errs = super::validate_for_publish(&m);
+        let m = toml.parse::<Manifest>().unwrap();
+        let errs = validate_for_publish(&m);
         assert!(
             errs.iter().any(|e| matches!(
                 e,
-                super::PublishError::WorkspaceDependency { dep_name } if dep_name == "ns:shared"
+                PublishError::WorkspaceDependency { dep_name } if dep_name == "ns:shared"
             )),
             "{errs:?}"
         );
@@ -515,12 +519,12 @@ authors = ["Alice"]
 [dependencies]
 "lib:shared" = { path = "../shared" }
 "#;
-        let m = toml.parse::<crate::Manifest>().unwrap();
-        let errs = super::validate_for_publish(&m);
+        let m = toml.parse::<Manifest>().unwrap();
+        let errs = validate_for_publish(&m);
         assert!(
             errs.iter().any(|e| matches!(
                 e,
-                super::PublishError::PathDependencyWithoutSource { dep_name } if dep_name == "lib:shared"
+                PublishError::PathDependencyWithoutSource { dep_name } if dep_name == "lib:shared"
             )),
             "{errs:?}"
         );

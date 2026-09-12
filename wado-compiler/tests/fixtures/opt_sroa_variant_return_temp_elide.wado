@@ -1,14 +1,14 @@
 // Test: return-only temp elision unblocks variant SROA
 //
-// NIR's `field_scalarize` (HFS) introduces `__hfs_call_N` locals that
+// NIR's `field_scalarize` (HFS) introduces `$hfs_call_N` locals that
 // capture a match arm's value before convergence sync, even when the
 // captured value flows straight into the surrounding function's `Return`:
 //
-//     __hfs_call_N = struct.new Result::Err { ... };
-//     self.pos = __hfs_pos_X;                       // HFS write-back
-//     return __hfs_call_N;
+//     $hfs_call_N = struct.new Result::Err { ... };
+//     self.pos = $hfs_pos_X;                       // HFS write-back
+//     return $hfs_call_N;
 //
-// The intermediate `LocalGet(__hfs_call_N)` hides the `StructNew` leaf
+// The intermediate `LocalGet($hfs_call_N)` hides the `StructNew` leaf
 // from variant-return SROA candidate analysis, so without elision the
 // function stays boxed.
 //

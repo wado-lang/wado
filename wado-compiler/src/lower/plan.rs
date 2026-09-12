@@ -6,6 +6,7 @@
 
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
+use crate::tir::ResolvedType;
 
 pub mod boxing;
 pub mod closure;
@@ -32,10 +33,7 @@ fn capture_param_mut_ref(flat: &mut FlatPackage) {
     for func in &flat.functions {
         let mut func = func.borrow_mut();
         for param in &mut func.params {
-            param.is_mut_ref = matches!(
-                type_table.get(param.type_id),
-                crate::tir::ResolvedType::MutRef(_)
-            );
+            param.is_mut_ref = matches!(type_table.get(param.type_id), ResolvedType::MutRef(_));
         }
     }
 }
@@ -50,7 +48,7 @@ fn ref_receiver_methods(flat: &FlatPackage) -> value_copy::funcset::FuncKeySet {
         let Some(p0) = f.params.first() else { continue };
         if matches!(
             type_table.get(p0.type_id),
-            crate::tir::ResolvedType::Ref(_) | crate::tir::ResolvedType::MutRef(_)
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
         ) {
             set.insert(f.module_source.clone(), f.name.clone());
         }

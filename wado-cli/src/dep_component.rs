@@ -20,6 +20,9 @@
 
 use wado_manifest::Manifest;
 
+use crate::cache::{component_path, write_atomic};
+use crate::fetch::split_registry_id;
+use crate::git::{fetch_manifest, materialize_entry, resolve_ref};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 
@@ -63,7 +66,7 @@ async fn fetch_via_resolve(
 
     let mut out = Vec::new();
     for package in packages.iter().filter(|p| p.integrity.is_some()) {
-        let (registry_url, coordinate, _name) = crate::fetch::split_registry_id(&package.id)
+        let (registry_url, coordinate, _name) = split_registry_id(&package.id)
             .ok_or_else(|| format!("unexpected lock id {:?}", package.id))?;
         let abs = pull_component(registry_url, coordinate, &package.version).await?;
         let specifier = manifest_key_for_coordinate(manifest, coordinate).unwrap_or(coordinate);
@@ -109,7 +112,7 @@ pub async fn resolve_inline_component_dependencies(
     let mut resolved = Vec::new();
     let mut unresolved = Vec::new();
     for dep in deps {
-        let path = crate::cache::component_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
+        let path = component_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         if path.is_file() {
             resolved.push((dep.specifier, path.display().to_string()));
         } else if fetch_missing {
@@ -197,14 +200,14 @@ pub async fn resolve_inline_git_dependencies(
 /// git package's own `[package].version` at the resolved commit keys the
 /// worktree (matching what a manifest ref-pin would lock).
 fn resolve_inline_git(url: &str, git_ref: &str, directory: Option<&str>) -> Result<String, String> {
-    let sha = crate::git::resolve_ref(url, git_ref).map_err(|e| e.to_string())?;
-    let manifest = crate::git::fetch_manifest(url, &sha, directory).map_err(|e| e.to_string())?;
+    let sha = resolve_ref(url, git_ref).map_err(|e| e.to_string())?;
+    let manifest = fetch_manifest(url, &sha, directory).map_err(|e| e.to_string())?;
     let version = manifest
         .package
         .as_ref()
         .map(|p| p.version.clone())
         .unwrap_or_else(|| sha.clone());
-    crate::git::materialize_entry(url, &version, &sha, directory).map_err(|e| e.to_string())
+    materialize_entry(url, &version, &sha, directory).map_err(|e| e.to_string())
 }
 
 /// An inline registry component source declared on a `use … from` clause.
@@ -362,14 +365,14 @@ async fn pull_component(
     coordinate: &str,
     version: &str,
 ) -> Result<String, String> {
-    let out_path = crate::cache::component_path(registry_url, coordinate, version)?;
+    let out_path = component_path(registry_url, coordinate, version)?;
     if !out_path.is_file() {
         let reference = oci::reference(registry_url, coordinate, version)
             .map_err(|e| format!("{coordinate}@{version}: {e}"))?;
         let bytes = oci::pull_component(&reference)
             .await
             .map_err(|e| format!("fetching {coordinate}@{version}: {e}"))?;
-        crate::cache::write_atomic(&out_path, &bytes)
+        write_atomic(&out_path, &bytes)
             .map_err(|e| format!("writing {}: {e}", out_path.display()))?;
     }
     // The cache path is already absolute (rooted at $WADO_ROOT/$HOME); no

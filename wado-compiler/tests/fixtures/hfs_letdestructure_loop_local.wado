@@ -1,6 +1,6 @@
 // Regression: a GC struct local introduced by a destructuring binding inside a
 // loop (`for let (a, n) of pairs`) must not be Hot-Field-Scalarized. HFS hoists
-// `let __hfs = a.sum;` to the loop pre-header, where `a` — bound per-iteration
+// `let $hfs = a.sum;` to the loop pre-header, where `a` — bound per-iteration
 // by the destructure — is still unbound, so the hoisted read null-derefs (trap).
 //
 // Root cause: `collect_locals_introduced` listed loop-introduced locals (to

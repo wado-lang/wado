@@ -564,6 +564,21 @@ test "negative i64 base formats print the two's complement bits" {
     assert `${min:#o}` == "0o1000000000000000000000";
 }
 
+test "u64 base formats around the 32-bit boundary" {
+    // The digit count comes off the highest set bit, so bit 31 and bit 32 are
+    // the seam: one digit apart in hex, and either side of a 32-bit word.
+    let below: u64 = 0x80000000;
+    assert `${below:x}` == "80000000";
+    assert `${below:b}` == "10000000000000000000000000000000";
+    let at: u64 = 0x100000000;
+    assert `${at:x}` == "100000000";
+    assert `${at:o}` == "40000000000";
+    // A highest bit that is not a multiple of any of the three digit widths.
+    let odd: u64 = 0x1_5555_5555;
+    assert `${odd:x}` == "155555555";
+    assert `${odd:b}` == "101010101010101010101010101010101";
+}
+
 test "i64 decimal formatting at every digit-count boundary" {
     // `count_digits_u64` sizes the buffer and `write_decimal_digits` fills it
     // backwards, so an off-by-one in either shows up as a lost or stray digit

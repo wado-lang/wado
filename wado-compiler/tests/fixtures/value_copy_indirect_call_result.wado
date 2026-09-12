@@ -3,8 +3,8 @@
 //
 // - An indirect (closure) call. `lower::plan::closure` rewrites every callable
 //   value — a closure literal and a bare `FuncRef` alike — into a functor whose
-//   `__call` is an ordinary function, so the return-convention fixpoint already
-//   covers every possible target: the call is owned when every `__call` of that
+//   `$call` is an ordinary function, so the return-convention fixpoint already
+//   covers every possible target: the call is owned when every `$call` of that
 //   return type is.
 // - An `if` / `if let` expression. Its value is the tail of whichever branch
 //   runs, so it is owned exactly when those tails are — the rule `match` arms
@@ -15,7 +15,7 @@
 // response stream — where a copy would land on every request.
 //
 // The functions are `#[inline(never)]` so the calls survive to the fold, and
-// nothing else in this program deep-copies: an `__array_clone_src` in the
+// nothing else in this program deep-copies: an `$array_clone_src` in the
 // module is a regression.
 
 use { println, Stdout } from "core:cli";
@@ -62,5 +62,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3 3 0\n",
-    "wir_not_expect:O2": ["__array_clone_src"]
+    "wir_not_expect:O2": ["$array_clone_src"]
 }

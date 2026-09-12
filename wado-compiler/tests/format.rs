@@ -172,7 +172,7 @@ fn assert_format_preserves_ast(source: &str) {
 #[test]
 fn test_format_keeps_resource_extends() {
     let source = concat!(
-        "#[cm(\"web:dom/node\", type=\"extern-handle\")]\n",
+        "#[cm(\"web:dom/node\", linearity=\"unrestricted\")]\n",
         "pub resource Node extends EventTarget {\n",
         "    #[cm(\"web:dom/node#text-content\")]\n",
         "    #[cm_params(\"self\")]\n",
@@ -185,8 +185,8 @@ fn test_format_keeps_resource_extends() {
         "the parent must survive formatting, got:\n{formatted}"
     );
     assert!(
-        formatted.contains("type = \"extern-handle\""),
-        "the backing must survive formatting, got:\n{formatted}"
+        formatted.contains("linearity = \"unrestricted\""),
+        "the linearity must survive formatting, got:\n{formatted}"
     );
     let again = wado_compiler::format(&formatted).expect("format failed");
     assert_eq!(formatted, again, "format should be idempotent");

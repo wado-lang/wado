@@ -1,10 +1,11 @@
 //! WebIDL-to-IR transformation, over the webidl2 AST `scripts/webidl/snapshot.mjs`
-//! writes: one extern-handle resource per interface. See `docs/wep-2026-04-01-tide.md`.
+//! writes: one unrestricted resource per interface. See `docs/wep-2026-04-01-tide.md`.
 
 use anyhow::{Result, bail};
 use indexmap::{IndexMap, IndexSet};
 use serde::Deserialize;
 
+use crate::WadoCodeGenerator;
 use crate::ir::{WadoFunction, WadoInterface, WadoModule, WadoParam, WadoResource, WadoType};
 use crate::naming::{to_kebab_case, to_snake_case, to_upper_camel_case, to_wado_identifier};
 
@@ -154,7 +155,7 @@ pub fn generate(snapshot: &Snapshot, source: &str) -> Result<(String, Vec<String
     } = transform(snapshot)?;
     module.source_files = vec![source.to_string()];
     module.stdlib_identity = Some(format!("web:{}", snapshot.package));
-    Ok((crate::WadoCodeGenerator::new().generate(&module), skipped))
+    Ok((WadoCodeGenerator::new().generate(&module), skipped))
 }
 
 /// Transform a snapshot into the `web:<package>` module.
@@ -186,7 +187,7 @@ pub fn transform(snapshot: &Snapshot) -> Result<WebIdlOutput> {
                 name: to_upper_camel_case(name),
                 doc_comment: None,
                 cm_attr: path,
-                extern_handle: true,
+                unrestricted: true,
                 extends: iface.inheritance.as_deref().map(to_upper_camel_case),
                 methods,
             },

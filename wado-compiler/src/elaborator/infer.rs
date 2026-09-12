@@ -6,6 +6,7 @@
 
 use std::cell::RefCell;
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
@@ -22,7 +23,7 @@ pub(super) fn unify(
 ) {
     let list_name = type_table
         .borrow()
-        .compiler_struct_name(crate::compiler_item::CompilerItem::List)
+        .compiler_struct_name(CompilerItem::List)
         .to_string();
     let expected_type = type_table.borrow().get(expected).clone();
     let actual_type = type_table.borrow().get(actual).clone();

@@ -17,7 +17,8 @@ pub mod traits;
 use crate::elaborator::trait_env::{SynthesisedImpls, TraitEnv};
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::ResolvedType;
+use crate::tir::{ResolvedType, TypeTable};
+use crate::{name, tir};
 
 /// The five reflection kinds' metadata (WEP 2026-06-13 §1, §3b–d). Driven by
 /// the declarations themselves, not by demand, so it runs exactly once: a
@@ -112,12 +113,10 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
     // layer answers "where is the code", and reify flattens a user impl's
     // methods into `module.functions` exactly like a generated one — so
     // excluding them would leave a mangled query with nothing to find.
-    let mut record = |receiver: &crate::name::Receiver,
-                      trait_name: &str,
-                      module: &ModuleSource,
-                      is_concrete: bool| {
-        impls.record_impl(receiver, trait_name, module, is_concrete);
-    };
+    let mut record =
+        |receiver: &name::Receiver, trait_name: &str, module: &ModuleSource, is_concrete: bool| {
+            impls.record_impl(receiver, trait_name, module, is_concrete);
+        };
     for tir_module in project.tir_modules.values() {
         let module_source = &tir_module.module_source;
         let type_table = tir_module.type_table.borrow();
@@ -157,10 +156,7 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 /// [`ResolvedType::Function`] and [`ResolvedType::GenericResource`] are
 /// anonymous, each using module synthesising its own stub, so a project-wide
 /// entry would mis-route. Every other type names one defining module.
-fn receiver_is_per_module_synth(
-    receiver_type_id: crate::tir::TypeId,
-    tt: &crate::tir::TypeTable,
-) -> bool {
+fn receiver_is_per_module_synth(receiver_type_id: tir::TypeId, tt: &TypeTable) -> bool {
     matches!(
         tt.get(tt.peel_refs(receiver_type_id)),
         ResolvedType::Function { .. } | ResolvedType::GenericResource { .. }

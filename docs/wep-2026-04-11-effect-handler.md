@@ -17,10 +17,10 @@ section records only the current state.
       and `resume`-only-in-handler-method. Effect-check skips handled
       effects from caller requirements while walking the body.
 - [x] Dispatch synthesis (`synthesis/effect_dispatch.rs`) emits, per effect:
-      a `__Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
+      a `$Dispatch_<E>` Wasm GC struct (recursive `outer: Option<&Self>` +
       one `fn(args) -> ret` closure field per operation), an
-      `__effect_<E>: Option<&__Dispatch_<E>>` mut global initialised to
-      `null`, and an `__effect_dispatch__<E>__<op>` wrapper per operation.
+      `$effect_<E>: Option<&$Dispatch_<E>>` mut global initialised to
+      `null`, and an `$effect_dispatch__<E>__<op>` wrapper per operation.
       `WithHandler` lowers to a desugared block that saves the global,
       builds closures capturing the handler, populates the dispatch
       struct, installs the global, runs the body, and restores on exit.
@@ -51,7 +51,7 @@ section records only the current state.
       order; a later binding wins when the same effect appears twice on
       a `with` line, with the earlier binding reachable via the outer
       chain. All bindings from one bundled clause share a synthesised
-      `__h_<bundle>` local (`TirHandlerBinding.bundle_group`), so the
+      `$h_<bundle>` local (`TirHandlerBinding.bundle_group`), so the
       handler expression evaluates exactly once and mutations through
       any installed effect are observed by the rest — the contract that
       makes value-form `with h do` work. Diagnostics:
@@ -86,8 +86,8 @@ section records only the current state.
       `synthesize_post_check` (`WithHandler` desugaring) after
       `effect_check`. Per `(module, base, type_args)` instantiation
       key, the synthesis substitutes the resource's operation template
-      and emits a distinct `__Dispatch_Stream<u8>` struct +
-      `__effect_Stream<u8>` global + `__effect_dispatch__Stream<u8>__op`
+      and emits a distinct `$Dispatch_Stream<u8>` struct +
+      `$effect_Stream<u8>` global + `$effect_dispatch__Stream<u8>__op`
       wrapper triple. `&self` / `&mut self` shorthand on impl methods is
       synthesised as a `TirEffectOp` receiver at index 0
       (`Self = GenericResource { name, module, type_args }`), and call
@@ -122,7 +122,7 @@ section records only the current state.
       already installed `outer`, so the call lands on the next handler out and
       the outermost handler's `..forward` behaves like `..trap`. Every dispatch
       boundary is therefore typed at the call-site type, and an async
-      operation's handler closure wraps its `T` through `__cm_wrap_async__`.
+      operation's handler closure wraps its `T` through `$cm_wrap_async__`.
       Fixtures: `effect_handler_forward_rest.wado`,
       `effect_handler_forward_async_op.wado`.
 
@@ -813,7 +813,7 @@ When no handler is installed (the common production path), the global is null an
 One dispatch function is generated per effect operation. It checks the global, and either calls the CM adapter (default) or calls through the dispatch record's funcref:
 
 ```wat
-;; __dispatch_Stdout_write_via_stream
+;; $dispatch_Stdout_write_via_stream
 (func $dispatch_stdout_wvs (param ...) (result ...)
   (local $dispatch (ref null $Dispatch_Stdout))
   (local.set $dispatch (global.get $__effect_Stdout))

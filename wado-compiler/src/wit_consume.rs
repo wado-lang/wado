@@ -8,12 +8,13 @@
 //! Type mapping reuses [`crate::wit_emit`]'s `CmShape` so producer and consumer
 //! cannot drift on how `option`/`list`/`tuple`/`result` are structured.
 
-use crate::ast::{AstId, AstIdSpace};
 use crate::ast::{
-    AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl, FlagsVariant,
-    Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType, Newtype, Param,
-    SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
+    AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EnumCase, EnumDecl, FlagsDecl,
+    FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
+    Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
+use crate::component_model::SourceInterfaceBatch;
+use crate::hashmap;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
@@ -40,7 +41,7 @@ pub struct ComponentBindings {
     /// The CM interface each named-type reference in `module` resolves to,
     /// keyed by the reference's own site. Merged into the CM registry by the
     /// loader; the syntax nodes carry no interface of their own.
-    pub source_interfaces: crate::component_model::SourceInterfaceBatch,
+    pub source_interfaces: SourceInterfaceBatch,
 }
 
 /// Read the host-leaf import FQs a component-binding module carries in its
@@ -126,7 +127,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
     if !b.errors.is_empty() {
         // One unsupported shape reaches the collector once per signature
         // position it occupies; the reader needs it once.
-        let unique: crate::hashmap::IndexSet<String> = b.errors.into_iter().collect();
+        let unique: hashmap::IndexSet<String> = b.errors.into_iter().collect();
         return Err(unique.into_iter().collect::<Vec<_>>().join("; "));
     }
 
@@ -152,7 +153,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         inner_attributes,
         None,
         None,
-        crate::hashmap::IndexSet::default(),
+        hashmap::IndexSet::default(),
         b.space,
         b.count,
         false,
@@ -174,7 +175,7 @@ struct Builder {
     count: u32,
     items: Vec<Item>,
     errors: Vec<String>,
-    source_interfaces: crate::component_model::SourceInterfaceBatch,
+    source_interfaces: SourceInterfaceBatch,
 }
 
 impl Builder {
@@ -184,7 +185,7 @@ impl Builder {
             count: 0,
             items: Vec::new(),
             errors: Vec::new(),
-            source_interfaces: crate::component_model::SourceInterfaceBatch::default(),
+            source_interfaces: SourceInterfaceBatch::default(),
         }
     }
 
@@ -694,6 +695,7 @@ fn syn() -> Span {
 mod tests {
     use super::*;
     use crate::ast::Item;
+    use crate::component_model::CmInterfaceRegistry;
 
     fn decode_fixture() -> (Resolve, WorldId) {
         let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
@@ -707,7 +709,7 @@ mod tests {
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
-        let registry = crate::component_model::CmInterfaceRegistry::new();
+        let registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(b.source_interfaces.clone());
         assert_eq!(
             b.interface_fqs,

@@ -6,8 +6,10 @@
 use crate::hashmap::IndexMap;
 use std::cell::RefCell;
 
-use crate::ast::{CmBoundary, Function, Type};
+use crate::ast;
+use crate::ast::{Attribute, CmBoundary, Function, Item, Type};
 use crate::compiler_item::CompilerItem;
+use crate::lexer::lex;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Information about a builtin function
@@ -64,7 +66,7 @@ impl BuiltinRegistry {
         let module = PARSED_MODULE.get_or_init(|| {
             let source =
                 stdlib::get_stdlib_module("core:builtin").expect("core:builtin is bundled");
-            let r = crate::lexer::lex(source);
+            let r = lex(source);
             assert!(
                 r.errors.is_empty(),
                 "lexer error in core:builtin: {:?}",
@@ -76,7 +78,7 @@ impl BuiltinRegistry {
 
         let mut registry = Self::new();
         for item in &module.items {
-            if let crate::ast::Item::Function(func) = item {
+            if let Item::Function(func) = item {
                 registry.register(func, type_table);
             }
         }
@@ -88,13 +90,9 @@ impl BuiltinRegistry {
     /// loader-synthesized wasm-asset modules
     /// (`ModuleSource::Wasm`) so calls into a wasm asset's exports go
     /// through the same `TirImport` path as `core:builtin` declarations.
-    pub fn register_wasm_module(
-        &mut self,
-        module: &crate::ast::Module,
-        type_table: &RefCell<TypeTable>,
-    ) {
+    pub fn register_wasm_module(&mut self, module: &ast::Module, type_table: &RefCell<TypeTable>) {
         for item in &module.items {
-            if let crate::ast::Item::Function(func) = item
+            if let Item::Function(func) = item
                 && func.body.is_none()
                 && func.attrs.iter().any(is_canonical_builtin)
             {
@@ -273,6 +271,6 @@ impl BuiltinRegistry {
 
 /// Returns true if the attribute is a well-formed `#[canonical(ns, name)]` that
 /// marks a CM canonical built-in.
-fn is_canonical_builtin(attr: &crate::ast::Attribute) -> bool {
+fn is_canonical_builtin(attr: &Attribute) -> bool {
     matches!(attr.cm_boundary, Some(CmBoundary::Canonical { .. }))
 }

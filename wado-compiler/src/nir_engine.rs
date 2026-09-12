@@ -9,14 +9,19 @@ use std::collections::VecDeque;
 
 use cranelift_entity::EntityRef;
 
+use crate::compiler_trace;
+use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirLocal};
 use crate::nir_arena::{
-    ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
-    PatKind, PatNode, StmtId, StmtKind, StmtNode,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode,
 };
-use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::TypeId;
+use crate::nir_value_graph::builder::{CallFacts, build};
+use crate::nir_value_graph::{HeapVersion, ValueId, ValueKind};
+use crate::niri::CtfeBuiltinMap;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// A live-pool representative per field read, plus the versions a placement
@@ -26,8 +31,8 @@ use crate::token::Span;
 #[derive(Default)]
 pub struct FieldValues {
     pub reads: Vec<(ExprId, ValueId)>,
-    walk_version: IndexMap<ValueId, crate::nir_value_graph::HeapVersion>,
-    stmt_entry_version: IndexMap<StmtId, crate::nir_value_graph::HeapVersion>,
+    walk_version: IndexMap<ValueId, HeapVersion>,
+    stmt_entry_version: IndexMap<StmtId, HeapVersion>,
 }
 
 impl FieldValues {
@@ -295,8 +300,8 @@ impl EngineBuffers {
 /// conservative — it leaves a call opaque — and shared, so asking costs no map.
 static NO_PURE_BUILTINS: std::sync::LazyLock<IndexSet<FuncId>> =
     std::sync::LazyLock::new(IndexSet::default);
-static NO_CTFE_BUILTINS: std::sync::LazyLock<crate::niri::CtfeBuiltinMap> =
-    std::sync::LazyLock::new(crate::niri::CtfeBuiltinMap::default);
+static NO_CTFE_BUILTINS: std::sync::LazyLock<CtfeBuiltinMap> =
+    std::sync::LazyLock::new(CtfeBuiltinMap::default);
 
 /// An engine session over one function body: the arena plus the [`EngineBuffers`]
 /// scratch (parent map, use index, and worklist) the worklist discipline needs,
@@ -337,17 +342,17 @@ pub struct Engine<'a> {
     param_locals: Vec<u32>,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
-    pure_calls: IndexSet<crate::nir_arena::ExprId>,
+    pure_calls: IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver. Empty is
     /// conservative.
-    receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
+    receiver_immutable_calls: IndexSet<ExprId>,
     /// Which sequence builtin each callee id is. `None` leaves every array
     /// length opaque, which costs a fold rather than correctness.
-    ctfe_builtins: Option<&'a crate::niri::CtfeBuiltinMap>,
+    ctfe_builtins: Option<&'a CtfeBuiltinMap>,
     /// Type table for the `ValueGraph` builder's constant folding of pure
     /// arithmetic. `None` (the default) disables folding. Set via
     /// [`Engine::set_value_graph_type_table`] before the first value query.
-    vg_type_table: Option<&'a crate::tir::TypeTable>,
+    vg_type_table: Option<&'a TypeTable>,
     /// [`FuncId`]s of the diverging panic / `unreachable` builtins, supplied by
     /// `condition_implication` so its bounds-check elimination identifies a
     /// panic block by callee id (not the call node's `FunctionRef`). `None` (the
@@ -575,7 +580,7 @@ impl<'a> Engine<'a> {
                 out.push((e, v));
             }
         }
-        crate::compiler_trace!(
+        compiler_trace!(
             "vg_field",
             "scoped reads: {fields_const} of {fields_seen} field reads are const, {} kept",
             out.len()
@@ -716,8 +721,8 @@ impl<'a> Engine<'a> {
     /// value query; the build is lazy.
     pub fn set_call_verdicts(
         &mut self,
-        pure_calls: IndexSet<crate::nir_arena::ExprId>,
-        receiver_immutable_calls: IndexSet<crate::nir_arena::ExprId>,
+        pure_calls: IndexSet<ExprId>,
+        receiver_immutable_calls: IndexSet<ExprId>,
     ) {
         self.pure_calls = pure_calls;
         self.receiver_immutable_calls = receiver_immutable_calls;
@@ -742,7 +747,7 @@ impl<'a> Engine<'a> {
 
     /// Provide the type table so the value graph folds pure arithmetic on
     /// literal operands (`2 + 3 → 5`). Used by the one build-once construction.
-    pub fn set_value_graph_type_table(&mut self, type_table: &'a crate::tir::TypeTable) {
+    pub fn set_value_graph_type_table(&mut self, type_table: &'a TypeTable) {
         self.vg_type_table = Some(type_table);
     }
 
@@ -763,7 +768,7 @@ impl<'a> Engine<'a> {
     /// Install the sequence-builtin lookup, so `array_len` over an array the
     /// walk saw allocated folds to the length it was given. Without it the
     /// length stays opaque and every capacity guard survives.
-    pub fn set_ctfe_builtins(&mut self, map: &'a crate::niri::CtfeBuiltinMap) {
+    pub fn set_ctfe_builtins(&mut self, map: &'a CtfeBuiltinMap) {
         self.ctfe_builtins = Some(map);
     }
 
@@ -776,7 +781,7 @@ impl<'a> Engine<'a> {
     /// The type table supplied for value-graph folding, if any. Used by
     /// `store_load_forward` to synthesize a literal `ExprKind` for a folded
     /// value that has no pre-existing source literal.
-    pub fn value_graph_type_table(&self) -> Option<&'a crate::tir::TypeTable> {
+    pub fn value_graph_type_table(&self) -> Option<&'a TypeTable> {
         self.vg_type_table
     }
 
@@ -794,13 +799,13 @@ impl<'a> Engine<'a> {
         if self.body.value_graph.is_some() {
             return;
         }
-        let build = crate::nir_value_graph::builder::build(
+        let build = build(
             &mut *self.body,
             &self.param_locals,
             &self.aliased_locals,
             &self.untrackable_locals,
             &self.mut_escaped_locals,
-            crate::nir_value_graph::builder::CallFacts {
+            CallFacts {
                 pure_builtin: self.pure_builtin_callees.unwrap_or(&NO_PURE_BUILTINS),
                 pure: &self.pure_calls,
                 receiver_immutable: &self.receiver_immutable_calls,
@@ -1211,7 +1216,7 @@ impl<'a> Engine<'a> {
     /// parent, the parent references it through a non-operand slot, or `value` is
     /// an aggregate (the pool models pure scalars only) — the caller then keeps
     /// the skeleton form.
-    pub fn replace_expr_with_value(&mut self, id: ExprId, value: crate::const_eval::Value) -> bool {
+    pub fn replace_expr_with_value(&mut self, id: ExprId, value: Value) -> bool {
         use crate::const_eval::Value;
         use ValueKind;
         let type_id = self.body.exprs[id].type_id;
@@ -1484,7 +1489,7 @@ impl<'a> Engine<'a> {
                 type_args,
                 args: args
                     .into_iter()
-                    .map(|a| crate::nir_arena::ArenaCallArg {
+                    .map(|a| ArenaCallArg {
                         expr: self.clone_operand(a.expr),
                         is_mut: a.is_mut,
                     })
@@ -1538,7 +1543,7 @@ impl<'a> Engine<'a> {
                 struct_name,
                 fields: fields
                     .into_iter()
-                    .map(|f| crate::nir_arena::ArenaStructField {
+                    .map(|f| ArenaStructField {
                         name: f.name,
                         value: self.clone_operand(f.value),
                         field_index: f.field_index,
@@ -1713,7 +1718,7 @@ impl<'a> Engine<'a> {
                 struct_type,
                 fields: fields
                     .into_iter()
-                    .map(|f| crate::nir_arena::ArenaStructPatternField {
+                    .map(|f| ArenaStructPatternField {
                         field_name: f.field_name,
                         field_index: f.field_index,
                         pattern: self.clone_pat(f.pattern),
@@ -1810,9 +1815,10 @@ pub trait Rule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::const_eval::Value;
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-    use crate::tir::TypeTable;
+    use crate::tir::{PrimitiveType, TypeTable};
     use Span;
     use std::assert_matches;
 
@@ -1986,9 +1992,9 @@ mod tests {
             // Promote the folded scalar into the parent operand slot.
             e.replace_expr_with_value(
                 id,
-                crate::const_eval::Value::Int {
+                Value::Int {
                     value: v,
-                    prim: crate::tir::PrimitiveType::I32,
+                    prim: PrimitiveType::I32,
                 },
             )
         }
@@ -2087,10 +2093,7 @@ mod tests {
             let two = lit(b, 2);
             let add = bin(b, one, NirBinaryOp::Add, two);
             let let_stmt = let_x(b, add, false);
-            let unit = Operand::Value(
-                b.values
-                    .alloc_unshared(ValueKind::Unit, crate::tir::TypeTable::UNIT),
-            );
+            let unit = Operand::Value(b.values.alloc_unshared(ValueKind::Unit, TypeTable::UNIT));
             let unit_stmt = s(b, StmtKind::Expr(unit));
             let ret = ret_x(b);
             vec![let_stmt, unit_stmt, ret]

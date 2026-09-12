@@ -1,5 +1,6 @@
 // Token definitions for Wado lexer
 
+use crate::ast::AstIdSpace;
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateTokenPart {
     /// Literal text with escape sequences resolved (e.g. `\$` → `$`). Only
@@ -270,7 +271,7 @@ pub struct Span {
     /// however far it travels from the walk that read it.
     /// [`crate::ast::AstIdSpace::FRESH`] for a synthesized span, which indexes
     /// no text.
-    pub space: crate::ast::AstIdSpace,
+    pub space: AstIdSpace,
 }
 
 impl Token {
@@ -309,7 +310,7 @@ impl Span {
             column,
             end_line: line,
             end_column: column + (end - start),
-            space: crate::ast::AstIdSpace::FRESH,
+            space: AstIdSpace::FRESH,
         }
     }
 
@@ -330,7 +331,7 @@ impl Span {
             column,
             end_line,
             end_column,
-            space: crate::ast::AstIdSpace::FRESH,
+            space: AstIdSpace::FRESH,
         }
     }
 
@@ -351,7 +352,7 @@ impl Span {
     }
 
     /// Say which parse's text this span indexes.
-    pub fn in_space(mut self, space: crate::ast::AstIdSpace) -> Self {
+    pub fn in_space(mut self, space: AstIdSpace) -> Self {
         self.space = space;
         self
     }

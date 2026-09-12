@@ -10,6 +10,11 @@ use crate::tir::TypeId;
 
 use super::super::sig::{DeclSig, MethodSig};
 use super::super::types::{EnumInfo, FlagsInfo, GenericNewtypeInfo, StructFieldInfo, VariantInfo};
+use crate::defs::DefId;
+use crate::elaborator::sig;
+use crate::elaborator::sig::{AssocConstSig, ImplSig, TraitSig};
+use crate::tir;
+use crate::tir::{AnonStructId, EffectRef, TirEffectOp, TirStruct};
 
 /// A function's canonical signature, resolved once by its module's decl
 /// pass in the declaring perspective, with the function's own type params
@@ -28,10 +33,10 @@ pub(crate) struct FunctionSig {
     /// `decl.type_params`, which holds only the slot-consuming subset.
     pub(crate) type_param_ids: Vec<(String, TypeId)>,
     /// The declared parameters, in order, parallel to `decl.param_types`.
-    pub(crate) params: Vec<super::super::sig::Param>,
+    pub(crate) params: Vec<sig::Param>,
     /// Declared `with` effects, resolved in the declaring perspective
     /// (effect parameters stay symbolic as `EffectRef::Param`).
-    pub(crate) effects: Vec<crate::tir::EffectRef>,
+    pub(crate) effects: Vec<EffectRef>,
 }
 
 impl ModuleDecls {
@@ -59,7 +64,7 @@ pub(crate) struct ModuleDecls {
     /// Canonical signatures of this module's own free functions, frozen
     /// behind `Rc` so the program-wide assembly and the stdlib-snapshot
     /// seeding share the map instead of deep-cloning every signature.
-    pub(crate) function_sigs: std::rc::Rc<IndexMap<crate::defs::DefId, std::rc::Rc<FunctionSig>>>,
+    pub(crate) function_sigs: std::rc::Rc<IndexMap<DefId, std::rc::Rc<FunctionSig>>>,
     /// `func_name → return TypeId` for functions defined in this module.
     pub(crate) function_return_types: IndexMap<String, TypeId>,
     /// Names visible via `use` declarations in this module (the union of
@@ -78,8 +83,7 @@ pub(crate) struct ModuleDecls {
     /// that perspective), the const type, and the value expression.
     /// Canonical keys make cross-module collisions impossible, so the
     /// driver-merged view needs no shadowing rules.
-    pub(crate) associated_constants:
-        IndexMap<(crate::defs::DefId, String), super::super::sig::AssocConstSig>,
+    pub(crate) associated_constants: IndexMap<(DefId, String), AssocConstSig>,
     /// Canonical signatures of this module's method declarations, keyed by
     /// the method's declaration.
     ///
@@ -88,26 +92,26 @@ pub(crate) struct ModuleDecls {
     /// to the impl target. An `interface` / `resource` operation is resolved
     /// in the declaration's frame. Either way a use site instantiates
     /// instead of re-resolving the method AST.
-    pub(crate) method_sigs: IndexMap<crate::defs::DefId, MethodSig>,
+    pub(crate) method_sigs: IndexMap<DefId, MethodSig>,
     /// A declaration paired with an operation name → the operation, so a
     /// caller holding only a name reaches its `method_sigs` entry.
-    pub(crate) resource_method_ids: IndexMap<(crate::defs::DefId, String), crate::defs::DefId>,
+    pub(crate) resource_method_ids: IndexMap<(DefId, String), DefId>,
     /// Facts of this module's `impl` blocks that belong to the block rather
     /// than to one method — its target and trait type arguments and its
     /// associated-type bindings — resolved once in the block's own frame and
     /// keyed by the block's [`crate::defs::DefId`].
-    pub(crate) impl_sigs: IndexMap<crate::defs::DefId, super::super::sig::ImplSig>,
+    pub(crate) impl_sigs: IndexMap<DefId, ImplSig>,
     /// Facts of this module's `trait` declarations, resolved once in each
     /// trait's own frame (`Self` at slot 0) and keyed by the declaration, so
     /// a use site instantiates instead of re-resolving the trait method AST.
-    pub(crate) trait_sigs: IndexMap<crate::defs::DefId, super::super::sig::TraitSig>,
+    pub(crate) trait_sigs: IndexMap<DefId, TraitSig>,
     /// Resolved operation signatures of this module's `interface` and
     /// `resource` declarations, keyed by the declaration.
     ///
     /// Resolved in the declaration's own frame — type params registered and
     /// `Self` constructed — which is why the body pass reads these back
     /// instead of resolving the same methods a second time.
-    pub(crate) effect_ops: IndexMap<crate::defs::DefId, Vec<crate::tir::TirEffectOp>>,
+    pub(crate) effect_ops: IndexMap<DefId, Vec<TirEffectOp>>,
 
     /// `func_name → type_params` for generic functions in this module.
     pub(crate) generic_function_params: IndexMap<String, Vec<(String, TypeId)>>,
@@ -127,7 +131,7 @@ pub(crate) struct ModuleDecls {
     /// Anonymous structs synthesised from struct literals during expression
     /// resolution. Reify reads them back into the [`crate::tir::TirModule`]
     /// in `reify_module`.
-    pub(crate) pending_anonymous_structs: Vec<crate::tir::TirStruct>,
+    pub(crate) pending_anonymous_structs: Vec<TirStruct>,
 
     /// Synthesis requests recorded by `impl Trait for Type;`.
     /// The elaborator pushes one per
@@ -135,7 +139,7 @@ pub(crate) struct ModuleDecls {
     /// this list and pushes each onto the emitted
     /// `TirModule::synthesis_requests`. Decouples annotate
     /// (which records) from reify (which emits).
-    pub(crate) pending_synthesis_requests: Vec<crate::tir::SynthesisRequest>,
+    pub(crate) pending_synthesis_requests: Vec<tir::SynthesisRequest>,
 
     /// Additions to the type tables made during this module's walk, consulted
     /// by [`super::super::types::TypeLookup`] before the shared `all_*`
@@ -146,17 +150,17 @@ pub(crate) struct ModuleDecls {
     /// declared inside a function body are two entries rather than one that
     /// wins — and so a walk standing in another module reads these without
     /// having to hide them first.
-    pub(crate) local_struct_fields: IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) local_newtypes: IndexMap<crate::defs::DefId, TypeId>,
-    pub(crate) local_generic_newtypes: IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
-    pub(crate) local_enum_cases: IndexMap<crate::defs::DefId, EnumInfo>,
-    pub(crate) local_flags_cases: IndexMap<crate::defs::DefId, FlagsInfo>,
-    pub(crate) local_variant_cases: IndexMap<crate::defs::DefId, VariantInfo>,
+    pub(crate) local_struct_fields: IndexMap<DefId, StructFieldInfo>,
+    pub(crate) local_newtypes: IndexMap<DefId, TypeId>,
+    pub(crate) local_generic_newtypes: IndexMap<DefId, GenericNewtypeInfo>,
+    pub(crate) local_enum_cases: IndexMap<DefId, EnumInfo>,
+    pub(crate) local_flags_cases: IndexMap<DefId, FlagsInfo>,
+    pub(crate) local_variant_cases: IndexMap<DefId, VariantInfo>,
 
     /// Fields of the anonymous struct shapes this walk interned. A shape names
     /// no declaration, so it is keyed by the shape's own id — the same head
     /// [`crate::tir::StructDef::Anon`] carries.
-    pub(crate) anon_struct_fields: IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
+    pub(crate) anon_struct_fields: IndexMap<AnonStructId, StructFieldInfo>,
 
     /// The local items in scope at the walk's position, by the name written in
     /// source. `hoist_local_items` saves and restores it per block, and
@@ -164,7 +168,7 @@ pub(crate) struct ModuleDecls {
     ///
     /// It answers with an identity; a declaration's contents come from the
     /// maps above.
-    pub(crate) fn_local_items: IndexMap<String, crate::defs::DefId>,
+    pub(crate) fn_local_items: IndexMap<String, DefId>,
 }
 
 impl ModuleDecls {
