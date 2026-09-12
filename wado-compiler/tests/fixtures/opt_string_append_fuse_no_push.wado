@@ -1,0 +1,38 @@
+// Regression test: the append fusion fires in a program holding no
+// `String::push` at all, so `push_ascii_unchecked` is reachable from nothing.
+// Early DCE clears a dead function's body but keeps its entry and its compiler
+// item, which is what `Ctx::resolve` reads, so the rule still resolves.
+//
+// The three literals total 6 bytes and the buffer starts empty, so one
+// reservation covers the run and each literal copies in at its own offset.
+
+use { Stdout, log_stdout } from "core:cli";
+
+fn build(buf: &mut String) {
+    buf.push_str(&"ab");
+    buf.push_str(&"cd");
+    buf.push_str(&"ef");
+}
+
+export fn run() with Stdout {
+    let mut buf = String::with_capacity(16);
+    build(&mut buf);
+    log_stdout(buf);
+}
+
+__DATA__
+{
+    "stdout": "abcdef\n",
+    "wir_scope": "opt_string_append_fuse_no_push.wado/build",
+    "wir_expect:O2": [
+        "new_used = buf.used + 6;",
+        "builtin::array_copy<u8>(self_{}, start, global:opt_string_append_fuse_no_push.wado::__const_obj_{}, 0, 2);",
+        "builtin::array_copy<u8>(self_{}, start + 2, global:opt_string_append_fuse_no_push.wado::__const_obj_{}, 0, 2);",
+        "builtin::array_copy<u8>(self_{}, start + 4, global:opt_string_append_fuse_no_push.wado::__const_obj_{}, 0, 2);"
+    ],
+    "wir_not_expect:O2": [
+        "String::push_str\"(",
+        "String::push\"(",
+        "encode_char"
+    ]
+}

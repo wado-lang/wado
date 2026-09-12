@@ -26,8 +26,9 @@ pub(super) struct Ctx {
     push_str_id: crate::nir::FuncId,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: crate::nir::FuncId,
-    /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
-    /// `push`. Absent (`None`) it only disables [`ConstAsciiPushRule`].
+    /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
+    /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
+    /// recognises. Absent (`None`) disables both.
     push_ascii_id: Option<crate::nir::FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
