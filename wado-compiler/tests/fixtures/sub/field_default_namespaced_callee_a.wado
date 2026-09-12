@@ -1,0 +1,13 @@
+// `nsb` is this file's own import alias. A construction site elsewhere has no
+// such alias, so resolving the default there cannot find it.
+
+use nsb from "./field_default_namespaced_callee_b.wado";
+
+pub struct Cfg {
+    pub x: i32,
+    via_ns: i32 = nsb::make(),
+}
+
+pub fn via_ns_of(c: &Cfg) -> i32 {
+    return c.via_ns;
+}

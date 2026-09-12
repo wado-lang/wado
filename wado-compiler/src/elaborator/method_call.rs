@@ -688,18 +688,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     subs.insert(name.clone(), arg_ast.clone());
                 }
             }
-            self.with_default_scope_module(Some(callee_module.clone()), |s| {
+            self.with_resolving_home(Some(callee_module.clone()), |s| {
                 for i in args.len()..expected_param_types.len() {
                     let Some(Some(default_ast)) = param_defaults.get(i) else {
                         break;
                     };
                     let expected_type = expected_param_types[i];
                     let mut default_expr = default_ast.clone();
-                    let vantage = Some((callee_module.clone(), default_expr.id().space()));
                     default_expr.substitute_idents(&subs);
-                    let resolved = s.with_foreign_vantage(vantage, |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    });
+                    let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
                     args.push(resolved);
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
@@ -1795,14 +1792,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 let expected_type = param_types[i];
                 let mut default_expr = default_ast.clone();
-                let vantage = static_method_module
-                    .clone()
-                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
-                let resolved = self.with_default_scope_module(static_method_module.clone(), |s| {
-                    s.with_foreign_vantage(vantage, |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    })
+                let resolved = self.with_resolving_home(static_method_module.clone(), |s| {
+                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
                 });
                 args.push(resolved);
                 arg_spans.push(default_expr.span());
@@ -3546,7 +3538,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .static_method_entries(&target, method_name)
                 .find(|e| e.is_inherent())
                 .map(|e| e.module.clone())
-                .unwrap_or_else(|| self.declaring_module_of(&actual_struct_name));
+                .unwrap_or_else(|| self.declaring_module_at(Some(call_id), &actual_struct_name));
             StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
         });
 

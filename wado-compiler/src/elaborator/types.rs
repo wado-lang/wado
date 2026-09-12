@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{self, AstId};
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 use crate::token::Span;
@@ -2997,6 +2998,16 @@ impl<'a> TypeLookup<'a> {
         site: Option<crate::ast::AstId>,
         name: &str,
     ) -> Option<crate::defs::DefId> {
+        // A name written in another module is being read here, which is what a
+        // default expression does. The walk's own answer for the site is no use
+        // then: the same node is walked once per site that takes the default,
+        // and only the last one is kept (`sem::fact_home`). Its author's frame
+        // is the stable answer.
+        if let Some(home) = site.and_then(|site| self.decls?.module_of_space(site.space()))
+            && home != self.current_module_source
+        {
+            return self.declaration_in(home, name);
+        }
         match site.and_then(|site| self.resolutions.walked(site)) {
             Some(crate::resolve::Resolution::Def(def)) => Some(def),
             Some(crate::resolve::Resolution::Binder(_)) => None,
@@ -3011,6 +3022,12 @@ impl<'a> TypeLookup<'a> {
     /// The function-local items tried ahead of the indexes are the walk's own
     /// position; a local item is visible only after its declaration statement.
     pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
+        self.declaration_in(self.current_module_source, name)
+    }
+
+    /// [`Self::declaration`] as read from `frame`, the module that wrote the
+    /// reference rather than necessarily the one reading it.
+    fn declaration_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
         let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.fn_local_items.get(name) {
@@ -3023,11 +3040,11 @@ impl<'a> TypeLookup<'a> {
         // reach — what it imported, what it declares, what the prelude gives
         // it — so a declaration this module cannot see stays unseen here.
         self.resolutions
-            .imported_as(self.current_module_source, name)
+            .imported_as(frame, name)
             .or_else(|| {
                 self.decls?
                     .decls_named(name)
-                    .find(|def| self.resolutions.defs().module(*def) == self.current_module_source)
+                    .find(|def| self.resolutions.defs().module(*def) == frame)
             })
             .or_else(|| self.resolutions.prelude_decl(name))
     }

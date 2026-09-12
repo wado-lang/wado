@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, BinaryOp, Expr, Type};
+use crate::ast::{self, AstId, BinaryOp, Expr, Type};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -632,7 +632,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The module declaring the type a rendered head names, for a caller whose
     /// receiver carries no declaration. The frame derivation and nothing wider
     /// (WEP 2026-08-12), so an unseen declaration lands where the walk stands.
+    /// [`Self::declaring_module_at`] for a caller with no reference site.
     pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
+        self.declaring_module_at(None, struct_name)
+    }
+
+    /// The module declaring the type `struct_name` names as written at `site`.
+    /// Two modules may each declare the name, so the site is what picks.
+    pub(super) fn declaring_module_at(
+        &self,
+        site: Option<AstId>,
+        struct_name: &str,
+    ) -> ModuleSource {
         // Primitive impl blocks live in `core:prelude/primitive.wado`. i128 /
         // u128 are structs in `prelude/int128.wado`, not primitives.
         if matches!(
@@ -651,7 +662,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ) {
             return ModuleSource::primitive();
         }
-        if let Some(def) = self.decl_key_or_local(struct_name) {
+        if let Some(def) = site.map_or_else(
+            || self.decl_key_or_local(struct_name),
+            |site| self.decl_key_at(site, struct_name),
+        ) {
             return self.tysys.resolutions.defs().module(def).clone();
         }
         // A newtype or `flags` type this walk interned: its `ResolvedType`
@@ -1200,7 +1214,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Bind a still-unbound method type param to its declared default,
     /// resolving the default with `Self` set to the concrete receiver and
-    /// `default_scope_module` pointed at the declaring module — a default may
+    /// `resolving_home` pointed at the declaring module — a default may
     /// name a type private to that module (`<T = Priv>`), which the call site
     /// cannot resolve. The free-function path does the same
     /// ([`Self::fill_defaulted_fn_type_args`]).
@@ -1235,7 +1249,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
         let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
-            s.with_default_scope_module(declaring_module, |s| {
+            s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(method_type_params, base);

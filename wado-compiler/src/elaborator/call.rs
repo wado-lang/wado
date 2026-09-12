@@ -1275,8 +1275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
-            else if let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
-            {
+            else if let Some(ns_source) = self.namespace_alias_source(prefix, call.callee.id()) {
                 // suffix may be "Type::method" or plain "func"
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
@@ -2059,8 +2058,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bare-name lookup reaches. Without it the arguments resolve with no
             // expected type, so a sequence literal never coerces to its `List`
             // parameter and reaches codegen mismatched.
-            if self.sem.imports.namespace_imports.contains_key(prefix) {
-                let ns_source = self.sem.imports.namespace_imports[prefix].clone();
+            if let Some(ns_source) =
+                callee_site.and_then(|id| self.namespace_alias_source(prefix, id))
+            {
                 if let Some(def) = self.decl_in_module(&ns_source, suffix)
                     && let Some(sig) = self.tysys.signatures.function_sig(def)
                 {
@@ -2142,23 +2142,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 subs.insert(name.clone(), arg_ast.clone());
             }
         }
-        self.with_default_scope_module(callee_module, |s| {
+        self.with_resolving_home(callee_module, |s| {
             for i in args.len()..param_types.len() {
                 let (name, default_ast) = match defaults.get(i) {
                     Some((n, Some(d))) => (n.clone(), d.clone()),
                     _ => break,
                 };
                 let mut default_expr = default_ast;
-                let vantage = s
-                    .annotate_ctx
-                    .default_scope_module
-                    .clone()
-                    .map(|m| (m, default_expr.id().space()));
                 default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
-                let resolved = s.with_foreign_vantage(vantage, |s| {
-                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                });
+                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2577,7 +2570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// type-arg slot call-site inference left unbound, seeding an empty
     /// `type_args` first so an omitted turbofish is covered. Each default
     /// resolves with the callee's params in scope (`<T, U = T>` picks up `T`)
-    /// and at `default_scope_module`, so it may name a type private to it.
+    /// and at `resolving_home`, so it may name a type private to it.
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
         let space: Vec<ast::GenericParam> = params
@@ -2591,7 +2584,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let n = space.len();
 
         let defaults: Vec<Option<TypeId>> =
-            self.with_default_scope_module(Some(callee.module().clone()), |s| {
+            self.with_resolving_home(Some(callee.module().clone()), |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&params, 0);

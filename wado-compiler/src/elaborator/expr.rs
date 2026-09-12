@@ -741,18 +741,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ident.span,
             );
             // Not an l-value.
-            let vantage = (assoc.module.clone(), assoc.value.id().space());
             let const_module = assoc.module.clone();
-            self.with_default_scope_module(Some(const_module), |s| {
-                s.with_foreign_vantage(Some(vantage), |s| {
-                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                })
+            self.with_resolving_home(Some(const_module), |s| {
+                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
             });
             return assoc.ty;
         }
 
         // A case name without parentheses: `Color::Red`, or a bare `Red`.
         if let Some(result) = self.resolve_qualified_case(ident, expected_type) {
+            return result;
+        }
+
+        // A module-level name belongs to the module that wrote this node. A
+        // default expression is resolved wherever the default is taken, so
+        // asking here first would let a same-named item of the taking module
+        // answer for a name its author never wrote.
+        let home = self.home_module(ident.id);
+        if home != self.current_module_source
+            && let Some(result) = self.resolve_ident_in_module(ident, &home)
+        {
             return result;
         }
 
@@ -812,16 +820,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // A default expression looks its identifier up in the callee's lexical
-        // scope, which is what gives it the definition module's private globals
-        // and functions (issue #1486).
-        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
-            && fallback != self.current_module_source
-            && let Some(result) = self.resolve_ident_in_fallback_module(ident, &fallback)
-        {
-            return result;
-        }
-
         // Unknown variable - report error
         let _ = self.emit(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
@@ -830,9 +828,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// Look up an identifier in the callee module's global scope during
-    /// default-expression resolution. Supports globals and function refs.
-    fn resolve_ident_in_fallback_module(
+    /// Look up an identifier in the global scope of the module that wrote it,
+    /// which is what gives a travelled expression its author's module-private
+    /// globals and functions. Supports globals and function refs.
+    fn resolve_ident_in_module(
         &mut self,
         ident: &ast::IdentExpr,
         fallback: &ModuleSource,
@@ -1515,12 +1514,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// The module that wrote `node`, per [`super::scope::Scope::foreign_vantage`].
-    /// `None` judges here, for a site carrying no id.
+    /// The module a visibility question is asked from: the one that wrote
+    /// `node`. `None` judges here, for a site carrying no id.
     pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
-        match (&self.annotate_ctx.foreign_vantage, node) {
-            (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
-            _ => self.current_module_source.clone(),
+        match node {
+            Some(id) => self.home_module(id),
+            None => self.current_module_source.clone(),
         }
     }
 
@@ -3973,26 +3972,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
                     // The default is *foreign* AST owned by the struct's
-                    // declaring module, so it both resolves in that module's
-                    // scope and is checked from that module's vantage: what a
-                    // default calls is the author's to see, not this
-                    // construction site's. `pad_args_with_defaults` redirects
-                    // both the same way for function defaults.
+                    // declaring module, and everything it names is that
+                    // module's: its scope, its import aliases, and the vantage
+                    // its visibility is judged from. None of the three belong
+                    // to this construction site.
                     // Fact keying stays local, the default's nodes carrying
                     // their own globally-unique `AstId`s, and `expected_type_id`
                     // still drives literal / `null → None` coercion.
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
-                        self.with_default_scope_module(Some(struct_module_source.clone()), |s| {
-                            let vantage = s
-                                .annotate_ctx
-                                .default_scope_module
-                                .clone()
-                                .map(|m| (m, default_expr.id().space()));
-                            s.with_foreign_vantage(vantage, |s| {
-                                s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
-                            })
+                        self.with_resolving_home(Some(struct_module_source.clone()), |s| {
+                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                         })
                     };
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);

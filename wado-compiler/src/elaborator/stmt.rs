@@ -1646,12 +1646,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // constant introduces no binding — it is either a literal
                         // or an opaque constant-value pattern — so return none
                         // either way.
-                        let vantage = (assoc.module.clone(), assoc.value.id().space());
                         let const_module = assoc.module.clone();
-                        self.with_default_scope_module(Some(const_module), |s| {
-                            s.with_foreign_vantage(Some(vantage), |s| {
-                                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
-                            })
+                        self.with_resolving_home(Some(const_module), |s| {
+                            s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                         });
                         return Vec::new();
                     }

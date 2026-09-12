@@ -49,6 +49,7 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Item, Module};
 use crate::compiler_host::CompilerHost;
+use crate::defs::DefId;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
@@ -378,6 +379,41 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         name: &str,
     ) -> Option<crate::defs::DefId> {
         self.type_lookup().declaration_at(site, name)
+    }
+
+    /// The module `node` was written in, which is the module it resolves in.
+    ///
+    /// A default expression travels: it is written by one module's author and
+    /// re-resolved wherever the default is taken. Its names, its import
+    /// aliases and the vantage its visibility is judged from all stay the
+    /// author's, and the caller's own arguments spliced into it stay the
+    /// caller's, because each node carries the space it was parsed in.
+    ///
+    /// Synthesized nodes belong to no module and answer with the current one.
+    pub(super) fn home_module(&self, node: ast::AstId) -> ModuleSource {
+        self.tysys
+            .trait_env
+            .module_of_space(node.space())
+            .cloned()
+            .unwrap_or_else(|| self.current_module_source.clone())
+    }
+
+    /// The namespace aliases in scope for `node`, which are the ones its own
+    /// module's author wrote.
+    pub(super) fn namespace_alias_source(
+        &self,
+        alias: &str,
+        node: ast::AstId,
+    ) -> Option<ModuleSource> {
+        let home = self.home_module(node);
+        if home == self.current_module_source {
+            return self.sem.imports.namespace_imports.get(alias).cloned();
+        }
+        self.tysys
+            .trait_env
+            .namespace_imports(&home)
+            .get(alias)
+            .cloned()
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and
@@ -1180,47 +1216,56 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration a written reference names, keyed on the site that wrote it,
     /// so an alias, a namespace prefix and a function-local item each reach their
     /// own. `name` is read only where the site reaches nothing.
-    pub(crate) fn decl_key_at(
-        &self,
-        site: crate::ast::AstId,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(crate) fn decl_key_at(&self, site: ast::AstId, name: &str) -> Option<DefId> {
+        // The walk's own answer is no use for a node another module wrote: the
+        // same node is walked once per site that takes it and only the last is
+        // kept (`sem::fact_home`), so its author's frame is what stays true.
+        let home = self.home_module(site);
+        if home != self.current_module_source {
+            return self.decl_key_in(&home, name);
+        }
         self.tysys
             .resolutions
             .declared_if_walked(site)
-            .or_else(|| self.decl_key_or_local(name))
+            .or_else(|| self.decl_key_in(&home, name))
     }
 
     /// The declaration indexes, for a caller holding a spelling whose reference
-    /// site is not at hand — a rendered head, a synthesis target. Each frame is
-    /// one module, so a hit is unique; an unaccounted name falls to the prelude.
+    /// site is not at hand — a rendered head, a synthesis target. One that
+    /// holds a site should call [`Self::decl_key_at`] instead.
     ///
-    /// The frames are the walk's own position, never a caller's. Where it reads an
-    /// expression another module wrote, that writing module answers first.
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
+    /// The frame is where the AST being resolved was *written*: the walk's own
+    /// position normally, and the author's module while the walk is inside an
+    /// expression that travelled. One frame, not a preference between two —
+    /// a name both modules declare must not be decided by which is tried first.
+    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
+        let frame = self
+            .annotate_ctx
+            .resolving_home
+            .clone()
+            .unwrap_or_else(|| self.current_module_source.clone());
+        self.decl_key_in(&frame, name)
+    }
+
+    /// The declaration `name` refers to as written in `frame`; an unaccounted
+    /// name falls to the prelude. One frame is one module, so a hit is unique.
+    fn decl_key_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
         // its own; the indexes cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
         let defs = self.tysys.resolutions.defs();
-        let frames = self
-            .annotate_ctx
-            .default_scope_module
-            .iter()
-            .chain(std::iter::once(&self.current_module_source));
-        for frame in frames {
-            let found = self.tysys.resolutions.imported_as(frame, name).or_else(|| {
+        self.tysys
+            .resolutions
+            .imported_as(frame, name)
+            .or_else(|| {
                 self.tysys
                     .trait_env
                     .decls_named(name)
                     .find(|def| defs.module(*def) == frame)
-            });
-            if found.is_some() {
-                return found;
-            }
-        }
-        self.tysys.resolutions.prelude_decl(name)
+            })
+            .or_else(|| self.tysys.resolutions.prelude_decl(name))
     }
 
     /// The trait a bound's reference site names; `written` supplies the type

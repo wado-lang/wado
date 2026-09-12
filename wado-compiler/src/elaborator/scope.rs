@@ -116,8 +116,8 @@ pub(super) struct TraitCheckFrame {
 /// Per-function annotate-time scope, bundled so queries take one `&Scope`.
 /// None of it may move onto the shared `TypeSystem`: `trait_ctx` is
 /// per-function, `trait_check_stack` is a per-call frame stack whose
-/// sharing would leak frames across module walks, and
-/// `default_scope_module` is a per-call-site override.
+/// sharing would leak frames across module walks, and `resolving_home`
+/// holds only for the expression being resolved under it.
 #[derive(Default)]
 pub(super) struct Scope {
     pub(super) trait_ctx: TraitContext,
@@ -128,15 +128,11 @@ pub(super) struct Scope {
     /// repeated question is grounded only when one of them lies between the
     /// two askings.
     pub(super) member_edges: Cell<u32>,
-    /// When resolving a default-expression AST at a call site, fall back to
-    /// looking up unresolved identifiers in this module's global scope —
-    /// the callee's lexical scope for defaults that reference
-    /// module-private items (WEP 2026-04-11).
-    pub(super) default_scope_module: Option<ModuleSource>,
-    /// The module a visibility question is asked from, with the id space it
-    /// applies to: foreign AST answers to its declaring module, while the
-    /// caller's own arguments spliced into it keep their own space.
-    pub(super) foreign_vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
+    /// The module that wrote the AST being resolved, while that is not this
+    /// one — a default expression taken at a site in another module. Names in
+    /// it resolve in their author's module, so this replaces the walk's own
+    /// frame rather than being tried alongside it (WEP 2026-04-11).
+    pub(super) resolving_home: Option<ModuleSource>,
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -232,25 +228,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Run `body` with [`Scope::default_scope_module`] replaced by
+    /// Run `body` with [`Scope::resolving_home`] replaced by
     /// `module`. Unlike [`Self::with_self_type`], `None` here is
     /// a value: it clears the fallback.
-    pub(super) fn with_default_scope_module<R>(
+    pub(super) fn with_resolving_home<R>(
         &mut self,
         module: Option<ModuleSource>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
-    }
-
-    /// Run `body` with the visibility vantage set to `module` for nodes parsed
-    /// in `space`. See [`Scope::foreign_vantage`].
-    pub(super) fn with_foreign_vantage<R>(
-        &mut self,
-        vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_scope_field(|scope| &mut scope.foreign_vantage, vantage, body)
+        self.with_scope_field(|scope| &mut scope.resolving_home, module, body)
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a

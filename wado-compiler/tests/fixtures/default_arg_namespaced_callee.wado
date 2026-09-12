@@ -1,0 +1,17 @@
+// Regression test: a parameter default resolves in the file that declared it,
+// import aliases included. Omitting the argument from another file must not ask
+// that file to know an alias it never wrote. The free-function case used to
+// panic the compiler outright.
+
+use { println, Stdout } from "core:cli";
+use { Holder, with_default } from "./sub/default_arg_namespaced_callee_a.wado";
+
+export fn run() with Stdout {
+    let h = Holder { q: 2 };
+    println(`${with_default()} ${h.scaled()} ${Holder::build().q}`);
+}
+
+__DATA__
+{
+    "stdout": "11 22 11\n"
+}
