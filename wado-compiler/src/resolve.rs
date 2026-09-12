@@ -10,7 +10,7 @@ use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::symbol::SymbolTable;
+use crate::symbol::{SymbolKind, SymbolTable};
 
 /// What a reference site refers to.
 ///
@@ -54,10 +54,10 @@ struct Scopes {
     /// Each module's own declarations, including what its own `pub use`
     /// re-exports reach.
     own: IndexMap<ModuleSource, IndexMap<String, DefId>>,
-    /// The prelude's public surface, then its implementation modules' own
-    /// declarations. In scope in every module without a `use`, which is what
-    /// makes `i32` and `List` universal and lets a sealed compiler item
-    /// (`ReflectStruct`, `Member`) resolve for a module that never named it.
+    /// The prelude's public surface — what `core:prelude` declares and
+    /// re-exports — plus the builtin types. In scope in every module without a
+    /// `use`, which is what makes `i32` and `List` universal. What an
+    /// implementation module declares for its siblings is not in it.
     prelude: IndexMap<String, DefId>,
     /// The cases the types above bring with them — `Some`, `Ok`, an `enum`
     /// case written bare. Their own tier, under every type tier, because a type
@@ -128,15 +128,10 @@ impl Scopes {
         defs: &DefTable,
     ) -> Self {
         let mut out = Self::default();
-        for (name, sym) in symbols.iter() {
-            if is_prelude_module(sym.module_source())
-                && let Some(def) = defs.of_ast_id(*name)
-            {
-                out.prelude.entry(sym.name.clone()).or_insert(def);
-            }
-        }
-        // The prelude's own surface — its declarations and what it re-exports —
-        // ranks above its implementation modules' internals.
+        // The prelude scope is what `core:prelude` exports — its own
+        // declarations and what it re-exports — and nothing else. An
+        // implementation module's symbol is `pub` so its siblings can name it,
+        // not so every module in the program can.
         let prelude = ModuleSource::prelude();
         let mut surface: IndexMap<String, DefId> = IndexMap::default();
         for name in symbols.reexport_names(&prelude) {
@@ -146,8 +141,22 @@ impl Scopes {
                 surface.insert(name, def);
             }
         }
-        for (name, def) in out.prelude.drain(..) {
-            surface.entry(name).or_insert(def);
+        for sym in symbols.get_module_symbols(&prelude) {
+            if let Some(def) = defs.of_ast_id(sym.defined_at) {
+                surface.entry(sym.name.clone()).or_insert(def);
+            }
+        }
+        // A builtin type is universal by nature rather than by export: `i32`
+        // names the same thing in a module that imports nothing, including one
+        // carrying `#![no_prelude]`, so where it was declared says nothing
+        // about who may write it.
+        for (id, sym) in symbols.iter() {
+            if matches!(sym.kind, SymbolKind::BuiltinType)
+                && is_prelude_module(sym.module_source())
+                && let Some(def) = defs.of_ast_id(*id)
+            {
+                surface.entry(sym.name.clone()).or_insert(def);
+            }
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);

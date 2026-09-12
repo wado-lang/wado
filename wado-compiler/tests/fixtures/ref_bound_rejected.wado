@@ -2,6 +2,10 @@
 // handle (an `i32` index into the CM handle table), an `enum` (scalar
 // discriminant), and `flags` (a `u32` bitmask). None is a Wasm GC reference.
 // See WEP 2026-01-20.
+//
+// `Ref` is a bound `IndexRef` states for its own `Output`, not a name the
+// prelude puts in scope, so a module that writes it imports it.
+use { Ref } from "core:prelude/traits.wado";
 
 pub resource Counter {
     fn bump(&self);

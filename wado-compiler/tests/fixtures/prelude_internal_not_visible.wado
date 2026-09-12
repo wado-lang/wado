@@ -1,0 +1,14 @@
+// The prelude's scope is what `core:prelude` exports, not what its
+// implementation modules happen to declare. `UnpackResult` is `pub` inside
+// `core:prelude/fpfmt.wado` so its siblings can name it, and `core:prelude`
+// imports that module without re-exporting anything from it — so no module
+// outside `core:` can see the name.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = UnpackResult { mantissa: 0, exponent: 0 };
+    println(`${r.exponent}`);
+}
+
+__DATA__
+{"compile_error": "UnpackResult"}

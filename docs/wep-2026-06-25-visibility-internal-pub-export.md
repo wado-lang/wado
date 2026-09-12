@@ -142,6 +142,13 @@ describing its own reach.
 - [x] Struct fields carry the ladder too: reading, setting, or binding one
       beyond its reach — field access, struct literal, or destructuring
       pattern — is a `PRIVATE_SYMBOL` compile error.
+- [x] The prelude is in scope everywhere, so what it puts there is what
+      `core:prelude` exports: its own declarations and its `pub use`
+      re-exports, plus the builtin types, which are universal by nature rather
+      than by export. A symbol an implementation module declares `pub` for its
+      siblings is not a prelude symbol — `core:prelude/fpfmt.wado`'s
+      `UnpackResult` is `pub` and unreachable outside `core:`, and
+      `prelude_internal_not_visible.wado` pins that.
 - [x] Impl members (methods, associated constants) likewise, in expression and
       pattern position alike, and `export` on one is a compile error with a
       targeted diagnostic. Only _inherent_ members carry a ladder; a trait
