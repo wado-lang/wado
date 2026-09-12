@@ -11,14 +11,8 @@ use crate::defs::{DefId, DefKind, DefTable};
 use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::symbol::{SymbolKind, SymbolTable};
-||||||| 3856bdb0b
-use crate::symbol::SymbolTable;
-=======
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::SymbolTable;
->>>>>>> origin/main
+use crate::symbol::{SymbolKind, SymbolTable};
 
 /// What a reference site refers to.
 ///
