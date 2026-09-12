@@ -11,6 +11,9 @@
 //
 // The three literals are 1-3 ASCII bytes. The buffer starts empty and nothing
 // else writes it, so the run's one reservation ends at the constant 6.
+//
+// Nothing here reaches `push_ascii_unchecked`, so early DCE marks it dead. This
+// pins `Ctx::resolve` reading a compiler item off the entry, not a live body.
 
 use { println, Stdout } from "core:cli";
 
