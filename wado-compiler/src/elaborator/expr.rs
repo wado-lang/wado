@@ -278,11 +278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let ast_id = expr.id();
-        let lifted = ctx.spliced_floor_lifted(ast_id);
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
-        if let Some(floor) = lifted {
-            ctx.scope_floor = floor;
-        }
         self.record_expression_type(ast_id, type_id);
         type_id
     }
@@ -740,6 +736,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // A parameter this default may name. Below the binder tiers, so a
+        // binder the default opens itself shadows the parameter, matching the
+        // scope a reader sees at the declaration.
+        if let Some(&param_type) = self.annotate_ctx.default_arg_types.get(&ident.name) {
+            return param_type;
+        }
+
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
         // constant's body is *foreign* AST owned by `const_module`; we
         // re-resolve it here only for the consumer's inference side effects.
@@ -762,11 +765,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // again here, so it travels exactly as a default does and names
             // none of this function's binders.
             let const_module = assoc.module.clone();
-            let travelled = ctx.enter_travelled_expr(std::iter::empty());
-            self.with_resolving_home(Some(const_module), |s| {
-                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+            ctx.with_caller_bindings_hidden(|ctx| {
+                self.with_resolving_home(Some(const_module), |s| {
+                    s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                })
             });
-            ctx.leave_travelled_expr(travelled);
             return assoc.ty;
         }
 
@@ -3994,17 +3997,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // its import aliases and the vantage its visibility is
                     // judged from are all that module's. Fact keying stays
                     // local, the default's nodes carrying their own globally
-                    // unique `AstId`s. A field default names no argument, so
-                    // nothing of this site's is spliced into it.
-                    let travelled = ctx.enter_travelled_expr(std::iter::empty());
-                    let resolved = if struct_module_source == self.current_module_source {
-                        self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
-                    } else {
+                    // unique `AstId`s.
+                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
                         self.with_resolving_home(Some(struct_module_source.clone()), |s| {
                             s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                         })
-                    };
-                    ctx.leave_travelled_expr(travelled);
+                    });
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(ResolvedField {
                         name: expected_name.clone(),

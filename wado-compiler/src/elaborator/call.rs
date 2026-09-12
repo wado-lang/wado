@@ -1777,7 +1777,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_function_param_defaults(&call.callee, ctx);
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
             self.apply_param_defaults(
-                &call.args,
                 &mut args,
                 &check_param_types,
                 &param_defaults,
@@ -1889,7 +1888,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if pad_with_defaults && args.len() < fn_params.len() {
-            self.pad_args_with_defaults(&call.callee, &call.args, &mut args, fn_params, ctx);
+            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, ctx);
         }
 
         if args.len() != fn_params.len() {
@@ -2099,30 +2098,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
-        call_args_ast: &[Expr],
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
         ctx: &mut FunctionContext,
     ) {
         let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
-        self.apply_param_defaults(
-            call_args_ast,
-            args,
-            param_types,
-            &defaults,
-            callee_module,
-            ctx,
-        );
+        self.apply_param_defaults(args, param_types, &defaults, callee_module, ctx);
     }
 
-    /// Fill missing trailing arguments from `defaults`, resolving each in the
-    /// caller's context. A default may name an earlier parameter (`fn rect(w, h
-    /// = w)`), so param-name idents in its cloned AST are substituted with the
-    /// caller's argument AST before resolution. A position with no declared
-    /// default is left for the arity check.
+    /// Fill missing trailing arguments from `defaults`, each resolved as its
+    /// author wrote it. A position with no declared default is left for the
+    /// arity check.
     pub(super) fn apply_param_defaults(
         &mut self,
-        call_args_ast: &[Expr],
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
@@ -2132,24 +2120,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if defaults.is_empty() {
             return;
         }
-        let mut subs: IndexMap<String, Expr> = IndexMap::default();
-        for (i, arg_ast) in call_args_ast.iter().enumerate() {
+        // A default may name a parameter ahead of it. The call site typed the
+        // caller's argument already, so its type is the answer; walking the
+        // caller's AST again here would be the one part of the default that is
+        // not the callee's code.
+        let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
+        for (i, arg_type) in args.iter().enumerate() {
             if let Some((name, _)) = defaults.get(i) {
-                subs.insert(name.clone(), arg_ast.clone());
+                param_types_so_far.insert(name.clone(), *arg_type);
             }
         }
         self.with_resolving_home(callee_module, |s| {
             for i in args.len()..param_types.len() {
-                let (name, default_ast) = match defaults.get(i) {
+                let (name, default_expr) = match defaults.get(i) {
                     Some((n, Some(d))) => (n.clone(), d.clone()),
                     _ => break,
                 };
-                let mut default_expr = default_ast;
-                default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
-                let travelled = ctx.enter_travelled_expr(call_args_ast.iter().map(Expr::id));
-                let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
-                ctx.leave_travelled_expr(travelled);
+                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                    s.with_default_arg_types(param_types_so_far.clone(), |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    })
+                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2169,7 +2161,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
                 args.push(resolved);
-                subs.insert(name, default_expr);
+                param_types_so_far.insert(name, resolved);
             }
         });
     }

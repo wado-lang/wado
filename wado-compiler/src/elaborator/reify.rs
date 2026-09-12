@@ -2657,12 +2657,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Run `f` with the default-argument override map suppressed. Mirrors
-    /// `Expr::substitute_idents` leaving binder / control forms (closure,
-    /// block, `if`, `match`, …) untouched on the annotate side: a reference
-    /// shadowed by a binding introduced *inside* such a form must resolve to
-    /// that binding, not to an outer parameter's substituted argument. No-op
-    /// outside a default-argument walk. See `reify_pad_args_with_defaults`.
+    /// Run `f` with the default-argument override map suppressed, for a binder
+    /// or control form (closure, block, `if`, `match`, …): a reference the form
+    /// binds itself must resolve to that binding, not to an outer parameter's
+    /// argument. No-op outside a default-argument walk. See
+    /// `reify_pad_args_with_defaults`.
     fn with_defaults_suppressed<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.default_arg_overrides.is_empty() {
             return f(self);
@@ -2686,15 +2685,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TypeTable};
-
-        // A caller's argument spliced into a default is the caller's code and
-        // names the caller's locals. The re-entry sees a zero floor, so it
-        // walks the subtree as any other expression.
-        if let Some(floor) = ctx.spliced_floor_lifted(expr.id()) {
-            let tir = self.reify_expr(expr, ctx, expected_type);
-            ctx.scope_floor = floor;
-            return tir;
-        }
 
         // Power-assert capture hook. See `reify_assert` /
         // `reify_with_assert_capture`.
@@ -5672,15 +5662,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // free identifiers and decl lookups still resolve in the
                     // struct module's scope, so the perspective swap remains for
                     // name resolution.
-                    let travelled = ctx.enter_travelled_expr(std::iter::empty());
-                    let value = if struct_module == self.current_module_source {
-                        self.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                    } else {
+                    let value = ctx.with_caller_bindings_hidden(|ctx| {
                         self.with_const_module_perspective(&struct_module, |this| {
                             this.reify_expr(default_expr, ctx, Some(expected_field_ty))
                         })
-                    };
-                    ctx.leave_travelled_expr(travelled);
+                    });
                     fields.push(TirStructField {
                         name: name.clone(),
                         value,
@@ -7888,12 +7874,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // A default declared on a trait method has no body for annotate to
             // walk, so without the parameter's type here it reifies untyped.
             let expected = param_types.get(i).copied();
-            // No caller AST is spliced here: `default_arg_overrides` already
-            // answers a reference to an earlier parameter with its reified
-            // argument, so the walk stays inside the callee's own default.
-            let travelled = ctx.enter_travelled_expr(std::iter::empty());
-            let resolved = self.reify_expr(&default_ast, ctx, expected);
-            ctx.leave_travelled_expr(travelled);
+            let resolved =
+                ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
             args.push(CallArg::new(resolved, false));
@@ -8772,28 +8754,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // Mirrors `resolve_method_call_with`; the recorded `param_names` /
         // `param_defaults` arrive on `MethodDispatch` from annotate.
         if args.len() < dispatch.param_defaults.len() {
-            let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
-            for (i, arg_ast) in method_call.args.iter().enumerate() {
+            // An earlier-parameter reference resolves to the caller's argument,
+            // already reified under the caller's perspective — the same answer
+            // `reify_pad_args_with_defaults` gives on the free-function path.
+            let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
+            for (i, arg) in args.iter().enumerate() {
                 if let Some(name) = dispatch.param_names.get(i) {
-                    subs.insert(name.clone(), arg_ast.clone());
+                    overrides.insert(name.clone(), arg.expr.clone());
                 }
             }
+            let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
             for i in args.len()..dispatch.param_defaults.len() {
-                let Some(Some(default_ast)) = dispatch.param_defaults.get(i) else {
+                let Some(Some(default_expr)) = dispatch.param_defaults.get(i).cloned() else {
                     break;
                 };
-                let mut default_expr = default_ast.clone();
-                default_expr.substitute_idents(&subs);
-                let travelled =
-                    ctx.enter_travelled_expr(method_call.args.iter().map(ast::Expr::id));
-                let resolved = self.reify_expr(&default_expr, ctx, None);
-                ctx.leave_travelled_expr(travelled);
+                let resolved = ctx
+                    .with_caller_bindings_hidden(|ctx| self.reify_expr(&default_expr, ctx, None));
                 let is_mut = dispatch.param_is_mut.get(i).copied().unwrap_or(false);
-                args.push(CallArg::new(resolved, is_mut));
                 if let Some(name) = dispatch.param_names.get(i) {
-                    subs.insert(name.clone(), default_expr);
+                    self.default_arg_overrides
+                        .insert(name.clone(), resolved.clone());
                 }
+                args.push(CallArg::new(resolved, is_mut));
             }
+            self.default_arg_overrides = saved_overrides;
         }
 
         // The call's result type is the resolved method's return type
@@ -8975,9 +8959,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // expression, a free reference to an earlier parameter resolves to the
         // caller's already-reified argument (kept under the caller's
         // perspective). `reify_expr` clears this map before descending into a
-        // binder / control form (closure, block, …) — exactly the forms
-        // `Expr::substitute_idents` leaves untouched on the annotate side — so
-        // a reference shadowed by an inner binding is never reached here. See
+        // binder / control form (closure, block, …), so a reference shadowed by
+        // an inner binding is never reached here. See
         // `reify_pad_args_with_defaults`.
         if !self.default_arg_overrides.is_empty()
             && let Some(tir) = self.default_arg_overrides.get(&ident.name)

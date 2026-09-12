@@ -1641,11 +1641,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // or an opaque constant-value pattern — so return none
                         // either way.
                         let const_module = assoc.module.clone();
-                        let travelled = ctx.enter_travelled_expr(std::iter::empty());
-                        self.with_resolving_home(Some(const_module), |s| {
-                            s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                        ctx.with_caller_bindings_hidden(|ctx| {
+                            self.with_resolving_home(Some(const_module), |s| {
+                                s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
+                            })
                         });
-                        ctx.leave_travelled_expr(travelled);
                         return Vec::new();
                     }
 

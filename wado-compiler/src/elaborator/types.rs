@@ -2299,14 +2299,6 @@ pub(super) struct LabeledBlockTarget {
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
     pub(super) scopes: Vec<IndexMap<String, LocalVar>>,
-    /// Scopes below this index are out of reach, and so are the enclosing
-    /// function's captures. Non-zero only inside a travelled expression; see
-    /// [`Self::enter_travelled_expr`].
-    pub(super) scope_floor: usize,
-    /// Roots of the caller's argument subtrees spliced into the travelled
-    /// expression being walked, which get the floor lifted again for their own
-    /// nodes. See [`Self::spliced_floor_lifted`].
-    pub(super) travelled_splices: IndexSet<AstId>,
     /// Next local index (Wasm locals are function-wide). Private: a uniquifier
     /// comes from [`FunctionContext::fresh_serial`], a count from
     /// [`FunctionContext::local_count`].
@@ -2418,8 +2410,6 @@ impl FunctionContext {
     pub(super) fn new(return_type: TypeId, function_name: String) -> Self {
         Self {
             scopes: vec![IndexMap::default()], // Start with one scope for function parameters
-            scope_floor: 0,
-            travelled_splices: IndexSet::default(),
             next_local: 0,
             return_type,
             is_async: false,
@@ -2453,10 +2443,8 @@ impl FunctionContext {
         outer_ctx: &FunctionContext,
         type_table: &RefCell<TypeTable>,
     ) -> Self {
-        // Snapshot the locals the closure may reach. A closure written inside a
-        // travelled expression reaches only what that expression opened, the
-        // same scopes `lookup_or_capture` leaves in reach for the expression.
-        let outer_scopes = &outer_ctx.scopes[outer_ctx.scope_floor..];
+        // Snapshot all locals from outer context
+        let outer_scopes = &outer_ctx.scopes;
         let mut outer_locals = IndexMap::default();
         for scope in outer_scopes {
             for (name, local) in scope {
@@ -2480,8 +2468,6 @@ impl FunctionContext {
 
         Self {
             scopes: vec![IndexMap::default()],
-            scope_floor: 0,
-            travelled_splices: IndexSet::default(),
             next_local: 0,
             return_type,
             is_async: false, // Closures are never async
@@ -2588,10 +2574,9 @@ impl FunctionContext {
         index
     }
 
-    /// Look up a variable by name, innermost scope first and never below the
-    /// floor [`Self::enter_travelled_expr`] set.
+    /// Look up a variable by name (searches from innermost to outermost scope)
     pub(super) fn lookup(&self, name: &str) -> Option<&LocalVar> {
-        for scope in self.scopes[self.scope_floor..].iter().rev() {
+        for scope in self.scopes.iter().rev() {
             if let Some(local) = scope.get(name) {
                 return Some(local);
             }
@@ -2618,45 +2603,11 @@ impl FunctionContext {
         result
     }
 
-    /// Put every scope open now out of reach, and answer the state
-    /// [`Self::leave_travelled_expr`] restores. A parameter or field default is
-    /// written at a declaration and resolved wherever it is taken: it names its
-    /// author's items and the binders it opens itself, never a local of the
-    /// function it lands in, however the two spell the same name.
-    ///
-    /// `splices` are the caller's own argument subtrees substituted into the
-    /// expression (`fn f(a, b = a)`), which stay the caller's code.
-    pub(super) fn enter_travelled_expr(
-        &mut self,
-        splices: impl Iterator<Item = AstId>,
-    ) -> TravelledExpr {
-        let saved = TravelledExpr {
-            scope_floor: self.scope_floor,
-            splices: self.travelled_splices.clone(),
-        };
-        self.scope_floor = self.scopes.len();
-        self.travelled_splices.extend(splices);
-        saved
-    }
-
-    pub(super) fn leave_travelled_expr(&mut self, saved: TravelledExpr) {
-        self.scope_floor = saved.scope_floor;
-        self.travelled_splices = saved.splices;
-    }
-
-    /// Lift the floor for `node` when it roots a spliced caller argument,
-    /// answering the floor to put back once its subtree is walked. Called from
-    /// each pass's expression dispatch, so the lift covers the whole subtree.
-    pub(super) fn spliced_floor_lifted(&mut self, node: AstId) -> Option<usize> {
-        (self.scope_floor > 0 && self.travelled_splices.contains(&node))
-            .then(|| std::mem::replace(&mut self.scope_floor, 0))
-    }
-
     /// Look up a variable, checking outer context for captures if in a closure.
     /// Returns either a local variable reference or a capture reference.
     pub(super) fn lookup_or_capture(&mut self, name: &str) -> Option<VarRef> {
         // First check local scopes
-        for scope in self.scopes[self.scope_floor..].iter().rev() {
+        for scope in self.scopes.iter().rev() {
             if let Some(local) = scope.get(name) {
                 return Some(VarRef::Local {
                     index: local.index,
@@ -2664,12 +2615,6 @@ impl FunctionContext {
                     defining_ast_id: local.defining_ast_id,
                 });
             }
-        }
-
-        // Captures reach the enclosing function's locals, which a travelled
-        // expression is no more entitled to than to the scopes above.
-        if self.scope_floor > 0 {
-            return None;
         }
 
         // Check deref overrides (for mutable closures: `count` -> `*$ref_count`)
@@ -2766,13 +2711,6 @@ impl FunctionContext {
         captures.sort_by_key(|(_, index, _)| *index);
         captures
     }
-}
-
-/// What [`FunctionContext::enter_travelled_expr`] displaced, restored by
-/// [`FunctionContext::leave_travelled_expr`] so nested defaults compose.
-pub(super) struct TravelledExpr {
-    scope_floor: usize,
-    splices: IndexSet<AstId>,
 }
 
 /// Reference to a variable (either local or captured)

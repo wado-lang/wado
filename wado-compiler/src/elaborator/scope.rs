@@ -136,6 +136,13 @@ pub(super) struct Scope {
     /// it resolve in their author's module, so this replaces the walk's own
     /// frame rather than being tried alongside it (WEP 2026-04-11).
     pub(super) resolving_home: Option<ModuleSource>,
+    /// The types of the parameters a default expression may name, for the
+    /// default being resolved — `fn f(a, b = a)` asks this for `a`. The caller
+    /// supplied `a` and the call site already typed it, so the answer is that
+    /// type rather than a second walk of the caller's argument. Consulted only
+    /// where the default's own binders do not answer, so a `|a| …` it opens
+    /// still wins. Empty outside such a walk.
+    pub(super) default_arg_types: IndexMap<String, TypeId>,
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -240,6 +247,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         self.with_scope_field(|scope| &mut scope.resolving_home, module, body)
+    }
+
+    /// Run `body` with [`Scope::default_arg_types`] replaced by `types`, so a
+    /// default expression can name the parameters ahead of it.
+    pub(super) fn with_default_arg_types<R>(
+        &mut self,
+        types: IndexMap<String, TypeId>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_scope_field(|scope| &mut scope.default_arg_types, types, body)
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a

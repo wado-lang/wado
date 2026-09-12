@@ -683,32 +683,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| inherent_impl_module.clone())
             .unwrap_or_else(|| struct_module.clone());
 
-        // Pad missing trailing args with declared parameter defaults.
-        // Earlier-parameter references inside a default (e.g. `fn f(w, h = w)`)
-        // are handled by substituting the caller's arg ASTs for those parameter
-        // names before resolving, mirroring the free-function path in
-        // `pad_args_with_defaults`.
+        // Pad missing trailing args with declared parameter defaults. An
+        // earlier-parameter reference is answered by that parameter's type, as
+        // in the free-function path (`apply_param_defaults`).
         if args.len() < expected_param_types.len() && !param_defaults.is_empty() {
-            let mut subs: hashmap::IndexMap<String, ast::Expr> = hashmap::IndexMap::default();
-            for (i, arg_ast) in args_ast.iter().enumerate() {
+            let mut param_types_so_far: hashmap::IndexMap<String, TypeId> =
+                hashmap::IndexMap::default();
+            for (i, arg_type) in args.iter().enumerate() {
                 if let Some(name) = param_names.get(i) {
-                    subs.insert(name.clone(), arg_ast.clone());
+                    param_types_so_far.insert(name.clone(), *arg_type);
                 }
             }
             self.with_resolving_home(Some(callee_module.clone()), |s| {
                 for i in args.len()..expected_param_types.len() {
-                    let Some(Some(default_ast)) = param_defaults.get(i) else {
+                    let Some(Some(default_expr)) = param_defaults.get(i).cloned() else {
                         break;
                     };
                     let expected_type = expected_param_types[i];
-                    let mut default_expr = default_ast.clone();
-                    default_expr.substitute_idents(&subs);
-                    let travelled = ctx.enter_travelled_expr(args_ast.iter().map(ast::Expr::id));
-                    let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
-                    ctx.leave_travelled_expr(travelled);
+                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                        s.with_default_arg_types(param_types_so_far.clone(), |s| {
+                            s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                        })
+                    });
                     args.push(resolved);
                     if let Some(name) = param_names.get(i) {
-                        subs.insert(name.clone(), default_expr);
+                        param_types_so_far.insert(name.clone(), resolved);
                     }
                 }
             });
@@ -1773,28 +1772,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // checks below are unaffected.
         if args.len() < param_types.len() && !static_method_defaults.is_empty() {
             let defaults = &static_method_defaults;
-            let mut subs: hashmap::IndexMap<String, ast::Expr> = hashmap::IndexMap::default();
-            for (i, arg_ast) in static_call.args.iter().enumerate() {
+            let mut param_types_so_far: hashmap::IndexMap<String, TypeId> =
+                hashmap::IndexMap::default();
+            for (i, arg_type) in args.iter().enumerate() {
                 if let Some((pname, _)) = defaults.get(i) {
-                    subs.insert(pname.clone(), arg_ast.clone());
+                    param_types_so_far.insert(pname.clone(), *arg_type);
                 }
             }
             for i in args.len()..param_types.len() {
-                let Some((pname, Some(default_ast))) = defaults.get(i) else {
+                let Some((pname, Some(default_expr))) = defaults.get(i).cloned() else {
                     break;
                 };
                 let expected_type = param_types[i];
-                let mut default_expr = default_ast.clone();
-                default_expr.substitute_idents(&subs);
-                let travelled =
-                    ctx.enter_travelled_expr(static_call.args.iter().map(ast::Expr::id));
-                let resolved = self.with_resolving_home(static_method_module.clone(), |s| {
-                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                    self.with_resolving_home(static_method_module.clone(), |s| {
+                        s.with_default_arg_types(param_types_so_far.clone(), |s| {
+                            s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                        })
+                    })
                 });
-                ctx.leave_travelled_expr(travelled);
                 args.push(resolved);
                 arg_spans.push(default_expr.span());
-                subs.insert(pname.clone(), default_expr);
+                param_types_so_far.insert(pname, resolved);
             }
         }
 
