@@ -283,8 +283,7 @@ struct TestSpec {
     wir_not_expect_os: Vec<String>,
 
     /// Narrows every WIR pattern to one function, named by any substring of it.
-    /// A short pattern is otherwise answerable by any function the whole-program
-    /// dump carries, including a stdlib one the fixture never mentions.
+    /// A short pattern is otherwise answerable by any function in the dump.
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
 }
@@ -310,8 +309,7 @@ impl TestSpec {
 }
 
 /// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
-/// A generated local's number is an allocation counter, so a golden spelling
-/// one out breaks on changes that have nothing to do with what it asserts.
+/// A generated local's number is an allocation counter, not what a golden means.
 fn wir_contains(wir: &str, pattern: &str) -> bool {
     let parts: Vec<&str> = pattern.split("{}").collect();
     if parts.len() == 1 {

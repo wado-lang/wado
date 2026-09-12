@@ -273,9 +273,8 @@ fn compute_function_reachability(
     let mut reachable = compute_reachable_from_entries(project, &graph.call_graph);
 
     // Phase 3: extend reachable set with optimizer-induced virtual edges.
-    // A pass may *synthesize* calls during the optimization loop, and their
-    // targets must survive the early DCE that runs before it — otherwise the
-    // target is gone and the rewrite cannot fire.
+    // A pass may *synthesize* calls during the optimization loop. Their targets
+    // must survive the DCE that runs before it, or the rewrite cannot fire.
     extend_reachable_for_optimizer_passes(project, descriptors, &graph.call_graph, &mut reachable);
 
     // Phase 4: resolve imports and WASI features using reachable set.
@@ -302,9 +301,8 @@ fn compute_reachable_positions(
         .collect()
 }
 
-/// Add functions the NIR optimizer's rewrites reach without a call edge: what
-/// `nir/string_push` writes an append run in terms of, and what an
-/// `array_clone::<T>` site reaches through its element type.
+/// Add functions the NIR optimizer's rewrites reach without a call edge:
+/// `nir/string_push`'s append primitives and `array_clone::<T>`'s helper.
 fn extend_reachable_for_optimizer_passes(
     project: &NirPackage,
     descriptors: &[FunctionRef],

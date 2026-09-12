@@ -10,16 +10,16 @@
 // therefore opens a new group at each run-time length, and only the pieces
 // after it share that group's reservation.
 //
-// `framed` covers a long literal: its length is a constant, so it shares the
+// `framed` covers a long literal. Its length is a constant, so it shares the
 // leading `<`'s reservation, and the packed array it leaves behind is what
-// `const_object_globalization` hoists. The loop then copies out of a module
-// global instead of rebuilding the literal.
+// `const_object_globalization` hoists into a module global the loop copies out
+// of.
 //
 // All four helpers splice into `run`, so every run is checked on `run`'s own
-// locals (`buf_0`, `s_2`). `dynamic`'s group split survives that splicing,
-// because the fusion runs before `inline` and `name` was still a parameter when
-// it opened the second group. `constant`'s run reserves once, ending at used 6;
-// `dynamic`'s reserves twice, ending at 7 and then 12.
+// locals (`buf_0`, `s_2`). `dynamic`'s group split survives that: the fusion
+// runs before `inline`, so `name` was still a parameter when it opened the
+// second group. `constant` reserves once, ending at used 6; `dynamic` reserves
+// twice, ending at 7 and then 12.
 
 use { println, Stdout } from "core:cli";
 

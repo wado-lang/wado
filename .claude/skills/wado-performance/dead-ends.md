@@ -20,72 +20,61 @@ for i in 1 2 3; do mise run json-catalog; done           # before and after
 
 ## Sharing `core:json`'s three digit-accumulating loops (2026-09-12)
 
-A distill folded them into one `fold_digits` helper as duplication. The body is
-a loop, so the inliner declines the call, and every digit of every number then
-pays one. json-canada deserialize over four alternating rounds: 9.738 ms/iter
-with the helper against 9.594 without.
+Folding them into one `fold_digits` helper costs json-canada deserialize 1.5%:
+9.738 ms/iter with the helper against 9.594 without, four alternating rounds.
+The body is a loop, so the inliner declines the call and every digit pays one.
 
-The extraction first measured flat, because it was measured on json-catalog.
-The change was to the float scanner and json-catalog's numbers are integers, so
-that row is unmoved either way (de 3.907 vs 3.906, ser 0.879 vs 0.873).
+It first measured flat because it was measured on json-catalog, whose numbers
+are integers where the change was to the float scanner.
 
 Generalizes: a loop body is not a candidate for extraction, whatever the
-duplication looks like. And run a scanner change on the corpus whose values
-reach that scanner — the next entry is the same mistake from the other end.
+duplication looks like. Run a scanner change on the corpus whose values reach
+that scanner.
 
 ## Making `json_ws_end` cost nothing on minified input (2026-09-12)
 
-The whitespace predicate tests `b != b' '` first, which settles a skipped byte
-in one compare and a stopping byte in two. citm_catalog is 71% whitespace, so it
-wins. canada.json is minified, 24 whitespace bytes in 2.25 MB, so it only pays. Measured against `origin/main`'s `core:json`, one dev compiler and five
-alternating rounds, with the rest of the branch held constant:
+The predicate tests `b != b' '` first, settling a skipped byte in one compare
+and a stopping byte in two. citm_catalog is 71% whitespace and wins; canada.json
+is minified, 24 whitespace bytes in 2.25 MB, and only pays. Five alternating
+rounds against `origin/main`'s `core:json`, one dev compiler:
 
 | `core:json`                           | catalog de | canada de |
 | ------------------------------------- | ---------- | --------- |
 | main's `b > b' ' \|\| !is_json_ws(b)` | +12.1%     | **-1.0%** |
 | space-first (today)                   | **+19.3%** | -2.8%     |
 
-So the ordering is worth 7.2 points on the pretty corpus and 1.8 on the
-minified one. Four attempts to keep both failed:
+The ordering is worth 7.2 points on the pretty corpus and 1.8 on the minified
+one. Four attempts to keep both failed:
 
-- **Reorder to `b > b' ' || (b != b' ' && !is_json_ws(b))`.** Equivalent, and
-  costs what it recovers: catalog de 3.9 → 4.2 ms.
-- **Two predicates, one per call site** — structural-first at the scan's entry,
-  space-first inside the run, on the theory that minified input only ever hits
-  the entry. Neutral on both corpora.
-- **Inline the body at all six sites**, in case the call was the cost. Also
-  neutral, which is what rules the call out: the same ordering inlined measures
-  the same as the call.
-- **Branchless**, so neither corpus pays for the other's byte frequencies:
-  `((b' ' - b) >> 31 | (ws_set >> b & 1) ^ 1) != 0`. Correct for all 256 bytes,
-  and the sign term rescues the shift aliasing that `assert b < 64` guards, so
-  `is_json_ws` disappears. Ten canada rounds put it at main −4.0% against head's
-  −4.2%, beating head in 6 of 10 — a coin flip. The branch it removes is
-  well-predicted on both corpora (canada is always structural, citm is long runs
-  of spaces), so eight unconditional ops lose to two behind a taken guess.
+- **Reorder to `b > b' ' || (b != b' ' && !is_json_ws(b))`.** Costs what it
+  recovers: catalog de 3.9 → 4.2 ms.
+- **Two predicates, one per call site**, structural-first at the scan's entry
+  and space-first inside the run. Neutral on both corpora.
+- **Inline the body at all six sites.** Also neutral, which rules the call out:
+  the ordering is the cost, not the call.
+- **Branchless**: `((b' ' - b) >> 31 | (ws_set >> b & 1) ^ 1) != 0`, correct for
+  all 256 bytes, the sign term rescuing the shift aliasing `assert b < 64`
+  guards. Ten canada rounds put it at main −4.0% against head's −4.2%, beating
+  head 6 of 10. The branch it removes is well-predicted on both corpora, so
+  eight unconditional ops lose to two behind a taken guess.
 
-No single compare can decide this either: a compare against a constant splits
-the byte range in two intervals, and `{0x09, 0x0A, 0x0D, 0x20}` is neither an
-interval nor the complement of one. SIMD does not apply — `v128_load` needs a
-linear-memory address and a Wado `String` is a GC `Array<u8>`, so sixteen bytes
-cost sixteen `array.get`s.
+One compare cannot decide it either: a compare against a constant splits the
+byte range into two intervals, and `{0x09, 0x0A, 0x0D, 0x20}` is neither an
+interval nor the complement of one. SIMD does not apply, `v128_load` wanting a
+linear-memory address where a `String` is a GC `Array<u8>`. All four arms sit
+within two points of each other, and main's own canada median moved
+9.376 → 9.056 between clean sessions, so this size of effect needs a better rig.
 
-The four arms all sit within about two points of each other, and main's own
-canada median moved 9.376 → 9.056 between two clean sessions. Effects this size
-need a better rig, not more variants.
-
-Generalizes: a byte-frequency assumption is a property of the corpus, not of
-the format. Check a scan predicate on a minified corpus and an indented one
-before believing either number — they move in opposite directions here, and
-`json-catalog` alone will not show it.
+Generalizes: a byte-frequency assumption belongs to the corpus, not the format.
+Check a scan predicate on a minified corpus and an indented one; they move in
+opposite directions here.
 
 ## Reading more than four bytes per bounds check (2026-09-12)
 
-citm_catalog is 71% whitespace, in runs averaging 24 bytes past the one its
-caller already read. That is well over the 16-byte floor the entry on short runs
-sets for batching, so widening `peek_after_whitespace_run`'s block from four bytes
-should pay. It does not. json-catalog deserialize, three alternating rounds
-against the four-wide arm at 4.21 ms/iter:
+citm_catalog's whitespace runs average 24 bytes, well over the 16-byte floor the
+entry on short runs sets for batching, so widening `peek_after_whitespace_run`'s
+block past four should pay. It does not. json-catalog deserialize, three
+alternating rounds against the four-wide arm at 4.21 ms/iter:
 
 | block                 | ms/iter          |
 | --------------------- | ---------------- |
@@ -95,52 +84,45 @@ against the four-wide arm at 4.21 ms/iter:
 | 8, then 4, then 1     | 4.89, 4.60, 4.62 |
 | 16, then 8, 4, then 1 | 4.88, 4.86, 4.89 |
 
-Monotonic in the width, on the input whose runs are longest. So wasmtime shares
-the base, length and null check across about four gets and no further. Each
-extra get past that is a lone one, and the block issues it whether the run needs
-it or not: a run ending at byte 0 still reads all sixteen.
+Monotonic in the width, on the input whose runs are longest. wasmtime shares the
+base, length and null check across about four gets and no further, so every get
+past that is a lone one the block issues whether the run needs it or not.
 
 Generalizes: four is the number, not a starting point. The run length decides
 whether to batch at all; it does not buy a wider block.
 
 ## Two digits at a time in `write_decimal_digits` (2026-09-12)
 
-The `core:prelude` integer digit loop is the twin of the `fpfmt` one in the
-entry on `write_digits_at`, and it comes out the same way on a corpus of
-8.8-digit integers. json-catalog serialize, three alternating rounds against
-0.822 ms/iter:
+The twin of the `fpfmt` loop in the entry on `write_digits_at`, coming out the
+same way on a corpus of 8.8-digit integers. json-catalog serialize, three
+alternating rounds against 0.822 ms/iter:
 
 - **`t / 100`, then the pair's two digits off the remainder**: 0.956, 0.956,
   1.045. Same store count, half the divisions and half the loop trips.
 - **`array.copy` of the pair out of a 200-byte `DIGIT_PAIRS` global**, which
   trades the two `array.set`s for one copy: 0.888, 0.978, 0.999, 1.002.
 
-The second is the interesting one, because a two-byte `array.copy` does beat two
-`array.set`s elsewhere: retiring `string_push`'s per-byte expansion, so a
-constant key's `":` stays one copy, is worth 3-4% on this row's serialize. The
-copy loses here all the same, and the difference is the index: a copy from a
-constant offset in a global is a different thing from a copy whose source offset
-is a value just computed.
+A two-byte `array.copy` does beat two `array.set`s elsewhere: retiring
+`string_push`'s per-byte expansion, so a constant key's `":` stays one copy, is
+worth 3-4% on this row. The difference is the index. A copy from a constant
+offset in a global is not a copy whose source offset was just computed.
 
 Generalizes: the digit loop is store-bound, and no digit-generation scheme has
 yet removed a store from it. Three attempts now, two functions, two corpora.
 
 ## Splitting a hot leaf so its fast path fits the inline budget (2026-09-12)
 
-Two tries in one session, both on the theory that a call per token is worth
-removing, both flat:
+Two tries on the theory that a call per token is worth removing, both flat:
 
-- **`Formatter::prepare_int_write`.** The unpadded case is a sign and a
-  reservation; the rest is five alignments and `write_char_n`. Holding the
-  padded half in its own function makes the fast half about ten instructions.
-  json-catalog serialize still measured 0.823 against 0.817 over four
+- **`Formatter::prepare_int_write`.** Holding the padded half in its own
+  function leaves the fast half about ten instructions — a sign and a
+  reservation. json-catalog serialize measured 0.823 against 0.817 over four
   alternating rounds, its best round behind the baseline's.
 - **`JsonDeserializer::peek_after_whitespace`.** Reduced to a length check, one
-  `array.get` and `b > b' '`, with everything else behind
-  `peek_after_whitespace_cold`. `wado dump -O2` shows the split worked and the
-  21 call sites still call: a tail call is priced like any other operand, so the
-  fast path is over budget with it. `#[inline(never)]` on the cold half kept the
-  inliner from folding it straight back in and changed nothing; `#[inline]` on
+  `array.get` and `b > b' '`, the rest behind `peek_after_whitespace_cold`.
+  `wado dump -O2` shows the split worked and the 21 call sites still call: a
+  tail call is priced like any other operand, so the fast path is over budget
+  with it. `#[inline(never)]` on the cold half changed nothing; `#[inline]` on
   the fast half measured 4.26–4.44 against 4.26.
 
 Generalizes: shrinking a leaf is not the same as getting it inlined. The dump

@@ -847,8 +847,7 @@ fn is_json_ws(b: i32) -> bool {
     return ws_set >> b as u64 & 1 != 0;
 }
 
-/// Whether a whitespace scan stops on `b`. Testing the space first settles a
-/// skipped byte in one compare and a stopping byte in two, which wins on
+/// Whether a whitespace scan stops on `b`. Testing the space first wins on
 /// indented input and loses on minified (`dead-ends.md`).
 fn json_ws_end(b: i32) -> bool {
     return b != b' ' && (b > b' ' || !is_json_ws(b));
@@ -864,9 +863,8 @@ fn digit_value(b: i32) -> u32 {
 /// that many needs no overflow check.
 global I64_SAFE_DIGITS: i32 = 18;
 
-// The three digit-accumulating loops below are deliberately not shared. The
-// body is a loop, so the inliner declines the call and every digit pays one
-// (`dead-ends.md`).
+// The three digit-accumulating loops below are deliberately not shared: the
+// body is a loop, so the inliner declines the call (`dead-ends.md`).
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
 /// needs the float-based integer fallback.
@@ -1002,8 +1000,8 @@ impl JsonDeserializer {
             self.pos = len;
             return -1;
         }
-        // A lone space separates a key from its value, so on pretty input it is
-        // a large share of the runs. Settling it here spares the call.
+        // A lone space separates a key from its value, a large share of the
+        // runs on indented input. Settling it here spares the call.
         let next = self.input.get_unchecked(pos + 1) as i32;
         if json_ws_end(next) {
             self.pos = pos + 1;
@@ -1608,8 +1606,8 @@ impl JsonDeserializer {
     fn parse_i64_with_lead(&mut self, lead: i32) -> Result<i64, DeserializeError> {
         fast: {
             // A plain integer that cannot overflow: one pass, no scratch, none
-            // of the scale bookkeeping a fraction or an exponent needs. Any
-            // other shape breaks to the scanner below, which `pos` still suits.
+            // of the bookkeeping a fraction or an exponent needs. Any other
+            // shape breaks to the scanner below, which `pos` still suits.
             let neg = lead == b'-';
             let input = self.input;
             let len = input.len();
