@@ -1725,6 +1725,7 @@ impl<'a> WirUnparser<'a> {
             WirInstr::Unreachable => self.write("unreachable"),
             WirInstr::Nop => self.write("nop"),
             WirInstr::ColdPath => self.write("cold_path"),
+            WirInstr::BlackBox(a) => self.write_unop("black_box", a),
             WirInstr::Drop(a) => self.write_unop("drop", a),
             WirInstr::Select {
                 condition,

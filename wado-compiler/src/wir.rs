@@ -1499,6 +1499,13 @@ pub enum WirInstr {
     /// reaching the marker is hinted cold (see that pass for the recognized
     /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
     ColdPath,
+    /// Optimization barrier emitted for `builtin::black_box(value)`. Produces
+    /// its operand's value and no Wasm: `codegen::emit` emits the operand where
+    /// the node stood. Every WIR pass must treat it as an unknown value, which
+    /// is what keeps a benchmark or a fixture measuring the work it names —
+    /// the barrier holds across the whole Wado pipeline, and only the Wasm
+    /// engine downstream sees through it.
+    BlackBox(Box<WirInstr>),
     /// Drop a value.
     Drop(Box<WirInstr>),
     /// Select between two values.
@@ -1834,7 +1841,8 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
-            Self::Drop(o)
+            Self::BlackBox(o)
+            | Self::Drop(o)
             | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
@@ -2416,7 +2424,8 @@ impl WirInstr {
             }
             Self::BrTable { index, .. } => f(index),
             Self::ArrayNewDefault { len, .. } => f(len),
-            Self::Drop(o)
+            Self::BlackBox(o)
+            | Self::Drop(o)
             | Self::MemoryGrow(o)
             | Self::I32Eqz(o)
             | Self::I64Eqz(o)
