@@ -83,6 +83,7 @@ fn "opt_licm_in_match_arm.wado/accumulate"(mode, n, t) {
         b1: block {
             l2: loop {
                 break_if b1 i >= n;
+                drop(black_box(2));
                 sum = sum + (t * i);
                 i = i + 1;
                 continue l2;
@@ -99,6 +100,8 @@ fn "opt_licm_in_match_arm.wado/accumulate"(mode, n, t) {
 }
 
 fn "opt_licm_in_match_arm.wado/run"() with Stdout {
+    let n: i32;
+    let t: i32;
     let __local_2: ref "core:prelude/string.wado//String";
     let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -123,29 +126,31 @@ fn "opt_licm_in_match_arm.wado/run"() with Stdout {
     let packed_75: i64;
     let rx_76: i32;
     let tx_77: i32;
+    n = black_box(5);
+    t = black_box(100);
     __local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_19("opt_licm_in_match_arm.wado/accumulate"(0, 5, 100)), __local_2);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_19("opt_licm_in_match_arm.wado/accumulate"(0, n, t)), __local_2);
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_13 = "opt_licm_in_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_22);
     "core:rt/write_string_to_stream"(tx_23, __local_2);
     "wasi/future-drop-readable:transmission-cli"(handle_13);
     __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_37("opt_licm_in_match_arm.wado/accumulate"(1, 5, 100)), __local_4_4);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_37("opt_licm_in_match_arm.wado/accumulate"(1, n, t)), __local_4_4);
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_31 = "opt_licm_in_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_40);
     "core:rt/write_string_to_stream"(tx_41, __local_4_4);
     "wasi/future-drop-readable:transmission-cli"(handle_31);
     __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_55("opt_licm_in_match_arm.wado/accumulate"(2, 5, 100)), __local_6);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_55("opt_licm_in_match_arm.wado/accumulate"(2, n, t)), __local_6);
     rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
     tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
     handle_49 = "opt_licm_in_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_58);
     "core:rt/write_string_to_stream"(tx_59, __local_6);
     "wasi/future-drop-readable:transmission-cli"(handle_49);
     __local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_73("opt_licm_in_match_arm.wado/accumulate"(9, 5, 100)), __local_8);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_73("opt_licm_in_match_arm.wado/accumulate"(9, n, t)), __local_8);
     rx_76 = builtin::i32_wrap_i64(local.tee packed_75("wasi/stream-new"()));
     tx_77 = builtin::i32_wrap_i64(packed_75 >> 32_i64);
     handle_67 = "opt_licm_in_match_arm.wado/__cm_binding__Stdout_write_via_stream"(rx_76);

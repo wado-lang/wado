@@ -234,6 +234,8 @@ global global:core:prelude/primitive.wado::__const_obj_100: ref null "core:prelu
 global global:core:prelude/primitive.wado::__const_obj_103: ref null Array<u8> = array.new_fixed<u8>(46);
 
 fn "tagged_template_members.wado/run"() with Stdout {
+    let pi: f64;
+    let n: i32;
     let p: ref "tagged_template_members.wado//Pt";
     let message_3: ref "core:prelude/string.wado//String";
     let handle_6: i32;
@@ -256,14 +258,16 @@ fn "tagged_template_members.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/__initialize_module"();
         global:tagged_template_members.wado::__modules_initialized = 1;
     };
+    pi = black_box(3.14159);
+    n = black_box(255);
     p = struct.new "tagged_template_members.wado//Pt" { x: 1, y: 2 };
-    message_3 = "tagged_template_members.wado/tagged_template_members.wado/describe<tagged_template_members.wado/$tmpl$fc283d65038656e4,[f64,i32,tagged_template_members.wado/Pt]>"(struct.new "tagged_template_members.wado//$tmpl$fc283d65038656e4" { h0: 3.14159, h1: 255, h2: p });
+    message_3 = "tagged_template_members.wado/tagged_template_members.wado/describe<tagged_template_members.wado/$tmpl$fc283d65038656e4,[f64,i32,tagged_template_members.wado/Pt]>"(struct.new "tagged_template_members.wado//$tmpl$fc283d65038656e4" { h0: pi, h1: n, h2: p });
     rx_9 = builtin::i32_wrap_i64(local.tee packed_8("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
     handle_6 = "tagged_template_members.wado/__cm_binding__Stdout_write_via_stream"(rx_9);
     "core:rt/write_string_to_stream"(tx_10, message_3);
     "wasi/future-drop-readable:transmission-cli"(handle_6);
-    message_15 = "core:prelude/string.wado/core:prelude/string.wado/String::raw<tagged_template_members.wado/$tmpl$f729fd781fa65131,[i32]>"(struct.new "tagged_template_members.wado//$tmpl$f729fd781fa65131" { h0: 255 });
+    message_15 = "core:prelude/string.wado/core:prelude/string.wado/String::raw<tagged_template_members.wado/$tmpl$f729fd781fa65131,[i32]>"(struct.new "tagged_template_members.wado//$tmpl$f729fd781fa65131" { h0: n });
     rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
     tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
     handle_18 = "tagged_template_members.wado/__cm_binding__Stdout_write_via_stream"(rx_21);

@@ -90,9 +90,9 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     let packed: i64;
     let rx_37: i32;
     let tx_38: i32;
-    c = struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } };
+    c = black_box(struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } });
     __local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(10, __local_1);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(c.width, __local_1);
     new_used_23 = __local_1.used + 1;
     if @unlikely(new_used_23 > builtin::array_len(__local_1.repr)) {
         cold_path;

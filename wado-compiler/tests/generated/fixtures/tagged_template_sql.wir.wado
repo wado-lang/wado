@@ -170,6 +170,7 @@ global global:core:prelude/array.wado::__const_obj_39: ref null Array<u8> = arra
 global global:core:prelude/primitive.wado::__const_obj_47: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "tagged_template_sql.wado/run"() with Stdout {
+    let id: i32;
     let __local_4_4: ref "core:prelude/string.wado//String";
     let __local_5: ref "core:prelude/format.wado//Formatter";
     let __local_6: ref "core:prelude/string.wado//String";
@@ -204,10 +205,11 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     let rx_128: i32;
     let tx_129: i32;
     let __sroa_user_name: ref "core:prelude/string.wado//String";
-    __sroa_user_name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 };
+    id = black_box(42);
+    __sroa_user_name = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
     let q_mv_text: ref "core:prelude/string.wado//String";
     let q_mv_params: ref "core:prelude//List<tagged_template_sql.wado/Param>";
-    multivalue_bind [q_mv_text, q_mv_params] = "tagged_template_sql.wado/tagged_template_sql.wado/sql<tagged_template_sql.wado/$tmpl$245c7f8ba6f74fab,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_sql.wado//$tmpl$245c7f8ba6f74fab" { h0: 42, h1: __sroa_user_name });
+    multivalue_bind [q_mv_text, q_mv_params] = "tagged_template_sql.wado/tagged_template_sql.wado/sql<tagged_template_sql.wado/$tmpl$245c7f8ba6f74fab,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_sql.wado//$tmpl$245c7f8ba6f74fab" { h0: id, h1: __sroa_user_name });
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_17 = "tagged_template_sql.wado/__cm_binding__Stdout_write_via_stream"(rx_20);
@@ -242,7 +244,7 @@ fn "tagged_template_sql.wado/run"() with Stdout {
     builtin::array_copy<u8>(self_65, start_63, __sroa_user_name.repr, 0, self_59);
     self_69 = __local_6.repr;
     builtin::array_copy<u8>(self_69, start_63 + self_59, global:tagged_template_sql.wado::__const_obj_8, 0, 1);
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, __local_6);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(id, __local_6);
     rx_79 = builtin::i32_wrap_i64(local.tee packed_78("wasi/stream-new"()));
     tx_80 = builtin::i32_wrap_i64(packed_78 >> 32_i64);
     handle_46 = "tagged_template_sql.wado/__cm_binding__Stdout_write_via_stream"(rx_79);

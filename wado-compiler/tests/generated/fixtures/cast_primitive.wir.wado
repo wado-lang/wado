@@ -273,6 +273,8 @@ global global:core:prelude/primitive.wado::__const_obj_690: ref null "core:prelu
 global global:core:prelude/int128.wado::__const_obj_701: ref null "core:prelude/int128.wado//u128" = struct.new "core:prelude/int128.wado//u128" { low: -8446744073709551616_i64, high: 0_i64 };
 
 fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__not_re_types"() {
+    let f_1: f64;
+    let n_2: f64;
     let __cond_4: bool;
     let __cond_5: bool;
     let __local_7: ref "core:prelude/string.wado//String";
@@ -372,10 +374,12 @@ fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__no
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     f_85 = __local_8;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(44, f_85);
+    f_1 = black_box(3.99);
+    n_2 = black_box(-3.99);
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(84), used: 0 };
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_91 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_s(3.99), f_91);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_s(f_1), f_91);
     new_used_101 = __local_9.used + 1;
     if @unlikely(new_used_101 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -386,7 +390,7 @@ fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__no
     builtin::array_copy<u8>(__local_9.repr, start_102, global:cast_primitive.wado::__const_obj_19, 0, 1);
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_106 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_s(-3.99), f_106);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_s(n_2), f_106);
     new_used_116 = __local_9.used + 1;
     if @unlikely(new_used_116 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -397,7 +401,7 @@ fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__no
     builtin::array_copy<u8>(__local_9.repr, start_117, global:cast_primitive.wado::__const_obj_19, 0, 1);
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_121 = __local_10;
-    "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(local.tee self_122(builtin::i64_trunc_f64_s(2)), f_121);
+    "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(local.tee self_122(builtin::i64_trunc_f64_s(black_box(2))), f_121);
     new_used_131 = __local_9.used + 1;
     if @unlikely(new_used_131 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -408,7 +412,7 @@ fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__no
     builtin::array_copy<u8>(__local_9.repr, start_132, global:cast_primitive.wado::__const_obj_19, 0, 1);
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_136 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_u(3.99) & 255, f_136);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(builtin::i32_trunc_f64_u(f_1) & 255, f_136);
     new_used_146 = __local_9.used + 1;
     if @unlikely(new_used_146 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -419,7 +423,7 @@ fn "cast_primitive.wado/__test_5_a_float_literal_cast_to_an_integer_converts__no
     builtin::array_copy<u8>(__local_9.repr, start_147, global:cast_primitive.wado::__const_obj_19, 0, 1);
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_151 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_152(builtin::i32_extend8_s(builtin::i32_trunc_f64_s(300.7))), f_151);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_152(builtin::i32_extend8_s(builtin::i32_trunc_f64_s(black_box(300.7)))), f_151);
     __cond_4 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_64: block -> bool {
         self_157 = __local_7.used;
         if self_157 != 11 {

@@ -184,16 +184,20 @@ fn "wir_optimize_branchless_increment.wado/__test_0"() {
     let i_45: i32;
     let count_56: i32;
     let i_57: i32;
+    let _licm_used_66: i32;
     let _licm_repr_67: ref Array<bool>;
+    let _licm_used_68: i32;
     let _licm_repr_69: ref Array<bool>;
+    let _licm_used_70: i32;
     let _licm_repr_71: ref Array<bool>;
-    __v1_1 = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 0, 1, 1, 0), used: 5 };
+    __v1_1 = black_box(struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 0, 1, 1, 0), used: 5 });
     count_32 = 0;
     i_33 = 0;
+    _licm_used_66 = __v1_1.used;
     _licm_repr_67 = __v1_1.repr;
     b0: block {
         l1: loop {
-            break_if b0 i_33 >= 5;
+            break_if b0 i_33 >= _licm_used_66;
             count_32 = count_32 + builtin::array_get_value<bool>(_licm_repr_67, i_33);
             i_33 = i_33 + 1;
             continue l1;
@@ -206,13 +210,14 @@ fn "wir_optimize_branchless_increment.wado/__test_0"() {
         unreachable;
     }
     elements_42 = array.new_fixed<bool>();
-    __v1_5 = struct.new "core:prelude//List<bool>" { repr: ref.as_non_null(let __array_clone_dst_2: ref Array<bool>; __array_clone_dst_2 = builtin::array_new<bool>(0); builtin::array_copy<bool>(__array_clone_dst_2, 0, elements_42, 0, 0); __array_clone_dst_2), used: 0 };
+    __v1_5 = black_box(struct.new "core:prelude//List<bool>" { repr: ref.as_non_null(let __array_clone_dst_2: ref Array<bool>; __array_clone_dst_2 = builtin::array_new<bool>(0); builtin::array_copy<bool>(__array_clone_dst_2, 0, elements_42, 0, 0); __array_clone_dst_2), used: 0 });
     count_44 = 0;
     i_45 = 0;
+    _licm_used_68 = __v1_5.used;
     _licm_repr_69 = __v1_5.repr;
     b3: block {
         l4: loop {
-            break_if b3 i_45 >= 0;
+            break_if b3 i_45 >= _licm_used_68;
             count_44 = count_44 + builtin::array_get_value<bool>(_licm_repr_69, i_45);
             i_45 = i_45 + 1;
             continue l4;
@@ -224,13 +229,14 @@ fn "wir_optimize_branchless_increment.wado/__test_0"() {
         "core:rt/panic"(__local_14 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(254); __fuse_at_22 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_14, 71); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_22, global:wir_optimize_branchless_increment.wado::__const_obj_15, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_22 + 20, global:wir_optimize_branchless_increment.wado::__const_obj_14, 8); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_22 + 28, global:wir_optimize_branchless_increment.wado::__const_obj_13, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_22 + 32, global:wir_optimize_branchless_increment.wado::__const_obj_12, 38); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_22 + 70, global:wir_optimize_branchless_increment.wado::__const_obj_11, 1); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, __local_15); __fuse_at_23 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_14, 63); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_23, global:wir_optimize_branchless_increment.wado::__const_obj_23, 56); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_23 + 56, global:wir_optimize_branchless_increment.wado::__const_obj_22, 7); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<bool>" { repr: elements_42, used: 0 }, __local_15); __fuse_at_24 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_14, 28); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_24, global:wir_optimize_branchless_increment.wado::__const_obj_4, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_24 + 1, global:wir_optimize_branchless_increment.wado::__const_obj_20, 27); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/Inspect::inspect"(__v1_5, __local_15); __fuse_at_25 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(__local_14, 41); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_25, global:wir_optimize_branchless_increment.wado::__const_obj_4, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(__local_14.repr, __fuse_at_25 + 1, global:wir_optimize_branchless_increment.wado::__const_obj_18, 40); __local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(__local_14); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: __v2_6 }, __local_15); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(__local_14, global:wir_optimize_branchless_increment.wado::__const_obj_4); __local_14);
         unreachable;
     }
-    __v1_9 = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 1, 1), used: 3 };
+    __v1_9 = black_box(struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(1, 1, 1), used: 3 });
     count_56 = 0;
     i_57 = 0;
+    _licm_used_70 = __v1_9.used;
     _licm_repr_71 = __v1_9.repr;
     b6: block {
         l7: loop {
-            break_if b6 i_57 >= 3;
+            break_if b6 i_57 >= _licm_used_70;
             count_56 = count_56 + builtin::array_get_value<bool>(_licm_repr_71, i_57);
             i_57 = i_57 + 1;
             continue l7;

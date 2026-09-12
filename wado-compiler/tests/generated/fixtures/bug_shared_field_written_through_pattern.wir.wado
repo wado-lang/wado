@@ -154,7 +154,7 @@ fn "bug_shared_field_written_through_pattern.wado/__cm_export____test_0_a_patter
     let __fuse_at_6: i32;
     let __fuse_at_7: i32;
     let elements: ref Array<i32>;
-    hh = struct.new "bug_shared_field_written_through_pattern.wado//Holder" { items: ref.as_non_null(elements = array.new_fixed<i32>(1, 2, 3); struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) }), tag: 0 };
+    hh = struct.new "bug_shared_field_written_through_pattern.wado//Holder" { items: ref.as_non_null(elements = array.new_fixed<i32>(1, 2, black_box(3)); struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) }), tag: 0 };
     __v1 = "bug_shared_field_written_through_pattern.wado/bug_shared_field_written_through_pattern.wado/Holder::read_it"(hh);
     if @unlikely(__v1 != 3) {
         cold_path;

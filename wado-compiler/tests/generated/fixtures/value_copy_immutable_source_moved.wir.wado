@@ -158,7 +158,12 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     let packed_143: i64;
     let rx_144: i32;
     let tx_145: i32;
-    c = struct.new "value_copy_immutable_source_moved.wado//Point" { x: 3, y: 4 };
+    let __sroa_d_x: i32;
+    let __sroa_e_x: i32;
+    let __sroa_f_x: i32;
+    c = struct.new "value_copy_immutable_source_moved.wado//Point" { x: black_box(3), y: 4 };
+    __sroa_d_x = c.x;
+    __sroa_e_x = c.x;
     elements_13 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
     l = struct.new "core:prelude//List<value_copy_immutable_source_moved.wado/Point>" { repr: elements_13, used: 0 };
     if @unlikely(0 >= builtin::array_len(l.repr)) {
@@ -171,7 +176,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     __local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     f_35 = __local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(3, f_35);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(__sroa_d_x, f_35);
     new_used_45 = __local_7.used + 1;
     if @unlikely(new_used_45 > builtin::array_len(__local_7.repr)) {
         cold_path;
@@ -182,7 +187,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     builtin::array_copy<u8>(__local_7.repr, start_46, global:value_copy_immutable_source_moved.wado::__const_obj_1, 0, 1);
     __local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_7 };
     f_50 = __local_8;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(3, f_50);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(__sroa_e_x, f_50);
     new_used_60 = __local_7.used + 1;
     if @unlikely(new_used_60 > builtin::array_len(__local_7.repr)) {
         cold_path;
@@ -203,9 +208,10 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     handle_30 = "value_copy_immutable_source_moved.wado/__cm_binding__Stdout_write_via_stream"(rx_75);
     "core:rt/write_string_to_stream"(tx_76, __local_7);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
+    __sroa_f_x = black_box(5);
     elements_81 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
     m = struct.new "core:prelude//List<value_copy_immutable_source_moved.wado/Point>" { repr: elements_81, used: 0 };
-    value_83 = struct.new "value_copy_immutable_source_moved.wado//Point" { x: 5, y: 6 };
+    value_83 = struct.new "value_copy_immutable_source_moved.wado//Point" { x: __sroa_f_x, y: 6 };
     if @unlikely(0 >= builtin::array_len(m.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<value_copy_immutable_source_moved.wado/Point>::grow"(m);
@@ -216,7 +222,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     __local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_104 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(5, f_104);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(__sroa_f_x, f_104);
     new_used_114 = __local_9.used + 1;
     if @unlikely(new_used_114 > builtin::array_len(__local_9.repr)) {
         cold_path;
@@ -227,7 +233,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     builtin::array_copy<u8>(__local_9.repr, start_115, global:value_copy_immutable_source_moved.wado::__const_obj_1, 0, 1);
     __local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_9 };
     f_119 = __local_10;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(5, f_119);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(__sroa_f_x, f_119);
     new_used_129 = __local_9.used + 1;
     if @unlikely(new_used_129 > builtin::array_len(__local_9.repr)) {
         cold_path;
