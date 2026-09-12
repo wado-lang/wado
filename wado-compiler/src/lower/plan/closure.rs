@@ -194,16 +194,8 @@ struct CollectedClosure {
     func_type_id: TypeId,
     span: Span,
     /// Closure-scope address-taken locals (closure-local indices).
-<<<<<<< HEAD
-    /// Shifted by +1 onto `__call` to make room for `self`.
-    address_taken_locals: hashmap::IndexSet<u32>,
-||||||| fe30fd382
-    /// Shifted by +1 onto `__call` to make room for `self`.
-    address_taken_locals: crate::hashmap::IndexSet<u32>,
-=======
     /// Shifted by +1 onto `$call` to make room for `self`.
-    address_taken_locals: crate::hashmap::IndexSet<u32>,
->>>>>>> origin/main
+    address_taken_locals: hashmap::IndexSet<u32>,
 }
 
 /// Signature of a top-level function or impl method, used by Phase 0 to
@@ -516,16 +508,8 @@ impl ClosureLowerer {
                 .iter()
                 .enumerate()
                 .map(|(i, cap)| TirField {
-<<<<<<< HEAD
-                    name: format!("__capture_{i}"),
-                    visibility: Visibility::Private,
-||||||| fe30fd382
-                    name: format!("__capture_{i}"),
-                    visibility: crate::ast::Visibility::Private,
-=======
                     name: format!("$capture_{i}"),
-                    visibility: crate::ast::Visibility::Private,
->>>>>>> origin/main
+                    visibility: Visibility::Private,
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,

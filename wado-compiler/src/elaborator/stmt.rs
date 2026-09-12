@@ -2893,20 +2893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
-<<<<<<< HEAD
         self.record_desugar(f.id, DesugarKind::CStyleFor);
-        let loop_id = ctx.next_loop_id;
-        ctx.next_loop_id += 1;
-        let body_label = format!("__for_{loop_id}_body");
-||||||| fe30fd382
-        self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
-        let loop_id = ctx.next_loop_id;
-        ctx.next_loop_id += 1;
-        let body_label = format!("__for_{loop_id}_body");
-=======
-        self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
         let body_label = format!("$for_{}_body", ctx.fresh_serial());
->>>>>>> origin/main
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant

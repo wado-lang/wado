@@ -6540,14 +6540,8 @@ mod tests {
     use super::*;
     use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
     use crate::lexer::lex;
-<<<<<<< HEAD
-    use crate::name::SYNTHETIC_LABEL_PREFIX;
-    use crate::{ast, format};
-||||||| fe30fd382
-    use crate::name::SYNTHETIC_LABEL_PREFIX;
-=======
     use crate::name::INTERNAL_PREFIX;
->>>>>>> origin/main
+    use crate::{ast, format};
     use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a

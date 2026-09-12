@@ -6,14 +6,8 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
-<<<<<<< HEAD
-use crate::name::kebab_export_name;
-use crate::package::test_selected;
-||||||| fe30fd382
-use crate::name::kebab_export_name;
-=======
 use crate::name::{INTERNAL_PREFIX, kebab_export_name};
->>>>>>> origin/main
+use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 

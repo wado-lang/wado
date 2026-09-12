@@ -135,16 +135,8 @@ pub(super) enum BoundKey {
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
 /// `let t = <op>` maps to `<op>`. Lets the structural matcher see through the
-<<<<<<< HEAD
-/// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
-pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
-||||||| fe30fd382
-/// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
-pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
-=======
 /// `let $cond = i < n; if !$cond { panic }` shape CSE produces.
-pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
->>>>>>> origin/main
+pub(super) type Binds = hashmap::IndexMap<u32, Operand>;
 
 /// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never
 /// reassigned (`Assign` / `&mut`). Conservative — a reassigned temp is excluded,

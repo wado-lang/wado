@@ -29,22 +29,12 @@ use crate::component_model::{
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
-<<<<<<< HEAD
-use crate::name::{DeclPath, kebab_export_name, to_kebab};
+use crate::name::{DeclPath, is_test_function, kebab_export_name, to_kebab};
 use crate::package::{Package, test_selected};
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirStmt, TirStmtKind, TypeId,
     TypeTable,
 };
-||||||| fe30fd382
-use crate::name::DeclPath;
-use crate::package::Package;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
-=======
-use crate::name::{DeclPath, is_test_function};
-use crate::package::Package;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
->>>>>>> origin/main
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
@@ -1190,16 +1180,8 @@ fn generate_test_world_bindings(project: &mut Package) {
             .iter()
             .filter(|f| {
                 let name = f.borrow().name.clone();
-<<<<<<< HEAD
-                name.starts_with("__test_")
-                    && test_selected(
-||||||| fe30fd382
-                name.starts_with("__test_")
-                    && crate::package::test_selected(
-=======
                 is_test_function(&name)
-                    && crate::package::test_selected(
->>>>>>> origin/main
+                    && test_selected(
                         original_names.get(name.as_str()).copied().flatten(),
                         &test_name_filters,
                     )

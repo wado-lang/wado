@@ -43,16 +43,8 @@ type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 #[derive(Debug, Clone)]
 struct PendingInspectEdge {
     closure_module: ModuleSource,
-<<<<<<< HEAD
-    /// `__Closure_{functor_id}` struct name.
-    struct_name: FqTypeName,
-||||||| fe30fd382
-    /// `__Closure_{functor_id}` struct name.
-    struct_name: crate::name::FqTypeName,
-=======
     /// `$Closure_{functor_id}` struct name.
-    struct_name: crate::name::FqTypeName,
->>>>>>> origin/main
+    struct_name: FqTypeName,
     /// `(arity, return_type)` key into `InspectableSignatures`.
     key: (usize, TypeId),
 }

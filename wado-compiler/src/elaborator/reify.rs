@@ -4223,23 +4223,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 name,
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
-<<<<<<< HEAD
             ast::Pattern::Tuple(..) => {
-                (format!("__pattern_temp_{unique_id}"), None, Span::default())
+                (format!("$pattern_temp_{unique_id}"), None, Span::default())
             }
-||||||| fe30fd382
-            ast::Pattern::Tuple(..) => (
-                format!("__pattern_temp_{unique_id}"),
-                None,
-                crate::token::Span::default(),
-            ),
-=======
-            ast::Pattern::Tuple(..) => (
-                format!("$pattern_temp_{unique_id}"),
-                None,
-                crate::token::Span::default(),
-            ),
->>>>>>> origin/main
             _ => {
                 return vec![TirStmt::new(TirStmtKind::Expr(iterable), span)];
             }
@@ -11141,16 +11127,8 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
 ///
 /// TIR counterpart of `control_flow::find_return_type_in_block`, and must stay
 /// in step with it: a construct missing here is a `return` the closure's return
-<<<<<<< HEAD
-/// type cannot see, which mistypes `__call` and fails core-Wasm validation.
-fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
-||||||| fe30fd382
-/// type cannot see, which mistypes `__call` and fails core-Wasm validation.
-fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
-=======
 /// type cannot see, which mistypes `$call` and fails core-Wasm validation.
-fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
->>>>>>> origin/main
+fn tir_block_return_type(body: &TirExpr) -> Option<tir::TypeId> {
     use crate::tir::{TirExprKind, TirStmtKind};
 
     fn in_block(block: &TirBlock) -> Option<tir::TypeId> {

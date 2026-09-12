@@ -1750,16 +1750,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Multi-comparison: actual chain expansion. Tag the node so the
         // future `reify` pass can replay the same `(a < b) && (b < c)`
-<<<<<<< HEAD
-        // shape with the same `__mK` middle bindings.
-        self.record_desugar(chain.id, DesugarKind::ComparisonChain);
-||||||| fe30fd382
-        // shape with the same `__mK` middle bindings.
-        self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
-=======
         // shape with the same `$mK` middle bindings.
-        self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
->>>>>>> origin/main
+        self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
         // Enter a fresh scope for the `$mK` bindings so they don't leak
         // into the surrounding function's local namespace.

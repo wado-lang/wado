@@ -597,16 +597,8 @@ fn push_stmt(body: &mut Body, kind: StmtKind, span: Span) -> StmtId {
     body.stmts.push(StmtNode { kind, span })
 }
 
-<<<<<<< HEAD
-/// Build a `Local` expression node for the scalar `__hfs_F` local.
-fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
-||||||| fe30fd382
-/// Build a `Local` expression node for the scalar `__hfs_F` local.
-fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
-=======
 /// Build a `Local` expression node for the scalar `$hfs_F` local.
-fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
->>>>>>> origin/main
+fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
     push_expr(
         body,
         ExprKind::Local {
@@ -641,24 +633,8 @@ fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> Exp
     )
 }
 
-<<<<<<< HEAD
-/// `local.field = __hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
-||||||| fe30fd382
-/// `local.field = __hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(
-    body: &mut Body,
-    c: &ScalarizeCandidate,
-    span: crate::token::Span,
-) -> StmtId {
-=======
 /// `local.field = $hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(
-    body: &mut Body,
-    c: &ScalarizeCandidate,
-    span: crate::token::Span,
-) -> StmtId {
->>>>>>> origin/main
+fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
     let assign = push_expr(
@@ -673,16 +649,8 @@ fn make_write_back_stmt(
     push_stmt(body, StmtKind::Expr(assign.into()), span)
 }
 
-<<<<<<< HEAD
-/// `__hfs_F = local.field;` — refresh the scalar from the GC field.
-fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
-||||||| fe30fd382
-/// `__hfs_F = local.field;` — refresh the scalar from the GC field.
-fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
-=======
 /// `$hfs_F = local.field;` — refresh the scalar from the GC field.
-fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
->>>>>>> origin/main
+fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
     let assign = push_expr(
