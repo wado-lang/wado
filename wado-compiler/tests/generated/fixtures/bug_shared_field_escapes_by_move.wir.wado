@@ -188,25 +188,11 @@ fn "bug_shared_field_escapes_by_move.wado/take"(v) {
 fn "bug_shared_field_escapes_by_move.wado/moved_out_of_a_local"() {
     let b: ref "core:prelude//List<i32>";
     let elements: ref Array<i32>;
-<<<<<<< HEAD
-    let __sroa___sroa_src_buf_used: i32;
-    elements = array.new_fixed<i32>(1, 2, black_box(3));
-    __sroa___sroa_src_buf_used = builtin::array_len(elements);
-    b = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_dst_2: ref Array<i32>; __array_clone_dst_2 = builtin::array_new<i32>(__sroa___sroa_src_buf_used); builtin::array_copy<i32>(__array_clone_dst_2, 0, elements, 0, __sroa___sroa_src_buf_used); __array_clone_dst_2), used: __sroa___sroa_src_buf_used };
-    if @unlikely(__sroa___sroa_src_buf_used >= builtin::array_len(b.repr)) {
-||||||| fe30fd382
-    let __sroa___sroa_src_buf_used: i32;
-    elements = array.new_fixed<i32>(1, 2, 3);
-    __sroa___sroa_src_buf_used = builtin::array_len(elements);
-    b = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let __array_clone_dst_2: ref Array<i32>; __array_clone_dst_2 = builtin::array_new<i32>(__sroa___sroa_src_buf_used); builtin::array_copy<i32>(__array_clone_dst_2, 0, elements, 0, __sroa___sroa_src_buf_used); __array_clone_dst_2), used: __sroa___sroa_src_buf_used };
-    if @unlikely(__sroa___sroa_src_buf_used >= builtin::array_len(b.repr)) {
-=======
     let $sroa_$sroa_src_buf_used: i32;
-    elements = array.new_fixed<i32>(1, 2, 3);
+    elements = array.new_fixed<i32>(1, 2, black_box(3));
     $sroa_$sroa_src_buf_used = builtin::array_len(elements);
     b = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($sroa_$sroa_src_buf_used); builtin::array_copy<i32>($array_clone_dst_2, 0, elements, 0, $sroa_$sroa_src_buf_used); $array_clone_dst_2), used: $sroa_$sroa_src_buf_used };
     if @unlikely($sroa_$sroa_src_buf_used >= builtin::array_len(b.repr)) {
->>>>>>> origin/main
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(b);
     }
@@ -236,25 +222,11 @@ fn "bug_shared_field_escapes_by_move.wado/$test_0_a_shared_field_does_not_escape
     let $fuse_at_24: i32;
     let $fuse_at_25: i32;
     let elements: ref Array<i32>;
-<<<<<<< HEAD
-    let __sroa_s_buf: ref "core:prelude//List<i32>";
-    elements = array.new_fixed<i32>(1, 2, black_box(3));
-    __sroa_s_buf = struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
-    __v1_1 = "bug_shared_field_escapes_by_move.wado/moved_into_a_binding$scalar"(__sroa_s_buf);
-    if @unlikely(__v1_1 != 3) {
-||||||| fe30fd382
-    let __sroa_s_buf: ref "core:prelude//List<i32>";
-    elements = array.new_fixed<i32>(1, 2, 3);
-    __sroa_s_buf = struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
-    __v1_1 = "bug_shared_field_escapes_by_move.wado/moved_into_a_binding$scalar"(__sroa_s_buf);
-    if @unlikely(__v1_1 != 3) {
-=======
     let $sroa_s_buf: ref "core:prelude//List<i32>";
-    elements = array.new_fixed<i32>(1, 2, 3);
+    elements = array.new_fixed<i32>(1, 2, black_box(3));
     $sroa_s_buf = struct.new "core:prelude//List<i32>" { repr: elements, used: builtin::array_len(elements) };
     $v1_1 = "bug_shared_field_escapes_by_move.wado/moved_into_a_binding$scalar"($sroa_s_buf);
     if @unlikely($v1_1 != 3) {
->>>>>>> origin/main
         cold_path;
         "core:rt/panic"($local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(178); $fuse_at_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 121); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17, global:bug_shared_field_escapes_by_move.wado::$const_obj_9, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 20, global:bug_shared_field_escapes_by_move.wado::$const_obj_8, 59); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 79, global:bug_shared_field_escapes_by_move.wado::$const_obj_7, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 83, global:bug_shared_field_escapes_by_move.wado::$const_obj_6, 37); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 120, global:bug_shared_field_escapes_by_move.wado::$const_obj_5, 1); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 52 }, $local_10); $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 45); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18, global:bug_shared_field_escapes_by_move.wado::$const_obj_24, 42); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18 + 42, global:bug_shared_field_escapes_by_move.wado::$const_obj_3, 3); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/traits.wado/bug_shared_field_escapes_by_move.wado/S^core:prelude/traits.wado/Inspect::inspect"(struct.new "bug_shared_field_escapes_by_move.wado//S" { buf: $sroa_s_buf }, $local_10); $fuse_at_19 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 27); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_19, global:bug_shared_field_escapes_by_move.wado::$const_obj_0, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_19 + 1, global:bug_shared_field_escapes_by_move.wado::$const_obj_21, 26); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: $v1_1 }, $local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_9, global:bug_shared_field_escapes_by_move.wado::$const_obj_0); $local_9);
         unreachable;
