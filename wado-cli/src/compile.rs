@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use wado_manifest::DependencySource;
@@ -76,7 +76,7 @@ impl CompileOptions {
     #[must_use]
     pub fn for_world_build(
         input: String,
-        output: std::path::PathBuf,
+        output: PathBuf,
         lib_world: Option<String>,
         target_world: Option<String>,
     ) -> Self {
@@ -338,10 +338,7 @@ pub async fn try_compile_with_run_cache(
         }
     };
 
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
@@ -590,7 +587,7 @@ async fn materialize_git_dependencies(
 /// and a host rebased on the manifest root.
 pub(crate) struct KilnSetup {
     pub manifest: wado_manifest::Manifest,
-    pub manifest_root: std::path::PathBuf,
+    pub manifest_root: PathBuf,
     pub invocations: Vec<wado_compiler::kiln::Invocation>,
     pub provider: CliGeneratorProvider,
     /// Kiln paths (`from`, `inputs`, `output_dir`) are anchored at the manifest
@@ -617,8 +614,8 @@ pub(crate) async fn prepare_kiln(
     let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
         entry_file
             .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
     });
     let (mut invocations, identities, inline_diagnostics) =
         collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root)
@@ -995,16 +992,31 @@ fn read_license_text(
         .map_err(|e| format!("cannot read license-file {}: {e}", path.display()))
 }
 
-pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
-    run_returning_bytes(opts).await.map(|_| ())
+/// A finished build: the emitted component, and where it was written.
+/// `--wat-to-stdout` writes no file, so `output_path` is `None` there.
+pub struct Artifact {
+    pub bytes: Vec<u8>,
+    pub output_path: Option<PathBuf>,
 }
 
-/// Like [`run`], but also returns the emitted component bytes. A run / serve
+/// Report a written file. A command that exists to produce one says so; a
+/// `run` / `serve` driver, which only builds on the way through, stays quiet.
+pub fn announce_artifact(output: impl AsRef<Path>) {
+    eprintln!("Generated: {}", output.as_ref().display());
+}
+
+pub async fn run(opts: CompileOptions) -> Result<(), CliExit> {
+    if let Some(output) = compile_to_artifact(opts).await?.output_path {
+        announce_artifact(output);
+    }
+    Ok(())
+}
+
+/// Like [`run`], but silent and handing back the [`Artifact`]. A run / serve
 /// driver uses its own compilation directly instead of reading the artifact
 /// back from `build/`, where a concurrent build could leave it torn or serve a
-/// different world's bytes. Returns an empty `Vec` on the `--wat-to-stdout`
-/// path, which writes no artifact.
-pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExit> {
+/// different world's bytes.
+pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliExit> {
     // Output format is independent of the compiled bytes; resolve it first so we
     // know whether to retain WIR (only the wasm-output embedding path needs it).
     let format = opts
@@ -1039,7 +1051,10 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
     if opts.wat_to_stdout {
         let wat = wasm_to_wat(&wasm)?;
         print!("{wat}");
-        return Ok(Vec::new());
+        return Ok(Artifact {
+            bytes: Vec::new(),
+            output_path: None,
+        });
     }
 
     // Discover the package manifest once, reused for the default output path and
@@ -1078,14 +1093,16 @@ pub async fn run_returning_bytes(opts: CompileOptions) -> Result<Vec<u8>, CliExi
     }
     fs::write(&output_path, &bytes)
         .map_err(|e| CliExit::error(format!("writing output file: {e}")))?;
-    eprintln!("Generated: {}", output_path.display());
-    Ok(bytes)
+    Ok(Artifact {
+        bytes,
+        output_path: Some(output_path),
+    })
 }
 
 /// The `<root>/build/<segment>.wasm` artifact path for a publish build, where
 /// `<segment>` is `"lib"` or a [`world_path_segment`].
 #[must_use]
-pub fn build_output_path(root: &Path, segment: &str) -> std::path::PathBuf {
+pub fn build_output_path(root: &Path, segment: &str) -> PathBuf {
     root.join(BUILD_DIR).join(format!("{segment}.wasm"))
 }
 
@@ -1118,7 +1135,7 @@ fn default_output_path(
     opts: &CompileOptions,
     project: Option<&manifest::ProjectManifest>,
     format: OutputFormat,
-) -> std::path::PathBuf {
+) -> PathBuf {
     let ext = match format {
         OutputFormat::Wasm => "wasm",
         OutputFormat::Wat => "wat",
@@ -1187,7 +1204,7 @@ mod kiln_dir_module_tests {
         }
     }
 
-    fn write_pkg(root: &Path, name: &str, world_entry: Option<&str>) -> std::path::PathBuf {
+    fn write_pkg(root: &Path, name: &str, world_entry: Option<&str>) -> PathBuf {
         let pkg = root.join(name);
         std::fs::create_dir_all(pkg.join("src")).unwrap();
         let mut manifest = format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n");
@@ -1201,7 +1218,7 @@ mod kiln_dir_module_tests {
         pkg
     }
 
-    fn unique_tmp(tag: &str) -> std::path::PathBuf {
+    fn unique_tmp(tag: &str) -> PathBuf {
         std::env::temp_dir().join(format!("wado-kiln-dir-{tag}-{}", std::process::id()))
     }
 

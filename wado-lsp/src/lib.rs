@@ -17,6 +17,7 @@ pub mod server;
 #[doc(hidden)]
 pub mod test_support;
 pub mod text;
+mod trace_sink;
 pub mod uri;
 
 use std::cell::RefCell;
@@ -37,6 +38,7 @@ pub use hover::{HoverResult, MarkupContent, MarkupKind};
 pub use inlay_hints::{InlayHint, InlayHintKind};
 pub use references::ReferenceLocation;
 pub use text::PositionEncoding;
+pub use trace_sink::install_stderr_trace_sink;
 pub use uri::{Uri, UriScheme};
 
 /// Why [`Engine::definition_by_symbol`] could not resolve a notation.

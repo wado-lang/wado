@@ -195,6 +195,18 @@ fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
     parse_response(&http_get_raw(port, path, timeout))
 }
 
+/// `serve` builds on its way to running, so it announces no artifact.
+#[test]
+fn startup_announces_no_build_artifact() {
+    let (_guard, _port, stderr) = start_serve("serve_hello.wado", &[]);
+
+    let captured = stderr.lock().unwrap().clone();
+    assert!(
+        !captured.contains("Generated:"),
+        "serve should not announce the artifact it built; got stderr:\n{captured}",
+    );
+}
+
 /// A guest stuck in pure wasm past `--timeout` should trap (via
 /// `set_epoch_deadline`) and the client should see a 504 — not a connection
 /// drop, not a 500, not a hang.

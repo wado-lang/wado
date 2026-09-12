@@ -19,6 +19,7 @@ pub struct FilesystemCompilerHost {
 impl FilesystemCompilerHost {
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
+        wado_lsp::install_stderr_trace_sink();
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),

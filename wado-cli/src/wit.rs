@@ -13,7 +13,9 @@ use wado_compiler::CompilerOptions;
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitEmitSnapshot, WitScope};
 
 use crate::args::{self, CliExit, OptSpec};
-use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest};
+use crate::compile::{
+    announce_artifact, attach_manifest_and_component_deps, load_nearest_manifest,
+};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::manifest::{self, EntryPointKind};
 
@@ -155,7 +157,7 @@ pub async fn run(opts: WitOptions) -> Result<(), CliExit> {
         Some(file) => {
             fs::write(&file, &text)
                 .map_err(|e| CliExit::error(format!("writing '{file}': {e}")))?;
-            eprintln!("Generated: {file}");
+            announce_artifact(&file);
         }
         None => print!("{text}"),
     }
