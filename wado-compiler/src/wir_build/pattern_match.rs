@@ -264,7 +264,7 @@ impl FunctionTranslator<'_, '_> {
                 let type_id = self.ref_type_id(value_ty);
                 let mut instrs = Vec::new();
 
-                let temp_name = self.unshadowed(format!("__let_pattern_{}", self.match_counter));
+                let temp_name = self.unshadowed(format!("$let_pattern_{}", self.match_counter));
                 self.match_counter += 1;
                 instrs.extend(declare_and_set_local(
                     temp_name.clone(),
@@ -322,7 +322,7 @@ impl FunctionTranslator<'_, '_> {
         let scrut = self.translate_operand(scrutinee);
         let match_id = self.match_counter;
         self.match_counter += 1;
-        let scrut_local_name = self.unshadowed(format!("__match_scrut_{match_id}"));
+        let scrut_local_name = self.unshadowed(format!("$match_scrut_{match_id}"));
         let scrut_wir_type = self
             .ctx
             .type_id_to_wir_type(self.type_table, self.operand_type_id(scrutinee));
@@ -945,7 +945,7 @@ impl FunctionTranslator<'_, '_> {
                         })
                         .count();
                     // For a single consumer, inline the `ref.cast` into the
-                    // `struct.get`'s receiver: avoids the temp `__cast_N`
+                    // `struct.get`'s receiver: avoids the temp `$cast_N`
                     // local plus its `LocalSet` / `LocalGet` pair.
                     //
                     // For two or more consumers, keep the temp: each
@@ -953,7 +953,7 @@ impl FunctionTranslator<'_, '_> {
                     // type check, which is more expensive than a
                     // `local.get`.
                     let cast_local = if consumers >= 2 {
-                        let cast_local = self.fresh_local("__cast");
+                        let cast_local = self.fresh_local("$cast");
                         instrs.extend(declare_and_set_local(
                             cast_local.clone(),
                             WirType::Ref {
@@ -1049,7 +1049,7 @@ impl FunctionTranslator<'_, '_> {
                             let payload_tid = *payload_type;
                             let payload_wir =
                                 self.ctx.type_id_to_wir_type(self.type_table, payload_tid);
-                            let temp_name = self.fresh_local("__variant_payload");
+                            let temp_name = self.fresh_local("$variant_payload");
                             instrs.extend(declare_and_set_local(
                                 temp_name.clone(),
                                 payload_wir,
@@ -1118,7 +1118,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("__tuple_elem");
+                            let temp_name = self.fresh_local("$tuple_elem");
                             let elem_type = tuple_element_type(&element_types, i);
                             let elem_wir_type =
                                 self.ctx.type_id_to_wir_type(self.type_table, elem_type);
@@ -1156,7 +1156,7 @@ impl FunctionTranslator<'_, '_> {
                         }
                         PatKind::Wildcard => {}
                         _ => {
-                            let temp_name = self.fresh_local("__struct_field");
+                            let temp_name = self.fresh_local("$struct_field");
                             let field_type =
                                 self.resolve_struct_field_type(scrut_type, &field.field_name);
                             let field_wir_type =

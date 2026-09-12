@@ -1,5 +1,5 @@
 // HFS &mut of a GC-typed scalarized field: `swap_out(&mut b.s)` is rewritten
-// to `swap_out(&mut __hfs_s)`. Sound because a GC field's reference is the
+// to `swap_out(&mut $hfs_s)`. Sound because a GC field's reference is the
 // object handle the scalar shares — `*v = x` mutates the object in place and
 // never rebinds the field — but this locks the behavior: the callee's
 // replacement must be observable through the field after &mut-struct calls
@@ -47,5 +47,5 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": ["__hfs_s"]
+    "wir_expect:O2": ["$hfs_s"]
 }

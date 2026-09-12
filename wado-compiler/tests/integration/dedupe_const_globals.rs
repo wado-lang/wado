@@ -5,7 +5,7 @@
 //! `tests/fixtures/const_global_dedup.wado`'s `wir_expect`/`wir_not_expect`
 //! (substring presence/absence over the WIR dump) can't express an exact
 //! occurrence count, so they can't directly prove merging happened — only
-//! that one promoted-eager `__const_obj_0` exists (true whether or not a
+//! that one promoted-eager `$const_obj_0` exists (true whether or not a
 //! second, unmerged duplicate also exists). This test compiles the same
 //! shape and counts the constant array literal's occurrences in the
 //! disassembled module directly.

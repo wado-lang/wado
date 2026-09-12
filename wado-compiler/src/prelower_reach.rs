@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::FunctionId;
+use crate::name::{FunctionId, is_type_bridge};
 use crate::nir_package::NirPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -30,12 +30,12 @@ fn function_key(func: &TirFunction) -> FunctionId {
 
 /// The exports the emitted component keeps, matching `optimize::dce`'s entries,
 /// plus what a later phase may call without any TIR body naming it: a compiler
-/// item the compiler resolves itself, and a `$`-prefixed synthesized bridge.
+/// item the compiler resolves itself, and a per-type synthesized bridge.
 fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
         || func.compiler_item.is_some()
-        || func.name.starts_with('$')
+        || is_type_bridge(&func.name)
 }
 
 /// What [`reachable`] found, against the population it walked.

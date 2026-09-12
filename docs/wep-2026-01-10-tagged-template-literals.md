@@ -166,8 +166,8 @@ sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`
 lowers to
 
 ```wado
-__tagged: {
-    sql(__Tmpl_a3f1 { h0: id, h1: &user.name })
+$tagged: {
+    sql($Tmpl_a3f1 { h0: id, h1: &user.name })
 }
 ```
 
@@ -462,11 +462,15 @@ the tag's result type:
 ### Reify
 
 `reify_tagged_template` reifies each hole in order, binding one that is not a
-place to a `let __hole_{n}_{k}` local, and builds the `Call` the dispatch fact
+place to a `let $hole_{n}_{k}` local, and builds the `Call` the dispatch fact
 names over a `StructLiteral` whose field `k` is the place or local, borrowed
 when the field type is `&V_k`. With locals the call sits in a labeled block that
 breaks with its value. The `TirStruct` reaches the module through the pending
 list `reify` already drains.
+
+`{n}` is `FunctionContext::fresh_serial`, taken before the holes are reified and
+advancing on read, so a template nested inside a hole mints `$hole_{n+1}_{k}` and
+`$tagged_{n+1}` rather than the enclosing template's names (issue #1987).
 
 ### Reflect resolution (`elaborator/reflect.rs`, `solver_bridge.rs`, `trait_query.rs`)
 

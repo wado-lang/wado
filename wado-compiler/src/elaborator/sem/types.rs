@@ -380,7 +380,7 @@ impl std::ops::DerefMut for TypeAnnotations {
 pub(crate) enum AssignPlace {
     /// A function-frame local — always a valid l-value.
     Local,
-    /// A `&mut`-captured outer binding accessed through `*__ref` inside a
+    /// A `&mut`-captured outer binding accessed through `*$ref` inside a
     /// closure body. Assignable iff the captured reference is `&mut T`
     /// (`through_mut_ref`); a shared-`&` capture is not assignable.
     DerefCapture { through_mut_ref: bool },
@@ -789,14 +789,14 @@ pub(crate) struct GenericInstantiation {
 
 /// A single mutating outer-binding captured by a closure. The closure
 /// pre-pass materialises a
-/// `let __ref_<var_name> = &mut <var_name>;` in the outer scope before
+/// `let $ref_<var_name> = &mut <var_name>;` in the outer scope before
 /// opening the closure body; reify replays the same `add_local` at the
 /// same point. The fields below carry every value the replay needs.
 #[derive(Clone)]
 pub(crate) struct MutCapture {
     /// Original outer-binding name (the source-level identifier).
     pub(crate) var_name: String,
-    /// Synthesised reference binding name (`__ref_<var_name>`).
+    /// Synthesised reference binding name (`$ref_<var_name>`).
     pub(crate) ref_name: String,
     /// `TypeId` of the inner value (`T`).
     pub(crate) inner_type: TypeId,
@@ -831,7 +831,7 @@ pub(crate) struct CaptureEntry {
 pub(crate) struct ClosureCaptureInfo {
     /// Mut-captures the outer scope must materialise before the closure
     /// body opens, in declaration order. Reify replays each as
-    /// `let __ref_<var> = &mut <var>;`.
+    /// `let $ref_<var> = &mut <var>;`.
     pub(crate) mut_captures: Vec<MutCapture>,
     /// Final capture list the closure surfaces to its caller, in the
     /// order `FunctionContext::get_captures` produced.
@@ -872,7 +872,7 @@ pub(crate) struct AssertSlot {
 /// Power-assert capture map recorded by
 /// [`super::super::Elaborator::desugar_assert`]. Reify walks the
 /// condition AST and consults `slots` to decide which sub-expressions
-/// become `let __vK = …;` (slots whose AST evaporated during
+/// become `let $vK = …;` (slots whose AST evaporated during
 /// resolution stay unbound and are skipped by the template).
 #[derive(Clone)]
 pub(crate) struct AssertCaptureInfo {
@@ -901,7 +901,7 @@ pub(crate) struct HandlerBindingFacts {
     /// bundled clause. `None` for the explicit form. Reify
     /// writes this onto every emitted `TirHandlerBinding`'s
     /// `bundle_group` field so dispatch synthesis allocates one
-    /// shared `__h_<bundle>` local across all the effects this
+    /// shared `$h_<bundle>` local across all the effects this
     /// bundled clause installs.
     pub(crate) bundle_group: Option<u32>,
     /// The handler value's underlying type after reference
@@ -1054,7 +1054,7 @@ pub(crate) struct ForOfIteratorInfo {
     /// Iterator type — the resolved return type of
     /// `iterable.into_iter()` (`info.into_iter` returns this).
     /// Reify uses this to type the synthesised iterator local
-    /// `let mut __iter_N: <iter_type> = …;` without re-running
+    /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
 }
@@ -1094,7 +1094,7 @@ pub(crate) enum DesugarKind {
     IfLetChain,
     /// `x += y` (and other compound ops) → `x = x + y` style rewrite.
     CompoundAssign,
-    /// `container[i].method()` → materialise `let __index_mut_val =
+    /// `container[i].method()` → materialise `let $index_mut_val =
     /// &mut container[i];` + dispatch the method through it
     /// (`method_lookup.rs::try_resolve_index_mut_method_call`). Tagged
     /// on the [`crate::ast::MethodCallExpr`]'s [`AstId`]; the receiver

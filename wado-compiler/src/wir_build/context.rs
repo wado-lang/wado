@@ -229,11 +229,11 @@ fn compute_inspectable_fn_dispatch(package: &NirPackage) -> IndexSet<(usize, Typ
 /// the struct then takes the slim `{ env, func }` schema.
 #[derive(Clone, Debug)]
 pub struct ClosureWrapperFuncs {
-    /// `__closure_wrapper_N(env, args...) -> ret` — refcasts env to
-    /// `&__Closure_N` and forwards to `__call`.
+    /// `$closure_wrapper_N(env, args...) -> ret` — refcasts env to
+    /// `&$Closure_N` and forwards to `$call`.
     pub call: WirFuncId,
-    /// `__closure_inspect_wrapper_N(env, formatter)` — refcasts both
-    /// args and forwards to `__Closure_N^Inspect::inspect`. `None`
+    /// `$closure_inspect_wrapper_N(env, formatter)` — refcasts both
+    /// args and forwards to `$Closure_N^Inspect::inspect`. `None`
     /// when the functor's `(N, Ret)` is not inspectable.
     pub inspect: Option<WirFuncId>,
 }
@@ -583,7 +583,7 @@ impl<'a> WirContext<'a> {
     ///
     /// Both args use abstract `(ref null struct)` so a single fn type
     /// is compatible with every per-functor wrapper. The wrappers
-    /// refcast `env` to the concrete `&__Closure_N` and `formatter` to
+    /// refcast `env` to the concrete `&$Closure_N` and `formatter` to
     /// `&Formatter` internally before forwarding.
     pub fn get_or_create_canonical_callback_fn_type(&mut self) -> WirTypeId {
         let fq = "functype/$canonical_callback_fn".to_string();

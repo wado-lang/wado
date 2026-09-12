@@ -82,7 +82,7 @@ fn eliminate_dead_arguments_round(
 }
 
 /// Closure-functor methods whose `is_closure_call` pin is lifted:
-/// `__Closure_N::__call` and its `^Inspect` impl. Each is reached only through
+/// `$Closure_N::$call` and its `^Inspect` impl. Each is reached only through
 /// a synthesised function-table wrapper, and `register_closure_wrappers` /
 /// `register_inspect_wrapper` adapt that wrapper to the shrunken signature.
 fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
@@ -98,7 +98,7 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
             keys.insert(id);
         }
     }
-    // Sweep for synthesised `__Closure_N^Inspect` impls, which have no field on
+    // Sweep for synthesised `$Closure_N^Inspect` impls, which have no field on
     // `ClosureFunctor` to key off. The trait is matched against the
     // compiler-item registry — the same source `generate_functor_format_methods`
     // stamps into `trait_name` — so a stdlib rename flows through. The match is
@@ -130,7 +130,7 @@ fn collect_closure_call_keys(project: &NirPackage) -> IndexSet<FnKey> {
 /// Shared pinning predicate for `dae` and `sroa_param`: both refuse the same
 /// world-boundary and ABI-fixed shapes, and both accept a concrete trait-impl
 /// method (post-monomorphization every call site carries a resolved `func_id`).
-/// They diverge only on `relax_closure_call` — a closure `__call` stays pinned
+/// They diverge only on `relax_closure_call` — a closure `$call` stays pinned
 /// unless its function-table wrapper adapts to the shrunken signature.
 pub(super) fn is_dae_sroa_eligible(func: &NirFunction, relax_closure_call: bool) -> bool {
     if func.body.is_none() {

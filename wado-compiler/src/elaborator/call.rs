@@ -126,7 +126,7 @@ pub(super) struct FnSignature {
 /// prefix already substituted, so `resolve_call` can look up parameter types and
 /// resolve arguments once with the right expected-type hints. Re-entering
 /// `resolve_call` with a synthetic `CallExpr` instead fired the assert-capture
-/// hook twice per sub-expression, emitting each `let __vK = …` binding twice.
+/// hook twice per sub-expression, emitting each `let $vK = …` binding twice.
 enum CalleeIdentKind<'a> {
     /// No prefix substitution needed. Covers plain ident calls
     /// (`foo(x)`), already-concrete qualified calls (`Type::method(x)`,

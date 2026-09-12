@@ -1587,7 +1587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // An identifier target classified by the place fact `resolve_ident`
             // recorded: a function-frame `Local`, or a `&mut`-captured ident
-            // (`*__ref` deref-capture, assignable iff the captured ref is
+            // (`*$ref` deref-capture, assignable iff the captured ref is
             // `&mut`). Globals returned above; anything else (function /
             // variant / enum / const ident, or a non-ident expression) is not
             // a place.
@@ -1652,7 +1652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::CompoundAssignOp::Shl => BinaryOp::Shl,
             ast::CompoundAssignOp::Shr => BinaryOp::Shr,
         };
-        // Reserve reify's `__caN` locals, resolving each impure sub-piece once
+        // Reserve reify's `$caN` locals, resolving each impure sub-piece once
         // (a subscript against its index key type) so the annotate and reify
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
@@ -1665,7 +1665,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .index_ctx
                 .and_then(|ix| self.compound_index_key_type(ix, ctx));
             let piece_type = self.resolve_expr(hoist.piece, ctx, expected);
-            let _local_index = ctx.add_local(format!("__ca{idx}"), piece_type, false, None);
+            let _local_index = ctx.add_local(format!("$ca{idx}"), piece_type, false, None);
             ctx.compound_hoist_types
                 .insert(hoist.piece.id(), piece_type);
         }
@@ -1703,7 +1703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`, which reify emits.
     ///
     /// Middle terms appear in two comparisons each, so each is bound to a
-    /// `__mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
+    /// `$mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
     pub(super) fn desugar_comparison_chain(
         &mut self,
         chain: &ast::ComparisonChainExpr,
@@ -1744,10 +1744,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Multi-comparison: actual chain expansion. Tag the node so the
         // future `reify` pass can replay the same `(a < b) && (b < c)`
-        // shape with the same `__mK` middle bindings.
+        // shape with the same `$mK` middle bindings.
         self.record_desugar(chain.id, super::sem::types::DesugarKind::ComparisonChain);
 
-        // Enter a fresh scope for the `__mK` bindings so they don't leak
+        // Enter a fresh scope for the `$mK` bindings so they don't leak
         // into the surrounding function's local namespace.
         ctx.enter_scope();
 
@@ -1762,7 +1762,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             None,
         );
 
-        // Bind `right0` to `__m0` — it is reused by the next comparison.
+        // Bind `right0` to `$m0` — it is reused by the next comparison.
         self.bind_chain_middle(0, right0_tir, ctx);
         let mut acc = self.resolve_binary_op(
             first_tir,
@@ -1799,11 +1799,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::BOOL
     }
 
-    /// Allocate a `__mK` local for a comparison-chain middle term. The `Let`
+    /// Allocate a `$mK` local for a comparison-chain middle term. The `Let`
     /// binding itself is rebuilt by reify; the body walk needs only the
     /// `add_local` side effect (walk-order parity) and the local's type.
     fn bind_chain_middle(&mut self, idx: usize, type_id: TypeId, ctx: &mut FunctionContext) {
-        let name = format!("__m{idx}");
+        let name = format!("$m{idx}");
         let _local_index = ctx.add_local(name, type_id, false, None);
     }
 

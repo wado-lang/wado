@@ -1,10 +1,10 @@
 // Regression: a non-u8 (record) `Stream<T>.read()` nested inside a container
 // expression (here an `if`-expression branch) must still synthesize its
-// `__cm_stream_read_<T>` binding function.
+// `$cm_stream_read_<T>` binding function.
 //
 // The CM-binding rewriter descends into container expressions (if/match/block/
 // binary/...) when rewriting `stream-read` method calls into calls to the
-// generated `__cm_stream_read_<T>` function. The discovery pass that *creates*
+// generated `$cm_stream_read_<T>` function. The discovery pass that *creates*
 // that function must descend into the same containers; otherwise the rewrite
 // targets a function that was never synthesized, producing a dangling call that
 // fails WIR resolution. This fixture reads directory entries (a WASI record

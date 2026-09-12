@@ -655,10 +655,10 @@ for let item of collection {
 
 // Desugars to
 scope: {
-    let mut __iter = collection.into_iter();
+    let mut $iter = collection.into_iter();
     loop {
-        if let Some(__item) = __iter.next() {
-            let item = __item;
+        if let Some($item) = $iter.next() {
+            let item = $item;
             body(item);
         } else {
             break;

@@ -16,7 +16,7 @@ use crate::nir_value_graph::ValueId;
 use crate::tir::TypeTable;
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
-/// cleanup so the scalarization shadow inits (`__hfs_x = obj.f`) get their fields
+/// cleanup so the scalarization shadow inits (`$hfs_x = obj.f`) get their fields
 /// forwarded to constants — the load→literal fold `field_scalarize` leaves to
 /// a later pass, and the only one that runs after it.
 pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {

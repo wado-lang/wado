@@ -131,7 +131,7 @@ pub(super) enum BoundKey {
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
 /// `let t = <op>` maps to `<op>`. Lets the structural matcher see through the
-/// `let __cond = i < n; if !__cond { panic }` shape CSE produces.
+/// `let $cond = i < n; if !$cond { panic }` shape CSE produces.
 pub(super) type Binds = crate::hashmap::IndexMap<u32, Operand>;
 
 /// Build [`Binds`] over `body`: every `let t = <value>` whose `t` is never

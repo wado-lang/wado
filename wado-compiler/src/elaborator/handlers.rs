@@ -29,7 +29,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Counter feeding `HandlerBindingFacts.bundle_group` for the
         // bundled-handler form. A bundled clause may expand into multiple
-        // effect bindings that share one synthesised `__h_<bundle>` local
+        // effect bindings that share one synthesised `$h_<bundle>` local
         // (value-form handler evaluated once, mutations propagate across
         // effects). Per-`with` allocation keeps ids unique inside one
         // synthesis-pass invocation.
@@ -321,7 +321,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // All bindings expanded from this single bundled clause share one
         // `bundle_group` id, so the dispatch synthesis allocates a single
-        // shared `__h_<bundle>` local. This is what makes value-form
+        // shared `$h_<bundle>` local. This is what makes value-form
         // `with h do { ... }` work correctly: the handler value is
         // evaluated once and every per-effect closure captures the same
         // local, so mutations from any installed effect are observed by

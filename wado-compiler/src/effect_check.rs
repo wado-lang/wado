@@ -579,7 +579,7 @@ fn check_function_effects_sem(
     };
     // `#[ambient]` bypasses the effect system; test helpers implicitly hold
     // every effect.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
+    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("$test_") {
         return;
     }
     let caller_key = func.id;
@@ -1842,7 +1842,7 @@ impl StoresCtx<'_> {
         let Some(body) = &func.body else {
             return;
         };
-        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_")
+        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("$test_")
         {
             return;
         }

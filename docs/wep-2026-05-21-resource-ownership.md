@@ -261,9 +261,9 @@ where it cannot prove move / share / fresh; no elision pass):
   result fresh while `w` is still held. A `core:builtin` answers the same
   question from `#[returns(part_of = p)]`, which names `p` outright.
 
-  An _indirect_ call is fresh when every closure `__call` of its
+  An _indirect_ call is fresh when every closure `$call` of its
   return type returns owned: closure lowering rewrites every callable value —
-  a closure literal and a bare `FuncRef` alike — into a functor whose `__call`
+  a closure literal and a bare `FuncRef` alike — into a functor whose `$call`
   is an ordinary function, so those are the complete set of targets, and the
   call's own signature narrows them to one return type. The verdict is derived
   from the return-convention fixpoint and so is computed after it, never inside

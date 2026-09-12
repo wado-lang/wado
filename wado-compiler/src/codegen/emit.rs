@@ -25,13 +25,13 @@ mod wide_arith_downlevel;
 /// pair so sites of the same shape share slots. The declaring walker and the
 /// emitter must spell these identically, so both come through here.
 fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
-    format!("__array_copy_{role}_{dest_type_idx}_{src_type_idx}")
+    format!("$array_copy_{role}_{dest_type_idx}_{src_type_idx}")
 }
 
 /// Scratch slot for the `ArrayClone` loop, keyed by array type. As
 /// [`array_copy_slot`].
 fn array_clone_slot(role: &str, type_idx: u32) -> String {
-    format!("__copy_arr_{role}_{type_idx}")
+    format!("$copy_arr_{role}_{type_idx}")
 }
 
 /// Whether a packed storage type reads back signed (`Some(true)`), unsigned
@@ -791,8 +791,8 @@ impl<'a> WirEmitter<'a> {
         for (i, name) in func.param_names.iter().enumerate() {
             let idx: u32 = u32::try_from(i).unwrap();
             self.current_locals.insert(name.clone(), idx);
-            // Also register __local_N alias for params, since TIR uses unified local indices
-            self.current_locals.insert(format!("__local_{i}"), idx);
+            // Also register $local_N alias for params, since TIR uses unified local indices
+            self.current_locals.insert(format!("$local_{i}"), idx);
             self.next_local = idx + 1;
         }
 

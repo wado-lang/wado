@@ -217,7 +217,7 @@ impl WasmModuleInfo {
 
         // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
-            let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
+            let fq: Rc<str> = Rc::from(format!("$wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName { fq: fq.to_string() },
                 params: vec![WirType::I32; func.param_names.len()],
@@ -229,7 +229,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
-                Rc::from(format!("__wasm_mod_type_{i}")),
+                Rc::from(format!("$wasm_mod_type_{i}")),
             );
             let mut body = func.body.clone();
             for instr in &mut body {
@@ -265,7 +265,7 @@ impl WasmModuleInfo {
                     desc: WirExportDesc::Func {
                         func_id: WirFuncId::new(
                             u32::try_from(i).unwrap(),
-                            Rc::from(format!("__wasm_mod_func_{i}")),
+                            Rc::from(format!("$wasm_mod_func_{i}")),
                         ),
                     },
                 });
@@ -3011,7 +3011,7 @@ pub struct WirGlobal {
     pub mutable: bool,
     /// Whether the user declared this global as `global mut`. A
     /// user-immutable global (`false`) is currently Wasm-mutable only
-    /// because its initializer was extracted into `__initialize_module`;
+    /// because its initializer was extracted into `$initialize_module`;
     /// `wir_optimize::const_global` promotes it back to an eager Wasm
     /// constant when that init folds to a const expression.
     pub wado_mutable: bool,

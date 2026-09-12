@@ -310,7 +310,7 @@ fn tir_function_key(f: &TirFunction) -> crate::name::FunctionId {
 }
 
 /// Per-function translation context. Created fresh for each function
-/// the translator walks (top-level functions, generated `__call`
+/// the translator walks (top-level functions, generated `$call`
 /// methods, fn-param specialized callees).
 struct FunctionTranslator<'a, 'p> {
     base: &'a Translator<'p>,
@@ -913,8 +913,8 @@ impl FunctionTranslator<'_, '_> {
         }
 
         let span = expr.span;
-        let ref_idx = self.alloc_local(ref_type_id, "__deref_ref".to_string());
-        let val_idx = self.alloc_local(inner_type_id, "__deref_val".to_string());
+        let ref_idx = self.alloc_local(ref_type_id, "$deref_ref".to_string());
+        let val_idx = self.alloc_local(inner_type_id, "$deref_val".to_string());
 
         let ref_nir = self.convert_expr(ref_expr);
         // Copy the RHS unless it is fresh/moved: the per-field write-back would
@@ -930,7 +930,7 @@ impl FunctionTranslator<'_, '_> {
         let mut out: Vec<StmtId> = Vec::with_capacity(2 + fields.len());
         out.push(self.alloc_stmt(
             StmtKind::Let {
-                name: format!("__deref_ref_{ref_idx}"),
+                name: format!("$deref_ref_{ref_idx}"),
                 local_index: ref_idx,
                 is_mut: false,
                 is_reactive: false,
@@ -938,14 +938,14 @@ impl FunctionTranslator<'_, '_> {
                 value: ref_nir.into(),
                 // Translator-synthesized binding — never a user-visible
                 // defensive copy. See the equivalent flag on the
-                // wide-int rewrite's `__wide_scrut` binding.
+                // wide-int rewrite's `$wide_scrut` binding.
                 skip_value_copy: true,
             },
             span,
         ));
         out.push(self.alloc_stmt(
             StmtKind::Let {
-                name: format!("__deref_val_{val_idx}"),
+                name: format!("$deref_val_{val_idx}"),
                 local_index: val_idx,
                 is_mut: false,
                 is_reactive: false,
@@ -961,7 +961,7 @@ impl FunctionTranslator<'_, '_> {
             let ref_local = self.alloc_expr(
                 ExprKind::Local {
                     index: ref_idx,
-                    name: format!("__deref_ref_{ref_idx}"),
+                    name: format!("$deref_ref_{ref_idx}"),
                 },
                 ref_type_id,
                 span,
@@ -969,7 +969,7 @@ impl FunctionTranslator<'_, '_> {
             let val_local = self.alloc_expr(
                 ExprKind::Local {
                     index: val_idx,
-                    name: format!("__deref_val_{val_idx}"),
+                    name: format!("$deref_val_{val_idx}"),
                 },
                 inner_type_id,
                 span,
@@ -1382,11 +1382,11 @@ impl FunctionTranslator<'_, '_> {
             // Hoist into a fresh local; `build_if_chain` clones the
             // scrutinee into each arm's `Eq::eq` condition, so a
             // side-effecting expression would re-run per arm.
-            let scrut_idx = self.alloc_local(scrutinee.type_id, "__wide_scrut".to_string());
+            let scrut_idx = self.alloc_local(scrutinee.type_id, "$wide_scrut".to_string());
             let scrut_local = TirExpr::new(
                 TirExprKind::Local {
                     index: scrut_idx,
-                    name: "__wide_scrut".to_string(),
+                    name: "$wide_scrut".to_string(),
                 },
                 scrutinee.type_id,
                 scrutinee.span,
@@ -1400,7 +1400,7 @@ impl FunctionTranslator<'_, '_> {
             );
             let let_stmt = TirStmt::new(
                 TirStmtKind::Let {
-                    name: "__wide_scrut".to_string(),
+                    name: "$wide_scrut".to_string(),
                     local_index: scrut_idx,
                     is_mut: false,
                     is_reactive: false,
@@ -1457,7 +1457,7 @@ impl FunctionTranslator<'_, '_> {
         }
         // `Closure` → raw `StructLiteral` (specialisable) or
         // `ClosureToCanonical` wrap (otherwise). The body is never
-        // recursed into; it lives in the synthesized `__call`
+        // recursed into; it lives in the synthesized `$call`
         // method which `convert_function` walks separately.
         if let TirExprKind::Closure {
             functor_id: Some(closure_id),
@@ -1491,7 +1491,7 @@ impl FunctionTranslator<'_, '_> {
         }
         // Inside a synthesized fn-param-specialized callee body, a
         // `Local` read of one of the specialized params surfaces in
-        // NIR as a `Local` retagged to the functor `&__Closure_N`
+        // NIR as a `Local` retagged to the functor `&$Closure_N`
         // type (mirrors the in-place rewrite the old
         // `SpecializerTransformer` applied).
         if let TirExprKind::Local { index, name } = &expr.kind
@@ -1508,7 +1508,7 @@ impl FunctionTranslator<'_, '_> {
         }
         // `IndirectCall` whose callee resolves to a specialized
         // fn-param `Local` is dispatched directly to the functor's
-        // `__call` method.
+        // `$call` method.
         if let TirExprKind::IndirectCall { callee, args } = &expr.kind
             && let TirExprKind::Local { index, .. } = &callee.kind
             && let Some(spec) = self.specialized_for_local(*index)
@@ -2367,7 +2367,7 @@ impl FunctionTranslator<'_, '_> {
             .map(|(i, cap)| {
                 let value = self.read_local(cap.outer_index, &cap.name, cap.type_id, span);
                 ArenaStructField {
-                    name: format!("__capture_{i}"),
+                    name: format!("$capture_{i}"),
                     value: value.into(),
                     field_index: i as u32,
                 }

@@ -171,10 +171,10 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 | Sub-pass           | Stage      | File                         | What it does                                                                                                                                                                        |
 | ------------------ | ---------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Pattern lowering   | translator | `lower/translate/pattern.rs` | `LetDestructure` / `IfLet` → explicit `Let` + `If` over the scrutinee and destructure temps it mints; runs ahead of the fold                                                        |
-| Global extract     | planner    | `lower/plan/globals.rs`      | Extracts non-constant global initializers into a per-module `__initialize_module` function (one per source module; disambiguated by `module_source`)                                |
+| Global extract     | planner    | `lower/plan/globals.rs`      | Extracts non-constant global initializers into a per-module `$initialize_module` function (one per source module; disambiguated by `module_source`)                                |
 | Boxing             | planner    | `lower/plan/boxing.rs`       | `&primitive` / `&mut primitive` → `Box<T>` struct operations                                                                                                                        |
-| Closure            | planner    | `lower/plan/closure.rs`      | Closures → `__Closure_N` functor structs with `__call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                        |
-| Initialize modules | planner    | `lower/plan/globals.rs`      | Combines per-module init functions into the top-level `__initialize_modules`                                                                                                        |
+| Closure            | planner    | `lower/plan/closure.rs`      | Closures → `$Closure_N` functor structs with `$call` methods; produces fn-param specialized callees; emits `ClosurePlan { functor_infos }`                                        |
+| Initialize modules | planner    | `lower/plan/globals.rs`      | Combines per-module init functions into the top-level `$initialize_modules`                                                                                                        |
 | Value copy         | planner    | `lower/plan/value_copy/`     | Decides move / copy / share per consumption site (freshness, last-use, confinement, read-only-share) and inserts `$value_copy$T` only at `copy` sites; synthesizes the helpers      |
 | String collection  | planner    | `lower/plan/string.rs`       | Collects literals and per-function DCE maps for the data section; emits `StringPlan`                                                                                                |
 | TIR → NIR          | translator | `lower/translate.rs`         | Single fold over TIR producing `NirPackage`. Special-cases that consume `LowerPlan`: wide-int `Match` → if-else chain, `Closure` → `ClosureToCanonical`, `copy_value::<T>` → helper |
@@ -251,6 +251,16 @@ The loader canonicalizes paths (RFC 3986, project-root-relative with `/` separat
 Every fq name names its subject by the module that declares it, and a type
 written into any name goes through `TypeTable::mangle_type_arg_for_generic`. A
 simple name alone is never an identity — two modules may declare the same one.
+
+A name the compiler mints for itself — a local, a label, a global, a synthesized
+struct or function — starts with one `$` (`name::INTERNAL_PREFIX`): the lexer
+admits none in an identifier, so no source can collide with one, shadow one, or
+`break` to a synthesized label, and a dump says at a glance which names are the
+compiler's. Within a function body the digits that make such a name unique come
+from `FunctionContext::fresh_serial`, which advances on read, so a desugaring
+nested inside another (a tagged template in a hole, a `for-of` over a `for-of`)
+mints names of its own. A per-type bridge spells the type's mangle after its kind
+(`$value_copy$…`, `$hole_get$…`), which `name::is_type_bridge` recognizes.
 
 What is one is a `crate::defs::DefId`: a dense index into the whole-program
 `DefTable`, built after loading from every module's items. Declaration data

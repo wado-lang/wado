@@ -329,7 +329,7 @@ pub(crate) fn is_owned_value(
         }
         TirExprKind::CmRawCall { .. } => true,
         // Every callable value is a closure functor by lowering time, so an
-        // indirect call is owned when every `__call` of this return type is
+        // indirect call is owned when every `$call` of this return type is
         // (`compute_indirect_owned_returns`). Without that verdict — inside the
         // fixpoint the verdict is derived from — it stays borrowed.
         TirExprKind::IndirectCall { .. } => oracle.indirect_is_owned(expr.type_id),

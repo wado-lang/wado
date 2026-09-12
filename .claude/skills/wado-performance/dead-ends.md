@@ -455,8 +455,8 @@ traversal about the root reads like closing a gap.
 
 The benchmark does not move: `sieve` swaps which arm wins across three
 alternating pairs, `json-catalog` de differs by under 0.2%. The WIR A/B says
-why — the whole diff is one new `__initialize_modules$cold0`, the
-`__initialize_module` it swallowed, and TypeId renumbering. **The parse and
+why — the whole diff is one new `$initialize_modules$cold0`, the
+`$initialize_module` it swallowed, and TypeId renumbering. **The parse and
 serialize loops are identical.** What a top-level marker reaches is every
 module's init guard: one call site, behind a branch, run once. Only then does
 size decide, and it decides against: every program grew (hello_world +5,

@@ -118,7 +118,7 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     // immutable local copy (`let a = b`, the inliner's param binding, copy_prop's) or
     // a reference to a *place* (`let r = &x`, ref_elim's). Hoisting one hands the
     // same binding to several rules at once (observed: a hoisted `let self =
-    // get_x` stranded a `get_x.__capture_0` read after the functor was elided);
+    // get_x` stranded a `get_x.$capture_0` read after the functor was elided);
     // once dissolved, the block flattens on a later iteration. A reference to a
     // *fresh value* (`&String { … }`, `&f()`) is nobody's shadow — deferring
     // would strand it block-wrapped forever — so the reference case gates on

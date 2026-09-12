@@ -3140,7 +3140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             super::sem::types::DesugarKind::IndexMutMethodCall,
         );
 
-        // The `__index_mut_val` local reify synthesizes comes from the
+        // The `$index_mut_val` local reify synthesizes comes from the
         // recorded `IndexMutMethodCall` desugar, not from this walk.
         Some(return_type)
     }

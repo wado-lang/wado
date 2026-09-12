@@ -3,16 +3,16 @@
 // HFS would either fall back to whole-stmt sync (clobbering the scalar arm
 // via the post-let re-read) or refuse to scalarize. With call-site sync,
 // each arm is its own scope: the call arm's wrapper captures the call's
-// value into a `Block { write_back; let __tmp = call; re_read; __tmp }`
+// value into a `Block { write_back; let $tmp = call; re_read; $tmp }`
 // and re-reads only locally, so the scalar arm's update survives.
 //
 // Expected trace (per iteration, 4 iterations of i = 0..4):
-//   - i=0 arm 0 (scalar):   __hfs_v += 1 → 1; val = __hfs_v = 1; sum += 1
-//   - i=1 arm 1 (call):     pre-call b.v = __hfs_v (1); call sets b.v = 11
-//                           returns 11; re-read __hfs_v = b.v = 11; val = 11; sum += 11
-//   - i=2 arm 0 (scalar):   __hfs_v += 1 → 12; val = 12; sum += 12
-//   - i=3 arm 1 (call):     pre b.v = 12; call → b.v = 22, ret 22; __hfs_v = 22; sum += 22
-//   sum = 1 + 11 + 12 + 22 = 46; final b.v = __hfs_v = 22.
+//   - i=0 arm 0 (scalar):   $hfs_v += 1 → 1; val = $hfs_v = 1; sum += 1
+//   - i=1 arm 1 (call):     pre-call b.v = $hfs_v (1); call sets b.v = 11
+//                           returns 11; re-read $hfs_v = b.v = 11; val = 11; sum += 11
+//   - i=2 arm 0 (scalar):   $hfs_v += 1 → 12; val = 12; sum += 12
+//   - i=3 arm 1 (call):     pre b.v = 12; call → b.v = 22, ret 22; $hfs_v = 22; sum += 22
+//   sum = 1 + 11 + 12 + 22 = 46; final b.v = $hfs_v = 22.
 
 use { println, Stdout } from "core:cli";
 
@@ -52,7 +52,7 @@ __DATA__
 {
     "stdout": "46 22\n",
     "wir_expect:O2": [
-        "let __hfs_v_",
-        "let __hfs_call_"
+        "let $hfs_v_",
+        "let $hfs_call_"
     ]
 }

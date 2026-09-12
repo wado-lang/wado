@@ -172,7 +172,7 @@ pub fn scalarize_variant_returns(project: &mut NirPackage, gate: &mut FunctionGa
 
 /// Wrap every call the fast path did not bind back into the variant it used to
 /// return, so the surrounding context sees the type it was written against:
-/// `f(x)` ⇒ `{ let __t = f(x); match __t.0 { 0 => Ok(__t.1!), _ => Err(__t.2!) } }`.
+/// `f(x)` ⇒ `{ let $t = f(x); match $t.0 { 0 => Ok($t.1!), _ => Err($t.2!) } }`.
 /// This is what makes the rewrite sound without validation — `nir/inline` keeps
 /// planting call sites after a callee's signature is already committed.
 fn rebox_stragglers(
@@ -530,7 +530,7 @@ fn collect_straggler_calls(
     });
 }
 
-/// Wrap `call` into `{ let __t = call; match __t.0 { k => Case(__t.slot) … } }`,
+/// Wrap `call` into `{ let $t = call; match $t.0 { k => Case($t.slot) … } }`,
 /// typed by the variant the callee used to return.
 fn rebox_call(
     body: &mut Body,
@@ -545,7 +545,7 @@ fn rebox_call(
     let (variant_type, layout) = scalarized[&func_id].clone();
 
     let local_index = u32::try_from(locals.len()).expect("local index overflow");
-    let name = format!("__rebox_{local_index}");
+    let name = format!("$rebox_{local_index}");
     locals.push(NirLocal {
         name: name.clone(),
         type_id: layout.tuple_type,
@@ -1468,7 +1468,7 @@ fn bound_temps(
 /// them is an immutable binding wearing a `mut` — the residue of a `?`-desugar
 /// or an inlining that `elide_local` did not tidy — and the rewrite, which
 /// retypes the local and every read of it, is exact on it. A local with a
-/// second definition is not: the pooled `__hfs_call_*` temps take one index for
+/// second definition is not: the pooled `$hfs_call_*` temps take one index for
 /// two live bindings, and retyping the index would retype both.
 pub(super) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
@@ -2221,7 +2221,7 @@ impl SiteCx<'_> {
 }
 
 /// `match f(x) { … }` has no binding for the tuple to land in, so give it one:
-/// `{ let __vr = f(x); match __vr { … } }`. Every call site is then the single
+/// `{ let $vr = f(x); match $vr { … } }`. Every call site is then the single
 /// `let`-bound shape the rest of the rewrite handles.
 fn hoist_call_scrutinees(
     body: &mut Body,
@@ -2251,7 +2251,7 @@ fn hoist_call_scrutinees(
         let call_type = body.exprs[call].type_id;
 
         let local_index = func.local_count();
-        let name = format!("__vr_{local_index}");
+        let name = format!("$vr_{local_index}");
         func.locals.push(NirLocal {
             name: name.clone(),
             type_id: call_type,

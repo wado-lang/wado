@@ -2272,7 +2272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         // Extract the element type for the loop binding.
         // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
@@ -2326,7 +2326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             crate::ast::Pattern::Tuple(..) => {
                 // For destructuring patterns like [a, b], use a synthetic name
                 // and resolve the destructuring in the body
-                (format!("__pattern_temp_{unique_id}"), None, None)
+                (format!("$pattern_temp_{unique_id}"), None, None)
             }
             _ => {
                 panic!("variadic for-of does not support this binding pattern")
@@ -2401,8 +2401,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per
-    /// element, binding the tuple to `__tuple_N` and each element to `v` in its
-    /// own block, all inside a `__tuple_for_of_N` label.
+    /// element, binding the tuple to `$tuple_N` and each element to `v` in its
+    /// own block, all inside a `$tuple_for_of_N` label.
     fn resolve_tuple_for_of(
         &mut self,
         for_of: &ForOfStmt,
@@ -2425,13 +2425,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return;
         }
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         // Store iterable in a temp variable to avoid re-evaluation (reify
-        // rebuilds the `__tuple_N` binding; we reserve its local slot here so
+        // rebuilds the `$tuple_N` binding; we reserve its local slot here so
         // the walk-order local indices stay in sync with reify).
         let tuple_type_id = iterable;
-        let temp_name = format!("__tuple_{unique_id}");
+        let temp_name = format!("$tuple_{unique_id}");
         ctx.add_local(temp_name, tuple_type_id, false, None);
 
         // Capture each unrolled element's body facts separately. The
@@ -2456,7 +2456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
             // Reify rebuilds the per-element block (the
-            // `__tuple_N.i` field access + binding + body) from the AST + the
+            // `$tuple_N.i` field access + binding + body) from the AST + the
             // `DesugarKind::ForOfTuple` tag and per-element overlays. This walk
             // binds the loop variable(s) into `ctx` and walks the body so every
             // element's facts are captured.
@@ -2546,17 +2546,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Lower a non-tuple `for let v of iterable { body }` into a labelled block
-    /// binding `__iter_N = iterable.into_iter()` around a `loop` that matches
-    /// `__iter_N.next()`, breaking on `None`. The synthetic local and both
+    /// binding `$iter_N = iterable.into_iter()` around a `loop` that matches
+    /// `$iter_N.next()`, breaking on `None`. The synthetic local and both
     /// dispatches carry no defining `AstId`, so clicking `for` does not drag the
     /// user into `Iterator::next`. `for_of.iterable` is resolved as written.
     fn resolve_iterator_for_of(&mut self, for_of: &ForOfStmt, ctx: &mut FunctionContext) {
         use super::method_call::MethodCallInput;
 
         let span = for_of.span;
-        let unique_id = ctx.next_local;
-        let iter_var = format!("__iter_{unique_id}");
-        let label = format!("__for_of_{unique_id}");
+        let unique_id = ctx.fresh_serial();
+        let iter_var = format!("$iter_{unique_id}");
+        let label = format!("$for_of_{unique_id}");
 
         // Resolve the iterable receiver verbatim, then dispatch `.into_iter()`
         // on it. Whatever adapter chain the user wrote (e.g. `.enumerate()`,
@@ -2611,17 +2611,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
 
-        // `let mut __iter_N = …;` — `defining_ast_id: None` keeps this
+        // `let mut $iter_N = …;` — `defining_ast_id: None` keeps this
         // synthetic local out of `local_symbols`. Reify rebuilds the `let`;
         // we reserve the local slot here for walk-order parity.
         ctx.add_local(iter_var, iter_type, /* is_mut */ true, None);
 
-        // Make `__for_of_N` visible to a body-level `break __for_of_N`
+        // Make `$for_of_N` visible to a body-level `break $for_of_N`
         // (no existing user does this, but the validation in `resolve_break`
         // would otherwise reject it). Pop after the body has been resolved.
         ctx.active_labels.push(label);
 
-        // `__iter_N.next()` — dispatch on the `__iter_N` local, no AST.
+        // `$iter_N.next()` — dispatch on the `$iter_N` local, no AST.
         let next_outcome = self.resolve_method_call_with(
             MethodCallInput {
                 receiver: iter_type,
@@ -2732,7 +2732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Reify rebuilds the
-        // `__for_of_N: { let mut __iter = …; loop { match __iter.next() { … } } }`
+        // `$for_of_N: { let mut $iter = …; loop { match $iter.next() { … } } }`
         // shape from the AST + the recorded `ForOfIteratorInfo`. This walk binds
         // the loop variable (`resolve_if_pattern_inner`, preserving the
         // binding's real `AstId`) and walks the body for its facts.
@@ -2892,15 +2892,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a C-style `for init; cond; update { B }` into
-    /// `{ init; loop { if !cond { break; } __for_N_body: { B } update; } }`,
+    /// `{ init; loop { if !cond { break; } $for_N_body: { B } update; } }`,
     /// with the `let pat = e` form guarding on a `match` instead. The outer block
     /// is a fresh scope, and `B`'s label is what [`Self::resolve_continue`]
     /// reroutes a naked `continue` to, so control still falls through `update`.
     pub(super) fn resolve_for(&mut self, f: &ForStmt, ctx: &mut FunctionContext) {
         self.record_desugar(f.id, super::sem::types::DesugarKind::CStyleFor);
-        let loop_id = ctx.next_loop_id;
-        ctx.next_loop_id += 1;
-        let body_label = format!("__for_{loop_id}_body");
+        let body_label = format!("$for_{}_body", ctx.fresh_serial());
 
         // Mirror `resolve_loop` / `resolve_while` / `resolve_for_of`: clear the
         // continue-retarget stack at the loop boundary so the invariant
@@ -2917,7 +2915,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx.enter_scope();
 
         // Reify rebuilds the C-style-for desugar
-        // (`{ init; loop { if !cond { break } __for_N_body: { B } update } }`,
+        // (`{ init; loop { if !cond { break } $for_N_body: { B } update } }`,
         // or the `while let` form) from the `DesugarKind::CStyleFor` tag + the
         // AST. This walk resolves `init` / `cond` / scrutinee, binds the
         // for-header let pattern, and walks the body + update for their facts.

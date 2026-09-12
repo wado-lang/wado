@@ -404,7 +404,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 
 /// In the fast clone, drive every implied check to `false` (the paired
 /// `BranchPruneRule` removes the dead panic arms), and constify the
-/// single-purpose `let __cond = <cmp>` temp feeding each check — in the fast
+/// single-purpose `let $cond = <cmp>` temp feeding each check — in the fast
 /// arm the comparison is provably constant, so this is exact for any reader.
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
 fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fast_body: BlockId) {

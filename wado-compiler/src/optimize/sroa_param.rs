@@ -1512,7 +1512,7 @@ fn discardable_field(body: &Body, value: Operand) -> bool {
 // -----------------------------------------------------------------------
 
 /// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
-/// `relax_closure_call = false` keeps closure `__call` functors pinned, their
+/// `relax_closure_call = false` keeps closure `$call` functors pinned, their
 /// function-table wrapper having snapshotted the signature, and one pin is added
 /// here: a `$value_copy$T` helper is never a rewrite target. A concrete
 /// trait-impl method is eligible, every post-mono call site being resolved.

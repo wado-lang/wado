@@ -680,7 +680,7 @@ fn apply_field_materialise(
         return false;
     }
     let span = engine.body.exprs[ids[0]].span;
-    let name = format!("_av_{}", engine.locals().len());
+    let name = format!("$av_{}", engine.locals().len());
     let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
     let let_stmt = engine.alloc_stmt(
         crate::nir_arena::StmtKind::Let {
@@ -780,7 +780,7 @@ fn apply_value_freeze(
     let mut changed = false;
     if materialize {
         let (anchor, block) = point.expect("`anchorable` holds only with a point");
-        let name = format!("_av_{}", engine.locals().len());
+        let name = format!("$av_{}", engine.locals().len());
         let av = engine.alloc_local(name.clone(), id_ty, /* is_mut */ false);
         let read = engine
             .body

@@ -63,7 +63,7 @@ macro_rules! reify_annotation_accessors {
 /// (read type, then write dispatch) but once by reify, so any local it allocated
 /// would desync the frame. Only idents, literals, field access, and deref / ref
 /// of a pure operand qualify — notably NOT a list/tuple literal, which
-/// materialises a `__b` builder local under sequence coercion.
+/// materialises a `$b` builder local under sequence coercion.
 pub(super) fn ast_expr_is_pure(expr: &ast::Expr) -> bool {
     match expr {
         Expr::Ident(_) | Expr::Literal(_) => true,
@@ -90,7 +90,7 @@ fn ast_expr_is_place(expr: &ast::Expr) -> bool {
 /// The side-effecting value operands of a compound-assign target — index
 /// subscripts, deref'd references, and owned-value bases (`get_obj().field`) —
 /// each bound once so the inline place skeleton is pure to duplicate. Shared by
-/// reify (binds `let __caN`, overrides) and annotate (reserves the matching
+/// reify (binds `let $caN`, overrides) and annotate (reserves the matching
 /// frame slots).
 pub(super) fn collect_compound_hoists<'e>(expr: &'e ast::Expr, out: &mut Vec<CompoundHoist<'e>>) {
     match expr {
@@ -133,7 +133,7 @@ fn collect_hoists_of_base<'e>(base: &'e ast::Expr, out: &mut Vec<CompoundHoist<'
 /// One reify-side power-assert capture slot. Independent from
 /// [`super::assert::Capture`] so the two walks don't share state.
 pub(super) struct ReifyAssertSlot {
-    /// `__v0`, `__v1`, … — the local the panic template references.
+    /// `$v0`, `$v1`, … — the local the panic template references.
     pub(super) name: String,
     pub(super) label: String,
     /// `false` when the sub-expression evaporated during reify and no
@@ -236,7 +236,7 @@ fn build_kv_from_call(
     build_literal_from_call(array, &facts.call, span)
 }
 
-/// `__acc.spread_literal(base)` for one `..base` member.
+/// `$acc.spread_literal(base)` for one `..base` member.
 fn build_literal_spread_call(
     acc_index: u32,
     output_type: crate::tir::TypeId,
@@ -247,7 +247,7 @@ fn build_literal_spread_call(
     let receiver = TirExpr::new(
         crate::tir::TirExprKind::Local {
             index: acc_index,
-            name: "__acc".to_string(),
+            name: "$acc".to_string(),
         },
         output_type,
         span,
@@ -364,7 +364,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) default_arg_overrides: IndexMap<String, TirExpr>,
     /// Active `AstId` → already-reified-`Local` substitutions for the
     /// side-effecting sub-pieces of a compound-assign target, bound once to
-    /// `let __caN` before the read/write. Reify returns the bound `Local` for
+    /// `let $caN` before the read/write. Reify returns the bound `Local` for
     /// those exact nodes so `arr[bump()] += 1` evaluates `bump()` once while
     /// the place skeleton (index calls, field / deref chain) stays inline and
     /// still writes back. Empty outside `reify_compound_assign`.
@@ -1440,7 +1440,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             stores: func.stores.clone(),
             body,
             span: func.span,
-            local_count: ctx.next_local,
+            local_count: ctx.local_count(),
             locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: crate::hashmap::IndexSet::default(),
@@ -1858,7 +1858,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             stores: func.stores.clone(),
             body,
             span: func.span,
-            local_count: ctx.next_local,
+            local_count: ctx.local_count(),
             locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: crate::hashmap::IndexSet::default(),
@@ -1928,7 +1928,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             stores: vec![],
             body: Some(body),
             span: test_decl.span,
-            local_count: ctx.next_local,
+            local_count: ctx.local_count(),
             locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
             stores_aliased_locals: crate::hashmap::IndexSet::default(),
@@ -3520,7 +3520,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .enumerate()
                 .map(
                     |(i, (label, conditional, is_place, hoisted))| ReifyAssertSlot {
-                        name: format!("__v{i}"),
+                        name: format!("$v{i}"),
                         label: label.clone(),
                         emitted: false,
                         local_index: None,
@@ -3549,7 +3549,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         inner_stmts.extend(actx.emitted_lets);
 
         let cond_type = cond_tir.type_id;
-        let cond_name = "__cond".to_string();
+        let cond_name = "$cond".to_string();
         let cond_local_index = ctx.add_local(cond_name.clone(), cond_type, false, None);
         inner_stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -3748,10 +3748,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         ctx.exit_scope();
 
-        // The `__assert_N:` label advances `next_assert_id` in lockstep with
-        // annotate's own walk.
-        let assert_serial = ctx.next_assert_id;
-        ctx.next_assert_id += 1;
+        let assert_serial = ctx.fresh_serial();
         vec![TirStmt::new(
             TirStmtKind::LabeledBlock {
                 label: format!("$assert_{assert_serial}"),
@@ -3809,8 +3806,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let span = for_of.span;
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
-        let unique_id = ctx.next_local;
-        let iter_var = format!("__iter_{unique_id}");
+        let unique_id = ctx.fresh_serial();
+        let iter_var = format!("$iter_{unique_id}");
         let label = format!("$for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
@@ -3981,7 +3978,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TypeTable};
 
         let span = for_of.span;
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         let (actual_iterable, is_enumerate) = match &for_of.iterable {
             ast::Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
@@ -4000,7 +3997,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_tuple_through_ref(tuple_type_id)
             .unwrap_or_default();
 
-        let temp_name = format!("__tuple_{unique_id}");
+        let temp_name = format!("$tuple_{unique_id}");
         let temp_local = ctx.add_local(temp_name.clone(), tuple_type_id, false, None);
         let temp_let = TirStmt::new(
             TirStmtKind::Let {
@@ -4206,7 +4203,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             other => (other, false),
         };
         let iterable = self.reify_expr(actual_iterable, ctx, None);
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         // Look through a `&`/`&mut` wrapper: `for v of &[..T]` binds `&T_k`.
         // `by_ref` and the element type are derived from a single lookup so the
@@ -4257,7 +4254,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span: name_span,
             } => (name.clone(), Some(*id), *name_span),
             ast::Pattern::Tuple(..) => (
-                format!("__pattern_temp_{unique_id}"),
+                format!("$pattern_temp_{unique_id}"),
                 None,
                 crate::token::Span::default(),
             ),
@@ -4378,7 +4375,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = comp.span;
         let (source, is_enumerate) = super::Elaborator::<H>::split_enumerate(&comp.iterable);
         let iterable = self.reify_expr(source, ctx, None);
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
 
         let elem_type = super::Elaborator::<H>::comprehension_pack_elem(
             &self.tysys.type_table,
@@ -4396,7 +4393,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let binding_name = match &comp.binding {
             ast::Pattern::Ident { name, .. } => name.clone(),
-            _ => format!("__comp_temp_{unique_id}"),
+            _ => format!("$comp_temp_{unique_id}"),
         };
         let binding_name_span = match &comp.binding {
             ast::Pattern::Ident { span, .. } => *span,
@@ -4500,9 +4497,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = f.span;
-        let loop_id = ctx.next_loop_id;
-        ctx.next_loop_id += 1;
-        let body_label = format!("$for_{loop_id}_body");
+        let body_label = format!("$for_{}_body", ctx.fresh_serial());
 
         let saved_continue = std::mem::take(&mut ctx.for_continue_labels);
         ctx.enter_scope();
@@ -4651,8 +4646,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         outer_stmts
     }
 
-    /// Reify the for-loop body wrapped in `__for_N_body:` so naked
-    /// `continue` lowers as `break __for_N_body` (letting the
+    /// Reify the for-loop body wrapped in `$for_N_body:` so naked
+    /// `continue` lowers as `break $for_N_body` (letting the
     /// `update` expression run before the next iteration). Mirrors
     /// `Elaborator::resolve_for_labeled_body`.
     fn reify_for_labeled_body(
@@ -5304,7 +5299,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             (tt.struct_head_name(*def), holes)
         };
 
-        let unique_id = ctx.next_local;
+        let unique_id = ctx.fresh_serial();
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut fields: Vec<TirStructField> = Vec::new();
         let holes: Vec<&ast::Expr> = tagged.template.interpolations().collect();
@@ -5321,7 +5316,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             holes.iter().zip(values).zip(&hole_types).enumerate()
         {
             if last_hoisted.is_some_and(|last| k <= last) {
-                let name = format!("__hole_{unique_id}_{k}");
+                let name = format!("$hole_{unique_id}_{k}");
                 let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
                 stmts.push(TirStmt::new(
                     TirStmtKind::Let {
@@ -5658,7 +5653,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.fields.iter().map(|f| f.name.clone()).collect();
 
         // Fill omitted fields from `base.field` (not defaults), evaluating a
-        // non-trivial `base` once via a `__base_N` temporary.
+        // non-trivial `base` once via a `$base_N` temporary.
         let mut spread_binding: Option<(u32, String, TirExpr)> = None;
         if let Some(spread) = struct_lit.spreads.first() {
             let base_expr = self.reify_expr(&spread.expr, ctx, Some(struct_type));
@@ -5666,7 +5661,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let base_ref = if matches!(base_expr.kind, TirExprKind::Local { .. }) {
                 base_expr
             } else {
-                let tmp_name = format!("__base_{}", ctx.next_local);
+                let tmp_name = format!("$base_{}", ctx.fresh_serial());
                 let tmp_idx = ctx.add_local(tmp_name.clone(), base_type, false, None);
                 spread_binding = Some((tmp_idx, tmp_name.clone(), base_expr));
                 TirExpr::new(
@@ -5766,7 +5761,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Bind each collected impure sub-piece to a `let __caN = …;` in `prelude`
+    /// Bind each collected impure sub-piece to a `let $caN = …;` in `prelude`
     /// once and register its `AstId` → `Local` override, so every recurrence
     /// in the reified read / write becomes that `Local` read.
     fn bind_compound_hoists(
@@ -5779,7 +5774,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let value = self.reify_expr(hoist.piece, ctx, None);
             let span = value.span;
             let type_id = value.type_id;
-            let name = format!("__ca{counter}");
+            let name = format!("$ca{counter}");
             let index = ctx.add_local(name.clone(), type_id, false, None);
             prelude.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -5976,7 +5971,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a compound assignment `x += y` as `x = x op y`, evaluating each
-    /// target sub-expression once: impure value operands bind to `let __caN`
+    /// target sub-expression once: impure value operands bind to `let $caN`
     /// while the place skeleton stays inline. Residual: a nested index's
     /// receiver (`m.index(i)` in `m[i][j] += 1`) is still duplicated, so a
     /// side-effecting custom `Index::index` runs twice.
@@ -6003,7 +5998,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = compound.span;
 
         // Save/restore the override map so a nested compound assign keeps its
-        // own bindings; the scope keeps `__caN` names out of the enclosing map.
+        // own bindings; the scope keeps `$caN` names out of the enclosing map.
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
         let saved_overrides = std::mem::take(&mut self.compound_overrides);
@@ -6157,14 +6152,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         };
 
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
+        let v_local = ctx.add_local("$qm_v".to_string(), some_type, false, None);
 
         let some_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
                 variant_name: some_name,
                 bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
+                    name: "$qm_v".to_string(),
                     local_index: v_local,
                     type_id: some_type,
                 }],
@@ -6174,7 +6169,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Local {
                     index: v_local,
-                    name: "__qm_v".to_string(),
+                    name: "$qm_v".to_string(),
                 },
                 some_type,
                 span,
@@ -6261,8 +6256,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let need_from_conversion = inner_err_type != outer_err_type;
 
         ctx.enter_scope();
-        let v_local = ctx.add_local("__qm_v".to_string(), ok_type, false, None);
-        let e_local = ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
+        let v_local = ctx.add_local("$qm_v".to_string(), ok_type, false, None);
+        let e_local = ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
         let (ok_name, err_name, err_index) = {
             let tt = self.tysys.type_table.borrow();
@@ -6279,7 +6274,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 enum_type: inner_type,
                 variant_name: ok_name,
                 bindings: vec![TirPattern::Binding {
-                    name: "__qm_v".to_string(),
+                    name: "$qm_v".to_string(),
                     local_index: v_local,
                     type_id: ok_type,
                 }],
@@ -6289,7 +6284,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Local {
                     index: v_local,
-                    name: "__qm_v".to_string(),
+                    name: "$qm_v".to_string(),
                 },
                 ok_type,
                 span,
@@ -6300,7 +6295,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let e_expr = TirExpr::new(
             TirExprKind::Local {
                 index: e_local,
-                name: "__qm_e".to_string(),
+                name: "$qm_e".to_string(),
             },
             inner_err_type,
             span,
@@ -6326,7 +6321,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 enum_type: inner_type,
                 variant_name: err_name,
                 bindings: vec![TirPattern::Binding {
-                    name: "__qm_e".to_string(),
+                    name: "$qm_e".to_string(),
                     local_index: e_local,
                     type_id: inner_err_type,
                 }],
@@ -6365,7 +6360,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Reify a comparison chain `a < b < c …` into
-    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `__mK` binding
+    /// `(a < m_0) && (m_0 < m_1) && …` inside a block holding one `$mK` binding
     /// per middle term, so no term is re-evaluated. Non-primitive operands
     /// dispatch through the `operator_dispatch` record on the chain's own
     /// `AstId` — the synthesised inner comparisons have no source id.
@@ -6488,9 +6483,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let first_tir = self.reify_expr(&chain.first, ctx, None);
         let right0_tir = self.reify_expr(&cmp0.right, ctx, Some(first_tir.type_id));
 
-        // Bind first middle to `__m0`.
+        // Bind first middle to `$m0`.
         let m0_type = right0_tir.type_id;
-        let m0_name = "__m0".to_string();
+        let m0_name = "$m0".to_string();
         let m0_index = ctx.add_local(m0_name.clone(), m0_type, false, None);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -6532,7 +6527,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 raw_right
             } else {
                 let m_type = raw_right.type_id;
-                let m_name = format!("__m{idx}");
+                let m_name = format!("$m{idx}");
                 let m_index = ctx.add_local(m_name.clone(), m_type, false, None);
                 stmts.push(TirStmt::new(
                     TirStmtKind::Let {
@@ -6676,7 +6671,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify a closure expression from the capture analysis in
     /// `sem.types.closure_captures[closure.id]`: `mut_captures` materialise as
-    /// `let __ref_v = &mut v;` ahead of the body in declaration order, `captures`
+    /// `let $ref_v = &mut v;` ahead of the body in declaration order, `captures`
     /// is the final capture list, and `is_mutating` picks `fn mut(…)`. Follows
     /// `resolve_closure` step by step so the walk-order invariant holds.
     fn reify_closure(
@@ -6696,9 +6691,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_closure_captures(closure.id)
             .expect("resolve_closure records the capture info for every closure reify emits");
 
-        // Step 1 (replay): materialise outer-scope `__ref_v` locals
+        // Step 1 (replay): materialise outer-scope `$ref_v` locals
         // for each mut-capture in the recorded order; emit the
-        // matching `let __ref_v = &mut v;` TIR; register
+        // matching `let $ref_v = &mut v;` TIR; register
         // `deref_overrides` so the closure body's references to
         // captured mut-locals dereference the proxy.
         let mut ref_stmts: Vec<TirStmt> = Vec::new();
@@ -6881,7 +6876,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         // Step 7: wrap in a Block when ref_stmts materialised any
-        // outer-scope `__ref_v` bindings.
+        // outer-scope `$ref_v` bindings.
         if ref_stmts.is_empty() {
             let _ = recorded_type;
             return closure_tir;
@@ -7006,7 +7001,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         spread_expr
                     } else {
                         let spread_type_id = spread_expr.type_id;
-                        let tmp_name = format!("__spread_{}", ctx.next_local);
+                        let tmp_name = format!("$spread_{}", ctx.fresh_serial());
                         let tmp_idx = ctx.add_local(tmp_name.clone(), spread_type_id, false, None);
                         spread_bindings.push((tmp_idx, tmp_name.clone(), spread_expr, elem.span()));
                         TirExpr::new(
@@ -7131,7 +7126,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `{ ..a, x: 1, ..b }` — members in source order, last write wins. The
         // accumulator is seeded with the first member so the common
         // `{ ..base, … }` costs one copy and one merge.
-        let label = "__kv_lit".to_string();
+        let label = "$kv_lit".to_string();
         ctx.enter_scope();
         let mut stmts: Vec<TirStmt> = Vec::new();
         let mut acc: Option<u32> = None;
@@ -7158,10 +7153,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         for (value, member_span) in members {
             match acc {
                 None => {
-                    let index = ctx.add_local("__acc".to_string(), output_type, true, None);
+                    let index = ctx.add_local("$acc".to_string(), output_type, true, None);
                     stmts.push(TirStmt::new(
                         TirStmtKind::Let {
-                            name: "__acc".to_string(),
+                            name: "$acc".to_string(),
                             local_index: index,
                             is_mut: true,
                             is_reactive: false,
@@ -7190,7 +7185,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 value: Some(TirExpr::new(
                     TirExprKind::Local {
                         index,
-                        name: "__acc".to_string(),
+                        name: "$acc".to_string(),
                     },
                     output_type,
                     span,
@@ -7445,7 +7440,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify an anonymous struct literal `{ x: 1, y: 2 }`. Annotate
     /// synthesises the struct from the field shape, gives it a
-    /// deterministic `__anon_{x:i32,y:i32}`-style name, and registers
+    /// deterministic `$anon_{x:i32,y:i32}`-style name, and registers
     /// it on `tysys.type_table` + `sem.decls.local_struct_fields` +
     /// `sem.decls.pending_anonymous_structs`. Reify reproduces the
     /// same name from the reified field types and looks the struct
@@ -7460,7 +7455,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use super::expr::UnionSource;
         use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
 
-        // `resolve_anonymous_struct_literal` records the synthesised `__anon_{…}`
+        // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
         let struct_type = recorded_type;
         let (struct_name, is_union) = self
@@ -7507,12 +7502,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::LiteralMember::Spread(si, sp) => {
                     let expr = self.reify_expr(&sp.expr, ctx, None);
                     base_types[si] = expr.type_id;
-                    base_refs[si] = Some(self.hoist_once(ctx, expr, "__base", &mut stmts));
+                    base_refs[si] = Some(self.hoist_once(ctx, expr, "$base", &mut stmts));
                 }
                 ast::LiteralMember::Field(pos, f) => {
                     let expr = self.reify_expr(&f.value, ctx, None);
                     explicit_types[pos] = expr.type_id;
-                    explicit_refs[pos] = Some(self.hoist_once(ctx, expr, "__fld", &mut stmts));
+                    explicit_refs[pos] = Some(self.hoist_once(ctx, expr, "$fld", &mut stmts));
                 }
             }
         }
@@ -7591,7 +7586,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let span = expr.span;
         let type_id = expr.type_id;
-        let name = format!("{prefix}_{}", ctx.next_local);
+        let name = format!("{prefix}_{}", ctx.fresh_serial());
         let index = ctx.add_local(name.clone(), type_id, false, None);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -7668,7 +7663,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Stream<u8>::new()`, whose target parses as a `Type` node rather than an
     /// `Ident` callee. Same shape as `reify_call`'s qualified-callee branch:
     /// resolve the target type, take the impl module from the resolved struct,
-    /// and build the mangled `__Type__method` `FunctionRef`.
+    /// and build the mangled `$Type__method` `FunctionRef`.
     fn reify_static_method_call(
         &mut self,
         static_call: &ast::StaticMethodCallExpr,
@@ -8089,7 +8084,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(dispatch) = self.ann_static_method_dispatch(call.id) {
             // Forward per-argument expected types to closure args with an
             // unannotated param, or their params stay UNKNOWN and the functor's
-            // `__call` is dropped before codegen. Restricted to those closures
+            // `$call` is dropped before codegen. Restricted to those closures
             // so an effect-polymorphic one keeps its body-inferred effects
             // instead of being pinned to a generic effect param.
             let call_param_types = self.ann_call_param_types(call.id);
@@ -8609,7 +8604,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// Reify a `MethodCallExpr`. Every decision — resolved `FunctionRef`,
     /// receiver-adjustment kind, ref-impl flag, final type — is already on
     /// `sem.types`. An `IndexMutMethodCall` desugar routes through here too,
-    /// materialising `__index_mut_val` before the dispatch.
+    /// materialising `$index_mut_val` before the dispatch.
     fn reify_method_call(
         &mut self,
         method_call: &ast::MethodCallExpr,
@@ -8620,7 +8615,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // IndexMut rewrite gets first crack — when the elaborator
         // tagged this call as `IndexMutMethodCall`, the receiver is an
-        // index expression that needs `__index_mut_val` synthesis.
+        // index expression that needs `$index_mut_val` synthesis.
         if matches!(
             self.ann_desugars(method_call.id),
             Some(super::sem::types::DesugarKind::IndexMutMethodCall)
@@ -9095,7 +9090,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let capture_expr = TirExpr::new(
                         TirExprKind::Capture {
                             index,
-                            name: format!("__deref_cap_{index}"),
+                            name: format!("$deref_cap_{index}"),
                         },
                         ref_type_id,
                         ident.span,
@@ -11221,7 +11216,7 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
 ///
 /// TIR counterpart of `control_flow::find_return_type_in_block`, and must stay
 /// in step with it: a construct missing here is a `return` the closure's return
-/// type cannot see, which mistypes `__call` and fails core-Wasm validation.
+/// type cannot see, which mistypes `$call` and fails core-Wasm validation.
 fn tir_block_return_type(body: &crate::tir::TirExpr) -> Option<crate::tir::TypeId> {
     use crate::tir::{TirExprKind, TirStmtKind};
 

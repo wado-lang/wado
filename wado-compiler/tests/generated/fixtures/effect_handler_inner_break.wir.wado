@@ -25,21 +25,21 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct effect_handler_inner_break.wado//__Dispatch_Counter {  // TypeId(5)
-    mut outer: ref null "effect_handler_inner_break.wado//__Dispatch_Counter",
+struct effect_handler_inner_break.wado//$Dispatch_Counter {  // TypeId(5)
+    mut outer: ref null "effect_handler_inner_break.wado//$Dispatch_Counter",
     mut op_next: ref struct,
 }
 
 struct effect_handler_inner_break.wado//Inner {  // TypeId(6)}
 
-struct effect_handler_inner_break.wado//__Closure_1 {  // TypeId(7)
-    mut __capture_0: ref "effect_handler_inner_break.wado//Inner",
+struct effect_handler_inner_break.wado//$Closure_1 {  // TypeId(7)
+    mut $capture_0: ref "effect_handler_inner_break.wado//Inner",
 }
 
 struct effect_handler_inner_break.wado//Outer {  // TypeId(8)}
 
-struct effect_handler_inner_break.wado//__Closure_0 {  // TypeId(9)
-    mut __capture_0: ref "effect_handler_inner_break.wado//Outer",
+struct effect_handler_inner_break.wado//$Closure_0 {  // TypeId(9)
+    mut $capture_0: ref "effect_handler_inner_break.wado//Outer",
 }
 
 struct core:prelude/slice.wado//Slice<u8> {  // TypeId(10)
@@ -73,9 +73,9 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//effect_handler_inner_break.wado/run" = fn();  // TypeId(21)
 
-type "functype//effect_handler_inner_break.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//effect_handler_inner_break.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//effect_handler_inner_break.wado/__cm_export__run" = fn();  // TypeId(23)
+type "functype//effect_handler_inner_break.wado/$cm_export__run" = fn();  // TypeId(23)
 
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(24)
 
@@ -89,9 +89,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(29)
 
-type "functype//effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_0::__call" = fn() -> i32;  // TypeId(30)
+type "functype//effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_0::$call" = fn() -> i32;  // TypeId(30)
 
-type "functype//effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_1::__call" = fn() -> i32;  // TypeId(31)
+type "functype//effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_1::$call" = fn() -> i32;  // TypeId(31)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(32)
 
@@ -117,33 +117,33 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_handler_inner_break.wado::__effect_Counter: ref null "effect_handler_inner_break.wado//__Dispatch_Counter" = ref.null none;
-global global:effect_handler_inner_break.wado::__const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44, 32, 111, 117, 116, 115, 105, 100, 101, 61);
-global global:effect_handler_inner_break.wado::__const_obj_2: ref null "effect_handler_inner_break.wado//Inner" = struct.new "effect_handler_inner_break.wado//Inner" {  };
-global global:effect_handler_inner_break.wado::__const_obj_3: ref null "effect_handler_inner_break.wado//Outer" = struct.new "effect_handler_inner_break.wado//Outer" {  };
-global global:core:prelude/primitive.wado::__const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global mut global:effect_handler_inner_break.wado::$effect_Counter: ref null "effect_handler_inner_break.wado//$Dispatch_Counter" = ref.null none;
+global global:effect_handler_inner_break.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44, 32, 111, 117, 116, 115, 105, 100, 101, 61);
+global global:effect_handler_inner_break.wado::$const_obj_2: ref null "effect_handler_inner_break.wado//Inner" = struct.new "effect_handler_inner_break.wado//Inner" {  };
+global global:effect_handler_inner_break.wado::$const_obj_3: ref null "effect_handler_inner_break.wado//Outer" = struct.new "effect_handler_inner_break.wado//Outer" {  };
+global global:core:prelude/primitive.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_inner_break.wado/run"() with Stdout {
     let a: i32;
     let b: i32;
     let outside: i32;
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/format.wado//Formatter";
-    let __h_Counter_7: ref "effect_handler_inner_break.wado//Inner";
-    let __save_Counter_8: ref null "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __d_Counter_9: ref "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __h_Counter_10: ref "effect_handler_inner_break.wado//Outer";
-    let __save_Counter_11: ref null "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __d_Counter_12: ref "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_0_15: ref null "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_1_16: ref "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_2_17: i32;
-    let __local_0_18: ref null "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_1_19: ref "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_2_20: i32;
-    let __local_0_21: ref null "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_1_22: ref "effect_handler_inner_break.wado//__Dispatch_Counter";
-    let __local_2_23: i32;
+    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_6: ref "core:prelude/format.wado//Formatter";
+    let $h_Counter_7: ref "effect_handler_inner_break.wado//Inner";
+    let $save_Counter_8: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $d_Counter_9: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $h_Counter_10: ref "effect_handler_inner_break.wado//Outer";
+    let $save_Counter_11: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $d_Counter_12: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_0_15: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_1_16: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_2_17: i32;
+    let $local_0_18: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_1_19: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_2_20: i32;
+    let $local_0_21: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_1_22: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
+    let $local_2_23: i32;
     let handle: i32;
     let f_49: ref "core:prelude/format.wado//Formatter";
     let new_used_54: i32;
@@ -155,116 +155,116 @@ fn "effect_handler_inner_break.wado/run"() with Stdout {
     let packed: i64;
     let rx_102: i32;
     let tx_103: i32;
-    __h_Counter_10 = global:effect_handler_inner_break.wado::__const_obj_3;
-    __save_Counter_11 = global:effect_handler_inner_break.wado::__effect_Counter;
-    __d_Counter_12 = struct.new "effect_handler_inner_break.wado//__Dispatch_Counter" { outer: __save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//__Closure_0" { __capture_0: __h_Counter_10 }, func: ref.func "closure/effect_handler_inner_break.wado/__closure_wrapper_0" } };
-    global:effect_handler_inner_break.wado::__effect_Counter = __d_Counter_12;
+    $h_Counter_10 = global:effect_handler_inner_break.wado::$const_obj_3;
+    $save_Counter_11 = global:effect_handler_inner_break.wado::$effect_Counter;
+    $d_Counter_12 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_0" { $capture_0: $h_Counter_10 }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_0" } };
+    global:effect_handler_inner_break.wado::$effect_Counter = $d_Counter_12;
     a = 0;
     b = 0;
-    __h_Counter_7 = global:effect_handler_inner_break.wado::__const_obj_2;
-    __save_Counter_8 = global:effect_handler_inner_break.wado::__effect_Counter;
-    __d_Counter_9 = struct.new "effect_handler_inner_break.wado//__Dispatch_Counter" { outer: __save_Counter_8, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//__Closure_1" { __capture_0: __h_Counter_7 }, func: ref.func "closure/effect_handler_inner_break.wado/__closure_wrapper_1" } };
-    global:effect_handler_inner_break.wado::__effect_Counter = __d_Counter_9;
-    a = $inline___effect_dispatch__Counter__next_1: block -> i32 {
-        __local_0_15 = global:effect_handler_inner_break.wado::__effect_Counter;
-        if @likely(ref.is_null(__local_0_15) == 0) {
-            __local_1_16 = ref.as_non_null(__local_0_15);
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_1_16.outer;
-            __local_2_17 = block -> i32 {
-                let __indirect_call_1: ref "canonical//CanonicalClosure_0";
-                __indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"(__local_1_16.op_next);
-                call_ref "functype/$canonical_closure_fn_0"(__indirect_call_1.func, __indirect_call_1.env);
+    $h_Counter_7 = global:effect_handler_inner_break.wado::$const_obj_2;
+    $save_Counter_8 = global:effect_handler_inner_break.wado::$effect_Counter;
+    $d_Counter_9 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_8, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_1" { $capture_0: $h_Counter_7 }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_1" } };
+    global:effect_handler_inner_break.wado::$effect_Counter = $d_Counter_9;
+    a = $inline__effect_dispatch__Counter__next_1: block -> i32 {
+        $local_0_15 = global:effect_handler_inner_break.wado::$effect_Counter;
+        if @likely(ref.is_null($local_0_15) == 0) {
+            $local_1_16 = ref.as_non_null($local_0_15);
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_1_16.outer;
+            $local_2_17 = block -> i32 {
+                let $indirect_call_1: ref "canonical//CanonicalClosure_0";
+                $indirect_call_1 = ref.cast "canonical//CanonicalClosure_0"($local_1_16.op_next);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, $indirect_call_1.env);
             };
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_0_15;
-            break $inline___effect_dispatch__Counter__next_1: __local_2_17;
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_0_15;
+            break $inline__effect_dispatch__Counter__next_1: $local_2_17;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    b = $inline___effect_dispatch__Counter__next_2: block -> i32 {
-        __local_0_18 = global:effect_handler_inner_break.wado::__effect_Counter;
-        if @likely(ref.is_null(__local_0_18) == 0) {
-            __local_1_19 = ref.as_non_null(__local_0_18);
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_1_19.outer;
-            __local_2_20 = block -> i32 {
-                let __indirect_call_2: ref "canonical//CanonicalClosure_0";
-                __indirect_call_2 = ref.cast "canonical//CanonicalClosure_0"(__local_1_19.op_next);
-                call_ref "functype/$canonical_closure_fn_0"(__indirect_call_2.func, __indirect_call_2.env);
+    b = $inline__effect_dispatch__Counter__next_2: block -> i32 {
+        $local_0_18 = global:effect_handler_inner_break.wado::$effect_Counter;
+        if @likely(ref.is_null($local_0_18) == 0) {
+            $local_1_19 = ref.as_non_null($local_0_18);
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_1_19.outer;
+            $local_2_20 = block -> i32 {
+                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
+                $indirect_call_2 = ref.cast "canonical//CanonicalClosure_0"($local_1_19.op_next);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, $indirect_call_2.env);
             };
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_0_18;
-            break $inline___effect_dispatch__Counter__next_2: __local_2_20;
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_0_18;
+            break $inline__effect_dispatch__Counter__next_2: $local_2_20;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    global:effect_handler_inner_break.wado::__effect_Counter = __save_Counter_8;
-    outside = $inline___effect_dispatch__Counter__next_3: block -> i32 {
-        __local_0_21 = global:effect_handler_inner_break.wado::__effect_Counter;
-        if @likely(ref.is_null(__local_0_21) == 0) {
-            __local_1_22 = ref.as_non_null(__local_0_21);
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_1_22.outer;
-            __local_2_23 = block -> i32 {
-                let __indirect_call_3: ref "canonical//CanonicalClosure_0";
-                __indirect_call_3 = ref.cast "canonical//CanonicalClosure_0"(__local_1_22.op_next);
-                call_ref "functype/$canonical_closure_fn_0"(__indirect_call_3.func, __indirect_call_3.env);
+    global:effect_handler_inner_break.wado::$effect_Counter = $save_Counter_8;
+    outside = $inline__effect_dispatch__Counter__next_3: block -> i32 {
+        $local_0_21 = global:effect_handler_inner_break.wado::$effect_Counter;
+        if @likely(ref.is_null($local_0_21) == 0) {
+            $local_1_22 = ref.as_non_null($local_0_21);
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_1_22.outer;
+            $local_2_23 = block -> i32 {
+                let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                $indirect_call_3 = ref.cast "canonical//CanonicalClosure_0"($local_1_22.op_next);
+                call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, $indirect_call_3.env);
             };
-            global:effect_handler_inner_break.wado::__effect_Counter = __local_0_21;
-            break $inline___effect_dispatch__Counter__next_3: __local_2_23;
+            global:effect_handler_inner_break.wado::$effect_Counter = $local_0_21;
+            break $inline__effect_dispatch__Counter__next_3: $local_2_23;
         } else {
             "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("no handler installed for `Counter::next`"), used: 40 });
             unreachable;
         }
         unreachable;
     };
-    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 };
-    __local_5.used = 2;
-    builtin::array_set_u8(__local_5.repr, 0, 97);
-    builtin::array_set_u8(__local_5.repr, 0 + 1, 61);
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
-    f_49 = __local_6;
+    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(64), used: 0 };
+    $local_5.used = 2;
+    builtin::array_set_u8($local_5.repr, 0, 97);
+    builtin::array_set_u8($local_5.repr, 0 + 1, 61);
+    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
+    f_49 = $local_6;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(a, f_49);
-    new_used_54 = __local_5.used + 4;
-    if @unlikely(new_used_54 > builtin::array_len(__local_5.repr)) {
+    new_used_54 = $local_5.used + 4;
+    if @unlikely(new_used_54 > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_5, new_used_54);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_54);
     }
-    start_55 = __local_5.used;
-    __local_5.used = new_used_54;
-    builtin::array_set_u8(__local_5.repr, start_55, 44);
-    builtin::array_set_u8(__local_5.repr, start_55 + 1, 32);
-    builtin::array_set_u8(__local_5.repr, start_55 + 2, 98);
-    builtin::array_set_u8(__local_5.repr, start_55 + 3, 61);
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
-    f_83 = __local_6;
+    start_55 = $local_5.used;
+    $local_5.used = new_used_54;
+    builtin::array_set_u8($local_5.repr, start_55, 44);
+    builtin::array_set_u8($local_5.repr, start_55 + 1, 32);
+    builtin::array_set_u8($local_5.repr, start_55 + 2, 98);
+    builtin::array_set_u8($local_5.repr, start_55 + 3, 61);
+    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
+    f_83 = $local_6;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(b, f_83);
-    new_used_93 = __local_5.used + 10;
-    if @unlikely(new_used_93 > builtin::array_len(__local_5.repr)) {
+    new_used_93 = $local_5.used + 10;
+    if @unlikely(new_used_93 > builtin::array_len($local_5.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_5, new_used_93);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_93);
     }
-    start_94 = __local_5.used;
-    __local_5.used = new_used_93;
-    builtin::array_copy<u8>(__local_5.repr, start_94, global:effect_handler_inner_break.wado::__const_obj_1, 0, 10);
-    __local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: __local_5 };
-    f_98 = __local_6;
+    start_94 = $local_5.used;
+    $local_5.used = new_used_93;
+    builtin::array_copy<u8>($local_5.repr, start_94, global:effect_handler_inner_break.wado::$const_obj_1, 0, 10);
+    $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
+    f_98 = $local_6;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(outside, f_98);
     rx_102 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_103 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "effect_handler_inner_break.wado/__cm_binding__Stdout_write_via_stream"(rx_102);
-    "core:rt/write_string_to_stream"(tx_103, __local_5);
+    handle = "effect_handler_inner_break.wado/$cm_binding__Stdout_write_via_stream"(rx_102);
+    "core:rt/write_string_to_stream"(tx_103, $local_5);
     "wasi/future-drop-readable:transmission-cli"(handle);
-    global:effect_handler_inner_break.wado::__effect_Counter = __save_Counter_11;
+    global:effect_handler_inner_break.wado::$effect_Counter = $save_Counter_11;
 }
 
-fn "effect_handler_inner_break.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "effect_handler_inner_break.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "effect_handler_inner_break.wado/__cm_export__run"() {
+fn "effect_handler_inner_break.wado/$cm_export__run"() {
     "effect_handler_inner_break.wado/run"();
     "wasi/task-return"(0);
 }
@@ -382,18 +382,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let start_257: i32;
     let new_used_264: i32;
     let start_265: i32;
-    let _av_273: bool;
-    let _av_274: i32;
-    _av_273 = self.sign_plus;
-    sign_len = select i32(select i32(is_negative, 1, _av_273), 1, 0);
+    let $av_273: bool;
+    let $av_274: i32;
+    $av_273 = self.sign_plus;
+    sign_len = select i32(select i32(is_negative, 1, $av_273), 1, 0);
     prefix_len = (if self.alternate -> i32 {
         alt_prefix.used;
     } else {
         0;
     });
     content_len = (sign_len + prefix_len) + digit_count;
-    _av_274 = self.width;
-    if select i32(_av_274 <= 0, 1, content_len >= _av_274) {
+    $av_274 = self.width;
+    if select i32($av_274 <= 0, 1, content_len >= $av_274) {
         if is_negative {
             self_16 = self.buf;
             new_used_21 = self_16.used + 1;
@@ -404,7 +404,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_22 = self_16.used;
             self_16.used = new_used_21;
             builtin::array_set_u8(self_16.repr, start_22, 45);
-        } else if _av_273 {
+        } else if $av_273 {
             self_30 = self.buf;
             new_used_35 = self_30.used + 1;
             if @unlikely(new_used_35 > builtin::array_len(self_30.repr)) {
@@ -701,7 +701,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     let start_9: i32;
     let repr: ref Array<u8>;
     let pos: i32;
-    let _av_51: i32;
+    let $av_51: i32;
     if c <u 128 {
         byte = c & 255;
         new_used = self.used + 1;
@@ -714,10 +714,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         builtin::array_set_u8(self.repr, start_9, byte);
         return;
     }
-    _av_51 = self.used;
-    if @unlikely((_av_51 + 4) > builtin::array_len(self.repr)) {
+    $av_51 = self.used;
+    if @unlikely(($av_51 + 4) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, _av_51 + 4);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $av_51 + 4);
     }
     self.used = self.used + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
@@ -759,26 +759,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let __sroa_data_start: i32;
-    let __sroa_written_count: i32;
-    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
-    let _av_52: i32;
-    let _av_53: i32;
-    _av_52 = data.start;
-    _av_53 = data.end;
-    if (_av_53 - _av_52) == 0 {
+    let $sroa_data_start: i32;
+    let $sroa_written_count: i32;
+    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $av_52: i32;
+    let $av_53: i32;
+    $av_52 = data.start;
+    $av_53 = data.end;
+    if ($av_53 - $av_52) == 0 {
         return;
     }
     repr_2 = data.repr;
-    end_3 = _av_52 + (_av_53 - _av_52);
+    end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
         l68: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b69: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b69: block {
                 l70: loop {
                     break_if b69 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l70;
                 };
@@ -796,21 +796,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            __sroa_written_count = result >> 4;
-            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let __match_scrut_0: i32;
-                __match_scrut_0 = result & 15;
-                if __match_scrut_0 == 0 {
+            $sroa_written_count = result >> 4;
+            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+                let $match_scrut_0: i32;
+                $match_scrut_0 = result & 15;
+                if $match_scrut_0 == 0 {
                     break $inline_cm_copy_result_14: 0;
-                } else if __match_scrut_0 == 1 {
+                } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_14: 1;
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + __sroa_written_count;
-            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+            offset = offset + $sroa_written_count;
+            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
             continue l68;
@@ -818,11 +818,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     };
 }
 
-fn "effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_0::__call"() {
+fn "effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_0::$call"() {
     return 1;
 }
 
-fn "effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_1::__call"() {
+fn "effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_1::$call"() {
     return 2;
 }
 
@@ -857,7 +857,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
         };
         break $inline_count_digits_u64_1: n;
     };
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::__const_obj_4, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, digit_count_4);
     arr = f.buf.repr;
     pos = offset_5 + digit_count_4;
     t_15 = abs_val;
@@ -874,12 +874,12 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     };
 }
 
-fn "closure/effect_handler_inner_break.wado/__closure_wrapper_0"(__env) {
-    return "effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_0::__call"();
+fn "closure/effect_handler_inner_break.wado/$closure_wrapper_0"($env) {
+    return "effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_0::$call"();
 }
 
-fn "closure/effect_handler_inner_break.wado/__closure_wrapper_1"(__env) {
-    return "effect_handler_inner_break.wado/effect_handler_inner_break.wado/__Closure_1::__call"();
+fn "closure/effect_handler_inner_break.wado/$closure_wrapper_1"($env) {
+    return "effect_handler_inner_break.wado/effect_handler_inner_break.wado/$Closure_1::$call"();
 }
 
-export fn "effect_handler_inner_break.wado/__cm_export__run" as "run"
+export fn "effect_handler_inner_break.wado/$cm_export__run" as "run"

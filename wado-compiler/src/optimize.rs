@@ -805,7 +805,7 @@ fn run_optimization_passes(
         profiler,
         scalarize_hot_fields,
     );
-    // Forward the scalarization shadow inits (`__hfs_x = obj.f`) to constants.
+    // Forward the scalarization shadow inits (`$hfs_x = obj.f`) to constants.
     // `field_scalarize` runs after the fixed-point loop, so no in-loop
     // `store_load_forward` sees its shadow reads; this once-over folds an
     // `obj.f` whose field the ValueGraph still knows (`obj` built from a
@@ -860,7 +860,7 @@ fn run_optimization_passes(
         forward_scalar_temps(p, &mut gate)
     });
     // Forward read-only clones that inlining + const-object globalization leave
-    // behind (`array_clone(&array_clone(&__const_obj))` into a read-only
+    // behind (`array_clone(&array_clone(&$const_obj))` into a read-only
     // binding). Runs last: `const_object_globalization` — which creates the
     // const global the residual clone reads — is itself a post-loop pass, so the
     // flat `let t = array_clone(&global.field)` shape only exists here, after the

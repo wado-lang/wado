@@ -685,8 +685,8 @@ used to hand-roll it. Two details it has to get right:
   `ValueKind::FieldAccess` is not — it is re-emitted at its use, and the sync may
   have written the field it reads.
 - So is a local the sync does not assign, which is decided by reading the sync
-  statements: a re-read (`__hfs_F = local.F`) assigns its scalar local, a
-  write-back (`local.F = __hfs_F`) only reads one. This is sound for a
+  statements: a re-read (`$hfs_F = local.F`) assigns its scalar local, a
+  write-back (`local.F = $hfs_F`) only reads one. This is sound for a
   ref-typed local too — the binding copies the reference, not the pointee, so a
   field the sync writes is visible either way.
 - Each operand holds its pooled temp until the whole literal is built, or
@@ -697,8 +697,8 @@ and `CborDeserializer::is_null` — the last boxed tuple this pass left on
 `cbor_twitter` — flattens with it.
 
 The aggregate rule alone was not enough to retire `return_temp.rs`. It removed
-the shape for a literal, and left it for a bare local — `__hfs_call_N = hit;
-self.pos = __hfs_pos; return __hfs_call_N` survived on `sqlite_parse` and
+the shape for a literal, and left it for a bare local — `$hfs_call_N = hit;
+self.pos = $hfs_pos; return $hfs_call_N` survived on `sqlite_parse` and
 `syntax_highlight`, which the WIR pass had been cleaning up unnoticed. The local
 rule above is what closed it. Removing a shape at its source is still cheaper
 than recognising it afterwards; the caution is that "removed" has to be checked,

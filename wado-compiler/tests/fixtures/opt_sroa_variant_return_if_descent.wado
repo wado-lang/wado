@@ -19,7 +19,7 @@ fn leaf(x: i32) -> Result<i32, String> {
 // The then-branch's last expression is an inline `match`, which
 // lowers to a typed value-If with `StructNew` leaves — so the function
 // passes discovery. Validating its body needs the If descent to find
-// the `LocalSet(__m, Call(leaf))` inside the then-branch and run the
+// the `LocalSet($m, Call(leaf))` inside the then-branch and run the
 // standard call-site check on it; without descent, the bare
 // `find_nested_candidate_calls` walk over-invalidates `leaf`.
 #[inline("never")]
