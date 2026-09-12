@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, CmResourceLinearity, Item, Module, Type};
+use crate::ast::{self, Item, Module, Type, declares_unrestricted};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -539,9 +539,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
-                            if resource_decl.attrs.iter().any(|a| {
-                                a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted)
-                            }) {
+                            if declares_unrestricted(&resource_decl.attrs) {
                                 type_table.borrow_mut().mark_unrestricted_resource(def);
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);

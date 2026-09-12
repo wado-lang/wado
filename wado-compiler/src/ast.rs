@@ -1408,14 +1408,8 @@ pub enum CmBoundary {
     Name(String),
 }
 
-/// The substructural discipline a `#[cm(..., linearity=...)]` resource
-/// declares. `Affine` is move-only and carries a drop obligation; `Unrestricted`
-/// is a copyable value that owns nothing, so nothing has to free it. Omitting
-/// the field reads as `Affine`.
-///
-/// The representation follows from this rather than standing beside it: an
-/// affine resource crosses as a CM `own` / `borrow` handle, an unrestricted one
-/// as a plain integer. See `docs/wep-2026-04-28-resource-inheritance.md`.
+/// `Affine` is move-only with a drop obligation, `Unrestricted` a copyable value.
+/// See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CmResourceLinearity {
     Affine,
@@ -1430,6 +1424,13 @@ impl CmResourceLinearity {
             _ => None,
         }
     }
+}
+
+/// Whether these attributes declare `#[cm(..., linearity = "unrestricted")]`.
+pub fn declares_unrestricted(attrs: &[Attribute]) -> bool {
+    attrs
+        .iter()
+        .any(|a| a.cm_resource_linearity() == Some(CmResourceLinearity::Unrestricted))
 }
 
 impl CmBoundary {

@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use wasm_encoder::ValType;
 
-use crate::ast::{Attribute, CmImport, GenericType, Type};
+use crate::ast::{Attribute, CmImport, GenericType, Type, declares_unrestricted};
 use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType};
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::to_kebab;
@@ -534,16 +534,8 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// Whether a resource declares `#[cm(..., linearity = "unrestricted")]`.
-fn unrestricted_resource(attrs: &[crate::ast::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|a| a.cm_resource_linearity() == Some(crate::ast::CmResourceLinearity::Unrestricted))
-}
-
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
-/// type is a reference, so a copyable handle is an integer — the WEP records
-/// why.
+/// type is a reference, so a copyable handle is an integer.
 fn extern_handle_type(span: crate::token::Span) -> Type {
     Type::Named(crate::ast::NamedType::new(
         crate::ast::AstId::fresh(),
@@ -1755,7 +1747,7 @@ impl CmInterfaceRegistry {
                 // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if unrestricted_resource(&resource.attrs) {
+                if declares_unrestricted(&resource.attrs) {
                     self.unrestricted_resources
                         .insert((source_interface.clone(), resource.name.clone()));
                     register_unique(

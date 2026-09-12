@@ -33,14 +33,14 @@ Wado will support **two resource linearities** for the foreseeable future:
 | `affine`       | move-only, with a drop obligation             | WIT-derived resources (WASI, etc.) |
 | `unrestricted` | copyable, owning nothing and dropping nothing | WebIDL-derived resources (Tide)    |
 
-The axis is substructural, not representational.
-[Resource Ownership](./wep-2026-05-21-resource-ownership.md) settles which one a
-resource gets — "the `dtor` decides the kind, not the representation" — and this
-WEP only gives that decision a surface spelling. The representation then
-follows: an affine resource crosses as a CM `own` / `borrow` handle; an
-unrestricted one owns nothing for the CM to track, so it crosses as a plain
-integer the host interprets, the _extern handle_ named throughout the Lowering
-section.
+[Resource Ownership](./wep-2026-05-21-resource-ownership.md) already settles
+which one a resource gets: the `dtor` decides the kind, not the representation.
+This WEP gives that decision a surface spelling.
+
+The representation then follows. An affine resource crosses as a CM `own` /
+`borrow` handle. An unrestricted one owns nothing for the CM to track, so it
+crosses as a plain integer the host interprets — the _extern handle_ the
+Lowering section names throughout.
 
 Reasoning:
 
@@ -64,7 +64,7 @@ Linearity is **declared on the resource** and **structurally verified** by the c
 
 Concretely:
 
-- `#[cm(...)]` on a `resource` takes a `linearity=...` field, `"affine"` or `"unrestricted"`. Making it mandatory means migrating every stdlib resource, which no consumer needs, so the affine majority keeps writing nothing.
+- `#[cm(...)]` on a `resource` takes a `linearity=...` field, `"affine"` or `"unrestricted"`. Making it mandatory means migrating every stdlib resource, which no consumer needs, so the affine majority writes nothing.
   ```wado
   #[cm("web:dom/element", linearity = "unrestricted")]
   pub resource Element { ... }
@@ -79,14 +79,16 @@ Concretely:
 
 ### Why the field names linearity, not representation
 
-`"i32"` and `"extern-handle"` — the pair this field carried before — named a
-representation, the axis
-[Resource Ownership](./wep-2026-05-21-resource-ownership.md) declares orthogonal
-to the kind. Half of it was never written (`"i32"` restated the default), and the
-half that was invited the wrong question: whether `"externref"` belongs in the
-same slot. Naming the substructural discipline instead puts one axis in the
-field, leaves the representation to follow from it, and reaches the two
-value-semantics rows that have no `#[cm]` backing to name.
+Linearity is what the compiler enforces. Whether a handle may be copied decides
+the move check, the cleanup pass, and whether `extends` is possible at all.
+`i32` versus `externref` decides none of those, and
+[Resource Ownership](./wep-2026-05-21-resource-ownership.md) declares the two
+axes orthogonal.
+
+Naming the enforced axis also covers more ground. A representation can only be
+stated for a resource that has one to name, but `Waitable` and `core:icu`'s
+interned handles are copyable for the same reason Tide's handles are, with a
+different backing. One field says so for all three.
 
 ### Why mandatory + structural over namespace inference
 
@@ -364,21 +366,22 @@ el.tag_name();                 // el is still valid: the handle was copied
 One rule decides what an ascription means, from the subject's static type `S`
 and the ascribed `T`:
 
-| Relation          | Meaning                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `S <: T`          | irrefutable — the implicit upcast, or the plain annotation it has been |
-| `T <: S`, `T ≠ S` | refutable — one host call, answered at runtime                         |
-| otherwise         | a type error, as a mismatched annotation is today                      |
+| Relation          | Meaning                                                           |
+| ----------------- | ----------------------------------------------------------------- |
+| `S <: T`          | irrefutable — the implicit upcast, or an ordinary type annotation |
+| `T <: S`, `T ≠ S` | refutable — one host call, answered at runtime                    |
+| otherwise         | a type error, as a mismatched annotation is today                 |
 
 The refutable case exists only where `extends` relates the two, so no other
 relation becomes a runtime test: a newtype still needs its `as`, a literal still
 coerces, and an unrelated annotation is still an error with the same message.
 
-A refutable pattern needs a position that admits failure, which Wado already
-decides for `let`. So the annotation on a `let` and the narrowing pattern are the
-same construct under one rule. The grammar says this by moving one clause: the
-ascription leaves `letStatement` and joins `pattern`, where every other position
-— `if let`, `match`, `matches`, `let … else` — picks it up for free.
+A refutable pattern needs a position that admits failure, and Wado already
+decides which positions those are. So the annotation on a `let` and the narrowing
+pattern become one construct under one rule. The grammar says this by moving a
+single clause: the ascription leaves `letStatement` and joins `pattern`. Every
+other pattern position — `if let`, `match`, `matches`, `let … else` — then picks
+it up for free.
 
 ```text
 letStatement : 'let' pattern ('=' expression ('else' block)?)?
@@ -397,37 +400,32 @@ if e matches { _: KeyboardEvent } { ... }           // the predicate form, bindi
 ```
 
 An irrefutable ascription keeps its second job: it supplies type context, so
-`let x: i64 = 42` coerces the literal exactly as before. Refutability is an axis
-added to the construct, not a replacement for what it did.
+`let x: i64 = 42` coerces the literal exactly as before.
 
 #### Why a pattern rather than a method
 
-- Every real use site of a narrowing immediately destructures the result. A
-  method returning `Option<T>` builds an aggregate in order to take it apart on
-  the next token; [Tide](./wep-2026-04-01-tide.md)'s examples are all of this
-  shape.
-- Wado already narrows a variant only by pattern
-  ([Variant-Independent Types](./wep-2026-02-09-variant-independent-types.md)),
-  and a second, method-shaped route to the same idea for resources would be a
-  second spelling of one concept.
-- A synthesized `downcast` method occupies a name in the resource's method
-  namespace, which the method-resolution rules above are otherwise strict about
-  (override forbidden, trait-vs-inherited ambiguous). WebIDL member names are not
-  ours to control, so the collision is a real hazard rather than a theoretical
-  one.
-- One-of-N dispatch — the shape events actually need — is flat rather than
-  nested.
-- Nothing about the construct names how the binding is produced, so extending
-  `extends` to affine resources later can bind by reference without changing the
-  surface. A method returning `Option<T>` by value is exactly what an affine
-  handle could not implement.
-- No `Option` is constructed, so the invariance sharp edge below never arises at
-  a narrowing site.
+- Every real use site destructures the result immediately. A method returning
+  `Option<T>` builds an aggregate only to take it apart on the next token, and
+  [Tide](./wep-2026-04-01-tide.md)'s examples are all that shape.
+- Wado narrows a variant only by pattern
+  ([Variant-Independent Types](./wep-2026-02-09-variant-independent-types.md)).
+  Giving resources a method-shaped route as well means two spellings of one idea.
+- A synthesized `downcast` takes a name in the resource's method namespace,
+  where the method-resolution rules above are otherwise strict: an override is
+  forbidden, a trait collision is an error. WebIDL member names are not ours to
+  control, so such a collision can really happen.
+- One-of-N dispatch comes out flat rather than nested, which is the shape events
+  need.
+- The construct does not say how the binding is produced. Extending `extends` to
+  affine resources later can bind by reference without changing the surface,
+  which a method returning `Option<T>` by value could not.
+- No `Option` is built, so the invariance sharp edge below never arises at a
+  narrowing site.
 
-The cost is that there is no expression form: a narrowing cannot be held as an
+The cost is that there is no expression form. A narrowing cannot be held as an
 `Option<T>` and passed along without writing the `if let` out. No consumer wants
-one yet, and adding it later accepts programs that are rejected now, which is the
-direction this WEP's guiding principle permits.
+one yet, and adding it later would accept programs that are rejected now, which
+this WEP's guiding principle permits.
 
 #### Allowed targets
 
@@ -478,11 +476,11 @@ match e {
 }
 ```
 
-This is the opposite of [`match type`](./wep-2026-09-05-total-reflection.md),
-which is exhaustive and carries no `_`. The two are near neighbours in reading
-and opposites in semantics — one narrows a type parameter at compile time and
-drops its unselected arms, the other narrows a value at runtime and cannot close
-its case set — so they share no keyword.
+[`match type`](./wep-2026-09-05-total-reflection.md) is the opposite case. It
+narrows a type parameter at compile time, drops the arms it does not select, and
+so is exhaustive and carries no `_`. A type pattern narrows a value at runtime
+and cannot close its case set. The `type` keyword is what tells the two apart at
+a glance.
 
 Arms are tried in order, so an arm whose type is an ancestor of a later arm's
 makes that later arm unreachable. Reachability checking therefore reads the
@@ -502,13 +500,12 @@ predicate:
 is-T: func(r: extern-handle) -> bool
 ```
 
-This is a per-type import, not a generic `is-instance(extern-handle, type-id)`
-form — and the reason is not only that a type-id encoding would have to be
-invented. `is-T` is a **subtype** test: `is-element` must answer `true` for an
+This is a per-type import rather than a generic `is-instance(extern-handle,
+type-id)`. `is-T` is a subtype test: `is-element` must answer `true` for an
 `HTMLInputElement`. A single `type-of(r) -> u32` could only answer that with a
 hierarchy encoding on the guest side, and no id exists for a class outside the
-compiled slice, which is exactly the case an open world produces. `instanceof`
-answers it; a tag does not.
+compiled slice, which is exactly what an open world produces. `instanceof`
+answers the question; a tag does not.
 
 The host (the jco-style JS glue Tide ships with the bindings) implements `is-T`
 with that natural check. A narrowing pattern lowers to a call to the target's
@@ -520,9 +517,9 @@ Imports are synthesized per target named in the program, not per
 types some pattern actually narrows to.
 
 A `match` with `k` type-pattern arms costs up to `k` boundary crossings, one per
-arm tried. For event dispatch that is the shape wasm-bindgen already lives with;
-if a hot dispatch ever wants better, it is a lowering question and not a change
-to this surface.
+arm tried. For event dispatch that is the shape wasm-bindgen already lives with.
+A hot dispatch that wants better is a lowering question, not a change to this
+surface.
 
 #### Sidebar: unrestricted resource handles are immutable
 
@@ -696,7 +693,7 @@ Upcast and the receiver argument of inherited methods are wasm-level no-ops; the
 
 `extends` introduces no drop protocol: however many Wado static types name a handle, it is one value, copied like any integer.
 
-There is no release path. A handle the host hands out is never reclaimed, and each one costs a table slot for the lifetime of the instance — every handle the program ever receives, not only the ones it keeps, so a loop that calls `query_selector` per frame leaks one slot per frame. The CM knows nothing about the handle, so it cannot reclaim it, and Wasm GC offers no finalization to hang a release on. See the known gap below for the only representation that closes this.
+There is no release path. A handle the host hands out is never reclaimed, and each one costs a table slot for the lifetime of the instance. That counts every handle the program receives, not only the ones it keeps: a loop calling `query_selector` once a frame leaks one slot a frame. The CM knows nothing about the handle, so it cannot reclaim it, and Wasm GC offers no finalization to hang a release on. See the known gap below for the only representation that closes this.
 
 ## Consequences
 

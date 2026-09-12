@@ -50,13 +50,14 @@ fn an_unrestricted_resource_is_copyable() {
 }
 
 #[test]
-fn an_i32_backed_resource_stays_move_only() {
-    let source =
-        format!("#[cm(\"wasi:demo/handle\", type=\"i32\")]\nresource Handle {{}}\n{USE_TWICE}");
+fn an_affine_resource_stays_move_only() {
+    let source = format!(
+        "#[cm(\"wasi:demo/handle\", linearity=\"affine\")]\nresource Handle {{}}\n{USE_TWICE}"
+    );
     let errors = move_errors(&source);
     assert!(
         !errors.is_empty(),
-        "an i32-backed handle keeps the affine discipline"
+        "an affine handle keeps the move-only discipline"
     );
 }
 
@@ -86,7 +87,7 @@ fn extends_requires_unrestricted_on_both_sides() {
     let d = diagnostics(source);
     assert!(
         d.iter().any(|e| e.contains("unrestricted")),
-        "expected a backing-mismatch error, got {d:?}"
+        "expected a linearity-mismatch error, got {d:?}"
     );
 }
 
@@ -463,14 +464,14 @@ fn extends_rejects_a_generic_child() {
 }
 
 #[test]
-fn another_attributes_type_field_is_its_own_business() {
-    let source = "#[wire(type = \"i32\")]\n\
+fn another_attributes_linearity_field_is_its_own_business() {
+    let source = "#[wire(linearity = \"unrestricted\")]\n\
          struct Wrapper { a: i32 }\n\
          export fn run() {}\n";
     let d = diagnostics(source);
     assert!(
         !d.iter().any(|e| e.contains("resource")),
-        "only #[cm] names a backing, got {d:?}"
+        "only #[cm] names a linearity, got {d:?}"
     );
 }
 
@@ -619,8 +620,8 @@ fn a_ref_trait_impl_does_not_hide_the_ambiguity() {
 }
 
 #[test]
-fn the_backing_is_declared_not_inferred_from_the_namespace() {
-    // The backing is whatever the declaration spells: it erases the resource
+fn the_linearity_is_declared_not_inferred_from_the_namespace() {
+    // The linearity is whatever the declaration spells: it erases the resource
     // wherever it appears, so no namespace is privileged.
     let source = format!(
         "#[cm(\"wasi:demo/handle\", linearity = \"unrestricted\")]\nresource Handle {{}}\n{USE_TWICE}"
@@ -628,7 +629,7 @@ fn the_backing_is_declared_not_inferred_from_the_namespace() {
     assert_eq!(diagnostics(&source), Vec::<String>::new());
     assert!(
         move_errors(&source).is_empty(),
-        "the backing is copyable outside `web:*` too"
+        "an unrestricted handle is copyable outside `web:*` too"
     );
 }
 

@@ -57,12 +57,12 @@ be move-only, because copying it aliases a destructor; without one there is
 nothing to free, so the handle is an ordinary value. `i32`-vs-`externref` is
 orthogonal to all four rows.
 
-The three `dtor`-less rows are one linearity, and
-[Resource Inheritance](./wep-2026-04-28-resource-inheritance.md) gives it a
-surface spelling: `#[cm(..., linearity = "unrestricted")]`, against an
-`"affine"` that is the default and so goes unwritten. Only Tide's resources
-declare it today; the non-owning tokens still take their value semantics from
-the absence of a `dtor` alone.
+The three `dtor`-less rows are one linearity, which
+[Resource Inheritance](./wep-2026-04-28-resource-inheritance.md) lets a
+declaration write out: `#[cm(..., linearity = "unrestricted")]`. The other
+spelling, `"affine"`, is the default and so goes unwritten. Only Tide's
+resources declare it today; the non-owning tokens still take their value
+semantics from the absence of a `dtor` alone.
 
 ### Non-owning tokens
 
@@ -86,15 +86,16 @@ input — is affine instead: a copyable index would leak it.
 
 ### Unreclaimed handles
 
-Tide's browser handles are the exception the rule above names and then accepts.
-They are indices into a host table allocated per call from unbounded runtime
-input, with no affine owner and no immortal bound, so by that rule they should be
-affine — and they cannot be, because an upcast in a `resource extends` hierarchy
-copies the handle
-([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Value
-semantics is bought here at the price the rule warns of: nothing frees them, and
-each one costs a table slot for the life of the instance. That is a known gap of
-that WEP, not a fourth way to be safe.
+Tide's browser handles break the rule above. They are indices into a host table,
+allocated per call from unbounded runtime input, with no affine owner and no
+immortal bound, so the rule makes them affine. They cannot be: an upcast in a
+`resource extends` hierarchy copies the handle
+([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)), and an
+affine handle may not be copied.
+
+So they get value semantics and pay what the rule warns of. Nothing frees them,
+and each one costs a table slot for the life of the instance. That is a known
+gap of that WEP, not a fourth way to be safe.
 
 The rest of this WEP concerns affine resources.
 

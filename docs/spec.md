@@ -5385,13 +5385,13 @@ pub enum ErrorCode {  // Maps to WIT: enum error-code
 
 A `#[cm(...)]` resource may declare what may be done with its handle: `linearity = "affine"` or `linearity = "unrestricted"`. Omitting the field reads as `"affine"`.
 
-An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value — assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
+An affine resource is move-only and carries a drop obligation, per [Resource Ownership](./wep-2026-05-21-resource-ownership.md). An unrestricted one owns nothing, so it is an ordinary copyable value. Assigning or passing one leaves the original usable, and nothing is dropped at the end of a scope.
 
-The representation follows from the linearity rather than standing beside it: an affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain integer the host interprets.
+The representation follows from the linearity. An affine resource crosses the Component Model boundary as an `own` / `borrow` handle, an unrestricted one as a plain integer the host interprets.
 
 ### Resource Inheritance
 
-`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"` — an upcast copies the handle, which an affine one may not do; single inheritance only, and a cycle is an error.
+`resource Child extends Parent` declares that a child handle is usable wherever the parent is. Both resources must declare `linearity = "unrestricted"`, because an upcast copies the handle and an affine one may not be copied. Single inheritance only, and a cycle is an error.
 
 ```wado
 #[cm("web:dom/event-target", linearity = "unrestricted")]
@@ -5434,7 +5434,7 @@ Whether the pattern can fail is decided statically, from the subject's type `S`:
 
 | Relation          | Meaning                                                              |
 | ----------------- | -------------------------------------------------------------------- |
-| `S <: T`          | irrefutable — an upcast, or the plain annotation it has always been  |
+| `S <: T`          | irrefutable — an upcast, or an ordinary type annotation              |
 | `T <: S`, `T ≠ S` | refutable — a runtime test, and only where `extends` relates the two |
 | otherwise         | a type error, as a mismatched annotation is today                    |
 
@@ -5454,7 +5454,7 @@ match e {
 }
 ```
 
-A type match over resources is never exhaustive — the host may hand back a type the program does not name — so it always needs a final `_` arm. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
+A type match over resources always needs a final `_` arm, because the host may hand back a type the program does not name. An arm whose type is a supertype of a later arm's makes that later arm dead, which is reported.
 
 This is not [`match type`](./wep-2026-09-05-total-reflection.md), which narrows a type parameter at compile time, is exhaustive, and takes no `_`.
 
