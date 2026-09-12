@@ -65,8 +65,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global global:trait_option_return.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(71, 111, 116, 58, 32, 52, 50), used: 7 };
 
 fn "trait_option_return.wado/run"() with Stdout {
-    let handle_10: i32;
+    let handle_9: i32;
     let packed: i64;
+<<<<<<< HEAD
     let rx_54: i32;
     let tx_55: i32;
     rx_54 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
@@ -74,6 +75,23 @@ fn "trait_option_return.wado/run"() with Stdout {
     handle_10 = "trait_option_return.wado/$cm_binding__Stdout_write_via_stream"(rx_54);
     "core:rt/write_string_to_stream"(tx_55, global:trait_option_return.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
+||||||| 3856bdb0b
+    let rx_54: i32;
+    let tx_55: i32;
+    rx_54 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_55 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle_10 = "trait_option_return.wado/__cm_binding__Stdout_write_via_stream"(rx_54);
+    "core:rt/write_string_to_stream"(tx_55, global:trait_option_return.wado::__const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_10);
+=======
+    let rx_28: i32;
+    let tx_29: i32;
+    rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle_9 = "trait_option_return.wado/__cm_binding__Stdout_write_via_stream"(rx_28);
+    "core:rt/write_string_to_stream"(tx_29, global:trait_option_return.wado::__const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
+>>>>>>> origin/main
 }
 
 fn "trait_option_return.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
