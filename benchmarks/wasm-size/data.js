@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789216627527,
+  "lastUpdate": 1789233953919,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55365,6 +55365,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/eb92229e0bdbfd3bc46d9ef1cfd427be0cbc15d9"
         },
         "date": 1789216626715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0dcabd7d908459108129c8514dd5281f155d7419",
+          "message": "Merge pull request #2039 from wado-lang/claude/black-box-optimization-issue-k4w9zi\n\nfix(wir): hold black_box opaque through the WIR, extending EMI past NIR",
+          "timestamp": "2026-09-13T02:09:26+09:00",
+          "tree_id": "a34141bf330ab9c0525886cb334adfdeb72c2c47",
+          "url": "https://github.com/wado-lang/wado/commit/0dcabd7d908459108129c8514dd5281f155d7419"
+        },
+        "date": 1789233952929,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
