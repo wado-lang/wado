@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { findInlinePaths, stripNonCode } from "./rust-inline-paths.mjs";
+import { findInlinePaths } from "./rust-inline-paths.mjs";
+import { stripNonCode } from "./rust-source.mjs";
 
 const texts = (source) => findInlinePaths(source).map((hit) => hit.text);
 

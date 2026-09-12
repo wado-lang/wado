@@ -8,17 +8,13 @@ use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use std::fmt;
 use std::hash::Hash;
 
-/// What every name the compiler mints for itself starts with — a local, a
-/// label, a global, a synthesized struct, function or method: one dollar sign,
-/// at the front. The lexer admits none in an identifier, so such a name can
-/// never collide with one an author wrote, no source can `break` to a
-/// synthesized label, and a dump says at a glance which names are the
-/// compiler's. The same character separates the parts of a mangle
-/// ([`value_copy_helper_name`], [`effect_default_impl_name`]).
+/// The one character every name the compiler mints starts with, whether local,
+/// label, global, or synthesized struct or function. A Wado identifier holds no
+/// dollar sign, so a minted name collides with nothing an author wrote and no
+/// source can `break` to a synthesized label.
 ///
-/// The exception is a field the standard library declares in Wado source and
-/// synthesis writes by name (`AsyncCall::__cm_packed` and its siblings): Wado
-/// source cannot spell the prefix, so those keep the older `__`.
+/// The `AsyncCall::__cm_*` fields are the exception: the standard library
+/// declares them in Wado source, which cannot spell the prefix.
 pub const INTERNAL_PREFIX: &str = "$";
 
 /// Canonical method name of the synthesised `$call` impl on every
@@ -121,17 +117,21 @@ pub fn display_function_name(name: &str) -> String {
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
 ///
-/// A synthesized name opens with [`INTERNAL_PREFIX`], which is the name rather
-/// than a suffix: the cut looks for the next one.
+/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
+/// character rather than a suffix marker.
 #[must_use]
 pub fn diagnostic_function_name(name: &str) -> &str {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name;
     }
     let unqualified = name.rsplit('/').next().unwrap_or(name);
-    let minted = usize::from(unqualified.starts_with(INTERNAL_PREFIX));
-    match unqualified[minted..].find(INTERNAL_PREFIX) {
-        Some(suffix) => &unqualified[..minted + suffix],
+    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
+        INTERNAL_PREFIX.len()
+    } else {
+        0
+    };
+    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
+        Some(suffix) => &unqualified[..prefix_len + suffix],
         None => unqualified,
     }
 }
@@ -1983,6 +1983,10 @@ pub fn test_name_to_snake(name: &str) -> String {
         .to_lowercase()
 }
 
+/// What every test function's name opens with; what follows encodes the test's
+/// attributes.
+const TEST_PREFIX: &str = "$test";
+
 /// Build a test block's exported name: `$test_{index}[_{snake}]`, with the
 /// prefix encoding attributes — `$test_trap_…` for `#[expect_trap]`,
 /// `$test_todo_…` for `#[TODO]`, `$test_tm{ms}_…` for `#[timeout_ms]`, and
@@ -1994,17 +1998,24 @@ pub fn test_function_name(
     name: Option<&str>,
 ) -> String {
     let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
-        (true, _, Some(ms)) => format!("$test_todo_tm{ms}"),
-        (true, _, None) => "$test_todo".to_string(),
-        (_, true, Some(ms)) => format!("$test_trap_tm{ms}"),
-        (_, true, None) => "$test_trap".to_string(),
-        (_, _, Some(ms)) => format!("$test_tm{ms}"),
-        (_, _, None) => "$test".to_string(),
+        (true, _, Some(ms)) => format!("{TEST_PREFIX}_todo_tm{ms}"),
+        (true, _, None) => format!("{TEST_PREFIX}_todo"),
+        (_, true, Some(ms)) => format!("{TEST_PREFIX}_trap_tm{ms}"),
+        (_, true, None) => format!("{TEST_PREFIX}_trap"),
+        (_, _, Some(ms)) => format!("{TEST_PREFIX}_tm{ms}"),
+        (_, _, None) => TEST_PREFIX.to_string(),
     };
     match name {
         Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
         None => format!("{prefix}_{test_index}"),
     }
+}
+
+/// Whether `name` is what [`test_function_name`] built, whatever attributes its
+/// prefix encodes.
+#[must_use]
+pub fn is_test_function(name: &str) -> bool {
+    name.starts_with(TEST_PREFIX)
 }
 
 #[cfg(test)]
@@ -2021,8 +2032,14 @@ mod tests {
         assert_eq!(diagnostic_function_name("main.wado/run"), "run");
         // A minted name opens with the prefix; cutting there would leave nothing.
         assert_eq!(diagnostic_function_name("$test_0_adds"), "$test_0_adds");
-        assert_eq!(diagnostic_function_name("main.wado/$cm_export__run"), "$cm_export__run");
-        assert_eq!(diagnostic_function_name("$value_copy$Point$shallow"), "$value_copy");
+        assert_eq!(
+            diagnostic_function_name("main.wado/$cm_export__run"),
+            "$cm_export__run"
+        );
+        assert_eq!(
+            diagnostic_function_name("$value_copy$Point$shallow"),
+            "$value_copy"
+        );
     }
 
     #[test]

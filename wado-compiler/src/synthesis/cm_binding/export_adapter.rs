@@ -375,12 +375,7 @@ fn lower_to_flat_inner(
                 synth_span(),
             );
             let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt(
-                "$opt_disc",
-                disc_local,
-                TypeTable::I32,
-                disc_expr,
-            ));
+            stmts.push(let_stmt("$opt_disc", disc_local, TypeTable::I32, disc_expr));
             result.push(FlatLocal {
                 index: disc_local,
                 cm_type: cm_abi::CmValType::I32,
@@ -483,12 +478,7 @@ fn lower_to_flat_inner(
                 TypeTable::I32,
             );
             let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-            stmts.push(let_stmt(
-                "$res_disc",
-                disc_local,
-                TypeTable::I32,
-                disc_expr,
-            ));
+            stmts.push(let_stmt("$res_disc", disc_local, TypeTable::I32, disc_expr));
             result.push(FlatLocal {
                 index: disc_local,
                 cm_type: cm_abi::CmValType::I32,
@@ -757,10 +747,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 ))]),
                 None,
             ));
-            (
-                local_ref(lifted_local, "$lifted_string", target_type_id),
-                2,
-            )
+            (local_ref(lifted_local, "$lifted_string", target_type_id), 2)
         }
         Type::Named(_)
             if matches!(

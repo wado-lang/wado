@@ -1,15 +1,14 @@
 // Every name the compiler mints for itself starts with one `$`
-// (`name::INTERNAL_PREFIX`): the lexer admits none in an identifier, so such a
-// name cannot collide with one an author wrote, and a dump says at a glance
-// which names are the compiler's. A `__`-prefixed string literal in Rust is the
-// old convention, and `--check` refuses a new one — including one appended to
-// another name (`format!("{base}__n_{field}")`), which carries only whatever
-// prefix `base` happens to have.
+// (`name::INTERNAL_PREFIX`), which no Wado identifier can spell, so such a name
+// collides with nothing an author wrote. A `__` name is the old convention, and
+// `--check` refuses a new one. That includes a name appended to another
+// (`format!("{base}__n_{field}")`), which carries only the prefix `base` has.
 //
 // Usage: node scripts/internal-names.mjs [--check | <file>…]
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+
+import { rustFiles, stringLiterals } from "./rust-source.mjs";
 
 /** Literals that are not names the compiler mints. */
 const ALLOWED = new Map([
@@ -33,34 +32,21 @@ const ALLOWED = new Map([
 ]);
 
 /**
- * Every literal in `source` that mints a `__…` name, as `{ line, text }` in
- * source order. Two positions mint one: the literal's own start, and right
- * after a `{…}` interpolation, where a name is appended to another name and
- * inherits whatever prefix that one carries. The `}` is kept in the token so
- * the two positions are allowed separately. Everything further along is prose
- * or a mangle separator, and the name the literal opens with is the same
- * allowance for all of it.
+ * Every literal in `source` that mints a `__…` name, as `{ line, text }`. A
+ * literal mints one at its start, and after a `{…}` interpolation, where the
+ * name is appended to another and inherits that one's prefix. The `}` stays in
+ * the token, so the two positions are allowed apart. Further along is prose or a
+ * mangle separator.
  */
 export function findLegacyNames(source) {
   const hits = [];
-  let line = 1;
-  for (const match of source.matchAll(/\n|"(?:[^"\\\n]|\\.)*"/g)) {
-    if (match[0] === "\n") {
-      line++;
-      continue;
-    }
-    const names = match[0].slice(1, -1).matchAll(/(?:^|\})__[A-Za-z0-9_]*/g);
-    if ([...names].some((name) => !ALLOWED.has(name[0]))) {
-      hits.push({ line, text: match[0] });
+  for (const { line, text, content } of stringLiterals(source)) {
+    const names = [...content.matchAll(/(?:^|\})__[A-Za-z0-9_]*/g)];
+    if (names.some((name) => !ALLOWED.has(name[0]))) {
+      hits.push({ line, text });
     }
   }
   return hits;
-}
-
-/** Every tracked Rust file, which is the corpus the rule covers. */
-function rustFiles() {
-  const listed = execFileSync("git", ["ls-files", "-z", "*.rs"], { encoding: "utf8" });
-  return listed.split("\0").filter(Boolean);
 }
 
 function main(argv) {

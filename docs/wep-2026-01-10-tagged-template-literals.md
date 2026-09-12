@@ -468,9 +468,10 @@ when the field type is `&V_k`. With locals the call sits in a labeled block that
 breaks with its value. The `TirStruct` reaches the module through the pending
 list `reify` already drains.
 
-`{n}` is `FunctionContext::fresh_serial`, taken before the holes are reified and
-advancing on read, so a template nested inside a hole mints `$hole_{n+1}_{k}` and
-`$tagged_{n+1}` rather than the enclosing template's names (issue #1987).
+`{n}` is `FunctionContext::fresh_serial`, taken before the holes are reified. The
+serial advances on read, so a template nested inside a hole mints its own
+`$hole_{n+1}_{k}` and `$tagged_{n+1}` instead of the enclosing template's names
+(issue #1987).
 
 ### Reflect resolution (`elaborator/reflect.rs`, `solver_bridge.rs`, `trait_query.rs`)
 

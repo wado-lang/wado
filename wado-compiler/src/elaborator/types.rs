@@ -2287,11 +2287,9 @@ pub(super) struct LabeledBlockTarget {
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
     pub(super) scopes: Vec<IndexMap<String, LocalVar>>,
-    /// Next local index (Wasm locals are function-wide). Private to this
-    /// module: a local index is an index, never a uniquifier — reading it to
-    /// name a temporary hands the same name to a nested desugaring, which
-    /// allocates nothing before recursing. [`FunctionContext::fresh_serial`] is
-    /// the uniquifier; [`FunctionContext::local_count`] is the count.
+    /// Next local index (Wasm locals are function-wide). Private: a uniquifier
+    /// comes from [`FunctionContext::fresh_serial`], a count from
+    /// [`FunctionContext::local_count`].
     next_local: u32,
     /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
     pub(super) return_type: TypeId,
@@ -2335,11 +2333,9 @@ pub(super) struct FunctionContext {
     /// `impl Effect for Type` block, i.e. an effect handler operation.
     /// `resume value` is only valid in such contexts.
     pub(super) in_handler_method: bool,
-    /// Per-function serial behind every name a desugaring step mints — the
-    /// labeled block scoping an `assert` (`$assert_0`, `$assert_1`, …), a `for`
-    /// body (`$for_0_body`), a `for-of`'s iterator local, a tagged template's
-    /// hoisted holes. One counter for all of them, read through
-    /// [`FunctionContext::fresh_serial`]. Reset per `FunctionContext::new`.
+    /// One per-function serial behind every name a desugaring step mints: an
+    /// `assert` label, a `for` body, an iterator local, a template's holes. Read
+    /// through [`FunctionContext::fresh_serial`].
     next_internal: u32,
     /// Stack of labels for re-targeting naked `continue` inside C-style
     /// `for` bodies. When non-empty, `resolve_continue` emits
@@ -2486,18 +2482,17 @@ impl FunctionContext {
         }
     }
 
-    /// A serial no other desugaring step in this function holds, for the
-    /// internal names one step mints. Advances on read, so a step that takes
-    /// its serial before recursing into its own operands keeps it: a tagged
-    /// template nested in a hole, or a `for-of` over a `for-of`, mints names
-    /// of its own rather than the enclosing step's (issue #1987).
+    /// A serial no other desugaring step in this function holds, for the names
+    /// one step mints. It advances on read, so a step that takes its serial
+    /// before recursing keeps it: a template nested in a hole, or a `for-of`
+    /// over a `for-of`, mints names of its own (issue #1987).
     pub(super) fn fresh_serial(&mut self) -> u32 {
         let serial = self.next_internal;
         self.next_internal += 1;
         serial
     }
 
-    /// Locals allocated so far — the function's `local_count`.
+    /// How many locals the function has allocated.
     pub(super) fn local_count(&self) -> u32 {
         self.next_local
     }

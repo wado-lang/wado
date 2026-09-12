@@ -756,11 +756,7 @@ fn generate_positional_at_function(
         if !is_positional {
             continue;
         }
-        let condition = i32_eq(
-            local_ref(0, "$rank", TypeTable::I32),
-            i32_const(rank),
-            span,
-        );
+        let condition = i32_eq(local_ref(0, "$rank", TypeTable::I32), i32_const(rank), span);
         stmts.push(if_stmt(
             condition,
             block(vec![return_stmt(Some(option_some(

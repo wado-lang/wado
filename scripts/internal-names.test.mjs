@@ -35,4 +35,6 @@ test("flags a name appended to another name, whose prefix it inherits", () => {
 
 test("looks at literals only", () => {
   assert.deepEqual(texts("// mints __iter_0 today\nlet __buf = 1;"), []);
+  assert.deepEqual(texts('// renamed from "__iter_0"'), []);
+  assert.deepEqual(texts('let n = r#"__iter_0"#;'), ['r#"__iter_0"#']);
 });

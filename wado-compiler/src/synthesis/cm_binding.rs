@@ -23,7 +23,7 @@ use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::DeclPath;
+use crate::name::{DeclPath, is_test_function};
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
@@ -1170,7 +1170,7 @@ fn generate_test_world_bindings(project: &mut Package) {
             .iter()
             .filter(|f| {
                 let name = f.borrow().name.clone();
-                name.starts_with("$test_")
+                is_test_function(&name)
                     && crate::package::test_selected(
                         original_names.get(name.as_str()).copied().flatten(),
                         &test_name_filters,
