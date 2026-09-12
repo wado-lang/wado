@@ -27,6 +27,12 @@ test("reports the line the literal sits on", () => {
   assert.deepEqual(hits, [{ line: 3, text: '"__iter_0"' }]);
 });
 
+test("flags a name appended to another name, whose prefix it inherits", () => {
+  assert.deepEqual(texts('format!("{slot}__n_{field}")'), ['"{slot}__n_{field}"']);
+  assert.deepEqual(texts('format!("{label}__{inner}")'), []);
+  assert.deepEqual(texts('format!("$effect_dispatch__{label}__{op}")'), []);
+});
+
 test("looks at literals only", () => {
   assert.deepEqual(texts("// mints __iter_0 today\nlet __buf = 1;"), []);
 });

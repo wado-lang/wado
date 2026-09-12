@@ -122,7 +122,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     let size: i32 = (core::builtin::i32_and((newsize + 15), -16) + 16);
     let k: i32 = ((size - 32) >> 4);
     let mut j: i32 = core::builtin::select::<i32>((k < 32), k, 32);
-    let _licm_arith_101: i32 = (size + 1);
+    let $licm_arith_101: i32 = (size + 1);
     loop {
         if !(j < 32) {
             break;
@@ -134,8 +134,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             core::allocator::fl_unlink(b);
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store(b, _licm_arith_101);
-                core::builtin::i32_store(((b + size) - 8), _licm_arith_101);
+                core::builtin::i32_store(b, $licm_arith_101);
+                core::builtin::i32_store(((b + size) - 8), $licm_arith_101);
                 let rest: i32 = (b + size);
                 let tag: i32 = (remainder + 0);
                 core::builtin::i32_store(rest, tag);
@@ -159,7 +159,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
         j = (j + 1);
     }
     let mut curr: i32 = core::builtin::i32_load(136);
-    let _licm_arith_102: i32 = (size + 1);
+    let $licm_arith_102: i32 = (size + 1);
     loop {
         if !(curr != 0) {
             break;
@@ -170,8 +170,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
             core::allocator::fl_unlink(curr);
             let remainder: i32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store(curr, _licm_arith_102);
-                core::builtin::i32_store(((curr + size) - 8), _licm_arith_102);
+                core::builtin::i32_store(curr, $licm_arith_102);
+                core::builtin::i32_store(((curr + size) - 8), $licm_arith_102);
                 let rest: i32 = (curr + size);
                 let tag: i32 = (remainder + 0);
                 core::builtin::i32_store(rest, tag);
@@ -225,7 +225,7 @@ pub fn unreachable() -> !;
 
 pub fn cold_path();
 
-export fn __cm_export__run() {
+export fn "$cm_export__run"() {
     cm_raw_call task-return(0);
 }
 

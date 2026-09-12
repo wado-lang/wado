@@ -2,7 +2,9 @@
 // (`name::INTERNAL_PREFIX`): the lexer admits none in an identifier, so such a
 // name cannot collide with one an author wrote, and a dump says at a glance
 // which names are the compiler's. A `__`-prefixed string literal in Rust is the
-// old convention, and `--check` refuses a new one.
+// old convention, and `--check` refuses a new one — including one appended to
+// another name (`format!("{base}__n_{field}")`), which carries only whatever
+// prefix `base` happens to have.
 //
 // Usage: node scripts/internal-names.mjs [--check | <file>…]
 
@@ -27,12 +29,17 @@ const ALLOWED = new Map([
   ["________ok", "what `test_name_to_snake` makes of a non-ASCII name"],
   ["______", "what `test_name_to_snake` makes of a non-ASCII name"],
   ["____ABCDEFGHIJKLMNOP", "test data"],
+  ["}__", "a label spliced under `$inline_…`, which carries the prefix already"],
 ]);
 
 /**
- * Every `"__…"` literal in `source`, as `{ line, text }` in source order. A
- * literal is judged by the name it opens with, so the rest of the text — a
- * trailing newline, a sentence around the name — is the same allowance.
+ * Every literal in `source` that mints a `__…` name, as `{ line, text }` in
+ * source order. Two positions mint one: the literal's own start, and right
+ * after a `{…}` interpolation, where a name is appended to another name and
+ * inherits whatever prefix that one carries. The `}` is kept in the token so
+ * the two positions are allowed separately. Everything further along is prose
+ * or a mangle separator, and the name the literal opens with is the same
+ * allowance for all of it.
  */
 export function findLegacyNames(source) {
   const hits = [];
@@ -42,9 +49,10 @@ export function findLegacyNames(source) {
       line++;
       continue;
     }
-    const name = match[0].slice(1, -1).match(/^__[A-Za-z0-9_]*/)?.[0];
-    if (name === undefined || ALLOWED.has(name)) continue;
-    hits.push({ line, text: match[0] });
+    const names = match[0].slice(1, -1).matchAll(/(?:^|\})__[A-Za-z0-9_]*/g);
+    if ([...names].some((name) => !ALLOWED.has(name[0]))) {
+      hits.push({ line, text: match[0] });
+    }
   }
   return hits;
 }
