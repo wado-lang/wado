@@ -1,7 +1,7 @@
-// `builtin::black_box` is an optimization barrier for the whole Wado pipeline,
-// not just NIR: `wir_build` must keep the call as an opaque WIR node so the WIR
-// passes cannot read the constant behind it either. Codegen erases the node and
-// emits the operand, so the Wasm engine is free to fold what it likes.
+// `builtin::black_box` is a barrier for the whole Wado pipeline, not just NIR:
+// `wir_build` keeps the call as an opaque WIR node, so no WIR pass reads the
+// constant behind it. Codegen erases the node and emits the operand, leaving
+// the Wasm engine free to fold what it likes.
 
 export fn run() {
     // A guard the compiler must not decide: both arms survive to the WIR.
@@ -20,9 +20,9 @@ export fn run() {
     // The spec's own example: the redundant mask must still be emitted.
     assert ((builtin::black_box(300) << 24) >> 24) == 44;
 
-    // The EMI guard shape: a payload no run reaches, that every pass still
-    // compiles. `tests/emi.rs` injects exactly this, so it must survive the WIR
-    // too — otherwise a campaign covers only the NIR pipeline.
+    // The EMI guard shape: a payload no run reaches and every pass compiles.
+    // `tests/emi.rs` injects exactly this, so it must survive the WIR too, or a
+    // campaign covers only the NIR pipeline.
     let mut emi = 0;
     if builtin::black_box(false) {
         emi = 1;

@@ -158,7 +158,7 @@ Branch hints are transparent annotations on `if`/`br_if` conditions: a pass look
 
 ## Differential testing (EMI)
 
-`wado-compiler/tests/emi.rs` checks the optimizer against itself: a block behind `builtin::black_box(false)` is unreachable at run time but visible to every NIR and WIR pass, so injecting one must leave the program's output unchanged. The barrier survives as `WirInstr::BlackBox` until codegen, which is what extends the campaign past the NIR pipeline. The design is in [WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md).
+`wado-compiler/tests/emi.rs` checks the optimizer against itself: a block behind `builtin::black_box(false)` is unreachable at run time but visible to every NIR and WIR pass, so injecting one must leave the program's output unchanged. The barrier survives as `WirInstr::BlackBox` until codegen, so the campaign reaches the WIR passes too. The design is in [WEP: Compiler Fuzzing](./wep-2026-08-19-compiler-fuzzing.md).
 
 The material comes from three roots — the e2e fixtures, the stdlib modules carrying `test` blocks, and the `example/` programs — which `WADO_EMI_ROOTS` selects among.
 

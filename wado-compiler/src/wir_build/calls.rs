@@ -771,8 +771,6 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f32_max" => binary!(self, args, WirInstr::F32Max),
             "builtin::f32_copysign" => binary!(self, args, WirInstr::F32Copysign),
             "builtin::ref_eq" => binary!(self, args, WirInstr::RefEq),
-            // Opaque to the NIR optimizer and to every WIR pass; gone by
-            // codegen, which emits the argument where the call stood.
             "builtin::black_box" => unary!(self, args, WirInstr::BlackBox),
             "builtin::is_uninitialized" => {
                 let mut a = self.translate_operand(args[0].expr);

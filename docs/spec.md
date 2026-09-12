@@ -1077,9 +1077,9 @@ test "sign extension folds the redundant mask" {
 
 Without it, `to_i8(300)` folds to `44` and the test no longer reaches `to_i8`.
 
-The barrier holds for the whole Wado pipeline — every NIR and WIR pass sees an
-unknown value — and ends at codegen, which emits the operand where the call
-stood. What the Wasm engine makes of the constant downstream is its own.
+The barrier holds for the whole Wado pipeline: every NIR and WIR pass sees an
+unknown value. It ends at codegen, which emits the operand where the call stood,
+so what the Wasm engine makes of the constant is its own.
 
 ## Memory Model
 

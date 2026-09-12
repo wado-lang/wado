@@ -105,8 +105,9 @@ pub(super) fn is_side_effect_free(instr: &WirInstr) -> bool {
 /// True if the *root* of `instr` would change observable program behavior on
 /// its own. Covers explicit state mutation (heap / global / local / table),
 /// calls (potentially I/O), the explicit [`WirInstr::Unreachable`] trap,
-/// control-flow exits that bypass subsequent siblings, and
-/// [`WirInstr::BlackBox`], whose whole purpose is to be kept. Does **not** classify
+/// control-flow exits that bypass subsequent siblings, and the
+/// [`WirInstr::BlackBox`] barrier, which mutates nothing but must survive.
+/// Does **not** classify
 /// implicit-trap ops (integer divide / remainder, float→int trunc, OOB heap
 /// reads / loads, null `ref.as_non_null` / `ref.cast`, etc.) as observable.
 ///
@@ -119,9 +120,7 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         WirInstr::Call { .. }
         | WirInstr::CallIndirect { .. }
         | WirInstr::CallRef { .. }
-        // The optimization barrier. It mutates nothing, but a dropped
-        // `black_box(work())` is the idiom that keeps `work()` in the program,
-        // so DCE must not reach past it.
+        // A dropped `black_box(work())` is what keeps `work()` in the program.
         | WirInstr::BlackBox(_)
         // GC / local / global state mutation.
         | WirInstr::LocalSet { .. }

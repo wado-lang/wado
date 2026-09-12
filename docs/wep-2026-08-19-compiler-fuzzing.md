@@ -20,14 +20,13 @@ oracle is strong; the input source is a fixed corpus.
 `builtin::black_box(false)` is a condition no pass can decide: the NIR optimizer
 treats the call as opaque, `wir_build` carries it into the WIR as
 `WirInstr::BlackBox`, and codegen emits the argument where the call stood. A
-block behind such a guard is therefore visible to every pass in both pipelines
-and to codegen, and unreachable at run time. Injecting one into a working
-program must leave that program's output untouched, and a difference is a
-wrong-code bug.
+block behind such a guard is unreachable at run time, and every NIR pass, every
+WIR pass and codegen still compile it. Injecting one into a working program must
+leave that program's output untouched, and a difference is a wrong-code bug.
 
 The guard reaches the emitted Wasm, where the engine's own folding decides it.
-That costs a mutant some code size and buys the campaign the WIR passes and
-codegen, which a barrier ending at `wir_build` would never have reached.
+A mutant therefore costs some code size. In exchange the campaign covers the WIR
+passes and codegen, which a barrier ending at `wir_build` never reached.
 
 There is no second compiler to compare against, and the fixture's recorded
 expectation is not the oracle either — the program before injection is. That is
