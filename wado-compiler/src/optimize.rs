@@ -450,7 +450,10 @@ pub mod pass_dump {
 
     use super::NirPackage;
     use crate::hashmap::IndexMap;
+    use crate::nir_unparse::unparse_nir_package;
+    use crate::trace;
     use crate::wir::WirPackage;
+    use crate::wir_unparse::unparse_wir;
 
     #[derive(Copy, Clone)]
     pub enum Phase {
@@ -477,14 +480,14 @@ pub mod pass_dump {
     fn dump_before_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
         LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
+            trace::parse_env_list(std::env::var(Phase::Before.env_var()).ok().as_deref())
         })
     }
 
     fn dump_after_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
         LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
+            trace::parse_env_list(std::env::var(Phase::After.env_var()).ok().as_deref())
         })
     }
 
@@ -495,9 +498,7 @@ pub mod pass_dump {
 
     fn skip_list() -> &'static Vec<String> {
         static LIST: OnceLock<Vec<String>> = OnceLock::new();
-        LIST.get_or_init(|| {
-            crate::trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref())
-        })
+        LIST.get_or_init(|| trace::parse_env_list(std::env::var("WADO_SKIP_PASS").ok().as_deref()))
     }
 
     /// Returns true if `name` matches one of the comma-separated entries in
@@ -531,25 +532,25 @@ pub mod pass_dump {
 
     pub fn list_pass(name: &str) {
         if list_passes_enabled() {
-            eprintln!("[pass] {name}");
+            trace::write(&format!("[pass] {name}"));
         }
     }
 
     pub fn dump_nir(name: &str, project: &NirPackage, phase: Phase) {
         if matches(name, phase) {
             let label = phase.label();
-            eprintln!("=== NIR {label} {name} ===");
-            eprintln!("{}", crate::nir_unparse::unparse_nir_package(project));
-            eprintln!("=== end NIR {label} {name} ===");
+            trace::write(&format!("=== NIR {label} {name} ==="));
+            trace::write(&unparse_nir_package(project));
+            trace::write(&format!("=== end NIR {label} {name} ==="));
         }
     }
 
     pub fn dump_wir(name: &str, module: &WirPackage, phase: Phase) {
         if matches(name, phase) {
             let label = phase.label();
-            eprintln!("=== WIR {label} {name} ===");
-            eprintln!("{}", crate::wir_unparse::unparse_wir(module));
-            eprintln!("=== end WIR {label} {name} ===");
+            trace::write(&format!("=== WIR {label} {name} ==="));
+            trace::write(&unparse_wir(module));
+            trace::write(&format!("=== end WIR {label} {name} ==="));
         }
     }
 }

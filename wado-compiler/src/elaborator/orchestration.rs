@@ -5,7 +5,6 @@
 //! [`Elaborator::build_tir_from_state`] reads it back for one [`TirModule`] each.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1042,14 +1041,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Topologically sort modules based on struct field type dependencies
-        // A module depends on another if it has a struct with a field of a type defined there
-        let sorted_sources = Self::topological_sort_modules(
-            modules,
-            &all_struct_fields,
-            &type_table.borrow(),
-            resolutions.defs(),
-        );
+        let sorted_sources = Self::sorted_module_sources(modules);
 
         let (cm_interface_registry, world_registry) = {
             let _span = logger.span("elaborate/cm_interface_registry");
@@ -2059,131 +2051,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         ))
     }
 
-    /// Topologically sort modules based on struct field type dependencies.
-    ///
-    /// Recursively collect cross-module struct/variant dependencies from a type.
-    /// Unwraps all wrapper types (`Ref`, `MutRef`, `Option`, `GenericInstance`, `Tuple`, etc.)
-    /// to find underlying Struct/Variant types defined in other modules.
-    pub(super) fn collect_cross_module_deps(
-        type_id: TypeId,
-        type_table: &TypeTable,
-        defs: &crate::defs::DefTable,
-        out: &mut Vec<crate::defs::DefId>,
-    ) {
-        match type_table.get(type_id) {
-            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-                // The dependency is the declaration, so the type is asked for
-                // it rather than destructured for a pair naming it.
-                if let Some(def) = type_table
-                    .decl_of_type(type_id)
-                    .and_then(|decl| defs.of_ast_id(decl))
-                {
-                    out.push(def);
-                }
-            }
-            ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Reactive(inner) => {
-                Self::collect_cross_module_deps(*inner, type_table, defs, out);
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                for arg in type_args {
-                    Self::collect_cross_module_deps(*arg, type_table, defs, out);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    /// A module A depends on module B if A contains a struct with a field whose type
-    /// is a struct defined in B. This ensures that when we register struct types in
-    /// codegen, dependency structs are registered before the structs that reference them.
-    pub(super) fn topological_sort_modules(
-        modules: &IndexMap<ModuleSource, Module>,
-        all_struct_fields: &IndexMap<crate::defs::DefId, StructFieldInfo>,
-        type_table: &TypeTable,
-        defs: &crate::defs::DefTable,
-    ) -> Vec<ModuleSource> {
-        // Collect and sort sources for deterministic ordering
-        let mut sources: Vec<&ModuleSource> = modules.keys().collect();
-        sources.sort_by_key(std::string::ToString::to_string);
-        let source_to_idx: IndexMap<&ModuleSource, usize> =
-            sources.iter().enumerate().map(|(i, s)| (*s, i)).collect();
-
-        // Track dependency counts directly (no need for full dependency sets)
-        let mut dependency_count: Vec<usize> = vec![0; sources.len()];
-        // Track which edges we've already added to avoid duplicates
-        let mut seen_edges: IndexSet<(usize, usize)> = IndexSet::default();
-        // Build reverse graph: dependents[i] = modules that depend on module i
-        let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); sources.len()];
-
-        // Analyze struct fields to find cross-module dependencies.
-        // Recursively unwrap wrapper types (Ref, MutRef, Option, GenericInstance,
-        // Tuple, etc.) to detect dependencies through any nesting level.
-        for (this, info) in all_struct_fields {
-            let module_src = &info.module_source;
-            let Some(&from_idx) = source_to_idx.get(module_src) else {
-                continue;
-            };
-            for (_field_name, field_type_id, _) in &info.fields {
-                let mut deps = Vec::new();
-                Self::collect_cross_module_deps(*field_type_id, type_table, defs, &mut deps);
-                for dep in deps {
-                    // A struct depending on itself, or on anything its own
-                    // module declares, orders nothing.
-                    if dep == *this || defs.module(dep) == module_src {
-                        continue;
-                    }
-                    if let Some(&to_idx) = source_to_idx.get(defs.module(dep)) {
-                        // from_idx depends on to_idx (dependency edge)
-                        if seen_edges.insert((from_idx, to_idx)) {
-                            dependency_count[from_idx] += 1;
-                            dependents[to_idx].push(from_idx);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Kahn's algorithm: start with modules that have no dependencies
-        let mut queue: VecDeque<usize> = dependency_count
-            .iter()
-            .enumerate()
-            .filter(|(_, count)| **count == 0)
-            .map(|(i, _)| i)
-            .collect();
-
-        let mut sorted_indices = Vec::with_capacity(sources.len());
-        while let Some(idx) = queue.pop_front() {
-            sorted_indices.push(idx);
-            // Update dependents using reverse graph (O(1) per edge)
-            for &dependent_idx in &dependents[idx] {
-                dependency_count[dependent_idx] -= 1;
-                if dependency_count[dependent_idx] == 0 {
-                    queue.push_back(dependent_idx);
-                }
-            }
-        }
-
-        // Cycle detection with warning (O(n) using IndexSet)
-        if sorted_indices.len() < sources.len() {
-            let sorted_set: IndexSet<usize> = sorted_indices.iter().copied().collect();
-            let in_cycle: Vec<usize> = (0..sources.len())
-                .filter(|i| !sorted_set.contains(i))
-                .collect();
-            let cycle_modules: Vec<_> = in_cycle.iter().map(|&i| sources[i].to_string()).collect();
-            eprintln!(
-                "Warning: circular struct dependencies detected among modules: {}",
-                cycle_modules.join(", ")
-            );
-            // Append remaining in deterministic order (already sorted by index)
-            sorted_indices.extend(in_cycle);
-        }
-
-        // Convert indices back to sources
-        sorted_indices.iter().map(|&i| sources[i].clone()).collect()
+    /// The order every later phase walks the loaded modules in: by source
+    /// path, so one compilation of one tree always yields the same package.
+    fn sorted_module_sources(modules: &IndexMap<ModuleSource, Module>) -> Vec<ModuleSource> {
+        let mut sources: Vec<ModuleSource> = modules.keys().cloned().collect();
+        sources.sort_by_cached_key(ToString::to_string);
+        sources
     }
 
     /// Validate that all named types in type definitions and explicit type annotations

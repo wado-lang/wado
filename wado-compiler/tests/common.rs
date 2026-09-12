@@ -36,7 +36,23 @@ pub fn install_rustls_provider_for_tests() {
 
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, OptLevel, SourceError,
+    TraceSink, set_trace_sink,
 };
+
+/// Send developer traces to stderr, so `WADO_TRACE` and `WADO_DUMP_PASS_*` work
+/// under `cargo test` as under `wado`. The binaries install `wado-lsp`'s copy.
+fn install_trace_sink() {
+    struct StderrTraceSink;
+
+    impl TraceSink for StderrTraceSink {
+        fn trace(&self, line: &str) {
+            eprintln!("{line}");
+        }
+    }
+
+    static SINK: StderrTraceSink = StderrTraceSink;
+    set_trace_sink(&SINK);
+}
 
 /// A located diagnostic names the file it is in — what a per-document consumer
 /// selects on, and without which the LSP drops it. Checked at the host, so the
@@ -69,6 +85,7 @@ pub struct FilesystemHost {
 
 impl FilesystemHost {
     pub fn new(base_path: PathBuf) -> Self {
+        install_trace_sink();
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
@@ -133,6 +150,7 @@ pub struct InMemoryHost {
 
 impl InMemoryHost {
     pub fn new() -> Self {
+        install_trace_sink();
         Self {
             diagnostics: Mutex::new(Vec::new()),
         }

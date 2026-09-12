@@ -12,6 +12,7 @@ use wado_compiler::{
     LogLevel, Severity, SourceError,
 };
 
+use crate::args::DEFAULT_LOG_LEVEL;
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::run_cache::RunCache;
 use crate::runtime::create_kiln_engine;
@@ -113,40 +114,32 @@ pub struct FilesystemCompilerHost {
 }
 
 impl FilesystemCompilerHost {
-    #[must_use]
-    pub fn new(base_path: PathBuf) -> Self {
+    /// The one constructor; the three below name the combinations callers want.
+    fn configured(base_path: PathBuf, print_diagnostics: bool, log_level: LogLevel) -> Self {
+        wado_lsp::install_stderr_trace_sink();
         Self {
             inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
-            print_diagnostics: true,
-            log_level: crate::args::DEFAULT_LOG_LEVEL,
-            start_time: Instant::now(),
-            run: Arc::new(RunCache::new()),
-            dep_index: None,
-        }
-    }
-
-    #[must_use]
-    pub fn silent(base_path: PathBuf) -> Self {
-        Self {
-            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
-            print_diagnostics: false,
-            log_level: LogLevel::Off,
-            start_time: Instant::now(),
-            run: Arc::new(RunCache::new()),
-            dep_index: None,
-        }
-    }
-
-    #[must_use]
-    pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
-        Self {
-            inner: Arc::new(wado_lsp::FilesystemCompilerHost::new(base_path)),
-            print_diagnostics: true,
+            print_diagnostics,
             log_level,
             start_time: Instant::now(),
             run: Arc::new(RunCache::new()),
             dep_index: None,
         }
+    }
+
+    #[must_use]
+    pub fn new(base_path: PathBuf) -> Self {
+        Self::configured(base_path, true, DEFAULT_LOG_LEVEL)
+    }
+
+    #[must_use]
+    pub fn silent(base_path: PathBuf) -> Self {
+        Self::configured(base_path, false, LogLevel::Off)
+    }
+
+    #[must_use]
+    pub fn with_log_level(base_path: PathBuf, log_level: LogLevel) -> Self {
+        Self::configured(base_path, true, log_level)
     }
 
     /// Supply a precomputed `[dependencies]` index so the inner host does not

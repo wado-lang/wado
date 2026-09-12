@@ -281,6 +281,11 @@ struct TestSpec {
     /// Patterns that must NOT appear in WIR output at -Os
     #[serde(rename = "wir_not_expect:Os", default)]
     wir_not_expect_os: Vec<String>,
+
+    /// Narrows every WIR pattern to one function, named by any substring of it.
+    /// A short pattern is otherwise answerable by any function in the dump.
+    #[serde(rename = "wir_scope", default)]
+    wir_scope: Option<String>,
 }
 
 impl TestSpec {
@@ -301,6 +306,59 @@ impl TestSpec {
         let (expect, not_expect) = self.wir_expectations(opt_level);
         !expect.is_empty() || !not_expect.is_empty()
     }
+}
+
+/// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
+/// A generated local's number is an allocation counter, not what a golden means.
+fn wir_contains(wir: &str, pattern: &str) -> bool {
+    let parts: Vec<&str> = pattern.split("{}").collect();
+    if parts.len() == 1 {
+        return wir.contains(pattern);
+    }
+    let mut from = 0;
+    while let Some(hit) = wir[from..].find(parts[0]) {
+        let mut pos = from + hit + parts[0].len();
+        let mut matched = true;
+        for part in &parts[1..] {
+            let rest = &wir[pos..];
+            let digits = rest.len() - rest.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+            if digits == 0 || !wir[pos + digits..].starts_with(part) {
+                matched = false;
+                break;
+            }
+            pos += digits + part.len();
+        }
+        if matched {
+            return true;
+        }
+        from += hit + 1;
+        while from < wir.len() && !wir.is_char_boundary(from) {
+            from += 1;
+        }
+    }
+    false
+}
+
+/// The body of the first function in `wir` whose name contains `scope`, from
+/// its `fn` line to the `}` closing it, or `None` when no name matches.
+fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
+    let mut start = None;
+    let mut offset = 0;
+    for line in wir.split_inclusive('\n') {
+        match start {
+            Some(s) if line.starts_with('}') => return Some(&wir[s..offset + line.len()]),
+            None if line.starts_with("fn \"") && line.contains(scope) => start = Some(offset),
+            _ => {}
+        }
+        offset += line.len();
+    }
+    // Returning the tail here would widen the scope to every function below,
+    // which is the one thing `wir_scope` exists to stop.
+    assert!(
+        start.is_none(),
+        "WIR function matching {scope:?} is never closed"
+    );
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -882,10 +940,20 @@ fn run_normal_test(
     if let Some(wir_text) = wir_text {
         let (expect, not_expect) = spec.wir_expectations(opt_level);
         let opt_name = common::opt_level_name(opt_level);
+        let wir_text = match spec.wir_scope.as_deref() {
+            None => wir_text.as_str(),
+            Some(scope) => scope_to_function(&wir_text, scope).unwrap_or_else(|| {
+                panic!(
+                    "[{test_id}] wir_scope names no function in the WIR\n\
+                     scope: {scope}\n\
+                     WIR output:\n{wir_text}"
+                )
+            }),
+        };
 
         for pattern in expect {
             assert!(
-                wir_text.contains(pattern),
+                wir_contains(wir_text, pattern),
                 "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
                  pattern: {pattern}\n\
                  WIR output:\n{wir_text}"
@@ -894,7 +962,7 @@ fn run_normal_test(
 
         for pattern in not_expect {
             assert!(
-                !wir_text.contains(pattern),
+                !wir_contains(wir_text, pattern),
                 "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
                  pattern: {pattern}\n\
                  WIR output:\n{wir_text}"
