@@ -21,36 +21,14 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 }
 
 pub(super) struct Ctx {
-<<<<<<< HEAD
-    /// `FuncId` of `push_str`, the call this rule recognizes.
-    push_str_id: FuncId,
-    /// `FuncId` of `push_char`, captured at resolution so the synthesized
-    /// per-byte `push(ch)` calls are born resolved.
-    push_char_id: FuncId,
-    /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
-    /// `push`. Independent of the two above: absent (`None`) it only disables
-    /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
-    push_ascii_id: Option<FuncId>,
-||||||| 3856bdb0b
-    /// `FuncId` of `push_str`, the call this rule recognizes.
-    push_str_id: crate::nir::FuncId,
-    /// `FuncId` of `push_char`, captured at resolution so the synthesized
-    /// per-byte `push(ch)` calls are born resolved.
-    push_char_id: crate::nir::FuncId,
-    /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
-    /// `push`. Independent of the two above: absent (`None`) it only disables
-    /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
-    push_ascii_id: Option<crate::nir::FuncId>,
-=======
     /// `FuncId` of `push_str`, one of the two appends a fused run absorbs.
-    push_str_id: crate::nir::FuncId,
+    push_str_id: FuncId,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
-    push_char_id: crate::nir::FuncId,
+    push_char_id: FuncId,
     /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
     /// a constant-ASCII `push` to, and the byte piece [`AppendFuseRule`]
     /// recognises. Absent (`None`) disables both.
-    push_ascii_id: Option<crate::nir::FuncId>,
->>>>>>> origin/main
+    push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
     fused: Option<FusedIds>,
@@ -188,187 +166,8 @@ impl Rule for ConstAsciiPushRule {
     }
 }
 
-<<<<<<< HEAD
-/// If `stmt` is a `place.push_str("short")` statement with a duplicable
-/// receiver and a short ASCII literal, build the equivalent per-byte
-/// `place.push(ch)` statements and return them; otherwise `None`.
-fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
-    let StmtKind::Expr(Operand::Expr(expr_id)) = engine.body.stmts[stmt].kind else {
-        return None;
-    };
-
-    let (receiver, arg0) = {
-        let (receiver, func_id, args) = engine.body.exprs[expr_id].kind.as_method_call()?;
-        if func_id != ctx.push_str_id || args.len() != 1 {
-            return None;
-        }
-        (receiver, args[0].expr)
-    };
-
-    let receiver_expr = receiver.as_expr()?;
-    if !is_duplicable_receiver(&*engine.body, receiver_expr) {
-        return None;
-    }
-
-    // `push_str` takes `&String`, so every call site — source-level
-    // `push_str(&"...")` and template lowering alike — passes the literal
-    // through an explicit `Ref`. Match through it to reach the string literal,
-    // now a `StructLiteral String { repr: PackedArray(bytes), used }`, and read
-    // the bytes off its packed `repr`. The expansion is byte-wise (each byte
-    // becomes a `push_char`) and only fires for short ASCII literals, so we
-    // gate on the borrowed `&[u8]` directly — no `String`/UTF-8 round-trip —
-    // and copy out only the (bounded) bytes we will actually expand.
-    let bytes: Vec<u8> = {
-        let arg0_expr = arg0.as_expr()?;
-        let ExprKind::Unary {
-            op: NirUnaryOp::Ref,
-            expr: inner,
-        } = &engine.body.exprs[arg0_expr].kind
-        else {
-            return None;
-        };
-        let inner_e = inner.as_expr()?;
-        let repr = {
-            let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[inner_e].kind else {
-                return None;
-            };
-            fields
-                .iter()
-                .find(|f| f.name == SeqField::Backing.field_name())
-                .map(|f| f.value)?
-        };
-        let repr_e = repr.as_expr()?;
-        let ExprKind::PackedArray(bytes) = &engine.body.exprs[repr_e].kind else {
-            return None;
-        };
-        if bytes.is_empty() || bytes.len() > MAX_SHORT_PUSH_STR_LEN || !bytes.is_ascii() {
-            return None;
-        }
-        bytes.clone()
-    };
-
-    let span = engine.body.exprs[expr_id].span;
-    let mut stmts = Vec::with_capacity(bytes.len());
-    for &byte in &bytes {
-        let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver_expr);
-        let char_arg = engine.const_operand(ValueKind::Char(ch), TypeTable::CHAR);
-        let call = engine.alloc_expr(
-            ExprKind::method_call(
-                ctx.push_char_id,
-                recv_clone.into(),
-                true,
-                vec![ArenaCallArg {
-                    expr: char_arg,
-                    is_mut: false,
-                }],
-            ),
-            TypeTable::UNIT,
-            span,
-        );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
-    }
-    Some(stmts)
-}
-
-/// Receivers safe to clone N times — deliberately narrow, excluding anything
-/// that may allocate, trap, or be observably stateful. `push_str`'s `&mut self`
-/// already forces a place, so in practice only a `Local`, an `&mut`-wrapped one,
-/// or a `FieldAccess` chain rooted at one appears; `GlobalVarGet` is accepted
-/// defensively, being a pure read.
-||||||| 3856bdb0b
-/// If `stmt` is a `place.push_str("short")` statement with a duplicable
-/// receiver and a short ASCII literal, build the equivalent per-byte
-/// `place.push(ch)` statements and return them; otherwise `None`.
-fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<StmtId>> {
-    let StmtKind::Expr(Operand::Expr(expr_id)) = engine.body.stmts[stmt].kind else {
-        return None;
-    };
-
-    let (receiver, arg0) = {
-        let (receiver, func_id, args) = engine.body.exprs[expr_id].kind.as_method_call()?;
-        if func_id != ctx.push_str_id || args.len() != 1 {
-            return None;
-        }
-        (receiver, args[0].expr)
-    };
-
-    let receiver_expr = receiver.as_expr()?;
-    if !is_duplicable_receiver(&*engine.body, receiver_expr) {
-        return None;
-    }
-
-    // `push_str` takes `&String`, so every call site — source-level
-    // `push_str(&"...")` and template lowering alike — passes the literal
-    // through an explicit `Ref`. Match through it to reach the string literal,
-    // now a `StructLiteral String { repr: PackedArray(bytes), used }`, and read
-    // the bytes off its packed `repr`. The expansion is byte-wise (each byte
-    // becomes a `push_char`) and only fires for short ASCII literals, so we
-    // gate on the borrowed `&[u8]` directly — no `String`/UTF-8 round-trip —
-    // and copy out only the (bounded) bytes we will actually expand.
-    let bytes: Vec<u8> = {
-        let arg0_expr = arg0.as_expr()?;
-        let ExprKind::Unary {
-            op: NirUnaryOp::Ref,
-            expr: inner,
-        } = &engine.body.exprs[arg0_expr].kind
-        else {
-            return None;
-        };
-        let inner_e = inner.as_expr()?;
-        let repr = {
-            let ExprKind::StructLiteral { fields, .. } = &engine.body.exprs[inner_e].kind else {
-                return None;
-            };
-            fields
-                .iter()
-                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
-                .map(|f| f.value)?
-        };
-        let repr_e = repr.as_expr()?;
-        let ExprKind::PackedArray(bytes) = &engine.body.exprs[repr_e].kind else {
-            return None;
-        };
-        if bytes.is_empty() || bytes.len() > MAX_SHORT_PUSH_STR_LEN || !bytes.is_ascii() {
-            return None;
-        }
-        bytes.clone()
-    };
-
-    let span = engine.body.exprs[expr_id].span;
-    let mut stmts = Vec::with_capacity(bytes.len());
-    for &byte in &bytes {
-        let ch = char::from(byte);
-        let recv_clone = engine.clone_expr(receiver_expr);
-        let char_arg =
-            engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
-        let call = engine.alloc_expr(
-            ExprKind::method_call(
-                ctx.push_char_id,
-                recv_clone.into(),
-                true,
-                vec![ArenaCallArg {
-                    expr: char_arg,
-                    is_mut: false,
-                }],
-            ),
-            TypeTable::UNIT,
-            span,
-        );
-        stmts.push(engine.alloc_stmt(StmtKind::Expr(call.into()), span));
-    }
-    Some(stmts)
-}
-
-/// Receivers safe to clone N times — deliberately narrow, excluding anything
-/// that may allocate, trap, or be observably stateful. `push_str`'s `&mut self`
-/// already forces a place, so in practice only a `Local`, an `&mut`-wrapped one,
-/// or a `FieldAccess` chain rooted at one appears; `GlobalVarGet` is accepted
-/// defensively, being a pure read.
-=======
 /// Receivers safe to clone N times: deliberately narrow, admitting nothing that
 /// may allocate, trap, or be observably stateful.
->>>>>>> origin/main
 fn is_duplicable_receiver(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Local { .. } | ExprKind::GlobalVarGet { .. } => true,

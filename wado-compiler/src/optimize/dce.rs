@@ -8,7 +8,7 @@ use super::mod_ref::FnEffect;
 use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
-use crate::compiler_item::{CompilerItem, SeqField};
+use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -17,7 +17,7 @@ use crate::name::{
     FunctionId, MethodName, is_fn_type_name, mangle_generic_name, mangle_local_trait_method,
     mangle_method_generic,
 };
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind, StmtNode,
 };
@@ -318,13 +318,7 @@ fn extend_reachable_for_optimizer_passes(
 ) {
     use crate::compiler_item::CompilerItem;
 
-<<<<<<< HEAD
-    let mut push_str: Option<(FunctionId, FuncId)> = None;
-||||||| 3856bdb0b
-    let mut push_str: Option<(FunctionId, crate::nir::FuncId)> = None;
-=======
     let mut push_str_id: Option<FunctionId> = None;
->>>>>>> origin/main
     let mut push_char_id: Option<FunctionId> = None;
     let mut fused: Vec<FunctionId> = Vec::new();
     for func_rc in &project.functions {
@@ -423,120 +417,6 @@ fn extend_reachable_for_optimizer_passes(
     }
 }
 
-<<<<<<< HEAD
-/// Whether any function body still holds a `nir/string_push`-rewritable call:
-/// `buf.push_str(&"…")` with a 1..=[`SHORT_PUSH_STR_MAX_LEN`]-byte ASCII
-/// constant literal. This mirrors the match shape of
-/// `optimize::string_push::try_split_stmt` (minus its receiver-duplicability
-/// refinement, which only ever narrows the set — so this stays a sound
-/// superset that never drops `push_char` while a rewrite could still fire).
-/// The pre-loop DCE sees such candidates; the final DCE, after the loop has
-/// consumed them, sees none — which is what gates the `String::push` virtual
-/// root to the invocation that needs it.
-fn has_short_push_str_candidate(project: &NirPackage, push_str_id: FuncId) -> bool {
-    project.functions.iter().any(|func_rc| {
-        let func = func_rc.borrow();
-        func.body
-            .as_ref()
-            .is_some_and(|body| body_has_short_push_str(body, push_str_id))
-    })
-}
-
-/// Byte-length ceiling for a `push_str` literal the `nir/string_push` rule
-/// expands. Must stay in sync with `string_push::MAX_SHORT_PUSH_STR_LEN`; a
-/// value at least as large keeps [`has_short_push_str_candidate`] a sound gate
-/// (an over-estimate only risks a little residual bloat, never a dropped
-/// rewrite target).
-const SHORT_PUSH_STR_MAX_LEN: usize = 8;
-
-fn body_has_short_push_str(body: &Body, push_str_id: FuncId) -> bool {
-    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
-        if let NodeRef::Expr(e) = node
-            && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
-            && func_id == push_str_id
-            && args.len() == 1
-            && let Some(arg) = args[0].expr.as_expr()
-            && let ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: inner,
-            } = &body.exprs[arg].kind
-            && let Some(inner_e) = inner.as_expr()
-            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner_e].kind
-            && let Some(repr) = fields
-                .iter()
-                .find(|f| f.name == SeqField::Backing.field_name())
-                .map(|f| f.value)
-            && let Some(repr_e) = repr.as_expr()
-            && let ExprKind::PackedArray(bytes) = &body.exprs[repr_e].kind
-            && !bytes.is_empty()
-            && bytes.len() <= SHORT_PUSH_STR_MAX_LEN
-            && bytes.is_ascii()
-        {
-            return Some(());
-        }
-        None
-    })
-    .is_some()
-}
-
-||||||| 3856bdb0b
-/// Whether any function body still holds a `nir/string_push`-rewritable call:
-/// `buf.push_str(&"…")` with a 1..=[`SHORT_PUSH_STR_MAX_LEN`]-byte ASCII
-/// constant literal. This mirrors the match shape of
-/// `optimize::string_push::try_split_stmt` (minus its receiver-duplicability
-/// refinement, which only ever narrows the set — so this stays a sound
-/// superset that never drops `push_char` while a rewrite could still fire).
-/// The pre-loop DCE sees such candidates; the final DCE, after the loop has
-/// consumed them, sees none — which is what gates the `String::push` virtual
-/// root to the invocation that needs it.
-fn has_short_push_str_candidate(project: &NirPackage, push_str_id: crate::nir::FuncId) -> bool {
-    project.functions.iter().any(|func_rc| {
-        let func = func_rc.borrow();
-        func.body
-            .as_ref()
-            .is_some_and(|body| body_has_short_push_str(body, push_str_id))
-    })
-}
-
-/// Byte-length ceiling for a `push_str` literal the `nir/string_push` rule
-/// expands. Must stay in sync with `string_push::MAX_SHORT_PUSH_STR_LEN`; a
-/// value at least as large keeps [`has_short_push_str_candidate`] a sound gate
-/// (an over-estimate only risks a little residual bloat, never a dropped
-/// rewrite target).
-const SHORT_PUSH_STR_MAX_LEN: usize = 8;
-
-fn body_has_short_push_str(body: &Body, push_str_id: crate::nir::FuncId) -> bool {
-    body.find_in_live_node_under(NodeRef::Block(body.root), |node| {
-        if let NodeRef::Expr(e) = node
-            && let Some((_, func_id, args)) = body.exprs[e].kind.as_method_call()
-            && func_id == push_str_id
-            && args.len() == 1
-            && let Some(arg) = args[0].expr.as_expr()
-            && let ExprKind::Unary {
-                op: crate::nir::NirUnaryOp::Ref,
-                expr: inner,
-            } = &body.exprs[arg].kind
-            && let Some(inner_e) = inner.as_expr()
-            && let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner_e].kind
-            && let Some(repr) = fields
-                .iter()
-                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
-                .map(|f| f.value)
-            && let Some(repr_e) = repr.as_expr()
-            && let ExprKind::PackedArray(bytes) = &body.exprs[repr_e].kind
-            && !bytes.is_empty()
-            && bytes.len() <= SHORT_PUSH_STR_MAX_LEN
-            && bytes.is_ascii()
-        {
-            return Some(());
-        }
-        None
-    })
-    .is_some()
-}
-
-=======
->>>>>>> origin/main
 /// Walk `block`'s expression tree and collect every `T` such that
 /// `builtin::array_clone::<T>(...)` appears as a NIR call. The
 /// corresponding `$value_copy$` helper has to survive DCE because
