@@ -60,6 +60,10 @@ absolute path resolves against no preopen and fails. The host answers that for
 every operation but `create_dir_all`, which splits the path rather than handing
 it over, so it makes the same check itself.
 
+`create_dir_all` makes one more check the host cannot: `Exist` reports whatever
+occupies a component, so it stats the entry and accepts only a directory. A
+regular file there is `NotDirectory`, not a directory that was already made.
+
 A second preopen is ignored. Nothing in the repository grants one. The
 alternative, resolving a path against the longest matching preopen prefix as
 wasi-libc does, is machinery with no caller. `root()` is the escape hatch for
