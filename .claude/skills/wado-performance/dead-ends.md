@@ -18,6 +18,37 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Reading digits eight at a time in `scan_number_into` (2026-09-12)
+
+The whitespace scan pays by reading several bytes per bounds check, so the
+digit loops look like the same shape. They are not. Packing eight bytes into a
+`u64`, testing them with the SWAR digit mask and folding them with three
+multiplies measured **11% slower** on json-canada deserialize than the
+byte-at-a-time loop; consuming the partial chunk's digits out of the bytes
+already read, so no chunk is ever wasted, still lost by **4%**, 4 of 5 rounds.
+
+Isolated on a 2.16 MB buffer of 17-digit numbers, both loops in one session:
+
+| digit loop             | throughput |
+| ---------------------- | ---------- |
+| byte at a time         | 953 MB/s   |
+| eight per bounds check | 709 MB/s   |
+
+953 MB/s is about 1 ns per byte, a handful of cycles for a get, a compare, a
+branch and a multiply-add. Whatever the loop still pays per get, it is already
+small enough that the packing shifts cost more than batching saves. The "~20
+machine instructions" figure for `array.get` is a straight-line one, and a tight
+scan loop over a single array does not pay anything like it.
+
+The entry on four-wide blocks is not in tension with this: batching the
+whitespace scan does pay. The difference is what the body does. A loop that only
+tests a byte has the get as its whole cost, so amortising it is the win; a loop
+that also accumulates the byte is near its floor already, and widening only adds
+the pack.
+
+Generalizes: measure the loop you mean to beat before widening it, in isolation,
+rather than reasoning from a per-get instruction count.
+
 ## Sharing `core:json`'s three digit-accumulating loops (2026-09-12)
 
 Folding them into one `fold_digits` helper costs json-canada deserialize 1.5%:
