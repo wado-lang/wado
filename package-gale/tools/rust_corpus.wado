@@ -71,7 +71,10 @@ pub fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
     return Option::Some(dirs[0].0);
 }
 
-pub fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
+/// The contents of `path`, or why it could not be read. The reason is returned
+/// rather than printed, so a walk that reports a failure and goes on reports it
+/// in one place.
+pub fn read_file(root: &Descriptor, path: &String) -> Result<String, String> {
     let file = match root.open_at(
         PathFlags::none(),
         *path,
@@ -80,18 +83,16 @@ pub fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr
     ).wait() {
         Ok(f) => f,
         Err(e) => {
-            eprintln(`error: ${*path}: cannot open: ${e:?}`);
-            return null;
+            return Result::Err(`cannot open: ${e:?}`);
         },
     };
     let [read_stream, _done] = file.read_via_stream(0 as Filesize);
     let bytes = read_stream.read_to_end();
     read_stream.drop();
     return match String::from_utf8(bytes) {
-        Ok(s) => Option::Some(s),
+        Ok(s) => Result::Ok(s),
         Err(e) => {
-            eprintln(`error: ${*path}: not UTF-8: ${e}`);
-            return null;
+            return Result::Err(`not UTF-8: ${e}`);
         },
     };
 }
@@ -106,9 +107,13 @@ pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> wit
             i += 1;
             // An unreadable list yields no paths, which would otherwise read as
             // a clean run. Keep it as the one path that reports itself.
-            let Some(list) = read_file(root, &argv[i]) else {
-                paths.push(argv[i]);
-                continue;
+            let list = match read_file(root, &argv[i]) {
+                Ok(text) => text,
+                Err(why) => {
+                    eprintln(`error: ${argv[i]}: ${why}`);
+                    paths.push(argv[i]);
+                    continue;
+                },
             };
             for let line of list.lines() {
                 if !line.is_empty() {

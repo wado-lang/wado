@@ -10,12 +10,38 @@ use rust from "../tests/grammars/RustLexer.g4"
         },
     };
 use { parse_rust, corpus_root, read_file, collect_paths } from "./rust_corpus.wado";
-use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
+use { args, println, eprintln, log_stderr, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { TreeMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
+
+/// A file the walk could not measure. The walk goes on, so the report is an
+/// effect rather than a return value, and no frame between the failure and
+/// whoever tallies it carries the tally.
+interface Unmeasured {
+    fn file(path: String, why: String) {
+        report_unmeasured(&path, &why);
+    }
+}
+
+fn report_unmeasured(path: &String, why: &String) {
+    log_stderr(`error: ${*path}: ${*why}`);
+}
+
+/// Counts what it reports, so a caller reads the tally off the handler instead
+/// of threading a counter down the walk.
+struct Failures {
+    count: i32 = 0,
+}
+
+impl Unmeasured for Failures {
+    fn file(&mut self, path: String, why: String) {
+        self.count += 1;
+        report_unmeasured(&path, &why);
+    }
+}
 
 /// One path written where its item is read, at a 1-based line and column.
 pub struct InlinePath {
@@ -103,18 +129,20 @@ pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
     return Result::Ok(locate(result.tokens.chars, &path_roots(&result)));
 }
 
-/// The inline paths `path` carries. A file that cannot be read or parsed lands
-/// in `failed`, never in a clean count.
-fn scan(root: &Descriptor, path: &String, failed: &mut i32) -> List<InlinePath> with Stderr {
-    let Some(source) = read_file(root, path) else {
-        *failed += 1;
-        return [];
+/// The inline paths `path` carries. A file that cannot be read or parsed is
+/// reported as unmeasured, never returned as a clean count.
+fn scan(root: &Descriptor, path: &String) -> List<InlinePath> with Unmeasured {
+    let source = match read_file(root, path) {
+        Ok(text) => text,
+        Err(why) => {
+            Unmeasured::file(*path, why);
+            return [];
+        },
     };
     return match find_inline_paths(&source) {
         Ok(hits) => hits,
         Err(why) => {
-            eprintln(`error: ${*path}: ${why}`);
-            *failed += 1;
+            Unmeasured::file(*path, why);
             return [];
         },
     };
@@ -149,12 +177,12 @@ fn write_file(root: &Descriptor, path: &String, content: &String) -> bool with S
 
 /// File path to the number of inline paths it carries, omitting the clean ones.
 /// The baseline is serialized straight from this, so the walk is sorted.
-fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with Stderr {
+fn census(root: &Descriptor, paths: &List<String>) -> TreeMap<String, i32> with Unmeasured {
     let mut sorted = *paths;
     sorted.sort();
     let mut counts = TreeMap::<String, i32>::new();
     for let path of &sorted {
-        let found = scan(root, path, failed).len();
+        let found = scan(root, path).len();
         if found > 0 {
             counts[*path] = found;
         }
@@ -163,8 +191,12 @@ fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<
 }
 
 fn read_baseline(root: &Descriptor) -> Option<TreeMap<String, i32>> with Stderr {
-    let Some(text) = read_file(root, &BASELINE_PATH) else {
-        return null;
+    let text = match read_file(root, &BASELINE_PATH) {
+        Ok(s) => s,
+        Err(why) => {
+            eprintln(`error: ${BASELINE_PATH}: ${why}`);
+            return null;
+        },
     };
     return match from_string::<TreeMap<String, i32>>(text) {
         Ok(map) => Option::Some(map),
@@ -218,24 +250,28 @@ fn report_grown(rows: &List<[String, i32, i32]>) with Stderr {
     eprintln("Run `scripts/check-rust-paths.sh <file>` to list them.");
 }
 
-fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with (Stdout, Stderr) {
+fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with Stdout {
     let mut found = 0;
-    let mut failed = 0;
-    for let path of paths {
-        for let hit of scan(root, path, &mut failed) {
-            println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
-            found += 1;
+    let mut failures = Failures {};
+    with Unmeasured => &mut failures do {
+        for let path of paths {
+            for let hit of scan(root, path) {
+                println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
+                found += 1;
+            }
         }
-    }
+    };
     println(`${found} inline paths`);
-    return if failed > 0 { 1 } else { 0 };
+    return if failures.count > 0 { 1 } else { 0 };
 }
 
 fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr) {
-    let mut failed = 0;
-    let counts = census(root, paths, &mut failed);
-    if failed > 0 {
-        eprintln(`error: ${failed} of ${paths.len()} files could not be measured`);
+    let mut failures = Failures {};
+    let counts = with Unmeasured => &mut failures do {
+        census(root, paths);
+    };
+    if failures.count > 0 {
+        eprintln(`error: ${failures.count} of ${paths.len()} files could not be measured`);
         return 1;
     }
     let Some(baseline) = read_baseline(root) else {

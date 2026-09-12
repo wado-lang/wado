@@ -28,24 +28,27 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 
     let mut bad = 0;
     for let path of &paths {
-        if let Some(source) = read_file(&root, path) {
-            let result = parse_rust(&source);
-            if result.diagnostics.len() == 0 {
-                println(`ok\t${*path}`);
-            } else {
+        let source = match read_file(&root, path) {
+            Ok(text) => text,
+            Err(why) => {
                 bad += 1;
-                let first = result.diagnostics[0];
-                // The rule stack, not the message: recovery restarts at an item
-                // boundary, so every failure inside one reports the same
-                // "expected KW_EXTERN" and the stack is what names the rule.
-                let stack = first.rule_path();
-                println(
-                    `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
-                );
-            }
+                println(`ng\t${*path}\t0\t0\t${why}\t`);
+                continue;
+            },
+        };
+        let result = parse_rust(&source);
+        if result.diagnostics.len() == 0 {
+            println(`ok\t${*path}`);
         } else {
             bad += 1;
-            println(`ng\t${*path}\t0\t0\tunreadable\t`);
+            let first = result.diagnostics[0];
+            // The rule stack, not the message: recovery restarts at an item
+            // boundary, so every failure inside one reports the same
+            // "expected KW_EXTERN" and the stack is what names the rule.
+            let stack = first.rule_path();
+            println(
+                `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
+            );
         }
     }
     eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);
