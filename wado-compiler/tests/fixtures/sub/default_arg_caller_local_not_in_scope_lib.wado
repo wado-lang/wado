@@ -1,0 +1,30 @@
+// Helper for `default_arg_caller_local_not_in_scope.wado`. Every default here
+// names `SECRET`, which is this module's global and nothing else.
+
+global SECRET: i32 = 7;
+
+pub struct Conf {
+    pub v: i32 = SECRET,
+}
+
+pub fn take(v: i32 = SECRET) -> i32 {
+    return v;
+}
+
+pub struct Box {
+    pub base: i32,
+}
+
+impl Box {
+    pub fn new(base: i32) -> Box {
+        return Box { base };
+    }
+
+    pub fn plus(&self, v: i32 = SECRET) -> i32 {
+        return self.base + v;
+    }
+
+    pub fn of(v: i32 = SECRET) -> Box {
+        return Box { base: v };
+    }
+}

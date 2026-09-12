@@ -267,7 +267,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let ast_id = expr.id();
+        let lifted = ctx.spliced_floor_lifted(ast_id);
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
+        if let Some(floor) = lifted {
+            ctx.scope_floor = floor;
+        }
         self.record_expression_type(ast_id, type_id);
         type_id
     }
@@ -3979,6 +3983,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Fact keying stays local, the default's nodes carrying
                     // their own globally-unique `AstId`s, and `expected_type_id`
                     // still drives literal / `null → None` coercion.
+                    // A field default names no argument, so nothing is spliced.
+                    let travelled = ctx.enter_travelled_expr(std::iter::empty());
                     let resolved = if struct_module_source == self.current_module_source {
                         self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                     } else {
@@ -3986,6 +3992,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                         })
                     };
+                    ctx.leave_travelled_expr(travelled);
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(ResolvedField {
                         name: expected_name.clone(),

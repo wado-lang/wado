@@ -2692,6 +2692,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> TirExpr {
         use crate::tir::{TirExprKind, TypeTable};
 
+        // A caller's argument spliced into a default is the caller's code and
+        // names the caller's locals. The re-entry sees a zero floor, so it
+        // walks the subtree as any other expression.
+        if let Some(floor) = ctx.spliced_floor_lifted(expr.id()) {
+            let tir = self.reify_expr(expr, ctx, expected_type);
+            ctx.scope_floor = floor;
+            return tir;
+        }
+
         // Power-assert capture hook. See `reify_assert` /
         // `reify_with_assert_capture`.
         if let Some(actx) = ctx.reify_assert_capture_ctx.as_ref() {
@@ -5710,6 +5719,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // free identifiers and decl lookups still resolve in the
                     // struct module's scope, so the perspective swap remains for
                     // name resolution.
+                    let travelled = ctx.enter_travelled_expr(std::iter::empty());
                     let value = if struct_module == self.current_module_source {
                         self.reify_expr(default_expr, ctx, Some(expected_field_ty))
                     } else {
@@ -5717,6 +5727,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             this.reify_expr(default_expr, ctx, Some(expected_field_ty))
                         })
                     };
+                    ctx.leave_travelled_expr(travelled);
                     fields.push(TirStructField {
                         name: name.clone(),
                         value,
@@ -7943,7 +7954,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // A default declared on a trait method has no body for annotate to
             // walk, so without the parameter's type here it reifies untyped.
             let expected = param_types.get(i).copied();
+            // No caller AST is spliced here: `default_arg_overrides` already
+            // answers a reference to an earlier parameter with its reified
+            // argument, so the walk stays inside the callee's own default.
+            let travelled = ctx.enter_travelled_expr(std::iter::empty());
             let resolved = self.reify_expr(&default_ast, ctx, expected);
+            ctx.leave_travelled_expr(travelled);
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
             args.push(crate::tir::CallArg::new(resolved, false));
@@ -8837,7 +8853,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 };
                 let mut default_expr = default_ast.clone();
                 default_expr.substitute_idents(&subs);
+                let travelled =
+                    ctx.enter_travelled_expr(method_call.args.iter().map(ast::Expr::id));
                 let resolved = self.reify_expr(&default_expr, ctx, None);
+                ctx.leave_travelled_expr(travelled);
                 let is_mut = dispatch.param_is_mut.get(i).copied().unwrap_or(false);
                 args.push(crate::tir::CallArg::new(resolved, is_mut));
                 if let Some(name) = dispatch.param_names.get(i) {

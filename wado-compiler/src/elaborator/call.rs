@@ -2151,7 +2151,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut default_expr = default_ast;
                 default_expr.substitute_idents(&subs);
                 let expected_type = param_types[i];
+                let travelled = ctx.enter_travelled_expr(call_args_ast.iter().map(Expr::id));
                 let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                ctx.leave_travelled_expr(travelled);
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR

@@ -271,7 +271,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
         TypeLookup {
-            current_module_source: &self.current_module_source,
+            // The frame is where the AST under resolution was written, so a
+            // travelled expression reads names as its author did.
+            current_module_source: self
+                .annotate_ctx
+                .resolving_home
+                .as_ref()
+                .unwrap_or(&self.current_module_source),
             resolutions: &self.tysys.resolutions,
             namespace_imports: &self.sem.imports.namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
@@ -1217,17 +1223,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// so an alias, a namespace prefix and a function-local item each reach their
     /// own. `name` is read only where the site reaches nothing.
     pub(crate) fn decl_key_at(&self, site: ast::AstId, name: &str) -> Option<DefId> {
-        // The walk's own answer is no use for a node another module wrote: the
-        // same node is walked once per site that takes it and only the last is
-        // kept (`sem::fact_home`), so its author's frame is what stays true.
-        let home = self.home_module(site);
-        if home != self.current_module_source {
-            return self.decl_key_in(&home, name);
-        }
         self.tysys
             .resolutions
             .declared_if_walked(site)
-            .or_else(|| self.decl_key_in(&home, name))
+            .or_else(|| self.decl_key_in(&self.home_module(site), name))
     }
 
     /// The declaration indexes, for a caller holding a spelling whose reference

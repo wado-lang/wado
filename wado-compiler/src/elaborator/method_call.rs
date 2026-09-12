@@ -696,7 +696,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let expected_type = expected_param_types[i];
                     let mut default_expr = default_ast.clone();
                     default_expr.substitute_idents(&subs);
+                    let travelled = ctx.enter_travelled_expr(args_ast.iter().map(ast::Expr::id));
                     let resolved = s.resolve_expr(&default_expr, ctx, Some(expected_type));
+                    ctx.leave_travelled_expr(travelled);
                     args.push(resolved);
                     if let Some(name) = param_names.get(i) {
                         subs.insert(name.clone(), default_expr);
@@ -1793,9 +1795,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let expected_type = param_types[i];
                 let mut default_expr = default_ast.clone();
                 default_expr.substitute_idents(&subs);
+                let travelled =
+                    ctx.enter_travelled_expr(static_call.args.iter().map(ast::Expr::id));
                 let resolved = self.with_resolving_home(static_method_module.clone(), |s| {
                     s.resolve_expr(&default_expr, ctx, Some(expected_type))
                 });
+                ctx.leave_travelled_expr(travelled);
                 args.push(resolved);
                 arg_spans.push(default_expr.span());
                 subs.insert(pname.clone(), default_expr);
