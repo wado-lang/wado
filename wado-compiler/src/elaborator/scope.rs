@@ -15,7 +15,7 @@ use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
-use crate::ast::{AstId, AstIdSpace};
+use crate::ast::AstId;
 use crate::defs::DefId;
 use crate::name::FqTraitName;
 
@@ -131,33 +131,11 @@ pub(super) struct Scope {
     /// repeated question is grounded only when one of them lies between the
     /// two askings.
     pub(super) member_edges: Cell<u32>,
-<<<<<<< HEAD
     /// The module that wrote the AST being resolved, while that is not this
     /// one — a default expression taken at a site in another module. Names in
     /// it resolve in their author's module, so this replaces the walk's own
     /// frame rather than being tried alongside it (WEP 2026-04-11).
     pub(super) resolving_home: Option<ModuleSource>,
-||||||| fe30fd382ca
-    /// When resolving a default-expression AST at a call site, fall back to
-    /// looking up unresolved identifiers in this module's global scope —
-    /// the callee's lexical scope for defaults that reference
-    /// module-private items (WEP 2026-04-11).
-    pub(super) default_scope_module: Option<ModuleSource>,
-    /// The module a visibility question is asked from, with the id space it
-    /// applies to: foreign AST answers to its declaring module, while the
-    /// caller's own arguments spliced into it keep their own space.
-    pub(super) foreign_vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
-=======
-    /// When resolving a default-expression AST at a call site, fall back to
-    /// looking up unresolved identifiers in this module's global scope —
-    /// the callee's lexical scope for defaults that reference
-    /// module-private items (WEP 2026-04-11).
-    pub(super) default_scope_module: Option<ModuleSource>,
-    /// The module a visibility question is asked from, with the id space it
-    /// applies to: foreign AST answers to its declaring module, while the
-    /// caller's own arguments spliced into it keep their own space.
-    pub(super) foreign_vantage: Option<(ModuleSource, AstIdSpace)>,
->>>>>>> origin/main
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -261,33 +239,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         module: Option<ModuleSource>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-<<<<<<< HEAD
         self.with_scope_field(|scope| &mut scope.resolving_home, module, body)
-||||||| fe30fd382ca
-        self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
-    }
-
-    /// Run `body` with the visibility vantage set to `module` for nodes parsed
-    /// in `space`. See [`Scope::foreign_vantage`].
-    pub(super) fn with_foreign_vantage<R>(
-        &mut self,
-        vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_scope_field(|scope| &mut scope.foreign_vantage, vantage, body)
-=======
-        self.with_scope_field(|scope| &mut scope.default_scope_module, module, body)
-    }
-
-    /// Run `body` with the visibility vantage set to `module` for nodes parsed
-    /// in `space`. See [`Scope::foreign_vantage`].
-    pub(super) fn with_foreign_vantage<R>(
-        &mut self,
-        vantage: Option<(ModuleSource, AstIdSpace)>,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> R {
-        self.with_scope_field(|scope| &mut scope.foreign_vantage, vantage, body)
->>>>>>> origin/main
     }
 
     /// Expand a written bound list to include every bound's supertraits, so a

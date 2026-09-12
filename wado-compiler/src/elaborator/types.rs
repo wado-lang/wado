@@ -4,12 +4,6 @@ use std::cell::RefCell;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-<<<<<<< HEAD
-use crate::ast::{self, AstId};
-use crate::defs::DefId;
-||||||| fe30fd382ca
-use crate::ast::{self, AstId};
-=======
 use crate::analyze::symbol_not_visible_message;
 use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic};
@@ -21,7 +15,6 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
->>>>>>> origin/main
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
 use crate::resolve::{Resolution, Resolutions};
@@ -2306,7 +2299,6 @@ pub(super) struct LabeledBlockTarget {
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
     pub(super) scopes: Vec<IndexMap<String, LocalVar>>,
-<<<<<<< HEAD
     /// Scopes below this index are out of reach, and so are the enclosing
     /// function's captures. Non-zero only inside a travelled expression; see
     /// [`Self::enter_travelled_expr`].
@@ -2315,17 +2307,10 @@ pub(super) struct FunctionContext {
     /// expression being walked, which get the floor lifted again for their own
     /// nodes. See [`Self::spliced_floor_lifted`].
     pub(super) travelled_splices: IndexSet<AstId>,
-    /// Next local index (Wasm locals are function-wide)
-    pub(super) next_local: u32,
-||||||| fe30fd382ca
-    /// Next local index (Wasm locals are function-wide)
-    pub(super) next_local: u32,
-=======
     /// Next local index (Wasm locals are function-wide). Private: a uniquifier
     /// comes from [`FunctionContext::fresh_serial`], a count from
     /// [`FunctionContext::local_count`].
     next_local: u32,
->>>>>>> origin/main
     /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
     pub(super) return_type: TypeId,
     /// Whether this is an async function (`export async fn`).
@@ -2681,19 +2666,13 @@ impl FunctionContext {
             }
         }
 
-<<<<<<< HEAD
         // Captures reach the enclosing function's locals, which a travelled
         // expression is no more entitled to than to the scopes above.
         if self.scope_floor > 0 {
             return None;
         }
 
-        // Check deref overrides (for mutable closures: `count` -> `*__ref_count`)
-||||||| fe30fd382ca
-        // Check deref overrides (for mutable closures: `count` -> `*__ref_count`)
-=======
         // Check deref overrides (for mutable closures: `count` -> `*$ref_count`)
->>>>>>> origin/main
         if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned()
             && let Some(ref_local) = self.outer_locals.get(&ref_name).cloned()
         {
@@ -3103,15 +3082,8 @@ impl<'a> TypeLookup<'a> {
     /// The function-local items tried ahead of the indexes are the walk's own
     /// position; a local item is visible only after its declaration statement.
     pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
-<<<<<<< HEAD
         let frame = self.current_module_source;
-        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
-||||||| fe30fd382ca
-    pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
-        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
-=======
         let canon = canonical_ns_ref(self.namespace_imports, name);
->>>>>>> origin/main
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.fn_local_items.get(name) {
             return Some(*def);

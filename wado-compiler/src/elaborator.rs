@@ -47,16 +47,6 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
-<<<<<<< HEAD
-use crate::ast::{self, Item, Module};
-use crate::compiler_host::CompilerHost;
-use crate::defs::DefId;
-use crate::logger::Logger;
-||||||| fe30fd382ca
-use crate::ast::{self, Item, Module};
-use crate::compiler_host::CompilerHost;
-use crate::logger::Logger;
-=======
 use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind};
@@ -68,7 +58,6 @@ use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
 use crate::logger::{Bail, Logger};
->>>>>>> origin/main
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{self as name, Receiver, RefKind};
 use crate::name::{
@@ -1167,17 +1156,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration a written reference names, keyed on the site that wrote it,
     /// so an alias, a namespace prefix and a function-local item each reach their
     /// own. `name` is read only where the site reaches nothing.
-<<<<<<< HEAD
-    pub(crate) fn decl_key_at(&self, site: ast::AstId, name: &str) -> Option<DefId> {
-||||||| fe30fd382ca
-    pub(crate) fn decl_key_at(
-        &self,
-        site: crate::ast::AstId,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
-=======
     pub(crate) fn decl_key_at(&self, site: AstId, name: &str) -> Option<DefId> {
->>>>>>> origin/main
         self.tysys
             .resolutions
             .declared_if_walked(site)
@@ -1188,7 +1167,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// site is not at hand — a rendered head, a synthesis target. One that
     /// holds a site should call [`Self::decl_key_at`] instead.
     ///
-<<<<<<< HEAD
     /// The frame is where the AST being resolved was written: the walk's own
     /// position, or the author's module while the walk is inside a travelled
     /// expression. One frame and not a preference between two, so a name both
@@ -1205,15 +1183,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// The declaration `name` refers to as written in `frame`; an unaccounted
     /// name falls to the prelude. One frame is one module, so a hit is unique.
     fn decl_key_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
-||||||| fe30fd382ca
-    /// The frames are the walk's own position, never a caller's. Where it reads an
-    /// expression another module wrote, that writing module answers first.
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<crate::defs::DefId> {
-=======
-    /// The frames are the walk's own position, never a caller's. Where it reads an
-    /// expression another module wrote, that writing module answers first.
-    pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
->>>>>>> origin/main
         // A binder shadows every declaration of its name and has no identity of
         // its own; the indexes cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
