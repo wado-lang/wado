@@ -276,16 +276,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+        // The frame is where the AST under resolution was written, so a
+        // travelled expression reads names as its author did — and its aliases
+        // too, since `nsb::Thing` is one name that only the author's `use ns`
+        // table can spell out.
+        let frame = self
+            .annotate_ctx
+            .resolving_home
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        let namespace_imports = if frame == &self.current_module_source {
+            &self.sem.imports.namespace_imports
+        } else {
+            self.tysys
+                .trait_env
+                .namespace_imports(frame)
+                .expect("a module the walk resolves in is one `TraitEnv` indexed")
+        };
         TypeLookup {
-            // The frame is where the AST under resolution was written, so a
-            // travelled expression reads names as its author did.
-            current_module_source: self
-                .annotate_ctx
-                .resolving_home
-                .as_ref()
-                .unwrap_or(&self.current_module_source),
+            current_module_source: frame,
             resolutions: &self.tysys.resolutions,
-            namespace_imports: &self.sem.imports.namespace_imports,
+            namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -405,7 +416,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
         self.tysys
             .trait_env
-            .namespace_imports(&home)
+            .namespace_imports(&home)?
             .get(alias)
             .cloned()
     }
@@ -425,7 +436,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.current_module_source == *module {
             return body(self);
         }
-        let namespaces = self.tysys.trait_env.namespace_imports(module);
+        let namespaces = self
+            .tysys
+            .trait_env
+            .namespace_imports(module)
+            .cloned()
+            .unwrap_or_default();
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
         let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
 

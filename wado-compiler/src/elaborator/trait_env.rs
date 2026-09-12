@@ -1319,13 +1319,10 @@ impl TraitEnv {
         self.space_modules.get(&space)
     }
 
-    /// The pre-computed namespace aliases for `module`. Empty for a module
-    /// with none.
-    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> NamespaceImports {
-        self.module_namespace_imports
-            .get(module)
-            .cloned()
-            .unwrap_or_default()
+    /// The pre-computed namespace aliases for `module`. Every loaded module has
+    /// a table, empty where it wrote no `use ns from "..."`.
+    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> Option<&NamespaceImports> {
+        self.module_namespace_imports.get(module)
     }
 
     /// Every trait with its supertrait closure.

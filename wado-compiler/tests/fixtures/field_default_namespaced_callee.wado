@@ -1,16 +1,17 @@
 // Regression test: a field default resolves in the file that wrote it, import
 // aliases included. Omitting the field from another file must not ask that file
-// to know an alias it never wrote.
+// to know an alias it never wrote — for a call the alias qualifies, and for a
+// type it spells, which is a separate lookup.
 
 use { println, Stdout } from "core:cli";
-use { Cfg, via_ns_of } from "./sub/field_default_namespaced_callee_a.wado";
+use { Cfg, typed_of, via_ns_of } from "./sub/field_default_namespaced_callee_a.wado";
 
 export fn run() with Stdout {
     let c = Cfg { x: 1 };
-    println(`${c.x} ${via_ns_of(&c)}`);
+    println(`${c.x} ${via_ns_of(&c)} ${typed_of(&c)}`);
 }
 
 __DATA__
 {
-    "stdout": "1 11\n"
+    "stdout": "1 11 55\n"
 }

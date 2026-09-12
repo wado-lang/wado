@@ -758,11 +758,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Not an l-value.
+            // Not an l-value. The value is its declaring module's AST, walked
+            // again here, so it travels exactly as a default does and names
+            // none of this function's binders.
             let const_module = assoc.module.clone();
+            let travelled = ctx.enter_travelled_expr(std::iter::empty());
             self.with_resolving_home(Some(const_module), |s| {
                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
             });
+            ctx.leave_travelled_expr(travelled);
             return assoc.ty;
         }
 

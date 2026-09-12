@@ -420,11 +420,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
 
+        // The alias belongs to whichever module wrote this node, so a type a
+        // travelled expression spells `ns::Type` reads its author's `use ns`.
         if self
-            .sem
-            .imports
-            .namespace_imports
-            .contains_key(namespaced.namespace.as_str())
+            .namespace_alias_source(&namespaced.namespace, namespaced.id)
+            .is_some()
         {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the

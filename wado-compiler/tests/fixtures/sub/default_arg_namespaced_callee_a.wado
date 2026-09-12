@@ -4,7 +4,14 @@
 
 use nsb from "./default_arg_namespaced_callee_b.wado";
 
+global CHOSEN: nsb::Pick = nsb::Pick::Case(41);
+
 pub fn with_default(v: i32 = nsb::make()) -> i32 {
+    return v;
+}
+
+// The alias qualifies a *pattern* here, which is a lookup of its own.
+pub fn picked(v: i32 = match CHOSEN { nsb::Case(n) => n, Other => 0 }) -> i32 {
     return v;
 }
 
