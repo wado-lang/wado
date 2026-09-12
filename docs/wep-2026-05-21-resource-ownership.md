@@ -50,11 +50,19 @@ traps.
 | Affine resource      | a CM `own`/`borrow` or waitable handle, or a guest one | Move-only + a check | `resource.drop` / `dtor` |
 | Host-object resource | a Wasm GC reference to a host object (no `dtor`)       | Value semantics     | Wasm GC                  |
 | Non-owning token     | an index naming something owned elsewhere (no `dtor`)  | Value semantics     | none of its own          |
+| Unreclaimed handle   | an index into a host table nobody frees (no `dtor`)    | Value semantics     | none — it leaks          |
 
 The `dtor` decides the kind, not the representation. A handle that owns one must
 be move-only, because copying it aliases a destructor; without one there is
 nothing to free, so the handle is an ordinary value. `i32`-vs-`externref` is
-orthogonal to all three rows.
+orthogonal to all four rows.
+
+The three `dtor`-less rows are one linearity, and
+[Resource Inheritance](./wep-2026-04-28-resource-inheritance.md) gives it a
+surface spelling: `#[cm(..., linearity = "unrestricted")]`, against an
+`"affine"` that is the default and so goes unwritten. Only Tide's resources
+declare it today; the non-owning tokens still take their value semantics from
+the absence of a `dtor` alone.
 
 ### Non-owning tokens
 
@@ -75,6 +83,18 @@ travels inside a struct by value (`WaitEvent.handle`).
 
 A referent with neither backing — allocated per call from unbounded runtime
 input — is affine instead: a copyable index would leak it.
+
+### Unreclaimed handles
+
+Tide's browser handles are the exception the rule above names and then accepts.
+They are indices into a host table allocated per call from unbounded runtime
+input, with no affine owner and no immortal bound, so by that rule they should be
+affine — and they cannot be, because an upcast in a `resource extends` hierarchy
+copies the handle
+([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Value
+semantics is bought here at the price the rule warns of: nothing frees them, and
+each one costs a table slot for the life of the instance. That is a known gap of
+that WEP, not a fourth way to be safe.
 
 The rest of this WEP concerns affine resources.
 
@@ -688,7 +708,7 @@ client.
 - [CM Canonical ABI — `lift_own` / `lift_borrow`](../vendor/component-model/design/mvp/CanonicalABI.md)
 - [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
 - [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
-- [Resource Inheritance and Downcast](./wep-2026-04-28-resource-inheritance.md)
+- [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
 - [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second

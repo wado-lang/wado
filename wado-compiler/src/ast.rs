@@ -1361,12 +1361,13 @@ impl Attribute {
         self.args.iter().any(|arg| arg.name() == name)
     }
 
-    /// The backing `#[cm(..., type=...)]` declares, if any.
-    pub fn cm_resource_backing(&self) -> Option<CmResourceBacking> {
+    /// The linearity `#[cm(..., linearity=...)]` declares, if any.
+    pub fn cm_resource_linearity(&self) -> Option<CmResourceLinearity> {
         if self.name != "cm" {
             return None;
         }
-        self.kv_value("type").and_then(CmResourceBacking::parse)
+        self.kv_value("linearity")
+            .and_then(CmResourceLinearity::parse)
     }
 
     /// Returns the parsed CM interface import (`namespace:package/interface[@v][#fn]`)
@@ -1407,19 +1408,25 @@ pub enum CmBoundary {
     Name(String),
 }
 
-/// How a `#[cm(..., type=...)]` resource is represented at the CM boundary.
-/// See `docs/wep-2026-04-28-resource-inheritance.md`.
+/// The substructural discipline a `#[cm(..., linearity=...)]` resource
+/// declares. `Affine` is move-only and carries a drop obligation; `Unrestricted`
+/// is a copyable value that owns nothing, so nothing has to free it. Omitting
+/// the field reads as `Affine`.
+///
+/// The representation follows from this rather than standing beside it: an
+/// affine resource crosses as a CM `own` / `borrow` handle, an unrestricted one
+/// as a plain integer. See `docs/wep-2026-04-28-resource-inheritance.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CmResourceBacking {
-    ExternHandle,
-    I32,
+pub enum CmResourceLinearity {
+    Affine,
+    Unrestricted,
 }
 
-impl CmResourceBacking {
+impl CmResourceLinearity {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
-            "extern-handle" => Some(Self::ExternHandle),
-            "i32" => Some(Self::I32),
+            "affine" => Some(Self::Affine),
+            "unrestricted" => Some(Self::Unrestricted),
             _ => None,
         }
     }

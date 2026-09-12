@@ -534,15 +534,16 @@ fn cm_attr_cm_name(attrs: &[crate::ast::Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// Whether a resource declares `#[cm(..., type = "extern-handle")]`.
-fn extern_handle_backed(attrs: &[crate::ast::Attribute]) -> bool {
+/// Whether a resource declares `#[cm(..., linearity = "unrestricted")]`.
+fn unrestricted_resource(attrs: &[crate::ast::Attribute]) -> bool {
     attrs
         .iter()
-        .any(|a| a.cm_resource_backing() == Some(crate::ast::CmResourceBacking::ExternHandle))
+        .any(|a| a.cm_resource_linearity() == Some(crate::ast::CmResourceLinearity::Unrestricted))
 }
 
-/// The CM type an extern-handle crosses the boundary as. No CM value type is a
-/// reference, so a copyable handle is an integer — the WEP records why.
+/// The CM type an unrestricted resource crosses the boundary as. No CM value
+/// type is a reference, so a copyable handle is an integer — the WEP records
+/// why.
 fn extern_handle_type(span: crate::token::Span) -> Type {
     Type::Named(crate::ast::NamedType::new(
         crate::ast::AstId::fresh(),
@@ -834,9 +835,9 @@ pub struct CmInterfaceRegistry {
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
 
-    /// Resources declared `#[cm(..., type = "extern-handle")]`, registered as
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`, registered as
     /// `u32` newtypes rather than in [`Self::resources`].
-    extern_handle_resources: IndexSet<(String, String)>,
+    unrestricted_resources: IndexSet<(String, String)>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
     /// Key: `(source_interface, wado_name)`. Value:
@@ -1515,11 +1516,11 @@ impl CmInterfaceRegistry {
         Self::default()
     }
 
-    /// Whether the resource `name` declared in `source` takes the extern-handle
-    /// backing, and so crosses the boundary as the universal handle.
+    /// Whether the resource `name` declared in `source` is unrestricted, and so
+    /// crosses the boundary as the universal handle rather than a CM handle.
     #[must_use]
-    pub fn is_extern_handle_resource(&self, source: &str, name: &str) -> bool {
-        self.extern_handle_resources
+    pub fn is_unrestricted_resource(&self, source: &str, name: &str) -> bool {
+        self.unrestricted_resources
             .contains(&(source.to_string(), name.to_string()))
     }
 
@@ -1543,7 +1544,7 @@ impl CmInterfaceRegistry {
             return ty.clone();
         };
         match self.source_interface(named) {
-            Some(source) if self.is_extern_handle_resource(&source, &named.name) => {
+            Some(source) if self.is_unrestricted_resource(&source, &named.name) => {
                 inner.as_ref().clone()
             }
             _ => ty.clone(),
@@ -1751,11 +1752,11 @@ impl CmInterfaceRegistry {
                 // Extract source interface path from #[cm] attribute
                 // Format: #[cm("wasi:cli/terminal-input@0.3.0-rc-2026-01-06#terminal-input")]
                 let source_interface = Self::cm_source_interface(&resource.attrs);
-                // An extern-handle backing erases the resource: the boundary sees
+                // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
-                if extern_handle_backed(&resource.attrs) {
-                    self.extern_handle_resources
+                if unrestricted_resource(&resource.attrs) {
+                    self.unrestricted_resources
                         .insert((source_interface.clone(), resource.name.clone()));
                     register_unique(
                         &mut self.newtypes,
@@ -2993,7 +2994,7 @@ impl CmInterfaceRegistry {
                 // boundary path lowers it to, but it names no CM type: the WIT
                 // spells the handle inline, so no alias declares it.
                 if source.starts_with(interface_prefix)
-                    && !self.is_extern_handle_resource(source, name)
+                    && !self.is_unrestricted_resource(source, name)
                 {
                     Some((name.as_str(), ty))
                 } else {
@@ -3471,7 +3472,7 @@ impl CmInterfaceRegistry {
                     || (keep_handles
                         && source
                             .as_deref()
-                            .is_some_and(|s| self.is_extern_handle_resource(s, &named.name)));
+                            .is_some_and(|s| self.is_unrestricted_resource(s, &named.name)));
                 if kept {
                     ty.clone()
                 } else if let Some(aliased_ty) = self.resolve_newtype_ref(named) {
@@ -4885,7 +4886,7 @@ mod tests {
         let registry = registry_from(
             "web:dom",
             r#"
-            #[cm("web:dom/handle", type = "extern-handle")]
+            #[cm("web:dom/handle", linearity = "unrestricted")]
             pub resource Handle {
                 #[cm("web:dom/handle#sibling")]
                 #[cm_params("self", "other")]
@@ -4918,7 +4919,7 @@ mod tests {
         let registry = registry_from(
             "web:dom",
             r#"
-            #[cm("web:dom/node", type = "extern-handle")]
+            #[cm("web:dom/node", linearity = "unrestricted")]
             pub resource Node {}
 
             #[cm("web:dom/types")]

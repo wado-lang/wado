@@ -314,7 +314,7 @@ pub fn cm_type_to_type_id(
                 // not a module per interface.
                 .or_else(|| {
                     let source = registry.resolve_cm_source_for(named, Some(wasi_package))?;
-                    if !registry.is_extern_handle_resource(&source, &named.name) {
+                    if !registry.is_unrestricted_resource(&source, &named.name) {
                         return None;
                     }
                     let (namespace, package) = cm_package_from_source(&source)?;
