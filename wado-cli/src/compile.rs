@@ -338,10 +338,7 @@ pub async fn try_compile_with_run_cache(
         }
     };
 
-    let base_path = path
-        .parent()
-        .map(std::path::Path::to_path_buf)
-        .unwrap_or_default();
+    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
     // Load the nearest manifest once: it seeds both the host's `[dependencies]`
     // index and the Kiln pipeline's `[build-dependencies]` resolution.
     let manifest_pair = load_nearest_manifest(path);
@@ -617,7 +614,7 @@ pub(crate) async fn prepare_kiln(
     let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
         entry_file
             .parent()
-            .map(std::path::Path::to_path_buf)
+            .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."))
     });
     let (mut invocations, identities, inline_diagnostics) =
@@ -1002,8 +999,8 @@ pub struct Artifact {
     pub output_path: Option<PathBuf>,
 }
 
-/// Report a written file, for the commands that exist to produce one:
-/// `compile`, `build`, `publish`, `wit`, `syntax`. A driver stays quiet.
+/// Report a written file. A command that exists to produce one says so; a
+/// `run` / `serve` driver, which only builds on the way through, stays quiet.
 pub fn announce_artifact(output: impl AsRef<Path>) {
     eprintln!("Generated: {}", output.as_ref().display());
 }

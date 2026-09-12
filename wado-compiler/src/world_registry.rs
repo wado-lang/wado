@@ -254,8 +254,7 @@ impl WorldRegistry {
     /// Register a world from a parsed declaration, keyed by the `#[cm("…")]`
     /// fully-qualified name or, failing that, the `PascalCase` name. The
     /// `lookup_interface_*` callbacks resolve an `export Foo;` / `import Foo;`
-    /// to its CM FQ; `None` skips the entry. Only the stdlib declares worlds,
-    /// so a duplicate `fq_name` is a broken stdlib rather than a user error.
+    /// to its CM FQ; `None` skips the entry.
     pub fn register(
         &mut self,
         world: &WorldDecl,
@@ -279,9 +278,7 @@ impl WorldRegistry {
                 }
                 WorldExport::Interface(iface) => {
                     // The two-pass stdlib bootstrap registers every `pub
-                    // interface Foo` before any world, so a missing lookup here
-                    // is a broken stdlib: a mismatched name, or a missing
-                    // `#[cm("...")]`.
+                    // interface Foo` before any world reaches here.
                     let Some(lookup) = lookup_interface_export(&iface.interface_name) else {
                         panic!(
                             "WorldRegistry: interface export `{}` in world `{fq_name}` \

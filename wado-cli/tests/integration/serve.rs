@@ -195,7 +195,7 @@ fn http_get(port: u16, path: &str, timeout: Duration) -> (u16, String) {
     parse_response(&http_get_raw(port, path, timeout))
 }
 
-/// The startup banner is the first thing the server says.
+/// `serve` builds on its way to running, so it announces no artifact.
 #[test]
 fn startup_announces_no_build_artifact() {
     let (_guard, _port, stderr) = start_serve("serve_hello.wado", &[]);

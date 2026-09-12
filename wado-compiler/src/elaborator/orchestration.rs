@@ -2055,9 +2055,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// The order every later phase walks the loaded modules in: by source
     /// path, so one compilation of one tree always yields the same package.
-    pub(super) fn sorted_module_sources(
-        modules: &IndexMap<ModuleSource, Module>,
-    ) -> Vec<ModuleSource> {
+    fn sorted_module_sources(modules: &IndexMap<ModuleSource, Module>) -> Vec<ModuleSource> {
         let mut sources: Vec<ModuleSource> = modules.keys().cloned().collect();
         sources.sort_by_key(std::string::ToString::to_string);
         sources
