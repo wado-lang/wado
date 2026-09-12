@@ -1,13 +1,9 @@
 // A `crate::` or `super::` path belongs in a `use` item, not inline where the
 // item is read (AGENTS.md > General Rules, which also says why clippy is not
-// the gate).
-//
-// This is the edit-time guard's scanner only (`.claude/hooks/`), which has to
-// answer inside a keystroke. The rule's authority is
-// `package-gale/tools/rust_inline_paths.wado`, which parses with the Gale Rust
-// grammar and owns `rust-inline-paths.json`; run it through
-// `scripts/check-rust-paths.sh`. The two agree over the whole corpus — where
-// they ever disagree, the parser is right.
+// the gate). This scanner serves the edit-time guard in `.claude/hooks/`, which
+// has to answer inside a keystroke. The rule's authority is the parser in
+// `package-gale/tools/rust_inline_paths.wado`: the two agree over the whole
+// corpus, and where they ever disagree the parser is right.
 
 // A Rust identifier runs over `XID_Continue`, so `αcrate` is one name and not
 // a path root. `$crate` is macro hygiene, which no `use` can replace, and

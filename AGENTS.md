@@ -54,7 +54,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Write all documentation and comments in clear, simple English.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Don't document implementation details, which go stale.
-- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. `mise run check-rust-paths` gates this in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so what counts as a path is the grammar's answer; `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
+- Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. `mise run check-rust-paths` gates this in CI against `scripts/rust-inline-paths.json`, which holds what each file has left to migrate. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
 - A pre-existing issue must be fixed, with TDD when practical.

@@ -1,17 +1,7 @@
 //! Every `crate::` / `super::` path a Rust file writes outside a `use` item
-//! (`AGENTS.md` > General Rules), found with the Gale-generated Rust parser.
-//! The grammar decides what is a path: a comment, a string, `$crate` and a raw
-//! identifier are settled by the lexer, and what encloses a path by the parse
-//! tree, rather than by a regular expression reading bytes.
-//!
-//! A file the grammar cannot parse is reported, never counted: recovery drops
-//! tokens, so a count taken from a broken tree would license whatever it failed
-//! to see.
-//!
-//! The corpus predates the rule, so `scripts/rust-inline-paths.json` records
-//! what each file still carries and `--check` fails only on a file that grew
-//! past it. `scripts/check-rust-paths.sh` drives every mode; paths open
-//! relative to the first preopen, so run it from the repository root.
+//! (`AGENTS.md` > General Rules), as the grammar sees it rather than as a
+//! regular expression over bytes does. `scripts/check-rust-paths.sh` drives
+//! every mode and `scripts/rust-inline-paths.json` is the baseline it ratchets.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -21,51 +11,13 @@ use rust from "../tests/grammars/RustLexer.g4"
             output_dir: "../tests/generated/cst_rust",
         },
     };
-use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
+use { parse_rust, corpus_root, read_file, collect_paths } from "./rust_corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 use { TreeMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
 global BASELINE_PATH: String = "scripts/rust-inline-paths.json";
-
-// The same ports the driver test installs; see `tests/driver_cst_rust_test.wado`.
-struct RustBase {
-}
-
-impl RustLexerBase for RustBase {
-    fn sof(&self, view: LexerView) -> bool {
-        resume view.la(-1) == -1;
-    }
-
-    fn float_literal_possible(&self, view: LexerView) -> bool {
-        resume view.la(-1) != '.' as i32;
-    }
-
-    fn float_dot_possible(&self, view: LexerView) -> bool {
-        let c = view.la(1);
-        if c == '.' as i32 || c == '_' as i32 {
-            resume false;
-        }
-        if c >= 'a' as i32 && c <= 'z' as i32 || c >= 'A' as i32 && c <= 'Z' as i32 {
-            resume false;
-        }
-        resume true;
-    }
-}
-
-struct RustPBase {
-}
-
-impl RustParserBase for RustPBase {
-    fn next_lt(&self, p: &Parser) -> bool {
-        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
-    }
-
-    fn next_gt(&self, p: &Parser) -> bool {
-        resume p.token_start(p.lt(1)) - p.token_start(p.lt(0)) == 1;
-    }
-}
 
 /// One path written where its item is read, at a 1-based line and column.
 pub struct InlinePath {
@@ -74,25 +26,15 @@ pub struct InlinePath {
     pub text: String,
 }
 
-fn parse_rust(source: &String) -> rust::ParseResult {
-    let mut base = RustBase {};
-    let mut pbase = RustPBase {};
-    with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
-        return rust::parse(source);
-    };
-}
-
 /// The character offset of every `crate` / `super` that opens a path outside a
 /// `use` item, paired with the text a report quotes for it.
-///
-/// A `useDeclaration` subtree is the one place the rule allows such a path, and
-/// the row scan tracks it by the depth it opened at: a `use` item nests no
-/// other, so the first one seen owns every row until its own close.
 fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     let cst = &result.cst;
     let toks = &result.tokens;
     let mut out: List<[i32, String]> = [];
     let mut depth = 0;
+    // A `use` item nests no other, so the depth the first one opened at is
+    // enough to know when its subtree closes.
     let mut use_depth = -1;
     for let mut row = 0; row < cst.row_count(); row += 1 {
         match cst.tag[row] {
@@ -128,8 +70,6 @@ fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     return out;
 }
 
-/// `roots` carries source-ordered offsets, so one walk of the characters
-/// resolves every line and column.
 fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
     let mut out: List<InlinePath> = List::with_capacity(roots.len());
     let mut line = 1;
@@ -152,11 +92,8 @@ fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
     return out;
 }
 
-/// Every inline path in `source`, or why the file could not be parsed.
-///
-/// An unparsable file is an error rather than a clean zero: recovery drops
-/// tokens, and a count taken from a broken tree would license whatever it
-/// failed to see.
+/// Every inline path in `source`, or why it could not be parsed: recovery drops
+/// tokens, so a count taken from a broken tree would license what it missed.
 pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
     let result = parse_rust(source);
     if result.diagnostics.len() > 0 {
@@ -166,27 +103,19 @@ pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
     return Result::Ok(locate(result.tokens.chars, &path_roots(&result)));
 }
 
-fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
-    let file = match root.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln(`error: ${*path}: cannot open: ${e:?}`);
-            return null;
-        },
+/// The inline paths `path` carries. A file that cannot be read or parsed lands
+/// in `failed`, never in a clean count.
+fn scan(root: &Descriptor, path: &String, failed: &mut i32) -> List<InlinePath> with Stderr {
+    let Some(source) = read_file(root, path) else {
+        *failed += 1;
+        return [];
     };
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let bytes = read_stream.read_to_end();
-    read_stream.drop();
-    return match String::from_utf8(bytes) {
-        Ok(s) => Option::Some(s),
-        Err(e) => {
-            eprintln(`error: ${*path}: not UTF-8: ${e}`);
-            return null;
+    return match find_inline_paths(&source) {
+        Ok(hits) => hits,
+        Err(why) => {
+            eprintln(`error: ${*path}: ${why}`);
+            *failed += 1;
+            return [];
         },
     };
 }
@@ -200,7 +129,7 @@ fn write_file(root: &Descriptor, path: &String, content: &String) -> bool with S
     ).wait() {
         Ok(f) => f,
         Err(e) => {
-            eprintln(`error: ${*path}: cannot write: ${e:?}`);
+            eprintln(`error: ${*path}: cannot create: ${e:?}`);
             return false;
         },
     };
@@ -218,62 +147,18 @@ fn write_file(root: &Descriptor, path: &String, content: &String) -> bool with S
     return true;
 }
 
-fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("error: no preopened directories available");
-        return null;
-    }
-    return Option::Some(dirs[0].0);
-}
-
-fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with Stderr {
-    let mut paths: List<String> = [];
-    for let mut i = 0; i < argv.len(); i += 1 {
-        if argv[i] == "--paths-from" {
-            // Without this the option falls through the `.rs` arm and the run
-            // reports a clean zero files.
-            assert i + 1 < argv.len(), "--paths-from needs a file";
-            i += 1;
-            // An unreadable list yields no paths, which would otherwise read as
-            // a clean run. Keep it as the one path that reports itself.
-            let Some(list) = read_file(root, &argv[i]) else {
-                paths.push(argv[i]);
-                continue;
-            };
-            for let line of list.lines() {
-                if !line.is_empty() {
-                    paths.push(line);
-                }
-            }
-        } else if argv[i].ends_with(".rs") {
-            paths.push(argv[i]);
-        }
-    }
-    return paths;
-}
-
 /// File path to the number of inline paths it carries, omitting the clean ones.
-fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> List<[String, i32]> with Stderr {
-    let mut counts: List<[String, i32]> = [];
-    for let path of paths {
-        let Some(source) = read_file(root, path) else {
-            *failed += 1;
-            continue;
-        };
-        match find_inline_paths(&source) {
-            Ok(hits) => {
-                if hits.len() > 0 {
-                    counts.push([*path, hits.len()]);
-                }
-            },
-            Err(why) => {
-                eprintln(`error: ${path}: ${why}`);
-                *failed += 1;
-            },
+/// The baseline is serialized straight from this, so the walk is sorted.
+fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with Stderr {
+    let mut sorted = *paths;
+    sorted.sort();
+    let mut counts = TreeMap::<String, i32>::new();
+    for let path of &sorted {
+        let found = scan(root, path, failed).len();
+        if found > 0 {
+            counts[*path] = found;
         }
     }
-    counts.sort_by(|a: &[String, i32], b: &[String, i32]| a.0.cmp(&b.0));
     return counts;
 }
 
@@ -290,12 +175,8 @@ fn read_baseline(root: &Descriptor) -> Option<TreeMap<String, i32>> with Stderr 
     };
 }
 
-fn write_baseline(root: &Descriptor, counts: &List<[String, i32]>) -> bool with Stderr {
-    let mut map = TreeMap::<String, i32>::new();
-    for let entry of counts {
-        map[entry.0] = entry.1;
-    }
-    let text = match to_string_pretty(&map, Option::Some('\n')) {
+fn write_baseline(root: &Descriptor, counts: &TreeMap<String, i32>) -> bool with Stderr {
+    let text = match to_string_pretty(counts, Option::Some('\n')) {
         Ok(s) => s,
         Err(e) => {
             eprintln(`error: cannot serialize the baseline: ${e:?}`);
@@ -305,32 +186,24 @@ fn write_baseline(root: &Descriptor, counts: &List<[String, i32]>) -> bool with 
     return write_file(root, &BASELINE_PATH, &text);
 }
 
-fn total(counts: &List<[String, i32]>) -> i32 {
+fn total(counts: &TreeMap<String, i32>) -> i32 {
     let mut sum = 0;
-    for let entry of counts {
-        sum += entry.1;
-    }
-    return sum;
-}
-
-fn baseline_total(baseline: &TreeMap<String, i32>) -> i32 {
-    let mut sum = 0;
-    for let [_path, n] of baseline.entries() {
+    for let [_path, n] of counts.entries() {
         sum += *n;
     }
     return sum;
 }
 
 /// Every file carrying more than its baseline allows, as `[file, was, now]`.
-fn grown(counts: &List<[String, i32]>, baseline: &TreeMap<String, i32>) -> List<[String, i32, i32]> {
+fn grown(counts: &TreeMap<String, i32>, baseline: &TreeMap<String, i32>) -> List<[String, i32, i32]> {
     let mut out: List<[String, i32, i32]> = [];
-    for let entry of counts {
-        let was = match baseline.get(entry.0) {
+    for let [path, now] of counts.entries() {
+        let was = match baseline.get(*path) {
             Some(n) => n,
             None => 0,
         };
-        if entry.1 > was {
-            out.push([entry.0, was, entry.1]);
+        if *now > was {
+            out.push([*path, was, *now]);
         }
     }
     return out;
@@ -349,21 +222,9 @@ fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with (Stdout, Stder
     let mut found = 0;
     let mut failed = 0;
     for let path of paths {
-        let Some(source) = read_file(root, path) else {
-            failed += 1;
-            continue;
-        };
-        match find_inline_paths(&source) {
-            Ok(hits) => {
-                for let hit of hits {
-                    println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
-                    found += 1;
-                }
-            },
-            Err(why) => {
-                eprintln(`error: ${path}: ${why}`);
-                failed += 1;
-            },
+        for let hit of scan(root, path, &mut failed) {
+            println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
+            found += 1;
         }
     }
     println(`${found} inline paths`);
@@ -395,7 +256,7 @@ fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 wi
         return 0;
     }
     let left = total(&counts);
-    let shrunk = baseline_total(&baseline) - left;
+    let shrunk = total(&baseline) - left;
     let ratchet = if shrunk > 0 { `, ${shrunk} fewer than the baseline — run --update` } else { "" };
     println(`ok: no file gained an inline path (${left} left${ratchet})`);
     return 0;
