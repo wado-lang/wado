@@ -296,6 +296,92 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span: root.span,
         });
     }
+
+    /// Resolve a call's arguments against parameter types that may still hold
+    /// this call's inference variables, each argument pinning what it answers
+    /// about them so a later one reads a refined type instead of a bare
+    /// variable.
+    ///
+    /// Three tiers decide who speaks when, mirroring the solver's own
+    /// ([`InferCtx::add`], [`InferCtx::add_expected_return`],
+    /// [`InferCtx::add_deferred`]):
+    ///
+    /// 1. Every argument whose parameter type is already settled, in source
+    ///    order.
+    /// 2. Each closure whose parameter types still held a variable when its
+    ///    turn came. A closure takes its parameter types off the signature and
+    ///    a variable is not a type its body could use: an operator applied to
+    ///    one dispatches against nothing and reaches WIR with no lowering.
+    ///    Waiting for the concrete arguments is what lets
+    ///    `late(|a, b| a + b, seed)` read `seed`'s type.
+    /// 3. A numeric literal pins last, and only what is still open. Its
+    ///    default (`i32` / `f64`) is not an answer, so locking a slot to it
+    ///    ahead of a typed neighbour or a closure body is exactly what tiers 1
+    ///    and 2 exist to avoid.
+    pub(super) fn resolve_args_against_params(
+        &mut self,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        param_types: &[TypeId],
+    ) -> Vec<TypeId> {
+        let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
+        let mut deferred: Vec<usize> = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            let param = param_types.get(i).copied();
+            if matches!(arg, ast::Expr::Closure(_)) && self.param_still_open(param) {
+                deferred.push(i);
+                continue;
+            }
+            resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param));
+        }
+        for i in deferred {
+            let param = param_types.get(i).copied();
+            resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param));
+        }
+        let resolved: Vec<TypeId> = resolved
+            .into_iter()
+            .map(|r| r.expect("every argument is resolved in one of the two passes"))
+            .collect();
+        for (i, arg) in args.iter().enumerate() {
+            if is_numeric_literal_arg(Some(arg))
+                && let Some(param) = param_types.get(i).copied()
+            {
+                let expected = self.apply_infer_holes(param);
+                self.solve_infer_holes_against(expected, resolved[i]);
+            }
+        }
+        resolved
+    }
+
+    /// Whether a parameter type still holds a variable nothing has answered.
+    fn param_still_open(&mut self, param_type: Option<TypeId>) -> bool {
+        let Some(param_type) = param_type else {
+            return false;
+        };
+        let settled = self.apply_infer_holes(param_type);
+        self.type_has_infer_hole(settled)
+    }
+
+    /// Resolve one call argument against a parameter type that may still hold
+    /// this call's inference variables, and pin what the argument answers about
+    /// them. See [`Self::resolve_args_against_params`] for the order the
+    /// arguments are walked in and why a numeric literal does not pin here.
+    fn resolve_arg_against_param(
+        &mut self,
+        arg: &ast::Expr,
+        ctx: &mut FunctionContext,
+        param_type: Option<TypeId>,
+    ) -> TypeId {
+        let Some(param_type) = param_type else {
+            return self.resolve_expr(arg, ctx, None);
+        };
+        let expected = self.apply_infer_holes(param_type);
+        let resolved = self.resolve_expr(arg, ctx, Some(expected));
+        if !is_numeric_literal_arg(Some(arg)) {
+            self.solve_infer_holes_against(expected, resolved);
+        }
+        resolved
+    }
 }
 
 impl TypeSystem {
@@ -729,15 +815,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
-            None => call
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    let expected_type = param_types.get(i).copied();
-                    self.resolve_expr(arg, ctx, expected_type)
-                })
-                .collect(),
+            None => self.resolve_args_against_params(&call.args, ctx, &param_types),
         };
 
         // Settle this resolution's variables. `solve_infer_var` keeps the

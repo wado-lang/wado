@@ -1339,6 +1339,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
+        // A slot answered with itself is not answered. The argument that
+        // supplied it is this call's own declaration frame, reaching the
+        // solver through a variable an earlier phase settled back onto the
+        // slot; taking it carries a rigid parameter into codegen, where it
+        // dies as `unsubstituted TypeParam`. Put the variable back so the
+        // blame below reports it at the call, as the free-function path does
+        // in `defer_or_report_uninferred_fn_type_args`. A slot the enclosing
+        // scope declares is a caller forwarding its own generics, which
+        // monomorphization resolves — hence the same `scope_params` guard.
+        let scope_params = self.scope_type_param_ids();
+        for (i, answer) in inferred.iter_mut().enumerate() {
+            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+                *answer = inst.vars[i];
+            }
+        }
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an

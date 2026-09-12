@@ -67,7 +67,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 diags.push(None);
                 continue;
             };
-            let var = self.mint_infer_var();
+            let var = self.mint_infer_var_named(&name);
             subst.insert(index, var);
             vars.push(var);
             // The parameter and the rest of the sentence stay apart so

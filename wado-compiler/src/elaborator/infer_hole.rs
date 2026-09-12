@@ -131,8 +131,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// to the variables it commits to. A variable nobody kept then reports
     /// nothing.
     pub(super) fn mint_infer_var(&mut self) -> TypeId {
+        self.mint_infer_var_for(None)
+    }
+
+    /// [`Self::mint_infer_var`] for a variable standing in for a named slot,
+    /// which every diagnostic that meets the variable renders it as. `?0` is
+    /// an internal identity and names nothing the source wrote.
+    pub(super) fn mint_infer_var_named(&mut self, slot_name: &str) -> TypeId {
+        self.mint_infer_var_for(Some(slot_name))
+    }
+
+    fn mint_infer_var_for(&mut self, slot_name: Option<&str>) -> TypeId {
         let var = InferVarId(self.infer_holes.solutions.len() as u32);
-        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
+        let hole = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let hole = tt.make_infer_var(var);
+            if let Some(name) = slot_name {
+                tt.name_infer_var(var, name.to_string());
+            }
+            hole
+        };
         assert!(
             self.infer_holes.solutions.insert(hole, None).is_none(),
             "inference variable {var} minted twice"

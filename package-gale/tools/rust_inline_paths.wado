@@ -268,8 +268,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     };
     let argv = args();
     let paths = collect_paths(&root, &argv);
-    let update = argv.into_iter().any(|a: String| a == "--update");
-    let check = argv.into_iter().any(|a: String| a == "--check");
+    let update = argv.into_iter().any(|a| a == "--update");
+    let check = argv.into_iter().any(|a| a == "--check");
     let status = if update || check { ratchet_mode(&root, &paths, update) } else { list_mode(&root, &paths) };
     if status != 0 {
         exit(status as u8);
