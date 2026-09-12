@@ -93,9 +93,9 @@ immortal bound, so the rule makes them affine. They cannot be: an upcast in a
 ([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)), and an
 affine handle may not be copied.
 
-So they get value semantics and pay what the rule warns of. Nothing frees them,
-and each one costs a table slot for the life of the instance. That is a known
-gap of that WEP, not a fourth way to be safe.
+They get value semantics instead, and pay for it. Nothing frees them, and each
+one costs a table slot for the life of the instance. That is a known gap of that
+WEP, not a fourth way to be safe.
 
 The rest of this WEP concerns affine resources.
 

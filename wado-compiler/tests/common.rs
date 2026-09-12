@@ -1032,6 +1032,14 @@ pub fn cli_linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     linker(engine)
 }
 
+/// What `host` reported, one `Code: message` line each.
+pub fn diagnostic_messages(host: &InMemoryHost) -> Vec<String> {
+    host.diagnostics()
+        .into_iter()
+        .map(|d| format!("{:?}: {}", d.code, d.message))
+        .collect()
+}
+
 /// Everything a `wado check` would report: elaboration diagnostics and the
 /// effect check that runs after it. Both, because a form the elaborator
 /// accepts can still be rejected downstream.
@@ -1042,11 +1050,7 @@ pub fn check_diagnostics(source: &str) -> Vec<String> {
         &host,
         Some("entry.wado"),
     ));
-    let mut out: Vec<String> = host
-        .diagnostics()
-        .into_iter()
-        .map(|d| format!("{:?}: {}", d.code, d.message))
-        .collect();
+    let mut out = diagnostic_messages(&host);
     out.extend(
         wado_compiler::check_effects_semantic(&sem)
             .into_iter()

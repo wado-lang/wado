@@ -419,7 +419,7 @@ An irrefutable ascription keeps its second job: it supplies type context, so
 - The construct does not say how the binding is produced. Extending `extends` to
   affine resources later can bind by reference without changing the surface,
   which a method returning `Option<T>` by value could not.
-- No `Option` is built, so the invariance sharp edge below never arises at a
+- No `Option` is built, so the container invariance below never arises at a
   narrowing site.
 
 The cost is that there is no expression form. A narrowing cannot be held as an

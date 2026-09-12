@@ -1,7 +1,7 @@
 //! `#[cm(..., linearity = "unrestricted")]` and `resource extends`.
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
-use crate::common::{InMemoryHost, check_diagnostics as diagnostics, runtime};
+use crate::common::{InMemoryHost, check_diagnostics as diagnostics, diagnostic_messages, runtime};
 use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
 
@@ -10,11 +10,7 @@ use wado_compiler::semantics::semantics;
 fn move_errors(source: &str) -> Vec<String> {
     let host = InMemoryHost::new();
     let sem = runtime().block_on(semantics(source, &host, Some("entry.wado")));
-    let rejected: Vec<String> = host
-        .diagnostics()
-        .into_iter()
-        .map(|d| format!("{:?}: {}", d.code, d.message))
-        .collect();
+    let rejected = diagnostic_messages(&host);
     assert!(
         rejected.is_empty(),
         "the source must reach the move check, got {rejected:?}"
