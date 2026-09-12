@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789199609848,
+  "lastUpdate": 1789211823462,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55233,6 +55233,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fe30fd382ca91941337721308368e798651a2eeb"
         },
         "date": 1789199609320,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a9e00393c76d4350322ce1b7ce018f13fb6200df",
+          "message": "Merge pull request #2033 from wado-lang/claude/nested-tagged-template-names-3qtg48\n\nfix(compiler): internal names that cannot collide, with source or with each other",
+          "timestamp": "2026-09-12T19:47:55+09:00",
+          "tree_id": "30e20113aa2395b912aa3371324d768e00dc214f",
+          "url": "https://github.com/wado-lang/wado/commit/a9e00393c76d4350322ce1b7ce018f13fb6200df"
+        },
+        "date": 1789211823160,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
