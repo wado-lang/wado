@@ -11,7 +11,9 @@ use std::rc::Rc;
 use crate::canonical::CanonicalIntrinsic;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::tir::EffectRef;
 use crate::token::Span;
 
 /// How a CM interface is imported, so codegen dispatches to the right encoding.
@@ -139,7 +141,7 @@ pub struct TraitBoundViolation {
     /// re-deriving both halves from a string built for Wasm.
     pub type_display: String,
     pub trait_display: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 /// A call to a `#[cm("...")]` member left unresolved at WIR build: only the
@@ -150,7 +152,7 @@ pub struct CmImportViolation {
     /// [`TraitBoundViolation::type_display`].
     pub call_display: String,
     pub cm_name: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 impl CmImportViolation {
@@ -217,7 +219,7 @@ impl WasmModuleInfo {
 
         // One func type per function
         for (i, func) in self.functions.iter().enumerate() {
-            let fq: Rc<str> = Rc::from(format!("__wasm_mod_type_{i}"));
+            let fq: Rc<str> = Rc::from(format!("$wasm_mod_type_{i}"));
             wir.types.push(WirTypeDef::Func(WirFuncType {
                 name: WirName { fq: fq.to_string() },
                 params: vec![WirType::I32; func.param_names.len()],
@@ -229,7 +231,7 @@ impl WasmModuleInfo {
         for (i, func) in self.functions.iter().enumerate() {
             let type_id = WirTypeId::new(
                 u32::try_from(i).unwrap(),
-                Rc::from(format!("__wasm_mod_type_{i}")),
+                Rc::from(format!("$wasm_mod_type_{i}")),
             );
             let mut body = func.body.clone();
             for instr in &mut body {
@@ -265,7 +267,7 @@ impl WasmModuleInfo {
                     desc: WirExportDesc::Func {
                         func_id: WirFuncId::new(
                             u32::try_from(i).unwrap(),
-                            Rc::from(format!("__wasm_mod_func_{i}")),
+                            Rc::from(format!("$wasm_mod_func_{i}")),
                         ),
                     },
                 });
@@ -843,14 +845,14 @@ pub struct WirFunction {
     /// Generic instantiation origin.
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
-    pub effects: Vec<crate::tir::EffectRef>,
+    pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].
-    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
+    pub compiler_item: Option<CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
     /// Declared locals the emitter allocates from, finalized once per producer
@@ -3016,7 +3018,7 @@ pub struct WirGlobal {
     pub mutable: bool,
     /// Whether the user declared this global as `global mut`. A
     /// user-immutable global (`false`) is currently Wasm-mutable only
-    /// because its initializer was extracted into `__initialize_module`;
+    /// because its initializer was extracted into `$initialize_module`;
     /// `wir_optimize::const_global` promotes it back to an eager Wasm
     /// constant when that init folds to a const expression.
     pub wado_mutable: bool,

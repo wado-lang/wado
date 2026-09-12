@@ -12,6 +12,7 @@ use crate::tir::TypeTable;
 use crate::token::Span;
 
 use super::arena_query;
+use crate::compiler_trace;
 
 pub(super) struct DropValueRule;
 
@@ -35,7 +36,7 @@ impl Rule for DropValueRule {
                 continue;
             };
             let span = engine.body.stmts[s].span;
-            crate::compiler_trace!("drop_value", "strip {label}");
+            compiler_trace!("drop_value", "strip {label}");
             strip_exits(engine, block, &label);
             new_stmts.push(engine.alloc_stmt(StmtKind::LabeledBlock { label, block, role }, span));
             changed = true;

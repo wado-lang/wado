@@ -1,5 +1,7 @@
 //! Utility functions for the elaborator phase.
 
+use crate::ast::Pattern;
+use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Check if a positive integer literal value fits in the target integer type.
@@ -394,10 +396,7 @@ pub(super) fn parse_int_bits(repr: &str, is_unsigned: bool) -> Result<i128, Stri
 
 /// A range-pattern endpoint's value, as the bits of the scrutinee's own type.
 /// `None` for an endpoint denoting no integer, which annotate diagnoses.
-pub(super) fn range_endpoint_to_i128(
-    pattern: &crate::ast::Pattern,
-    is_unsigned: bool,
-) -> Option<i128> {
+pub(super) fn range_endpoint_to_i128(pattern: &Pattern, is_unsigned: bool) -> Option<i128> {
     use crate::ast::{Literal, Pattern};
     match pattern {
         Pattern::Literal(Literal::Number(repr)) => parse_int_bits(repr, is_unsigned).ok(),
@@ -413,7 +412,7 @@ pub(super) fn range_endpoint_to_i128(
             bindings,
             ..
         } if bindings.is_empty() => {
-            super::stmt::primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
+            primitive_assoc_const_to_i128(variant_qualifier.as_ref(), variant_name)
         }
         _ => None,
     }

@@ -56,6 +56,11 @@ pub mod semantics;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
+use crate::ast::UseDecl;
+use crate::component_model::wado_primitive_name_to_cm;
+use crate::name::entry_dir_of;
+use crate::wit_consume::module_host_leaf_imports;
+use crate::world_registry::WorldInfo;
 pub use stdlib_snapshot::prewarm as prewarm_stdlib_snapshot;
 pub mod niri;
 pub mod symbol;
@@ -126,9 +131,9 @@ fn report_violations<H: CompilerHost>(
     logger: &Logger<'_, H>,
     entry_filename: &str,
     code: compiler_host::Code,
-    violations: impl IntoIterator<Item = (crate::token::Span, String)>,
+    violations: impl IntoIterator<Item = (Span, String)>,
 ) -> Result<(), Bail> {
-    let mut seen = crate::hashmap::IndexSet::default();
+    let mut seen = hashmap::IndexSet::default();
     for (span, message) in violations {
         if seen.insert((span, message.clone())) {
             let _ = logger.error(compiler_host::Diagnostic {
@@ -340,7 +345,7 @@ pub struct CompilerOptions {
     /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
     /// Consumed by the param-resolution pass against `#[param]` globals; an
     /// entry matching no declaration is reported per `param_policy.unknown`.
-    pub param_overrides: crate::hashmap::IndexMap<String, String>,
+    pub param_overrides: hashmap::IndexMap<String, String>,
     /// Severity policy for the three param-resolution diagnostic classes
     /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
     pub param_policy: param_resolution::ParamPolicy,
@@ -368,7 +373,7 @@ impl Default for CompilerOptions {
             lib_world: None,
             lib_interface_export: false,
             providers: Vec::new(),
-            param_overrides: crate::hashmap::IndexMap::default(),
+            param_overrides: hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
             embed_wit_contract: None,
         }
@@ -407,39 +412,38 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     use crate::compiler_host::{Code, DiagnosticSpan};
 
     let mut out = Vec::new();
-    let mut collect =
-        |ids: &[crate::ast::AstId], fn_code: Code, global_code: Code, reason: &str| {
-            for id in ids {
-                let Some(owning) = sem.module_of_id(*id) else {
-                    continue;
+    let mut collect = |ids: &[AstId], fn_code: Code, global_code: Code, reason: &str| {
+        for id in ids {
+            let Some(owning) = sem.module_of_id(*id) else {
+                continue;
+            };
+            let Some(module) = sem.modules.get(owning) else {
+                continue;
+            };
+            let filename = owning.source_path();
+            for item in &module.items {
+                let (code, message, span) = match item {
+                    Item::Function(func) if func.id == *id => (
+                        fn_code,
+                        format!("function `{}` {reason}", func.name),
+                        &func.name_span,
+                    ),
+                    Item::Global(global) if global.id == *id => (
+                        global_code,
+                        format!("global `{}` {reason}", global.name),
+                        &global.name_span,
+                    ),
+                    _ => continue,
                 };
-                let Some(module) = sem.modules.get(owning) else {
-                    continue;
-                };
-                let filename = owning.source_path();
-                for item in &module.items {
-                    let (code, message, span) = match item {
-                        Item::Function(func) if func.id == *id => (
-                            fn_code,
-                            format!("function `{}` {reason}", func.name),
-                            &func.name_span,
-                        ),
-                        Item::Global(global) if global.id == *id => (
-                            global_code,
-                            format!("global `{}` {reason}", global.name),
-                            &global.name_span,
-                        ),
-                        _ => continue,
-                    };
-                    out.push(Diagnostic {
-                        severity: Severity::Warning,
-                        code,
-                        message,
-                        span: Some(DiagnosticSpan::from_span(span, Some(filename.as_str()))),
-                    });
-                }
+                out.push(Diagnostic {
+                    severity: Severity::Warning,
+                    code,
+                    message,
+                    span: Some(DiagnosticSpan::from_span(span, Some(filename.as_str()))),
+                });
             }
-        };
+        }
+    };
 
     collect(
         &sem.liveness.dead_items,
@@ -480,7 +484,7 @@ struct LibSurface {
 
 fn collect_lib_surface(
     entry_source: &ModuleSource,
-    modules: &crate::hashmap::IndexMap<ModuleSource, ast::Module>,
+    modules: &hashmap::IndexMap<ModuleSource, ast::Module>,
 ) -> LibSurface {
     use crate::ast::Item;
     use crate::world_registry::WorldExportInfo;
@@ -531,7 +535,7 @@ fn collect_lib_surface(
 }
 
 fn first_duplicate<'a>(names: impl IntoIterator<Item = &'a str>) -> Option<String> {
-    let mut seen = crate::hashmap::IndexSet::default();
+    let mut seen = hashmap::IndexSet::default();
     for name in names {
         if !seen.insert(name.to_string()) {
             return Some(name.to_string());
@@ -561,7 +565,7 @@ fn synthesize_lib_world_info(
     fq: &str,
     entry_module: Option<&ast::Module>,
     reexports: &[world_registry::WorldExportInfo],
-    submodule_type_names: &crate::hashmap::IndexSet<String>,
+    submodule_type_names: &hashmap::IndexSet<String>,
     force_interface_export: bool,
 ) -> world_registry::WorldInfo {
     use crate::ast::Item;
@@ -612,7 +616,7 @@ fn synthesize_lib_world_info(
     // library's default-interface FQ, matching `register_lib_local_decls`, so
     // the lift/lower machinery resolves them like WASI types. Only the module's
     // own declarations — types from other interfaces keep their source.
-    let mut local_type_names: crate::hashmap::IndexSet<String> = entry_module
+    let mut local_type_names: hashmap::IndexSet<String> = entry_module
         .map(|module| {
             module
                 .items
@@ -659,7 +663,7 @@ fn annotate_lib_local_sources(
     registry: &component_model::CmInterfaceRegistry,
     ty: &ast::Type,
     fq: &str,
-    local_type_names: &crate::hashmap::IndexSet<String>,
+    local_type_names: &hashmap::IndexSet<String>,
 ) {
     use crate::ast::Type;
     match ty {
@@ -695,7 +699,7 @@ fn tag_lib_local_decl_fields(
     registry: &component_model::CmInterfaceRegistry,
     item: &ast::Item,
     fq: &str,
-    local_type_names: &crate::hashmap::IndexSet<String>,
+    local_type_names: &hashmap::IndexSet<String>,
 ) {
     use crate::ast::Item;
     match item {
@@ -726,8 +730,7 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     use crate::ast::Type;
     match ty {
         Type::Named(named) => {
-            named.name != "()"
-                && crate::component_model::wado_primitive_name_to_cm(&named.name).is_none()
+            named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none()
         }
         Type::Generic(g) => g.args.iter().any(lib_sig_uses_named_type),
         Type::Tuple(elems) => elems.iter().any(lib_sig_uses_named_type),
@@ -753,7 +756,7 @@ fn select_allocator<H: CompilerHost>(
         let is_http_service = package
             .world_registry
             .get(&package.target_world)
-            .is_some_and(crate::world_registry::WorldInfo::has_http_handler_export);
+            .is_some_and(WorldInfo::has_http_handler_export);
         if package.is_test_world() {
             "debug".to_string()
         } else if is_http_service || package.is_lib_world() {
@@ -868,11 +871,11 @@ async fn resolve_inline_providers<H: CompilerHost>(
     use crate::ast::Item;
 
     let entry_source = load_result.entry_module_source.clone();
-    let entry_dir = crate::name::entry_dir_of(Some(&entry_source));
+    let entry_dir = entry_dir_of(Some(&entry_source));
 
     // (importing module source, use decl, provider path) for every provider
     // directive, collected before the on-demand compiles below.
-    let mut jobs: Vec<(ModuleSource, crate::ast::UseDecl, String)> = Vec::new();
+    let mut jobs: Vec<(ModuleSource, UseDecl, String)> = Vec::new();
     for (src, module) in &load_result.modules {
         for item in &module.items {
             if let Item::Use(use_decl) = item
@@ -911,7 +914,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
                 use_decl.source
             )));
         };
-        let guest_fqs: Vec<String> = crate::wit_consume::module_host_leaf_imports(dep_module)
+        let guest_fqs: Vec<String> = module_host_leaf_imports(dep_module)
             .into_iter()
             .filter(|fq| !fq.starts_with("wasi:"))
             .collect();
@@ -1066,7 +1069,7 @@ fn compile_after_load<H: CompilerHost>(
     // emits and share their logic with the LSP.
     {
         let _span = logger.span("effect-check");
-        let provided_import_fqs: crate::hashmap::IndexSet<String> = options
+        let provided_import_fqs: hashmap::IndexSet<String> = options
             .providers
             .iter()
             .map(|p| p.import_fq.clone())
@@ -1144,7 +1147,7 @@ fn compile_after_load<H: CompilerHost>(
         .get(&sem.entry_module_source)
         .map(|m| m.items.iter().filter_map(lib_type_decl_name).collect())
         .unwrap_or_default();
-    let lib_type_names: crate::hashmap::IndexSet<String> = entry_type_names
+    let lib_type_names: hashmap::IndexSet<String> = entry_type_names
         .iter()
         .cloned()
         .chain(
@@ -1242,11 +1245,10 @@ fn compile_after_load<H: CompilerHost>(
         // `export fn` beside it is not a world export and must not be
         // force-routed through the async binding below.
         world.exports.retain(|e| e.name == "generate");
-        let kiln_shared: crate::hashmap::IndexSet<String> =
-            kiln::import_check::KILN_SHARED_TYPE_NAMES
-                .iter()
-                .map(|s| (*s).to_string())
-                .collect();
+        let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
         for export in &mut world.exports {
             // `generate`'s shared `core:kiln/types` records reach analysis
             // without a `source_interface`; stamp their real interface so the
@@ -1755,7 +1757,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         None,
         OptOverrides::default(),
         &[],
-        &crate::hashmap::IndexMap::default(),
+        &hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
         kiln::InvocationIndex::default(),
     )
@@ -1780,7 +1782,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     allocator: Option<&str>,
     opt: OptOverrides,
     codegen_flags: &[String],
-    param_overrides: &crate::hashmap::IndexMap<String, String>,
+    param_overrides: &hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
     invocations: kiln::InvocationIndex,
 ) -> Result<DumpResult, Bail> {
@@ -2379,6 +2381,8 @@ impl std::error::Error for CompileError {}
 #[cfg(test)]
 mod lib_world_tests {
     use super::synthesize_lib_world_info;
+    use crate::component_model::CmInterfaceRegistry;
+    use crate::{hashmap, parse};
 
     #[test]
     fn synthesizes_one_export_per_export_fn() {
@@ -2387,13 +2391,13 @@ export fn id_u32(v: u32) -> u32 { return v; }
 fn helper(x: u32) -> u32 { return x; }
 export fn id_bool(v: bool) -> bool { return v; }
 "#;
-        let module = super::parse(src).ast;
+        let module = parse(src).ast;
         let world = synthesize_lib_world_info(
-            &crate::component_model::CmInterfaceRegistry::new(),
+            &CmInterfaceRegistry::new(),
             "wado:mylib/mylib@0.1.0",
             Some(&module),
             &[],
-            &crate::hashmap::IndexSet::default(),
+            &hashmap::IndexSet::default(),
             false,
         );
 
@@ -2414,11 +2418,11 @@ export fn id_bool(v: bool) -> bool { return v; }
     #[test]
     fn empty_when_no_entry_module() {
         let world = synthesize_lib_world_info(
-            &crate::component_model::CmInterfaceRegistry::new(),
+            &CmInterfaceRegistry::new(),
             "wado:x/x@0.1.0",
             None,
             &[],
-            &crate::hashmap::IndexSet::default(),
+            &hashmap::IndexSet::default(),
             false,
         );
         assert!(world.exports.is_empty());
@@ -2434,13 +2438,13 @@ export fn id_point(v: Point) -> Point { return v; }
 export fn id_u32(v: u32) -> u32 { return v; }
 export fn id_points(v: List<Point>) -> List<Point> { return v; }
 "#;
-        let module = super::parse(src).ast;
+        let module = parse(src).ast;
         let world = synthesize_lib_world_info(
-            &crate::component_model::CmInterfaceRegistry::new(),
+            &CmInterfaceRegistry::new(),
             "wado:geo/geo@0.1.0",
             Some(&module),
             &[],
-            &crate::hashmap::IndexSet::default(),
+            &hashmap::IndexSet::default(),
             false,
         );
         assert!(
@@ -2460,13 +2464,13 @@ export fn id_points(v: List<Point>) -> List<Point> { return v; }
 export fn id_list(v: List<u8>) -> List<u8> { return v; }
 export fn id_opt(v: Option<String>) -> Option<String> { return v; }
 "#;
-        let module = super::parse(src).ast;
+        let module = parse(src).ast;
         let world = synthesize_lib_world_info(
-            &crate::component_model::CmInterfaceRegistry::new(),
+            &CmInterfaceRegistry::new(),
             "wado:c/c@0.1.0",
             Some(&module),
             &[],
-            &crate::hashmap::IndexSet::default(),
+            &hashmap::IndexSet::default(),
             false,
         );
         assert!(

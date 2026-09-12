@@ -10,6 +10,7 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 
 use super::Elaborator;
+use crate::ast::GenericParam;
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
 /// slot is never solved.
@@ -131,7 +132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn record_slot_bounds(
         &mut self,
         inst: &Instantiated,
-        params: &[crate::ast::GenericParam],
+        params: &[GenericParam],
         span: Span,
     ) {
         for ((&var, param), diag) in inst.vars.iter().zip(params.iter()).zip(inst.diags.iter()) {

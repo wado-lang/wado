@@ -3,14 +3,14 @@
 // keeps it. Read from a receiver-less index instead, the binding was lost and
 // the call reached WIR naming a function no module holds.
 
-#[cm("web:dom/event-target", type = "extern-handle")]
+#[cm("web:dom/event-target", linearity = "unrestricted")]
 resource EventTarget {
     #[cm("web:dom/event-target#tag")]
     #[cm_params("self")]
     fn tag(&self) -> String;
 }
 
-#[cm("web:dom/node", type = "extern-handle")]
+#[cm("web:dom/node", linearity = "unrestricted")]
 resource Node extends EventTarget {}
 
 export fn run() with EventTarget {

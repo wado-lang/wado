@@ -7,10 +7,18 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
+use crate::name::is_test_function;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
-use crate::ast::{self, AstId, AstVisitor, Expr, Function, Item, Stmt};
+use crate::ast::{
+    self, AstId, AstVisitor, AttrArg, Attribute, CallExpr, CmImport, EffectHandlerBinding, Expr,
+    Function, ImplBlock, Item, Stmt,
+};
+use crate::compiler_host::Diagnostic;
+use crate::elaborator::liveness::is_user_authored;
+use crate::elaborator::orchestration::AnnotateState;
+use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -62,10 +70,10 @@ impl std::fmt::Display for EffectError {
 
 impl std::error::Error for EffectError {}
 
-impl From<EffectError> for crate::compiler_host::Diagnostic {
+impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: format!(
@@ -101,10 +109,10 @@ impl std::fmt::Display for StoresError {
 
 impl std::error::Error for StoresError {}
 
-impl From<StoresError> for crate::compiler_host::Diagnostic {
+impl From<StoresError> for Diagnostic {
     fn from(e: StoresError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: e.message.clone(),
@@ -133,10 +141,10 @@ impl std::fmt::Display for DefaultPurityError {
 
 impl std::error::Error for DefaultPurityError {}
 
-impl From<DefaultPurityError> for crate::compiler_host::Diagnostic {
+impl From<DefaultPurityError> for Diagnostic {
     fn from(e: DefaultPurityError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: format!(
@@ -306,7 +314,7 @@ impl SemanticDiagnostics {
 /// violations. Shared by [`check_effects_semantic`] and [`check_semantics`].
 fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectError>) {
     for (src, module) in &sem.modules {
-        if !crate::elaborator::liveness::is_user_authored(src) {
+        if !is_user_authored(src) {
             continue;
         }
         for item in &module.items {
@@ -342,8 +350,8 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
 struct OwnedEffectData {
-    fn_effects: IndexMap<crate::ast::AstId, Vec<EffectRef>>,
-    fn_params: IndexMap<crate::ast::AstId, Vec<TypeId>>,
+    fn_effects: IndexMap<AstId, Vec<EffectRef>>,
+    fn_params: IndexMap<AstId, Vec<TypeId>>,
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     resource_names: IndexSet<(ModuleSource, String)>,
@@ -363,14 +371,14 @@ struct OwnedEffectData {
 impl OwnedEffectData {
     fn build(
         sem: &Semantics,
-        state: &crate::elaborator::orchestration::AnnotateState,
+        state: &AnnotateState,
         provided_import_fqs: IndexSet<String>,
     ) -> Self {
         // Resolved effect lists, indexed two ways: by the function's
         // declaration key (free calls resolve through `references`) and by
         // `(module, mangled name)` (method dispatch carries a `FunctionRef`).
-        let mut fn_effects: IndexMap<crate::ast::AstId, Vec<EffectRef>> = IndexMap::default();
-        let mut fn_params: IndexMap<crate::ast::AstId, Vec<TypeId>> = IndexMap::default();
+        let mut fn_effects: IndexMap<AstId, Vec<EffectRef>> = IndexMap::default();
+        let mut fn_params: IndexMap<AstId, Vec<TypeId>> = IndexMap::default();
         let mut mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>> =
             IndexMap::default();
         let mut mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
@@ -459,7 +467,7 @@ impl OwnedEffectData {
                     .attrs
                     .iter()
                     .find_map(|a| a.as_cm_import())
-                    .map(crate::ast::CmImport::interface_path);
+                    .map(CmImport::interface_path);
                 interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
@@ -510,9 +518,9 @@ impl OwnedEffectData {
 /// The cross-module effect data the body walk consults, assembled once.
 struct EffectIndex<'a> {
     /// Declaration key → resolved effects (free calls resolve via `references`).
-    fn_effects: &'a IndexMap<crate::ast::AstId, Vec<EffectRef>>,
+    fn_effects: &'a IndexMap<AstId, Vec<EffectRef>>,
     /// Declaration key → parameter type ids (for effect-parameter resolution).
-    fn_params: &'a IndexMap<crate::ast::AstId, Vec<TypeId>>,
+    fn_params: &'a IndexMap<AstId, Vec<TypeId>>,
     /// `(module, mangled name)` → effects (method / static dispatch).
     mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     /// `(module, mangled name)` → parameter type ids.
@@ -543,7 +551,7 @@ struct EffectIndex<'a> {
 fn handled_effect(
     sem: &Semantics,
     module: &ModuleSource,
-    impl_block: &crate::ast::ImplBlock,
+    impl_block: &ImplBlock,
     index: &EffectIndex,
 ) -> Option<EffectRef> {
     let facts = sem
@@ -579,7 +587,7 @@ fn check_function_effects_sem(
     };
     // `#[ambient]` bypasses the effect system; test helpers implicitly hold
     // every effect.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
+    if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
         return;
     }
     let caller_key = func.id;
@@ -664,7 +672,7 @@ fn check_function_effects_sem(
 /// operation's types.
 fn build_propagation_closure_sem(
     sem: &Semantics,
-    state: &crate::elaborator::orchestration::AnnotateState,
+    state: &AnnotateState,
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
@@ -830,8 +838,8 @@ fn expand_through_closure(
 /// container-nested resources (`Option<R>`, `List<R>`, `&R`, `fn() -> R`) are
 /// too.
 fn add_signature_resources(
-    annotations: &crate::elaborator::sem::types::TypeAnnotations,
-    fn_key: crate::ast::AstId,
+    annotations: &TypeAnnotations,
+    fn_key: AstId,
     type_table: &TypeTable,
     struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
     variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
@@ -876,11 +884,11 @@ fn add_signature_resources(
 }
 
 /// `#[benign(E, F)]` effect names declared on a function.
-fn benign_effect_names(attrs: &[crate::ast::Attribute]) -> Vec<String> {
+fn benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
         .filter(|attr| attr.name == "benign")
-        .flat_map(|attr| attr.args.iter().map(crate::ast::AttrArg::as_str))
+        .flat_map(|attr| attr.args.iter().map(AttrArg::as_str))
         .map(str::to_string)
         .collect()
 }
@@ -896,7 +904,7 @@ fn callee_name(callee: &Expr) -> &str {
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
     sem: &'a Semantics,
-    annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
+    annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     /// Effects available at the current point: the function's declared +
     /// signature + benign + propagated set, plus any effects granted by an
@@ -968,7 +976,7 @@ impl SemEffectWalker<'_> {
     fn effect_op_requirement(
         &self,
         func_ref: &FunctionRef,
-        receiver_site: Option<crate::ast::AstId>,
+        receiver_site: Option<AstId>,
     ) -> Vec<EffectRef> {
         if func_ref.method_info.is_some() {
             return Vec::new();
@@ -1015,10 +1023,7 @@ impl SemEffectWalker<'_> {
         }]
     }
 
-    fn binding_granted_effects(
-        &self,
-        binding: &crate::ast::EffectHandlerBinding,
-    ) -> Vec<EffectRef> {
+    fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
         // One fact per walk that reached the binding. A handler installed in a
         // tuple `for-of` body is bound once per element, and an effect only
         // some elements grant does not cover the body — so the grant is what
@@ -1050,7 +1055,7 @@ impl SemEffectWalker<'_> {
             .effect
             .as_ref()
             .and_then(|ty| match ty {
-                crate::ast::Type::Named(named) => effect_named_in(
+                ast::Type::Named(named) => effect_named_in(
                     &named.name,
                     &self.module_source,
                     self.sem,
@@ -1185,7 +1190,7 @@ impl AstVisitor for SemEffectWalker<'_> {
         // One fact per walk that reached the loop: an inner `for-of` inside a
         // tuple `for-of` body is walked once per outer element.
         if let Stmt::ForOf(for_of) = stmt {
-            let iterators: Vec<crate::elaborator::sem::types::ForOfIteratorInfo> = self
+            let iterators: Vec<ForOfIteratorInfo> = self
                 .annotations
                 .into_iter()
                 .flat_map(|ann| ann.all(|facts| &facts.for_of_iterator, for_of.id))
@@ -1300,13 +1305,7 @@ impl SemEffectWalker<'_> {
     /// through `static_method_dispatch` keyed by the call id. (Free functions
     /// also appear there, so `references` is tried first — it is the
     /// authoritative free-call edge.)
-    fn check_call_effects(
-        &mut self,
-        callee: &Expr,
-        id: crate::ast::AstId,
-        args: &[Expr],
-        span: crate::token::Span,
-    ) -> bool {
+    fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) -> bool {
         let free = if let Expr::Ident(ident) = callee {
             self.sem.referenced_symbol(ident.id).and_then(|def| {
                 self.index
@@ -1353,7 +1352,7 @@ impl SemEffectWalker<'_> {
     /// Type of an indirect call's callee, preferring the enclosing function's
     /// parameter types: a function-typed parameter callee leaves no `references`
     /// edge or recorded expression type at the call, so nothing else names it.
-    fn indirect_callee_type(&self, call: &crate::ast::CallExpr) -> Option<TypeId> {
+    fn indirect_callee_type(&self, call: &CallExpr) -> Option<TypeId> {
         if let Expr::Ident(ident) = &call.callee
             && let Some(type_id) = self.param_types.get(&ident.name)
         {
@@ -1383,7 +1382,7 @@ pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
     let oracle = StoresOracle::build(sem, state, &tyctx);
 
     for (src, module) in &sem.modules {
-        if !crate::elaborator::liveness::is_user_authored(src) {
+        if !is_user_authored(src) {
             continue;
         }
         let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
@@ -1429,11 +1428,7 @@ struct StoresOracle {
 }
 
 impl StoresOracle {
-    fn build(
-        sem: &Semantics,
-        state: &crate::elaborator::orchestration::AnnotateState,
-        tyctx: &TypeRefCtx,
-    ) -> Self {
+    fn build(sem: &Semantics, state: &AnnotateState, tyctx: &TypeRefCtx) -> Self {
         let mut fn_stores: IndexMap<AstId, Vec<u32>> = IndexMap::default();
         let record = |func: &Function, fn_stores: &mut IndexMap<AstId, Vec<u32>>| {
             let positions: Vec<u32> = func
@@ -1508,7 +1503,7 @@ fn functions_of(item: &Item) -> Vec<&Function> {
 /// bodied functions start at ∅ and grow until no set changes.
 fn build_returns(
     sem: &Semantics,
-    state: &crate::elaborator::orchestration::AnnotateState,
+    state: &AnnotateState,
     tyctx: &TypeRefCtx,
 ) -> (
     IndexMap<AstId, IndexSet<u32>>,
@@ -1583,7 +1578,7 @@ fn build_returns(
 /// is built from `fn_stores`.
 fn rebuild_mangled_returns(
     fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-    state: &crate::elaborator::orchestration::AnnotateState,
+    state: &AnnotateState,
 ) -> IndexMap<(ModuleSource, String), IndexSet<u32>> {
     let mut mangled: IndexMap<(ModuleSource, String), IndexSet<u32>> = IndexMap::default();
     for (src, module_sem) in &state.module_semantics {
@@ -1601,7 +1596,7 @@ fn rebuild_mangled_returns(
 /// intrinsics whose body the checker cannot inspect.
 fn bodyless_returns(
     func: &Function,
-    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    annotations: Option<&TypeAnnotations>,
     sem: &Semantics,
     tyctx: &TypeRefCtx,
 ) -> IndexSet<u32> {
@@ -1623,7 +1618,7 @@ fn compute_fn_returns(
     func: &Function,
     body: &ast::Block,
     sem: &Semantics,
-    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    annotations: &TypeAnnotations,
     tyctx: &TypeRefCtx,
     fn_returns: &IndexMap<AstId, IndexSet<u32>>,
     mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
@@ -1663,7 +1658,7 @@ fn compute_fn_returns(
 /// A nested closure is not descended into — its `return` is its own.
 struct ReturnFlow<'a> {
     sem: &'a Semantics,
-    annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
+    annotations: &'a TypeAnnotations,
     tyctx: &'a TypeRefCtx,
     fn_returns: &'a IndexMap<AstId, IndexSet<u32>>,
     mangled_returns: &'a IndexMap<(ModuleSource, String), IndexSet<u32>>,
@@ -1747,7 +1742,7 @@ struct TypeRefCtx {
 }
 
 impl TypeRefCtx {
-    fn build(sem: &Semantics, state: &crate::elaborator::orchestration::AnnotateState) -> Self {
+    fn build(sem: &Semantics, state: &AnnotateState) -> Self {
         let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         for (src, module) in &sem.modules {
             let annotations = state.module_semantics.get(src).map(|m| &m.types);
@@ -1829,7 +1824,7 @@ impl TypeRefCtx {
 /// Per-module context for the escape checks.
 struct StoresCtx<'a> {
     sem: &'a Semantics,
-    annotations: &'a crate::elaborator::sem::types::TypeAnnotations,
+    annotations: &'a TypeAnnotations,
     oracle: &'a StoresOracle,
     tyctx: &'a TypeRefCtx,
     module: String,
@@ -1842,8 +1837,7 @@ impl StoresCtx<'_> {
         let Some(body) = &func.body else {
             return;
         };
-        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_")
-        {
+        if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
             return;
         }
         let param_types = self
@@ -2015,12 +2009,9 @@ fn place_root_of(place: &Expr) -> (Option<&ast::IdentExpr>, bool) {
 }
 
 /// The global's name if this identifier resolves to a module global l-value.
-fn global_name_of(
-    ident: &ast::IdentExpr,
-    annotations: &crate::elaborator::sem::types::TypeAnnotations,
-) -> Option<String> {
+fn global_name_of(ident: &ast::IdentExpr, annotations: &TypeAnnotations) -> Option<String> {
     match annotations.assign_places.get(&ident.id) {
-        Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => Some(name.clone()),
+        Some(AssignPlace::Global { name, .. }) => Some(name.clone()),
         _ => None,
     }
 }
@@ -2063,7 +2054,7 @@ fn ident_returns(
 fn resolve_returned_args<'e>(
     expr: &'e Expr,
     sem: &Semantics,
-    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    annotations: &TypeAnnotations,
     fn_returns: &IndexMap<AstId, IndexSet<u32>>,
     mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
 ) -> Option<ReturnedCall<'e>> {
@@ -2133,7 +2124,7 @@ fn carries_of(
     expr: &Expr,
     sem: &Semantics,
     tyctx: &TypeRefCtx,
-    annotations: &crate::elaborator::sem::types::TypeAnnotations,
+    annotations: &TypeAnnotations,
     fn_returns: &IndexMap<AstId, IndexSet<u32>>,
     mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
     carries: &IndexMap<AstId, IndexSet<u32>>,
@@ -2375,9 +2366,7 @@ impl RefFlow<'_, '_> {
     /// The global's name if this identifier resolves to a module global l-value.
     fn global_name(&self, ident: &ast::IdentExpr) -> Option<String> {
         match self.ctx.annotations.assign_places.get(&ident.id) {
-            Some(crate::elaborator::sem::types::AssignPlace::Global { name, .. }) => {
-                Some(name.clone())
-            }
+            Some(AssignPlace::Global { name, .. }) => Some(name.clone()),
             _ => None,
         }
     }
@@ -2563,9 +2552,9 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
     let Some(state) = sem.state.as_ref() else {
         return;
     };
-    let walk = |annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    let walk = |annotations: Option<&TypeAnnotations>,
                 module: &ModuleSource,
-                params: &[crate::ast::Param],
+                params: &[ast::Param],
                 out: &mut Vec<DefaultPurityError>| {
         for param in params {
             if let Some(default) = &param.default {
@@ -2575,7 +2564,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
     };
 
     for (src, module) in &sem.modules {
-        if !crate::elaborator::liveness::is_user_authored(src) {
+        if !is_user_authored(src) {
             continue;
         }
         let annotations = state.module_semantics.get(src).map(|m| &m.types);
@@ -2618,7 +2607,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
 
 fn purity_walk_default(
     sem: &Semantics,
-    annotations: Option<&crate::elaborator::sem::types::TypeAnnotations>,
+    annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     module: &ModuleSource,
     default: &Expr,
@@ -2638,7 +2627,7 @@ fn purity_walk_default(
 /// effect-handler install), which would make the default impure.
 struct PurityWalker<'a> {
     sem: &'a Semantics,
-    annotations: Option<&'a crate::elaborator::sem::types::TypeAnnotations>,
+    annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     module: String,
     out: &'a mut Vec<DefaultPurityError>,
@@ -2719,6 +2708,7 @@ impl AstVisitor for PurityWalker<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::Diagnostic;
 
     #[test]
     fn test_effect_error_display() {
@@ -2741,7 +2731,7 @@ mod tests {
             error.to_string(),
             "10:5: missing effect 'Stdout' required by 'println'"
         );
-        let diag = crate::compiler_host::Diagnostic::from(error);
+        let diag = Diagnostic::from(error);
         assert_eq!(diag.span.expect("span").file, "example/hello.wado");
     }
 }

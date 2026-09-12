@@ -2,18 +2,18 @@
 // dropped the indentation entirely, printing the body unindented.
 //
 // The outer `for` loop appends each line to `w.buf`, so HFS scalarises
-// `w.buf.{used,repr}` into `__hfs_*` for that loop. LICM hoists the
-// buffer into `_licm_buf_a` and the nested `write_indent` loop hoists it
-// again into a whole-ref copy `let _licm_buf_b = _licm_buf_a;`. Because a
-// `String` is a reference, `_licm_buf_b` aliases the same heap object, so
-// `_licm_buf_b.push(' ')` mutates the buffer the `__hfs_*` scalars stand
+// `w.buf.{used,repr}` into `$hfs_*` for that loop. LICM hoists the
+// buffer into `$licm_buf_a` and the nested `write_indent` loop hoists it
+// again into a whole-ref copy `let $licm_buf_b = $licm_buf_a;`. Because a
+// `String` is a reference, `$licm_buf_b` aliases the same heap object, so
+// `$licm_buf_b.push(' ')` mutates the buffer the `$hfs_*` scalars stand
 // for — bypassing them. The stale scalars were then written back, so the
 // indentation pushed through the alias was overwritten by the next line.
 //
-// Root cause: the per-loop alias scan marks `_licm_buf_a` aliased only if
-// the `let _licm_buf_b = _licm_buf_a;` copy is walked after the field-
+// Root cause: the per-loop alias scan marks `$licm_buf_a` aliased only if
+// the `let $licm_buf_b = $licm_buf_a;` copy is walked after the field-
 // access entries exist, but the copy precedes the loop's first
-// `_licm_buf_a.field` access, so the mark was a no-op. The fix records
+// `$licm_buf_a.field` access, so the mark was a no-op. The fix records
 // whole-GC-ref copies in the order-independent function-wide alias scan,
 // disqualifying the source from scalarisation.
 

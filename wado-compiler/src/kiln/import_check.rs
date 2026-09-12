@@ -3,11 +3,13 @@
 //! on the generator being deterministic. `run_generator`'s runtime link refuses
 //! any `wasi:*` CM import as depth. Runs after loading and before analysis, so
 //! the diagnostic points at the user's `use` like any other import error.
+use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
     SelfKind, Stmt, StructLiteralExpr, StructLiteralField, Type, UseDecl, UseItem,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
@@ -56,7 +58,7 @@ pub fn inject_kiln_request_adapter(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
     modules: &mut IndexMap<ModuleSource, Module>,
-    source_interfaces: &mut crate::component_model::SourceInterfaceBatch,
+    source_interfaces: &mut SourceInterfaceBatch,
 ) {
     if target_world != Some(KILN_GENERATOR_WORLD) {
         return;
@@ -283,7 +285,7 @@ fn ensure_kiln_imports(module: &mut Module, span: Span, needed: &[&str]) {
     // No existing core:kiln use — synthesize one at the top.
     let decl = UseDecl {
         id: module.alloc_ast_id(),
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         source: "core:kiln".to_string(),
         source_span: span,
         source_id: module.alloc_ast_id(),

@@ -122,10 +122,10 @@ let m: T = { a: 1, b: 2 };
 
 // Desugared
 let m: T = {
-    let mut __b: T::Builder = T::Builder::new_literal(2);
-    __b.insert_literal("a", 1);
-    __b.insert_literal("b", 2);
-    break __kv_lit: __b.build();
+    let mut $b: T::Builder = T::Builder::new_literal(2);
+    $b.insert_literal("a", 1);
+    $b.insert_literal("b", 2);
+    break $kv_lit: $b.build();
 };
 ```
 
@@ -135,11 +135,11 @@ let s: T = [e0, e1, e2];
 
 // Desugared
 let s: T = {
-    let mut __b: T::Builder = T::Builder::new_literal(3);
-    __b.push_literal(e0);
-    __b.push_literal(e1);
-    __b.push_literal(e2);
-    break __seq_lit: __b.build();
+    let mut $b: T::Builder = T::Builder::new_literal(3);
+    $b.push_literal(e0);
+    $b.push_literal(e1);
+    $b.push_literal(e2);
+    break $seq_lit: $b.build();
 };
 ```
 

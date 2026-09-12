@@ -1,5 +1,5 @@
 //! Constant global-initializer promotion: a user-immutable global whose
-//! initializer is no syntactic Wasm constant becomes an `__initialize_module`
+//! initializer is no syntactic Wasm constant becomes an `$initialize_module`
 //! runtime assignment, which NIR optimization often reduces back to a constant.
 //! This is the single eager/lazy classifier, promoting when *every* assignment
 //! is [`WirInstr::is_const_expressible`] — leaving a string lazy.
@@ -143,7 +143,7 @@ fn nop_promoted_assignments(
 
 /// The replacement for a promoted global's assignment. The resolved constant is
 /// already installed in the global's eager `init`, so the store itself is
-/// redundant. When its value is a builder `Seq` (`__b = …; __b`), dropping the
+/// redundant. When its value is a builder `Seq` (`$b = …; $b`), dropping the
 /// whole `Seq` would also drop its `LocalSet` bindings — unsound if a bound
 /// local is read outside the store — so the `Seq` collapses to `Nop` only when
 /// every bound local is dead elsewhere, otherwise to its binding prefix.
@@ -178,7 +178,7 @@ fn drop_promoted_set(value: &WirInstr, read_counts: &IndexMap<String, u32>) -> W
 /// Handles the shapes the extracted-then-optimized init takes: a direct
 /// const value (scalar / `struct.new` / `array.new_*`), and a
 /// side-effect-free `Seq` that binds const locals and returns one of them
-/// (`__b = struct.new …; __b`) — the form an array literal produces via its
+/// (`$b = struct.new …; $b`) — the form an array literal produces via its
 /// builder temp. A redundant `RefAsNonNull` wrapper is transparent. Returns
 /// `None` for anything else (notably any non-const statement in a `Seq`,
 /// which would make dropping the assignment unsound).

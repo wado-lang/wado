@@ -5,13 +5,14 @@
 //! `tests/fixtures/const_global_dedup.wado`'s `wir_expect`/`wir_not_expect`
 //! (substring presence/absence over the WIR dump) can't express an exact
 //! occurrence count, so they can't directly prove merging happened — only
-//! that one promoted-eager `__const_obj_0` exists (true whether or not a
+//! that one promoted-eager `$const_obj_0` exists (true whether or not a
 //! second, unmerged duplicate also exists). This test compiles the same
 //! shape and counts the constant array literal's occurrences in the
 //! disassembled module directly.
 
 use std::path::Path;
 
+use crate::common::compile_source_with_compiler_options;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// `black_box` keeps the loop bound opaque, so the calls — and the template
@@ -54,7 +55,7 @@ fn identical_hoisted_globals_merge_to_one() {
         opt_level: OptLevel::O2,
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
+    let result = compile_source_with_compiler_options(
         Path::new("dedupe_const_globals_test.wado"),
         DEDUP_SOURCE,
         options,

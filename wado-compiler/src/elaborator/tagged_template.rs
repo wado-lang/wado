@@ -8,6 +8,8 @@ use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use crate::tir::StructDef;
+use crate::token::Span;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_tagged_template(
@@ -89,7 +91,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `ty` can be a hole of a shape: decided, and free of the
     /// enclosing item's type parameters (a known gap of the WEP).
-    fn hole_type_admissible(&mut self, ty: TypeId, span: crate::token::Span) -> bool {
+    fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
         }
@@ -122,7 +124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         shape: TemplateShape,
         defined_at: ast::AstId,
-        span: crate::token::Span,
+        span: Span,
     ) -> TypeId {
         let fields: Vec<(String, TypeId)> = {
             let mut tt = self.tysys.type_table.borrow_mut();
@@ -136,7 +138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (id, name, existing) = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let id = tt.intern_template_shape(self.current_module_source.clone(), shape);
-            let existing = tt.find_struct_type(crate::tir::StructDef::Anon(id));
+            let existing = tt.find_struct_type(StructDef::Anon(id));
             (id, tt.anon_struct_mangle(id), existing)
         };
         match existing {

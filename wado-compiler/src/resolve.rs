@@ -7,9 +7,11 @@
 use std::sync::Arc;
 
 use crate::ast::{self, AstId, AstVisitor, GenericParam, Item, Module, Type};
-use crate::defs::{DefId, DefTable};
+use crate::defs::{DefId, DefKind, DefTable};
+use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
 use crate::symbol::SymbolTable;
 
 /// What a reference site refers to.
@@ -104,14 +106,12 @@ impl Scopes {
     fn collect_cases(defs: &DefTable, from: &IndexMap<String, DefId>) -> IndexMap<String, DefId> {
         let mut out: IndexMap<String, DefId> = IndexMap::default();
         for (name, def) in from {
-            if name.contains(crate::name::NAMESPACE_MEMBER_SEP) {
+            if name.contains(NAMESPACE_MEMBER_SEP) {
                 continue;
             }
             if !matches!(
                 defs.kind(*def),
-                crate::defs::DefKind::Variant
-                    | crate::defs::DefKind::Enum
-                    | crate::defs::DefKind::Flags
+                DefKind::Variant | DefKind::Enum | DefKind::Flags
             ) {
                 continue;
             }
@@ -261,7 +261,7 @@ impl Resolutions {
     /// `Add` reaches that one and not the prelude's. Enumerating the tiers
     /// instead would put both in scope at once, which no name ever resolves to.
     #[must_use]
-    pub fn decls_in_scope(&self, module: &ModuleSource) -> crate::hashmap::IndexSet<DefId> {
+    pub fn decls_in_scope(&self, module: &ModuleSource) -> hashmap::IndexSet<DefId> {
         let names = |t: &IndexMap<ModuleSource, IndexMap<String, DefId>>| {
             t.get(module)
                 .map(|m| m.keys().cloned().collect::<Vec<_>>())
@@ -600,7 +600,7 @@ impl AstVisitor for Resolver<'_> {
                         .symbols
                         .imported(
                             self.module,
-                            &crate::name::namespace_member_alias(&ns.namespace, &ns.name),
+                            &namespace_member_alias(&ns.namespace, &ns.name),
                         )
                         .and_then(|sym| self.defs.of_ast_id(sym.defined_at))
                         .map_or(Resolution::Unresolved, Resolution::Def),
@@ -648,7 +648,11 @@ pub fn head_site(ty: &Type) -> Option<AstId> {
 mod tests {
     use super::*;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
+    use crate::defs::DefKind;
+    use crate::lexer::lex;
+    use crate::logger::Logger;
     use crate::module_source::ModuleSourceInterner;
+    use crate::{analyze, hashmap, parser};
 
     /// Resolve two modules together and hand back the table, so a test can ask
     /// what a name means from either vantage.
@@ -674,21 +678,18 @@ mod tests {
         let other_source = interner.borrow_mut().local("./other.wado");
         let mut modules: IndexMap<ModuleSource, Module> = IndexMap::default();
         for (source, text) in [(&entry_source, entry), (&other_source, other)] {
-            let lexed = crate::lexer::lex(text);
+            let lexed = lex(text);
             assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
-            let ast = crate::parser::Parser::new(lexed.tokens)
+            let ast = parser::Parser::new(lexed.tokens)
                 .parse_strict()
                 .expect("parse error");
             modules.insert(source.clone(), ast);
         }
         let host = InMemoryCompilerHost::new();
-        let logger = crate::logger::Logger::new(&host, LogLevel::Error);
-        let mut analyzer = crate::analyze::Analyzer::new(&logger).with_interner(interner);
-        let _ = analyzer.analyze_loaded_modules(
-            &modules,
-            &entry_source,
-            crate::hashmap::IndexSet::default(),
-        );
+        let logger = Logger::new(&host, LogLevel::Error);
+        let mut analyzer = analyze::Analyzer::new(&logger).with_interner(interner);
+        let _ =
+            analyzer.analyze_loaded_modules(&modules, &entry_source, hashmap::IndexSet::default());
         assert!(
             host.diagnostics().is_empty(),
             "analyze reported: {:?}",
@@ -764,14 +765,14 @@ mod tests {
         // `Leaf` reaches nothing in type position and its case in value position.
         assert!(r.scopes.resolve(&entry, "Leaf").is_none());
         let leaf = r.scopes.resolve_value(&entry, "Leaf").unwrap();
-        assert_eq!(r.defs().kind(leaf), crate::defs::DefKind::VariantCase);
+        assert_eq!(r.defs().kind(leaf), DefKind::VariantCase);
         assert_eq!(r.defs().module(leaf), &other);
 
         // `List` is both a case of the imported variant and this module's own
         // struct. The type wins in both positions.
         let list = r.scopes.resolve_value(&entry, "List").unwrap();
         assert_eq!(list, r.scopes.resolve(&entry, "List").unwrap());
-        assert_eq!(r.defs().kind(list), crate::defs::DefKind::Struct);
+        assert_eq!(r.defs().kind(list), DefKind::Struct);
         assert_eq!(r.defs().module(list), &entry);
     }
 

@@ -166,7 +166,7 @@ impl WriteBack<'_> {
         let index = self.local_count;
         self.local_count += 1;
         self.locals.push(TirLocal::synth(index, type_id, is_mut));
-        let name = format!("__write_back_{kind}{index}");
+        let name = format!("$write_back_{kind}{index}");
         prefix.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),

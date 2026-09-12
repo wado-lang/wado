@@ -28,7 +28,12 @@ use std::process::Command;
 use wado_manifest::{Manifest, Package, PublishError, validate_for_publish};
 
 use crate::args::{self, CliExit};
-use crate::manifest::{ProjectManifest, discover, emit_manifest_warnings};
+use crate::compile::{build_output_path, build_publish_world, world_path_segment};
+use crate::manifest::{
+    ProjectManifest, discover, emit_manifest_warnings, governing_workspace_root_dir, lib_world_fq,
+    workspace_member_dirs,
+};
+use crate::metadata_embed::working_tree_dirty;
 
 #[derive(Debug)]
 pub struct PublishOptions {
@@ -110,9 +115,7 @@ pub async fn run(opts: PublishOptions) -> Result<(), CliExit> {
     if project.manifest.workspace.is_some() {
         return publish_workspace(&project, opts.dry_run).await;
     }
-    if let Some(root) =
-        crate::manifest::governing_workspace_root_dir(&project.root).map_err(CliExit::error)?
-    {
+    if let Some(root) = governing_workspace_root_dir(&project.root).map_err(CliExit::error)? {
         return Err(CliExit::error(format!(
             "this package belongs to a workspace; run `wado publish` from the workspace \
              root to publish all members together at the shared version:\n  {}",
@@ -179,7 +182,7 @@ async fn publish_workspace(root: &ProjectManifest, dry_run: bool) -> Result<(), 
         .as_ref()
         .map(|w| w.members.as_slice())
         .unwrap_or_default();
-    let member_dirs = crate::manifest::workspace_member_dirs(&root.root, members);
+    let member_dirs = workspace_member_dirs(&root.root, members);
 
     // Keep each candidate's `ProjectManifest` so a non-dry-run publish can build
     // it; the root's own `[package]` (if any) publishes alongside the members.
@@ -282,18 +285,18 @@ fn publishable_worlds(project: &ProjectManifest) -> Result<Vec<PublishTarget>, C
         targets.push(PublishTarget {
             subpath: None,
             entry: root.join(lib_rel),
-            output: crate::compile::build_output_path(root, "lib"),
-            world: BuildWorld::Lib(crate::manifest::lib_world_fq(pkg)?),
+            output: build_output_path(root, "lib"),
+            world: BuildWorld::Lib(lib_world_fq(pkg)?),
         });
     }
     for (world_fq, entry) in &project.manifest.world {
         if !entry.publish {
             continue;
         }
-        let segment = crate::compile::world_path_segment(world_fq);
+        let segment = world_path_segment(world_fq);
         targets.push(PublishTarget {
             entry: root.join(&entry.entry),
-            output: crate::compile::build_output_path(root, &segment),
+            output: build_output_path(root, &segment),
             subpath: Some(segment),
             world: BuildWorld::Hosted(world_fq.clone()),
         });
@@ -322,7 +325,7 @@ async fn publish_package(
             "{coord} declares no publishable world; add `[package].lib` or a `[world]` entry"
         )));
     }
-    if !dry_run && crate::metadata_embed::working_tree_dirty(&project.root) == Some(true) {
+    if !dry_run && working_tree_dirty(&project.root) == Some(true) {
         eprintln!(
             "warning: working tree has uncommitted changes; publishing {coord} \
              without a `revision` annotation"
@@ -337,8 +340,7 @@ async fn publish_package(
         // Build even on a dry run: it is what catches a package that no longer
         // compiles into a publishable component (e.g. a `--lib` that exports
         // nothing), the failure mode a dry run exists to surface before release.
-        crate::compile::build_publish_world(&target.entry, &target.output, lib_world, target_world)
-            .await?;
+        build_publish_world(&target.entry, &target.output, lib_world, target_world).await?;
         let world = target.subpath.as_deref().unwrap_or("lib");
         if dry_run {
             eprintln!("(dry-run) {coord} ({world}) builds; would push -> {reference}");

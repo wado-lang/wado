@@ -15,6 +15,7 @@
 //! wat declares four exports (`add_one`, `twice`, `unused_no_args`,
 //! `unused_squared`).
 
+use crate::common::compile_source_with_opts;
 use std::path::Path;
 use wasmparser::{Parser, Payload};
 
@@ -103,7 +104,7 @@ export fn run() with Stdout {
 }
 "#;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let result = crate::common::compile_source_with_opts(
+    let result = compile_source_with_opts(
         &fixture_dir.join("__wasm_import_dce_entry__.wado"),
         source,
         wado_compiler::OptLevel::default(),
@@ -140,7 +141,7 @@ export fn run() with Stdout {
 }
 "#;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let result = crate::common::compile_source_with_opts(
+    let result = compile_source_with_opts(
         &fixture_dir.join("__wasm_import_dce_unused_entry__.wado"),
         source,
         wado_compiler::OptLevel::default(),
@@ -254,7 +255,7 @@ export fn run() with Stdout {
 }
 "#;
     let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let result = crate::common::compile_source_with_opts(
+    let result = compile_source_with_opts(
         &fixture_dir.join(entry),
         source,
         wado_compiler::OptLevel::default(),

@@ -10,6 +10,7 @@ use wasmtime::component::Component;
 use wasmtime::{GuestProfiler, UpdateDeadline};
 
 use crate::args::{self, CliExit};
+use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
 use crate::knobs::{CompileKnobs, KnobOpt};
 use crate::manifest;
@@ -288,7 +289,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     // builds the cli/command world through the shared build core (metadata
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
-    let wasm = crate::build::build_for_driver(&opts.input, "wasi:cli/command", &flags).await?;
+    let wasm = build_for_driver(&opts.input, "wasi:cli/command", &flags).await?;
 
     run_cli_component(
         &wasm,

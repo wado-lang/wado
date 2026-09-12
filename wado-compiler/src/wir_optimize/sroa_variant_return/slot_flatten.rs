@@ -5,6 +5,7 @@
 //! decomposes and every slot local is consumed solely via variant access.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::name::INTERNAL_PREFIX;
 use crate::wir::{
     WirFuncType, WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId, WirVariantRepr,
 };
@@ -688,13 +689,16 @@ fn expand_slot_binds(
 
         // Fresh locals for `W`'s result-vector fields, mapped by field name so
         // `build_variant_replacement` can resolve each case struct's fields. The
-        // field name (`discriminant`, `payload_0`, `caseN_payload_M`) is kept in
-        // the local name so the flattened slot stays self-documenting.
+        // field name (`discriminant`, `payload_0`, `caseN_payload_M`) follows the
+        // marker so the flattened slot stays self-documenting, and the slot local
+        // it came from trails it, making the name unique — verbatim, since
+        // trimming a prefix off it would let a source name and a minted one
+        // arrive at the same field local.
         let mut field_map: IndexMap<String, String> = IndexMap::default();
         let mut sub_locals: Vec<Option<String>> = Vec::with_capacity(cand.layout.field_names.len());
         let mut decls: Vec<WirInstr> = Vec::with_capacity(cand.layout.field_names.len());
         for (field_name, field_ty) in cand.layout.field_names.iter().zip(&cand.layout.field_types) {
-            let name = format!("{slot_local}__n_{field_name}");
+            let name = format!("{INTERNAL_PREFIX}vr_{field_name}_{slot_local}");
             field_map.insert(field_name.clone(), name.clone());
             decls.push(WirInstr::DeclareLocal {
                 name: name.clone(),

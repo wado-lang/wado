@@ -4,9 +4,10 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
-use crate::name::kebab_export_name;
+use crate::name::{INTERNAL_PREFIX, kebab_export_name};
+use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
@@ -37,7 +38,7 @@ pub struct WorldExportPlan {
     /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
     /// already kebab-safe, so this equals `name` for them.
     pub cm_export_name: String,
-    /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
+    /// Core function name in the Wasm module (e.g., `"$cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
     /// Whether this is an async export
     pub is_async: bool,
@@ -132,7 +133,7 @@ pub enum CmExportType {
 /// A test function to export from the component.
 #[derive(Debug, Clone)]
 pub struct TestExportPlan {
-    /// Internal function name (e.g., "__`test_0_simple`", "__`test_trap_0_panics`", or "__`test_todo_0_not_yet`")
+    /// Internal function name (e.g., "$`test_0_simple`", "$`test_trap_0_panics`", or "$`test_todo_0_not_yet`")
     pub function_name: String,
     /// Core function name in Wasm module (adapter name if adapter exists, otherwise same as `function_name`)
     pub core_func_name: String,
@@ -197,7 +198,7 @@ pub fn build_component_plan(
             // exports we plan match the adapters that survived early DCE.
             // Unselected tests have no adapter and were dropped; planning them
             // here would reference a function that no longer exists.
-            .filter(|test| crate::package::test_selected(test.name.as_deref(), test_name_filters))
+            .filter(|test| test_selected(test.name.as_deref(), test_name_filters))
             .map(|test| {
                 let export_name = sanitize_kebab_export_name(&test.function_name);
                 let core_func_name = export_binding_names
@@ -238,7 +239,7 @@ fn build_world_export_plans(
     // The synthesized library world (`--lib`) takes priority over the static
     // registry, which cannot hold a per-package world.
     let world = lib_world.or_else(|| world_registry.get(target_world));
-    let world_namespace_prefix = world.map(crate::world_registry::WorldInfo::namespace_prefix);
+    let world_namespace_prefix = world.map(WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
         vec![WorldExportInfo {
@@ -324,7 +325,7 @@ fn build_world_export_plans(
 /// Whether `name` is a Wado primitive that maps directly to a Component Model
 /// primitive value type at the export boundary.
 fn is_cm_primitive_name(name: &str) -> bool {
-    crate::component_model::wado_primitive_name_to_cm(name).is_some()
+    wado_primitive_name_to_cm(name).is_some()
 }
 
 /// Resolve a Wado [`Type`] reachable from a world export signature into its
@@ -411,7 +412,7 @@ fn resolve_cm_export_type(
     panic!("unsupported world export type shape: {ty:?}");
 }
 
-/// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
+/// Convert a test function name (e.g., `$test_0_my_name`) to a valid kebab-case
 /// CM export name (e.g., `test-0-my-name`).
 ///
 /// Test names may contain consecutive underscores when non-alphanumeric characters
@@ -419,7 +420,9 @@ fn resolve_cm_export_type(
 /// elaborator. A naive `replace('_', '-')` would produce consecutive dashes which
 /// violate the kebab-case requirement of the Component Model.
 fn sanitize_kebab_export_name(function_name: &str) -> String {
-    let raw = function_name.trim_start_matches('_').replace('_', "-");
+    let raw = function_name
+        .trim_start_matches(INTERNAL_PREFIX)
+        .replace('_', "-");
     // Collapse consecutive dashes and strip trailing dashes
     let mut prev_dash = false;
     let collapsed: String = raw
@@ -442,49 +445,50 @@ fn sanitize_kebab_export_name(function_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component_model::CmInterfaceRegistry;
     use std::assert_matches;
     #[test]
     fn test_sanitize_kebab_export_name() {
         // Simple case
         assert_eq!(
-            sanitize_kebab_export_name("__test_0_simple"),
+            sanitize_kebab_export_name("$test_0_simple"),
             "test-0-simple"
         );
         // Consecutive underscores from parentheses in test name
         assert_eq!(
-            sanitize_kebab_export_name("__test_23_compression_level_0__stored__round_trip"),
+            sanitize_kebab_export_name("$test_23_compression_level_0__stored__round_trip"),
             "test-23-compression-level-0-stored-round-trip"
         );
         // Trailing underscores
         assert_eq!(
-            sanitize_kebab_export_name("__test_1_trailing__"),
+            sanitize_kebab_export_name("$test_1_trailing__"),
             "test-1-trailing"
         );
         // Unnamed test (no name part)
-        assert_eq!(sanitize_kebab_export_name("__test_5"), "test-5");
+        assert_eq!(sanitize_kebab_export_name("$test_5"), "test-5");
         // expect_trap tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_trap_0_panics_on_zero"),
+            sanitize_kebab_export_name("$test_trap_0_panics_on_zero"),
             "test-trap-0-panics-on-zero"
         );
-        assert_eq!(sanitize_kebab_export_name("__test_trap_3"), "test-trap-3");
+        assert_eq!(sanitize_kebab_export_name("$test_trap_3"), "test-trap-3");
         // TODO tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_todo_0_not_yet_implemented"),
+            sanitize_kebab_export_name("$test_todo_0_not_yet_implemented"),
             "test-todo-0-not-yet-implemented"
         );
-        assert_eq!(sanitize_kebab_export_name("__test_todo_2"), "test-todo-2");
+        assert_eq!(sanitize_kebab_export_name("$test_todo_2"), "test-todo-2");
         // timeout_ms tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_tm2000_0_slow"),
+            sanitize_kebab_export_name("$test_tm2000_0_slow"),
             "test-tm2000-0-slow"
         );
         assert_eq!(
-            sanitize_kebab_export_name("__test_trap_tm500_0_panics"),
+            sanitize_kebab_export_name("$test_trap_tm500_0_panics"),
             "test-trap-tm500-0-panics"
         );
         assert_eq!(
-            sanitize_kebab_export_name("__test_todo_tm3000_1"),
+            sanitize_kebab_export_name("$test_todo_tm3000_1"),
             "test-todo-tm3000-1"
         );
     }
@@ -520,7 +524,7 @@ mod tests {
     #[test]
     fn test_resolve_unit_shapes() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `()` is the type that carries nothing. The empty tuple `[]` is a type
         // of its own with no CM representation, rejected at the boundary before
@@ -540,7 +544,7 @@ mod tests {
     #[test]
     fn test_resolve_handler_result() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
         // http world scope. The arms resolve to wasi:http/types.
@@ -581,7 +585,7 @@ mod tests {
     #[test]
     fn test_resolve_named_resource() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
         match resolve_cm_export_type(&named("Request"), &registry, None) {
@@ -604,7 +608,7 @@ mod tests {
     #[test]
     fn test_resolve_named_kiln_record() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `OutputFile` is a struct declared in `core:kiln/types` (and, unlike
         // `Response`, collides with no WASI type) — exercises the `find_kiln_*`

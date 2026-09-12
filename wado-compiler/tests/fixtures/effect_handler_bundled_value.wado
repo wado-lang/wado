@@ -1,7 +1,7 @@
 // Bundled handler in **value form** (`with h do`, no `&mut`): the
 // bundled clause expands to one `TirHandlerBinding` per implemented
 // effect, but every expanded binding must share a single synthesised
-// `__h_<bundle>` local so that:
+// `$h_<bundle>` local so that:
 //
 // 1. the handler expression is evaluated **once** (not effects-many
 //    times), and
@@ -10,7 +10,7 @@
 //    copies would diverge).
 //
 // This is the cross-effect mutation contract the WEP intends; without
-// `bundle_group` sharing, the synthesis would emit one `__h_<E>` Let
+// `bundle_group` sharing, the synthesis would emit one `$h_<E>` Let
 // per binding, each holding an independent value-copy of the handler.
 //
 // The fixture exercises both contracts at once:

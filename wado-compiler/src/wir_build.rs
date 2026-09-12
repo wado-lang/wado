@@ -4,6 +4,7 @@
 //!
 //! Emission (`WirPackage` → Wasm bytes) is handled by `codegen`.
 
+use crate::name::INLINE_REF_EAGER_MAX_BYTES;
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
@@ -19,7 +20,7 @@ pub(crate) fn packed_array_is_eager(
 ) -> bool {
     len == 0
         || len <= string_inline_max_bytes
-        || (prefer_fixed && len <= crate::name::INLINE_REF_EAGER_MAX_BYTES)
+        || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES)
 }
 
 mod calls;

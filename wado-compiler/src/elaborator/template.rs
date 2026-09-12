@@ -9,6 +9,7 @@ use crate::tir::TypeId;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use crate::elaborator::util::unescape_template_string;
 
 /// A template's static parts: the raw segments — one more than the holes —
 /// and each hole's resolved type and specifier, in source order.
@@ -52,7 +53,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The gate reify relies on: it decodes these segments with no
                 // diagnostic channel of its own.
                 ast::TemplatePart::String(raw) => {
-                    if let Err(message) = super::util::unescape_template_string(raw) {
+                    if let Err(message) = unescape_template_string(raw) {
                         let _ = self.emit(TypeError::InvalidLiteral {
                             message,
                             span: template.span,

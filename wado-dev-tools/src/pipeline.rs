@@ -7,7 +7,9 @@ use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::OptLevel;
 
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::data_section::{extract_world_from_data_section, should_skip_file};
+use crate::data_section::{
+    extract_dependencies_from_data_section, extract_world_from_data_section, should_skip_file,
+};
 use crate::template::Template;
 
 const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
@@ -512,7 +514,7 @@ async fn render_phases(
         .map(std::path::Path::to_path_buf)
         .unwrap_or_default();
     let target_world = extract_world_from_data_section(source, default_world);
-    let dependencies = crate::data_section::extract_dependencies_from_data_section(source);
+    let dependencies = extract_dependencies_from_data_section(source);
 
     if needs_dump {
         let host = FilesystemCompilerHost::silent(base_path.clone())

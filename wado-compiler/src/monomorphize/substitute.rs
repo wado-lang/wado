@@ -13,6 +13,8 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 
 use super::state::Monomorphizer;
+use crate::tir;
+use crate::tir::TirFunction;
 
 impl Monomorphizer {
     /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
@@ -47,11 +49,7 @@ impl Monomorphizer {
     /// newly-instantiated function after struct monomorphisation reaches
     /// fixpoint, so `collect_function_instantiation_sites` sees only canonical
     /// `Struct` form and `function_id_for` stays injective.
-    pub fn rewrite_types_in_function(
-        &self,
-        func: &mut crate::tir::TirFunction,
-        type_table: &mut TypeTable,
-    ) {
+    pub fn rewrite_types_in_function(&self, func: &mut TirFunction, type_table: &mut TypeTable) {
         let mut rewriter = TypeRewriter {
             mono: self,
             type_table,
@@ -59,10 +57,7 @@ impl Monomorphizer {
         Self::rewrite_types_in_function_inner(&mut rewriter, func);
     }
 
-    fn rewrite_types_in_function_inner(
-        rewriter: &mut TypeRewriter<'_>,
-        func: &mut crate::tir::TirFunction,
-    ) {
+    fn rewrite_types_in_function_inner(rewriter: &mut TypeRewriter<'_>, func: &mut TirFunction) {
         for param in &mut func.params {
             param.type_id = rewriter.rewrite_type_id(param.type_id);
         }
@@ -185,7 +180,7 @@ impl Monomorphizer {
                     .all(|&arg| !type_table.contains_type_param(arg));
 
                 if all_concrete {
-                    let key = crate::tir::InstantiationKey {
+                    let key = tir::InstantiationKey {
                         def: Some(*def),
                         name: name.clone(),
                         module_source: module_source.clone(),
@@ -397,7 +392,7 @@ impl Monomorphizer {
     /// Substitute type parameters in a pattern
     pub fn substitute_types_in_pattern(
         &self,
-        pattern: &mut crate::tir::TirPattern,
+        pattern: &mut TirPattern,
         substitution: &IndexMap<u32, TypeId>,
         type_table: &mut TypeTable,
     ) {

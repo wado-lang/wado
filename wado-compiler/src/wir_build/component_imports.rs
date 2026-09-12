@@ -10,6 +10,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
+use crate::wir_build::component_plan::CmExportType;
 
 /// Resolve the categorized import plan for `project` from `used_wasi_functions`,
 /// the registry, and the WIR-level canonical intrinsics. This is the decision
@@ -216,10 +217,7 @@ pub fn resolve_import_plan(
 /// Collect the CM interface FQs a world export's boundary type references, so a
 /// resource-defining interface is imported when an export's signature needs its
 /// types even if no function of it is called.
-fn collect_export_interface_fqs(
-    ty: &crate::wir_build::component_plan::CmExportType,
-    out: &mut IndexSet<String>,
-) {
+fn collect_export_interface_fqs(ty: &CmExportType, out: &mut IndexSet<String>) {
     use crate::wir_build::component_plan::CmExportType;
     match ty {
         CmExportType::Unit => {}
@@ -299,10 +297,7 @@ fn needs_canonical_cli_error_code(
 }
 
 /// Whether `ty` references the canonical `wasi:cli/types` `ErrorCode`.
-fn references_cli_error_code(
-    ty: &Type,
-    registry: &crate::component_model::CmInterfaceRegistry,
-) -> bool {
+fn references_cli_error_code(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     let any = |tys: &[Type]| tys.iter().any(|ty| references_cli_error_code(ty, registry));
     match ty {
         Type::Named(named) => {

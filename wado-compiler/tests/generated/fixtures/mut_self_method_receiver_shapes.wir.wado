@@ -8,7 +8,7 @@ struct core:prelude/types.wado//Box<i32> {  // TypeId(0)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(1)
 
-type "functype//mut_self_method_receiver_shapes.wado/__cm_export__run" = fn();  // TypeId(2)
+type "functype//mut_self_method_receiver_shapes.wado/$cm_export__run" = fn();  // TypeId(2)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
@@ -16,11 +16,11 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "mut_self_method_receiver_shapes.wado/__cm_export__run"() {
+fn "mut_self_method_receiver_shapes.wado/$cm_export__run"() {
     let b: ref "core:prelude/types.wado//Box<i32>";
     b = struct.new "core:prelude/types.wado//Box<i32>" { value: 5 };
     b.value = 4;
     "wasi/task-return"(0);
 }
 
-export fn "mut_self_method_receiver_shapes.wado/__cm_export__run" as "run"
+export fn "mut_self_method_receiver_shapes.wado/$cm_export__run" as "run"

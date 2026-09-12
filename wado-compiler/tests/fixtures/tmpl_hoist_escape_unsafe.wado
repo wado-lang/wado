@@ -2,7 +2,7 @@
 // escapes the iteration. Each result is moved into a list that outlives the
 // loop, so all six must coexist — a reused scratch buffer would leave every
 // entry showing the last iteration's bytes, which the printed output catches.
-// The WIR must NOT contain __tmpl_buf_.
+// The WIR must NOT contain $tmpl_buf_.
 //
 // The complementary case — a template moved straight into a map key — is the
 // same rule seen from the caller side; see tmpl_hoist_escape_copy_safe.wado.
@@ -30,5 +30,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "x=0\nx=1\nx=2\ny=0\ny=1\ny=2\n",
-    "wir_not_expect:O2": ["__tmpl_buf_"]
+    "wir_not_expect:O2": ["$tmpl_buf_"]
 }

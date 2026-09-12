@@ -7,7 +7,7 @@
 // has no `let` to anchor on, so it was rebuilt on every call. The pass now
 // also matches a `Unary { op: Ref, .. }` node wrapping a closed constant
 // aggregate anywhere in a function body, hoisting it into the same kind of
-// shared immutable `__const_obj_*` global.
+// shared immutable `$const_obj_*` global.
 //
 // `byte_sum` is `#[inline(never)]` so the call (and its literal argument)
 // survives to `const_object_globalization`, instead of the literal getting
@@ -35,10 +35,10 @@ __DATA__
 {
     "stdout": "532\n",
     "wir_expect:O2": [
-        "global global:const_object_globalization_call_arg.wado::__const_obj_0",
+        "global global:const_object_globalization_call_arg.wado::$const_obj_0",
         "array.new_fixed<u8>(104, 101, 108, 108, 111)"
     ],
     "wir_not_expect:O2": [
-        "global mut global:const_object_globalization_call_arg.wado::__const_obj_0"
+        "global mut global:const_object_globalization_call_arg.wado::$const_obj_0"
     ]
 }

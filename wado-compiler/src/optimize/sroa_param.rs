@@ -33,9 +33,13 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{is_local_operand, is_pure_operand, place_root_local};
 use super::gate::{FunctionGate, GatedPass};
+use crate::ast::Visibility;
+use crate::name::sroa_param_name;
 use crate::nir::FuncId;
+use crate::nir_visitor::reachable_exprs;
+use crate::optimize::dae::is_dae_sroa_eligible;
 
-type FnKey = crate::nir::FuncId;
+type FnKey = FuncId;
 
 /// Per-candidate metadata captured during Phase 1.
 #[derive(Clone)]
@@ -695,7 +699,7 @@ impl FieldForm {
 /// of the three sees is that disagreement.
 fn param_field_form(body: &Body, idx: u32) -> FieldForm {
     let mut form = FieldForm::Value;
-    for e in crate::nir_visitor::reachable_exprs(body) {
+    for e in reachable_exprs(body) {
         let node = &body.exprs[e];
         let ExprKind::Unary { op, expr: inner } = &node.kind else {
             continue;
@@ -890,10 +894,10 @@ fn mint_scalarized_clones(
         };
         let mut clone = original.borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
-        let name = crate::name::sroa_param_name(&clone.name);
+        let name = sroa_param_name(&clone.name);
         clone.name.clone_from(&name);
         if let Some(info) = &mut clone.method_info {
-            info.method_name = crate::name::sroa_param_name(&info.method_name);
+            info.method_name = sroa_param_name(&info.method_name);
         }
         // This pass runs once per fixpoint iteration, so a clone it minted on an
         // earlier one already stands under this name. Reuse it rather than mint
@@ -914,7 +918,7 @@ fn mint_scalarized_clones(
         let id = FuncId::new(next_id);
         next_id += 1;
         clone.id = Some(id);
-        clone.visibility = crate::ast::Visibility::Private;
+        clone.visibility = Visibility::Private;
         clone.is_export = false;
         clone.export_name = None;
         // The marker names the one canonical function behind a compiler item, and
@@ -1512,10 +1516,10 @@ fn discardable_field(body: &Body, value: Operand) -> bool {
 // -----------------------------------------------------------------------
 
 /// Pinning rules, shared with DAE via [`super::dae::is_dae_sroa_eligible`].
-/// `relax_closure_call = false` keeps closure `__call` functors pinned, their
+/// `relax_closure_call = false` keeps closure `$call` functors pinned, their
 /// function-table wrapper having snapshotted the signature, and one pin is added
 /// here: a `$value_copy$T` helper is never a rewrite target. A concrete
 /// trait-impl method is eligible, every post-mono call site being resolved.
 fn is_eligible(func: &NirFunction) -> bool {
-    super::dae::is_dae_sroa_eligible(func, false) && !func.is_value_copy()
+    is_dae_sroa_eligible(func, false) && !func.is_value_copy()
 }

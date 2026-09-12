@@ -6,7 +6,7 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//opt_drve_scalar_trap.wado/divide" = fn(i32) -> i32;  // TypeId(1)
 
-type "functype//opt_drve_scalar_trap.wado/__cm_export__run" = fn();  // TypeId(2)
+type "functype//opt_drve_scalar_trap.wado/$cm_export__run" = fn();  // TypeId(2)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
@@ -18,9 +18,17 @@ fn "opt_drve_scalar_trap.wado/divide"(n) {
     return 42 / n;
 }
 
+<<<<<<< HEAD
 fn "opt_drve_scalar_trap.wado/__cm_export__run"() {
     drop("opt_drve_scalar_trap.wado/divide"(black_box(0)));
+||||||| fe30fd382
+fn "opt_drve_scalar_trap.wado/__cm_export__run"() {
+    drop("opt_drve_scalar_trap.wado/divide"(0));
+=======
+fn "opt_drve_scalar_trap.wado/$cm_export__run"() {
+    drop("opt_drve_scalar_trap.wado/divide"(0));
+>>>>>>> origin/main
     "wasi/task-return"(0);
 }
 
-export fn "opt_drve_scalar_trap.wado/__cm_export__run" as "run"
+export fn "opt_drve_scalar_trap.wado/$cm_export__run" as "run"

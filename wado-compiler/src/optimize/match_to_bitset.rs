@@ -170,7 +170,7 @@ impl Build<'_, '_> {
 
     /// A fresh immutable local bound to `value`, as its index and its `let`.
     fn bind(&mut self, name: &str, ty: TypeId, value: Operand) -> (u32, StmtId) {
-        let name = format!("__bitset_{name}_{}", self.engine.locals().len());
+        let name = format!("$bitset_{name}_{}", self.engine.locals().len());
         let local_index = self.engine.alloc_local(name.clone(), ty, false);
         let stmt = self.engine.alloc_stmt(
             StmtKind::Let {

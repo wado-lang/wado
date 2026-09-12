@@ -4,9 +4,21 @@ use std::cell::RefCell;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, AstId};
+use crate::analyze::symbol_not_visible_message;
+use crate::ast::{self, AstId, Expr, Visibility};
+use crate::compiler_host::{Code, Diagnostic};
+use crate::defs::DefId;
+use crate::elaborator::assert::AssertCaptureContext;
+use crate::elaborator::reify::ReifyAssertCaptureContext;
+use crate::elaborator::sem::imports::canonical_ns_ref;
+use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::type_resolution::substitute_type_params;
+use crate::elaborator::tysys::TypeSystem;
+use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::tir::TypeId;
+use crate::name::{FqTraitName, FqTypeName};
+use crate::resolve::{Resolution, Resolutions};
+use crate::tir::{AnonStructId, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Struct field info: module source and field definitions
@@ -20,7 +32,7 @@ pub(crate) struct StructFieldInfo {
     /// directly, without re-interning by `(name, module_source)`.
     pub(super) defined_at: AstId,
     /// Field definitions: (name, `type_id`, visibility) triples
-    pub(super) fields: Vec<(String, TypeId, crate::ast::Visibility)>,
+    pub(super) fields: Vec<(String, TypeId, Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
     /// Used for recording use→def references (e.g. field access → field def).
     pub(super) field_ast_ids: Vec<AstId>,
@@ -48,9 +60,9 @@ pub(crate) struct StructFieldInfo {
 /// when the prefix names something that owns its members.
 pub(super) fn newtype_member_owner(
     lookup: &TypeLookup<'_>,
-    tysys: &super::tysys::TypeSystem,
-    def: crate::defs::DefId,
-) -> Option<(crate::defs::DefId, TypeId)> {
+    tysys: &TypeSystem,
+    def: DefId,
+) -> Option<(DefId, TypeId)> {
     let newtype_id = lookup.newtype_of(def)?;
     let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
     Some((tysys.type_def(head)?, newtype_id))
@@ -91,7 +103,7 @@ impl StructFieldInfo {
 #[derive(Clone, Debug)]
 pub(super) struct BoundRef {
     pub(super) name: String,
-    pub(super) site: crate::ast::AstId,
+    pub(super) site: AstId,
 }
 
 /// Variant case info: case name and payload type
@@ -147,7 +159,7 @@ pub(crate) struct EnumInfo {
     pub(super) defined_at: AstId,
     pub(super) cases: Vec<EnumCaseData>,
     /// O(1) lookup from case name to discriminant index
-    pub(super) case_index: crate::hashmap::IndexMap<String, u32>,
+    pub(super) case_index: hashmap::IndexMap<String, u32>,
 }
 
 impl EnumInfo {
@@ -828,7 +840,7 @@ pub enum TypeError {
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
-        visibility: crate::ast::Visibility,
+        visibility: Visibility,
         span: Span,
     },
 
@@ -839,8 +851,8 @@ pub enum TypeError {
     /// what bars it.
     PrivateNamespacedSymbol {
         name: String,
-        module_source: crate::module_source::ModuleSource,
-        visibility: crate::ast::Visibility,
+        module_source: ModuleSource,
+        visibility: Visibility,
         span: Span,
     },
 
@@ -850,7 +862,7 @@ pub enum TypeError {
         type_name: String,
         member_name: String,
         member_kind: ImplMemberKind,
-        visibility: crate::ast::Visibility,
+        visibility: Visibility,
         span: Span,
     },
 
@@ -1053,8 +1065,8 @@ pub enum TypeError {
     },
 
     /// A `resource Child extends Parent` clause the elaborator rejected: the
-    /// parent is not a resource, a backing does not match, the chain is
-    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    /// parent is not a resource, a linearity does not match, the chain is
+    /// cyclic, or the parent carries generic arguments.
     ResourceExtends {
         message: String,
         span: Span,
@@ -1135,7 +1147,7 @@ impl TypeError {
     /// source of truth shared by [`std::fmt::Display`] and the
     /// `From<TypeError> for Diagnostic` conversion, so both surfaces phrase
     /// every variant identically.
-    pub(super) fn render(&self) -> (crate::compiler_host::Code, String, Span) {
+    pub(super) fn render(&self) -> (Code, String, Span) {
         use crate::compiler_host::Code;
         match self {
             TypeError::TypeMismatch {
@@ -1812,17 +1824,17 @@ impl TypeError {
             } => (
                 Code::PrivateSymbol,
                 match visibility {
-                    crate::ast::Visibility::Internal => format!(
+                    Visibility::Internal => format!(
                         "field `{field_name}` of struct `{struct_name}` is `internal` to its \
                          package and cannot be accessed from another package; mark it `pub` to \
                          expose it across packages"
                     ),
-                    crate::ast::Visibility::Private => format!(
+                    Visibility::Private => format!(
                         "field `{field_name}` of struct `{struct_name}` is private to its defining \
                          file; mark it `internal` (same package) or `pub` (cross package) to widen \
                          access"
                     ),
-                    crate::ast::Visibility::Public => {
+                    Visibility::Public => {
                         unreachable!("a `pub` field is reachable from every module")
                     }
                 },
@@ -1835,7 +1847,7 @@ impl TypeError {
                 span,
             } => (
                 Code::PrivateSymbol,
-                crate::analyze::symbol_not_visible_message(name, module_source, *visibility),
+                symbol_not_visible_message(name, module_source, *visibility),
                 *span,
             ),
             TypeError::PrivateMemberAccess {
@@ -1850,12 +1862,12 @@ impl TypeError {
                     let kind = member_kind.noun();
                     let verb = member_kind.verb();
                     match visibility {
-                        crate::ast::Visibility::Internal => format!(
+                        Visibility::Internal => format!(
                             "{kind} `{member_name}` of `{type_name}` is `internal` to its package \
                              and cannot be {verb} from another package; mark it `pub` to \
                              expose it across packages"
                         ),
-                        crate::ast::Visibility::Private | crate::ast::Visibility::Public => {
+                        Visibility::Private | Visibility::Public => {
                             format!(
                                 "{kind} `{member_name}` of `{type_name}` is private to its defining \
                                  file; mark it `internal` (same package) or `pub` (cross \
@@ -2126,11 +2138,11 @@ impl TypeError {
     }
 }
 
-impl From<TypeError> for crate::compiler_host::Diagnostic {
+impl From<TypeError> for Diagnostic {
     fn from(e: TypeError) -> Self {
         use crate::compiler_host::{DiagnosticSpan, Severity};
         let (code, message, span) = e.render();
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code,
             message,
@@ -2149,7 +2161,7 @@ pub(super) struct LocalVar {
     pub(super) is_mut: bool,
     /// `AstId` of the node that introduced this binding (pattern, parameter,
     /// closure parameter). `None` for elaborator-synthesized temporaries whose
-    /// names cannot be referenced from source (e.g., `__qm_v`, `__b`).
+    /// names cannot be referenced from source (e.g., `$qm_v`, `$b`).
     ///
     /// Used by [`Elaborator`] to record `use → def` edges when an `IdentExpr`
     /// resolves to this local, so that LSP can translate a cursor position
@@ -2213,7 +2225,7 @@ pub(super) struct MethodInfo {
     /// here, so it names the impl dispatch chose. `None` where no declaration
     /// backs the signature: tuple builtins, auto-derived `Eq` / `Ord`, the
     /// error-recovery placeholder.
-    pub(super) method_def: Option<crate::defs::DefId>,
+    pub(super) method_def: Option<DefId>,
     pub(super) return_type: TypeId,
     pub(super) self_kind: ast::SelfKind,
     /// Parameter types (excluding self)
@@ -2263,7 +2275,7 @@ pub(super) struct MethodInfo {
     pub(super) consumes_self: bool,
     /// An inherent member's declared rung. `None` where the member does not
     /// decide its own reach: trait impls, resource methods, builtins.
-    pub(super) inherent_visibility: Option<crate::ast::Visibility>,
+    pub(super) inherent_visibility: Option<Visibility>,
     /// Where [`Self::param_defaults`] were written, when that is not the
     /// selected method's own module: the trait it implements declares them
     /// (WEP 2026-04-11), and a default resolves in the scope that wrote it.
@@ -2287,8 +2299,10 @@ pub(super) struct LabeledBlockTarget {
 pub(super) struct FunctionContext {
     /// Stack of scopes (each scope maps name -> `LocalVar`)
     pub(super) scopes: Vec<IndexMap<String, LocalVar>>,
-    /// Next local index (Wasm locals are function-wide)
-    pub(super) next_local: u32,
+    /// Next local index (Wasm locals are function-wide). Private: a uniquifier
+    /// comes from [`FunctionContext::fresh_serial`], a count from
+    /// [`FunctionContext::local_count`].
+    next_local: u32,
     /// Return type of the function (unit for async fns, since they don't Wasm-return a value)
     pub(super) return_type: TypeId,
     /// Whether this is an async function (`export async fn`).
@@ -2303,7 +2317,7 @@ pub(super) struct FunctionContext {
     /// need a `Vec<TypeId>` (e.g. `TirFunction::local_types`,
     /// `TirGlobal::local_types`) project `locals.iter().map(|l| l.type_id)`
     /// at the point of emission.
-    pub(super) locals: Vec<crate::tir::TirLocal>,
+    pub(super) locals: Vec<TirLocal>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
@@ -2319,27 +2333,22 @@ pub(super) struct FunctionContext {
     /// Current function name for `#function` compile-time literal
     pub(super) function_name: String,
     /// Deref overrides for mutable closures: maps original var name -> (ref var name, inner type)
-    /// When a variable is in this map, lookups return `*__ref_name` instead of the value.
+    /// When a variable is in this map, lookups return `*$ref_name` instead of the value.
     pub(super) deref_overrides: IndexMap<String, (String, TypeId)>,
     /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
     /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
     /// Keyed by local variable name; stores `(param_name, default_expr)` in declaration order.
-    pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<crate::ast::Expr>)>>,
+    pub(super) closure_defaults: IndexMap<String, Vec<(String, Option<Expr>)>>,
     /// True when this context represents the body of a method inside an
     /// `impl Effect for Type` block, i.e. an effect handler operation.
     /// `resume value` is only valid in such contexts.
     pub(super) in_handler_method: bool,
-    /// Per-function serial counter used to name the labeled block that
-    /// scopes each `assert` expansion. Each `assert` in the same function
-    /// gets `__assert_0`, `__assert_1`, … so the names stay short and
-    /// monotonic; the counter is reset per `FunctionContext::new`.
-    pub(super) next_assert_id: u32,
-    /// Per-function serial counter for synthetic loop labels generated by
-    /// `resolve_for` (`__for_0_body`, `__for_1_body`, …). Reset per
-    /// `FunctionContext::new`.
-    pub(super) next_loop_id: u32,
+    /// One per-function serial behind every name a desugaring step mints: an
+    /// `assert` label, a `for` body, an iterator local, a template's holes. Read
+    /// through [`FunctionContext::fresh_serial`].
+    next_internal: u32,
     /// Stack of labels for re-targeting naked `continue` inside C-style
     /// `for` bodies. When non-empty, `resolve_continue` emits
     /// `break <last>` instead of a bare `continue`, so the for-loop's
@@ -2349,19 +2358,19 @@ pub(super) struct FunctionContext {
     /// Power-assert capture side-channel. `Some` only while
     /// [`Elaborator::desugar_assert`] is resolving an assert condition;
     /// the [`Elaborator::resolve_expr`] entry consults it to extract
-    /// scanner-flagged sub-expressions into `let __vK = …;` bindings
+    /// scanner-flagged sub-expressions into `let $vK = …;` bindings
     /// as they are resolved. Outside an assert this is always `None`,
     /// so the hook is a single `Option` discriminant check on the hot
     /// path.
-    pub(super) assert_capture_ctx: Option<super::assert::AssertCaptureContext>,
+    pub(super) assert_capture_ctx: Option<AssertCaptureContext>,
     /// Reify-side counterpart to [`Self::assert_capture_ctx`].
     /// Independent so production and reify never share state.
-    pub(super) reify_assert_capture_ctx: Option<super::reify::ReifyAssertCaptureContext>,
+    pub(super) reify_assert_capture_ctx: Option<ReifyAssertCaptureContext>,
     /// Annotate side-channel: a compound-assign sub-piece's `AstId` → its
     /// resolved type. [`Elaborator::resolve_expr`] returns this instead of
     /// re-resolving the node, so it is walked once (matching reify's
     /// `compound_overrides`). Empty outside `resolve_compound_assign`.
-    pub(super) compound_hoist_types: IndexMap<crate::ast::AstId, TypeId>,
+    pub(super) compound_hoist_types: IndexMap<AstId, TypeId>,
     /// Local slots bound as the index of an enclosing variadic `for let [i, v]
     /// of t.enumerate()`. Such a binding is a compile-time constant once the
     /// loop is unrolled, so it is the one non-literal a pack-typed tuple
@@ -2416,8 +2425,7 @@ impl FunctionContext {
             outer_box_types: IndexMap::default(),
             closure_defaults: IndexMap::default(),
             in_handler_method: false,
-            next_assert_id: 0,
-            next_loop_id: 0,
+            next_internal: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
@@ -2433,7 +2441,7 @@ impl FunctionContext {
     pub(super) fn new_closure(
         return_type: TypeId,
         outer_ctx: &FunctionContext,
-        type_table: &RefCell<crate::tir::TypeTable>,
+        type_table: &RefCell<TypeTable>,
     ) -> Self {
         // Snapshot all locals from outer context
         let mut outer_locals = IndexMap::default();
@@ -2477,14 +2485,28 @@ impl FunctionContext {
             // handler methods — `resume` returns from the enclosing
             // operation, not from the closure.
             in_handler_method: false,
-            next_assert_id: 0,
-            next_loop_id: 0,
+            next_internal: 0,
             for_continue_labels: Vec::new(),
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
             variadic_enumerate_indices: Vec::new(),
         }
+    }
+
+    /// A serial no other desugaring step in this function holds, for the names
+    /// one step mints. It advances on read, so a step that takes its serial
+    /// before recursing keeps it: a template nested in a hole, or a `for-of`
+    /// over a `for-of`, mints names of its own (issue #1987).
+    pub(super) fn fresh_serial(&mut self) -> u32 {
+        let serial = self.next_internal;
+        self.next_internal += 1;
+        serial
+    }
+
+    /// How many locals the function has allocated.
+    pub(super) fn local_count(&self) -> u32 {
+        self.next_local
     }
 
     /// Enter a new scope (for blocks, if/while/for/loop bodies)
@@ -2503,7 +2525,7 @@ impl FunctionContext {
     /// binding and is used by the elaborator to record `use → def` edges. Pass
     /// `Some(id)` for user-visible bindings (let patterns, parameters, closure
     /// parameters); pass `None` for elaborator-synthesized temporaries whose
-    /// names cannot appear in source (e.g., `__qm_v`, `__b`).
+    /// names cannot appear in source (e.g., `$qm_v`, `$b`).
     pub(super) fn add_local(
         &mut self,
         name: String,
@@ -2530,7 +2552,7 @@ impl FunctionContext {
     ) -> u32 {
         let index = self.next_local;
         self.next_local += 1;
-        self.locals.push(crate::tir::TirLocal {
+        self.locals.push(TirLocal {
             name: name.clone(),
             type_id,
             is_mut,
@@ -2594,7 +2616,7 @@ impl FunctionContext {
             }
         }
 
-        // Check deref overrides (for mutable closures: `count` -> `*__ref_count`)
+        // Check deref overrides (for mutable closures: `count` -> `*$ref_count`)
         if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned()
             && let Some(ref_local) = self.outer_locals.get(&ref_name).cloned()
         {
@@ -2702,7 +2724,7 @@ pub(super) enum VarRef {
         type_id: TypeId,
         defining_ast_id: Option<AstId>,
     },
-    /// Captured by mutable reference: `*self.__capture_N` (dereferenced)
+    /// Captured by mutable reference: `*self.$capture_N` (dereferenced)
     DerefCapture {
         index: u32,
         ref_type_id: TypeId,
@@ -2717,7 +2739,7 @@ pub(super) enum VarRef {
 /// resolved types, so aliased spellings compare equal. `display` keeps the
 /// caller's spelling for diagnostics.
 pub(super) struct RequiredTrait {
-    pub(super) decl: crate::resolve::Resolution,
+    pub(super) decl: Resolution,
     pub(super) args: Option<Vec<TypeId>>,
     pub(super) display: String,
 }
@@ -2726,10 +2748,10 @@ pub(super) struct RequiredTrait {
 pub(super) struct TraitMethodMatch {
     /// The matched trait as a mangled method name embeds it: named by the
     /// module that declares it, carrying the impl header's type arguments.
-    pub(super) trait_name: crate::name::FqTraitName,
+    pub(super) trait_name: FqTraitName,
     /// The matched trait's declaration key, resolved from the impl's own
     /// module — two same-named traits from different modules stay distinct.
-    pub(super) trait_decl: crate::defs::DefId,
+    pub(super) trait_decl: DefId,
     /// The impl's trait type arguments as resolved types (empty for a trait
     /// with none). Two matches agreeing on `trait_decl` but not here are one
     /// trait at different argument lists — an overload set.
@@ -2741,7 +2763,7 @@ pub(super) struct TraitMethodMatch {
     pub(super) blanket_type_param: Option<String>,
     /// [`Self::blanket_type_param`] as a binder named by its block, so two
     /// blankets of one trait are two templates whatever letter each spells.
-    pub(super) blanket_binder: Option<crate::name::FqTypeName>,
+    pub(super) blanket_binder: Option<FqTypeName>,
     /// The receiver parameter's bounds as source writes them (`T: Limit`) —
     /// what an ambiguity names two blankets by, neither having a name.
     pub(super) blanket_bounds: Option<String>,
@@ -2752,7 +2774,7 @@ pub(super) struct TraitMethodMatch {
     /// [`Self::impl_struct_name`] as the receiver form a mangled name embeds,
     /// resolved from the impl's own module so it matches the name the impl's
     /// methods were defined under.
-    pub(super) impl_struct_fq: crate::name::FqTypeName,
+    pub(super) impl_struct_fq: FqTypeName,
     /// True for blanket ref impls like `impl<T: Inspect> Inspect for &T` where
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
@@ -2769,39 +2791,39 @@ pub(crate) struct TypeLookup<'a> {
     /// What every name in the program resolves to, answered once by the resolve
     /// pass. The registries this view reads are keyed by declaration, so this is
     /// how a written name reaches one.
-    pub(crate) resolutions: &'a crate::resolve::Resolutions,
+    pub(crate) resolutions: &'a Resolutions,
     /// Namespace-import aliases (`use ns from "..."`). A `ns::Type` reference
     /// in type position is canonicalized to its `ns$Type` alias before any
     /// registry lookup (`sem::imports::canonical_ns_ref`). Collection passes
     /// that have no import context pass an empty map (ns-qualified type
     /// references only appear in resolved bodies).
     pub(crate) namespace_imports: &'a IndexMap<String, ModuleSource>,
-    pub(crate) all_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
-    pub(crate) all_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) all_variant_cases: &'a IndexMap<crate::defs::DefId, VariantInfo>,
-    pub(crate) all_enum_cases: &'a IndexMap<crate::defs::DefId, EnumInfo>,
-    pub(crate) all_flags_cases: &'a IndexMap<crate::defs::DefId, FlagsInfo>,
-    pub(crate) all_resource_types: &'a IndexMap<crate::defs::DefId, ResourceInfo>,
-    pub(crate) all_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
+    pub(crate) all_newtypes: &'a IndexMap<DefId, TypeId>,
+    pub(crate) all_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
+    pub(crate) all_variant_cases: &'a IndexMap<DefId, VariantInfo>,
+    pub(crate) all_enum_cases: &'a IndexMap<DefId, EnumInfo>,
+    pub(crate) all_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
+    pub(crate) all_resource_types: &'a IndexMap<DefId, ResourceInfo>,
+    pub(crate) all_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
     /// This walk's own additions, keyed by declaration like the `all_*` tables
     /// above. See `ModuleDecls::local_struct_fields`.
-    pub(crate) local_struct_fields: &'a IndexMap<crate::defs::DefId, StructFieldInfo>,
-    pub(crate) local_newtypes: &'a IndexMap<crate::defs::DefId, TypeId>,
-    pub(crate) local_enum_cases: &'a IndexMap<crate::defs::DefId, EnumInfo>,
-    pub(crate) local_flags_cases: &'a IndexMap<crate::defs::DefId, FlagsInfo>,
-    pub(crate) local_generic_newtypes: &'a IndexMap<crate::defs::DefId, GenericNewtypeInfo>,
-    pub(crate) local_variant_cases: &'a IndexMap<crate::defs::DefId, VariantInfo>,
+    pub(crate) local_struct_fields: &'a IndexMap<DefId, StructFieldInfo>,
+    pub(crate) local_newtypes: &'a IndexMap<DefId, TypeId>,
+    pub(crate) local_enum_cases: &'a IndexMap<DefId, EnumInfo>,
+    pub(crate) local_flags_cases: &'a IndexMap<DefId, FlagsInfo>,
+    pub(crate) local_generic_newtypes: &'a IndexMap<DefId, GenericNewtypeInfo>,
+    pub(crate) local_variant_cases: &'a IndexMap<DefId, VariantInfo>,
     /// Fields of the anonymous shapes this walk interned, by shape id.
-    pub(crate) anon_struct_fields: &'a IndexMap<crate::tir::AnonStructId, StructFieldInfo>,
+    pub(crate) anon_struct_fields: &'a IndexMap<AnonStructId, StructFieldInfo>,
     /// The local items in scope at the walk's position, highest precedence.
-    pub(crate) fn_local_items: &'a IndexMap<String, crate::defs::DefId>,
+    pub(crate) fn_local_items: &'a IndexMap<String, DefId>,
     /// The declaration indexes — the frame derivation, for a caller holding a
     /// rendered head rather than the site that wrote one. They hold what
     /// modules *declare*, so no import alias can steer them, and they decline
     /// when several modules declare the name. `None` for the collection passes
     /// that run before the indexes exist; every name they resolve is written,
     /// so its site answers.
-    pub(crate) decls: Option<&'a super::trait_env::TraitEnv>,
+    pub(crate) decls: Option<&'a TraitEnv>,
 }
 
 impl<'a> TypeLookup<'a> {
@@ -2811,13 +2833,10 @@ impl<'a> TypeLookup<'a> {
 
     /// Field info for a struct type's own head — the form with nothing left to
     /// resolve, since the head is already an identity or a shape.
-    pub(super) fn struct_fields_of_head(
-        &self,
-        head: crate::tir::StructDef,
-    ) -> Option<&'a StructFieldInfo> {
+    pub(super) fn struct_fields_of_head(&self, head: StructDef) -> Option<&'a StructFieldInfo> {
         match head {
-            crate::tir::StructDef::Decl(def) => self.struct_fields_of(def),
-            crate::tir::StructDef::Anon(shape) => self.anon_struct_fields.get(&shape),
+            StructDef::Decl(def) => self.struct_fields_of(def),
+            StructDef::Anon(shape) => self.anon_struct_fields.get(&shape),
         }
     }
 
@@ -2827,25 +2846,21 @@ impl<'a> TypeLookup<'a> {
     /// The spelling answers only where no walk saw the node.
     pub(super) fn variant_cases_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         name: &str,
     ) -> Option<&'a VariantInfo> {
         self.variant_cases_of(self.declaration_at(site, name)?)
     }
 
     /// [`Self::variant_cases_at`] for an `enum`.
-    pub(super) fn enum_cases_at(
-        &self,
-        site: Option<crate::ast::AstId>,
-        name: &str,
-    ) -> Option<&'a EnumInfo> {
+    pub(super) fn enum_cases_at(&self, site: Option<AstId>, name: &str) -> Option<&'a EnumInfo> {
         self.enum_cases_of(self.declaration_at(site, name)?)
     }
 
     /// [`Self::variant_cases_at`] for a `flags` type.
     pub(super) fn flags_members_at(
         &self,
-        site: Option<crate::ast::AstId>,
+        site: Option<AstId>,
         name: &str,
     ) -> Option<&'a FlagsInfo> {
         self.flags_members_of(self.declaration_at(site, name)?)
@@ -2864,7 +2879,7 @@ impl<'a> TypeLookup<'a> {
     /// about two of them.
     pub(super) fn declared_type_params(
         &self,
-        def: crate::defs::DefId,
+        def: DefId,
     ) -> Option<Vec<(String, Option<ast::Type>)>> {
         fn zip(
             names: impl IntoIterator<Item = String>,
@@ -2907,7 +2922,7 @@ impl<'a> TypeLookup<'a> {
     /// arguments already settled before it resolves.
     pub(super) fn type_args_with_defaults(
         &self,
-        def: crate::defs::DefId,
+        def: DefId,
         args: &[ast::Type],
     ) -> Option<Vec<ast::Type>> {
         let params = self.declared_type_params(def)?;
@@ -2919,7 +2934,7 @@ impl<'a> TypeLookup<'a> {
         for (_, default) in &params[args.len()..] {
             let default = default.clone()?;
             let settled = filled.clone();
-            filled.push(super::type_resolution::substitute_type_params(
+            filled.push(substitute_type_params(
                 &default,
                 &names[..settled.len()],
                 &settled,
@@ -2933,50 +2948,47 @@ impl<'a> TypeLookup<'a> {
     /// The declaration is the key: nothing here re-resolves a spelling, so a
     /// caller that reached `def` off a type cannot land on another module's
     /// same-named struct.
-    pub(super) fn struct_fields_of(&self, def: crate::defs::DefId) -> Option<&'a StructFieldInfo> {
+    pub(super) fn struct_fields_of(&self, def: DefId) -> Option<&'a StructFieldInfo> {
         self.local_struct_fields
             .get(&def)
             .or_else(|| self.all_struct_fields.get(&def))
     }
 
     /// The cases of the variant `def` declares.
-    pub(super) fn variant_cases_of(&self, def: crate::defs::DefId) -> Option<&'a VariantInfo> {
+    pub(super) fn variant_cases_of(&self, def: DefId) -> Option<&'a VariantInfo> {
         self.local_variant_cases
             .get(&def)
             .or_else(|| self.all_variant_cases.get(&def))
     }
 
     /// The cases of the enum `def` declares.
-    pub(super) fn enum_cases_of(&self, def: crate::defs::DefId) -> Option<&'a EnumInfo> {
+    pub(super) fn enum_cases_of(&self, def: DefId) -> Option<&'a EnumInfo> {
         self.local_enum_cases
             .get(&def)
             .or_else(|| self.all_enum_cases.get(&def))
     }
 
     /// The members of the flags type `def` declares.
-    pub(super) fn flags_members_of(&self, def: crate::defs::DefId) -> Option<&'a FlagsInfo> {
+    pub(super) fn flags_members_of(&self, def: DefId) -> Option<&'a FlagsInfo> {
         self.local_flags_cases
             .get(&def)
             .or_else(|| self.all_flags_cases.get(&def))
     }
 
     /// The resource `def` declares.
-    pub(super) fn resource_type_of(&self, def: crate::defs::DefId) -> Option<&'a ResourceInfo> {
+    pub(super) fn resource_type_of(&self, def: DefId) -> Option<&'a ResourceInfo> {
         self.all_resource_types.get(&def)
     }
 
     /// The generic newtype `def` declares.
-    pub(super) fn generic_newtype_of(
-        &self,
-        def: crate::defs::DefId,
-    ) -> Option<&'a GenericNewtypeInfo> {
+    pub(super) fn generic_newtype_of(&self, def: DefId) -> Option<&'a GenericNewtypeInfo> {
         self.local_generic_newtypes
             .get(&def)
             .or_else(|| self.all_generic_newtypes.get(&def))
     }
 
     /// The type the newtype (or `flags` type) `def` declares.
-    pub(super) fn newtype_of(&self, def: crate::defs::DefId) -> Option<TypeId> {
+    pub(super) fn newtype_of(&self, def: DefId) -> Option<TypeId> {
         self.local_newtypes
             .get(&def)
             .or_else(|| self.all_newtypes.get(&def))
@@ -2992,15 +3004,11 @@ impl<'a> TypeLookup<'a> {
     /// walk left nothing — `None` for a node the elaborator minted, and
     /// `Unresolved` for a name it could not place, where this module's scope
     /// is the same scope and so the same answer.
-    pub(super) fn declaration_at(
-        &self,
-        site: Option<crate::ast::AstId>,
-        name: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         match site.and_then(|site| self.resolutions.walked(site)) {
-            Some(crate::resolve::Resolution::Def(def)) => Some(def),
-            Some(crate::resolve::Resolution::Binder(_)) => None,
-            Some(crate::resolve::Resolution::Unresolved) | None => self.declaration(name),
+            Some(Resolution::Def(def)) => Some(def),
+            Some(Resolution::Binder(_)) => None,
+            Some(Resolution::Unresolved) | None => self.declaration(name),
         }
     }
 
@@ -3010,8 +3018,8 @@ impl<'a> TypeLookup<'a> {
     ///
     /// The function-local items tried ahead of the indexes are the walk's own
     /// position; a local item is visible only after its declaration statement.
-    pub(super) fn declaration(&self, name: &str) -> Option<crate::defs::DefId> {
-        let canon = super::sem::imports::canonical_ns_ref(self.namespace_imports, name);
+    pub(super) fn declaration(&self, name: &str) -> Option<DefId> {
+        let canon = canonical_ns_ref(self.namespace_imports, name);
         let name = canon.as_deref().unwrap_or(name);
         if let Some(def) = self.fn_local_items.get(name) {
             return Some(*def);
@@ -3039,14 +3047,14 @@ impl<'a> TypeLookup<'a> {
 pub(super) struct IndexingTraitInfo {
     /// The method the matched block declares — two blocks on one type may each
     /// declare it, so a use site records this rather than the name.
-    pub(super) method_def: crate::defs::DefId,
+    pub(super) method_def: DefId,
     /// The `Output` associated type — for `IndexAssign`, the assigned value's
     /// type.
     pub(super) output_type: TypeId,
     /// Self kind of the trait's method.
     pub(super) self_kind: ast::SelfKind,
     /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
+    pub(super) trait_name: FqTraitName,
     /// Module where the impl block is defined
     pub(super) impl_module_source: ModuleSource,
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
@@ -3059,13 +3067,13 @@ pub(super) struct IndexingTraitInfo {
 pub(super) struct ArithmeticTraitInfo {
     /// The `impl` block that matched. The module a dispatch is recorded
     /// against is read off it, so no rendering is compared to find one.
-    pub(super) impl_def: crate::defs::DefId,
+    pub(super) impl_def: DefId,
     /// The Output associated type
     pub(super) output_type: TypeId,
     /// Self kind for the method (&self)
     pub(super) self_kind: ast::SelfKind,
     /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
+    pub(super) trait_name: FqTraitName,
     /// The resolved type of the rhs parameter (first non-self parameter)
     pub(super) rhs_type: Option<TypeId>,
     /// Module that wrote the impl block — where the method body is registered.
@@ -3083,15 +3091,15 @@ pub(super) struct ResolvedTraitMethod {
     /// The declaration dispatch selected — an `impl` block's method, or the
     /// *trait's* where the receiver is a type parameter and only
     /// monomorphization can say which block answers.
-    pub(super) method_def: Option<crate::defs::DefId>,
+    pub(super) method_def: Option<DefId>,
     /// The implemented trait, named by the module that declares it.
-    pub(super) trait_name: crate::name::FqTraitName,
+    pub(super) trait_name: FqTraitName,
     /// Method name (e.g., "eq", "cmp", "add", "shl", "neg", "bitnot").
     pub(super) method_name: String,
     /// The `impl` block dispatch matched. `None` where none is named: an
     /// auto-derived `Eq` / `Ord`, and a method reached through a type
     /// parameter's bound, whose block monomorphization picks.
-    pub(super) impl_def: Option<crate::defs::DefId>,
+    pub(super) impl_def: Option<DefId>,
     /// Written name of the type whose impl matched — the impl-index key. For
     /// newtypes this may be the ultimate base-type name when dispatch falls
     /// back to the base impl.
@@ -3121,7 +3129,7 @@ pub(super) struct ResolvedTraitMethod {
 pub(super) struct FromArrayInfo {
     /// The `impl From<Array<…>>` block that matched. `None` for an `Array<E>`
     /// target, which runs no conversion.
-    pub(super) impl_def: Option<crate::defs::DefId>,
+    pub(super) impl_def: Option<DefId>,
     /// `E` — the type every element (or key-value pair) of the literal takes.
     pub(super) element_type: TypeId,
     /// `Array<E>` — the value the literal materializes and `from` receives.
@@ -3131,13 +3139,13 @@ pub(super) struct FromArrayInfo {
     /// `From<Array<…>>` as the impl block declares it — the spelling the
     /// method template is registered under, so a generic impl's argument is
     /// still written in its own parameters (`From<Array<T>>`).
-    pub(super) trait_name: crate::name::FqTraitName,
+    pub(super) trait_name: FqTraitName,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler_host::Diagnostic;
+    use crate::compiler_host::{Code, Diagnostic};
     use crate::token::Span;
     use std::assert_matches;
 
@@ -3164,7 +3172,7 @@ mod tests {
     #[test]
     fn render_carries_diagnostic_code_and_span() {
         let (code, message, sp) = TypeError::ResumeOutsideHandler { span: span() }.render();
-        assert_matches!(code, crate::compiler_host::Code::UnsupportedFeature);
+        assert_matches!(code, Code::UnsupportedFeature);
         assert_eq!(
             message,
             "`resume` is only valid inside an effect handler method body"

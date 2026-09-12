@@ -1,14 +1,16 @@
+use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
-use crate::tir::FunctionRef;
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName};
 use crate::tir::{
-    CallArg, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, PrimitiveType, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr,
+    TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern,
+    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -61,7 +63,7 @@ fn coerce_value_to_binding(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,
                     struct_name,
-                    fields: vec![crate::tir::TirStructField {
+                    fields: vec![TirStructField {
                         name: "value".to_string(),
                         value,
                         field_index: 0,
@@ -127,11 +129,11 @@ fn peel_refs_and_box(
 pub struct Lowering {
     /// Map from the `variant` declaration to its (`case_name`, `case_index`)
     /// pairs.
-    variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
+    variant_case_map: IndexMap<DefId, Vec<(String, u32)>>,
     /// Map from a struct type's head-and-args to its field definitions.
-    struct_fields_map: IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
+    struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Canonical stdlib name of the `Eq` trait.
-    eq_trait_name: crate::name::FqTraitName,
+    eq_trait_name: FqTraitName,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: FqTypeName,
     /// `&String`, the type of the argument a synthesised `String^Eq::eq` takes.
@@ -148,8 +150,7 @@ impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
     pub fn new(flat: &FlatPackage, returns_receiver_alias: &FuncKeySet) -> Self {
-        let mut variant_case_map: IndexMap<crate::defs::DefId, Vec<(String, u32)>> =
-            IndexMap::default();
+        let mut variant_case_map: IndexMap<DefId, Vec<(String, u32)>> = IndexMap::default();
         for variant in &flat.variants {
             let cases: Vec<(String, u32)> = variant
                 .cases
@@ -159,7 +160,7 @@ impl Lowering {
             variant_case_map.insert(variant.def, cases);
         }
 
-        let mut struct_fields_map: IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>> =
+        let mut struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>> =
             IndexMap::default();
         for s in &flat.structs {
             struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
@@ -181,15 +182,14 @@ impl Lowering {
         }
 
         let mut type_table = flat.type_table.borrow_mut();
-        let eq_trait_name = type_table.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq);
-        let string_struct_name =
-            type_table.compiler_struct_fq_name(crate::compiler_item::CompilerItem::String);
-        let string_def = crate::tir::StructDef::Decl(
+        let eq_trait_name = type_table.compiler_trait_fq(CompilerItem::Eq);
+        let string_struct_name = type_table.compiler_struct_fq_name(CompilerItem::String);
+        let string_def = StructDef::Decl(
             type_table
-                .compiler_item_def(crate::compiler_item::CompilerItem::String)
+                .compiler_item_def(CompilerItem::String)
                 .expect("the prelude always defines String"),
         );
-        let string_type = type_table.intern(crate::tir::ResolvedType::Struct {
+        let string_type = type_table.intern(ResolvedType::Struct {
             def: string_def,
             type_args: Vec::new(),
         });
@@ -243,7 +243,7 @@ struct PatternLowerer<'a> {
     /// compiler-item registry so synthesised `String^Eq::eq` calls
     /// follow stdlib renames without falling back to a hard-coded
     /// `"Eq"` literal.
-    eq_trait_name: crate::name::FqTraitName,
+    eq_trait_name: FqTraitName,
     /// Canonical stdlib name of the `String` struct, resolved through
     /// the same registry so the receiver-type slot of the synthesised
     /// `String^Eq::eq` `LocalMethodName` tracks renames too.
@@ -252,9 +252,9 @@ struct PatternLowerer<'a> {
     string_ref_type: TypeId,
     /// Map from the `variant` declaration to a list of (`case_name`,
     /// `case_index`) pairs; the scrutinee's type names the declaration.
-    variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
+    variant_case_map: &'a IndexMap<DefId, Vec<(String, u32)>>,
     /// Map from a struct type's head-and-args to its field definitions.
-    struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
+    struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
     const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
     returns_receiver_alias: &'a FuncKeySet,
@@ -267,9 +267,7 @@ struct PatternLowerer<'a> {
 /// write.
 fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     match pattern {
-        TirPattern::Binding { type_id, .. } => {
-            crate::lower::plan::value_copy::needs_value_copy(*type_id, type_table)
-        }
+        TirPattern::Binding { type_id, .. } => value_copy::needs_value_copy(*type_id, type_table),
         TirPattern::Tuple(sub, _)
         | TirPattern::Variant { bindings: sub, .. }
         | TirPattern::Or(sub) => sub.iter().any(|p| binds_by_value(p, type_table)),
@@ -306,11 +304,11 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
-        eq_trait_name: crate::name::FqTraitName,
+        eq_trait_name: FqTraitName,
         string_struct_name: FqTypeName,
         string_ref_type: TypeId,
-        variant_case_map: &'a IndexMap<crate::defs::DefId, Vec<(String, u32)>>,
-        struct_fields_map: &'a IndexMap<(crate::tir::StructDef, Vec<TypeId>), Vec<TirField>>,
+        variant_case_map: &'a IndexMap<DefId, Vec<(String, u32)>>,
+        struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
         returns_receiver_alias: &'a FuncKeySet,
     ) -> Self {
@@ -330,7 +328,7 @@ impl<'a> PatternLowerer<'a> {
     }
 
     /// Look up the case index for a case of `def`.
-    fn get_case_index(&self, def: crate::defs::DefId, case_name: &str) -> Option<u32> {
+    fn get_case_index(&self, def: DefId, case_name: &str) -> Option<u32> {
         self.variant_case_map
             .get(&def)
             .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
@@ -355,7 +353,7 @@ impl<'a> PatternLowerer<'a> {
 
     /// Allocate a new local and return its index. Pattern temps are
     /// synthesised — they have no source-level name, so the produced slot
-    /// uses the `__local_N` convention.
+    /// uses the `$local_N` convention.
     fn alloc_local(&mut self, type_id: TypeId) -> u32 {
         let index = self.local_count;
         self.local_count += 1;
@@ -365,7 +363,7 @@ impl<'a> PatternLowerer<'a> {
 
     /// Generate a unique temp local name
     fn next_temp_name(&mut self) -> String {
-        let name = format!("__pattern_temp_{}", self.temp_counter);
+        let name = format!("$pattern_temp_{}", self.temp_counter);
         self.temp_counter += 1;
         name
     }
@@ -454,8 +452,8 @@ impl<'a> PatternLowerer<'a> {
     /// tuple/struct pattern into guard conditions.
     ///
     /// Transforms:
-    ///   `[a, 10] => body`  →  `[a, __lit_0] && __lit_0 == 10 => body`
-    ///   `[Bool(x), Bool(y)] => body`  →  `[__v_0, __v_1] && variant_test(__v_0, Bool) && variant_test(__v_1, Bool) => { let x = payload(__v_0); let y = payload(__v_1); body }`
+    ///   `[a, 10] => body`  →  `[a, $lit_0] && $lit_0 == 10 => body`
+    ///   `[Bool(x), Bool(y)] => body`  →  `[$v_0, $v_1] && variant_test($v_0, Bool) && variant_test($v_1, Bool) => { let x = payload($v_0); let y = payload($v_1); body }`
     fn extract_refutable_sub_patterns(
         &mut self,
         arm: &mut TirMatchArm,
@@ -615,7 +613,7 @@ impl<'a> PatternLowerer<'a> {
                 conditions.push(cond);
 
                 *sub = TirPattern::Binding {
-                    name: format!("__lit_{temp_index}"),
+                    name: format!("$lit_{temp_index}"),
                     local_index: temp_index,
                     type_id: elem_type,
                 };
@@ -628,7 +626,7 @@ impl<'a> PatternLowerer<'a> {
             } => {
                 let (start, end, inclusive) = (*start, *end, *inclusive);
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("__range_{temp_index}");
+                let temp_name = format!("$range_{temp_index}");
 
                 let cond = self.range_condition(
                     temp_index, &temp_name, elem_type, start, end, inclusive, span,
@@ -648,7 +646,7 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
             } => {
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("__variant_{temp_index}");
+                let temp_name = format!("$variant_{temp_index}");
 
                 // If the element is a reference, deref to get the variant value
                 let variant_expr = {
@@ -744,7 +742,7 @@ impl<'a> PatternLowerer<'a> {
                 case_index,
             } => {
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("__enum_{temp_index}");
+                let temp_name = format!("$enum_{temp_index}");
 
                 // If the element is a reference, deref to get the enum value
                 let enum_expr = {
@@ -790,7 +788,7 @@ impl<'a> PatternLowerer<'a> {
                 let local_expr = TirExpr::new(
                     TirExprKind::Local {
                         index: temp_index,
-                        name: format!("__const_{temp_index}"),
+                        name: format!("$const_{temp_index}"),
                     },
                     elem_type,
                     span,
@@ -806,7 +804,7 @@ impl<'a> PatternLowerer<'a> {
                 );
                 conditions.push(cond);
                 *sub = TirPattern::Binding {
-                    name: format!("__const_{temp_index}"),
+                    name: format!("$const_{temp_index}"),
                     local_index: temp_index,
                     type_id: elem_type,
                 };
@@ -819,7 +817,7 @@ impl<'a> PatternLowerer<'a> {
                 // variant tag tests and payload extractions. The whole thing becomes
                 // a single bool condition in the guard.
                 let temp_index = self.alloc_local(elem_type);
-                let temp_name = format!("__compound_{temp_index}");
+                let temp_name = format!("$compound_{temp_index}");
                 let temp_expr = TirExpr::new(
                     TirExprKind::Local {
                         index: temp_index,
@@ -897,7 +895,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Literal(lit) => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__lit_{temp_index}");
+                let temp_name = format!("$lit_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name,
@@ -928,7 +926,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::ConstantValue { expr: const_expr } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__const_{temp_index}");
+                let temp_name = format!("$const_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -979,7 +977,7 @@ impl<'a> PatternLowerer<'a> {
                 case_index,
             } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__enum_{temp_index}");
+                let temp_name = format!("$enum_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1040,7 +1038,7 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
             } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__variant_{temp_index}");
+                let temp_name = format!("$variant_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1136,7 +1134,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__tup_{temp_index}");
+                let temp_name = format!("$tup_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1187,7 +1185,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__struct_{temp_index}");
+                let temp_name = format!("$struct_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1247,7 +1245,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Or(alternatives) => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__or_{temp_index}");
+                let temp_name = format!("$or_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1307,7 +1305,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 let temp_index = self.alloc_local(pattern_type);
-                let temp_name = format!("__range_{temp_index}");
+                let temp_name = format!("$range_{temp_index}");
                 let let_stmt = TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -1429,7 +1427,7 @@ impl<'a> PatternLowerer<'a> {
         let local_expr = TirExpr::new(
             TirExprKind::Local {
                 index: local_index,
-                name: format!("__lit_{local_index}"),
+                name: format!("$lit_{local_index}"),
             },
             local_type,
             span,
@@ -1753,7 +1751,7 @@ impl<'a> PatternLowerer<'a> {
         let type_id = hoisted.type_id;
         let scrutinee_span = hoisted.span;
         let temp = self.alloc_local(type_id);
-        let name = format!("__match_{temp}");
+        let name = format!("$match_{temp}");
         self.owned_temps.insert(temp);
         *scrutinee = TirExpr::new(
             TirExprKind::Local {
@@ -2230,7 +2228,7 @@ impl<'a> PatternLowerer<'a> {
                         let cond =
                             self.literal_eq_condition(temp_index, scrutinee_type_id, &lit, span);
                         arm.pattern = TirPattern::Binding {
-                            name: format!("__lit_{temp_index}"),
+                            name: format!("$lit_{temp_index}"),
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
@@ -2293,7 +2291,7 @@ impl<'a> PatternLowerer<'a> {
                         let local_expr = TirExpr::new(
                             TirExprKind::Local {
                                 index: temp_index,
-                                name: format!("__const_{temp_index}"),
+                                name: format!("$const_{temp_index}"),
                             },
                             scrutinee_type_id,
                             span,
@@ -2308,7 +2306,7 @@ impl<'a> PatternLowerer<'a> {
                             span,
                         );
                         arm.pattern = TirPattern::Binding {
-                            name: format!("__const_{temp_index}"),
+                            name: format!("$const_{temp_index}"),
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
@@ -2413,7 +2411,7 @@ impl<'a> PatternLowerer<'a> {
                         name: name.clone(),
                         type_id: *ty,
                         is_mut: false,
-                        span: crate::token::Span::default(),
+                        span: Span::default(),
                     })
                     .chain(body_locals.iter().cloned())
                     .collect();

@@ -18,15 +18,16 @@
 //! 4. Shift operators (`<<`, `>>`) accept `rhs: u32` verbatim — the
 //!    subsystem distinguishes `&Self` from a concrete rhs type.
 
+use crate::common::compile_source;
 fn compile_ok(source: &str) {
-    match crate::common::compile_source(source) {
+    match compile_source(source) {
         Ok(_) => {}
         Err(e) => panic!("expected successful compile, got error: {e}"),
     }
 }
 
 fn compile_err_contains(source: &str, needle: &str) -> String {
-    match crate::common::compile_source(source) {
+    match compile_source(source) {
         Ok(_) => panic!("expected compile error containing {needle:?}, but compile succeeded"),
         Err(e) => {
             let msg = e.to_string();

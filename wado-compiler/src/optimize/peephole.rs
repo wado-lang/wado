@@ -26,6 +26,9 @@ use super::match_to_switch::MatchToSwitchRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
+use crate::optimize::match_to_switch::intern_cold_markers;
+use crate::optimize::mod_ref::compute_fn_effects;
+use crate::optimize::select_lowering::intern_select;
 
 /// Run the unified peephole rule set over every function body. Returns whether
 /// any rule fired. Gated: skips functions unchanged since this pass last ran.
@@ -41,8 +44,8 @@ pub(super) fn run_peephole(
 ) -> bool {
     // Intern the builtins the bundled rules synthesize, before any shared
     // immutable borrow of `project`, so their calls are born resolved.
-    let (cold_path_id, unreachable_id) = super::match_to_switch::intern_cold_markers(project);
-    let select_id = super::select_lowering::intern_select(project);
+    let (cold_path_id, unreachable_id) = intern_cold_markers(project);
+    let select_id = intern_select(project);
     // Whole-package contexts, resolved once before the mutable body walk.
     let push_ctx = resolve_ctx(project);
     let const_ascii_push_rule = push_ctx.as_ref().and_then(ConstAsciiPushRule::new);
@@ -82,7 +85,7 @@ pub(super) fn run_peephole(
          built for a run that visits no function. `gated!` owns that skip."
     );
     // Once for the run.
-    let effects = super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     gate.run_gated(gated_pass, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         // `stores_aliased_locals` is per-function, so the ref-elimination rule is
@@ -112,7 +115,7 @@ pub(super) fn run_peephole(
         // Labeled-block fusion runs post-inline only: the `let temp = LB { ...;
         // break L: Some(v); }; if VariantTest(temp, …)` shape it folds is what
         // `inline` exposes when an `Option`/`Result`-returning helper is copied
-        // into an if-let caller. The rule allocates fresh `__fused_payload_N`
+        // into an if-let caller. The rule allocates fresh `$fused_payload_N`
         // locals via the engine, so it sits next to the other block-level
         // rules.
         // One rule, two entry points: `apply_block` fuses the value-discarding

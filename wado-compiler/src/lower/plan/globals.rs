@@ -4,16 +4,20 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Visibility;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
-use crate::tir::FunctionRef;
+use crate::name::{MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::synthesis::common::builtin_call;
+use crate::tir;
 use crate::tir::{
-    FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
-    TypeId, TypeTable,
+    FunctionKind, FunctionRef, GlobalInit, InlineHint, PrimitiveType, ResolvedType, TirBinaryOp,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -22,7 +26,7 @@ use crate::token::Span;
 // after closure), so they cannot share a single entry point. The
 // `extract` half emits per-module init functions; the
 // `build_initialize_modules` half combines them into the top-level
-// `__initialize_modules` aggregator.
+// `$initialize_modules` aggregator.
 
 /// Whether the Wasm slot can hold this value directly, so the global needs no
 /// assignment from an initialization function.
@@ -62,10 +66,7 @@ fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),
         ResolvedType::Primitive(
-            crate::tir::PrimitiveType::I32
-                | crate::tir::PrimitiveType::U32
-                | crate::tir::PrimitiveType::I64
-                | crate::tir::PrimitiveType::U64
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::I64 | PrimitiveType::U64
         )
     )
 }
@@ -74,12 +75,12 @@ fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => match prim {
-            crate::tir::PrimitiveType::I8
-            | crate::tir::PrimitiveType::I16
-            | crate::tir::PrimitiveType::I32
-            | crate::tir::PrimitiveType::U8
-            | crate::tir::PrimitiveType::U16
-            | crate::tir::PrimitiveType::U32 => TirExpr::new(
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -87,7 +88,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::I64 | crate::tir::PrimitiveType::U64 => TirExpr::new(
+            PrimitiveType::I64 | PrimitiveType::U64 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -95,7 +96,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::F32 => TirExpr::new(
+            PrimitiveType::F32 => TirExpr::new(
                 TirExprKind::FloatLiteral {
                     value: 0.0,
                     repr: "0.0".to_string(),
@@ -103,7 +104,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::F64 => TirExpr::new(
+            PrimitiveType::F64 => TirExpr::new(
                 TirExprKind::FloatLiteral {
                     value: 0.0,
                     repr: "0.0".to_string(),
@@ -111,13 +112,9 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::Bool => {
-                TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span)
-            }
-            crate::tir::PrimitiveType::Char => {
-                TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span)
-            }
-            crate::tir::PrimitiveType::V128 => TirExpr::new(
+            PrimitiveType::Bool => TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span),
+            PrimitiveType::Char => TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span),
+            PrimitiveType::V128 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -133,7 +130,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
 }
 
 /// Extract non-constant global initializers into a per-module
-/// `__initialize_module` function, the globals keeping a default value in their
+/// `$initialize_module` function, the globals keeping a default value in their
 /// place. Must run before `boxing`, the extracted code being able to contain the
 /// `&primitive` and closure expressions boxing rewrites; the top-level
 /// aggregator calling each one is built later by [`build_initialize_modules`].
@@ -175,7 +172,7 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     }
 
     // Partition lazy inits by their owning module so each module gets
-    // its own `__initialize_module` function. Insertion order is
+    // its own `$initialize_module` function. Insertion order is
     // preserved so cross-module sibling ordering matches the original
     // global declaration order, which the aggregator then walks in
     // entry-last order (see `build_initialize_modules`).
@@ -232,8 +229,8 @@ fn build_module_init_function(
         module_source,
         def_id: None,
         is_async: false,
-        name: crate::name::MODULE_INIT_FUNCTION.to_string(),
-        visibility: crate::ast::Visibility::Public,
+        name: MODULE_INIT_FUNCTION.to_string(),
+        visibility: Visibility::Public,
         is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -261,7 +258,7 @@ fn build_module_init_function(
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -276,7 +273,7 @@ struct BodyReads {
     callees: IndexSet<String>,
 }
 
-impl crate::tir_visitor::TirRefVisitor for BodyReads {
+impl TirRefVisitor for BodyReads {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::GlobalVarGet {
@@ -531,7 +528,7 @@ fn topological_sort_global_inits(
 }
 
 /// Renumber all local variable indices in a TIR expression by adding an offset.
-/// Used when merging multiple global initializers into a single `__initialize_module` function.
+/// Used when merging multiple global initializers into a single `$initialize_module` function.
 fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
     match &mut expr.kind {
         TirExprKind::Local { index, .. } => *index += offset,
@@ -725,7 +722,7 @@ fn sort_modules_by_dependency(
 ) {
     let reads = global_reads_by_function(functions);
     let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
-        let key = function_key(module, crate::name::MODULE_INIT_FUNCTION);
+        let key = function_key(module, MODULE_INIT_FUNCTION);
         reads
             .get(&key)
             .into_iter()
@@ -761,19 +758,18 @@ fn sort_modules_by_dependency(
     *modules = ordered;
 }
 
-/// Generate `__initialize_modules` for a `FlatPackage`.
-/// Generate the top-level `__initialize_modules` aggregator. Must run
+/// Generate `$initialize_modules` for a `FlatPackage`.
+/// Generate the top-level `$initialize_modules` aggregator. Must run
 /// after all per-module init functions exist (i.e. after [`extract`]).
 pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
-    // Collect distinct module sources that have __initialize_module function
+    // Collect distinct module sources that have $initialize_module function
     let mut modules_with_init: Vec<ModuleSource> = Vec::new();
     let mut seen = IndexSet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        if func.name == crate::name::MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone())
-        {
+        if func.name == MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone()) {
             modules_with_init.push(func.module_source.clone());
         }
     }
@@ -786,9 +782,9 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
 
     let span = Span::new(0, 0, 1, 1);
 
-    // Create __modules_initialized flag global
+    // Create $modules_initialized flag global
     let init_flag_global = TirGlobal {
-        name: "__modules_initialized".to_string(),
+        name: "$modules_initialized".to_string(),
         ty: TypeTable::BOOL,
         init: GlobalInit::Direct(TirExpr::new(
             TirExprKind::BoolLiteral(false),
@@ -797,21 +793,21 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         )),
         param: None,
         wado_mutable: true,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
         locals: Vec::new(),
     };
     flat.globals.push(init_flag_global);
 
-    // Build __initialize_modules function body
+    // Build $initialize_modules function body
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
-    // Check flag: if __modules_initialized { return; }
+    // Check flag: if $modules_initialized { return; }
     let flag_check = TirExpr::new(
         TirExprKind::GlobalVarGet {
             module_source: entry_source.clone(),
-            name: "__modules_initialized".to_string(),
+            name: "$modules_initialized".to_string(),
         },
         TypeTable::BOOL,
         span,
@@ -836,21 +832,17 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     // the copies inlined into each export entry, and the inliner excludes the
     // one-shot init calls from its cost estimate.
     init_stmts.push(TirStmt::new(
-        TirStmtKind::Expr(crate::synthesis::common::builtin_call(
-            "cold_path",
-            Vec::new(),
-            TypeTable::UNIT,
-        )),
+        TirStmtKind::Expr(builtin_call("cold_path", Vec::new(), TypeTable::UNIT)),
         span,
     ));
 
-    // Call each module's __initialize_module
+    // Call each module's $initialize_module
     for module_source in &modules_with_init {
         let call = TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
                     module_source: module_source.clone(),
-                    name: crate::name::MODULE_INIT_FUNCTION.to_string(),
+                    name: MODULE_INIT_FUNCTION.to_string(),
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -864,11 +856,11 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
     }
 
-    // Set flag: __modules_initialized = true;
+    // Set flag: $modules_initialized = true;
     let set_flag = TirExpr::new(
         TirExprKind::GlobalVarSet {
             module_source: entry_source.clone(),
-            name: "__modules_initialized".to_string(),
+            name: "$modules_initialized".to_string(),
             value: Box::new(TirExpr::new(
                 TirExprKind::BoolLiteral(true),
                 TypeTable::BOOL,
@@ -889,8 +881,8 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         module_source: entry_source.clone(),
         def_id: None,
         is_async: false,
-        name: crate::name::MODULES_INIT_FUNCTION.to_string(),
-        visibility: crate::ast::Visibility::Private,
+        name: MODULES_INIT_FUNCTION.to_string(),
+        visibility: Visibility::Private,
         is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -919,18 +911,18 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     };
 
     flat.functions
         .push(Rc::new(RefCell::new(init_modules_func)));
 
-    // Inject call to __initialize_modules at the start of entry point functions
+    // Inject call to $initialize_modules at the start of entry point functions
     let init_call = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: crate::name::MODULES_INIT_FUNCTION.to_string(),
+                name: MODULES_INIT_FUNCTION.to_string(),
                 monomorph_info: None,
                 method_info: None,
             }),

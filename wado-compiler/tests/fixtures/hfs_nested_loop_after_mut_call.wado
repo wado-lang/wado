@@ -1,7 +1,7 @@
 // Regression: Hot-Field Scalarization must not leave a nested loop in
 // `ScalarOnly` when the field is canonical on every real exit.
 //
-// In the outer loop `s.a` is scalarized into `__hfs_a`. Each iteration:
+// In the outer loop `s.a` is scalarized into `$hfs_a`. Each iteration:
 //   1. reads `s.a` (scalar),
 //   2. an opaque `#[inline(never)]` `&mut self` call (`touch`) mutates
 //      `s.a` — post-call state is `FieldOnly` (field current, scalar stale),
@@ -13,7 +13,7 @@
 // `ScalarOnly` via the branch-join heuristic (`{ScalarOnly,FieldOnly} ->
 // ScalarOnly`). That is unsound for a loop: the zero-iteration path exits
 // at `entry` (field canonical, scalar stale), so claiming `ScalarOnly`
-// let step 4 trust a stale `__hfs_a` and a later write-back clobbered
+// let step 4 trust a stale `$hfs_a` and a later write-back clobbered
 // `touch`'s mutation. The fix demotes a loop's post-state `ScalarOnly`
 // to `FieldOnly`, forcing a re-read. Reproduces only at high inline
 // thresholds (-O3), where `touch`'s caller context inlines into the

@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::common::InMemoryHost;
+use crate::common::{FilesystemHost, InMemoryHost};
 use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };
@@ -218,7 +218,7 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
     let base = std::path::PathBuf::from(format!("{}/tests/fixtures", env!("CARGO_MANIFEST_DIR")));
 
     let plan: BTreeSet<String> = {
-        let host = crate::common::FilesystemHost::new(base.clone());
+        let host = FilesystemHost::new(base.clone());
         let dump = block_on(dump_with_host_and_world(
             source,
             &host,
@@ -242,7 +242,7 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
     };
 
     let actual: BTreeSet<String> = {
-        let host = crate::common::FilesystemHost::new(base);
+        let host = FilesystemHost::new(base);
         let result = block_on(compile_with_host(
             source,
             &host,

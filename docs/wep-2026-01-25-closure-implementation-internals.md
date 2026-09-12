@@ -4,7 +4,7 @@ How the closure design in [Closure Implementation](./wep-2026-01-16-closure-impl
 
 ## Context
 
-A closure literal lowers to a functor struct with a `__call` method, but a parameter that receives it is typed `fn(i32) -> i32`:
+A closure literal lowers to a functor struct with a `$call` method, but a parameter that receives it is typed `fn(i32) -> i32`:
 
 ```wado
 fn apply(f: fn(i32) -> i32, x: i32) -> i32 {
@@ -52,7 +52,7 @@ A closure is an environment struct paired with a funcref. Flat closure plus tram
 
 Two structs, on two different keys:
 
-- `__Closure_N` — one per closure literal, `(env, func)`, the specialised form.
+- `$Closure_N` — one per closure literal, `(env, func)`, the specialised form.
 - `CanonicalClosure_K` — one per full Wasm signature, the type-erased form.
 
 The canonical struct takes one of two shapes, chosen per `(arity, return type)` by whether any closure of that shape is inspected — the struct's own identity is keyed on the full Wasm signature:
@@ -80,7 +80,7 @@ The subtype keeps the base's prefix and adds `func` last. `$canonical_callback_f
 
 A stub is synthesized as a bodyless `FunctionKind::FnCanonicalDispatch` and WIR build supplies its body, a `call_ref` through the vtable slot. Bodyless functions are skipped by the inliner and the other body walkers, so the placeholder costs nothing during optimization.
 
-Per-literal wrappers cast the canonical `env` back to `__Closure_N` and forward to `__call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
+Per-literal wrappers cast the canonical `env` back to `$Closure_N` and forward to `$call` or `^Inspect`. The specialised path never touches the vtable: lowering rewrites an `Inspect` call on a known-local closure receiver into a direct call, and DCE removes the impls when nothing calls them.
 
 ### Closures cannot cross the Component Model boundary
 

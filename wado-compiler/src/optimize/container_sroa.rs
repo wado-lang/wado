@@ -25,6 +25,10 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{reachable_blocks, strip_one_value_copy};
 use super::gate::{FunctionGate, GatedPass};
+use crate::lower::plan::value_copy;
+use crate::name::FqTraitName;
+use crate::nir::NirField;
+use crate::nir_value_graph::ValueKind;
 
 /// Signature key for a monomorphized `List<T>` method: (`trait_name`, `method_name`).
 /// Inherent methods (`push/len/is_empty/with_capacity`) use `trait_name = None`;
@@ -33,7 +37,7 @@ use super::gate::{FunctionGate, GatedPass};
 /// This key is the *method family* identifier — it is invariant under the element
 /// type `T` (i.e., `List<i32>::push` and `List<i64>::push` share the same
 /// `SigKey`). The catalog then uses `(TypeId, SigKey)` for per-element-type lookup.
-type SigKey = (Option<crate::name::FqTraitName>, String);
+type SigKey = (Option<FqTraitName>, String);
 
 /// Classification of an `List<T>` method by signature shape. Determines whether
 /// the pass can safely rewrite calls on decomposed candidates, and how.
@@ -167,7 +171,7 @@ type SigKindIndex = IndexMap<SigKey, ListMethodKind>;
 /// `func_id` instead of reading the call node's `FunctionRef`. Built alongside
 /// [`SigKindIndex`]; an entry exists for exactly the functions whose `SigKey`
 /// classifies, so `id_kinds.get(call.func_id) == sig_kinds.get(sig_key_of(call))`.
-type IdKindIndex = IndexMap<crate::nir::FuncId, ListMethodKind>;
+type IdKindIndex = IndexMap<FuncId, ListMethodKind>;
 
 /// The method-signature classification, bundled so it threads as one borrow.
 struct MethodSig {
@@ -175,7 +179,7 @@ struct MethodSig {
     /// A `List` method's [`FuncId`](crate::nir::FuncId) → its `SigKey`, so the
     /// rewriter recovers the callee's `(trait, method)` by id (for catalog
     /// retargeting) instead of reading the call node's `FunctionRef`.
-    id_sigkeys: IndexMap<crate::nir::FuncId, SigKey>,
+    id_sigkeys: IndexMap<FuncId, SigKey>,
     /// Element type `T` and [`ListMethodKind`] → the [`SigKey`] of a
     /// monomorphized `List<T>` method of that kind. Direct index so
     /// [`find_sig_key_for_kind`] is a single lookup, not a per-call catalog scan.
@@ -184,7 +188,7 @@ struct MethodSig {
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
 /// `List<T_k>::method`. Built once per pass.
-type MethodCatalog = IndexMap<(TypeId, SigKey), (FunctionRef, crate::nir::FuncId)>;
+type MethodCatalog = IndexMap<(TypeId, SigKey), (FunctionRef, FuncId)>;
 
 /// A local that is a candidate for container SROA.
 struct Candidate {
@@ -308,7 +312,7 @@ pub(super) struct ContainerSroaRule<'a> {
     /// The `$value_copy$T` helper ids. A slot copy `v[i] = $value_copy$T(v[j])`
     /// of an all-scalar element decomposes to per-field scalar copies, so the
     /// wrapper is seen through during decomposition.
-    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
     /// Whole-function rewrite: only run once per session.
     applied: Cell<bool>,
 }
@@ -346,7 +350,7 @@ fn build_method_catalog(
     let mut catalog = MethodCatalog::default();
     let mut sig_kinds = SigKindIndex::default();
     let mut id_kinds = IdKindIndex::default();
-    let mut id_sigkeys: IndexMap<crate::nir::FuncId, SigKey> = IndexMap::default();
+    let mut id_sigkeys: IndexMap<FuncId, SigKey> = IndexMap::default();
     let mut kind_index: IndexMap<(TypeId, ListMethodKind), SigKey> = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
@@ -464,7 +468,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     for c in &safe_candidates {
         for (k, &elem_ty) in c.element_types.iter().enumerate() {
             let list_type = rule.type_table_rc.borrow_mut().make_list(elem_ty);
-            let name = format!("__csroa_{}_{}", c.local_name, k);
+            let name = format!("$csroa_{}_{}", c.local_name, k);
             let local_index = engine.alloc_local(name.clone(), list_type, /* is_mut */ false);
             field_map.insert(
                 (c.local_index, k as u32),
@@ -539,7 +543,7 @@ struct RewriteCtx<'a> {
     candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
     catalog: &'a MethodCatalog,
     sig: &'a MethodSig,
-    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
 }
 
 /// Whether the catalog holds, for every per-field element type, each
@@ -588,7 +592,7 @@ fn collect_candidates(
     type_table: &TypeTable,
     struct_index: &StructIndex<'_>,
     sig: &MethodSig,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> Vec<Candidate> {
     let mut out = Vec::new();
     for block in reachable_blocks(body) {
@@ -621,7 +625,7 @@ fn collect_candidates(
             };
             let all_scalar = element_types
                 .iter()
-                .all(|t| !crate::lower::plan::value_copy::needs_value_copy(*t, type_table));
+                .all(|t| !value_copy::needs_value_copy(*t, type_table));
             out.push(Candidate {
                 local_index: *local_index,
                 local_name: name.clone(),
@@ -662,7 +666,7 @@ fn element_layout_of(
             return None;
         }
         // Fields indexed 0..N by declaration order. We sort defensively.
-        let mut ordered: Vec<&crate::nir::NirField> = tir_struct.fields.iter().collect();
+        let mut ordered: Vec<&NirField> = tir_struct.fields.iter().collect();
         ordered.sort_by_key(|f| f.index);
         for (i, f) in ordered.iter().enumerate() {
             if f.index != i as u32 {
@@ -679,7 +683,7 @@ fn recognize_init_operand(
     body: &Body,
     op: Operand,
     sig: &MethodSig,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> Option<CandidateInit> {
     op.as_expr()
         .and_then(|e| recognize_init(body, e, sig, value_copy_ids))
@@ -687,11 +691,7 @@ fn recognize_init_operand(
 
 /// Peel `$value_copy$T(inner)` wrappers, returning the innermost expression. A
 /// value copy of a fresh value (a constructor result) is a no-op.
-fn peel_value_copy(
-    body: &Body,
-    e: ExprId,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
-) -> ExprId {
+fn peel_value_copy(body: &Body, e: ExprId, value_copy_ids: &IndexSet<FuncId>) -> ExprId {
     let mut cur = e;
     while let Some(inner) = strip_one_value_copy(body, cur, value_copy_ids) {
         cur = inner;
@@ -708,7 +708,7 @@ fn recognize_init(
     body: &Body,
     value: ExprId,
     sig: &MethodSig,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> Option<CandidateInit> {
     // The constructor result is fresh, so a `$value_copy$T` wrapping the whole
     // initializer (inserted for the by-value binding) is a no-op — see through
@@ -748,13 +748,13 @@ fn recognize_init(
 /// Look up the `ListMethodKind` of a call target by signature, via the
 /// pre-built `SigKindIndex`. Returns `None` for non-method functions, non-List
 /// methods, or List methods whose signature didn't match any kind.
-fn list_method_kind(func_id: crate::nir::FuncId, sig: &MethodSig) -> Option<ListMethodKind> {
+fn list_method_kind(func_id: FuncId, sig: &MethodSig) -> Option<ListMethodKind> {
     sig.id_kinds.get(&func_id).copied()
 }
 
 /// The callee's `SigKey` by its stamped `func_id` (the rewriter's catalog
 /// retarget key), or `None` for a non-`List`-method callee.
-fn sig_key_of_id(sig: &MethodSig, func_id: crate::nir::FuncId) -> Option<SigKey> {
+fn sig_key_of_id(sig: &MethodSig, func_id: FuncId) -> Option<SigKey> {
     sig.id_sigkeys.get(&func_id).cloned()
 }
 
@@ -764,7 +764,7 @@ fn compute_safe_set(
     body: &Body,
     candidates: &[Candidate],
     sig: &MethodSig,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> (IndexSet<u32>, IndexMap<u32, IndexSet<ListMethodKind>>) {
     let shape_of: IndexMap<u32, CandidateShape> = candidates
         .iter()
@@ -817,7 +817,7 @@ struct CandidateShape {
 struct WhitelistChecker<'a> {
     safe: &'a IndexSet<u32>,
     shape_of: &'a IndexMap<u32, CandidateShape>,
-    value_copy_ids: &'a IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &'a IndexSet<FuncId>,
     sig: &'a MethodSig,
     escaped: IndexSet<u32>,
     /// Per-candidate set of `ListMethodKind`s observed on whitelisted uses.
@@ -1239,10 +1239,7 @@ impl Rewriter<'_, '_> {
             let field = ctx.field_map[&(local_index, k as u32)].clone();
             let cap = match capacity {
                 Some(capacity) => clone_or_dup(engine, capacity),
-                None => engine.const_operand(
-                    crate::nir_value_graph::ValueKind::Int(0, crate::tir::TypeTable::I32),
-                    crate::tir::TypeTable::I32,
-                ),
+                None => engine.const_operand(ValueKind::Int(0, TypeTable::I32), TypeTable::I32),
             };
             let init = build_with_capacity_call(engine, &field, cap, span, ctx);
             let let_stmt = engine.alloc_stmt(
@@ -1659,7 +1656,7 @@ fn build_receiver(engine: &mut Engine, field: &FieldList, mut_ref: bool, span: S
 }
 
 /// The `func_id` of `List<field.elem_type>`'s method with signature `sig`.
-fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> crate::nir::FuncId {
+fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
     ctx.catalog
         .get(&(field.elem_type, sig.clone()))
         .expect("method entry checked by required_methods_available")

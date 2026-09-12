@@ -87,16 +87,16 @@ fn positional_at_maps_rank_to_declaration_order_index() {
 
     // rank 0 -> field 0 (input), rank 1 -> field 1 (out), else None.
     assert!(
-        body.contains("__rank == 0") && body.contains("Some(0)"),
+        body.contains("$rank == 0") && body.contains("Some(0)"),
         "positional_at must map rank 0 to field index 0:\n{body}"
     );
     assert!(
-        body.contains("__rank == 1") && body.contains("Some(1)"),
+        body.contains("$rank == 1") && body.contains("Some(1)"),
         "positional_at must map rank 1 to field index 1:\n{body}"
     );
     // Only the two positional fields are enumerated; rank 2 is absent.
     assert!(
-        !body.contains("__rank == 2"),
+        !body.contains("$rank == 2"),
         "positional_at must not enumerate non-positional fields:\n{body}"
     );
     assert!(

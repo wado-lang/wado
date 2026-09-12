@@ -1,13 +1,14 @@
 //! Multi-value return ABI classification: which aggregate-returning functions
 //! take the multi-value Wasm ABI, one result per field, instead of a heap
 //! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
-//! fresh literals, and every call site binds it as `let __tmp = Call(f)` whose
+//! fresh literals, and every call site binds it as `let $tmp = Call(f)` whose
 //! only uses are field accesses. The one mutation is `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::optimize::sroa_variant_return::settled_locals;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Widest result vector the ABI is applied to. Matches
@@ -559,7 +560,7 @@ fn validate_uses_in_block(
     yields_value: bool,
 ) {
     let mut tracked: IndexMap<u32, usize> = IndexMap::default();
-    let settled = super::sroa_variant_return::settled_locals(body);
+    let settled = settled_locals(body);
     let cx = UseCx {
         candidate_ids,
         candidates,

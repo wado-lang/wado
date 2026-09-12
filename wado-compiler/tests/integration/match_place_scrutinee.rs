@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use crate::common::wir_function_body;
 use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
@@ -31,7 +32,7 @@ export fn run() {
 fn walk_body() -> String {
     // No closing quote: `sroa_param` may have left the surviving definition
     // under a `$scalar` clone name, which does not change what is asserted here.
-    crate::common::wir_function_body(
+    wir_function_body(
         Path::new("match_place_scrutinee_test.wado"),
         SOURCE,
         OptLevel::O2,

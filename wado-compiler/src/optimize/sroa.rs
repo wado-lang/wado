@@ -1,6 +1,6 @@
 //! Scalar Replacement of Aggregates: a struct or tuple used only for field
 //! access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed into
-//! per-field `__sroa_s_x` locals, and copy propagation then removes the trivial
+//! per-field `$sroa_s_x` locals, and copy propagation then removes the trivial
 //! copies. A local found `&local`-aliased by a decomposed field flows back into
 //! `func.stores_aliased_locals` through a `RefCell` the driver merges after.
 
@@ -10,6 +10,7 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::strip_one_value_copy;
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
@@ -152,7 +153,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
         if rule.stores_aliased.contains(&c.local_index) {
-            crate::compiler_trace!("sroa", "{}: stores-aliased", c.local_name);
+            compiler_trace!("sroa", "{}: stores-aliased", c.local_name);
             continue;
         }
         if !uses.escaped.contains(&c.local_index) {
@@ -161,7 +162,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             decomposed.insert(c.local_index);
             reconstruct_set.insert(c.local_index);
         } else {
-            crate::compiler_trace!("sroa", "{}: escaped, not soft", c.local_name);
+            compiler_trace!("sroa", "{}: escaped, not soft", c.local_name);
         }
     }
     if decomposed.is_empty() {
@@ -179,7 +180,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         // collection), so the positional index `i` *is* the `field_index` every
         // lookup keys by.
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
-            let name = format!("__sroa_{}_{}", candidate.local_name, field_name);
+            let name = format!("$sroa_{}_{}", candidate.local_name, field_name);
             let local_index = engine.alloc_local(name.clone(), *field_type, candidate.is_mut);
             field_map.insert(
                 (candidate.local_index, i as u32),
@@ -865,10 +866,7 @@ fn reconstruct_aggregate(engine: &mut Engine, id: ExprId, local_idx: u32, ctx: &
 
     let kind = if is_tuple {
         ExprKind::TupleLiteral {
-            elements: values
-                .into_iter()
-                .map(crate::nir_arena::Operand::Expr)
-                .collect(),
+            elements: values.into_iter().map(Operand::Expr).collect(),
         }
     } else {
         ExprKind::StructLiteral {

@@ -10,6 +10,7 @@ use crate::wir::{
     WirInstr, WirPackage, WirStructType, WirType, WirTypeDef, WirVariantType,
 };
 
+use crate::codegen_flags::CodegenFlags;
 use wasm_encoder::{
     AbstractHeapType, BlockType, BranchHint, BranchHints, CodeSection, CompositeInnerType,
     CompositeType, ConstExpr, DataCountSection, DataSection, ElementSection, Elements, ExportKind,
@@ -25,13 +26,13 @@ mod wide_arith_downlevel;
 /// pair so sites of the same shape share slots. The declaring walker and the
 /// emitter must spell these identically, so both come through here.
 fn array_copy_slot(role: &str, dest_type_idx: u32, src_type_idx: u32) -> String {
-    format!("__array_copy_{role}_{dest_type_idx}_{src_type_idx}")
+    format!("$array_copy_{role}_{dest_type_idx}_{src_type_idx}")
 }
 
 /// Scratch slot for the `ArrayClone` loop, keyed by array type. As
 /// [`array_copy_slot`].
 fn array_clone_slot(role: &str, type_idx: u32) -> String {
-    format!("__copy_arr_{role}_{type_idx}")
+    format!("$copy_arr_{role}_{type_idx}")
 }
 
 /// Whether a packed storage type reads back signed (`Some(true)`), unsigned
@@ -48,7 +49,7 @@ fn packed_signedness(ty: &WirType) -> Option<bool> {
 pub fn emit_core_module(
     wir: &WirPackage,
     strip_names: bool,
-    codegen_flags: crate::codegen_flags::CodegenFlags,
+    codegen_flags: CodegenFlags,
 ) -> Vec<u8> {
     let mut emitter = WirEmitter::new(wir, strip_names, codegen_flags);
     emitter.emit()
@@ -98,15 +99,11 @@ struct WirEmitter<'a> {
     /// When true, strip debug name sections for smaller binary size (-Os).
     strip_names: bool,
     /// Fine-grained codegen feature flags (from the CLI's `-f <flag>` option).
-    codegen_flags: crate::codegen_flags::CodegenFlags,
+    codegen_flags: CodegenFlags,
 }
 
 impl<'a> WirEmitter<'a> {
-    fn new(
-        wir: &'a WirPackage,
-        strip_names: bool,
-        codegen_flags: crate::codegen_flags::CodegenFlags,
-    ) -> Self {
+    fn new(wir: &'a WirPackage, strip_names: bool, codegen_flags: CodegenFlags) -> Self {
         Self {
             wir,
             type_index_map: IndexMap::default(),
@@ -791,8 +788,8 @@ impl<'a> WirEmitter<'a> {
         for (i, name) in func.param_names.iter().enumerate() {
             let idx: u32 = u32::try_from(i).unwrap();
             self.current_locals.insert(name.clone(), idx);
-            // Also register __local_N alias for params, since TIR uses unified local indices
-            self.current_locals.insert(format!("__local_{i}"), idx);
+            // Also register $local_N alias for params, since TIR uses unified local indices
+            self.current_locals.insert(format!("$local_{i}"), idx);
             self.next_local = idx + 1;
         }
 
@@ -2777,6 +2774,7 @@ impl<'a> WirEmitter<'a> {
 #[cfg(test)]
 mod tests {
     use super::emit_core_module;
+    use crate::codegen_flags::CodegenFlags;
     use crate::hashmap::{IndexMap, IndexSet};
     use crate::wir::{
         WirComponent, WirExport, WirExportDesc, WirField, WirFuncId, WirGlobal, WirInstr, WirMeta,
@@ -2866,7 +2864,7 @@ mod tests {
         pkg.types.push(WirTypeDef::Struct(struct_ty));
         pkg.globals.push(global);
 
-        let bytes = emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        let bytes = emit_core_module(&pkg, false, CodegenFlags::default());
         validate(&bytes).expect("const struct global init should validate as Wasm");
     }
 
@@ -2897,7 +2895,7 @@ mod tests {
             meta: WirMeta::default(),
         });
 
-        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        emit_core_module(&pkg, false, CodegenFlags::default());
     }
 
     /// Likewise for a function id with no Wasm index, where the raw WIR id
@@ -2913,6 +2911,6 @@ mod tests {
             },
         });
 
-        emit_core_module(&pkg, false, crate::codegen_flags::CodegenFlags::default());
+        emit_core_module(&pkg, false, CodegenFlags::default());
     }
 }

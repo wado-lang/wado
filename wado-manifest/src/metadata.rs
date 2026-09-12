@@ -118,9 +118,10 @@ pub fn license_ref_id(license_file: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Manifest;
 
     fn package(toml: &str) -> Package {
-        toml.parse::<crate::Manifest>().unwrap().package.unwrap()
+        toml.parse::<Manifest>().unwrap().package.unwrap()
     }
 
     fn value_of<'a>(sections: &'a [MetadataSection], name: &str) -> Option<&'a str> {

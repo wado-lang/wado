@@ -6,8 +6,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::trait_env::ReceiverCandidate;
-use crate::elaborator::trait_env::{BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv};
+use crate::elaborator::trait_env::{
+    BlanketImpl, BlanketParamSource, ImplReceiver, ReceiverCandidate, TraitEnv,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
@@ -20,6 +21,15 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::state::Monomorphizer;
 use super::{generic_function_key, module_source_for_trait_impl};
+use crate::defs::DefId;
+use crate::monomorphize::{dispatch_receiver_head, dispatch_receiver_name};
+use crate::name::{DeclName, FqTraitName, MangledName};
+use crate::synthesis::template::{
+    blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, ranked_value_blanket,
+};
+use crate::tir::TirTypeParam;
+use crate::token::Span;
+use crate::{name, tir};
 
 /// Lower remaining comparison operators on non-primitive types in all module functions.
 pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<TraitEnv>) {
@@ -89,14 +99,14 @@ pub(super) fn receiver_candidates(
     let mut c: Vec<ReceiverCandidate> = Vec::new();
     if let Some(info) = info {
         c.push(ReceiverCandidate::Of(info.receiver().clone()));
-        c.push(ReceiverCandidate::Instantiated(
-            crate::name::MangledName::new(info.struct_name()),
-        ));
+        c.push(ReceiverCandidate::Instantiated(MangledName::new(
+            info.struct_name(),
+        )));
     }
     c.extend(
         declared
             .iter()
-            .map(|s| ReceiverCandidate::Declared(crate::name::DeclName::new(*s))),
+            .map(|s| ReceiverCandidate::Declared(DeclName::new(*s))),
     );
     c
 }
@@ -148,7 +158,7 @@ pub(super) fn blanket_pack_dispatch_args(
     args: &[TypeId],
     trait_env: &TraitEnv,
     method: &LocalMethodName,
-    trait_: crate::defs::DefId,
+    trait_: DefId,
     blanket_module: &ModuleSource,
     generic_name: &str,
     type_table: &TypeTable,
@@ -157,7 +167,7 @@ pub(super) fn blanket_pack_dispatch_args(
         return None;
     }
     let receiver = args[0];
-    let blanket = crate::synthesis::template::ranked_value_blanket(
+    let blanket = ranked_value_blanket(
         trait_env,
         trait_,
         Some(blanket_module),
@@ -239,21 +249,14 @@ fn declared_method_type_args(generic: &TirFunction, type_args: &[TypeId]) -> Vec
 /// allowed as before.
 fn blanket_receiver_satisfies(
     trait_env: &TraitEnv,
-    trait_: crate::defs::DefId,
+    trait_: DefId,
     blanket_module: &ModuleSource,
     blanket_receiver: Option<(TypeId, &TypeTable)>,
 ) -> bool {
     let Some((type_id, type_table)) = blanket_receiver else {
         return true;
     };
-    crate::synthesis::template::ranked_value_blanket(
-        trait_env,
-        trait_,
-        Some(blanket_module),
-        type_id,
-        type_table,
-    )
-    .is_some()
+    ranked_value_blanket(trait_env, trait_, Some(blanket_module), type_id, type_table).is_some()
 }
 
 /// Look up a generic function template, starting at `module_hint` — usually the
@@ -855,7 +858,7 @@ impl Monomorphizer {
         &self,
         info: &LocalMethodName,
         monomorph: &MonomorphInfo,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         module_source: &ModuleSource,
         blanket_receiver: TypeId,
         type_table: &mut TypeTable,
@@ -863,7 +866,7 @@ impl Monomorphizer {
         // The value type: a `&self` method's receiver arrives as a reference,
         // which answers for no kind and projects nothing.
         let receiver = type_table.peel_refs(blanket_receiver);
-        let blanket = crate::synthesis::template::ranked_value_blanket(
+        let blanket = ranked_value_blanket(
             &self.functions.trait_env,
             trait_,
             Some(module_source),
@@ -897,12 +900,7 @@ impl Monomorphizer {
             };
             link = *base_type;
         }
-        let args = crate::synthesis::template::blanket_impl_args(
-            &self.functions.trait_env,
-            &blanket,
-            receiver,
-            type_table,
-        )?;
+        let args = blanket_impl_args(&self.functions.trait_env, &blanket, receiver, type_table)?;
         // A blanket that projects nothing (`impl<I: Iterator> IntoIterator for
         // I`) is already keyed by its receiver, and re-keying it off the peeled
         // one mints a second instance under the same mangled name.
@@ -1160,10 +1158,7 @@ impl Monomorphizer {
                                 let method_info =
                                     gf.borrow().method_info.clone().unwrap_or_else(|| {
                                         LocalMethodName::new(
-                                            super::dispatch_receiver_name(
-                                                type_table,
-                                                receiver.type_id,
-                                            ),
+                                            dispatch_receiver_name(type_table, receiver.type_id),
                                             tn.clone(),
                                             method_name.clone(),
                                         )
@@ -1208,17 +1203,12 @@ impl Monomorphizer {
                                 });
                             if let Some((base_struct, impl_type_args)) = base_info {
                                 let receiver_head =
-                                    super::dispatch_receiver_head(type_table, receiver.type_id);
+                                    dispatch_receiver_head(type_table, receiver.type_id);
                                 // Try both inherent and trait method formats
-                                let mut dg_names: Vec<(String, Option<crate::name::FqTraitName>)> =
-                                    vec![(
-                                        MethodName::format_local(
-                                            &receiver_head,
-                                            None,
-                                            &method_name,
-                                        ),
-                                        None::<crate::name::FqTraitName>,
-                                    )];
+                                let mut dg_names: Vec<(String, Option<FqTraitName>)> = vec![(
+                                    MethodName::format_local(&receiver_head, None, &method_name),
+                                    None::<FqTraitName>,
+                                )];
                                 if let Some(ref tn) = trait_name_opt {
                                     dg_names.push((
                                         MethodName::format_local(
@@ -1343,7 +1333,7 @@ impl Monomorphizer {
                     } else {
                         false
                     };
-                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
+                    let receiver_head = dispatch_receiver_head(type_table, receiver.type_id);
                     names_to_try.push(MethodName::format_local(&receiver_head, None, &method_name));
                     if let Some(ref info) = method_func.method_info.clone()
                         && let Some(ref trait_name) = info.trait_name
@@ -1460,7 +1450,7 @@ impl Monomorphizer {
                 {
                     let base_struct = &struct_key.name;
                     let impl_type_args = struct_key.impl_type_args.clone();
-                    let receiver_head = super::dispatch_receiver_head(type_table, receiver.type_id);
+                    let receiver_head = dispatch_receiver_head(type_table, receiver.type_id);
 
                     let mut names_to_try =
                         vec![MethodName::format_local(&receiver_head, None, &method_name)];
@@ -1696,7 +1686,7 @@ impl Monomorphizer {
                         ) {
                             let generic_func = generic_func_rc.borrow();
                             let method_info = generic_func.method_info.clone();
-                            let impl_type_params: Vec<crate::tir::TirTypeParam> =
+                            let impl_type_params: Vec<TirTypeParam> =
                                 generic_func.impl_type_params.clone();
                             let template_module = generic_func.module_source.clone();
                             drop(generic_func);
@@ -1855,7 +1845,7 @@ impl Monomorphizer {
         &self,
         type_table: &TypeTable,
         id: TypeId,
-        trait_decl: Option<crate::defs::DefId>,
+        trait_decl: Option<DefId>,
     ) -> bool {
         if !type_table.is_scalar_primitive_like(id) {
             return false;
@@ -1875,13 +1865,8 @@ impl Monomorphizer {
                 .is_none()
     }
 
-    fn value_blanket_serves(
-        &self,
-        tid: TypeId,
-        trait_: crate::defs::DefId,
-        type_table: &TypeTable,
-    ) -> bool {
-        crate::synthesis::template::ranked_value_blanket(
+    fn value_blanket_serves(&self, tid: TypeId, trait_: DefId, type_table: &TypeTable) -> bool {
+        ranked_value_blanket(
             &self.functions.trait_env,
             trait_,
             module_source_for_trait_impl(type_table, tid).as_ref(),
@@ -2086,7 +2071,7 @@ impl Monomorphizer {
             declared_return_convention: generic.declared_return_convention,
             kind: FunctionKind::Regular,
 
-            return_abi: crate::tir::ReturnAbi::default(),
+            return_abi: tir::ReturnAbi::default(),
         })
     }
 
@@ -2404,7 +2389,7 @@ impl Monomorphizer {
                                 );
                             let blanket = if generic_or_concrete.is_none() {
                                 trait_name_for_blanket.and_then(|tn| {
-                                    crate::synthesis::template::ranked_value_blanket(
+                                    ranked_value_blanket(
                                         &self.functions.trait_env,
                                         tn,
                                         receiver_module.as_ref(),
@@ -2453,7 +2438,7 @@ impl Monomorphizer {
                             // body — every link past the first of a newtype
                             // chain — with its other parameters unbound.
                             let blanket_impl_args = blanket.as_ref().and_then(|b| {
-                                crate::synthesis::template::blanket_impl_args(
+                                blanket_impl_args(
                                     &self.functions.trait_env,
                                     b,
                                     concrete_type_id,
@@ -2586,9 +2571,7 @@ impl Monomorphizer {
                 // Convert back to a binary op when monomorphization concretized to a primitive.
                 if let Some((trait_name_before, method_name_before)) = type_param_trait_info {
                     let recv_inner = type_table.peel_refs(receiver.type_id);
-                    let trait_decl = trait_name_before
-                        .as_ref()
-                        .and_then(crate::name::FqTraitName::canonical);
+                    let trait_decl = trait_name_before.as_ref().and_then(FqTraitName::canonical);
                     // Which operator this is, by declaration: a user trait
                     // spelled `Neg` supplies no instruction of its own.
                     let item = trait_decl.and_then(|decl| {
@@ -3240,7 +3223,7 @@ impl Monomorphizer {
             RefKind::Shared
         };
         let Some(ref_module) = self.functions.trait_env.impl_module_for(
-            ImplReceiver::Of(&crate::name::Receiver::Ref(ref_kind)),
+            ImplReceiver::Of(&name::Receiver::Ref(ref_kind)),
             trait_name,
             None,
         ) else {
@@ -3442,20 +3425,18 @@ impl Monomorphizer {
         let Some(trait_name) = info.trait_decl() else {
             return false;
         };
-        if !crate::synthesis::template::has_reflect_kind(receiver, type_table) {
+        if !has_reflect_kind(receiver, type_table) {
             return false;
         }
         let receiver_module = module_source_for_trait_impl(type_table, receiver);
-        crate::synthesis::template::ranked_value_blanket(
+        ranked_value_blanket(
             &self.functions.trait_env,
             trait_name,
             receiver_module.as_ref(),
             receiver,
             type_table,
         )
-        .is_some_and(|blanket| {
-            crate::synthesis::template::blanket_is_reflect_keyed(&blanket.bounds, type_table)
-        })
+        .is_some_and(|blanket| blanket_is_reflect_keyed(&blanket.bounds, type_table))
     }
 
     /// Route a type-param receiver (`T^Trait::method`, resolved to a concrete
@@ -3497,7 +3478,7 @@ impl Monomorphizer {
         let blanket = if generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
-                crate::synthesis::template::ranked_value_blanket(
+                ranked_value_blanket(
                     &self.functions.trait_env,
                     tn,
                     receiver_module.as_ref(),
@@ -3551,12 +3532,7 @@ impl Monomorphizer {
             // arity. A plain one-arg blanket (`impl<I: Iterator> IntoIterator
             // for I`) projects nothing and stays keyed by the call-site args.
             let projected = blanket.as_ref().and_then(|b| {
-                crate::synthesis::template::blanket_impl_args(
-                    &self.functions.trait_env,
-                    b,
-                    recv_inner,
-                    type_table,
-                )
+                blanket_impl_args(&self.functions.trait_env, b, recv_inner, type_table)
             });
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
             let blanket_name = if receiver_is_assoc_projection {
@@ -3658,7 +3634,7 @@ impl Monomorphizer {
         // unhinted lookup routes a `&List<i32>` call to `&Array`'s template.
         let receiver_hint = {
             let inner = type_table.peel_refs(receiver_type_id);
-            super::module_source_for_trait_impl(type_table, inner)
+            module_source_for_trait_impl(type_table, inner)
         };
         let resolved_module = self
             .functions
@@ -3755,7 +3731,7 @@ impl Monomorphizer {
         };
 
         let uid = *unique_id;
-        let temp_name = format!("__tuple_{uid}");
+        let temp_name = format!("$tuple_{uid}");
         let binding_local_idx = *binding_local;
         let b_name = binding_name.clone();
         let b_mut = *is_mut;
@@ -3798,7 +3774,7 @@ impl Monomorphizer {
             name: temp_name.clone(),
             type_id: iterable_type,
             is_mut: false,
-            span: crate::token::Span::default(),
+            span: Span::default(),
         });
 
         let destruct_count = Self::destructure_prefix_len(body, binding_local_idx);
@@ -3813,7 +3789,7 @@ impl Monomorphizer {
 
         let mut outer_stmts = Vec::new();
 
-        // let __tuple_N = iterable;
+        // let $tuple_N = iterable;
         if temp_read || !Self::is_pure_place(iterable) {
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -3829,7 +3805,7 @@ impl Monomorphizer {
             ));
         }
 
-        // For each element, create: { let v = __tuple_N.i; body }
+        // For each element, create: { let v = $tuple_N.i; body }
         for (i, &elem_type) in elements.iter().enumerate() {
             let mut iter_stmts = Vec::new();
 
@@ -3875,7 +3851,7 @@ impl Monomorphizer {
                 name: b_name.clone(),
                 type_id: bind_type,
                 is_mut: b_mut,
-                span: crate::token::Span::default(),
+                span: Span::default(),
             });
 
             if !inline_enumerate_pair {
@@ -4307,14 +4283,14 @@ impl Monomorphizer {
 
         // Private to this unroll, one reader per field — so each element binding
         // moves its field out (`skip_value_copy`) rather than deep-copying it.
-        let temp_name = format!("__comp_{uid}");
+        let temp_name = format!("$comp_{uid}");
         let temp_local = *local_count;
         *local_count += 1;
         locals.push(TirLocal {
             name: temp_name.clone(),
             type_id: source_type,
             is_mut: false,
-            span: crate::token::Span::default(),
+            span: Span::default(),
         });
 
         let mut result_elements = Vec::with_capacity(elements.len());
@@ -4358,7 +4334,7 @@ impl Monomorphizer {
                 name: b_name.clone(),
                 type_id: bind_type,
                 is_mut: false,
-                span: crate::token::Span::default(),
+                span: Span::default(),
             });
             if !inline_enumerate_pair {
                 let bind_value = if is_enumerate {
@@ -4424,7 +4400,7 @@ impl Monomorphizer {
                     name: name.clone(),
                     type_id: field_type,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: Span::default(),
                 });
                 sub_locals.push((*local_index, sub_local));
                 pinned.push((*local_index, field_type));
@@ -4653,7 +4629,7 @@ impl Monomorphizer {
 /// `Eq::eq` / `Ord::cmp` method calls. Returns `None` for primitives.
 fn try_lower_comparison(
     trait_env: &Arc<TraitEnv>,
-    span: crate::token::Span,
+    span: Span,
     op: TirBinaryOp,
     left: &TirExpr,
     right: &TirExpr,
@@ -4685,8 +4661,8 @@ fn try_lower_comparison(
             _ => return None,
         };
     let base_struct_name = type_table.fq_base_type_name(left.type_id);
-    let eq_trait = type_table.compiler_trait_fq(crate::compiler_item::CompilerItem::Eq);
-    let ord_trait = type_table.compiler_trait_fq(crate::compiler_item::CompilerItem::Ord);
+    let eq_trait = type_table.compiler_trait_fq(CompilerItem::Eq);
+    let ord_trait = type_table.compiler_trait_fq(CompilerItem::Ord);
 
     let make_ref = |e: &TirExpr, tt: &mut TypeTable| -> TirExpr {
         let ref_type = tt.intern(ResolvedType::Ref(e.type_id));
@@ -4765,7 +4741,7 @@ fn try_lower_comparison(
         let receiver = make_ref(left, type_table);
         let arg_ref = make_ref(right, type_table);
         let ordering_def = type_table
-            .compiler_item_def(crate::compiler_item::CompilerItem::Ordering)
+            .compiler_item_def(CompilerItem::Ordering)
             .expect("`Ordering` is a registered compiler item");
         let ordering_type_id = type_table.intern(ResolvedType::Enum { def: ordering_def });
         let method_info =
@@ -4795,10 +4771,8 @@ fn try_lower_comparison(
         // flows through this primitive-ord-dispatch path without touching
         // the literal-case mapping table.
         let items = type_table.compiler_items();
-        let (_, _, less_n, less_i) =
-            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingLess);
-        let (_, _, greater_n, greater_i) =
-            items.require_enum_case(crate::compiler_item::CompilerItem::OrderingGreater);
+        let (_, _, less_n, less_i) = items.require_enum_case(CompilerItem::OrderingLess);
+        let (_, _, greater_n, greater_i) = items.require_enum_case(CompilerItem::OrderingGreater);
         let less_n = less_n.to_string();
         let greater_n = greater_n.to_string();
         let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {

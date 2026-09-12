@@ -10,6 +10,10 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TypeId, TypeTable};
 
 use super::sem::decls::FunctionSig;
+use crate::ast;
+use crate::ast::{SelfKind, Visibility};
+use crate::name::FqTypeName;
+use crate::tir::{ResolvedType, SlotProjections};
 
 /// What an `impl` block's `const NAME: T = expr;` declares.
 #[derive(Debug, Clone)]
@@ -19,7 +23,7 @@ pub(crate) struct AssocConstSig {
     pub(crate) ty: TypeId,
     pub(crate) value: Expr,
     /// The declared rung; `None` on a trait impl's constant.
-    pub(crate) inherent_visibility: Option<crate::ast::Visibility>,
+    pub(crate) inherent_visibility: Option<Visibility>,
 }
 
 /// Program-wide declaration facts, resolved once by the decl pass and read-only
@@ -176,7 +180,7 @@ pub(crate) struct MethodSig {
     /// A use→def edge is recorded from here, never from a name re-scan.
     pub(crate) def: DefId,
     pub(crate) decl: DeclSig,
-    pub(crate) self_kind: crate::ast::SelfKind,
+    pub(crate) self_kind: SelfKind,
     /// The non-receiver parameters, in order. `decl.param_types` includes
     /// the receiver at index 0 when there is one, so these are offset by
     /// [`Self::first_value_param`].
@@ -265,7 +269,7 @@ pub(super) fn own_params_of(type_params: &[GenericParam]) -> Vec<GenericParam> {
 impl MethodSig {
     /// Index of the first non-receiver parameter in `decl.param_types`.
     pub(crate) fn first_value_param(&self) -> usize {
-        usize::from(self.self_kind != crate::ast::SelfKind::None)
+        usize::from(self.self_kind != SelfKind::None)
     }
 
     /// The non-receiver parameter types, parallel to [`Self::params`].
@@ -347,8 +351,8 @@ impl MethodSig {
                 .flatten()
                 .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
-                if let crate::tir::ResolvedType::TypeParam { index, .. }
-                | crate::tir::ResolvedType::TypePack { index, .. } = table.get(*slot)
+                if let ResolvedType::TypeParam { index, .. }
+                | ResolvedType::TypePack { index, .. } = table.get(*slot)
                 {
                     substitution.insert(*index, arg);
                 }
@@ -379,7 +383,7 @@ pub(crate) struct TraitMethod {
     pub(crate) sig: MethodSig,
     /// Irreducibly AST: walked once per implementing block and reified per
     /// instantiation. `None` marks a required method.
-    pub(crate) default_body: Option<Rc<crate::ast::Function>>,
+    pub(crate) default_body: Option<Rc<ast::Function>>,
 }
 
 impl TraitSig {
@@ -390,9 +394,7 @@ impl TraitSig {
 
     /// The methods this trait provides a default body for, in declaration
     /// order.
-    pub(crate) fn default_methods(
-        &self,
-    ) -> impl Iterator<Item = (&str, &Rc<crate::ast::Function>)> {
+    pub(crate) fn default_methods(&self) -> impl Iterator<Item = (&str, &Rc<ast::Function>)> {
         self.methods.iter().filter_map(|(name, method)| {
             method
                 .default_body
@@ -423,7 +425,7 @@ pub(crate) struct ImplSig {
     /// The target's fq name, qualified by the module that declares it — what
     /// the block's own imports make of the name it wrote. A blanket target
     /// (`impl<T> Trait for T`) is its own binder.
-    pub(crate) target_fq: crate::name::FqTypeName,
+    pub(crate) target_fq: FqTypeName,
     /// Which trait declaration the block implements, answered by the header's
     /// own reference site. `None` for an inherent impl.
     pub(crate) trait_decl: Option<DefId>,
@@ -484,8 +486,9 @@ impl ImplSig {
             .iter()
             .zip(receiver_args)
             .filter_map(|(&declared, &concrete)| match table.get(declared) {
-                crate::tir::ResolvedType::TypeParam { index, .. }
-                | crate::tir::ResolvedType::TypePack { index, .. } => Some((*index, concrete)),
+                ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
+                    Some((*index, concrete))
+                }
                 _ => None,
             })
             .collect()
@@ -548,11 +551,7 @@ impl DeclSig {
         type_table: &RefCell<TypeTable>,
         substitution: &IndexMap<u32, TypeId>,
     ) -> InstantiatedSig {
-        self.instantiate_slots_with(
-            type_table,
-            substitution,
-            &crate::tir::SlotProjections::default(),
-        )
+        self.instantiate_slots_with(type_table, substitution, &SlotProjections::default())
     }
 
     /// [`Self::instantiate_slots`] for a use site that also knows what the
@@ -562,7 +561,7 @@ impl DeclSig {
         &self,
         type_table: &RefCell<TypeTable>,
         substitution: &IndexMap<u32, TypeId>,
-        projections: &crate::tir::SlotProjections,
+        projections: &SlotProjections,
     ) -> InstantiatedSig {
         let mut table = type_table.borrow_mut();
         InstantiatedSig {
@@ -583,6 +582,7 @@ impl DeclSig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::name::FqTypeName;
 
     /// `fn id<T>(x: T) -> T` instantiated at `T = i32`.
     fn generic_identity(table: &RefCell<TypeTable>) -> DeclSig {
@@ -675,7 +675,7 @@ mod tests {
             target_type_args: vec![TypeTable::U8, v],
             trait_type_args: vec![TypeTable::I32],
             associated_types: [("Output".to_string(), v)].into_iter().collect(),
-            target_fq: crate::name::FqTypeName::builtin("Map"),
+            target_fq: FqTypeName::builtin("Map"),
             trait_decl: None,
         }
     }

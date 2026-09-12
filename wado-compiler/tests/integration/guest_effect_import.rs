@@ -4,6 +4,7 @@
 //! self-contained and imports nothing. `wit_component::decode` recovers the
 //! component's world so the import surface is asserted structurally.
 
+use crate::common::compile_source_with_compiler_options;
 use std::assert_matches;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
@@ -18,7 +19,7 @@ fn compile_lib_source(source: &str) -> Vec<u8> {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new("hltest.wado"), source, options)
+    compile_source_with_compiler_options(Path::new("hltest.wado"), source, options)
         .expect("compile inline --lib source")
         .wasm
 }
@@ -99,12 +100,8 @@ test "shape" {}
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    let err = crate::common::compile_source_with_compiler_options(
-        Path::new("hltest.wado"),
-        source,
-        options,
-    )
-    .expect_err("a guest effect colliding with the package interface name is rejected");
+    let err = compile_source_with_compiler_options(Path::new("hltest.wado"), source, options)
+        .expect_err("a guest effect colliding with the package interface name is rejected");
     assert!(
         format!("{err}").contains("collides"),
         "expected a collision diagnostic, got: {err}"
@@ -161,11 +158,7 @@ export fn run() {
         opt_level: OptLevel::O2,
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
-        Path::new("nonlib.wado"),
-        source,
-        options,
-    );
+    let result = compile_source_with_compiler_options(Path::new("nonlib.wado"), source, options);
     assert!(
         result.is_ok(),
         "a non-lib open guest effect should compile, not ICE: {:?}",

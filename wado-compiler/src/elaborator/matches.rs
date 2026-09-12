@@ -11,6 +11,7 @@ use crate::tir::{TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::FunctionContext;
+use crate::elaborator::sem::types::DesugarKind;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_matches_expr(
@@ -19,7 +20,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         _expected_type: Option<TypeId>,
     ) -> TypeId {
-        self.record_desugar(m.id, super::sem::types::DesugarKind::Matches);
+        self.record_desugar(m.id, DesugarKind::Matches);
         let scrutinee_type = self.resolve_expr(&m.expr, ctx, None);
 
         // Pattern arm. The pattern's bindings (e.g. `Some(x)`) must be in

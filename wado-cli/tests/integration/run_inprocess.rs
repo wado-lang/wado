@@ -1,17 +1,17 @@
 //! In-process subcommand `run()` tests — call each subcommand directly
 //! and assert on the returned `CliExit`, no subprocess.
 
-use std::env;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+use std::{env, fs};
 
+use crate::common::project_root;
 use wado_cli::args::CliExit;
 use wado_cli::compile::{self, CompileOptions, OutputFormat};
 use wado_cli::knobs::{CompileKnobs, EmbedOptions, OptLevel};
 
 fn fixture(rel: &str) -> PathBuf {
-    crate::common::project_root().join(rel)
+    project_root().join(rel)
 }
 
 // `set_current_dir` is process-wide, so cwd-mutating tests serialize on this.
