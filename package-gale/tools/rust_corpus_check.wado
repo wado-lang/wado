@@ -27,10 +27,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 
     let mut bad = 0;
     for let path of &paths {
-        let Ok(source) = fs::read_to_string(path) else {
-            bad += 1;
-            println(`ng\t${*path}\t0\t0\tunreadable\t`);
-            continue;
+        let source = match fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln(`error: ${e}`);
+                bad += 1;
+                println(`ng\t${*path}\t0\t0\tunreadable\t`);
+                continue;
+            },
         };
         let result = parse_rust(&source);
         if result.diagnostics.len() == 0 {

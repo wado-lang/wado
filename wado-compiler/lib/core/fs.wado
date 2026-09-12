@@ -111,9 +111,22 @@ pub fn root() -> Result<Descriptor, FsError> with Preopens {
     return Result::Ok(dirs[0].0);
 }
 
-/// The whole content of `path`.
+/// The whole content of `path`. A path that names anything but a regular file
+/// — a directory, a device, a pipe — fails rather than reading.
 pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens {
     let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
+    // The one operation the host cannot check for us: no open flag says "a
+    // regular file", and `read_via_stream` traps rather than failing.
+    let kind = match file.get_type().wait() {
+        Ok(k) => k,
+        Err(e) => {
+            return Result::Err(failure(path, e));
+        },
+    };
+    if !kind matches { RegularFile } {
+        let code = if kind matches { Directory } { ErrorCode::IsDirectory } else { ErrorCode::Invalid };
+        return Result::Err(failure(path, code));
+    }
     let [stream, done] = file.read_via_stream(0 as Filesize);
     let bytes = stream.read_to_end();
     stream.drop();
@@ -171,6 +184,12 @@ pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens 
 /// Create the directory `path` names, and every parent it needs. A directory
 /// that already exists is not a failure.
 pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
+    // The one operation that splits the path rather than handing it to the
+    // host, so the loop below would skip the empty component a leading `/`
+    // makes and build the tree inside the preopen.
+    if path.starts_with("/") {
+        return Result::Err(failure(path, ErrorCode::NotPermitted));
+    }
     let dir = root()?;
     let mut prefix = String::new();
     for let component of path.split("/") {
@@ -231,19 +250,4 @@ fn file_type(type: DescriptorType) -> FileType {
         Directory => FileType::Directory,
         _ => FileType::Other,
     };
-}
-
-test "an error renders its path and its cause" {
-    let e = FsError { path: "build/out.json", kind: FsErrorKind::NotFound };
-    assert `${e}` == "build/out.json: no such file or directory";
-}
-
-test "an error with no path renders its cause alone" {
-    let e = FsError { path: "", kind: FsErrorKind::NoPreopen };
-    assert `${e}` == "no preopened directory available";
-}
-
-test "an unnamed cause keeps the code WASI gave" {
-    let e = FsError { path: "x", kind: FsErrorKind::Io(ErrorCode::Access) };
-    assert `${e}` == "x: ErrorCode::Access";
 }

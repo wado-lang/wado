@@ -1,0 +1,21 @@
+use { FsError, FsErrorKind } from "core:fs";
+use { ErrorCode } from "wasi:filesystem";
+
+// The operations themselves need a real directory, so they are covered by
+// `wado-compiler/tests/fixtures/core_fs.wado`, which runs against a scratch
+// preopen.
+
+test "an error renders its path and its cause" {
+    let e = FsError { path: "build/out.json", kind: FsErrorKind::NotFound };
+    assert `${e}` == "build/out.json: no such file or directory";
+}
+
+test "an error with no path renders its cause alone" {
+    let e = FsError { path: "", kind: FsErrorKind::NoPreopen };
+    assert `${e}` == "no preopened directory available";
+}
+
+test "an unnamed cause keeps the code WASI gave" {
+    let e = FsError { path: "x", kind: FsErrorKind::Io(ErrorCode::Access) };
+    assert `${e}` == "x: ErrorCode::Access";
+}

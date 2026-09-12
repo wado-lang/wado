@@ -18,10 +18,14 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 
     let mut bad = 0;
     for let arg of &paths {
-        let Ok(src) = fs::read_to_string(arg) else {
-            bad += 1;
-            println(`ng\t${*arg}\t0\t0\tunreadable\t`);
-            continue;
+        let src = match fs::read_to_string(arg) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln(`error: ${e}`);
+                bad += 1;
+                println(`ng\t${*arg}\t0\t0\tunreadable\t`);
+                continue;
+            },
         };
         let result = parse(&src);
         if result.diagnostics.len() == 0 {

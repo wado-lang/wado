@@ -45,7 +45,8 @@ owned by the caller, which may pass it to any `wasi:filesystem` method.
 
 ### `pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens`
 
-The whole content of `path`.
+The whole content of `path`. A path that names anything but a regular file
+— a directory, a device, a pipe — fails rather than reading.
 
 ### `pub fn read_to_string(path: &String) -> Result<String, FsError> with Preopens`
 

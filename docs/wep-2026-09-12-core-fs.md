@@ -55,7 +55,10 @@ components (`scripts/rust-inline-paths.json` is an existing call), so a
 recursive directory walk needs no descriptor either: `read_dir("a/b")` is what
 `open_dir` + `read_directory` was.
 
-The empty path and `"."` name the preopen itself, so a walk has a root case.
+The empty path and `"."` name the preopen itself, so a walk has a root case. An
+absolute path resolves against no preopen and fails. The host answers that for
+every operation but `create_dir_all`, which splits the path rather than handing
+it over, so it makes the same check itself.
 
 A second preopen is ignored. Nothing in the repository grants one. The
 alternative, resolving a path against the longest matching preopen prefix as
@@ -101,8 +104,12 @@ changing their signatures.
 
 ### Whole files only
 
-`read` buffers, `write` creates-truncates-and-closes. Streaming stays on
-`wasi:filesystem`. `example/cat.wado` connects a file's read stream straight to
+`read` buffers, `write` creates-truncates-and-closes. `read` also checks that
+the path names a regular file: `read_via_stream` traps on anything else, and a
+`Result` that a directory turns into an abort is not one. Every other operation
+states what it expects in its open flags, so the host makes that check.
+
+Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read stream straight to
 stdout and never holds the file in memory. This module would break that shape
 rather than shorten it, so the example keeps its raw WASI code on purpose, as
 the worked case of the boundary.
