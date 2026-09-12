@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789169073636,
+  "lastUpdate": 1789175717568,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55101,6 +55101,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/50b5485e717ae27b72d556be2e04d97c04dd4e6f"
         },
         "date": 1789169073226,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e723cb713f6f970857d5e06e58f021590404cb9e",
+          "message": "Merge pull request #2029 from wado-lang/gfx/refine-README\n\ndocs: refine README.md",
+          "timestamp": "2026-09-12T10:00:49+09:00",
+          "tree_id": "6f50aa06bb30f5c6f46c05a565525c0513818737",
+          "url": "https://github.com/wado-lang/wado/commit/e723cb713f6f970857d5e06e58f021590404cb9e"
+        },
+        "date": 1789175716796,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
