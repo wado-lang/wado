@@ -2,6 +2,7 @@
 // This module must be synchronized with syntax.rs (canonical syntax definition).
 
 use crate::ast::{
+<<<<<<< HEAD
     AssertStmt, AssignExpr, AssocTypeBound, AssociatedConst, AssociatedTypeBinding,
     AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
     BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
@@ -20,6 +21,41 @@ use crate::ast::{
     TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
     UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
     WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+||||||| a9e00393c
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
+    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
+    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    CmResourceBacking, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
+    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
+    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
+    WorldExportFn, WorldExportInterface, WorldImport,
+=======
+    AssertStmt, AssignExpr, AssociatedConst, AssociatedTypeBinding, AssociatedTypeDecl, AstId,
+    AttrArg, AttrEntry, Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl,
+    CallExpr, CastExpr, ChainedComparison, ClosureExpr, ClosureParam, CmBoundary, CmImport,
+    CmResourceLinearity, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp, Condition,
+    ConditionElement, ContinueStmt, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
+    FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function, FunctionType, GenericType, GlobalDecl,
+    IdentExpr, IfExpr, IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute,
+    InterfaceDecl, Item, LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
+    StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
+    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitDecl,
+    TryOpExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem,
+    UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WorldDecl, WorldExport,
+    WorldExportFn, WorldExportInterface, WorldImport,
+>>>>>>> origin/main
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -1095,7 +1131,7 @@ impl Parser {
         };
 
         if !self.check(&TokenKind::Resource) {
-            reject_resource_backing(&attrs)?;
+            reject_resource_linearity(&attrs)?;
         }
 
         // Check for contextual keyword "test" (identifier followed by string or block)
@@ -1269,8 +1305,7 @@ impl Parser {
     fn parse_attr_arg_list(&mut self) -> ParseResult<Vec<AttrArg>> {
         let mut args: Vec<AttrArg> = Vec::new();
         loop {
-            // `as_ident_name`, so a contextual keyword can be a key:
-            // `#[cm(..., type="extern-handle")]`.
+            // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
                 (_, TokenKind::StringLit(raw)) => {
@@ -1760,7 +1795,7 @@ impl Parser {
         attrs: Vec<Attribute>,
         is_method: bool,
     ) -> ParseResult<Function> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Fn)?;
@@ -5287,7 +5322,7 @@ impl Parser {
 
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let attrs = self.parse_attributes()?;
-            reject_resource_backing(&attrs)?;
+            reject_resource_linearity(&attrs)?;
             let id = self.alloc_ast_id();
             let start_span = self.peek().span;
             let visibility = if self.check(&TokenKind::Pub) {
@@ -5375,7 +5410,7 @@ impl Parser {
     }
 
     fn parse_enum_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<EnumCase> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -5412,7 +5447,7 @@ impl Parser {
         let mut flags = Vec::new();
         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
             let flag_attrs = self.parse_attributes()?;
-            reject_resource_backing(&flag_attrs)?;
+            reject_resource_linearity(&flag_attrs)?;
             let flag_id = self.alloc_ast_id();
             let flag_span = self.peek().span;
             let (flag_name, flag_name_span) = self.consume_ident_with_span()?;
@@ -5488,7 +5523,7 @@ impl Parser {
     }
 
     fn parse_variant_case(&mut self, attrs: Vec<Attribute>) -> ParseResult<VariantCase> {
-        reject_resource_backing(&attrs)?;
+        reject_resource_linearity(&attrs)?;
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         let (name, name_span) = self.consume_ident_with_span()?;
@@ -6375,12 +6410,12 @@ fn span_of_open_brace(origin: Position, space: AstIdSpace) -> Span {
     .in_space(space)
 }
 
-/// The backing is a property of the handle type, so it has one home: the
+/// Linearity is a property of the handle type, so it has one home: the
 /// `resource` declaration. Anything else carrying it is rejected.
-fn reject_resource_backing(attrs: &[Attribute]) -> ParseResult<()> {
-    match attrs.iter().find(|a| a.cm_resource_backing().is_some()) {
+fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
+    match attrs.iter().find(|a| a.cm_resource_linearity().is_some()) {
         Some(attr) => Err(ParseError {
-            message: "#[cm(..., type=...)] declares a resource's handle backing; \
+            message: "#[cm(..., linearity=...)] declares a resource's linearity; \
                 it belongs on a `resource` declaration"
                 .to_string(),
             span: attr.span,
@@ -6417,24 +6452,24 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
         let AttrArg::Str(s) = path else {
             return Err("#[cm] argument must be a string literal".to_string());
         };
-        let mut seen_type = false;
+        let mut seen_linearity = false;
         for field in fields {
             let AttrArg::KeyValue(key, value) = field else {
                 return Err(
                     "#[cm] takes a path string followed by `key = \"value\"` fields".to_string(),
                 );
             };
-            if key != "type" {
+            if key != "linearity" {
                 return Err(format!(
-                    "unknown #[cm] field `{key}`; the only field is `type`"
+                    "unknown #[cm] field `{key}`; the only field is `linearity`"
                 ));
             }
-            if std::mem::replace(&mut seen_type, true) {
-                return Err("#[cm] takes one `type` field".to_string());
+            if std::mem::replace(&mut seen_linearity, true) {
+                return Err("#[cm] takes one `linearity` field".to_string());
             }
-            if CmResourceBacking::parse(value).is_none() {
+            if CmResourceLinearity::parse(value).is_none() {
                 return Err(format!(
-                    "unknown #[cm] type `{value}`; expected \"extern-handle\" or \"i32\""
+                    "unknown #[cm] linearity `{value}`; expected \"affine\" or \"unrestricted\""
                 ));
             }
         }
@@ -7016,7 +7051,7 @@ mod tests {
     #[test]
     fn resource_declares_a_parent() {
         let source = r#"
-            #[cm("web:dom/node", type="extern-handle")]
+            #[cm("web:dom/node", linearity="unrestricted")]
             pub resource Node extends EventTarget {}
         "#;
         let module = parse(source).unwrap();
@@ -7049,9 +7084,9 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_carries_a_resource_backing() {
+    fn cm_attribute_carries_a_resource_linearity() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle")]
+            #[cm("web:dom/element", linearity="unrestricted")]
             pub resource Element {}
         "#;
         let module = parse(source).unwrap();
@@ -7060,15 +7095,15 @@ mod tests {
         };
         let attr = &decl.attrs[0];
         assert_eq!(
-            attr.cm_resource_backing(),
-            Some(CmResourceBacking::ExternHandle)
+            attr.cm_resource_linearity(),
+            Some(CmResourceLinearity::Unrestricted)
         );
         let cm = attr.as_cm_import().expect("cm boundary import");
         assert_eq!(cm.interface, "element");
     }
 
     #[test]
-    fn cm_attribute_backing_defaults_to_none() {
+    fn cm_attribute_linearity_defaults_to_none() {
         let source = r#"
             #[cm("wasi:http/types@0.3.0#request")]
             pub resource Request {}
@@ -7077,32 +7112,32 @@ mod tests {
         let Item::Resource(decl) = &module.items[0] else {
             panic!("expected resource declaration");
         };
-        assert_eq!(decl.attrs[0].cm_resource_backing(), None);
+        assert_eq!(decl.attrs[0].cm_resource_linearity(), None);
     }
 
     #[test]
-    fn cm_attribute_rejects_an_unknown_backing() {
+    fn cm_attribute_rejects_an_unknown_linearity() {
         let source = r#"
-            #[cm("web:dom/element", type="handle")]
+            #[cm("web:dom/element", linearity="extern-handle")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
         assert!(
-            err.message.contains("extern-handle") && err.message.contains("i32"),
+            err.message.contains("affine") && err.message.contains("unrestricted"),
             "expected the allowed values in the message, got: {}",
             err.message
         );
     }
 
     #[test]
-    fn cm_attribute_backing_is_rejected_on_every_other_site() {
+    fn cm_attribute_linearity_is_rejected_on_every_other_site() {
         for source in [
-            "struct S { #[cm(\"a:b/c\", type=\"i32\")] f: i32 }",
-            "enum E { #[cm(\"a:b/c\", type=\"i32\")] Case }",
-            "variant V { #[cm(\"a:b/c\", type=\"i32\")] Case(i32) }",
-            "resource R { #[cm(\"a:b/c\", type=\"i32\")] fn m(&self); }",
-            "flags F { #[cm(\"a:b/c\", type=\"i32\")] A }",
-            "#[cm(\"a:b/c\", type=\"i32\")] test \"t\" { assert true; }",
+            "struct S { #[cm(\"a:b/c\", linearity=\"affine\")] f: i32 }",
+            "enum E { #[cm(\"a:b/c\", linearity=\"affine\")] Case }",
+            "variant V { #[cm(\"a:b/c\", linearity=\"affine\")] Case(i32) }",
+            "resource R { #[cm(\"a:b/c\", linearity=\"affine\")] fn m(&self); }",
+            "flags F { #[cm(\"a:b/c\", linearity=\"affine\")] A }",
+            "#[cm(\"a:b/c\", linearity=\"affine\")] test \"t\" { assert true; }",
         ] {
             let err = parse(source).unwrap_err();
             assert!(
@@ -7114,14 +7149,14 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_rejects_a_repeated_type_field() {
+    fn cm_attribute_rejects_a_repeated_linearity_field() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle", type="i32")]
+            #[cm("web:dom/element", linearity="unrestricted", linearity="affine")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
         assert!(
-            err.message.contains("one `type` field"),
+            err.message.contains("one `linearity` field"),
             "a second value must not be silently dropped, got: {}",
             err.message
         );
@@ -7130,7 +7165,7 @@ mod tests {
     #[test]
     fn cm_attribute_rejects_an_unknown_field() {
         let source = r#"
-            #[cm("web:dom/element", backing="extern-handle")]
+            #[cm("web:dom/element", backing="unrestricted")]
             pub resource Element {}
         "#;
         let err = parse(source).unwrap_err();
@@ -7142,9 +7177,9 @@ mod tests {
     }
 
     #[test]
-    fn cm_attribute_backing_belongs_on_a_resource() {
+    fn cm_attribute_linearity_belongs_on_a_resource() {
         let source = r#"
-            #[cm("web:dom/element", type="extern-handle")]
+            #[cm("web:dom/element", linearity="unrestricted")]
             pub struct Element {}
         "#;
         let err = parse(source).unwrap_err();

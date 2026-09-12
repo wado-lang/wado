@@ -841,10 +841,22 @@ pub struct TypeTable {
     /// [`Self::cm_decl_in`]. Built with [`Self::attach_defs`], so it answers at
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
+<<<<<<< HEAD
     decl_index: IndexMap<(String, ModuleSource), DefId>,
     /// Resources declared `#[cm(..., type = "extern-handle")]`: a copyable handle
     /// to a host object, outside the affine resource discipline.
     extern_handle_resources: IndexSet<DefId>,
+||||||| a9e00393c
+    decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+    /// Resources declared `#[cm(..., type = "extern-handle")]`: a copyable handle
+    /// to a host object, outside the affine resource discipline.
+    extern_handle_resources: IndexSet<crate::defs::DefId>,
+=======
+    decl_index: IndexMap<(String, ModuleSource), crate::defs::DefId>,
+    /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
+    /// handle to a host object, outside the affine resource discipline.
+    unrestricted_resources: IndexSet<crate::defs::DefId>,
+>>>>>>> origin/main
     /// `resource Child extends Parent`, child → parent.
     resource_parents: IndexMap<DefId, DefId>,
     /// Every declaration in the program, for rendering a nominal type's head.
@@ -971,7 +983,7 @@ impl TypeTable {
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
-            extern_handle_resources: IndexSet::default(),
+            unrestricted_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
         };
@@ -1122,15 +1134,31 @@ impl TypeTable {
             .copied()
     }
 
+<<<<<<< HEAD
     pub fn mark_extern_handle_resource(&mut self, def: DefId) {
         self.extern_handle_resources.insert(def);
+||||||| a9e00393c
+    pub fn mark_extern_handle_resource(&mut self, def: crate::defs::DefId) {
+        self.extern_handle_resources.insert(def);
+=======
+    pub fn mark_unrestricted_resource(&mut self, def: crate::defs::DefId) {
+        self.unrestricted_resources.insert(def);
+>>>>>>> origin/main
     }
 
-    /// Whether `def` declares an extern-handle-backed resource, which no affine
-    /// check and no cleanup pass owns.
+    /// Whether `def` declares an unrestricted resource, which no affine check
+    /// and no cleanup pass owns.
     #[must_use]
+<<<<<<< HEAD
     pub fn is_extern_handle_resource(&self, def: DefId) -> bool {
         self.extern_handle_resources.contains(&def)
+||||||| a9e00393c
+    pub fn is_extern_handle_resource(&self, def: crate::defs::DefId) -> bool {
+        self.extern_handle_resources.contains(&def)
+=======
+    pub fn is_unrestricted_resource(&self, def: crate::defs::DefId) -> bool {
+        self.unrestricted_resources.contains(&def)
+>>>>>>> origin/main
     }
 
     /// Record `child extends parent`, already validated by the caller.

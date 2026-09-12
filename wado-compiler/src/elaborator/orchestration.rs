@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Module, Type};
+use crate::ast::{self, Item, Module, Type, declares_unrestricted};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -171,11 +171,11 @@ fn resolve_resource_extends<H: CompilerHost>(
             continue;
         }
         let tt = type_table.borrow();
-        let child_is_extern_handle = tt.is_extern_handle_resource(clause.child);
-        let parent_is_extern_handle = tt.is_extern_handle_resource(parent);
+        let child_is_unrestricted = tt.is_unrestricted_resource(clause.child);
+        let parent_is_unrestricted = tt.is_unrestricted_resource(parent);
         drop(tt);
-        if !child_is_extern_handle || !parent_is_extern_handle {
-            let lacking = if child_is_extern_handle {
+        if !child_is_unrestricted || !parent_is_unrestricted {
+            let lacking = if child_is_unrestricted {
                 defs.name(parent).to_string()
             } else {
                 clause.child_name.clone()
@@ -183,7 +183,7 @@ fn resolve_resource_extends<H: CompilerHost>(
             reject(
                 clause,
                 format!(
-                    "`extends` requires `#[cm(..., type = \"extern-handle\")]` on both resources; `{lacking}` does not declare it"
+                    "`extends` requires `#[cm(..., linearity = \"unrestricted\")]` on both resources; `{lacking}` does not declare it"
                 ),
             );
             continue;
@@ -191,8 +191,9 @@ fn resolve_resource_extends<H: CompilerHost>(
         // Absence means the collect pass never walked the declaration, which
         // it skips for a module the stdlib snapshot covers: no method names,
         // no arity, so the checks that need them would pass by default.
-        // Nothing in the stdlib declares a backing yet; when Tide's `web:*`
-        // modules do, this says so instead of accepting what it cannot check.
+        // Nothing in the stdlib snapshot declares a linearity yet; when Tide's
+        // `web:*` modules do, this says so instead of accepting what it cannot
+        // check.
         if !method_names.contains_key(&parent) {
             reject(
                 clause,
@@ -560,10 +561,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     defined_at: resource_decl.id,
                                 },
                             );
+<<<<<<< HEAD
                             if resource_decl.attrs.iter().any(|a| {
                                 a.cm_resource_backing() == Some(CmResourceBacking::ExternHandle)
                             }) {
                                 type_table.borrow_mut().mark_extern_handle_resource(def);
+||||||| a9e00393c
+                            if resource_decl.attrs.iter().any(|a| {
+                                a.cm_resource_backing()
+                                    == Some(crate::ast::CmResourceBacking::ExternHandle)
+                            }) {
+                                type_table.borrow_mut().mark_extern_handle_resource(def);
+=======
+                            if declares_unrestricted(&resource_decl.attrs) {
+                                type_table.borrow_mut().mark_unrestricted_resource(def);
+>>>>>>> origin/main
                             }
                             let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
                             if is_generic {

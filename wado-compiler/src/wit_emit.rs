@@ -773,7 +773,7 @@ impl<'a> Emitter<'a> {
         let registry = self.cm_interface_registry?;
         let source = registry.source_interface(named)?;
         registry
-            .is_extern_handle_resource(&source, &named.name)
+            .is_unrestricted_resource(&source, &named.name)
             .then_some(Type::U32)
     }
 
@@ -967,14 +967,14 @@ impl<'a> Emitter<'a> {
                     .0;
                 Ok(self.named(&name, id))
             }
-            ResolvedType::Resource { def } if self.types.is_extern_handle_resource(*def) => {
+            ResolvedType::Resource { def } if self.types.is_unrestricted_resource(*def) => {
                 Ok(Type::U32)
             }
             ResolvedType::Resource { def } => Ok(Type::named(to_kebab(self.types.def_name(*def)))),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 let inner = *inner;
                 if let ResolvedType::Resource { def } = self.types.get(inner) {
-                    if self.types.is_extern_handle_resource(*def) {
+                    if self.types.is_unrestricted_resource(*def) {
                         return Ok(Type::U32);
                     }
                     Ok(Type::borrow(to_kebab(self.types.def_name(*def))))

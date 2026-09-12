@@ -1065,8 +1065,8 @@ pub enum TypeError {
     },
 
     /// A `resource Child extends Parent` clause the elaborator rejected: the
-    /// parent is not a resource, a backing does not match, the chain is
-    /// cyclic, or the parent carries generic arguments (out of scope in v1).
+    /// parent is not a resource, a linearity does not match, the chain is
+    /// cyclic, or the parent carries generic arguments.
     ResourceExtends {
         message: String,
         span: Span,

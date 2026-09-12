@@ -407,11 +407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         if required_trait.is_none()
             && let Some(def) = self.tysys.type_table.borrow().nominal_def(base_type_id)
-            && self
-                .tysys
-                .type_table
-                .borrow()
-                .is_extern_handle_resource(def)
+            && self.tysys.type_table.borrow().is_unrestricted_resource(def)
             && let Some((declaring, _)) = self.resource_instance_method(def, method_name)
             && let Some(trait_name) = colliding_trait(self)
         {
