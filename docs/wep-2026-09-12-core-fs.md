@@ -42,6 +42,7 @@ pub fn write<T: AsByteSlice>(path: &String, data: &T) -> Result<(), FsError> wit
 pub fn remove_file(path: &String) -> Result<(), FsError> with Preopens;
 
 pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens;
+pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens;
 pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens;
 ```
 
@@ -62,6 +63,8 @@ it over, so it makes the same check itself.
 `create_dir_all` makes one more check the host cannot: `Exist` reports whatever
 occupies a component, so it stats the entry and accepts only a directory. A
 regular file there is `NotDirectory`, not a directory that was already made.
+`create_dir` makes one directory and needs no such check, since it passes the
+host's answer straight back, as Rust's `create_dir` does.
 
 A second preopen is ignored. Nothing in the repository grants one. The
 alternative, resolving a path against the longest matching preopen prefix as
@@ -89,8 +92,9 @@ A kind earns its name by a branch that exists: `NoPreopen` is reported at 7
 sites, `NotFound` is what a tool distinguishes from a real fault, and `NotUtf8`
 has no `ErrorCode` at all because it is not an I/O failure. Everything else
 stays `Io(ErrorCode)`, which loses nothing: the code is the one WASI gave.
-`create_dir_all` settles `Exist` itself, either as the directory it asked for or
-as `NotDirectory`, which is why `AlreadyExists` is not a kind.
+`AlreadyExists` is not a kind either. `create_dir_all` settles `Exist` itself,
+either as the directory it asked for or as `NotDirectory`, and `create_dir`
+hands the code back as `Io(Exist)`, which a caller matches like any other.
 
 `impl Display for FsError` renders `path: message`, so a caller writes
 `eprintln(`error: ${e}`)` and the message names the file.

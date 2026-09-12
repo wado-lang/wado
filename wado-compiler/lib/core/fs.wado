@@ -183,6 +183,16 @@ pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens 
     return Result::Ok(out);
 }
 
+/// Create the directory `path` names. The parent has to exist and the path
+/// itself has to be free, so an occupied path is `Io(Exist)`.
+pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens {
+    let dir = root()?;
+    return match dir.create_directory_at(*path).wait() {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(failure(path, e)),
+    };
+}
+
 /// Create the directory `path` names, and every parent it needs. A directory
 /// that already exists is not a failure.
 pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
@@ -201,14 +211,14 @@ pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
             prefix.push('/');
         }
         prefix.push_str(&component);
-        create_dir(&dir, &prefix)?;
+        ensure_dir(&dir, &prefix)?;
     }
     return Result::Ok(());
 }
 
 /// Create the directory `path` names under `dir`. One already there is not a
 /// failure, and anything else there is `NotDirectory`.
-fn create_dir(dir: &Descriptor, path: &String) -> Result<(), FsError> {
+fn ensure_dir(dir: &Descriptor, path: &String) -> Result<(), FsError> {
     let Err(e) = dir.create_directory_at(*path).wait() else {
         return Result::Ok(());
     };

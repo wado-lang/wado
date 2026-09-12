@@ -69,6 +69,11 @@ one fails rather than removing it.
 Every entry of the directory `path` names, in the order the host lists
 them. `""` and `"."` name the preopened directory itself.
 
+### `pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens`
+
+Create the directory `path` names. The parent has to exist and the path
+itself has to be free, so an occupied path is `Io(Exist)`.
+
 ### `pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens`
 
 Create the directory `path` names, and every parent it needs. A directory

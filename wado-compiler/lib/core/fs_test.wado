@@ -39,6 +39,28 @@ test "a path that names nothing is NotFound" {
     assert e.kind matches { NotFound };
 }
 
+test "create_dir creates one directory, and will not take an occupied path" {
+    let dir = scratch(&"create-dir");
+    let path = `${dir}/one`;
+    remove_dir(&path);
+    fs::create_dir(&path).unwrap();
+    assert fs::read_dir(&path).unwrap().is_empty();
+    assert fs::create_dir(&path).unwrap_err().kind matches { Io(Exist) };
+}
+
+test "create_dir needs the parent to be there" {
+    let dir = scratch(&"create-dir-parent");
+    let e = fs::create_dir(&`${dir}/absent/child`).unwrap_err();
+    assert e.kind matches { NotFound };
+}
+
+/// Remove the directory `path` names, which a previous run left behind. The
+/// module does not remove a directory, so this is WASI's own call.
+fn remove_dir(path: &String) with Preopens {
+    let root = fs::root().unwrap();
+    let _ = root.remove_directory_at(*path).wait();
+}
+
 test "create_dir_all creates every parent, and repeating it is not an error" {
     let dir = scratch(&"nested");
     let leaf = `${dir}/a/b/c`;

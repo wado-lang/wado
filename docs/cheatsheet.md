@@ -1497,7 +1497,8 @@ use fs from "core:fs";
 let text = fs::read_to_string(&"docs/spec.md")?;   // Result<String, FsError>
 let bytes = fs::read(&"icon.png")?;                // Result<ByteList, FsError>
 fs::write(&"build/out.json", &text)?;              // any AsByteSlice; creates/truncates
-fs::create_dir_all(&"build/reports")?;
+fs::create_dir_all(&"build/reports")?;               // mkdir -p
+fs::create_dir(&"build/reports/today")?;             // one level; parent must exist
 fs::remove_file(&"build/stale.txt")?;
 
 for let entry of fs::read_dir(&"src")? {           // DirEntry { name, type }
