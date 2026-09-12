@@ -682,7 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // below are keyed by these aliases. The rewritten ident keeps the
         // original `id` so use→def edges still resolve back to the user's text.
         let canonical_ident;
-        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
+        let ident = if let Some(canon) = self.canonical_ns_ref_at(&ident.name, ident.id) {
             canonical_ident = ast::IdentExpr {
                 id: ident.id,
                 name: canon,

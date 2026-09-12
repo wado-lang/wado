@@ -1,0 +1,16 @@
+// Helper for `default_arg_ns_global.wado`. The defaults here reach a global
+// and a function through a namespace alias this module alone declares.
+
+use nsb from "./default_arg_ns_global_dep.wado";
+
+pub fn takes(v: i32 = nsb::SOME) -> i32 {
+    return v;
+}
+
+pub struct Conf {
+    pub v: i32 = nsb::SOME,
+}
+
+pub fn called(v: i32 = nsb::make()) -> i32 {
+    return v;
+}

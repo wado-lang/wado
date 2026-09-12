@@ -52,6 +52,7 @@ use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
+use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
@@ -402,22 +403,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .unwrap_or_else(|| self.current_module_source.clone())
     }
 
-    /// The namespace aliases in scope for `node`, which are the ones its own
-    /// module's author wrote.
+    /// The namespace aliases in scope for `node`: the ones its own module's
+    /// author wrote, not the ones in scope where the walk happens to stand.
+    pub(super) fn namespace_imports_at(
+        &self,
+        node: ast::AstId,
+    ) -> Option<&trait_env::NamespaceImports> {
+        let home = self.home_module(node);
+        if home == self.current_module_source {
+            return Some(&self.sem.imports.namespace_imports);
+        }
+        self.tysys.trait_env.namespace_imports(&home)
+    }
+
+    /// Which module the alias `ns` names, as written at `node`.
     pub(super) fn namespace_alias_source(
         &self,
         alias: &str,
         node: ast::AstId,
     ) -> Option<ModuleSource> {
-        let home = self.home_module(node);
-        if home == self.current_module_source {
-            return self.sem.imports.namespace_imports.get(alias).cloned();
-        }
-        self.tysys
-            .trait_env
-            .namespace_imports(&home)?
-            .get(alias)
-            .cloned()
+        self.namespace_imports_at(node)?.get(alias).cloned()
+    }
+
+    /// `ns::member` written at `node`, as the `ns$member` alias the registries
+    /// are keyed by. `None` when `ns` is no namespace alias of `node`'s module.
+    pub(super) fn canonical_ns_ref_at(&self, name: &str, node: ast::AstId) -> Option<String> {
+        canonical_ns_ref(self.namespace_imports_at(node)?, name)
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and
@@ -541,7 +552,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: AstId, name: &str) {
-        let Some(sym) = self.symbol_named(&self.current_module_source, name) else {
+        // The name is spelled at `use_id`, so it means what its own module says
+        // it means. A travelled expression otherwise records an edge to a
+        // same-named item of whichever module took it.
+        let Some(sym) = self.symbol_named(&self.home_module(use_id), name) else {
             return;
         };
         let def_id = sym.defined_at;
