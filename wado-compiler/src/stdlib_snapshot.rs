@@ -90,7 +90,7 @@ pub fn prewarm() {
 /// subset every real compile loads.
 fn build_snapshot() -> Semantics {
     let host = SnapshotHost;
-    let logger = Logger::new(&host, LogLevel::Warn);
+    let logger = Logger::new(&host, LogLevel::Error);
 
     // `wado-compiler` has no async runtime dependency (it must compile
     // to `wasm32-unknown-unknown`, see crate-level `CLAUDE.md`).  The
@@ -244,16 +244,14 @@ impl CompilerHost for SnapshotHost {
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
-        // Surface stdlib diagnostics so a stray error or warning during
-        // snapshot construction is visible to the user rather than
-        // swallowed behind the `expect` in `build_snapshot`. The
-        // `Logger` already filters by `LogLevel`, so anything that
-        // reaches us here is worth printing.
+        // The stdlib is ours and compiles clean, and the `Logger` above filters
+        // below `Error`: anything reaching here is a broken stdlib, not
+        // something a user's program can provoke or act on.
         let where_ = diagnostic.span.as_ref().map_or_else(
             || "<stdlib>".to_string(),
             |s| format!("{}:{}:{}", s.file, s.line, s.column),
         );
-        eprintln!(
+        panic!(
             "stdlib snapshot {}: {} at {}",
             diagnostic.severity, diagnostic.message, where_
         );

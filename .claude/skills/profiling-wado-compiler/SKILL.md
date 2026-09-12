@@ -44,6 +44,12 @@ kill -TERM "$(pgrep -P "$SAMPLY_PID" | head -1)"; wait "$SAMPLY_PID"
 node .claude/skills/profiling-wado-compiler/scripts/analyze_native_profile.ts /tmp/prof.json
 ```
 
+Symbols resolve against the path the profile recorded, not the binary that
+produced it. Rebuilding over `target/profiling/wado` makes every earlier profile
+symbolicate against the new build, and its output still looks normal. When you
+A/B, give each arm its own path: copy the first build aside and profile it
+there.
+
 For one-shot commands (`wado compile foo.wado`, `wado test foo.wado`)
 there is nothing to drive — samply records until the child exits, so
 just invoke it directly:

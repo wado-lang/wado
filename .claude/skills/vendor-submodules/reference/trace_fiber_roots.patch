@@ -1,0 +1,90 @@
+diff --git a/crates/wasmtime/src/runtime/component/concurrent.rs b/crates/wasmtime/src/runtime/component/concurrent.rs
+index f6b921b671..9e25b64aef 100644
+--- a/crates/wasmtime/src/runtime/component/concurrent.rs
++++ b/crates/wasmtime/src/runtime/component/concurrent.rs
+@@ -5310,6 +5310,15 @@ pub struct ConcurrentState {
+     ///
+     /// Used in the implementation of `Accessor::poll_ready_for_concurrent_call`.
+     ready_for_concurrent_call_waker: Option<Waker>,
++
++    /// Table entries that may own a fiber, i.e. the `WaitableSet` and
++    /// `GuestThread` entries `Self::trace_fiber_roots` has to visit.
++    ///
++    /// A superset: an entry is added when pushed and removed when deleted, and
++    /// a stale rep costs the tracer one failed lookup or downcast, which is
++    /// what visiting a non-fiber entry cost it anyway. Only a *missing* rep
++    /// could drop a root, and reps enter here at the one place they are made.
++    fiber_bearing: BTreeSet<u32>,
+ }
+ 
+ impl Default for ConcurrentState {
+@@ -5327,10 +5336,19 @@ impl Default for ConcurrentState {
+             interesting_tasks: 0,
+             interesting_tasks_empty_waker: None,
+             ready_for_concurrent_call_waker: None,
++            fiber_bearing: BTreeSet::new(),
+         }
+     }
+ }
+ 
++/// Whether a table entry of type `V` can own a fiber, and so has to be visited
++/// by `ConcurrentState::trace_fiber_roots`. Constant per monomorphization.
++#[cfg(feature = "gc")]
++fn may_own_fiber<V: 'static>() -> bool {
++    let id = core::any::TypeId::of::<V>();
++    id == core::any::TypeId::of::<WaitableSet>() || id == core::any::TypeId::of::<GuestThread>()
++}
++
+ impl ConcurrentState {
+     /// Take ownership of any fibers and futures owned by this object.
+     ///
+@@ -5412,6 +5430,7 @@ impl ConcurrentState {
+             worker,
+             high_priority,
+             low_priority,
++            fiber_bearing,
+ 
+             // TODO(cm-gc): This field contains `ValRaw`s, but they are never GC
+             // references because the component model doesn't support GC yet. We
+@@ -5428,7 +5447,15 @@ impl ConcurrentState {
+             ready_for_concurrent_call_waker: _,
+         } = self;
+ 
+-        for entry in table.get_mut().iter_mut() {
++        // Only the entries that can own a fiber, rather than the whole table:
++        // a long-lived instance holds one entry per in-flight request's
++        // resources, and every collection walked all of them to reach the few
++        // that hold a fiber.
++        let table = table.get_mut();
++        for &rep in fiber_bearing.iter() {
++            let Ok(entry) = table.get_any_mut(rep) else {
++                continue;
++            };
+             if let Some(set) = entry.downcast_mut::<WaitableSet>() {
+                 for mode in set.waiting.values_mut() {
+                     if let WaitMode::Fiber(fiber) = mode {
+@@ -5472,7 +5499,12 @@ impl ConcurrentState {
+         &mut self,
+         value: V,
+     ) -> Result<TableId<V>, ResourceTableError> {
+-        self.table.get_mut().push(value).map(TableId::from)
++        let id = self.table.get_mut().push(value).map(TableId::from)?;
++        #[cfg(feature = "gc")]
++        if may_own_fiber::<V>() {
++            self.fiber_bearing.insert(id.rep());
++        }
++        Ok(id)
+     }
+ 
+     fn get_mut<V: 'static>(&mut self, id: TableId<V>) -> Result<&mut V, ResourceTableError> {
+@@ -5500,6 +5532,10 @@ impl ConcurrentState {
+     }
+ 
+     fn delete<V: 'static>(&mut self, id: TableId<V>) -> Result<V, ResourceTableError> {
++        #[cfg(feature = "gc")]
++        if may_own_fiber::<V>() {
++            self.fiber_bearing.remove(&id.rep());
++        }
+         self.table.get_mut().delete(Resource::from(id))
+     }
+ 

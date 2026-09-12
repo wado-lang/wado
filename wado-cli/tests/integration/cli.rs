@@ -491,6 +491,27 @@ fn test_run_hello() {
         .stdout(predicate::str::contains("Hello, world!"));
 }
 
+/// A run writes the program's output and nothing else.
+#[test]
+fn test_run_announces_nothing() {
+    wado()
+        .args(["run", "example/hello.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
+
+/// Traces reach stderr, which every `optimizer-debug` recipe depends on.
+#[test]
+fn test_trace_env_var_reaches_stderr() {
+    wado()
+        .env("WADO_LIST_PASSES", "1")
+        .args(["run", "example/hello.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[pass] nir/"));
+}
+
 #[test]
 fn test_test_passing() {
     wado()
