@@ -846,8 +846,9 @@ fn is_json_ws(b: i32) -> bool {
     return ws_set >> b as u64 & 1 != 0;
 }
 
-/// Whether a whitespace scan stops on `b`. Almost every skipped byte is a
-/// space and almost every stopping byte is above one, so neither shifts.
+/// Whether a whitespace scan stops on `b`. Testing the space first settles a
+/// skipped byte in one compare, and costs a stopping byte one: a trade that
+/// pays on indented input and is paid for on minified (`dead-ends.md`).
 fn json_ws_end(b: i32) -> bool {
     return b != b' ' && (b > b' ' || !is_json_ws(b));
 }

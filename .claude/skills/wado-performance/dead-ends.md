@@ -18,6 +18,36 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## Making `json_ws_end` cost nothing on minified input (2026-09-12)
+
+The whitespace predicate tests `b != b' '` first, which settles a skipped byte
+in one compare and costs a stopping byte one. citm_catalog is 71% whitespace so
+it wins; canada.json is minified — 24 whitespace bytes in 2.25 MB — so it only
+pays. Measured against `origin/main`'s `core:json`, one dev compiler and five
+alternating rounds, with the rest of the branch held constant:
+
+| `core:json`                           | catalog de | canada de |
+| ------------------------------------- | ---------- | --------- |
+| main's `b > b' ' \|\| !is_json_ws(b)` | +12.1%     | **-1.0%** |
+| space-first (today)                   | **+19.3%** | -2.8%     |
+
+So the ordering is worth 7.2 points on the pretty corpus and 1.8 on the
+minified one. Three attempts to keep both failed:
+
+- **Reorder to `b > b' ' || (b != b' ' && !is_json_ws(b))`.** Equivalent, and
+  costs what it recovers: catalog de 3.9 → 4.2 ms.
+- **Two predicates, one per call site** — structural-first at the scan's entry,
+  space-first inside the run, on the theory that minified input only ever hits
+  the entry. Neutral on both corpora.
+- **Inline the body at all six sites**, in case the call was the cost. Also
+  neutral, which is what rules the call out: the same ordering inlined measures
+  the same as the call.
+
+Generalizes: a byte-frequency assumption is a property of the corpus, not of
+the format. Check a scan predicate on a minified corpus and an indented one
+before believing either number — they move in opposite directions here, and
+`json-catalog` alone will not show it.
+
 ## Reading more than four bytes per bounds check (2026-09-12)
 
 citm_catalog is 71% whitespace, in runs averaging 24 bytes past the one its
