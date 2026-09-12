@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789175717568,
+  "lastUpdate": 1789195628188,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55145,6 +55145,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e723cb713f6f970857d5e06e58f021590404cb9e"
         },
         "date": 1789175716796,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6492,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18919,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285903,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3856bdb0b9a7683bff4748ba8a959d44aba02e99",
+          "message": "Merge pull request #2031 from wado-lang/claude/wado-remove-debug-output-thdhoc\n\nfix(cli): silence run and serve, and deny stream writes in the compiler",
+          "timestamp": "2026-09-12T15:32:10+09:00",
+          "tree_id": "4d70f0dec55da6a95470f15b4a491ee14b12e231",
+          "url": "https://github.com/wado-lang/wado/commit/3856bdb0b9a7683bff4748ba8a959d44aba02e99"
+        },
+        "date": 1789195627603,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
