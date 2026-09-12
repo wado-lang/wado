@@ -1,0 +1,149 @@
+// A tag that decides each hole by scanning the literal text before it — the
+// shape the WEP's `html` example and WadoPoet's `wado` tag both take. The scan
+// reads `h.lit()`, which the shape holds as a constant, and the state the
+// previous segment left, which is a constant too, so the whole walk is a
+// compile-time quantity: it should fold to one decision per hole and leave
+// neither a call nor a loop.
+//
+// It folds only while the scan fits the inliner's size budget
+// (`inline_threshold`, 16 at -O2 and 26 at -O3). `small` is under it and folds
+// to straight-line appends. `big` is a four-state scan — what a Wado-emitting
+// tag needs, and what WadoPoet has — and survives as a call per hole, so every
+// emitted line rescans a string the compiler knows.
+// `--optimize-inline-threshold 200` folds `big` away too, which is what says
+// the blocker is the budget rather than the shape: CTFE runs an effect-free
+// callee (`niri::is_ctfe_eligible`), but only the inliner brings this one
+// within reach of the fold.
+//
+// The expectations below pin both sides. Closing the gap turns the
+// `wir_expect:O2` line into a `wir_not_expect:O2` one.
+use { println, Stdout } from "core:cli";
+
+enum Small {
+    Code,
+    Str,
+}
+
+enum Big {
+    Code,
+    Str,
+    Chr,
+    Comment,
+}
+
+fn small(ctx: Small, lit: &String) -> Small {
+    let mut cur = ctx;
+    for let c of lit.chars() {
+        if c == '"' {
+            cur = match cur {
+                Small::Code => Small::Str,
+                Small::Str => Small::Code,
+            };
+        }
+    }
+    return cur;
+}
+
+fn big(ctx: Big, lit: &String) -> Big {
+    let mut cur = ctx;
+    let mut escaped = false;
+    let mut prev_slash = false;
+    for let c of lit.chars() {
+        if escaped {
+            escaped = false;
+            prev_slash = false;
+            continue;
+        }
+        match cur {
+            Big::Code => {
+                if c == '"' {
+                    cur = Big::Str;
+                } else if c == '\'' {
+                    cur = Big::Chr;
+                } else if c == '/' && prev_slash {
+                    cur = Big::Comment;
+                }
+            },
+            Big::Str => {
+                if c == '\\' {
+                    escaped = true;
+                } else if c == '"' {
+                    cur = Big::Code;
+                }
+            },
+            Big::Chr => {
+                if c == '\\' {
+                    escaped = true;
+                } else if c == '\'' {
+                    cur = Big::Code;
+                }
+            },
+            Big::Comment => {
+                if c == '\n' {
+                    cur = Big::Code;
+                }
+            },
+        }
+        prev_slash = c == '/';
+    }
+    return cur;
+}
+
+fn quoted_small<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    let mut ctx = Small::Code;
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit());
+        ctx = small(ctx, &h.lit());
+        match ctx {
+            Small::Code => h.fmt(&t, &mut Formatter::new(&mut out)),
+            Small::Str => {
+                out.push('!');
+                h.fmt(&t, &mut Formatter::new(&mut out));
+            },
+        }
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    return out;
+}
+
+fn quoted_big<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
+    let mut out = "";
+    let mut ctx = Big::Code;
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&h.lit());
+        ctx = big(ctx, &h.lit());
+        match ctx {
+            Big::Code => h.fmt(&t, &mut Formatter::new(&mut out)),
+            Big::Comment => h.fmt(&t, &mut Formatter::new(&mut out)),
+            Big::Str => {
+                out.push('!');
+                h.fmt(&t, &mut Formatter::new(&mut out));
+            },
+            Big::Chr => {
+                out.push('?');
+                h.fmt(&t, &mut Formatter::new(&mut out));
+            },
+        }
+    }
+    out.push_str(&ReflectTemplate::<T>::tail());
+    return out;
+}
+
+export fn run() with Stdout {
+    let name = builtin::black_box("n");
+    let text = builtin::black_box("t");
+    println(quoted_small`let ${name} = "${text}";`);
+    println(quoted_big`let ${name} = '${text}';`);
+}
+
+__DATA__
+{
+    "stdout": "let n = \"!t\";\nlet n = '?t';\n",
+    "wir_expect:O2": [
+        "/big\"("
+    ],
+    "wir_not_expect:O2": [
+        "/small\"("
+    ]
+}
