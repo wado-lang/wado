@@ -2117,31 +2117,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee_module: Option<ModuleSource>,
         ctx: &mut FunctionContext,
     ) {
-        if defaults.is_empty() {
-            return;
-        }
-        // A default may name a parameter ahead of it. The call site typed the
-        // caller's argument already, so its type is the answer; walking the
-        // caller's AST again here would be the one part of the default that is
-        // not the callee's code.
-        let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
-        for (i, arg_type) in args.iter().enumerate() {
-            if let Some((name, _)) = defaults.get(i) {
-                param_types_so_far.insert(name.clone(), *arg_type);
-            }
-        }
-        self.with_resolving_home(callee_module, |s| {
-            for i in args.len()..param_types.len() {
-                let (name, default_expr) = match defaults.get(i) {
-                    Some((n, Some(d))) => (n.clone(), d.clone()),
-                    _ => break,
-                };
+        self.fill_trailing_defaults(
+            args,
+            param_types,
+            defaults,
+            callee_module,
+            ctx,
+            |s, i, default_expr, resolved| {
                 let expected_type = param_types[i];
-                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                    s.with_default_arg_types(param_types_so_far.clone(), |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    })
-                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
@@ -2149,7 +2132,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
                     panic!(
-                        "compiler bug: default expression for parameter '{name}' \
+                        "compiler bug: default expression for parameter {i} \
                          re-resolved to () at call site but parameter expects '{expected_name}'. \
                          Likely cause: the default references callee-only scope \
                          (e.g. a callee type parameter like `T::default()`) that is \
@@ -2160,6 +2143,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         default_expr.span()
                     );
                 }
+            },
+        );
+    }
+
+    /// Fill `args` from `defaults` up to `param_types`, each default resolved
+    /// as its author wrote it in `callee_module`: the caller's bindings are out
+    /// of scope, and a default naming a parameter ahead of it is answered by
+    /// that parameter's already-known type rather than by a second walk of the
+    /// caller's argument. `filled` sees each appended `(index, default,
+    /// resolved type)`. A position no default covers stops the fill and is left
+    /// to the arity check.
+    pub(super) fn fill_trailing_defaults(
+        &mut self,
+        args: &mut Vec<TypeId>,
+        param_types: &[TypeId],
+        defaults: &[(String, Option<Expr>)],
+        callee_module: Option<ModuleSource>,
+        ctx: &mut FunctionContext,
+        mut filled: impl FnMut(&mut Self, usize, &Expr, TypeId),
+    ) {
+        if defaults.is_empty() {
+            return;
+        }
+        let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
+        for (i, arg_type) in args.iter().enumerate() {
+            if let Some((name, _)) = defaults.get(i) {
+                param_types_so_far.insert(name.clone(), *arg_type);
+            }
+        }
+        self.with_resolving_home(callee_module, |s| {
+            for i in args.len()..param_types.len() {
+                let Some((name, Some(default_expr))) = defaults.get(i).cloned() else {
+                    break;
+                };
+                let expected_type = param_types[i];
+                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                    s.with_default_arg_types(param_types_so_far.clone(), |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    })
+                });
+                filled(s, i, &default_expr, resolved);
                 args.push(resolved);
                 param_types_so_far.insert(name, resolved);
             }

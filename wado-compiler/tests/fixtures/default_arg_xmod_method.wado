@@ -1,0 +1,33 @@
+// Regression: a method's default expression is written at the declaration and
+// must resolve there, the same as a free function's. Reify swapped module
+// perspective for the free-function path but not the method one, so a method
+// default naming its own module's global was answered in the caller's module
+// instead: a caller declaring that name got its value, and a caller declaring
+// nothing panicked the compiler in `lower::translate`.
+//
+// The caller's `BASE` is deliberately a different value from the callee's, so
+// resolving at the wrong end is a wrong number rather than a tie. A caller with
+// no `BASE` at all is the `no_base` module next door.
+
+use { Box3 } from "./sub/default_arg_xmod_method_lib.wado";
+use { without_base } from "./sub/default_arg_xmod_method_no_base.wado";
+
+global BASE: i32 = 500;
+
+export fn run() {
+    // Instance method, plain global default and an expression over it.
+    assert Box3::new(1).plus() == 8;
+    assert Box3::new(1).scaled() == 22;
+
+    // Static method on the same type.
+    assert Box3::of().k == 7;
+
+    // An explicit argument still wins, and it is the caller's value.
+    assert Box3::new(1).plus(BASE) == 501;
+
+    // A caller that declares no `BASE` at all.
+    assert without_base() == 8;
+}
+
+__DATA__
+{"stdout": ""}

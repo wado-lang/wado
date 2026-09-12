@@ -154,7 +154,7 @@ A default expression resolves its names in the scope of the declaration (the fun
 
 Compile-time literals that read a file follow the declaration too: `#include_str`, `#include_bytes` and `#data` all name the file that wrote them, which is the only file whose paths and `__DATA__` section the loader read.
 
-The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and earlier-parameter references substitute the caller's argument expression (next section). A substituted argument is the caller's code and keeps reaching the caller's locals.
+The exceptions are deliberate and syntactic, not scoped lookups: location literals (`#file`/`#line`/`#function`) evaluate at the call site (see the interaction table below), and a default may name an earlier parameter (next section). Naming a parameter means the value the call supplied for it, which the caller wrote in its own scope and may well have read its own locals to build. It does not put the caller's scope inside the default: every other name in the default still resolves at the declaration.
 
 The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all.
 

@@ -1,0 +1,27 @@
+// Helper for `default_arg_xmod_method.wado`. Every default here names this
+// module's own `BASE`, which the caller never spells the same value for — so a
+// default answered at the call site shows up as a wrong number, not a tie.
+
+global BASE: i32 = 7;
+
+pub struct Box3 {
+    pub k: i32,
+}
+
+impl Box3 {
+    pub fn new(k: i32) -> Box3 {
+        return Box3 { k };
+    }
+
+    pub fn plus(&self, v: i32 = BASE) -> i32 {
+        return self.k + v;
+    }
+
+    pub fn scaled(&self, v: i32 = BASE * 3) -> i32 {
+        return self.k + v;
+    }
+
+    pub fn of(v: i32 = BASE) -> Box3 {
+        return Box3 { k: v };
+    }
+}

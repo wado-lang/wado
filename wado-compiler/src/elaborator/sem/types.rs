@@ -38,6 +38,11 @@ pub(crate) struct MethodDispatch {
     pub(crate) param_names: Vec<String>,
     /// Per-parameter default expression ASTs (`None` for required).
     pub(crate) param_defaults: Vec<Option<Expr>>,
+    /// The module that wrote `param_defaults`, which is where they resolve.
+    /// Reify stands in it while reifying one, as the free-function path does
+    /// in `reify_pad_args_with_defaults`: a default naming its own module's
+    /// global otherwise takes the caller's same-named one.
+    pub(crate) defaults_module: ModuleSource,
     /// The resolved method's return [`TypeId`] — the authoritative result
     /// type of the call. Reify uses this for the call's
     /// `type_id` rather than the per-`AstId` `expression_types` entry,

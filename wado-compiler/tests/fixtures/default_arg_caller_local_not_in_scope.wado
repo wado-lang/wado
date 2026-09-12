@@ -9,8 +9,12 @@
 // also used to panic the compiler when no caller local shadowed the global:
 // the callee's own global was invisible from the call site.
 //
-// The caller's own arguments spliced into a default (`fn f(a, b = a)`) stay the
-// caller's code and keep reaching the caller's locals, which `pair` pins.
+// Naming an earlier parameter (`fn f(a, b = a)`) means the value the call
+// supplied for it, which the caller may have built from its own locals — that
+// is `pair`.
+//
+// Both modules spell `SECRET` as 7 here, so this file cannot tell which end a
+// default resolved at; `default_arg_xmod_method.wado` is the one that can.
 
 use { Conf, Box, called, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
 
@@ -50,7 +54,7 @@ export fn run() {
     assert called() == 7;
     assert MAKE() == 99;
 
-    // A spliced caller argument still names the caller's locals.
+    // Naming an earlier parameter takes the value the call supplied for it.
     assert pair(SECRET) == 99099;
 }
 

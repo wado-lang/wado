@@ -7639,6 +7639,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &mut args,
                 &dispatch.param_defaults,
                 &dispatch.param_types,
+                &[],
                 &callee_module,
                 static_call.span,
                 ctx,
@@ -7763,6 +7764,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             args,
             &dispatch.param_defaults,
             &dispatch.param_types,
+            &[],
             &module,
             span,
             ctx,
@@ -7791,6 +7793,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             args,
             &func_params,
             param_types,
+            &[],
             callee_module,
             callee.span(),
             ctx,
@@ -7801,11 +7804,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the call omitted. `func_params` is the callee's `(name, default)` list in
     /// declaration order, `callee_module` its defining module (for the
     /// perspective swap), and `call_span` the call site (for location literals).
+    /// An absent `param_types` / `param_is_mut` entry means no expected type and
+    /// a by-value argument.
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<CallArg>,
         func_params: &[(String, Option<ast::Expr>)],
         param_types: &[tir::TypeId],
+        param_is_mut: &[bool],
         callee_module: &ModuleSource,
         call_span: Span,
         ctx: &mut FunctionContext,
@@ -7813,15 +7819,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
         }
-        // A default may reference an earlier parameter. The substituted
-        // value is the caller's argument, already reified under the
-        // caller's perspective in `args[i]` (and, for later defaults,
-        // the synthesized value reified below). Map parameter name →
-        // reified TIR so `reify_ident` returns it directly: re-resolving
-        // the spliced caller AST under the callee's swapped perspective
-        // (below) would key its AstIds against the wrong module's
-        // annotations and mis-type the node. Save / restore so nested
-        // defaults compose.
+        // A default may name an earlier parameter, which means the caller's
+        // argument — already reified under the caller's perspective in
+        // `args[i]`, or, for a later default, the value synthesized below.
+        // Map parameter name → reified TIR so `reify_ident` hands it back
+        // directly, since the perspective swap below leaves the caller's
+        // module behind. Saved and restored so nested defaults compose.
         let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
         for (i, arg) in args.iter().enumerate() {
             if let Some((name, _)) = func_params.get(i) {
@@ -7878,7 +7881,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
-            args.push(CallArg::new(resolved, false));
+            let is_mut = param_is_mut.get(i).copied().unwrap_or(false);
+            args.push(CallArg::new(resolved, is_mut));
         }
 
         if let Some((src, items, sem)) = saved {
@@ -8750,35 +8754,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Pad missing trailing args with the method's defaults.
-        // Mirrors `resolve_method_call_with`; the recorded `param_names` /
-        // `param_defaults` arrive on `MethodDispatch` from annotate.
-        if args.len() < dispatch.param_defaults.len() {
-            // An earlier-parameter reference resolves to the caller's argument,
-            // already reified under the caller's perspective — the same answer
-            // `reify_pad_args_with_defaults` gives on the free-function path.
-            let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(name) = dispatch.param_names.get(i) {
-                    overrides.insert(name.clone(), arg.expr.clone());
-                }
-            }
-            let saved_overrides = std::mem::replace(&mut self.default_arg_overrides, overrides);
-            for i in args.len()..dispatch.param_defaults.len() {
-                let Some(Some(default_expr)) = dispatch.param_defaults.get(i).cloned() else {
-                    break;
-                };
-                let resolved = ctx
-                    .with_caller_bindings_hidden(|ctx| self.reify_expr(&default_expr, ctx, None));
-                let is_mut = dispatch.param_is_mut.get(i).copied().unwrap_or(false);
-                if let Some(name) = dispatch.param_names.get(i) {
-                    self.default_arg_overrides
-                        .insert(name.clone(), resolved.clone());
-                }
-                args.push(CallArg::new(resolved, is_mut));
-            }
-            self.default_arg_overrides = saved_overrides;
-        }
+        // Pad missing trailing args with the method's defaults, standing in the
+        // module that declared them — the same walk the free-function path takes.
+        let method_params: Vec<(String, Option<ast::Expr>)> = dispatch
+            .param_defaults
+            .iter()
+            .enumerate()
+            .map(|(i, d)| {
+                (
+                    dispatch.param_names.get(i).cloned().unwrap_or_default(),
+                    d.clone(),
+                )
+            })
+            .collect();
+        self.reify_apply_param_defaults(
+            &mut args,
+            &method_params,
+            &[],
+            &dispatch.param_is_mut,
+            &dispatch.defaults_module,
+            method_call.span,
+            ctx,
+        );
 
         // The call's result type is the resolved method's return type
         // (recorded on the dispatch), not the per-`AstId` `expression_types`

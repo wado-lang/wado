@@ -686,32 +686,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pad missing trailing args with declared parameter defaults. An
         // earlier-parameter reference is answered by that parameter's type, as
         // in the free-function path (`apply_param_defaults`).
-        if args.len() < expected_param_types.len() && !param_defaults.is_empty() {
-            let mut param_types_so_far: hashmap::IndexMap<String, TypeId> =
-                hashmap::IndexMap::default();
-            for (i, arg_type) in args.iter().enumerate() {
-                if let Some(name) = param_names.get(i) {
-                    param_types_so_far.insert(name.clone(), *arg_type);
-                }
-            }
-            self.with_resolving_home(Some(callee_module.clone()), |s| {
-                for i in args.len()..expected_param_types.len() {
-                    let Some(Some(default_expr)) = param_defaults.get(i).cloned() else {
-                        break;
-                    };
-                    let expected_type = expected_param_types[i];
-                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                        s.with_default_arg_types(param_types_so_far.clone(), |s| {
-                            s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                        })
-                    });
-                    args.push(resolved);
-                    if let Some(name) = param_names.get(i) {
-                        param_types_so_far.insert(name.clone(), resolved);
-                    }
-                }
-            });
-        }
+        let defaults: Vec<(String, Option<Expr>)> = param_defaults
+            .iter()
+            .enumerate()
+            .map(|(i, d)| (param_names.get(i).cloned().unwrap_or_default(), d.clone()))
+            .collect();
+        self.fill_trailing_defaults(
+            &mut args,
+            &expected_param_types,
+            &defaults,
+            Some(callee_module.clone()),
+            ctx,
+            |_, _, _, _| {},
+        );
 
         // Arity, once the declared defaults have filled what they can. A
         // defaulted parameter is optional and the rest are required; the
@@ -789,7 +776,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
-                declaring_module: Some(callee_module),
+                declaring_module: Some(callee_module.clone()),
                 span,
             });
             if type_args.is_empty() {
@@ -1131,6 +1118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_is_mut,
                 param_names,
                 param_defaults,
+                callee_module,
                 return_type,
                 method_type_args,
                 consumes_self,
@@ -1770,32 +1758,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pad omitted trailing arguments with declared parameter defaults.
         // Variant / flags constructors carry no defaults, so the arg-count
         // checks below are unaffected.
-        if args.len() < param_types.len() && !static_method_defaults.is_empty() {
-            let defaults = &static_method_defaults;
-            let mut param_types_so_far: hashmap::IndexMap<String, TypeId> =
-                hashmap::IndexMap::default();
-            for (i, arg_type) in args.iter().enumerate() {
-                if let Some((pname, _)) = defaults.get(i) {
-                    param_types_so_far.insert(pname.clone(), *arg_type);
-                }
-            }
-            for i in args.len()..param_types.len() {
-                let Some((pname, Some(default_expr))) = defaults.get(i).cloned() else {
-                    break;
-                };
-                let expected_type = param_types[i];
-                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                    self.with_resolving_home(static_method_module.clone(), |s| {
-                        s.with_default_arg_types(param_types_so_far.clone(), |s| {
-                            s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                        })
-                    })
-                });
-                args.push(resolved);
-                arg_spans.push(default_expr.span());
-                param_types_so_far.insert(pname, resolved);
-            }
-        }
+        self.fill_trailing_defaults(
+            &mut args,
+            &param_types,
+            &static_method_defaults,
+            static_method_module.clone(),
+            ctx,
+            |_, _, default_expr, _| arg_spans.push(default_expr.span()),
+        );
 
         // A declared static is checked against its signature here, where the
         // spelled `Type::<T>::method(…)` call would otherwise reach codegen

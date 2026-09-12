@@ -3014,8 +3014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_names: method_param_names,
             consumes_self: _,
             inherent_visibility,
-            // Reify pads a `MethodDispatch` under the caller: no swap reads it.
-            defaults_module: _,
+            defaults_module,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3137,6 +3136,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_param_is_mut,
             method_param_names,
             method_param_defaults,
+            defaults_module
+                .or_else(|| impl_module.clone())
+                .unwrap_or_else(|| self.current_module_source.clone()),
             return_type,
             type_args,
             false,
