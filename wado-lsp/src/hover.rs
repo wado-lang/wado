@@ -482,10 +482,10 @@ mod tests {
     #[test]
     fn for_of_keyword_no_synthetic_iter_hover() {
         // The cursor on the `for` keyword of `for x of items { ... }` must
-        // never surface the elaborator's synthetic `__iter_N` local. A hover
+        // never surface the elaborator's synthetic `$iter_N` local. A hover
         // here should return None (the cursor lands between recognised
         // names) or, at most, surface the user's loop variable — never
-        // a `let __iter_N` line that exposes compiler internals.
+        // a `let $iter_N` line that exposes compiler internals.
         futures::executor::block_on(async {
             let source = concat!(
                 "fn f(items: List<i32>) -> i32 {\n",
@@ -499,7 +499,7 @@ mod tests {
             let result = hover_at(source, 2, 4).await;
             if let Some(r) = &result {
                 assert!(
-                    !r.contents.value.contains("__iter"),
+                    !r.contents.value.contains("$iter"),
                     "hover on `for` exposed synthetic iter local: {}",
                     r.contents.value
                 );

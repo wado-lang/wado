@@ -1,7 +1,7 @@
 //! Multi-value return ABI classification: which aggregate-returning functions
 //! take the multi-value Wasm ABI, one result per field, instead of a heap
 //! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
-//! fresh literals, and every call site binds it as `let __tmp = Call(f)` whose
+//! fresh literals, and every call site binds it as `let $tmp = Call(f)` whose
 //! only uses are field accesses. The one mutation is `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};

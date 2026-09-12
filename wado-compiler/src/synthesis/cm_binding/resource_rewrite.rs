@@ -1,5 +1,5 @@
 //! Two passes ahead of adapter synthesis: [`synthesize_record_stream_reads`]
-//! generates a `__cm_stream_read_<T>` binding per WASI record
+//! generates a `$cm_stream_read_<T>` binding per WASI record
 //! `Stream<T>::read()` mentions, and [`rewrite_cm_resource_methods`] then turns
 //! every `#[cm("…")]` resource method call into its raw / internal /
 //! entry-module form, before a downstream phase meets a `cm_name`-tagged call.
@@ -277,7 +277,7 @@ fn synthesize_bindings<K>(
 /// Generate binding functions for Stream<T>.`read()` where T is a non-u8 WASI record type.
 ///
 /// For each unique stream element type T found in stream-read calls, generates a
-/// TIR function `__cm_stream_read_<T>` that:
+/// TIR function `$cm_stream_read_<T>` that:
 /// 1. Allocates a `max * elem_size` buffer and issues the element-parameterized
 ///    `stream-read` canonical, awaiting BLOCKED
 /// 2. Loops through the buffer, lifting each record from linear memory
@@ -350,7 +350,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
 /// Generate the per-payload `Future<T>::read()` binding functions.
 ///
 /// For each distinct future payload `T` consumed by `future-read`, synthesizes
-/// `__cm_future_read_<mangle(T)>(handle: i32) -> Option<T>` which allocates a
+/// `$cm_future_read_<mangle(T)>(handle: i32) -> Option<T>` which allocates a
 /// CM buffer (sized via `cm_abi`), calls the payload-parameterized
 /// `future-read` canonical, handles BLOCKED via `cm_await_blocked`, lifts the
 /// payload with the shared `synthesize_lift`, and wraps it in `Option`. This
@@ -398,10 +398,10 @@ fn future_write_payload(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
         .copied()
 }
 
-/// The `__cm_future_write_*` helper name for a payload type.
+/// The `$cm_future_write_*` helper name for a payload type.
 fn future_write_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     format!(
-        "__cm_future_write_{}",
+        "$cm_future_write_{}",
         tt.mangle_type_arg_for_generic(payload_type_id)
     )
 }
@@ -473,7 +473,7 @@ fn stream_write_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> 
 
 fn stream_write_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
     format!(
-        "__cm_stream_write_{}",
+        "$cm_stream_write_{}",
         tt.mangle_type_arg_for_generic(elem_type_id)
     )
 }
@@ -552,10 +552,10 @@ fn stream_read_value_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     has_value_payload(tt, elem).then_some(elem)
 }
 
-/// The `__cm_stream_read_val_*` helper name for an element type.
+/// The `$cm_stream_read_val_*` helper name for an element type.
 fn stream_read_value_func_name(tt: &TypeTable, elem_type_id: TypeId) -> String {
     format!(
-        "__cm_stream_read_val_{}",
+        "$cm_stream_read_val_{}",
         tt.mangle_type_arg_for_generic(elem_type_id)
     )
 }
@@ -639,8 +639,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
             write_name,
             vec![
                 local_ref(handle_idx, "handle", TypeTable::I32),
-                local_ref(ptr_local, "__list_base", TypeTable::I32),
-                local_ref(count_local, "__list_len", TypeTable::I32),
+                local_ref(ptr_local, "$list_base", TypeTable::I32),
+                local_ref(count_local, "$list_len", TypeTable::I32),
             ],
             TypeTable::I32,
         ),
@@ -651,25 +651,25 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     // Free the element buffer: realloc(ptr, count * elem_size, elem_align, 0).
     let byte_count = binary(
         TirBinaryOp::Mul,
-        local_ref(count_local, "__list_len", TypeTable::I32),
+        local_ref(count_local, "$list_len", TypeTable::I32),
         i32_const(elem_size),
         TypeTable::I32,
     );
     let freed_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
-        Some("__freed".to_string()),
+        Some("$freed".to_string()),
         TypeTable::I32,
         false,
     );
     stmts.push(let_stmt(
-        "__freed",
+        "$freed",
         freed_idx,
         TypeTable::I32,
         builtin_call(
             "realloc",
             vec![
-                local_ref(ptr_local, "__list_base", TypeTable::I32),
+                local_ref(ptr_local, "$list_base", TypeTable::I32),
                 byte_count,
                 i32_const(elem_align),
                 i32_const(0),
@@ -775,12 +775,12 @@ fn free_cm_buffer(
     let freed_idx = alloc_named_local(
         next_local,
         locals,
-        Some("__freed".to_string()),
+        Some("$freed".to_string()),
         TypeTable::I32,
         false,
     );
     let_stmt(
-        "__freed",
+        "$freed",
         freed_idx,
         TypeTable::I32,
         builtin_call(
@@ -894,7 +894,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     let written_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
-        Some("__written".to_string()),
+        Some("$written".to_string()),
         TypeTable::I32,
         awaits_reader,
     );
@@ -904,7 +904,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         let_stmt
     };
     stmts.push(write_binding(
-        "__written",
+        "$written",
         written_idx,
         TypeTable::I32,
         cm_canonical_call(
@@ -918,7 +918,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     ));
 
     if awaits_reader {
-        stmts.push(await_if_blocked(written_idx, "__written", handle_idx));
+        stmts.push(await_if_blocked(written_idx, "$written", handle_idx));
         stmts.push(free_cm_buffer(
             ptr_idx,
             size,
@@ -998,10 +998,10 @@ fn future_read_payload(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId, TypeId
     Some((payload_type_id, expr.type_id))
 }
 
-/// The `__cm_future_read_*` helper name for a payload type.
+/// The `$cm_future_read_*` helper name for a payload type.
 fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     format!(
-        "__cm_future_read_{}",
+        "$cm_future_read_{}",
         tt.mangle_type_arg_for_generic(payload_type_id)
     )
 }
@@ -1251,9 +1251,9 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     (!crate::component_model::is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
-/// The `__cm_stream_read_<record>` helper name for a WASI record element.
+/// The `$cm_stream_read_<record>` helper name for a WASI record element.
 fn record_stream_read_func_name(elem_name: &str) -> String {
-    format!("__cm_stream_read_{elem_name}")
+    format!("$cm_stream_read_{elem_name}")
 }
 
 /// Shared stream-read loop generator. `func_name` / `stream_read_name` /
@@ -1543,11 +1543,11 @@ fn synthesize_stream_read_func(
     let freed_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
-        Some("__freed".to_string()),
+        Some("$freed".to_string()),
         TypeTable::I32,
         false,
     );
-    stmts.push(let_stmt("__freed", freed_idx, TypeTable::I32, free_call));
+    stmts.push(let_stmt("$freed", freed_idx, TypeTable::I32, free_call));
 
     stmts.push(return_stmt(Some(stream_chunk_literal(
         chunk_type_id,
@@ -1614,7 +1614,7 @@ fn synthesize_stream_read_func(
     }
 }
 
-/// Synthesize `__cm_stream_read_val_<mangle>(handle, max) -> List<T>` for a
+/// Synthesize `$cm_stream_read_val_<mangle>(handle, max) -> List<T>` for a
 /// value-payload element type, delegating the read loop to the shared
 /// [`synthesize_stream_read_func`]. The canonical name and CM layout come from
 /// the general `classify_stream_payload` / `cm_*_with_registry_scoped` path,
@@ -1810,7 +1810,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
             return;
         }
         // Value-payload stream reads call a generated per-element binding;
-        // WASI-record reads fall through to the `__cm_stream_read_<record>` path.
+        // WASI-record reads fall through to the `$cm_stream_read_<record>` path.
         if let Some(elem_type_id) = stream_read_value_element(self.tt, expr) {
             let func_name = stream_read_value_func_name(self.tt, elem_type_id);
             self.rewrite_call(expr, BindingTarget::Entry(func_name));

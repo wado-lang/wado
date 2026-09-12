@@ -112,7 +112,7 @@ paid on a benchmark `fts` never touched.
   the aggregate: **json-canada de +12.7%, ser +7.2%**, and `uscale_pow10`
   deleted.
 - **`multi_value_return` is all-or-nothing per callee.** It wants _every_ call
-  site to be `let __tmp = Call(f)` whose only uses are field accesses.
+  site to be `let $tmp = Call(f)` whose only uses are field accesses.
   `mul_pow10` had seven sites and six were exactly that; the one yielding the
   call as a block value disqualified all seven. Fixing the first gap retired
   this one, since the offending site is now a `let`. The precondition is

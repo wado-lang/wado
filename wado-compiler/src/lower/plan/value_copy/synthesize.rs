@@ -299,7 +299,7 @@ fn build_variant_copy_body(
                 // Local 0 is the `v` parameter.
                 let local_index =
                     u32::try_from(extra_locals.len() + 1).expect("local index fits u32");
-                let local_name = format!("__vc_payload_{case_index}");
+                let local_name = format!("$vc_payload_{case_index}");
                 extra_locals.push(TirLocal {
                     name: local_name.clone(),
                     type_id: *payload_ty,

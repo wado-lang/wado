@@ -319,7 +319,7 @@ desugar fact.
 A speculative `resolve_expr` against a scratch `ModuleSemantics` is not an
 option, now or later. It would corrupt three things living outside the
 `AstId`-keyed annotation maps: the `FunctionContext` local-index walk that reify
-replays in lockstep (a discarded synthetic local — `__ref_*`, `__qm_*`, `__b` —
+replays in lockstep (a discarded synthetic local — `$ref_*`, `$qm_*`, `$b` —
 desyncs every later index into silently wrong code), the anonymous-struct dedup
 guard in the shared `TypeTable` (a speculative literal would satisfy it and the
 real resolve would register nothing), and `record_bound_driven_synth_request`

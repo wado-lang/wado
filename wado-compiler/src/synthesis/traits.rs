@@ -5213,13 +5213,13 @@ fn generate_variant_eq_fn(
         } else {
             let self_idx = locals.len() as u32;
             locals.push(param_local(
-                &format!("__eq_self_{case_name}_{self_idx}"),
+                &format!("$eq_self_{case_name}_{self_idx}"),
                 *payload_type,
                 false,
             ));
             let other_idx = locals.len() as u32;
             locals.push(param_local(
-                &format!("__eq_other_{case_name}_{other_idx}"),
+                &format!("$eq_other_{case_name}_{other_idx}"),
                 *payload_type,
                 false,
             ));
@@ -5331,8 +5331,8 @@ fn variant_eq_body(
             } else {
                 let (self_idx, other_idx) =
                     binding.expect("non-unit case must have payload bindings");
-                let self_name = format!("__eq_self_{case_name}_{self_idx}");
-                let other_name = format!("__eq_other_{case_name}_{other_idx}");
+                let self_name = format!("$eq_self_{case_name}_{self_idx}");
+                let other_name = format!("$eq_other_{case_name}_{other_idx}");
                 let self_payload = local_expr(self_idx, &self_name, *payload_type, span);
                 let other_payload = local_expr(other_idx, &other_name, *payload_type, span);
                 let eq_result = eq_call_expr(

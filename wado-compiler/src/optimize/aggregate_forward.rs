@@ -6,9 +6,9 @@
 //! the `Ok` only for the caller to open again, and re-binds the payload:
 //!
 //! ```text
-//! __vr   = Option<S>::Some(S { … });
-//! __qm_v = __variant_payload(__vr, case=0);
-//! seq    = __qm_v;                          // `mut`, so copy_prop declines
+//! $vr   = Option<S>::Some(S { … });
+//! $qm_v = $variant_payload($vr, case=0);
+//! seq    = $qm_v;                          // `mut`, so copy_prop declines
 //! ```
 //!
 //! Neither is elidable alone — `elide_local` wants a local nobody reads, and
@@ -62,7 +62,7 @@ fn consumer(body: &Body, stmt: StmtId, local: u32, source: ExprId) -> Option<(Ex
         ExprKind::Local { index, .. } if *index == local && is_aggregate_literal(body, source) => {
             Some((read, source))
         }
-        // `let b = __variant_payload(a, c)` — the construct/extract pair.
+        // `let b = $variant_payload(a, c)` — the construct/extract pair.
         ExprKind::VariantPayload {
             expr, case_index, ..
         } => {

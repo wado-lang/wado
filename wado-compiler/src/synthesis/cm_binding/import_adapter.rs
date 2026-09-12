@@ -1,4 +1,4 @@
-//! Import-side CM adapter synthesis: a `__cm_binding__<iface>_<method>` TIR
+//! Import-side CM adapter synthesis: a `$cm_binding__<iface>_<method>` TIR
 //! function per referenced WASI import, lowering Wado-typed args to the flat CM
 //! ABI, performing the `cm_raw_call`, and lifting the result back for a sync
 //! import. An async one returns an `AsyncCall<T>` the caller `wait()`s on. The
@@ -37,17 +37,17 @@ use super::types::{
 
 /// Build the binding function name for a WASI import.
 pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("__cm_binding__{interface_name}_{method_name}")
+    format!("$cm_binding__{interface_name}_{method_name}")
 }
 
 /// Per-import lift function name. Pointed to by `AsyncCall<T>::__cm_lift`.
 fn lift_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("__cm_lift__{interface_name}_{method_name}")
+    format!("$cm_lift__{interface_name}_{method_name}")
 }
 
 /// Functions produced by [`synthesize_adapter`] for a single WASI import:
-/// the user-visible `__cm_binding__*` adapter, plus any auxiliaries (for
-/// async imports, the `__cm_lift__*` function the adapter's `AsyncCall<T>`
+/// the user-visible `$cm_binding__*` adapter, plus any auxiliaries (for
+/// async imports, the `$cm_lift__*` function the adapter's `AsyncCall<T>`
 /// dispatches through).
 pub(super) struct AdapterArtifacts {
     pub adapter: Rc<RefCell<TirFunction>>,
@@ -168,16 +168,16 @@ fn synthesize_lift_flat_result(
         stmts.push(if_stmt(
             binary(TirBinaryOp::Eq, disc_expr, i32_const(0), TypeTable::BOOL),
             block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", result_type_id),
+                local_ref(result_local, "$result_val", result_type_id),
                 ok_construct,
             ))]),
             Some(block(vec![expr_stmt(assign(
-                local_ref(result_local, "__result_val", result_type_id),
+                local_ref(result_local, "$result_val", result_type_id),
                 err_construct,
             ))])),
         ));
 
-        return local_ref(result_local, "__result_val", result_type_id);
+        return local_ref(result_local, "$result_val", result_type_id);
     }
 
     // Fallback: just return the discriminant as-is
@@ -285,7 +285,7 @@ fn synthesize_async_lift_function(
     locals.push(TirLocal::synth(outptr_local, TypeTable::I32, false));
     next_local += 1;
     let params = vec![TirParam {
-        name: "__outptr".to_string(),
+        name: "$outptr".to_string(),
         type_id: TypeTable::I32,
         local_index: outptr_local,
         is_mut: false,
@@ -303,7 +303,7 @@ fn synthesize_async_lift_function(
         };
         let lifted = synthesize_lift(
             &resolved,
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
+            local_ref(outptr_local, "$outptr", TypeTable::I32),
             &mut next_local,
             &mut body_stmts,
             &mut locals,
@@ -396,7 +396,7 @@ fn synthesize_async_wrap_function(
         locals.push(TirLocal::synth(vl, inner_type_id, false));
         next_local += 1;
         params.push(TirParam {
-            name: "__value".to_string(),
+            name: "$value".to_string(),
             type_id: inner_type_id,
             local_index: vl,
             is_mut: false,
@@ -413,7 +413,7 @@ fn synthesize_async_wrap_function(
         locals.push(TirLocal::synth(outptr_local, TypeTable::I32, false));
         next_local += 1;
         body_stmts.push(let_stmt(
-            "__outptr",
+            "$outptr",
             outptr_local,
             TypeTable::I32,
             builtin_call(
@@ -433,13 +433,13 @@ fn synthesize_async_wrap_function(
             .expect("outptr_size > 0 implies a result type");
         body_stmts.extend(synthesize_lower_wasi_type_to_memory(
             return_type,
-            local_ref(value_local, "__value", inner_type_id),
-            local_ref(outptr_local, "__outptr", TypeTable::I32),
+            local_ref(value_local, "$value", inner_type_id),
+            local_ref(outptr_local, "$outptr", TypeTable::I32),
             &mut next_local,
             &mut locals,
             ctx,
         ));
-        local_ref(outptr_local, "__outptr", TypeTable::I32)
+        local_ref(outptr_local, "$outptr", TypeTable::I32)
     } else {
         i32_const(0)
     };
@@ -487,11 +487,11 @@ fn lift_flat_struct_return(
     };
 
     let flat_local = alloc_local(next_local, locals, raw_call_type);
-    body_stmts.push(let_stmt("__flat", flat_local, raw_call_type, raw_call));
+    body_stmts.push(let_stmt("$flat", flat_local, raw_call_type, raw_call));
 
     let buf_local = alloc_local(next_local, locals, TypeTable::I32);
     body_stmts.push(let_stmt(
-        "__flat_buf",
+        "$flat_buf",
         buf_local,
         TypeTable::I32,
         builtin_call(
@@ -508,15 +508,15 @@ fn lift_flat_struct_return(
     body_stmts.push(expr_stmt(builtin_call(
         store_op,
         vec![
-            local_ref(buf_local, "__flat_buf", TypeTable::I32),
-            local_ref(flat_local, "__flat", raw_call_type),
+            local_ref(buf_local, "$flat_buf", TypeTable::I32),
+            local_ref(flat_local, "$flat", raw_call_type),
         ],
         TypeTable::UNIT,
     )));
 
     let lifted = synthesize_lift(
         resolved,
-        local_ref(buf_local, "__flat_buf", TypeTable::I32),
+        local_ref(buf_local, "$flat_buf", TypeTable::I32),
         next_local,
         body_stmts,
         locals,
@@ -527,7 +527,7 @@ fn lift_flat_struct_return(
     body_stmts.push(expr_stmt(builtin_call(
         "realloc",
         vec![
-            local_ref(buf_local, "__flat_buf", TypeTable::I32),
+            local_ref(buf_local, "$flat_buf", TypeTable::I32),
             i32_const(byte_width),
             i32_const(byte_width),
             i32_const(0),
@@ -761,7 +761,7 @@ fn cm_return_size_align(
 }
 
 fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
-    let base = local_ref(params_buf_local, "__params_buf", TypeTable::I32);
+    let base = local_ref(params_buf_local, "$params_buf", TypeTable::I32);
     if offset == 0 {
         base
     } else {
@@ -917,7 +917,7 @@ impl<'a> AdapterBuilder<'a> {
                         param_local,
                         plan.name,
                         struct_type_id,
-                        &format!("__{}", plan.name),
+                        &format!("${}", plan.name),
                         &mut self.next_local,
                         &mut self.body_stmts,
                         &mut self.locals,
@@ -936,7 +936,7 @@ impl<'a> AdapterBuilder<'a> {
                         synthesize_flatten_value_to_flat_args(
                             plan.ty,
                             param_ref,
-                            &format!("__{}", plan.name),
+                            &format!("${}", plan.name),
                             &mut self.next_local,
                             &mut self.body_stmts,
                             &mut self.locals,
@@ -956,7 +956,7 @@ impl<'a> AdapterBuilder<'a> {
                         synthesize_flatten_option_to_flat_args(
                             payload,
                             param_ref,
-                            &format!("__{}", plan.name),
+                            &format!("${}", plan.name),
                             &mut self.next_local,
                             &mut self.body_stmts,
                             &mut self.locals,
@@ -980,7 +980,7 @@ impl<'a> AdapterBuilder<'a> {
                         ok,
                         err,
                         param_ref,
-                        &format!("__{}", plan.name),
+                        &format!("${}", plan.name),
                         &mut self.next_local,
                         &mut self.body_stmts,
                         &mut self.locals,
@@ -1000,7 +1000,7 @@ impl<'a> AdapterBuilder<'a> {
                     synthesize_flatten_value_to_flat_args(
                         plan.ty,
                         param_ref,
-                        &format!("__{}", plan.name),
+                        &format!("${}", plan.name),
                         &mut self.next_local,
                         &mut self.body_stmts,
                         &mut self.locals,
@@ -1022,7 +1022,7 @@ impl<'a> AdapterBuilder<'a> {
     /// String / List<u8>: call the packing helper (→ packed i64) and split it
     /// into (ptr, len) flat args.
     fn emit_packed_ptr_len(&mut self, param_name: &str, param_local: u32, helper: &str) {
-        let packed_name = format!("__{param_name}_packed");
+        let packed_name = format!("${param_name}_packed");
         let packed_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I64);
         let packed = internal_call(
             helper,
@@ -1059,7 +1059,7 @@ impl<'a> AdapterBuilder<'a> {
             (elem_tid, list_tid)
         };
 
-        // __len = List<T>::len(param)
+        // $len = List<T>::len(param)
         let len_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         let len_expr = generic_method_call(
             local_ref(param_local, param_name, array_type_id),
@@ -1070,16 +1070,16 @@ impl<'a> AdapterBuilder<'a> {
             TypeTable::I32,
         );
         self.body_stmts.push(let_stmt(
-            &format!("__{param_name}_len"),
+            &format!("${param_name}_len"),
             len_local,
             TypeTable::I32,
             len_expr,
         ));
 
-        // __base = realloc(0, 0, align, __len * elem_size)
+        // $base = realloc(0, 0, align, $len * elem_size)
         let base_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
-            &format!("__{param_name}_base"),
+            &format!("${param_name}_base"),
             base_local,
             TypeTable::I32,
             builtin_call(
@@ -1090,7 +1090,7 @@ impl<'a> AdapterBuilder<'a> {
                     i32_const(elem_align),
                     binary(
                         TirBinaryOp::Mul,
-                        local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
+                        local_ref(len_local, &format!("${param_name}_len"), TypeTable::I32),
                         i32_const(elem_size),
                         TypeTable::I32,
                     ),
@@ -1099,10 +1099,10 @@ impl<'a> AdapterBuilder<'a> {
             ),
         ));
 
-        // __i = 0; loop { if __i >= __len { break; } lower elem[__i]; __i += 1; }
+        // $i = 0; loop { if $i >= $len { break; } lower elem[$i]; $i += 1; }
         let i_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_mut_stmt(
-            &format!("__{param_name}_i"),
+            &format!("${param_name}_i"),
             i_local,
             TypeTable::I32,
             i32_const(0),
@@ -1112,32 +1112,32 @@ impl<'a> AdapterBuilder<'a> {
         loop_body.push(if_stmt(
             binary(
                 TirBinaryOp::GtEq,
-                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
-                local_ref(len_local, &format!("__{param_name}_len"), TypeTable::I32),
+                local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
+                local_ref(len_local, &format!("${param_name}_len"), TypeTable::I32),
                 TypeTable::BOOL,
             ),
             block(vec![break_stmt()]),
             None,
         ));
-        // __addr = __base + __i * elem_size
+        // $addr = $base + $i * elem_size
         let addr_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         loop_body.push(let_stmt(
-            &format!("__{param_name}_addr"),
+            &format!("${param_name}_addr"),
             addr_local,
             TypeTable::I32,
             binary(
                 TirBinaryOp::Add,
-                local_ref(base_local, &format!("__{param_name}_base"), TypeTable::I32),
+                local_ref(base_local, &format!("${param_name}_base"), TypeTable::I32),
                 binary(
                     TirBinaryOp::Mul,
-                    local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                    local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
                     i32_const(elem_size),
                     TypeTable::I32,
                 ),
                 TypeTable::I32,
             ),
         ));
-        // __elem = param[__i] (IndexValue trait method)
+        // $elem = param[$i] (IndexValue trait method)
         let elem_local = alloc_local(&mut self.next_local, &mut self.locals, elem_type_id);
         let iv_info = LocalMethodName::new(
             self.lower_ctx.names.array_fq.clone(),
@@ -1152,7 +1152,7 @@ impl<'a> AdapterBuilder<'a> {
         );
         let iv_mangled = iv_info.to_mangled_name();
         loop_body.push(let_stmt(
-            &format!("__{param_name}_elem"),
+            &format!("${param_name}_elem"),
             elem_local,
             elem_type_id,
             TirExpr::new(
@@ -1166,7 +1166,7 @@ impl<'a> AdapterBuilder<'a> {
                     },
                     vec![],
                     vec![CallArg::new(
-                        local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                        local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
                         false,
                     )],
                 ),
@@ -1176,8 +1176,8 @@ impl<'a> AdapterBuilder<'a> {
         ));
         // Use the full memory lowerer so aggregate elements lay out their
         // payload correctly instead of being stored as an i32.
-        let elem_ref = local_ref(elem_local, &format!("__{param_name}_elem"), elem_type_id);
-        let addr_ref = local_ref(addr_local, &format!("__{param_name}_addr"), TypeTable::I32);
+        let elem_ref = local_ref(elem_local, &format!("${param_name}_elem"), elem_type_id);
+        let addr_ref = local_ref(addr_local, &format!("${param_name}_addr"), TypeTable::I32);
         let lower_stmts = synthesize_lower_wasi_type_to_memory(
             elem_type,
             elem_ref,
@@ -1187,12 +1187,12 @@ impl<'a> AdapterBuilder<'a> {
             &self.lower_ctx,
         );
         loop_body.extend(lower_stmts);
-        // __i += 1
+        // $i += 1
         loop_body.push(expr_stmt(assign(
-            local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+            local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
             binary(
                 TirBinaryOp::Add,
-                local_ref(i_local, &format!("__{param_name}_i"), TypeTable::I32),
+                local_ref(i_local, &format!("${param_name}_i"), TypeTable::I32),
                 i32_const(1),
                 TypeTable::I32,
             ),
@@ -1201,12 +1201,12 @@ impl<'a> AdapterBuilder<'a> {
 
         self.flat_args.push(local_ref(
             base_local,
-            &format!("__{param_name}_base"),
+            &format!("${param_name}_base"),
             TypeTable::I32,
         ));
         self.flat_args.push(local_ref(
             len_local,
-            &format!("__{param_name}_len"),
+            &format!("${param_name}_len"),
             TypeTable::I32,
         ));
     }
@@ -1235,7 +1235,7 @@ impl<'a> AdapterBuilder<'a> {
             self.emit_indirect_params_buffer(plans, async_outptr);
         } else if let Some(outptr) = async_outptr {
             self.flat_args
-                .push(local_ref(outptr.local, "__async_outptr", TypeTable::I32));
+                .push(local_ref(outptr.local, "$async_outptr", TypeTable::I32));
         }
         async_outptr
     }
@@ -1253,7 +1253,7 @@ impl<'a> AdapterBuilder<'a> {
         );
         let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
-            "__async_outptr",
+            "$async_outptr",
             local,
             TypeTable::I32,
             builtin_call(
@@ -1300,7 +1300,7 @@ impl<'a> AdapterBuilder<'a> {
 
         let params_buf_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
-            "__params_buf",
+            "$params_buf",
             params_buf_local,
             TypeTable::I32,
             builtin_call(
@@ -1375,10 +1375,10 @@ impl<'a> AdapterBuilder<'a> {
             }
         }
 
-        self.flat_args = vec![local_ref(params_buf_local, "__params_buf", TypeTable::I32)];
+        self.flat_args = vec![local_ref(params_buf_local, "$params_buf", TypeTable::I32)];
         if let Some(outptr) = async_outptr {
             self.flat_args
-                .push(local_ref(outptr.local, "__async_outptr", TypeTable::I32));
+                .push(local_ref(outptr.local, "$async_outptr", TypeTable::I32));
         }
     }
 
@@ -1399,7 +1399,7 @@ impl<'a> AdapterBuilder<'a> {
         );
         let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
-            "__outptr",
+            "$outptr",
             local,
             TypeTable::I32,
             builtin_call(
@@ -1414,7 +1414,7 @@ impl<'a> AdapterBuilder<'a> {
             ),
         ));
         self.flat_args
-            .push(local_ref(local, "__outptr", TypeTable::I32));
+            .push(local_ref(local, "$outptr", TypeTable::I32));
         Some(OutptrBuffer { local, size, align })
     }
 
@@ -1431,7 +1431,7 @@ impl<'a> AdapterBuilder<'a> {
         let func_info = self.func_info;
         let subtask_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
-            "__subtask_packed",
+            "$subtask_packed",
             subtask_local,
             TypeTable::I32,
             raw_call,
@@ -1439,7 +1439,7 @@ impl<'a> AdapterBuilder<'a> {
 
         let (outptr_expr, size_expr, align_expr) = match async_outptr {
             Some(outptr) => (
-                local_ref(outptr.local, "__async_outptr", TypeTable::I32),
+                local_ref(outptr.local, "$async_outptr", TypeTable::I32),
                 i32_const(outptr.size as i32),
                 i32_const(outptr.align as i32),
             ),
@@ -1491,7 +1491,7 @@ impl<'a> AdapterBuilder<'a> {
 
         let subtask_struct = make_async_call_literal(
             subtask_type,
-            local_ref(subtask_local, "__subtask_packed", TypeTable::I32),
+            local_ref(subtask_local, "$subtask_packed", TypeTable::I32),
             outptr_expr,
             size_expr,
             align_expr,
@@ -1535,7 +1535,7 @@ impl<'a> AdapterBuilder<'a> {
         let lift_ctx = self.lift_ctx();
         let lifted = synthesize_lift(
             &resolved,
-            local_ref(outptr.local, "__outptr", TypeTable::I32),
+            local_ref(outptr.local, "$outptr", TypeTable::I32),
             &mut self.next_local,
             &mut self.body_stmts,
             &mut self.locals,
@@ -1555,7 +1555,7 @@ impl<'a> AdapterBuilder<'a> {
         self.body_stmts.push(expr_stmt(builtin_call(
             "realloc",
             vec![
-                local_ref(outptr.local, "__outptr", TypeTable::I32),
+                local_ref(outptr.local, "$outptr", TypeTable::I32),
                 i32_const(outptr.size as i32),
                 i32_const(outptr.align as i32),
                 i32_const(0),
@@ -1596,7 +1596,7 @@ impl<'a> AdapterBuilder<'a> {
             // Synthesize VariantConstruct from the discriminant.
             let disc_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
             self.body_stmts
-                .push(let_stmt("__disc", disc_local, TypeTable::I32, raw_call));
+                .push(let_stmt("$disc", disc_local, TypeTable::I32, raw_call));
 
             // Resolve the concrete `Result<T, E>` TypeId so the binding's
             // intermediate local and `VariantConstruct` exprs match the
@@ -1606,7 +1606,7 @@ impl<'a> AdapterBuilder<'a> {
             let result_type_id = self.cm_type_id(&resolved);
             let result_local = alloc_local(&mut self.next_local, &mut self.locals, result_type_id);
             self.body_stmts.push(let_mut_stmt(
-                "__result_val",
+                "$result_val",
                 result_local,
                 result_type_id,
                 null_expr(result_type_id),
@@ -1615,7 +1615,7 @@ impl<'a> AdapterBuilder<'a> {
             let lift_ctx = self.lift_ctx();
             let lifted = synthesize_lift_flat_result(
                 &resolved,
-                local_ref(disc_local, "__disc", TypeTable::I32),
+                local_ref(disc_local, "$disc", TypeTable::I32),
                 result_local,
                 result_type_id,
                 &mut self.next_local,

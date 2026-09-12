@@ -5,7 +5,7 @@
 // buffer out of the `for-of` loop, after which HFS scalarised the
 // buffer's `.used`/`.repr` fields. The inlined `push_str` body wrote the
 // new length only to the HFS scalar; the outer
-// `break $tmpl: __tmpl_buf;` then read `__tmpl_buf.used` directly and
+// `break $tmpl: $tmpl_buf;` then read `$tmpl_buf.used` directly and
 // got the *stale* value the last `push_char` wrote, truncating the
 // produced `String` to the prefix the per-byte pushes had built.
 //
@@ -19,7 +19,7 @@
 //
 // (A peer concern, captured in the same fix: `&local` / `&mut local`
 // captured into a struct field that itself escapes — e.g.
-// `Formatter { buf: &mut __tmpl_buf }` hoisted out of the loop — also
+// `Formatter { buf: &mut $tmpl_buf }` hoisted out of the loop — also
 // makes the local aliased; the function-wide alias scan flags it.)
 
 use { println, Stdout } from "core:cli";

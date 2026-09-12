@@ -9,7 +9,7 @@
 //
 // `build_cast` is the shape under test and `build_plain` the control.
 // `#[inline(never)]` keeps both calls intact, and nothing else in this program
-// deep-copies: an `__array_clone_len` in the module is a regression.
+// deep-copies: an `$array_clone_len` in the module is a regression.
 
 use { println, Stdout } from "core:cli";
 
@@ -48,5 +48,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "3 3 5 5\n",
-    "wir_not_expect:O2": ["__array_clone_len"]
+    "wir_not_expect:O2": ["$array_clone_len"]
 }

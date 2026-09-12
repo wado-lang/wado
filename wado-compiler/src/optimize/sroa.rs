@@ -1,6 +1,6 @@
 //! Scalar Replacement of Aggregates: a struct or tuple used only for field
 //! access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed into
-//! per-field `__sroa_s_x` locals, and copy propagation then removes the trivial
+//! per-field `$sroa_s_x` locals, and copy propagation then removes the trivial
 //! copies. A local found `&local`-aliased by a decomposed field flows back into
 //! `func.stores_aliased_locals` through a `RefCell` the driver merges after.
 
@@ -179,7 +179,7 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         // collection), so the positional index `i` *is* the `field_index` every
         // lookup keys by.
         for (i, (field_name, field_type)) in candidate.fields.iter().enumerate() {
-            let name = format!("__sroa_{}_{}", candidate.local_name, field_name);
+            let name = format!("$sroa_{}_{}", candidate.local_name, field_name);
             let local_index = engine.alloc_local(name.clone(), *field_type, candidate.is_mut);
             field_map.insert(
                 (candidate.local_index, i as u32),

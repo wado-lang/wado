@@ -4,7 +4,7 @@
 // loop-invariant; LICM hoists it into the pre-header and reloads it right after
 // each clobbering statement, so the common (clobber-free) path drops the
 // per-byte struct load. O0/O2 differential execution guards soundness; the WIR
-// checks pin the hoist (`_licm_repr` read) and the reload (`= s.repr`).
+// checks pin the hoist (`$licm_repr` read) and the reload (`= s.repr`).
 use { println, Stdout } from "core:cli";
 
 fn escape_quotes(buf: &mut String, s: &String) {
@@ -27,6 +27,6 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "[Q][Q][Q]\n",
-    "wir_expect:O2": ["_licm_repr", "= s.repr", "array_get_value<u8>(_licm_repr"],
+    "wir_expect:O2": ["$licm_repr", "= s.repr", "array_get_value<u8>($licm_repr"],
     "wir_not_expect:O2": ["array_get_value<u8>(s.repr"]
 }

@@ -123,10 +123,10 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
 
   ```text
     f(&mut xs[idx])
-  ⇒ { let __mr_idx = idx;
-      let mut __mr_t = xs[__mr_idx];
-      f(&mut __mr_t);                  // mutates the temp's box
-      xs[__mr_idx] = __mr_t;           // write-back to the place
+  ⇒ { let $mr_idx = idx;
+      let mut $mr_t = xs[$mr_idx];
+      f(&mut $mr_t);                  // mutates the temp's box
+      xs[$mr_idx] = $mr_t;           // write-back to the place
     }
   ```
 

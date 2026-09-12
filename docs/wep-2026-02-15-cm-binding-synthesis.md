@@ -47,7 +47,7 @@ For each world export, `cm_binding_gen` synthesizes an binding that wraps the us
 
 `task return` names the function's result, and its destination depends on who entered the function. The CM runtime is the destination for the export binding's entry; a Wado caller is the destination for its own call. The two cannot share one body: `task.return` hands a resource result to the host, so the same value cannot also be returned.
 
-So the delivery lives in a copy. `split_task_entry` clones the user's function as `__cm_task_entry__<name>`, `expand_task_returns_in_func` rewrites the copy's `task return` statements into the canonical calls, and the export binding calls the copy. A `FunctionRef` resolves by name, so the rename is the whole redirection, and DCE drops whichever copy nothing reaches.
+So the delivery lives in a copy. `split_task_entry` clones the user's function as `$cm_task_entry__<name>`, `expand_task_returns_in_func` rewrites the copy's `task return` statements into the canonical calls, and the export binding calls the copy. A `FunctionRef` resolves by name, so the rename is the whole redirection, and DCE drops whichever copy nothing reaches.
 
 The user's own function keeps its `task return` statements for `reduce_unexpanded_task_returns`, which runs after export synthesis. There each `task return value` becomes a binding into an `Option` slot, and the body ends by returning what it bound — trapping if it reaches the end having delivered nothing, which for the task entry is a CM protocol error either way. The `Option` is what lets a delivery sitting under a branch type-check without demanding a default for the declared type. A unit result takes no slot: there is nothing to bind, so only the operand is left behind.
 
@@ -151,7 +151,7 @@ For generic exports with composite parameters, the binding must **lift flat CM p
 export fn greet(name: String) -> String { ... }
 
 // Adapter must synthesize:
-fn __cm_export__greet(name_ptr: i32, name_len: i32) {
+fn $cm_export__greet(name_ptr: i32, name_len: i32) {
     let name = internal::memory_to_gc_string(name_ptr, name_len);
     let result = greet(name);
     // lower result...

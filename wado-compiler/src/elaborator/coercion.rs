@@ -727,7 +727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Members in source order, so each subexpression is walked exactly
         // where it is written — and, for a spread, in the same order reify's
-        // fold walks them, so the `__acc` reserved below lands on the index
+        // fold walks them, so the `$acc` reserved below lands on the index
         // reify will allocate for it.
         let has_spread = !struct_lit.spreads.is_empty();
         if has_spread {
@@ -764,7 +764,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         if has_spread {
-            ctx.add_local("__acc".to_string(), output_type, true, None);
+            ctx.add_local("$acc".to_string(), output_type, true, None);
             ctx.exit_scope();
         }
 

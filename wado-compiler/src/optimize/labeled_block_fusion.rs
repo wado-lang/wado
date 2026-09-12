@@ -1252,7 +1252,7 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
             let payload_local = pattern_payload_binding.unwrap_or_else(|| {
                 let next = engine.locals().len() as u32;
                 engine.alloc_local(
-                    format!("__fused_payload_{next}"),
+                    format!("$fused_payload_{next}"),
                     payload_type,
                     /* is_mut */ false,
                 )
@@ -1269,7 +1269,7 @@ fn bind_value(engine: &mut Engine, value: FusedValue) -> BoundValue {
                 .into_iter()
                 .map(|slot| {
                     let local_index =
-                        alloc_indexed_local(engine, "__fused_slot_", slot.type_id, false);
+                        alloc_indexed_local(engine, "$fused_slot_", slot.type_id, false);
                     BoundSlot {
                         field_index: slot.field_index,
                         local_index,
@@ -1306,7 +1306,7 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     });
     let stmt = engine.alloc_stmt(
         StmtKind::Let {
-            name: format!("__fused_payload_{payload_local}"),
+            name: format!("$fused_payload_{payload_local}"),
             local_index: payload_local,
             is_mut: false,
             is_reactive: false,
@@ -1319,7 +1319,7 @@ fn emit_variant_payload_let(engine: &mut Engine, vc: ExprId, f: &Fusion, out: &m
     out.push(stmt);
 }
 
-/// `let __fused_slot_k = <element k>;` for each slot the arm reads. The
+/// `let $fused_slot_k = <element k>;` for each slot the arm reads. The
 /// elements it does not read are dropped, which the precondition allows only
 /// for pure ones.
 fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &mut Vec<StmtId>) {
@@ -1330,7 +1330,7 @@ fn emit_slot_lets(engine: &mut Engine, elements: &[Operand], f: &Fusion, out: &m
         let value = elements[slot.field_index as usize];
         let stmt = engine.alloc_stmt(
             StmtKind::Let {
-                name: format!("__fused_slot_{}", slot.local_index),
+                name: format!("$fused_slot_{}", slot.local_index),
                 local_index: slot.local_index,
                 is_mut: false,
                 is_reactive: false,
@@ -1628,7 +1628,7 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             (ci == case_index && is_local_operand(body, *inner, f.temp_local)).then(|| {
                 ExprKind::Local {
                     index: *payload_local,
-                    name: format!("__fused_payload_{payload_local}"),
+                    name: format!("$fused_payload_{payload_local}"),
                 }
             })
         }
@@ -1647,7 +1647,7 @@ fn replacement_for(body: &Body, e: ExprId, f: &Fusion) -> Option<ExprKind> {
             let slot = slots.iter().find(|s| s.field_index == *field_index)?;
             Some(ExprKind::Local {
                 index: slot.local_index,
-                name: format!("__fused_slot_{}", slot.local_index),
+                name: format!("$fused_slot_{}", slot.local_index),
             })
         }
     }
@@ -2098,7 +2098,7 @@ fn validate_exits_in_block(
 }
 
 fn perform_threading(engine: &mut Engine, match_id: ExprId, plan: ThreadPlan) {
-    let fused_label = format!("__thread_{}", plan.label);
+    let fused_label = format!("$thread_{}", plan.label);
     thread_block(engine, plan.lb_block, &plan, &fused_label);
     // A `break plan.label` surviving here is a validate/thread walker divergence
     // (a child position validated but not rewritten) that would dangle once the
@@ -2560,7 +2560,7 @@ fn plan_slot_temp_sroa(
     for ((field_index, type_id), pad) in fields.into_iter().zip(pads) {
         let zero = materialize_pad(engine, pad, span);
         let local_index =
-            alloc_indexed_local(engine, "__sroa_slot_", type_id, /* is_mut */ true);
+            alloc_indexed_local(engine, "$sroa_slot_", type_id, /* is_mut */ true);
         slots.push(BoundSlot {
             field_index,
             local_index,
@@ -2679,7 +2679,7 @@ fn perform_slot_temp_sroa(
             e,
             ExprKind::Local {
                 index: slot.local_index,
-                name: format!("__sroa_slot_{}", slot.local_index),
+                name: format!("$sroa_slot_{}", slot.local_index),
             },
         );
     }
@@ -2700,7 +2700,7 @@ fn perform_slot_temp_sroa(
     for (local_index, type_id, zero) in plan.zeros {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
-                name: format!("__sroa_slot_{local_index}"),
+                name: format!("$sroa_slot_{local_index}"),
                 local_index,
                 is_mut: true,
                 is_reactive: false,
@@ -2844,12 +2844,12 @@ fn alloc_indexed_local(engine: &mut Engine, prefix: &str, type_id: TypeId, is_mu
     index
 }
 
-/// `__sroa_slot_N = value`, the statement every exit form ends up emitting.
+/// `$sroa_slot_N = value`, the statement every exit form ends up emitting.
 fn slot_assign(engine: &mut Engine, slot: &BoundSlot, value: Operand, span: Span) -> StmtKind {
     let target = engine.alloc_expr(
         ExprKind::Local {
             index: slot.local_index,
-            name: format!("__sroa_slot_{}", slot.local_index),
+            name: format!("$sroa_slot_{}", slot.local_index),
         },
         slot.type_id,
         span,
@@ -2871,8 +2871,8 @@ fn scalarize_materialized_exit(
     out: &mut Vec<StmtId>,
 ) {
     let agg_type = engine.body.exprs[exit].type_id;
-    let index = alloc_indexed_local(engine, "__sroa_agg_", agg_type, /* is_mut */ false);
-    let name = format!("__sroa_agg_{index}");
+    let index = alloc_indexed_local(engine, "$sroa_agg_", agg_type, /* is_mut */ false);
+    let name = format!("$sroa_agg_{index}");
     out.push(engine.alloc_stmt(
         StmtKind::Let {
             name: name.clone(),

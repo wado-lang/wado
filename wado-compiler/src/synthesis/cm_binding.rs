@@ -23,7 +23,7 @@ use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
 use crate::module_source::{CmNamespace, ModuleSource};
-use crate::name::DeclPath;
+use crate::name::{DeclPath, is_test_function};
 use crate::package::Package;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
@@ -517,7 +517,7 @@ fn generate_import_adapters(project: &mut Package) {
     // call sites are rewritten against.
     let mut adapters: IndexMap<DeclPath, Rc<RefCell<TirFunction>>> = IndexMap::default();
     // Auxiliary functions returned alongside an adapter (e.g. the
-    // per-import `__cm_lift__*` for async imports). Not used for
+    // per-import `$cm_lift__*` for async imports). Not used for
     // call-site rewriting, but added to the entry module so they
     // participate in monomorphize / lower / DCE like normal functions.
     let mut auxiliary_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
@@ -1135,7 +1135,7 @@ fn sync_wasi_export_strategy(
     ExportReturnStrategy::SyncReturn
 }
 
-/// Synthesize export bindings for test functions (`__test_*`). Only when
+/// Synthesize export bindings for test functions (`$test_*`). Only when
 /// targeting the test world — in other worlds, tests are dead code.
 fn generate_test_world_bindings(project: &mut Package) {
     if !project.is_test_world() {
@@ -1170,7 +1170,7 @@ fn generate_test_world_bindings(project: &mut Package) {
             .iter()
             .filter(|f| {
                 let name = f.borrow().name.clone();
-                name.starts_with("__test_")
+                is_test_function(&name)
                     && crate::package::test_selected(
                         original_names.get(name.as_str()).copied().flatten(),
                         &test_name_filters,

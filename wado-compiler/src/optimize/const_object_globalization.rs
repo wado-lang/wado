@@ -225,7 +225,7 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
         return false;
     }
 
-    // Phase 2 — mutation. Number from the count of pre-existing `__const_obj_*`
+    // Phase 2 — mutation. Number from the count of pre-existing `$const_obj_*`
     // globals so names stay unique across invocations.
     let base = project
         .globals
@@ -466,7 +466,7 @@ fn collect_candidates(
 
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
 /// referent's storage back out, or writes through it. [`is_readonly_body`] only
-/// sees the caller, where `__b."…build"()` reads.
+/// sees the caller, where `$b."…build"()` reads.
 fn local_leaks_through_call(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
     reachable_nodes(body).into_iter().any(|node| {
         let NodeRef::Expr(e) = node else {
@@ -2461,8 +2461,8 @@ fn rewrite_promoted_reads(
 
 /// Move a candidate's sibling const `let`s into the hoisted set's value,
 /// rebuilding the self-contained initializer block the pre-normal-form shape
-/// carried: `G = *__b` (sibling `__b` outside) becomes
-/// `G = { let __b = <literal>; *__b }`. Confinement (checked at candidacy)
+/// carried: `G = *$b` (sibling `$b` outside) becomes
+/// `G = { let $b = <literal>; *$b }`. Confinement (checked at candidacy)
 /// guarantees the moved bindings have no other readers.
 fn inline_sibling_lets(
     body: &mut Body,

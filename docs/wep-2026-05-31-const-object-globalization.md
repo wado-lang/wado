@@ -56,22 +56,22 @@ size.
 
 `promote_const_global_inits` runs in WIR phase 7, before guard removal.
 `lower/plan/globals::extract` emits every non-trivial initializer as an
-`__initialize_module` runtime assignment, NIR optimization collapses builder
+`$initialize_module` runtime assignment, NIR optimization collapses builder
 sequences, and by WIR the assignment is a `GlobalSet(G, value)` with `value`
 fully lowered. The pass:
 
 - Considers user-immutable globals (`g.mutable && !g.wado_mutable`), which are
   Wasm-mutable only because their init was extracted. `global mut` is excluded.
 - Resolves each assignment through `is_const_expressible`, seeing through the
-  builder-temp `Seq` (`__b = struct.new …; __b`) an array literal leaves. When
+  builder-temp `Seq` (`$b = struct.new …; $b`) an array literal leaves. When
   every assignment to a global is constant, it moves the value into the global's
   eager `init`, marks it immutable, and drops the `GlobalSet`s.
-- Recurses into nested instructions: an inlined `__initialize_module` puts its
+- Recurses into nested instructions: an inlined `$initialize_module` puts its
   `GlobalSet` inside an `$inline___initialize_modules` guard block, duplicated
   per entry export, which a top-level-only scan would leave lazy.
 
 `dce` / `cleanup` reclaim the emptied init body and the
-`__modules_initialized` guard in the same phase. Promotion leaves the nullable
+`$modules_initialized` guard in the same phase. Promotion leaves the nullable
 slot as `register_globals` set it. A non-null const init is a valid subtype of a
 nullable slot.
 
@@ -210,7 +210,7 @@ A global created from either in-place case — the inline `&` or the by-value
 argument — is marked `NirGlobal::prefer_fixed_string_repr`, a field rather than
 a name-prefix guess,
 so it cannot misidentify a user-declared global sharing the pass's
-`__const_obj_*` naming convention. WIR build gives only such a global's
+`$const_obj_*` naming convention. WIR build gives only such a global's
 `GlobalVarSet` value a size-bounded override
 (`name::INLINE_REF_EAGER_MAX_BYTES`, 64 bytes) of `string_inline_max_bytes`, so
 a realistic field name promotes eager without forcing arbitrarily large literals

@@ -116,7 +116,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// Whether an indirect call yielding `return_type` is owned. Every callable
     /// value is a closure functor by this point, so the question is whether
-    /// every closure `__call` of that return type returns owned.
+    /// every closure `$call` of that return type returns owned.
     pub fn indirect_is_owned(&self, return_type: TypeId) -> bool {
         self.indirect_owned_returns
             .is_some_and(|set| set.contains(&return_type))
@@ -407,7 +407,7 @@ fn settle_component(
 
 /// Return types for which *every* possible indirect-call target returns owned.
 /// `lower::plan::closure` turns every callable value into a functor whose
-/// `__call` is an ordinary function, so those are the complete target set, and
+/// `$call` is an ordinary function, so those are the complete target set, and
 /// an indirect call reaches only targets of its own return type. Derived from
 /// `returns_owned` after that fixpoint settles, never feeding back into it.
 pub fn compute_indirect_owned_returns(
@@ -466,7 +466,7 @@ fn function_return_convention(
 /// the first parameter (`return *self`). Only `return` delivers a function's
 /// result — Wado value-returning functions always use an explicit `return`. A
 /// `break value` is internal to a loop or a labeled-block expression (e.g. the
-/// `break: __b` inside a `[1,2,3]` sequence literal that is itself the payload of
+/// `break: $b` inside a `[1,2,3]` sequence literal that is itself the payload of
 /// a returned `Ok(...)`), so its freshness is judged by `is_owned_value` on the
 /// enclosing return expression, not here — checking it against the
 /// function-level fresh set would spuriously poison the return.

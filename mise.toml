@@ -73,6 +73,10 @@ run = "cargo run --bin wado-dev-tools -- highlight-vocab"
 description = "Fail if a Rust file gained a `crate::` / `super::` path written outside a `use` item"
 run = "node scripts/rust-inline-paths.mjs --check"
 
+[tasks.check-internal-names]
+description = "Fail if a name the compiler mints for itself is spelled `__x` instead of `$x`"
+run = "node scripts/internal-names.mjs --check"
+
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
 run = "node scripts/rust-inline-paths.mjs --update"

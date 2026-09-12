@@ -578,7 +578,7 @@ impl<'a> NirUnparser<'a> {
             ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
                 Some(OpaqueSource::Local(idx)) => match self.locals.get(idx as usize) {
                     Some(name) => self.output.push_str(name),
-                    None => self.output.push_str(&format!("local_{idx}")),
+                    None => self.output.push_str(&format!("$local_{idx}")),
                 },
                 _ => self.output.push_str(&format!("%{}", v.index())),
             },
@@ -873,7 +873,7 @@ impl<'a> NirUnparser<'a> {
             // Lowered pattern matching nodes
             ExprKind::VariantTag { expr } => {
                 let expr = *expr;
-                self.output.push_str("__variant_tag(");
+                self.output.push_str("$variant_tag(");
                 self.unparse_operand(body, expr);
                 self.output.push(')');
             }
@@ -883,7 +883,7 @@ impl<'a> NirUnparser<'a> {
                 case_name,
             } => {
                 let (expr, case_index, case_name) = (*expr, *case_index, case_name.clone());
-                self.output.push_str("__variant_test(");
+                self.output.push_str("$variant_test(");
                 self.unparse_operand(body, expr);
                 self.output
                     .push_str(&format!(", case={case_index}, name={case_name})"));
@@ -892,7 +892,7 @@ impl<'a> NirUnparser<'a> {
                 expr, case_index, ..
             } => {
                 let (expr, case_index) = (*expr, *case_index);
-                self.output.push_str("__variant_payload(");
+                self.output.push_str("$variant_payload(");
                 self.unparse_operand(body, expr);
                 self.output.push_str(&format!(", case={case_index})"));
             }

@@ -111,8 +111,8 @@ impl FunctionTranslator<'_, '_> {
     /// a `StructNew` reading the locals back as the struct fields.
     fn wrap_multivalue_i64(&mut self, instr: WirInstr, result_type_id: TypeId) -> WirInstr {
         let type_id = self.ref_type_id(result_type_id);
-        let lo = self.fresh_local("__mv_lo");
-        let hi = self.fresh_local("__mv_hi");
+        let lo = self.fresh_local("$mv_lo");
+        let hi = self.fresh_local("$mv_hi");
         WirInstr::Seq(vec![
             WirInstr::DeclareLocal {
                 name: lo.clone(),
@@ -289,9 +289,9 @@ impl FunctionTranslator<'_, '_> {
     ) -> WirInstr {
         // One set per clone: the `len` operand can hold a bulk clone of this
         // same type, and it runs between this one's `src` store and its copy.
-        let src_name = self.fresh_local("__array_clone_src");
-        let dst_name = self.fresh_local("__array_clone_dst");
-        let len_name = self.fresh_local("__array_clone_len");
+        let src_name = self.fresh_local("$array_clone_src");
+        let dst_name = self.fresh_local("$array_clone_dst");
+        let len_name = self.fresh_local("$array_clone_len");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -1179,7 +1179,7 @@ impl FunctionTranslator<'_, '_> {
         };
 
         // Generate a temp local for the callee as canonical closure struct ref
-        let temp_name = self.fresh_local("__indirect_call");
+        let temp_name = self.fresh_local("$indirect_call");
         let callee_ref_type = WirType::Ref {
             type_id: closure_struct_type_id.clone(),
             nullable: false,

@@ -86,18 +86,18 @@ for let [i, v] of values.enumerate() {
 Expands to:
 
 ```wado
-__unroll_0: {
+$unroll_0: {
     let i: i32 = 0;
     let v: T_0 = values.0;
     body(i, v);
 }
-__unroll_1: {
+$unroll_1: {
     let i: i32 = 1;
     let v: T_1 = values.1;
     body(i, v);
 }
 // ...
-__unroll_{n-1}: {
+$unroll_{n-1}: {
     let i: i32 = {n-1};
     let v: T_{n-1} = values.{n-1};
     body(i, v);
@@ -166,12 +166,12 @@ fn to_params<Values>(values: Values) -> List<SqlParam> {
 When called as `to_params::<[i32, String]>([42, "Alice"])`, the loop body expands to:
 
 ```wado
-__unroll_0: {
+$unroll_0: {
     let i: i32 = 0;
     let v: i32 = values.0;
     params.push(v.to_sql_param());        // resolves to i32::to_sql_param
 }
-__unroll_1: {
+$unroll_1: {
     let i: i32 = 1;
     let v: String = values.1;
     params.push(v.to_sql_param());        // resolves to String::to_sql_param

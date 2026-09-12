@@ -2,7 +2,7 @@
 // both closure IR shapes.
 //
 // Closure construction is not a Wasm constant expression, so the slot starts
-// as `ref.null` and `__initialize_module` writes the real value. The WIR-level
+// as `ref.null` and `$initialize_module` writes the real value. The WIR-level
 // global type stayed non-nullable for a closure-typed global (closure types
 // lower to `WirType::AbstractRef`, which the lazy-init nullability widening
 // only covered for `WirType::Ref`), so the placeholder failed validation with
@@ -20,7 +20,7 @@ global TICK: fn mut () -> i32 = || {
 
 // A capturing closure is a different IR shape (non-empty env) and reaches its
 // global through a non-const initializer, so it stays a lazy
-// `__initialize_module` assignment.
+// `$initialize_module` assignment.
 global ADD_N: fn(i32) -> i32 = make_adder(42);
 
 fn make_adder(n: i32) -> fn(i32) -> i32 {
