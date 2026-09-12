@@ -352,7 +352,13 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
         }
         offset += line.len();
     }
-    start.map(|s| &wir[s..])
+    // Returning the tail here would widen the scope to every function below,
+    // which is the one thing `wir_scope` exists to stop.
+    assert!(
+        start.is_none(),
+        "WIR function matching {scope:?} is never closed"
+    );
+    None
 }
 
 // ---------------------------------------------------------------------------
