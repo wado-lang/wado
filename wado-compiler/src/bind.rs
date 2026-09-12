@@ -7,13 +7,16 @@ use crate::hashmap::IndexSet;
 
 use crate::hashmap::IndexMap;
 
+use crate::ast::Pattern;
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
     ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, ReturnStmt,
     Stmt, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
+use crate::compiler_host::Diagnostic;
 use crate::logger::{Bail, Logger};
+use crate::module_source::ModuleSource;
 use crate::token::Span;
 
 /// Binding information for a local variable
@@ -106,7 +109,7 @@ impl std::fmt::Display for BindError {
 
 impl std::error::Error for BindError {}
 
-impl From<BindError> for crate::compiler_host::Diagnostic {
+impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
@@ -138,7 +141,7 @@ impl From<BindError> for crate::compiler_host::Diagnostic {
                 *span,
             ),
         };
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code,
             message,
@@ -270,25 +273,25 @@ fn expr_references_var(expr: &Expr, name: &str) -> bool {
     }
 }
 
-fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
+fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
     match stmt {
-        crate::ast::Stmt::Let(let_stmt) => let_stmt
+        Stmt::Let(let_stmt) => let_stmt
             .value
             .as_ref()
             .is_some_and(|v| expr_references_var(v, name)),
-        crate::ast::Stmt::Expr(expr_stmt) => expr_references_var(&expr_stmt.expr, name),
-        crate::ast::Stmt::Return(ret) => ret
+        Stmt::Expr(expr_stmt) => expr_references_var(&expr_stmt.expr, name),
+        Stmt::Return(ret) => ret
             .value
             .as_ref()
             .is_some_and(|v| expr_references_var(v, name)),
-        crate::ast::Stmt::TaskReturn(tr) => expr_references_var(&tr.value, name),
-        crate::ast::Stmt::Assert(a) => {
+        Stmt::TaskReturn(tr) => expr_references_var(&tr.value, name),
+        Stmt::Assert(a) => {
             expr_references_var(&a.condition, name)
                 || a.message
                     .as_ref()
                     .is_some_and(|m| expr_references_var(m, name))
         }
-        crate::ast::Stmt::If(if_stmt) => {
+        Stmt::If(if_stmt) => {
             condition_references_var(&if_stmt.condition, name)
                 || if_stmt
                     .then_block
@@ -300,11 +303,11 @@ fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
                     .as_ref()
                     .is_some_and(|b| b.stmts.iter().any(|s| stmt_references_var(s, name)))
         }
-        crate::ast::Stmt::While(w) => {
+        Stmt::While(w) => {
             condition_references_var(&w.condition, name)
                 || w.body.stmts.iter().any(|s| stmt_references_var(s, name))
         }
-        crate::ast::Stmt::For(f) => {
+        Stmt::For(f) => {
             f.init
                 .as_ref()
                 .is_some_and(|i| stmt_references_var(i, name))
@@ -316,12 +319,12 @@ fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
                     .is_some_and(|u| expr_references_var(u, name))
                 || f.body.stmts.iter().any(|s| stmt_references_var(s, name))
         }
-        crate::ast::Stmt::ForOf(fo) => {
+        Stmt::ForOf(fo) => {
             expr_references_var(&fo.iterable, name)
                 || fo.body.stmts.iter().any(|s| stmt_references_var(s, name))
         }
-        crate::ast::Stmt::Loop(l) => l.body.stmts.iter().any(|s| stmt_references_var(s, name)),
-        crate::ast::Stmt::Match(m) => {
+        Stmt::Loop(l) => l.body.stmts.iter().any(|s| stmt_references_var(s, name)),
+        Stmt::Match(m) => {
             expr_references_var(&m.expr, name)
                 || m.arms.iter().any(|arm| {
                     arm.guard
@@ -330,28 +333,21 @@ fn stmt_references_var(stmt: &crate::ast::Stmt, name: &str) -> bool {
                         || expr_references_var(&arm.body, name)
                 })
         }
-        crate::ast::Stmt::LabeledBlock(lb) => {
-            lb.block.stmts.iter().any(|s| stmt_references_var(s, name))
-        }
+        Stmt::LabeledBlock(lb) => lb.block.stmts.iter().any(|s| stmt_references_var(s, name)),
         // A local type/impl declaration's methods aren't closures — they
         // can't capture `name` from the enclosing function — so it never
         // references an outer variable.
-        crate::ast::Stmt::Item(_)
-        | crate::ast::Stmt::Break(_)
-        | crate::ast::Stmt::Continue(_)
-        | crate::ast::Stmt::Error(_) => false,
+        Stmt::Item(_) | Stmt::Break(_) | Stmt::Continue(_) | Stmt::Error(_) => false,
     }
 }
 
-fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bool {
+fn condition_references_var(condition: &Condition, name: &str) -> bool {
     match condition {
-        crate::ast::Condition::Expr(expr) => expr_references_var(expr, name),
-        crate::ast::Condition::LetChain { elements, .. } => {
-            elements.iter().any(|elem| match elem {
-                crate::ast::ConditionElement::Let { expr, .. } => expr_references_var(expr, name),
-                crate::ast::ConditionElement::Expr(expr) => expr_references_var(expr, name),
-            })
-        }
+        Condition::Expr(expr) => expr_references_var(expr, name),
+        Condition::LetChain { elements, .. } => elements.iter().any(|elem| match elem {
+            ConditionElement::Let { expr, .. } => expr_references_var(expr, name),
+            ConditionElement::Expr(expr) => expr_references_var(expr, name),
+        }),
     }
 }
 
@@ -359,10 +355,10 @@ fn condition_references_var(condition: &crate::ast::Condition, name: &str) -> bo
 /// including through or-alternatives. These are candidates for global
 /// constant references that should not be tracked as local variables.
 /// Nested idents inside variants/structs/tuples are real local bindings.
-fn collect_top_level_bare_idents(pattern: &crate::ast::Pattern) -> Vec<String> {
+fn collect_top_level_bare_idents(pattern: &Pattern) -> Vec<String> {
     match pattern {
-        crate::ast::Pattern::Ident { name, .. } => vec![name.clone()],
-        crate::ast::Pattern::Or(alternatives) => alternatives
+        Pattern::Ident { name, .. } => vec![name.clone()],
+        Pattern::Or(alternatives) => alternatives
             .iter()
             .flat_map(collect_top_level_bare_idents)
             .collect(),
@@ -376,7 +372,7 @@ pub struct Binder<'a, H: CompilerHost> {
     logger: &'a Logger<'a, H>,
     /// Module whose bodies are being bound; every diagnostic is attributed to
     /// its source file.
-    module_source: &'a crate::module_source::ModuleSource,
+    module_source: &'a ModuleSource,
     current_depth: u32,
     /// All local variable names defined in the current function
     /// Used to distinguish "out of scope" errors from "global reference"
@@ -389,10 +385,7 @@ pub struct Binder<'a, H: CompilerHost> {
 
 impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Create a new binder
-    pub fn new(
-        logger: &'a Logger<'a, H>,
-        module_source: &'a crate::module_source::ModuleSource,
-    ) -> Self {
+    pub fn new(logger: &'a Logger<'a, H>, module_source: &'a ModuleSource) -> Self {
         Self {
             scopes: vec![Scope::new()], // Global scope
             logger,
@@ -404,7 +397,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     }
 
     /// Emit a bind error attributed to the module being bound.
-    fn emit(&self, err: impl Into<crate::compiler_host::Diagnostic>) -> Result<(), Bail> {
+    fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
         self.logger.error_in(self.module_source, err)
     }
 
@@ -551,8 +544,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // during bind_expr above so the RHS can reference it. Now that
             // the RHS is bound, remove the old binding before define() so it
             // won't report a duplicate.
-            if let crate::ast::Pattern::Ident { name, .. }
-            | crate::ast::Pattern::MutIdent { name, .. } = &let_stmt.pattern
+            if let Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } = &let_stmt.pattern
             {
                 let is_duplicate_in_scope = self
                     .scopes
@@ -595,32 +587,31 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Like `bind_let_pattern` but registers variables as possibly uninitialized.
     fn bind_let_pattern_uninit(
         &mut self,
-        pattern: &crate::ast::Pattern,
+        pattern: &Pattern,
         is_mut: bool,
         is_reactive: bool,
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident { name, .. }
-            | crate::ast::Pattern::MutIdent { name, .. } => {
+            Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } => {
                 self.define_uninit(name, is_mut, is_reactive, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns, _) => {
+            Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_let_pattern_uninit(p, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Wildcard => {}
-            crate::ast::Pattern::Struct { fields, .. } => {
+            Pattern::Wildcard => {}
+            Pattern::Struct { fields, .. } => {
                 for field in fields {
                     self.bind_let_pattern_uninit(&field.pattern, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_)
-            | crate::ast::Pattern::Variant { .. }
-            | crate::ast::Pattern::Range { .. }
-            | crate::ast::Pattern::Error(_) => {}
-            crate::ast::Pattern::Or(alternatives) => {
+            Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => {}
+            Pattern::Or(alternatives) => {
                 // Bind variables from the first alternative (all alternatives must bind the same names)
                 if let Some(first) = alternatives.first() {
                     self.bind_let_pattern_uninit(first, is_mut, is_reactive, span)?;
@@ -633,38 +624,37 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// Bind a let pattern with mutability and reactivity information
     fn bind_let_pattern(
         &mut self,
-        pattern: &crate::ast::Pattern,
+        pattern: &Pattern,
         is_mut: bool,
         is_reactive: bool,
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident { name, .. }
-            | crate::ast::Pattern::MutIdent { name, .. } => {
+            Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } => {
                 self.define(name, is_mut, is_reactive, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns, _) => {
+            Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_let_pattern(p, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Wildcard => {
+            Pattern::Wildcard => {
                 // No variable introduced for wildcard
             }
-            crate::ast::Pattern::Struct { fields, .. } => {
+            Pattern::Struct { fields, .. } => {
                 for field in fields {
                     self.bind_let_pattern(&field.pattern, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Or(alternatives) => {
+            Pattern::Or(alternatives) => {
                 if let Some(first) = alternatives.first() {
                     self.bind_let_pattern(first, is_mut, is_reactive, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_)
-            | crate::ast::Pattern::Variant { .. }
-            | crate::ast::Pattern::Range { .. }
-            | crate::ast::Pattern::Error(_) => {
+            Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Range { .. }
+            | Pattern::Error(_) => {
                 // Literal, variant, and range patterns are not valid in let statements
                 // This would be caught by the type checker.
                 // Pattern::Error is a parser recovery placeholder: nothing to bind.
@@ -1153,23 +1143,23 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
     /// no longer uses case to distinguish variant case names from variable bindings,
     /// so duplicate bare names like `[Null, Null]` in a match pattern are valid
     /// (the elaborator disambiguates them using type information).
-    fn bind_pattern(&mut self, pattern: &crate::ast::Pattern, span: Span) -> Result<(), Bail> {
+    fn bind_pattern(&mut self, pattern: &Pattern, span: Span) -> Result<(), Bail> {
         match pattern {
-            crate::ast::Pattern::Ident { name, .. } => {
+            Pattern::Ident { name, .. } => {
                 let scope = self.scopes.last().unwrap();
                 if !scope.bindings.contains_key(name) {
                     self.define(name, false, false, span)?;
                 }
             }
-            crate::ast::Pattern::MutIdent { name, .. } => {
+            Pattern::MutIdent { name, .. } => {
                 self.define(name, true, false, span)?;
             }
-            crate::ast::Pattern::Tuple(patterns, _) => {
+            Pattern::Tuple(patterns, _) => {
                 for p in patterns {
                     self.bind_pattern(p, span)?;
                 }
             }
-            crate::ast::Pattern::Variant {
+            Pattern::Variant {
                 bindings,
                 span: variant_span,
                 ..
@@ -1179,18 +1169,15 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_pattern(p, *variant_span)?;
                 }
             }
-            crate::ast::Pattern::Struct { fields, .. } => {
+            Pattern::Struct { fields, .. } => {
                 for field in fields {
                     self.bind_pattern(&field.pattern, span)?;
                 }
             }
-            crate::ast::Pattern::Literal(_)
-            | crate::ast::Pattern::Wildcard
-            | crate::ast::Pattern::Range { .. }
-            | crate::ast::Pattern::Error(_) => {
+            Pattern::Literal(_) | Pattern::Wildcard | Pattern::Range { .. } | Pattern::Error(_) => {
                 // No variables introduced
             }
-            crate::ast::Pattern::Or(alternatives) => {
+            Pattern::Or(alternatives) => {
                 // Bind variables from the first alternative (all alternatives must bind the same names)
                 if let Some(first) = alternatives.first() {
                     self.bind_pattern(first, span)?;
@@ -1305,7 +1292,7 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
 /// Convenience function to bind a module
 pub fn bind_module<H: CompilerHost>(
     module: &Module,
-    module_source: &crate::module_source::ModuleSource,
+    module_source: &ModuleSource,
     logger: &Logger<H>,
 ) -> Result<(), Bail> {
     let mut binder = Binder::new(logger, module_source);
@@ -1315,8 +1302,10 @@ pub fn bind_module<H: CompilerHost>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::Diagnostic;
     use crate::compiler_host::{InMemoryCompilerHost, LogLevel, Severity};
     use crate::lexer::lex;
+    use crate::module_source::ModuleSource;
     use crate::parser::Parser;
 
     fn parse(source: &str) -> Module {
@@ -1326,14 +1315,10 @@ mod tests {
         parser.parse_strict().expect("parse error")
     }
 
-    fn bind_and_check(module: &Module) -> (bool, Vec<crate::compiler_host::Diagnostic>) {
+    fn bind_and_check(module: &Module) -> (bool, Vec<Diagnostic>) {
         let host = InMemoryCompilerHost::new();
         let logger = Logger::new(&host, LogLevel::Error);
-        let result = bind_module(
-            module,
-            &crate::module_source::ModuleSource::default(),
-            &logger,
-        );
+        let result = bind_module(module, &ModuleSource::default(), &logger);
         (result.is_ok(), host.diagnostics())
     }
 

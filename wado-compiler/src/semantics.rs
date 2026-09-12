@@ -4,21 +4,45 @@
 //! emit Wasm bytes. The resulting [`Semantics`] carries every fact an editor
 //! query needs without paying for monomorphize / lower / codegen.
 
+use crate::Diagnostic;
+use crate::ParseError;
 use crate::analyze::Analyzer;
+use crate::ast;
+use crate::ast::AstIdSpace;
+use crate::ast::ImplBlock;
+use crate::ast::Item;
+use crate::ast::SelfKind;
+use crate::ast::Visibility;
 use crate::ast::{AstId, Module};
 use crate::ast_index::AstIndex;
 use crate::compiler_host::{CompilerHost, LogLevel};
 use crate::component_model::CmInterfaceRegistry;
 use crate::elaborator::Elaborator;
+use crate::elaborator::assert::render_plans;
+use crate::elaborator::liveness::Liveness;
 use crate::elaborator::orchestration::AnnotateState;
+use crate::elaborator::sem::types::MethodDispatch;
 use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::kiln::InvocationIndex;
+use crate::kiln::import_check::inject_kiln_request_adapter;
+use crate::lexer::LexError;
+use crate::load;
 use crate::loader;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::resolve_import_with_entry;
+use crate::parse;
+use crate::resolve::Resolutions;
+use crate::stdlib_snapshot::get_or_init_snapshot;
+use crate::stdlib_snapshot::reparsed_snapshot_module;
 use crate::symbol::{Symbol, SymbolTable};
+use crate::symbol_notation;
+use crate::symbol_notation::SymbolNotation;
 use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
+use crate::wit_emit::WitContract;
+use crate::wit_emit::WitEmitInput;
 use crate::world_registry::WorldRegistry;
 
 /// A ready-to-query analysis result.
@@ -57,7 +81,7 @@ pub struct Semantics {
     /// module's parse minted each id space. Lets bare-`AstId` facts be
     /// resolved back to their owning module (spans, URIs) without carrying a
     /// module in every key.
-    pub(crate) space_modules: IndexMap<crate::ast::AstIdSpace, ModuleSource>,
+    pub(crate) space_modules: IndexMap<AstIdSpace, ModuleSource>,
     /// The [`ModuleSemantics`] holding each fact the body walk recorded, as a
     /// position in [`AnnotateState::module_semantics`] — the routing every
     /// `AstId`-keyed query below reads through, in place of a second copy.
@@ -73,7 +97,7 @@ pub struct Semantics {
     /// Source-level liveness produced between `annotate_bodies` and `reify`.
     /// `dead_items` feeds the unused-diagnostics emitter; `emit_live` is the
     /// set reify gates emission on. Empty when annotate did not complete.
-    pub(crate) liveness: crate::elaborator::liveness::Liveness,
+    pub(crate) liveness: Liveness,
     /// True when every analysis phase ran to completion without bailing.
     /// Batch compilation refuses to continue when this is false; LSP queries
     /// proceed with whatever partial state the phases managed to produce.
@@ -81,7 +105,7 @@ pub struct Semantics {
     /// Compiler-owned WIT emit facts (target world + default interface). Set by
     /// the CLI before WIT emission so `wado wit` and the `wado compile` embed
     /// path derive them identically. `None` until set.
-    pub(crate) wit_contract: Option<crate::wit_emit::WitContract>,
+    pub(crate) wit_contract: Option<WitContract>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -124,7 +148,7 @@ impl Semantics {
         let state = self.state.as_ref()?;
         let mut out = String::new();
         for (module_source, module_sem) in &state.module_semantics {
-            let plans = crate::elaborator::assert::render_plans(module_sem);
+            let plans = render_plans(module_sem);
             if plans.is_empty() {
                 continue;
             }
@@ -146,20 +170,20 @@ impl Semantics {
 
     /// The compiler-owned WIT emit contract, if set by the CLI.
     #[must_use]
-    pub fn wit_contract(&self) -> Option<&crate::wit_emit::WitContract> {
+    pub fn wit_contract(&self) -> Option<&WitContract> {
         self.wit_contract.as_ref()
     }
 
     /// Set the WIT emit contract (target world + default interface).
-    pub fn set_wit_contract(&mut self, c: crate::wit_emit::WitContract) {
+    pub fn set_wit_contract(&mut self, c: WitContract) {
         self.wit_contract = Some(c);
     }
 
     /// A borrowed [`crate::wit_emit::WitEmitInput`] view over the WIT-relevant
     /// subset.
     #[must_use]
-    pub fn wit_emit_input(&self) -> crate::wit_emit::WitEmitInput<'_> {
-        crate::wit_emit::WitEmitInput {
+    pub fn wit_emit_input(&self) -> WitEmitInput<'_> {
+        WitEmitInput {
             is_complete: self.is_complete,
             tir_modules: &self.tir_modules,
             types: &self.types,
@@ -203,7 +227,7 @@ impl Semantics {
     /// under the same conditions as [`Self::world_registry`].
     #[must_use]
     /// Name resolution: which declaration a spelling in a module reaches.
-    pub(crate) fn resolutions(&self) -> Option<&crate::resolve::Resolutions> {
+    pub(crate) fn resolutions(&self) -> Option<&Resolutions> {
         self.state.as_ref().map(|s| &*s.tysys.resolutions)
     }
 
@@ -240,7 +264,7 @@ impl Semantics {
             space_modules,
             fact_home: IndexMap::default(),
             tir_modules: IndexMap::default(),
-            liveness: crate::elaborator::liveness::Liveness::default(),
+            liveness: Liveness::default(),
             is_complete: false,
             wit_contract: None,
         }
@@ -420,10 +444,7 @@ impl Semantics {
     /// [`crate::elaborator::sem::types::MethodDispatch`] for the data
     /// shape.
     #[must_use]
-    pub(crate) fn method_dispatch_at(
-        &self,
-        id: AstId,
-    ) -> Option<&crate::elaborator::sem::types::MethodDispatch> {
+    pub(crate) fn method_dispatch_at(&self, id: AstId) -> Option<&MethodDispatch> {
         self.method_dispatches_at(id).next()
     }
 
@@ -432,10 +453,7 @@ impl Semantics {
     /// element's receiver may select a different method. A check that must
     /// hold for the call reads them all; [`Self::method_dispatch_at`] answers
     /// the first.
-    pub(crate) fn method_dispatches_at(
-        &self,
-        id: AstId,
-    ) -> impl Iterator<Item = &crate::elaborator::sem::types::MethodDispatch> {
+    pub(crate) fn method_dispatches_at(&self, id: AstId) -> impl Iterator<Item = &MethodDispatch> {
         self.facts_at(ModuleSemantics::METHOD_DISPATCH, id)
     }
 
@@ -447,10 +465,10 @@ impl Semantics {
     pub fn method_dispatch_view(&self, id: AstId) -> Option<(String, ModuleSource, String)> {
         let dispatch = self.method_dispatch_at(id)?;
         let self_kind = match dispatch.self_kind {
-            crate::ast::SelfKind::None => "none",
-            crate::ast::SelfKind::Value => "value",
-            crate::ast::SelfKind::Ref => "ref",
-            crate::ast::SelfKind::MutRef => "mut_ref",
+            SelfKind::None => "none",
+            SelfKind::Value => "value",
+            SelfKind::Ref => "ref",
+            SelfKind::MutRef => "mut_ref",
         };
         Some((
             dispatch.function_ref.name.clone(),
@@ -570,22 +588,22 @@ impl Semantics {
     /// reached through the symbol table. O(1): the per-module [`AstIndex`]
     /// holds each function's address, so nothing scans the AST at query time.
     #[must_use]
-    pub fn function_at(&self, id: AstId) -> Option<&crate::ast::Function> {
+    pub fn function_at(&self, id: AstId) -> Option<&ast::Function> {
         use crate::ast_index::FunctionLocation;
         let owning = self.module_of_id(id)?;
         let module = self.modules.get(owning)?;
         let location = self.ast_indices.get(owning)?.function_location(id)?;
         match location {
             FunctionLocation::Free { item_idx } => match module.items.get(item_idx)? {
-                crate::ast::Item::Function(f) => Some(f),
+                Item::Function(f) => Some(f),
                 _ => None,
             },
             FunctionLocation::Method {
                 item_idx,
                 method_idx,
             } => match module.items.get(item_idx)? {
-                crate::ast::Item::Impl(b) => b.methods.get(method_idx),
-                crate::ast::Item::Trait(t) => t.methods.get(method_idx),
+                Item::Impl(b) => b.methods.get(method_idx),
+                Item::Trait(t) => t.methods.get(method_idx),
                 _ => None,
             },
         }
@@ -615,7 +633,7 @@ impl Semantics {
     /// anchor at its directory — and must already be loaded here.
     pub fn resolve_symbol_notation(
         &self,
-        notation: &crate::symbol_notation::SymbolNotation,
+        notation: &SymbolNotation,
     ) -> Result<Definition, SymbolResolveError> {
         let module = self.resolve_notation_module(&notation.module);
         if !self.modules.contains_key(&module) {
@@ -646,7 +664,7 @@ impl Semantics {
     fn resolve_member(
         &self,
         module: &ModuleSource,
-        receiver: &crate::symbol_notation::Receiver,
+        receiver: &symbol_notation::Receiver,
         member: &str,
     ) -> Result<Definition, SymbolResolveError> {
         use crate::ast::Item;
@@ -690,7 +708,7 @@ impl Semantics {
     pub fn type_member_names(
         &self,
         module: &ModuleSource,
-        receiver: &crate::symbol_notation::Receiver,
+        receiver: &symbol_notation::Receiver,
         public_only: bool,
     ) -> Vec<String> {
         use crate::ast::Item;
@@ -743,7 +761,7 @@ impl Semantics {
     #[must_use]
     pub fn resolve_notation_module(&self, module_spec: &str) -> ModuleSource {
         let from = self.entry_module_source.clone();
-        crate::name::resolve_import_with_entry(
+        resolve_import_with_entry(
             &mut self.interner.borrow_mut(),
             &from,
             module_spec,
@@ -958,14 +976,7 @@ pub async fn semantics<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
 ) -> Semantics {
-    semantics_for_world(
-        source,
-        host,
-        filename,
-        None,
-        crate::kiln::InvocationIndex::new(),
-    )
-    .await
+    semantics_for_world(source, host, filename, None, InvocationIndex::new()).await
 }
 
 /// [`semantics`] with the target world and kiln redirects threaded through, so a
@@ -981,9 +992,9 @@ pub async fn semantics_for_world<H: CompilerHost>(
     host: &H,
     filename: Option<&str>,
     target_world: Option<&str>,
-    invocations: crate::kiln::InvocationIndex,
+    invocations: InvocationIndex,
 ) -> Semantics {
-    let parsed = crate::parse(source);
+    let parsed = parse(source);
     // Surface every recovered lex/parse error, then analyze the partial AST
     // so queries still resolve in the regions outside the error. If load/bind
     // then fails on the partial AST, the result still collapses to
@@ -996,12 +1007,12 @@ pub async fn semantics_for_world<H: CompilerHost>(
     for e in &parsed.errors {
         host.emit_diagnostic(parse_error_diagnostic(e, filename));
     }
-    match crate::load(parsed, filename, host, invocations, LogLevel::default()).await {
+    match load(parsed, filename, host, invocations, LogLevel::default()).await {
         // General entry: build TIR so consumers that read `tir_modules`
         // (kiln options extraction) work. The LSP engine uses its own
         // annotate-only path (`semantics_of(.., build_tir = false)`).
         Ok(mut loaded) => {
-            crate::kiln::import_check::inject_kiln_request_adapter(
+            inject_kiln_request_adapter(
                 target_world,
                 &loaded.entry_module_source,
                 &mut loaded.modules,
@@ -1029,10 +1040,7 @@ pub async fn semantics_for_world<H: CompilerHost>(
 /// error-recovering parser surfaces one of these per syntax error, so the
 /// LSP can report them all while still analyzing the partial AST.
 #[must_use]
-pub fn parse_error_diagnostic(
-    err: &crate::ParseError,
-    filename: Option<&str>,
-) -> crate::Diagnostic {
+pub fn parse_error_diagnostic(err: &ParseError, filename: Option<&str>) -> Diagnostic {
     use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
     Diagnostic {
         severity: Severity::Error,
@@ -1054,10 +1062,7 @@ pub fn parse_error_diagnostic(
 /// `filename`. The resilient lexer surfaces one of these per recovered
 /// problem; LSP and batch report them alongside parser diagnostics.
 #[must_use]
-pub fn lex_error_diagnostic(
-    err: &crate::lexer::LexError,
-    filename: Option<&str>,
-) -> crate::Diagnostic {
+pub fn lex_error_diagnostic(err: &LexError, filename: Option<&str>) -> Diagnostic {
     use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
     Diagnostic {
         severity: Severity::Error,
@@ -1155,9 +1160,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // itself (re-entry guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        crate::stdlib_snapshot::get_or_init_snapshot().filter(|snap| {
-            crate::stdlib_snapshot::reparsed_snapshot_module(snap, &load_result.modules).is_none()
-        })
+        get_or_init_snapshot()
+            .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
     let (symbols, analyze_ok) = {
@@ -1288,11 +1292,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 /// implements that trait. Both type names are compared by base name (generic
 /// arguments are not matched; see `resolve_member`). Shared by member
 /// resolution and the member-suggestion list so they never disagree.
-fn receiver_matches_impl(
-    b: &crate::ast::ImplBlock,
-    want_type: &str,
-    want_trait: Option<&str>,
-) -> bool {
+fn receiver_matches_impl(b: &ImplBlock, want_type: &str, want_trait: Option<&str>) -> bool {
     if b.ty.head_base_name() != Some(want_type) {
         return false;
     }
@@ -1305,11 +1305,7 @@ fn receiver_matches_impl(
 /// Whether a type member is shown in the public-API view. Inherent-`impl`
 /// members need `pub`; trait-`impl` members are always shown (they are the
 /// trait's public surface). Shared with `unparse::unparse_impl_block_signature`.
-pub(crate) fn member_visible(
-    public_only: bool,
-    inherent: bool,
-    visibility: crate::ast::Visibility,
-) -> bool {
+pub(crate) fn member_visible(public_only: bool, inherent: bool, visibility: Visibility) -> bool {
     !public_only || !inherent || visibility.is_public()
 }
 
@@ -1317,6 +1313,7 @@ pub(crate) fn member_visible(
 mod tests {
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
+    use crate::hashmap;
 
     fn block_on<F: std::future::Future>(future: F) -> F::Output {
         tokio::runtime::Runtime::new().unwrap().block_on(future)
@@ -1375,12 +1372,12 @@ mod tests {
             Some("entry.wado"),
         ));
 
-        let mut live: crate::hashmap::IndexSet<AstId> = crate::hashmap::IndexSet::default();
+        let mut live: hashmap::IndexSet<AstId> = hashmap::IndexSet::default();
         for (id, type_id) in sem.iter_expression_types() {
             assert!(live.insert(id), "iteration yielded {id:?} twice");
             assert_eq!(sem.expression_type(id), Some(type_id));
         }
-        let mut seen_uses: crate::hashmap::IndexSet<AstId> = crate::hashmap::IndexSet::default();
+        let mut seen_uses: hashmap::IndexSet<AstId> = hashmap::IndexSet::default();
         for (use_id, def_id) in sem.iter_references() {
             assert!(
                 seen_uses.insert(use_id),

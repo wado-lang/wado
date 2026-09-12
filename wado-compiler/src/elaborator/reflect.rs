@@ -10,6 +10,16 @@ use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use super::Elaborator;
 use super::trait_query::OnBoundTrait;
 use super::types::{FunctionContext, TypeError};
+use crate::elaborator::sem::types::StaticMethodDispatch;
+use crate::hashmap;
+use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
+use crate::synthesis::template::has_reflect_kind;
+use crate::synthesis::traits::REFLECT_CASE_PAYLOADS_ASSOC;
+use crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC;
+use crate::synthesis::traits::REFLECT_HOLES_ASSOC;
+use crate::synthesis::traits::REFLECT_MEMBERS_ASSOC;
+use crate::tir;
 
 /// The two payload-free kinds share one static-call resolution shape, differing
 /// only in their compiler items, subject kind, and scalar type (`i32` / `u64`).
@@ -27,7 +37,7 @@ struct ReflectSubject {
     /// The declaring module, carried from the resolved subject. Re-deriving it
     /// from `base_name` picks whichever same-named declaration a name lookup
     /// reaches first, so `P2<i32>` would reflect `p1`'s `Pair`.
-    module_source: crate::module_source::ModuleSource,
+    module_source: ModuleSource,
     type_args: Vec<TypeId>,
     member_types: Vec<TypeId>,
 }
@@ -57,7 +67,7 @@ impl ScalarReflectSpec {
         from_method_item: CompilerItem::ReflectEnumFromDiscriminant,
         members_method_item: CompilerItem::ReflectEnumMembers,
         member_struct_item: CompilerItem::ReflectEnumCase,
-        members_assoc: crate::synthesis::traits::REFLECT_MEMBERS_ASSOC,
+        members_assoc: REFLECT_MEMBERS_ASSOC,
         value_type: TypeTable::I32,
     };
     const FLAGS: Self = Self {
@@ -68,7 +78,7 @@ impl ScalarReflectSpec {
         from_method_item: CompilerItem::ReflectFlagsFromBits,
         members_method_item: CompilerItem::ReflectFlagsMembers,
         member_struct_item: CompilerItem::ReflectFlagsBit,
-        members_assoc: crate::synthesis::traits::REFLECT_MEMBERS_ASSOC,
+        members_assoc: REFLECT_MEMBERS_ASSOC,
         value_type: TypeTable::U64,
     };
 
@@ -345,7 +355,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         self.sem.types.static_method_dispatch.insert(
             call_id,
-            super::sem::types::StaticMethodDispatch {
+            StaticMethodDispatch {
                 // Reflection dispatches to an impl the reflect-bridge
                 // synthesis mints; there is no declaration to name.
                 method_def: None,
@@ -369,9 +379,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_ty: TypeId,
         base_name: &str,
         type_args: &[TypeId],
-        trait_name: &crate::name::FqTraitName,
+        trait_name: &FqTraitName,
         method: &str,
-        module_source: crate::module_source::ModuleSource,
+        module_source: ModuleSource,
     ) -> FunctionRef {
         let mut method_info = LocalMethodName::new(
             self.tysys.type_table.borrow().fq_base_type_name(self_ty),
@@ -386,7 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|t| self.tysys.type_table.borrow().fq_type_name(*t))
                 .collect();
             method_info = method_info.with_type_args(&arg_names, &[]);
-            Some(crate::tir::MonomorphInfo {
+            Some(tir::MonomorphInfo {
                 generic_name: base_name.to_string(),
                 impl_type_args: type_args.to_vec(),
                 method_type_args: Vec::new(),
@@ -453,7 +463,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_ty,
                 type_param_name,
                 reflect_trait_name.base_name(),
-                crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+                REFLECT_FIELD_TYPES_ASSOC,
                 CompilerItem::ReflectStructField,
             ) else {
                 self.emit_missing_pack_bound(
@@ -515,7 +525,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         self_ty: TypeId,
         type_param_name: &str,
-        reflect_trait_name: crate::name::FqTraitName,
+        reflect_trait_name: FqTraitName,
         static_call: &ast::StaticMethodCallExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
@@ -523,7 +533,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(fields_ty) = self.reflect_pack_bound_ty(
             type_param_name,
             reflect_trait_name.base_name(),
-            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+            REFLECT_FIELD_TYPES_ASSOC,
         ) else {
             self.emit_missing_pack_bound(
                 reflect_trait_name.base_name(),
@@ -565,7 +575,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn record_type_param_reflect_dispatch(
         &mut self,
         type_param_name: &str,
-        reflect_trait_name: crate::name::FqTraitName,
+        reflect_trait_name: FqTraitName,
         method: String,
         static_call: &ast::StaticMethodCallExpr,
         param_is_mut: Vec<bool>,
@@ -729,7 +739,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return declared.to_vec();
         }
         let mut tt = self.tysys.type_table.borrow_mut();
-        let substitution: crate::hashmap::IndexMap<u32, TypeId> = param_ids
+        let substitution: hashmap::IndexMap<u32, TypeId> = param_ids
             .iter()
             .zip(type_args)
             .filter_map(|(param, &arg)| match tt.get(*param) {
@@ -856,7 +866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectStruct)
+            != Some(OnBoundTrait::ReflectStruct)
         {
             return false;
         }
@@ -895,7 +905,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::Reflect)
+            != Some(OnBoundTrait::Reflect)
         {
             return false;
         }
@@ -973,12 +983,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `None` where no `Reflect` impl is synthesized, which
     /// [`has_reflect_kind`](crate::synthesis::template::has_reflect_kind)
     /// decides — the same answer monomorphization gets for a bounded blanket.
-    fn reflect_root_subject(
-        &self,
-        self_ty: TypeId,
-    ) -> Option<(String, crate::module_source::ModuleSource, Vec<TypeId>)> {
+    fn reflect_root_subject(&self, self_ty: TypeId) -> Option<(String, ModuleSource, Vec<TypeId>)> {
         let tt = self.tysys.type_table.borrow();
-        if !crate::synthesis::template::has_reflect_kind(self_ty, &tt) {
+        if !has_reflect_kind(self_ty, &tt) {
             return None;
         }
         let (base_name, module_source) = tt.nominal_head(self_ty)?;
@@ -992,7 +999,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectVariant)
+            != Some(OnBoundTrait::ReflectVariant)
         {
             return false;
         }
@@ -1005,7 +1012,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self
             .tysys
             .classify_on_bound_trait(&self.type_lookup(), prefix)
-            != Some(super::trait_query::OnBoundTrait::ReflectTemplate)
+            != Some(OnBoundTrait::ReflectTemplate)
         {
             return false;
         }
@@ -1051,7 +1058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self_ty,
                     &name,
                     trait_name.base_name(),
-                    crate::synthesis::traits::REFLECT_HOLES_ASSOC,
+                    REFLECT_HOLES_ASSOC,
                     CompilerItem::ReflectTemplateHole,
                 ) else {
                     self.emit_missing_pack_bound(
@@ -1244,7 +1251,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_ty,
                 type_param_name,
                 trait_name.base_name(),
-                crate::synthesis::traits::REFLECT_CASE_PAYLOADS_ASSOC,
+                REFLECT_CASE_PAYLOADS_ASSOC,
                 CompilerItem::ReflectVariantCase,
             ) else {
                 self.emit_missing_pack_bound(
@@ -1349,7 +1356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.map_bound_pack(
             type_param_name,
             reflect_trait_name,
-            crate::synthesis::traits::REFLECT_FIELD_TYPES_ASSOC,
+            REFLECT_FIELD_TYPES_ASSOC,
             // The slot names the pack itself, not a `TypeParam` placeholder: a
             // derivation infers `Option<F>`'s payload from it, and inference
             // binds through the pack.

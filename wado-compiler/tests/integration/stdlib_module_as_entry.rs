@@ -2,6 +2,7 @@
 //! stdlib snapshot's parse of that file gave it two identities, so trait
 //! synthesis re-derived an impl it writes by hand and monomorphize panicked.
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::{Path, PathBuf};
 
 fn core_dir() -> PathBuf {
@@ -49,7 +50,7 @@ fn compile_as_test_world_entry(
         target_world: Some("test".to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(path, source, options)
+    compile_source_with_compiler_options(path, source, options)
 }
 
 fn compile_file_as_test_world_entry(

@@ -808,11 +808,13 @@ fn calls(tokens: &[Token], index: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::MapHost;
+    use crate::text::line_without_terminator;
 
     /// Build a `Semantics` snapshot for `source` so the semantic
     /// classification path can be exercised in unit tests.
     fn sem_of(source: &str) -> Semantics {
-        let host = crate::test_support::MapHost::single("/test.wado", source);
+        let host = MapHost::single("/test.wado", source);
         futures::executor::block_on(wado_compiler::semantics(source, &host, Some("/test.wado")))
     }
 
@@ -1009,7 +1011,7 @@ mod tests {
         // "Must not span lines", expressed against a start and a length.
         let line_lengths: Vec<u32> = src
             .split_inclusive('\n')
-            .map(|l| crate::text::line_without_terminator(l).chars().count() as u32)
+            .map(|l| line_without_terminator(l).chars().count() as u32)
             .collect();
         for tok in &tokens {
             let line_len = line_lengths

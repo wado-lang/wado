@@ -22,12 +22,28 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmPayloadType};
 use crate::compiler_item::CompilerItem;
+use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::CmNameSink;
+use crate::component_model::CmTypeGen;
+use crate::component_model::cm_payload_type_from_type_id;
+use crate::component_model::future_payload_rejection;
+use crate::component_model::is_cm_record_stream_element;
+use crate::component_model::stream_payload_rejection;
+use crate::flat_package::FlatPackage;
+use crate::hashmap;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::DeclPath;
+use crate::name::kebab_export_name;
+use crate::name::to_kebab;
 use crate::package::Package;
+use crate::package::test_selected;
+use crate::tir::TirStmt;
+use crate::tir::TirStmtKind;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
 use crate::unparse::unparse_type_into;
+use crate::world_registry::TEST_WORLD;
+use crate::world_registry::fq_name_package;
 use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 pub use export_adapter::export_binding_func_name;
@@ -117,6 +133,8 @@ mod payload_validation {
     use crate::tir_visitor::TirRefVisitor;
 
     use super::{FunctionKey, NamedPayloadFinder};
+    use crate::synthesis::cm_binding::reachable_from_export_bindings;
+    use crate::synthesis::cm_binding::reachable_from_export_bindings_flat;
 
     /// Witness that a scan ran while the TIR still carried the pristine
     /// `future-new` / `stream-new` shape it matches. Each rewrite half consumes
@@ -157,7 +175,7 @@ mod payload_validation {
     pub(in crate::synthesis::cm_binding) fn reject_unresolvable_record_payloads(
         project: &Package,
     ) -> Result<PayloadsValidated, String> {
-        let reachable = super::reachable_from_export_bindings(project);
+        let reachable = reachable_from_export_bindings(project);
         for (module_source, module) in &project.tir_modules {
             let tt = module.type_table.borrow();
             let functions = module.functions.iter().map(|f| (module_source.clone(), f));
@@ -178,7 +196,7 @@ mod payload_validation {
     pub fn reject_unresolvable_payloads_monomorphized(
         flat: &FlatPackage,
     ) -> Result<PayloadsValidated, String> {
-        let reachable = super::reachable_from_export_bindings_flat(flat);
+        let reachable = reachable_from_export_bindings_flat(flat);
         let tt = flat.type_table.borrow();
         let functions = flat
             .functions
@@ -224,9 +242,7 @@ fn reachable_from_export_bindings(project: &Package) -> IndexSet<FunctionKey> {
 
 /// The same walk over the flattened, monomorphized functions, where each
 /// carries its own module source.
-fn reachable_from_export_bindings_flat(
-    flat: &crate::flat_package::FlatPackage,
-) -> IndexSet<FunctionKey> {
+fn reachable_from_export_bindings_flat(flat: &FlatPackage) -> IndexSet<FunctionKey> {
     let functions = flat
         .functions
         .iter()
@@ -283,10 +299,10 @@ struct CalleeCollector {
 }
 
 impl TirRefVisitor for CalleeCollector {
-    fn visit_stmt(&mut self, stmt: &crate::tir::TirStmt) {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
         // This pass runs before `task return` is stripped; descend into its
         // value rather than tripping the default walker's guard.
-        if let crate::tir::TirStmtKind::TaskReturn { value } = &stmt.kind {
+        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
             self.visit_expr(value);
         } else {
             self.walk_stmt(stmt);
@@ -304,7 +320,7 @@ impl TirRefVisitor for CalleeCollector {
 
 struct NamedPayloadFinder<'a> {
     tt: &'a TypeTable,
-    registry: &'a crate::component_model::CmInterfaceRegistry,
+    registry: &'a CmInterfaceRegistry,
     /// Only where the world keeps the code: a record's resolvability depends on
     /// the world, unlike classifiability, which is always checked.
     check_records: bool,
@@ -312,10 +328,10 @@ struct NamedPayloadFinder<'a> {
 }
 
 impl TirRefVisitor for NamedPayloadFinder<'_> {
-    fn visit_stmt(&mut self, stmt: &crate::tir::TirStmt) {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
         // This pass runs before `task return` is stripped; descend into its
         // value rather than tripping the default walker's guard.
-        if let crate::tir::TirStmtKind::TaskReturn { value } = &stmt.kind {
+        if let TirStmtKind::TaskReturn { value } = &stmt.kind {
             self.visit_expr(value);
         } else {
             self.walk_stmt(stmt);
@@ -337,7 +353,7 @@ impl TirRefVisitor for NamedPayloadFinder<'_> {
 
 fn unresolvable_future_stream_payload(
     tt: &TypeTable,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     expr: &TirExpr,
     check_records: bool,
 ) -> Option<String> {
@@ -355,12 +371,12 @@ fn unresolvable_future_stream_payload(
         ));
     }
     if is_future {
-        return crate::component_model::future_payload_rejection(tt, payload);
+        return future_payload_rejection(tt, payload);
     }
-    if crate::component_model::is_cm_record_stream_element(tt, payload) {
+    if is_cm_record_stream_element(tt, payload) {
         return None;
     }
-    crate::component_model::stream_payload_rejection(tt, payload)
+    stream_payload_rejection(tt, payload)
 }
 
 /// Two shapes name a payload: a `new()` static call, and a CM method on a
@@ -404,12 +420,12 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
 /// different shape.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
-    registry: &crate::component_model::CmInterfaceRegistry,
+    registry: &CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
     if let Some((name, module_source)) = named_decl_of(tt, tt.get(type_id))
         && matches!(
-            crate::component_model::cm_payload_type_from_type_id(tt, type_id),
+            cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
         && !registry.is_named_type_registered_from(module_source, name)
@@ -800,7 +816,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
 /// source that has to change.
 fn validate_lib_interface_names(
     world_info: &WorldInfo,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> Result<(), String> {
     let exported = exported_cm_type_names(world_info, cm_interface_registry);
     let wado_names = wado_names_by_cm_name(world_info);
@@ -839,7 +855,7 @@ fn validate_lib_interface_names(
         claimed.insert(key, describe(cm_name));
     }
     for export in &world_info.exports {
-        let cm_name = crate::name::kebab_export_name(&export.name);
+        let cm_name = kebab_export_name(&export.name);
         let key = cm_name.to_ascii_lowercase();
         if let Some(previous) = claimed.get(&key) {
             return Err(format!(
@@ -859,17 +875,17 @@ fn validate_lib_interface_names(
 /// the same walk codegen uses to emit them.
 fn exported_cm_type_names(
     world_info: &WorldInfo,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
 ) -> Vec<String> {
     let mut type_gen = match world_info
         .exports
         .first()
         .and_then(|e| e.from_interface_fq.as_deref())
     {
-        Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
-        None => crate::component_model::CmTypeGen::new(),
+        Some(fq) => CmTypeGen::with_interface_hint(fq),
+        None => CmTypeGen::new(),
     };
-    let mut sink = crate::component_model::CmNameSink::default();
+    let mut sink = CmNameSink::default();
     let no_resources = IndexMap::default();
     for ty in export_signature_types(world_info) {
         let resolved = cm_interface_registry.resolve_type_preserving_local_newtypes(ty);
@@ -902,7 +918,7 @@ fn export_signature_types(world_info: &WorldInfo) -> impl Iterator<Item = &Type>
 fn collect_named_types(ty: &Type, out: &mut IndexMap<String, IndexSet<String>>) {
     match ty {
         Type::Named(named) => {
-            out.entry(crate::name::to_kebab(&named.name))
+            out.entry(to_kebab(&named.name))
                 .or_default()
                 .insert(named.name.clone());
         }
@@ -1159,7 +1175,7 @@ fn generate_test_world_bindings(project: &mut Package) {
         // Map each test's mangled function name → its original (lossless)
         // name so `--test-name` matches against what the user wrote, not
         // the ASCII-folded export name.
-        let original_names: crate::hashmap::IndexMap<&str, Option<&str>> = entry_module
+        let original_names: hashmap::IndexMap<&str, Option<&str>> = entry_module
             .tests
             .iter()
             .map(|t| (t.function_name.as_str(), t.name.as_deref()))
@@ -1171,7 +1187,7 @@ fn generate_test_world_bindings(project: &mut Package) {
             .filter(|f| {
                 let name = f.borrow().name.clone();
                 name.starts_with("__test_")
-                    && crate::package::test_selected(
+                    && test_selected(
                         original_names.get(name.as_str()).copied().flatten(),
                         &test_name_filters,
                     )
@@ -1189,7 +1205,7 @@ fn generate_test_world_bindings(project: &mut Package) {
         world_params: &[],
         world_return: None,
         cm_interface_registry: &project.cm_interface_registry,
-        cm_package: crate::world_registry::fq_name_package(crate::world_registry::TEST_WORLD),
+        cm_package: fq_name_package(TEST_WORLD),
         interner: &project.interner,
     };
     let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs

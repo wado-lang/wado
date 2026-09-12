@@ -13,6 +13,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::wide_int_literal::create_literal;
+use crate::tir::GlobalInit;
 use crate::tir::{TirExpr, TirExprKind, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -160,7 +161,7 @@ pub fn resolve_params<H: CompilerHost>(
             convert_builtin(trimmed, global.ty, &builtins, &type_table, global.span)
         {
             // A resolved parameter is a literal, so the storage can hold it.
-            global.init = crate::tir::GlobalInit::Direct(literal);
+            global.init = GlobalInit::Direct(literal);
         } else {
             let type_name = type_table.borrow().type_name(global.ty);
             let origin = match &from_env_name {

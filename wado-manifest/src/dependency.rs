@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::cache::registry_cache_relative;
 use crate::{DependencySource, LockFile, Manifest};
 
 /// A registry `[dependencies]` entry resolved to its exact lock-pinned version
@@ -76,7 +77,7 @@ pub fn registry_component_need(
         .ok_or_else(|| format!("no `wado.lock` version for {package:?}; run `wado update`"))?;
     let cache_root =
         cache_root.ok_or_else(|| format!("no cache root for {package:?}; set `WADO_ROOT`"))?;
-    let relative = crate::cache::registry_cache_relative(registry_url, package, None, version)
+    let relative = registry_cache_relative(registry_url, package, None, version)
         .ok_or_else(|| format!("cannot place {package:?} in the cache"))?;
     Ok(RegistryComponentNeed {
         name: name.to_string(),
@@ -111,8 +112,9 @@ mod tests {
     use std::path::Path;
 
     use super::{RegistryComponentNeed, registry_component_need};
+    use crate::Manifest;
 
-    fn manifest_with_registry_dep() -> crate::Manifest {
+    fn manifest_with_registry_dep() -> Manifest {
         "[package]\nname=\"app\"\nversion=\"0.1.0\"\n\n\
          [registries]\ndefault=\"oci://ghcr.io\"\n\n\
          [dependencies]\n\"wado-lang:cm-catalog\" = { version = \"^0.1\" }\n"

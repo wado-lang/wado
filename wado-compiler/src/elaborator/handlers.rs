@@ -10,6 +10,14 @@ use crate::tir::{EffectRef, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
+use crate::defs::DefId;
+use crate::defs::DefKind;
+use crate::elaborator::sem::types::HandlerBindingFacts;
+use crate::elaborator::sem::types::HandlerEffectEntry;
+use crate::elaborator::trait_env::ImplTargetKey;
+use crate::hashmap;
+use crate::name::DeclName;
+use crate::name::FqTraitName;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// Annotate `with E1 => h1, ... do { body }`. Walks each handler
@@ -127,7 +135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let handles = effect_decl.is_some_and(|def| {
                         matches!(
                             self.tysys.resolutions.defs().kind(def),
-                            crate::defs::DefKind::Effect | crate::defs::DefKind::Resource
+                            DefKind::Effect | DefKind::Resource
                         )
                     });
                     if !handles {
@@ -233,8 +241,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             // Name the effect by its declaration, so `use { Random as Rng }`
             // records the entry a plain import would.
-            let declared = effect_decl
-                .map(|def| crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), def));
+            let declared =
+                effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
             let name = declared
                 .as_ref()
                 .map(|fq| fq.base_name().to_string())
@@ -246,8 +254,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .unwrap_or_else(|| eff_module.clone());
             self.record_handler_binding_facts(
                 binding.id,
-                super::sem::types::HandlerBindingFacts {
-                    effects: vec![super::sem::types::HandlerEffectEntry {
+                HandlerBindingFacts {
+                    effects: vec![HandlerEffectEntry {
                         impl_def: effect_decl.and_then(|trait_| {
                             self.effect_impl_block(handler_type, trait_, &trait_type_args)
                         }),
@@ -336,7 +344,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // without re-running collect_effect_impls_for_type.
         self.record_handler_binding_facts(
             binding.id,
-            super::sem::types::HandlerBindingFacts {
+            HandlerBindingFacts {
                 effects,
                 bundle_group: Some(bundle_group),
                 handler_type,
@@ -348,16 +356,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resource — both are installable, so a bundled `with h do` expands to one
     /// binding each. Dedup by `(module, name, type args)` keeps `Stream<u8>`
     /// and `Stream<i32>` separate.
-    fn collect_effect_impls_for_type(
-        &self,
-        handler_type: TypeId,
-    ) -> Vec<super::sem::types::HandlerEffectEntry> {
+    fn collect_effect_impls_for_type(&self, handler_type: TypeId) -> Vec<HandlerEffectEntry> {
         let defs = self.tysys.resolutions.defs();
-        let mut out: Vec<super::sem::types::HandlerEffectEntry> = Vec::new();
+        let mut out: Vec<HandlerEffectEntry> = Vec::new();
         // Keyed by the effect's declaration, not its spelling: `Stream<u8>` and
         // `Stream<i32>` stay separate, two modules' same-named effects too.
-        let mut seen: crate::hashmap::IndexSet<(crate::defs::DefId, Vec<TypeId>)> =
-            crate::hashmap::IndexSet::default();
+        let mut seen: hashmap::IndexSet<(DefId, Vec<TypeId>)> = hashmap::IndexSet::default();
 
         let Some(entries) = self
             .tysys
@@ -398,9 +402,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|sig| sig.trait_type_args.clone())
                 .unwrap_or_default();
             if seen.insert((trait_ref, type_args.clone())) {
-                out.push(super::sem::types::HandlerEffectEntry {
+                out.push(HandlerEffectEntry {
                     impl_def: Some(impl_def),
-                    name: crate::name::FqTraitName::declared(defs, trait_ref)
+                    name: FqTraitName::declared(defs, trait_ref)
                         .base_name()
                         .to_string(),
                     module_source: defs.module(trait_ref).clone(),
@@ -418,15 +422,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn effect_impl_block(
         &self,
         handler_type: TypeId,
-        effect_decl: crate::defs::DefId,
+        effect_decl: DefId,
         trait_type_args: &[TypeId],
-    ) -> Option<crate::defs::DefId> {
+    ) -> Option<DefId> {
         let keys = self
             .tysys
             .trait_env
             .impl_index
             .get(&self.handler_impl_target(handler_type))?;
-        let implements = |key: &crate::defs::DefId| {
+        let implements = |key: &DefId| {
             self.tysys
                 .trait_env
                 .impl_headers
@@ -437,7 +441,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // or where the block left a slot for monomorphization to fill —
         // `impl<T> Stream<T> for Ctx<T>` installed as `with Stream<u8>`. A
         // block written for other arguments answers for nothing.
-        let fills = |key: &crate::defs::DefId| {
+        let fills = |key: &DefId| {
             self.tysys.signatures.impl_sig(*key).is_some_and(|sig| {
                 sig.trait_type_args.len() == trait_type_args.len()
                     && std::iter::zip(&sig.trait_type_args, trait_type_args)
@@ -461,9 +465,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The impl-index key for a handler type: its own declaration, not what
     /// the installing module's scope makes of the written name — the handler
     /// may be declared elsewhere, or shadowed by a same-named type here.
-    fn handler_impl_target(&self, handler_type: TypeId) -> super::trait_env::ImplTargetKey {
+    fn handler_impl_target(&self, handler_type: TypeId) -> ImplTargetKey {
         let name = self.handler_impl_target_name(handler_type);
-        self.impl_target_of(handler_type, &crate::name::DeclName::new(name))
+        self.impl_target_of(handler_type, &DeclName::new(name))
     }
 
     /// The name an `impl <effect> for <handler>` block is indexed under — the

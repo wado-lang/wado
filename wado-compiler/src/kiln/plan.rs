@@ -207,6 +207,10 @@ fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
 mod tests {
     use super::*;
     use crate::kiln::invocation::{DeclSite, GeneratorModule};
+    use crate::kiln::options::CanonicalValue;
+    use crate::kiln::options::OptionsDescriptor;
+    use crate::kiln::options_check::CanonicalOptions;
+    use crate::token::Span;
 
     fn inv(name: &str, from: &str, inputs: &[&str], out: &str) -> Invocation {
         Invocation {
@@ -222,9 +226,9 @@ mod tests {
                 .map(|p| InvocationPath::normalize(p))
                 .collect(),
             output_dir: InvocationPath::normalize(out),
-            options: crate::kiln::options_check::CanonicalOptions::default(),
+            options: CanonicalOptions::default(),
             raw_options: None,
-            options_span: crate::token::Span::default(),
+            options_span: Span::default(),
         }
     }
 
@@ -323,12 +327,9 @@ mod tests {
     fn dedup_rejects_conflicting_duplicates() {
         let a1 = inv("a", "s.proto", &[], "build/kiln/a");
         let mut a2 = inv("a", "s.proto", &[], "build/kiln/a");
-        a2.options = crate::kiln::options_check::CanonicalOptions {
-            descriptor: crate::kiln::options::OptionsDescriptor::default(),
-            values: vec![(
-                "k".to_string(),
-                crate::kiln::options::CanonicalValue::Bool(true),
-            )],
+        a2.options = CanonicalOptions {
+            descriptor: OptionsDescriptor::default(),
+            values: vec![("k".to_string(), CanonicalValue::Bool(true))],
         };
         let err = build_plan(vec![a1, a2]).unwrap_err();
         match err {

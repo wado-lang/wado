@@ -7,8 +7,11 @@
 // best-effort token stream via [`LexResult`]. The entry points are the free
 // functions [`lex`] and [`lex_in`].
 
+use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
+use crate::compiler_host::Diagnostic;
 use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+use crate::token;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind};
 
 /// Check if a string is a valid Wado identifier.
@@ -25,12 +28,12 @@ pub fn is_valid_ident(s: &str) -> bool {
 /// Tokenise `source` as its own parse. See module docs for the recovery
 /// contract.
 pub fn lex(source: &str) -> LexResult {
-    lex_in(source, crate::ast::AstIdSpace::next())
+    lex_in(source, AstIdSpace::next())
 }
 
 /// [`lex`] into an existing parse, for text that belongs to one already: a
 /// template interpolation is part of the file its template sits in.
-pub fn lex_in(source: &str, space: crate::ast::AstIdSpace) -> LexResult {
+pub fn lex_in(source: &str, space: AstIdSpace) -> LexResult {
     Lexer::new(source).run().in_space(space)
 }
 
@@ -48,11 +51,7 @@ pub fn lex_in(source: &str, space: crate::ast::AstIdSpace) -> LexResult {
 /// tokens inside an interpolation, which the outer template hides behind a
 /// single [`TokenKind::TemplateStringLit`].
 #[must_use]
-pub fn lex_interpolation(
-    source: &str,
-    origin: Position,
-    space: crate::ast::AstIdSpace,
-) -> LexResult {
+pub fn lex_interpolation(source: &str, origin: Position, space: AstIdSpace) -> LexResult {
     let mut result = lex_in(source, space);
     for token in &mut result.tokens {
         token.span = rebase_span(token.span, origin);
@@ -156,13 +155,13 @@ pub struct LexResult {
     /// The parse every span in here belongs to. [`crate::parser::Parser`] adopts
     /// it rather than drawing its own, so a module's `AstId`s and its spans name
     /// the same parse.
-    pub space: crate::ast::AstIdSpace,
+    pub space: AstIdSpace,
 }
 
 impl LexResult {
     /// Stamp `space` onto every span this run produced. One choke point covers
     /// the lot: nothing else here carries a position.
-    fn in_space(mut self, space: crate::ast::AstIdSpace) -> Self {
+    fn in_space(mut self, space: AstIdSpace) -> Self {
         for token in &mut self.tokens {
             token.span = token.span.in_space(space);
         }
@@ -284,7 +283,7 @@ impl std::fmt::Display for LexError {
     }
 }
 
-impl From<LexError> for crate::compiler_host::Diagnostic {
+impl From<LexError> for Diagnostic {
     fn from(e: LexError) -> Self {
         Self {
             severity: Severity::Error,
@@ -332,7 +331,7 @@ impl<'a> Lexer<'a> {
             shebang: self.shebang,
             data_section: self.data_section,
             data_section_span: self.data_section_span,
-            space: crate::ast::AstIdSpace::FRESH,
+            space: AstIdSpace::FRESH,
         }
     }
 
@@ -1208,7 +1207,7 @@ impl<'a> Lexer<'a> {
                     // Taken before the scan: the cursor sits on the first byte
                     // of the expression, which is where the parser's re-lex of
                     // it has to be anchored.
-                    let origin = crate::token::Position {
+                    let origin = token::Position {
                         offset: self.pos,
                         line: self.line,
                         column: self.column,

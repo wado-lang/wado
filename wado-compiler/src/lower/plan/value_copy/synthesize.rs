@@ -20,6 +20,13 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 use super::{ValueCopyHelpers, needs_value_copy};
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItem;
+use crate::hashmap;
+use crate::lower::plan::value_copy;
+use crate::lower::plan::value_copy::array_clone_element_type_arg;
+use crate::name::value_copy_helper_name;
+use crate::tir;
 
 pub fn synthesize_helpers(
     project: &mut FlatPackage,
@@ -97,8 +104,8 @@ impl TirRefVisitor for Collector<'_> {
         // ref. The helper has to actually exist by then, so collect
         // such element types into the worklist alongside direct
         // `copy_value::<T>` callers.
-        if let Some(t) = super::array_clone_element_type_arg(expr)
-            && super::needs_value_copy(t, self.type_table)
+        if let Some(t) = array_clone_element_type_arg(expr)
+            && value_copy::needs_value_copy(t, self.type_table)
         {
             self.out.insert(t);
         }
@@ -109,7 +116,7 @@ impl TirRefVisitor for Collector<'_> {
 fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
     if let TirExprKind::Call { func, .. } = &expr.kind
         && func.module_source.is_core_builtin()
-        && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
+        && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
     {
         func.monomorph_info
             .as_ref()
@@ -135,7 +142,7 @@ fn generate_copy_function(
     let module_source = helper_module.clone();
     let span = dummy_span();
     let key = type_table.borrow().mangle_type_arg_for_generic(type_id);
-    let name = crate::name::value_copy_helper_name(&key);
+    let name = value_copy_helper_name(&key);
 
     let v_local = TirExpr::new(
         TirExprKind::Local {
@@ -170,7 +177,7 @@ fn generate_copy_function(
         name: "v".to_string(),
         type_id,
         is_mut: false,
-        span: crate::token::Span::default(),
+        span: Span::default(),
     }];
     locals.extend(extra_locals);
     let local_count = u32::try_from(locals.len()).expect("local count fits in u32");
@@ -179,7 +186,7 @@ fn generate_copy_function(
         name,
         def_id: None,
         module_source,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -209,7 +216,7 @@ fn generate_copy_function(
         declared_return_convention: None,
         kind: FunctionKind::ValueCopy { type_id },
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     };
     (func, key)
 }
@@ -259,7 +266,7 @@ fn variant_cases_concrete(
                 .borrow()
                 .variant_template_cases(*def)
                 .map(<[_]>::to_vec)?;
-            let mut substitution = crate::hashmap::IndexMap::default();
+            let mut substitution = hashmap::IndexMap::default();
             for (idx, ty) in type_args.iter().enumerate() {
                 substitution.insert(idx as u32, *ty);
             }
@@ -304,7 +311,7 @@ fn build_variant_copy_body(
                     name: local_name.clone(),
                     type_id: *payload_ty,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: Span::default(),
                 });
                 let payload_local = TirExpr::new(
                     TirExprKind::Local {
@@ -408,7 +415,7 @@ fn build_copy_return_expr(
     // need a real copy (`List<T>`, tuples) are recovered by the checks below.
     let list_name = type_table
         .borrow()
-        .compiler_struct_name(crate::compiler_item::CompilerItem::List)
+        .compiler_struct_name(CompilerItem::List)
         .to_string();
     if let ResolvedType::GenericInstance { def, type_args } = resolved
         && type_table.borrow().def_name(*def) == list_name
@@ -497,15 +504,9 @@ fn is_synth_safe_element(
                 let tt = type_table.borrow();
                 let items = tt.compiler_items();
                 (
-                    items
-                        .struct_name(crate::compiler_item::CompilerItem::List)
-                        .to_string(),
-                    items
-                        .struct_name(crate::compiler_item::CompilerItem::String)
-                        .to_string(),
-                    items
-                        .struct_name(crate::compiler_item::CompilerItem::Box)
-                        .to_string(),
+                    items.struct_name(CompilerItem::List).to_string(),
+                    items.struct_name(CompilerItem::String).to_string(),
+                    items.struct_name(CompilerItem::Box).to_string(),
                 )
             };
             if *name == list_name || *name == string_name || *name == box_name {
@@ -540,7 +541,7 @@ fn build_list_wrapper_copy(
     let raw_array_ty = type_table.borrow_mut().make_builtin_array(elem_type);
     let repr_field = TirField {
         name: SeqField::Backing.field_name().to_string(),
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         type_id: raw_array_ty,
         index: 0,
         span,
@@ -552,7 +553,7 @@ fn build_list_wrapper_copy(
     };
     let used_field = TirField {
         name: SeqField::Len.field_name().to_string(),
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         type_id: TypeTable::I32,
         index: 1,
         span,
@@ -606,7 +607,7 @@ fn build_tuple_copy(
         .map(|(idx, elem_ty)| {
             let field = TirField {
                 name: idx.to_string(),
-                visibility: crate::ast::Visibility::Public,
+                visibility: Visibility::Public,
                 type_id: *elem_ty,
                 index: idx as u32,
                 span,

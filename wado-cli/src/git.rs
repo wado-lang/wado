@@ -11,6 +11,7 @@ use std::process::Command;
 
 use wado_manifest::{GitTagInfo, Manifest, ProviderError};
 
+use crate::cache::root;
 use crate::registry::parse_version_tag;
 
 /// List a repository's semver tags via `git ls-remote --tags`.
@@ -294,7 +295,7 @@ fn repo_relative(url: &str) -> Result<String, ProviderError> {
 }
 
 fn wado_root() -> Result<PathBuf, ProviderError> {
-    crate::cache::root().map_err(|message| ProviderError::IoError {
+    root().map_err(|message| ProviderError::IoError {
         path: "<wado-root>".to_string(),
         message,
     })

@@ -24,6 +24,15 @@ use crate::token::Span;
 use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
+use crate::nir::NirLocal;
+use crate::nir_arena::PatId;
+use crate::nir_value_graph::ValuePool;
+use crate::optimize::alias::CallImmutability;
+use crate::optimize::alias::builder_alias_sets;
+use crate::optimize::alias::first_param_types;
+use crate::optimize::arena_query::storage_root;
+use crate::optimize::condition_implication::eliminate_at_root;
+use crate::optimize::condition_implication::resolve_panic_ids;
 
 /// Tracks which variables and fields are modified within a loop.
 ///
@@ -175,9 +184,9 @@ impl ModifiedVars {
 /// Apply Loop-Invariant Code Motion to all functions in the project.
 pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
-    let panic_ids = super::condition_implication::resolve_panic_ids(project);
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
+    let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -200,7 +209,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
             ..
         } = &mut *func;
         let body = body.as_mut().expect("checked above");
-        let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+        let (aliased, untrackable, mut_escaped) = builder_alias_sets(
             body,
             locals,
             address_taken_locals,
@@ -222,7 +231,7 @@ pub fn apply_licm(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
         // ValueGraph stays valid. cond-impl runs after licm here — the same
         // document order as the standalone passes — so it still sees the hoisted
         // body.
-        let cond_changed = super::condition_implication::eliminate_at_root(&mut engine);
+        let cond_changed = eliminate_at_root(&mut engine);
         if licm_changed || cond_changed {
             compiler_trace!(
                 "opt_loop",
@@ -266,7 +275,7 @@ struct LicmCtx<'a> {
 }
 
 impl<'a> LicmCtx<'a> {
-    fn new(type_table: &'a TypeTable, locals: &[crate::nir::NirLocal]) -> Self {
+    fn new(type_table: &'a TypeTable, locals: &[NirLocal]) -> Self {
         let hoist_locals = locals
             .iter()
             .enumerate()
@@ -1470,11 +1479,7 @@ fn collect_modified_vars_in_stmt(
 }
 
 /// Collect all local variable indices bound by a pattern.
-fn collect_pattern_bindings(
-    body: &Body,
-    pat: crate::nir_arena::PatId,
-    modified: &mut ModifiedVars,
-) {
+fn collect_pattern_bindings(body: &Body, pat: PatId, modified: &mut ModifiedVars) {
     match &body.pats[pat].kind {
         PatKind::Binding { local_index, .. } => {
             modified.insert_full(*local_index);
@@ -1655,7 +1660,7 @@ fn collect_modified_vars_in_expr(
         | ExprKind::EnumConstruct { .. } => {}
         ExprKind::Match { expr, arms } => {
             let expr = *expr;
-            let arm_data: Vec<(crate::nir_arena::PatId, Option<ExprId>, Option<ExprId>)> = arms
+            let arm_data: Vec<(PatId, Option<ExprId>, Option<ExprId>)> = arms
                 .iter()
                 .map(|a| {
                     (
@@ -1848,7 +1853,7 @@ fn find_hoist_candidates(
 /// pre-header. `Div` / `Mod` are excluded (trap on a zero divisor — hoisting
 /// out of a possibly-zero-iteration loop could trap where the original would
 /// not). `RefEq` / `RefNotEq` are excluded (reference operands, not arithmetic).
-fn is_hoistable_binop(op: crate::nir::NirBinaryOp) -> bool {
+fn is_hoistable_binop(op: NirBinaryOp) -> bool {
     use crate::nir::NirBinaryOp::{
         Add, And, BitAnd, BitOr, BitXor, Eq, Gt, GtEq, Lt, LtEq, Mul, NotEq, Or, Shl, Shr, Sub,
     };
@@ -2457,7 +2462,7 @@ fn local_assigned_in(body: &Body, node: NodeRef, idx: u32) -> bool {
         }
         NodeRef::Expr(e) => {
             if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-                && super::arena_query::storage_root(body, *target) == Some(idx)
+                && storage_root(body, *target) == Some(idx)
             {
                 return true;
             }
@@ -2648,11 +2653,7 @@ fn collect_loop_subtree(body: &Body, loop_body: BlockId) -> (Vec<ExprId>, Vec<St
 /// (`Div` / `Mod`) and flow-merge / heap kinds (`LoopPhi` / `Select` /
 /// `FieldAccess` / `Opaque(Expr)` / `Cast`) are excluded — the same shape
 /// `ArithHoist` admits.
-fn is_hoistable_value(
-    pool: &crate::nir_value_graph::ValuePool,
-    v: ValueId,
-    entry_locals: &IndexSet<u32>,
-) -> bool {
+fn is_hoistable_value(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
     use crate::nir_value_graph::ValueKind;
     let compound = matches!(
         pool.kind(v),
@@ -2666,11 +2667,7 @@ fn is_hoistable_value(
     !leaves.is_empty()
 }
 
-fn value_is_invariant(
-    pool: &crate::nir_value_graph::ValuePool,
-    v: ValueId,
-    entry_locals: &IndexSet<u32>,
-) -> bool {
+fn value_is_invariant(pool: &ValuePool, v: ValueId, entry_locals: &IndexSet<u32>) -> bool {
     use crate::nir_value_graph::{OpaqueSource, ValueKind};
     match pool.kind(v) {
         ValueKind::Int(..)

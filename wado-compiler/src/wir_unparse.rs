@@ -4,6 +4,8 @@
 //! The output uses Wado syntax for type definitions (struct, variant, enum)
 //! and WAT-style mnemonics for arithmetic instructions (i32.add, f64.mul, etc.).
 
+use crate::tir::EffectRef;
+use crate::wir::WirTypeId;
 use crate::wir::{
     WirAbstractHeapType, WirArrayType, WirData, WirEnumType, WirExport, WirExportDesc, WirField,
     WirFlagsType, WirFuncType, WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr,
@@ -62,7 +64,7 @@ impl<'a> WirUnparser<'a> {
     /// like `"hello"`. For other element types, returns comma-separated values.
     fn try_inline_data(
         &self,
-        type_id: &crate::wir::WirTypeId,
+        type_id: &WirTypeId,
         data_index: u32,
         offset: &WirInstr,
         len: &WirInstr,
@@ -159,7 +161,7 @@ impl<'a> WirUnparser<'a> {
     }
 
     /// Get the element type of a GC array type as a display string.
-    fn array_elem_type_str(&self, type_id: &crate::wir::WirTypeId) -> String {
+    fn array_elem_type_str(&self, type_id: &WirTypeId) -> String {
         let idx = type_id.index() as usize;
         if let Some(WirTypeDef::Array(a)) = self.types.get(idx) {
             self.fmt_type(&a.element_type)
@@ -175,7 +177,7 @@ impl<'a> WirUnparser<'a> {
     }
 
     /// Look up field names for a struct type by `WirTypeId`.
-    fn struct_field_names(&self, type_id: &crate::wir::WirTypeId) -> Option<Vec<String>> {
+    fn struct_field_names(&self, type_id: &WirTypeId) -> Option<Vec<String>> {
         let idx = type_id.index() as usize;
         if let Some(WirTypeDef::Struct(s)) = self.types.get(idx) {
             Some(s.fields.iter().map(|f| f.name.clone()).collect())
@@ -469,11 +471,7 @@ impl<'a> WirUnparser<'a> {
 
         if !func.effects.is_empty() {
             self.write(" with ");
-            let effects_str: Vec<&str> = func
-                .effects
-                .iter()
-                .map(super::tir::EffectRef::name)
-                .collect();
+            let effects_str: Vec<&str> = func.effects.iter().map(EffectRef::name).collect();
             self.write(&effects_str.join(", "));
         }
 

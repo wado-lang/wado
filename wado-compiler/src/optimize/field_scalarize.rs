@@ -9,13 +9,19 @@
 //! the call graph would remove that cliff for thin forwarding wrappers.
 
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::nir::FuncId;
 use crate::nir::{NirBinaryOp, NirFunction, NirLocal, NirUnaryOp};
+use crate::nir_arena::BlockNode;
+use crate::nir_arena::ExprNode;
+use crate::nir_arena::StmtNode;
 use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
+use crate::optimize::alias::copy_edge;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 const MIN_ACCESS_COUNT: usize = 4;
 
@@ -33,7 +39,7 @@ struct FuncUsageEntry {
 }
 
 /// Maps each function (by module + name) to its usage info.
-type FieldUsageCache = IndexMap<crate::nir::FuncId, FuncUsageEntry>;
+type FieldUsageCache = IndexMap<FuncId, FuncUsageEntry>;
 
 pub fn scalarize_hot_fields(project: &mut NirPackage) -> bool {
     // Phase 1: Build field usage cache (immutable access to all functions)
@@ -541,7 +547,7 @@ fn scalarize_loop(
     *local_count = next_local;
 
     // Step 3: Create pre-loop load statements
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let mut pre_stmts: Vec<StmtId> = Vec::new();
     for c in &candidates {
         let field = field_access_expr(body, c, span);
@@ -581,8 +587,8 @@ fn scalarize_loop(
 }
 
 /// Push a fresh expression node into the arena and return its id.
-fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
-    body.exprs.push(crate::nir_arena::ExprNode {
+fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
+    body.exprs.push(ExprNode {
         kind,
         type_id,
         span,
@@ -590,12 +596,12 @@ fn push_expr(body: &mut Body, kind: ExprKind, type_id: TypeId, span: crate::toke
 }
 
 /// Push a fresh statement node into the arena and return its id.
-fn push_stmt(body: &mut Body, kind: StmtKind, span: crate::token::Span) -> StmtId {
-    body.stmts.push(crate::nir_arena::StmtNode { kind, span })
+fn push_stmt(body: &mut Body, kind: StmtKind, span: Span) -> StmtId {
+    body.stmts.push(StmtNode { kind, span })
 }
 
 /// Build a `Local` expression node for the scalar `__hfs_F` local.
-fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
+fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
     push_expr(
         body,
         ExprKind::Local {
@@ -608,7 +614,7 @@ fn scalar_local_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
 }
 
 /// Build a `local.field` field-access expression node for the candidate.
-fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> ExprId {
+fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> ExprId {
     let base = push_expr(
         body,
         ExprKind::Local {
@@ -631,11 +637,7 @@ fn field_access_expr(body: &mut Body, c: &ScalarizeCandidate, span: crate::token
 }
 
 /// `local.field = __hfs_F;` — commit the scalar back to the GC field.
-fn make_write_back_stmt(
-    body: &mut Body,
-    c: &ScalarizeCandidate,
-    span: crate::token::Span,
-) -> StmtId {
+fn make_write_back_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = field_access_expr(body, c, span);
     let value = scalar_local_expr(body, c, span);
     let assign = push_expr(
@@ -651,7 +653,7 @@ fn make_write_back_stmt(
 }
 
 /// `__hfs_F = local.field;` — refresh the scalar from the GC field.
-fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: crate::token::Span) -> StmtId {
+fn make_re_read_stmt(body: &mut Body, c: &ScalarizeCandidate, span: Span) -> StmtId {
     let target = scalar_local_expr(body, c, span);
     let value = field_access_expr(body, c, span);
     let assign = push_expr(
@@ -734,7 +736,7 @@ fn collect_alias_node(
 ) {
     // The name a copy binds to. Its source is marked below, from every binding
     // shape — a store into `x.f` publishes the object with no local to pair.
-    if let Some((dst, value)) = super::alias::copy_edge(body, node)
+    if let Some((dst, value)) = copy_edge(body, node)
         && let Some(ve) = value.as_expr()
     {
         mark_gc_alias_pair(body, Some(dst), ve, type_table, &mut out.locals);
@@ -1383,7 +1385,7 @@ fn process_loop_body(
         interior_effects: false,
     };
     walk_block(body, block, &mut states, &mut ctx);
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     // Body-end: converge every candidate back to its loop-entry state so the
     // loop's back-edge state matches the entry established by the pre-load.
     // For deferrable (`ScalarOnly`-entry) candidates this is a no-op; for the
@@ -1406,7 +1408,7 @@ fn sync_to_targets(
     states: &mut ScalarStates,
     targets: &[CanonState],
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> Vec<StmtId> {
     let mut out = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -1447,7 +1449,7 @@ fn state_transition_stmt(
     from: CanonState,
     to: CanonState,
     c: &ScalarizeCandidate,
-    span: crate::token::Span,
+    span: Span,
 ) -> Option<StmtId> {
     match transition_sync_action(from, to) {
         None => None,
@@ -1528,7 +1530,7 @@ fn insert_convergence_at_block_end(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     debug_assert_eq!(from.len(), to.len());
     let mut sync_stmts: Vec<StmtId> = Vec::new();
@@ -1553,7 +1555,7 @@ fn capture_for_sync(
     ctx: &mut WalkCtx,
     value: Operand,
     assigned: &IndexSet<u32>,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     if let Some(e) = value.as_expr() {
         let rebuildable = match &body.exprs[e].kind {
@@ -1637,7 +1639,7 @@ fn bind_for_sync(
     ctx: &mut WalkCtx,
     value: Operand,
     assigned: &IndexSet<u32>,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Operand, Vec<(u32, TypeId)>) {
     use crate::nir_value_graph::ValueKind;
     if let Some(v) = value.as_value()
@@ -1758,7 +1760,7 @@ fn build_convergence_block(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> BlockId {
     let mut stmts: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -1766,8 +1768,7 @@ fn build_convergence_block(
             stmts.push(stmt);
         }
     }
-    body.blocks
-        .push(crate::nir_arena::BlockNode { stmts, span })
+    body.blocks.push(BlockNode { stmts, span })
 }
 
 /// True if any of the candidates' state in `from` differs from `to`.
@@ -1781,7 +1782,7 @@ fn states_differ(from: &ScalarStates, to: &ScalarStates) -> bool {
 // ─────────────────────────────────────────────────────────────────────────────
 
 fn walk_block(body: &mut Body, block: BlockId, states: &mut ScalarStates, ctx: &mut WalkCtx) {
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let stmts = std::mem::take(&mut body.blocks[block].stmts);
     let mut new_stmts: Vec<StmtId> = Vec::new();
     // Each statement's sync sink (`new_stmts`) sits exactly before it, so
@@ -1806,7 +1807,7 @@ fn walk_stmt(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     match &body.stmts[sid].kind {
         StmtKind::If {
@@ -1966,7 +1967,7 @@ fn hoist_operand_to_temp(
     value: Operand,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Operand, u32, TypeId) {
     let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
     out.push(let_sid);
@@ -1980,7 +1981,7 @@ fn bind_temp(
     body: &mut Body,
     value: Operand,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (StmtId, Operand, u32, TypeId) {
     let type_id = body.operand_type(value);
     let tmp_idx = ctx.alloc_temp(type_id);
@@ -2019,7 +2020,7 @@ fn commit_scalar_for_escape(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     for (i, c) in ctx.candidates.iter().enumerate() {
         if states[i] == CanonState::ScalarOnly {
@@ -2050,7 +2051,7 @@ fn walk_if_branches(
     else_block: Option<BlockId>,
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut then_states = entry.clone();
@@ -2101,7 +2102,7 @@ fn walk_nested_loop(
     states: &mut ScalarStates,
     out: &mut Vec<StmtId>,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     // Commit a reached `ScalarOnly` candidate so inner reads (and a nested
     // HFS's pre-load) observe an up-to-date field. An unreached one keeps its
@@ -2427,7 +2428,7 @@ fn hoist_call_inputs(
     body: &mut Body,
     call: ExprId,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) -> (Vec<StmtId>, Vec<(u32, TypeId)>) {
     enum Slot {
         Callee,
@@ -2776,7 +2777,7 @@ fn walk_labeled_block(
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
 ) {
-    let span = crate::token::Span::new(0, 0, 0, 0);
+    let span = Span::new(0, 0, 0, 0);
     let prior = ctx.label_breaks.insert(label.to_string(), Vec::new());
     walk_block(body, block, states, ctx);
     let break_records = ctx.label_breaks.swap_remove(label).unwrap_or_default();
@@ -2807,7 +2808,7 @@ fn insert_convergence_before_break(
     record: &BreakRecord,
     target: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let mut sync: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -2851,7 +2852,7 @@ fn walk_expr_branches_switch(
     default: BlockId,
     states: &mut ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut arm_states: Vec<ScalarStates> = Vec::new();
@@ -2883,7 +2884,7 @@ fn walk_expr_branches_match(
     states: &mut ScalarStates,
     result_used: bool,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let entry = states.clone();
     let mut accumulated_pre = entry;
@@ -2957,7 +2958,7 @@ fn wrap_expr_with_prefix(body: &mut Body, e: ExprId, prefix: Vec<StmtId>) {
     let expr_stmt = push_stmt(body, StmtKind::Expr(original.into()), expr_span);
     let mut stmts = prefix;
     stmts.push(expr_stmt);
-    let blk = body.blocks.push(crate::nir_arena::BlockNode {
+    let blk = body.blocks.push(BlockNode {
         stmts,
         span: expr_span,
     });
@@ -2970,7 +2971,7 @@ fn emit_convergence_at_expr_end_operand(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     if let Some(e) = op.as_expr() {
         emit_convergence_at_expr_end(body, e, from, to, ctx, span);
@@ -2989,7 +2990,7 @@ fn emit_convergence_at_expr_end(
     from: &ScalarStates,
     to: &ScalarStates,
     ctx: &mut WalkCtx,
-    span: crate::token::Span,
+    span: Span,
 ) {
     let mut sync_stmts: Vec<StmtId> = Vec::new();
     for (i, c) in ctx.candidates.iter().enumerate() {
@@ -3018,7 +3019,7 @@ fn emit_convergence_at_expr_end(
         let mut stmts = Vec::with_capacity(1 + sync_stmts.len());
         stmts.push(expr_stmt);
         stmts.extend(sync_stmts);
-        let blk = body.blocks.push(crate::nir_arena::BlockNode {
+        let blk = body.blocks.push(BlockNode {
             stmts,
             span: body_span,
         });
@@ -3034,7 +3035,7 @@ fn emit_convergence_at_expr_end(
     stmts.extend(bindings);
     stmts.extend(sync_stmts);
     stmts.push(push_stmt(body, StmtKind::Expr(value_after), body_span));
-    let blk = body.blocks.push(crate::nir_arena::BlockNode {
+    let blk = body.blocks.push(BlockNode {
         stmts,
         span: body_span,
     });
@@ -3074,7 +3075,7 @@ fn is_immut_ref_arg(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
 fn add_sync_fields_for_arg(
     body: &Body,
     arg_expr: ExprId,
-    callee_id: crate::nir::FuncId,
+    callee_id: FuncId,
     param_position: u32,
     candidates: &[ScalarizeCandidate],
     type_table: &TypeTable,

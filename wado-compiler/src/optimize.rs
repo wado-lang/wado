@@ -86,7 +86,9 @@ use value_copy_demote::demote_value_copies;
 use extract::FreezePhase;
 use gate::GatedPass;
 
+use crate::OptOverrides;
 use crate::compiler_host::SpanEmitter;
+use crate::compiler_trace;
 use crate::nir_package::NirPackage;
 
 /// Configuration for optimization passes
@@ -143,10 +145,10 @@ fn string_inline_max_bytes(opt_level: OptLevel) -> usize {
 pub fn optimize(
     mut project: NirPackage,
     opt_level: OptLevel,
-    opt: crate::OptOverrides,
+    opt: OptOverrides,
     profiler: &dyn SpanEmitter,
 ) -> NirPackage {
-    let crate::OptOverrides {
+    let OptOverrides {
         inline_threshold,
         inline_growth,
         iterations: opt_iterations,
@@ -760,14 +762,14 @@ fn run_optimization_passes(
             hoist_template_buffers
         );
         profiler.span_end(&format!("nir/iteration {i}"));
-        crate::compiler_trace!(
+        compiler_trace!(
             "opt_loop",
             "iter {i:>3}: changed_by = [{}]",
             iter_changed.join(", ")
         );
         if iter_changed.is_empty() {
             if inline_holds.release(&mut gate) {
-                crate::compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
+                compiler_trace!("opt_loop", "iter {i:>3}: inline holds released");
                 limit = i + config.iterations;
                 continue;
             }

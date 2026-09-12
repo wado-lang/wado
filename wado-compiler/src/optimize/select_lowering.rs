@@ -6,11 +6,13 @@
 
 use crate::lower::plan::value_copy::needs_value_copy;
 use crate::module_source::ModuleSource;
+use crate::nir::FuncId;
 use crate::nir::{FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::optimize::arena_query::binary_op_may_trap;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
@@ -37,7 +39,7 @@ pub fn select_lowering(project: &mut NirPackage) -> bool {
 /// Intern the `select` builtin once so every synthesized call is born
 /// resolved. Its `FuncId` keys on `Free(builtin, "select")` (type args ride
 /// the node), so one id serves all instantiations.
-pub(super) fn intern_select(project: &mut NirPackage) -> crate::nir::FuncId {
+pub(super) fn intern_select(project: &mut NirPackage) -> FuncId {
     project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "select".to_string(),
@@ -48,7 +50,7 @@ pub(super) fn intern_select(project: &mut NirPackage) -> crate::nir::FuncId {
 
 struct SelectLoweringRule<'t> {
     type_table: &'t TypeTable,
-    select_id: crate::nir::FuncId,
+    select_id: FuncId,
 }
 
 impl Rule for SelectLoweringRule<'_> {
@@ -93,7 +95,7 @@ impl Rule for SelectLoweringRule<'_> {
 
 /// `builtin::select(cond, a, b)` over `ty`.
 pub(super) fn select_call(
-    select_id: crate::nir::FuncId,
+    select_id: FuncId,
     ty: TypeId,
     cond: Operand,
     a: Operand,
@@ -157,7 +159,7 @@ fn is_select_eligible_value(body: &Body, v: ValueId, type_table: &TypeTable) -> 
                 && is_select_eligible_value(body, *operand, type_table)
         }
         ValueKind::Binary { op, lhs, rhs, .. } => {
-            !super::arena_query::binary_op_may_trap(*op)
+            !binary_op_may_trap(*op)
                 && is_select_eligible_value(body, *lhs, type_table)
                 && is_select_eligible_value(body, *rhs, type_table)
         }
@@ -204,7 +206,7 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             // (`Div` / `Mod`) must not be lowered, since a `select` evaluates
             // both arms unconditionally. The trap taxonomy is shared with
             // `arena_query` so it cannot drift from the other trap consumers.
-            !super::arena_query::binary_op_may_trap(*op)
+            !binary_op_may_trap(*op)
                 && is_select_eligible_operand(body, *left, type_table)
                 && is_select_eligible_operand(body, *right, type_table)
         }

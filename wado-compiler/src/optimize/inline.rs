@@ -36,8 +36,17 @@ use cranelift_entity::EntityRef;
 use super::arena_query;
 use super::dce::callee_descriptor;
 use super::gate::{FunctionGate, GatedPass};
+use crate::compiler_trace;
 use crate::nir::FuncId;
+use crate::nir_value_graph::OpaqueSource;
+use crate::niri::is_ctfe_eligible;
+use crate::optimize::alias::CallImmutability;
+use crate::optimize::alias::call_verdicts;
+use crate::optimize::alias::first_param_types;
+use crate::optimize::dce::DescriptorCache;
+use crate::optimize::mod_ref::compute_fn_effects;
 use crate::token::Span;
+use crate::trace::filter;
 
 /// Inline cost weights, in emitted Wasm instructions. The threshold is read in
 /// the same unit, so "`-O2` inlines a callee of up to N instructions" is a
@@ -297,7 +306,7 @@ impl<'a> CostWalk<'a> {
             }
             ValueKind::Opaque(oid) => matches!(
                 self.body.values.opaque_source(*oid),
-                Some(crate::nir_value_graph::OpaqueSource::Local(l)) if view.params.contains(&l)
+                Some(OpaqueSource::Local(l)) if view.params.contains(&l)
             ),
             ValueKind::Const(..) => true,
             ValueKind::Int(..)
@@ -1398,7 +1407,7 @@ impl InlineBudget {
     /// a trace that reports them. Taking them walks every body in the unit, so
     /// the default — no cap, no trace — should not pay for it.
     pub(super) fn prices_read(&self) -> bool {
-        let trace = crate::trace::filter();
+        let trace = filter();
         self.growth.is_some() || trace.enabled("inline") || trace.enabled("opt_loop")
     }
 
@@ -1485,7 +1494,7 @@ pub fn inline_functions(
     budget: &mut InlineBudget,
     holds: &mut InlineHolds,
     gate: &mut FunctionGate,
-    descriptor_cache: &mut super::dce::DescriptorCache,
+    descriptor_cache: &mut DescriptorCache,
 ) -> bool {
     // Callee identity by `func_id` (descriptor table built once from the records,
     // borrow-safe), so a call site is recognized by its stamped id rather than the
@@ -1520,13 +1529,12 @@ pub fn inline_functions(
         })
         .collect();
     let const_params = constant_params(project, &written_by_func);
-    let fn_effects =
-        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry);
+    let fn_effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let foldable: Vec<bool> = project
         .functions
         .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && crate::niri::is_ctfe_eligible(&f.borrow()))
+        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
         .collect();
     let loopy: Vec<bool> = project
         .functions
@@ -1642,7 +1650,7 @@ pub fn inline_functions(
     }
     drop(type_table);
 
-    crate::compiler_trace!("inline", "held: [{}]", {
+    compiler_trace!("inline", "held: [{}]", {
         holds
             .held
             .iter()
@@ -1654,7 +1662,7 @@ pub fn inline_functions(
     // What this round would add, and which callees dominate it. A candidate the
     // threshold admitted only because the cold discount put its hot path under
     // it is flagged `cold`: the two prices disagree about exactly those.
-    crate::compiler_trace!("inline", "{}", {
+    compiler_trace!("inline", "{}", {
         let mut ranked: Vec<&Candidate> = priced.iter().collect();
         ranked.sort_by_key(|c| std::cmp::Reverse(splice_growth(c.size, c.sites)));
         let total: usize = ranked.iter().map(|c| splice_growth(c.size, c.sites)).sum();
@@ -1688,7 +1696,7 @@ pub fn inline_functions(
         candidate_strings.shift_remove(id);
     }
 
-    crate::compiler_trace!(
+    compiler_trace!(
         "opt_loop",
         "inline: threshold={} candidates={} (unit {}, {} over budget)",
         inline_threshold,
@@ -1707,9 +1715,9 @@ pub fn inline_functions(
     // an inlined call that mutates no caller-reachable state lets the caller's
     // `value_of` survive the splice. Computed once over the project; the
     // per-call `pure_calls` set is taken per body just before inlining it.
-    let inline_first_param_types = super::alias::first_param_types(project);
+    let inline_first_param_types = first_param_types(project);
     let inline_type_table = project.type_table.borrow();
-    let inline_call_immutability = super::alias::CallImmutability::new(project, &inline_type_table);
+    let inline_call_immutability = CallImmutability::new(project, &inline_type_table);
 
     // Inline at call sites.
     for fid in gate.dirty_funcs(GatedPass::Inline, project.functions.len()) {
@@ -1739,7 +1747,7 @@ pub fn inline_functions(
             // keys). Drives the graph-preserving gate below.
             let pure_set = {
                 let body = func.body.as_ref().unwrap();
-                super::alias::call_verdicts(
+                call_verdicts(
                     body,
                     &inline_type_table,
                     &inline_first_param_types,
@@ -2673,12 +2681,7 @@ fn splice_operand(caller: &mut Body, callee: &Body, op: Operand, ctx: &InlineCtx
 /// an `Opaque`'s source local is remapped into the caller frame — otherwise a
 /// composite value (`Binary` / `Cast` / `FieldAccess` / …) would carry child ids
 /// that denote unrelated values (often a different width) in the caller's pool.
-fn splice_value(
-    caller: &mut Body,
-    callee: &Body,
-    v: crate::nir_value_graph::ValueId,
-    ctx: &InlineCtx,
-) -> crate::nir_value_graph::ValueId {
+fn splice_value(caller: &mut Body, callee: &Body, v: ValueId, ctx: &InlineCtx) -> ValueId {
     use crate::nir_value_graph::{OpaqueSource, ValueKind};
     let recorded_ty = callee.values.type_of(v);
     let new_kind = match callee.values.kind(v).clone() {

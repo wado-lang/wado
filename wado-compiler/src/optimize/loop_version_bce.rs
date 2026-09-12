@@ -24,6 +24,10 @@ use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
 use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
+use crate::nir::FuncId;
+use crate::nir_arena;
+use crate::optimize::arena_query::is_pure_operand;
+use crate::optimize::mod_ref::compute_fn_effects;
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
 /// `var < check_bound`, all three distinct same-typed locals, `bound` /
@@ -73,7 +77,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         .iter()
         .any(|f| f.borrow().body.as_ref().is_some_and(body_contains_loop))
     {
-        super::mod_ref::compute_fn_effects(&project.functions, &project.builtin_registry)
+        compute_fn_effects(&project.functions, &project.builtin_registry)
     } else {
         Vec::new()
     };
@@ -142,7 +146,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
 }
 
 /// Whether any statement in `body` is a `Loop` (cheap pre-filter).
-fn body_contains_loop(body: &crate::nir_arena::Body) -> bool {
+fn body_contains_loop(body: &nir_arena::Body) -> bool {
     body.stmts
         .iter()
         .any(|(_, s)| matches!(s.kind, StmtKind::Loop { .. }))
@@ -151,7 +155,7 @@ fn body_contains_loop(body: &crate::nir_arena::Body) -> bool {
 /// Collect every `Loop` statement reachable from `block` with its parent
 /// block, recursing through nested statement and expression blocks.
 fn collect_loops(
-    body: &crate::nir_arena::Body,
+    body: &nir_arena::Body,
     block: BlockId,
     out: &mut Vec<(BlockId, StmtId, BlockId)>,
 ) {
@@ -454,7 +458,7 @@ fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: 
                 local_index, value, ..
             } = &engine.body.stmts[s].kind
             && *local_index == temp
-            && super::arena_query::is_pure_operand(engine.body, *value)
+            && is_pure_operand(engine.body, *value)
             && is_check_comparison(engine, *value, var)
         {
             let v = engine
@@ -549,7 +553,7 @@ fn try_fill_idiom(
     engine: &mut Engine,
     binds: &Binds,
     descriptors: &[FunctionRef],
-    fill_id: crate::nir::FuncId,
+    fill_id: FuncId,
     plan: &Plan,
     arm: &FastArm,
 ) -> bool {
@@ -661,7 +665,7 @@ fn try_fill_idiom(
             // to be exact.
             return false;
         }
-        if !super::arena_query::is_pure_operand(engine.body, *value) {
+        if !is_pure_operand(engine.body, *value) {
             return false;
         }
         if parse_var_offset(engine, binds, *value) == Some((*local_index, 0)) {

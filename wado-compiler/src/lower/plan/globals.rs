@@ -4,16 +4,23 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Visibility;
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
+use crate::name::MODULE_INIT_FUNCTION;
+use crate::name::MODULES_INIT_FUNCTION;
+use crate::synthesis::common::builtin_call;
+use crate::tir;
 use crate::tir::FunctionRef;
+use crate::tir::PrimitiveType;
 use crate::tir::{
     FunctionKind, GlobalInit, InlineHint, ResolvedType, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
     TypeId, TypeTable,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -62,10 +69,7 @@ fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),
         ResolvedType::Primitive(
-            crate::tir::PrimitiveType::I32
-                | crate::tir::PrimitiveType::U32
-                | crate::tir::PrimitiveType::I64
-                | crate::tir::PrimitiveType::U64
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::I64 | PrimitiveType::U64
         )
     )
 }
@@ -74,12 +78,12 @@ fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
 fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => match prim {
-            crate::tir::PrimitiveType::I8
-            | crate::tir::PrimitiveType::I16
-            | crate::tir::PrimitiveType::I32
-            | crate::tir::PrimitiveType::U8
-            | crate::tir::PrimitiveType::U16
-            | crate::tir::PrimitiveType::U32 => TirExpr::new(
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -87,7 +91,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::I64 | crate::tir::PrimitiveType::U64 => TirExpr::new(
+            PrimitiveType::I64 | PrimitiveType::U64 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -95,7 +99,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::F32 => TirExpr::new(
+            PrimitiveType::F32 => TirExpr::new(
                 TirExprKind::FloatLiteral {
                     value: 0.0,
                     repr: "0.0".to_string(),
@@ -103,7 +107,7 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::F64 => TirExpr::new(
+            PrimitiveType::F64 => TirExpr::new(
                 TirExprKind::FloatLiteral {
                     value: 0.0,
                     repr: "0.0".to_string(),
@@ -111,13 +115,9 @@ fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -
                 type_id,
                 span,
             ),
-            crate::tir::PrimitiveType::Bool => {
-                TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span)
-            }
-            crate::tir::PrimitiveType::Char => {
-                TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span)
-            }
-            crate::tir::PrimitiveType::V128 => TirExpr::new(
+            PrimitiveType::Bool => TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span),
+            PrimitiveType::Char => TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span),
+            PrimitiveType::V128 => TirExpr::new(
                 TirExprKind::IntLiteral {
                     value: 0,
                     repr: "0".to_string(),
@@ -232,8 +232,8 @@ fn build_module_init_function(
         module_source,
         def_id: None,
         is_async: false,
-        name: crate::name::MODULE_INIT_FUNCTION.to_string(),
-        visibility: crate::ast::Visibility::Public,
+        name: MODULE_INIT_FUNCTION.to_string(),
+        visibility: Visibility::Public,
         is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -261,7 +261,7 @@ fn build_module_init_function(
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -276,7 +276,7 @@ struct BodyReads {
     callees: IndexSet<String>,
 }
 
-impl crate::tir_visitor::TirRefVisitor for BodyReads {
+impl TirRefVisitor for BodyReads {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
             TirExprKind::GlobalVarGet {
@@ -725,7 +725,7 @@ fn sort_modules_by_dependency(
 ) {
     let reads = global_reads_by_function(functions);
     let module_deps = |module: &ModuleSource| -> IndexSet<ModuleSource> {
-        let key = function_key(module, crate::name::MODULE_INIT_FUNCTION);
+        let key = function_key(module, MODULE_INIT_FUNCTION);
         reads
             .get(&key)
             .into_iter()
@@ -772,8 +772,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let mut seen = IndexSet::default();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        if func.name == crate::name::MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone())
-        {
+        if func.name == MODULE_INIT_FUNCTION && seen.insert(func.module_source.clone()) {
             modules_with_init.push(func.module_source.clone());
         }
     }
@@ -797,7 +796,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         )),
         param: None,
         wado_mutable: true,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
         locals: Vec::new(),
@@ -836,11 +835,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     // the copies inlined into each export entry, and the inliner excludes the
     // one-shot init calls from its cost estimate.
     init_stmts.push(TirStmt::new(
-        TirStmtKind::Expr(crate::synthesis::common::builtin_call(
-            "cold_path",
-            Vec::new(),
-            TypeTable::UNIT,
-        )),
+        TirStmtKind::Expr(builtin_call("cold_path", Vec::new(), TypeTable::UNIT)),
         span,
     ));
 
@@ -850,7 +845,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
                     module_source: module_source.clone(),
-                    name: crate::name::MODULE_INIT_FUNCTION.to_string(),
+                    name: MODULE_INIT_FUNCTION.to_string(),
                     monomorph_info: None,
                     method_info: None,
                 }),
@@ -889,8 +884,8 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         module_source: entry_source.clone(),
         def_id: None,
         is_async: false,
-        name: crate::name::MODULES_INIT_FUNCTION.to_string(),
-        visibility: crate::ast::Visibility::Private,
+        name: MODULES_INIT_FUNCTION.to_string(),
+        visibility: Visibility::Private,
         is_export: false,
         type_params: Vec::new(),
         impl_type_params: Vec::new(),
@@ -919,7 +914,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     };
 
     flat.functions
@@ -930,7 +925,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         TirExprKind::Call {
             func: Box::new(FunctionRef {
                 module_source: entry_source.clone(),
-                name: crate::name::MODULES_INIT_FUNCTION.to_string(),
+                name: MODULES_INIT_FUNCTION.to_string(),
                 monomorph_info: None,
                 method_info: None,
             }),

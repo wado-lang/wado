@@ -5,12 +5,22 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
+use crate::ast::AstId;
+use crate::ast::Visibility;
+use crate::ast::WorldExport;
 use crate::ast::{Item, Module, UseDecl, UseItem};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_host::Diagnostic;
+use crate::hashmap;
+use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::name::entry_dir_of;
+use crate::name::namespace_member_alias;
+use crate::name::resolve_import_with_invocations;
 use crate::name::validate_module_path;
+use crate::unparse::unparse_type_into;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -27,14 +37,14 @@ fn resolve_use_decl_module_source(
     from: &ModuleSource,
     use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
-    invocations: &crate::kiln::InvocationIndex,
+    invocations: &InvocationIndex,
 ) -> Option<ModuleSource> {
     if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
-        return resolve_wasm_asset_path(from, &use_decl.source, &crate::name::entry_dir_of(entry))
+        return resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
             .ok()
             .map(|path| interner.wasm(&path, kind));
     }
-    Some(crate::name::resolve_import_with_invocations(
+    Some(resolve_import_with_invocations(
         interner,
         from,
         &use_decl.source,
@@ -104,7 +114,7 @@ pub enum AnalyzeError {
     SymbolNotVisible {
         name: String,
         module_source: ModuleSource,
-        visibility: crate::ast::Visibility,
+        visibility: Visibility,
         span: Span,
     },
     /// A `pub use` / `internal use` that promises more reach than the item it
@@ -112,8 +122,8 @@ pub enum AnalyzeError {
     ReExportWidensVisibility {
         name: String,
         module_source: ModuleSource,
-        source_visibility: crate::ast::Visibility,
-        reexport_visibility: crate::ast::Visibility,
+        source_visibility: Visibility,
+        reexport_visibility: Visibility,
         span: Span,
     },
 }
@@ -226,13 +236,13 @@ impl std::fmt::Display for AnalyzeError {
 fn reexport_widens_message(
     name: &str,
     module_source: &ModuleSource,
-    source_visibility: crate::ast::Visibility,
-    reexport_visibility: crate::ast::Visibility,
+    source_visibility: Visibility,
+    reexport_visibility: Visibility,
 ) -> String {
     let reexport = reexport_visibility.keyword().trim_end();
     let declared = match source_visibility {
-        crate::ast::Visibility::Private => "file-private".to_string(),
-        crate::ast::Visibility::Internal | crate::ast::Visibility::Public => {
+        Visibility::Private => "file-private".to_string(),
+        Visibility::Internal | Visibility::Public => {
             format!("`{}`", source_visibility.keyword().trim_end())
         }
     };
@@ -245,15 +255,15 @@ fn reexport_widens_message(
 pub(crate) fn symbol_not_visible_message(
     name: &str,
     module_source: &ModuleSource,
-    visibility: crate::ast::Visibility,
+    visibility: Visibility,
 ) -> String {
     match visibility {
-        crate::ast::Visibility::Internal => format!(
+        Visibility::Internal => format!(
             "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
              from another package; mark it `pub` to export it across packages"
         ),
         // `Public` never reaches here (always importable); folded in for exhaustiveness.
-        crate::ast::Visibility::Private | crate::ast::Visibility::Public => format!(
+        Visibility::Private | Visibility::Public => format!(
             "symbol '{name}' is private to '{module_source}' and cannot be imported; \
              mark it `internal` (same package) or `pub` (cross package) to export it"
         ),
@@ -262,7 +272,7 @@ pub(crate) fn symbol_not_visible_message(
 
 impl std::error::Error for AnalyzeError {}
 
-impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
+impl From<AnalyzeError> for Diagnostic {
     fn from(e: AnalyzeError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         let (code, message, span) = match &e {
@@ -349,7 +359,7 @@ impl From<AnalyzeError> for crate::compiler_host::Diagnostic {
                 *span,
             ),
         };
-        crate::compiler_host::Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code,
             message,
@@ -367,12 +377,12 @@ pub struct Analyzer<'a, H: CompilerHost> {
     /// Logger for emitting diagnostics
     logger: &'a Logger<'a, H>,
     /// Modules loaded implicitly by the compiler (not by user imports)
-    implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
+    implicit_modules: hashmap::IndexSet<ModuleSource>,
     entry_module_source: ModuleSource,
     /// Kiln invocation redirects consulted by the import-resolution paths
     /// (`validate_imports`, re-export registration). Empty when the
     /// compilation did not run the Kiln pipeline.
-    invocations: crate::kiln::InvocationIndex,
+    invocations: InvocationIndex,
     /// `ModuleSource` interner shared with the loader. Forwarded to
     /// [`resolve_use_decl_module_source`] so analyze-phase imports get
     /// canonicalized identities.
@@ -385,9 +395,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         Self {
             symbols: SymbolTable::new(),
             logger,
-            implicit_modules: crate::hashmap::IndexSet::default(),
+            implicit_modules: hashmap::IndexSet::default(),
             entry_module_source: ModuleSource::entry_point_uninitialized(),
-            invocations: crate::kiln::InvocationIndex::new(),
+            invocations: InvocationIndex::new(),
             interner: Rc::new(RefCell::new(ModuleSourceInterner::new())),
         }
     }
@@ -404,7 +414,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// [`Self::analyze_loaded_modules`] so import-site redirects line up
     /// with the loader's redirects.
     #[must_use]
-    pub fn with_invocations(mut self, invocations: crate::kiln::InvocationIndex) -> Self {
+    pub fn with_invocations(mut self, invocations: InvocationIndex) -> Self {
         self.invocations = invocations;
         self
     }
@@ -420,12 +430,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     fn define_unique(
         &mut self,
         module_source: &ModuleSource,
-        ast_id: crate::ast::AstId,
+        ast_id: AstId,
         name: &str,
         kind: SymbolKind,
-        visibility: crate::ast::Visibility,
+        visibility: Visibility,
         span: Span,
-    ) -> Option<crate::ast::AstId> {
+    ) -> Option<AstId> {
         if let Some(first) = self.symbols.defined_span_in_module(module_source, name) {
             let _ = self.logger.error_in(
                 module_source,
@@ -586,7 +596,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 Item::Newtype(newtype) => {
                     let mut aliased_type = String::new();
-                    crate::unparse::unparse_type_into(&newtype.ty, &mut aliased_type);
+                    unparse_type_into(&newtype.ty, &mut aliased_type);
                     let kind = SymbolKind::Newtype(NewtypeSymbol { aliased_type });
 
                     self.define_unique(
@@ -657,26 +667,18 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             .exports
                             .iter()
                             .map(|e| match e {
-                                crate::ast::WorldExport::Interface(iface) => {
-                                    WorldExportSymbol::Interface {
-                                        interface_name: iface.interface_name.clone(),
-                                    }
-                                }
-                                crate::ast::WorldExport::Function(func) => {
-                                    WorldExportSymbol::Function {
-                                        name: func.name.clone(),
-                                        is_async: func.is_async,
-                                        params: func
-                                            .params
-                                            .iter()
-                                            .map(|p| p.name.clone())
-                                            .collect(),
-                                        return_type: func
-                                            .return_type
-                                            .as_ref()
-                                            .map(|_| "unknown".to_string()),
-                                    }
-                                }
+                                WorldExport::Interface(iface) => WorldExportSymbol::Interface {
+                                    interface_name: iface.interface_name.clone(),
+                                },
+                                WorldExport::Function(func) => WorldExportSymbol::Function {
+                                    name: func.name.clone(),
+                                    is_async: func.is_async,
+                                    params: func.params.iter().map(|p| p.name.clone()).collect(),
+                                    return_type: func
+                                        .return_type
+                                        .as_ref()
+                                        .map(|_| "unknown".to_string()),
+                                },
                             })
                             .collect(),
                     });
@@ -821,9 +823,9 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// * `implicit_modules` - Set of implicitly loaded modules
     pub fn analyze_loaded_modules(
         &mut self,
-        modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
+        modules: &hashmap::IndexMap<ModuleSource, Module>,
         entry_source: &ModuleSource,
-        implicit_modules: crate::hashmap::IndexSet<ModuleSource>,
+        implicit_modules: hashmap::IndexSet<ModuleSource>,
     ) -> Result<(), Bail> {
         self.implicit_modules = implicit_modules;
         self.entry_module_source = entry_source.clone();
@@ -853,7 +855,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
     fn validate_all_imports(
         &mut self,
-        modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
+        modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for (source, module) in modules {
             self.validate_imports(module, source, modules)?;
@@ -870,7 +872,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         &mut self,
         module: &Module,
         module_source: &ModuleSource,
-        all_modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
+        all_modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -979,7 +981,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         from_module_source: &ModuleSource,
         target_module: &ModuleSource,
         name: &str,
-        reexport_visibility: crate::ast::Visibility,
+        reexport_visibility: Visibility,
         span: Span,
     ) -> Result<(), Bail> {
         if !reexport_visibility.reaches_beyond_file() {
@@ -1039,7 +1041,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         &mut self,
         module: &Module,
         from_module_source: &ModuleSource,
-        all_modules: &crate::hashmap::IndexMap<ModuleSource, Module>,
+        all_modules: &hashmap::IndexMap<ModuleSource, Module>,
     ) -> Result<(), Bail> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -1194,14 +1196,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                             // alias, matching how the elaborator canonicalizes
                             // `ns::member` at lookup time
                             // (`ModuleImports::canonical_ns_ref`).
-                            let symbols: Vec<(String, crate::ast::AstId)> = self
+                            let symbols: Vec<(String, AstId)> = self
                                 .symbols
                                 .reachable_members(from_module_source, &module_source)
                                 .map(|(name, sym)| {
-                                    (
-                                        crate::name::namespace_member_alias(ns, &name),
-                                        sym.defined_at,
-                                    )
+                                    (namespace_member_alias(ns, &name), sym.defined_at)
                                 })
                                 .collect();
                             for (alias, sym_key) in symbols {
@@ -1217,7 +1216,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     /// Get a copy of the implicit modules set
-    pub fn get_implicit_modules(&self) -> &crate::hashmap::IndexSet<ModuleSource> {
+    pub fn get_implicit_modules(&self) -> &hashmap::IndexSet<ModuleSource> {
         &self.implicit_modules
     }
 }

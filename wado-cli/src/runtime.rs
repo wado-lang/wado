@@ -19,6 +19,9 @@ use wasmtime_wasi_tls::{
 
 use crate::args::CliExit;
 use crate::http_hooks::WadoHttpHooks;
+use crate::timezone_host::add_to_linker;
+use crate::tls_trust::build_root_cert_store;
+use crate::tls_trust::install_default_crypto_provider;
 
 /// Build a [`WasiTlsCtx`] backed by [`WadoTlsProvider`] so the raw
 /// `wasi:tls` connector and [`WadoHttpHooks`] share the same trust store.
@@ -36,9 +39,9 @@ struct WadoTlsProvider {
 impl WadoTlsProvider {
     fn shared() -> Self {
         static CONFIG: LazyLock<Arc<rustls::ClientConfig>> = LazyLock::new(|| {
-            crate::tls_trust::install_default_crypto_provider();
+            install_default_crypto_provider();
             let config = rustls::ClientConfig::builder()
-                .with_root_certificates(crate::tls_trust::build_root_cert_store())
+                .with_root_certificates(build_root_cert_store())
                 .with_no_client_auth();
             Arc::new(config)
         });
@@ -531,6 +534,6 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<WasiState>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
-    crate::timezone_host::add_to_linker(&mut linker)?;
+    add_to_linker(&mut linker)?;
     Ok(linker)
 }

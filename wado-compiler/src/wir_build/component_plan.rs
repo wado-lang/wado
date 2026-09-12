@@ -5,8 +5,10 @@
 
 use crate::ast::Type;
 use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::wado_primitive_name_to_cm;
 use crate::hashmap::IndexMap;
 use crate::name::kebab_export_name;
+use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
@@ -197,7 +199,7 @@ pub fn build_component_plan(
             // exports we plan match the adapters that survived early DCE.
             // Unselected tests have no adapter and were dropped; planning them
             // here would reference a function that no longer exists.
-            .filter(|test| crate::package::test_selected(test.name.as_deref(), test_name_filters))
+            .filter(|test| test_selected(test.name.as_deref(), test_name_filters))
             .map(|test| {
                 let export_name = sanitize_kebab_export_name(&test.function_name);
                 let core_func_name = export_binding_names
@@ -238,7 +240,7 @@ fn build_world_export_plans(
     // The synthesized library world (`--lib`) takes priority over the static
     // registry, which cannot hold a per-package world.
     let world = lib_world.or_else(|| world_registry.get(target_world));
-    let world_namespace_prefix = world.map(crate::world_registry::WorldInfo::namespace_prefix);
+    let world_namespace_prefix = world.map(WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
         vec![WorldExportInfo {
@@ -324,7 +326,7 @@ fn build_world_export_plans(
 /// Whether `name` is a Wado primitive that maps directly to a Component Model
 /// primitive value type at the export boundary.
 fn is_cm_primitive_name(name: &str) -> bool {
-    crate::component_model::wado_primitive_name_to_cm(name).is_some()
+    wado_primitive_name_to_cm(name).is_some()
 }
 
 /// Resolve a Wado [`Type`] reachable from a world export signature into its
@@ -442,6 +444,7 @@ fn sanitize_kebab_export_name(function_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component_model::CmInterfaceRegistry;
     use std::assert_matches;
     #[test]
     fn test_sanitize_kebab_export_name() {
@@ -520,7 +523,7 @@ mod tests {
     #[test]
     fn test_resolve_unit_shapes() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `()` is the type that carries nothing. The empty tuple `[]` is a type
         // of its own with no CM representation, rejected at the boundary before
@@ -540,7 +543,7 @@ mod tests {
     #[test]
     fn test_resolve_handler_result() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
         // http world scope. The arms resolve to wasi:http/types.
@@ -581,7 +584,7 @@ mod tests {
     #[test]
     fn test_resolve_named_resource() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `Request` is a resource declared in `wasi:http/types`.
         match resolve_cm_export_type(&named("Request"), &registry, None) {
@@ -604,7 +607,7 @@ mod tests {
     #[test]
     fn test_resolve_named_kiln_record() {
         use resolver_helpers::*;
-        let (registry, _) = crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
         // `OutputFile` is a struct declared in `core:kiln/types` (and, unlike
         // `Response`, collides with no WASI type) — exercises the `find_kiln_*`

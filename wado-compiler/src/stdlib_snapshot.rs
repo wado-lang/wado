@@ -10,10 +10,12 @@ use std::pin::pin;
 use std::rc::Rc;
 use std::task::{Context, Poll, Waker};
 
+use crate::ast;
 use crate::compiler_host::{
     CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError, LogLevel,
     SourceError,
 };
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
@@ -165,7 +167,7 @@ pub(crate) fn stdlib_sources(snap: &Semantics) -> IndexSet<ModuleSource> {
 /// `DefId`s only that parse mints (WEP 2026-08-12 §1).
 pub(crate) fn reparsed_snapshot_module<'a>(
     snap: &Semantics,
-    modules: &'a IndexMap<ModuleSource, crate::ast::Module>,
+    modules: &'a IndexMap<ModuleSource, ast::Module>,
 ) -> Option<&'a ModuleSource> {
     let cached = stdlib_sources(snap);
     modules.iter().find_map(|(ms, module)| {
@@ -187,7 +189,7 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 pub(crate) fn rehydrate_tir_module(
     snap_module: &TirModule,
     fresh_type_table: &Rc<RefCell<TypeTable>>,
-    live: Option<&IndexSet<crate::defs::DefId>>,
+    live: Option<&IndexSet<DefId>>,
     fn_remap: &mut IndexMap<*const RefCell<TirFunction>, Rc<RefCell<TirFunction>>>,
 ) -> TirModule {
     // A synthesized function declares nothing, so nothing in the graph can name

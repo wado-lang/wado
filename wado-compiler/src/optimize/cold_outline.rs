@@ -34,6 +34,11 @@ use cranelift_entity::EntityRef;
 
 use super::dce::DescriptorCache;
 use super::inline::{InlineCtx, splice_stmt};
+use crate::ast::Visibility;
+use crate::compiler_trace;
+use crate::name::cold_region_helper_name;
+use crate::optimize::inline::call_site_size;
+use crate::optimize::inline::region_size;
 
 /// Split every cold region the preconditions admit, in every function —
 /// including the ones this pass itself creates, so a region nested inside a
@@ -145,12 +150,12 @@ fn find_region(
         if buys_nothing(body, &type_table, descriptors, &region, params) {
             continue;
         }
-        crate::compiler_trace!(
+        compiler_trace!(
             "cold_outline",
             "{}: region of {} stmt(s), {} to hold",
             func.name,
             region.len(),
-            super::inline::region_size(body, &type_table, descriptors, &region),
+            region_size(body, &type_table, descriptors, &region),
         );
         if let Some(args) = free_vars(body, &region, params as u32, under_loop, &func, &type_table)
         {
@@ -233,8 +238,7 @@ fn buys_nothing(
     param_count: usize,
 ) -> bool {
     region.is_empty()
-        || super::inline::region_size(body, type_table, descriptors, region)
-            <= super::inline::call_site_size(param_count)
+        || region_size(body, type_table, descriptors, region) <= call_site_size(param_count)
 }
 
 /// Whether `stmt` is a bare `cold_path()` call.
@@ -310,7 +314,7 @@ fn free_vars(
         if crossing.leaves_storage_behind()
             && (inside.written.contains(&idx) || func.address_taken_locals.contains(&idx))
         {
-            crate::compiler_trace!("cold_outline", "  local {idx} is written across the split");
+            compiler_trace!("cold_outline", "  local {idx} is written across the split");
             return None;
         }
         if crossing != Crossing::Argument {
@@ -325,7 +329,7 @@ fn free_vars(
             type_table.get(func.locals[idx as usize].type_id),
             ResolvedType::Primitive(_)
         ) {
-            crate::compiler_trace!("cold_outline", "  local {idx} may be unset at the call");
+            compiler_trace!("cold_outline", "  local {idx} may be unset at the call");
             return None;
         }
         args.push(idx);
@@ -591,8 +595,8 @@ fn build_helper(
         .map(|&i| ctx.local(i))
         .collect();
     helper.id = Some(id);
-    helper.name = crate::name::cold_region_helper_name(&parent.name, ordinal);
-    helper.visibility = crate::ast::Visibility::Private;
+    helper.name = cold_region_helper_name(&parent.name, ordinal);
+    helper.visibility = Visibility::Private;
     helper.is_export = false;
     helper.export_name = None;
     // A plain function of the enclosing frame: not the method, monomorphization

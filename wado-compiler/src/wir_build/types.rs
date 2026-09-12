@@ -18,6 +18,16 @@ use crate::wir::{
 use crate::hashmap::{IndexMap, IndexSet};
 
 use super::context::WirContext;
+use crate::compiler_item::CompilerItem;
+use crate::hashmap;
+use crate::name::mangle_builtin_array_type;
+use crate::name::mangle_generic_name;
+use crate::name::wir_enum_type_key;
+use crate::name::wir_tuple_type_key;
+use crate::name::wir_type_key;
+use crate::name::wir_variant_case_key;
+use crate::tir;
+use crate::wir::WirAbstractHeapType;
 
 /// A type declaration in topological order (struct or variant).
 pub enum TypeDecl<'a> {
@@ -30,12 +40,9 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
     match type_table.get(type_id) {
         ResolvedType::Struct { def, type_args } => {
             let name = type_table.struct_rendered_name(*def, type_args);
-            vec![crate::name::wir_type_key(
-                type_table.struct_head_module(*def),
-                &name,
-            )]
+            vec![wir_type_key(type_table.struct_head_module(*def), &name)]
         }
-        ResolvedType::Variant { def } => vec![crate::name::wir_type_key(
+        ResolvedType::Variant { def } => vec![wir_type_key(
             type_table.def_module(*def),
             type_table.def_name(*def),
         )],
@@ -73,7 +80,7 @@ fn sort_types_topologically<'a>(
 ) -> Vec<TypeDecl<'a>> {
     // Use FQ keys ("{module_source}//{name}") to distinguish same-named types
     // from different modules.
-    let fq_key = crate::name::wir_type_key;
+    let fq_key = wir_type_key;
 
     let struct_keys: IndexSet<String> = structs
         .iter()
@@ -266,8 +273,7 @@ fn register_struct(
                 .iter()
                 .map(|t| type_table.mangle_type_name_resolving_newtypes(*t))
                 .collect();
-            let resolved_name =
-                crate::name::mangle_generic_name(&mono.generic_name, &resolved_args);
+            let resolved_name = mangle_generic_name(&mono.generic_name, &resolved_args);
             let resolved_sn = StructName::new(effective_module.clone(), resolved_name);
             if let Some(existing) = ctx.struct_type_map.get(&resolved_sn).cloned() {
                 ctx.struct_type_map.insert(struct_name, existing);
@@ -276,7 +282,7 @@ fn register_struct(
         }
     }
 
-    let fq = crate::name::wir_type_key(&effective_module, &tir_struct.name);
+    let fq = wir_type_key(&effective_module, &tir_struct.name);
 
     // Pre-register raw array types for BuiltinArray fields before resolving field types,
     // so that concrete array refs are available instead of falling back to abstract arrayref.
@@ -321,7 +327,7 @@ fn register_struct(
         fq,
         WirTypeDef::Struct(WirStructType {
             name: WirName {
-                fq: crate::name::wir_type_key(&effective_module, &tir_struct.name),
+                fq: wir_type_key(&effective_module, &tir_struct.name),
             },
             fields,
             meta: WirMeta {
@@ -349,7 +355,7 @@ fn register_struct(
             .iter()
             .map(|t| type_table.mangle_type_arg_for_generic(*t))
             .collect();
-        let qualified_name = crate::name::mangle_generic_name(&mono.generic_name, &qualified_args);
+        let qualified_name = mangle_generic_name(&mono.generic_name, &qualified_args);
         if qualified_name != tir_struct.name {
             let qualified_sn = StructName::new(effective_module, qualified_name);
             ctx.struct_type_map.entry(qualified_sn).or_insert(type_id);
@@ -364,7 +370,7 @@ fn register_variant(
     type_table: &TypeTable,
     module_source: &ModuleSource,
 ) {
-    let fq = crate::name::wir_type_key(module_source, &variant.name);
+    let fq = wir_type_key(module_source, &variant.name);
 
     // Skip if already registered
     if ctx.variant_type_map.contains_key(&fq) {
@@ -421,10 +427,10 @@ fn register_variant(
         if case.payload.is_empty() {
             continue; // Unit cases don't need separate types
         }
-        let case_fq = crate::name::wir_variant_case_key(&fq, &case.name);
+        let case_fq = wir_variant_case_key(&fq, &case.name);
         let mut fields = vec![WirField {
             name: "discriminant".to_string(),
-            ty: crate::wir::WirType::I32,
+            ty: WirType::I32,
             mutable: false,
         }];
         for (j, payload_ty) in case.payload.iter().enumerate() {
@@ -438,7 +444,7 @@ fn register_variant(
             case_fq,
             WirTypeDef::Struct(WirStructType {
                 name: WirName {
-                    fq: crate::name::wir_variant_case_key(&fq, &case.name),
+                    fq: wir_variant_case_key(&fq, &case.name),
                 },
                 fields,
                 meta: WirMeta::default(),
@@ -455,7 +461,7 @@ fn register_variant(
 /// Register a raw GC array type for a given element `TypeId`.
 fn register_raw_array_type(
     ctx: &mut WirContext<'_>,
-    element_type_id: crate::tir::TypeId,
+    element_type_id: tir::TypeId,
     type_table: &TypeTable,
 ) {
     if ctx.array_type_map.contains_key(&element_type_id) {
@@ -483,7 +489,7 @@ fn register_raw_array_type(
         return;
     }
 
-    let fq = crate::name::mangle_builtin_array_type(&elem_name);
+    let fq = mangle_builtin_array_type(&elem_name);
     let elem_wir_type = ctx.type_id_to_wir_type_pending(type_table, element_type_id);
 
     let type_id = ctx.register_type(
@@ -522,25 +528,24 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
     // Pre-register Box<i32> if not already present. This is needed for Option<Resource>,
     // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
     // Wasm level but there's no explicit Option<i32> usage in the source code.
-    ensure_box_type(ctx, "i32", crate::wir::WirType::I32);
+    ensure_box_type(ctx, "i32", WirType::I32);
 }
 
 /// Ensure a `Box<T>` struct type exists for the given primitive name.
-fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: crate::wir::WirType) {
-    let box_name =
-        crate::name::mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
+fn ensure_box_type(ctx: &mut WirContext<'_>, prim_name: &str, wir_type: WirType) {
+    let box_name = mangle_generic_name("Box", std::slice::from_ref(&prim_name.to_string()));
     let module_source = ctx
         .package
         .type_table
         .borrow()
-        .compiler_struct_module(crate::compiler_item::CompilerItem::Box)
+        .compiler_struct_module(CompilerItem::Box)
         .cloned()
         .unwrap_or_else(ModuleSource::prelude);
     let struct_name = StructName::new(module_source.clone(), box_name.clone());
     if ctx.struct_type_map.contains_key(&struct_name) {
         return;
     }
-    let fq = crate::name::wir_type_key(&module_source, &box_name);
+    let fq = wir_type_key(&module_source, &box_name);
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
@@ -643,7 +648,7 @@ fn register_tuple_types(ctx: &mut WirContext<'_>) {
                     .map(|&e| type_table.mangle_type_arg_for_generic_resolving_newtypes(e))
                     .collect();
                 let tuple_display = format!("[{}]", elem_names.join(", "));
-                let fq = crate::name::wir_tuple_type_key(&tuple_display);
+                let fq = wir_tuple_type_key(&tuple_display);
 
                 let fields: Vec<WirField> = elements
                     .iter()
@@ -834,7 +839,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 }
 
                 let mangled = generic_instance_name(type_table, name, type_args);
-                let fq = crate::name::wir_type_key(module_source, &mangled);
+                let fq = wir_type_key(module_source, &mangled);
                 if ctx.variant_type_map.contains_key(&fq) {
                     continue;
                 }
@@ -887,14 +892,14 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
 
         // Phase 3: convert the concrete payloads to WIR types.
         let mut to_register: Vec<(
-            String,                                  // mangled name
-            ModuleSource,                            // module source of the base variant
-            Vec<(String, Vec<crate::wir::WirType>)>, // cases: (name, payload types)
+            String,                      // mangled name
+            ModuleSource,                // module source of the base variant
+            Vec<(String, Vec<WirType>)>, // cases: (name, payload types)
         )> = Vec::new();
         {
             let type_table = &*ctx.package.type_table.borrow();
             for (mangled, module_source, cases) in substituted {
-                let cases: Vec<(String, Vec<crate::wir::WirType>)> = cases
+                let cases: Vec<(String, Vec<WirType>)> = cases
                     .into_iter()
                     .map(|(name, payload)| {
                         let wir_payload = match type_table.get(payload) {
@@ -912,8 +917,8 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     payloads.iter().any(|ty| {
                         matches!(
                             ty,
-                            crate::wir::WirType::AbstractRef {
-                                heap_type: crate::wir::WirAbstractHeapType::Struct,
+                            WirType::AbstractRef {
+                                heap_type: WirAbstractHeapType::Struct,
                                 ..
                             }
                         )
@@ -930,7 +935,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
         }
 
         for (mangled_name, module_source, cases) in to_register {
-            let fq = crate::name::wir_type_key(&module_source, &mangled_name);
+            let fq = wir_type_key(&module_source, &mangled_name);
             if ctx.variant_type_map.contains_key(&fq) {
                 continue;
             }
@@ -966,10 +971,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 if case.payload.is_empty() {
                     continue; // Unit cases don't need separate types
                 }
-                let case_fq = crate::name::wir_variant_case_key(&fq, &case.name);
+                let case_fq = wir_variant_case_key(&fq, &case.name);
                 let mut fields = vec![WirField {
                     name: "discriminant".to_string(),
-                    ty: crate::wir::WirType::I32,
+                    ty: WirType::I32,
                     mutable: false,
                 }];
                 for (j, payload_ty) in case.payload.iter().enumerate() {
@@ -983,7 +988,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                     case_fq,
                     WirTypeDef::Struct(WirStructType {
                         name: WirName {
-                            fq: crate::name::wir_variant_case_key(&fq, &case.name),
+                            fq: wir_variant_case_key(&fq, &case.name),
                         },
                         fields,
                         meta: WirMeta::default(),
@@ -1013,7 +1018,7 @@ fn register_remaining_arrays(ctx: &mut WirContext<'_>) {
 
 fn register_enums(ctx: &mut WirContext<'_>) {
     for e in &ctx.package.enums {
-        let fq = crate::name::wir_enum_type_key(&e.module_source, &e.name);
+        let fq = wir_enum_type_key(&e.module_source, &e.name);
         if ctx.type_map.contains_key(&fq) {
             continue;
         }
@@ -1031,7 +1036,7 @@ fn register_enums(ctx: &mut WirContext<'_>) {
             fq,
             WirTypeDef::Enum(WirEnumType {
                 name: WirName {
-                    fq: crate::name::wir_enum_type_key(&e.module_source, &e.name),
+                    fq: wir_enum_type_key(&e.module_source, &e.name),
                 },
                 cases,
                 meta: WirMeta {
@@ -1061,9 +1066,8 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
     // whether a `fn(..)^Inspect` for that `(arity, return_type)` survived
     // DCE. The `(arity, return_type)` also maps back to the canonical struct
     // type id the dispatch body casts to.
-    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, crate::tir::TypeId)> =
-        Vec::new();
-    let mut seen_keys: crate::hashmap::IndexSet<String> = crate::hashmap::IndexSet::default();
+    let mut fn_sigs: Vec<(Vec<WirType>, Vec<WirType>, bool, usize, tir::TypeId)> = Vec::new();
+    let mut seen_keys: hashmap::IndexSet<String> = hashmap::IndexSet::default();
 
     {
         let type_table = &*ctx.package.type_table.borrow();
@@ -1089,13 +1093,12 @@ fn register_canonical_closure_types(ctx: &mut WirContext<'_>) {
                     .map(|p| ctx.type_id_to_wir_type_pending(type_table, *p))
                     .filter(|t| !matches!(t, WirType::Unit))
                     .collect();
-                let result_wirs: Vec<WirType> = if *return_type == crate::tir::TypeTable::UNIT
-                    || *return_type == crate::tir::TypeTable::NEVER
-                {
-                    vec![]
-                } else {
-                    vec![ctx.type_id_to_wir_type_pending(type_table, *return_type)]
-                };
+                let result_wirs: Vec<WirType> =
+                    if *return_type == TypeTable::UNIT || *return_type == TypeTable::NEVER {
+                        vec![]
+                    } else {
+                        vec![ctx.type_id_to_wir_type_pending(type_table, *return_type)]
+                    };
                 let key = WirContext::canonical_closure_key(&param_wirs, &result_wirs);
                 if seen_keys.insert(key) {
                     let arity = params.len();
@@ -1124,7 +1127,7 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     use crate::tir::ResolvedType;
 
     // Collect unique List<T> element types from the shared type table.
-    let mut array_elem_types: Vec<(crate::tir::TypeId, String)> = Vec::new();
+    let mut array_elem_types: Vec<(tir::TypeId, String)> = Vec::new();
     let tt_rc = ctx.package.type_table.clone();
     {
         let type_table = &*tt_rc.borrow();
@@ -1157,8 +1160,8 @@ fn register_list_wrapper_structs(ctx: &mut WirContext<'_>) {
     // Topological sort: process leaf element types (non-List) before nested ones.
     // Partition into non-array elements (leaf) and array elements (nested).
     let tt = tt_rc.borrow();
-    let mut leaf: Vec<(crate::tir::TypeId, String)> = Vec::new();
-    let mut nested: Vec<(crate::tir::TypeId, String)> = Vec::new();
+    let mut leaf: Vec<(tir::TypeId, String)> = Vec::new();
+    let mut nested: Vec<(tir::TypeId, String)> = Vec::new();
     for (elem_tid, elem_name) in &array_elem_types {
         if tt.is_list(*elem_tid) {
             nested.push((*elem_tid, elem_name.clone()));
@@ -1196,7 +1199,7 @@ pub(super) fn generic_instance_name(
         .iter()
         .map(|t| type_table.mangle_type_arg_for_generic(normalize_assoc_projection(type_table, *t)))
         .collect();
-    crate::name::mangle_generic_name(name, &type_arg_names)
+    mangle_generic_name(name, &type_arg_names)
 }
 
 /// Resolve an associated-type projection (`f64::Err`) to the type it names.
@@ -1230,8 +1233,7 @@ pub(super) fn list_wrapper_struct_name(
 
 /// [`list_wrapper_struct_name`] for an element whose name is already mangled.
 fn list_wrapper_struct_name_for_elem(elem_name: &str) -> StructName {
-    let mangled =
-        crate::name::mangle_generic_name("List", std::slice::from_ref(&elem_name.to_string()));
+    let mangled = mangle_generic_name("List", std::slice::from_ref(&elem_name.to_string()));
     StructName::new(ModuleSource::prelude(), mangled)
 }
 
@@ -1251,7 +1253,7 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
     }
 
     let module_source = struct_name.module_source.clone();
-    let fq = crate::name::wir_type_key(&module_source, &mangled);
+    let fq = wir_type_key(&module_source, &mangled);
     let type_id = ctx.register_type(
         fq.clone(),
         WirTypeDef::Struct(WirStructType {
@@ -1259,7 +1261,7 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
             fields: vec![
                 WirField {
                     name: SeqField::Backing.field_name().to_string(),
-                    ty: crate::wir::WirType::Ref {
+                    ty: WirType::Ref {
                         type_id: raw_type,
                         nullable: false,
                     },
@@ -1267,7 +1269,7 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
                 },
                 WirField {
                     name: SeqField::Len.field_name().to_string(),
-                    ty: crate::wir::WirType::I32,
+                    ty: WirType::I32,
                     mutable: true,
                 },
             ],
@@ -1287,12 +1289,11 @@ fn register_list_wrapper_struct(ctx: &mut WirContext<'_>, elem_name: &str) {
 }
 
 /// Check if a `WirType` is an unresolved abstract struct/array reference.
-fn is_abstract_ref(ty: &crate::wir::WirType) -> bool {
+fn is_abstract_ref(ty: &WirType) -> bool {
     matches!(
         ty,
-        crate::wir::WirType::AbstractRef {
-            heap_type: crate::wir::WirAbstractHeapType::Struct
-                | crate::wir::WirAbstractHeapType::Array,
+        WirType::AbstractRef {
+            heap_type: WirAbstractHeapType::Struct | WirAbstractHeapType::Array,
             ..
         }
     )
@@ -1511,8 +1512,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             {
                 let type_table = &*ctx.package.type_table.borrow();
                 for type_id in type_table.iter_type_ids() {
-                    if let crate::tir::ResolvedType::BuiltinArray(elem_tid) =
-                        type_table.get(type_id)
+                    if let ResolvedType::BuiltinArray(elem_tid) = type_table.get(type_id)
                         && let Some(arr_wir_id) = ctx.array_type_map.get(elem_tid)
                         && arr_wir_id.index() == u32::try_from(wir_idx).unwrap()
                     {
@@ -1544,7 +1544,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                     for tir_variant in &ctx.package.variants {
                         if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
                             let payload_type_id = tir_variant.cases[case_idx].payload;
-                            if tt.get(payload_type_id) != &crate::tir::ResolvedType::Unit {
+                            if tt.get(payload_type_id) != &ResolvedType::Unit {
                                 let wir_type =
                                     ctx.type_id_to_wir_type_pending(&tt, payload_type_id);
                                 if !is_abstract_ref(&wir_type) {

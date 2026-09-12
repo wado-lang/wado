@@ -10,6 +10,15 @@
 //! - `zlib_cross_compress.wado`: compress/checksum operations
 //! - `zlib_cross_inflate.wado`: inflate/decompress operations
 
+use crate::common::TestHttpCtx;
+use crate::common::WasiState;
+use crate::common::cli_engine;
+use crate::common::cli_linker;
+use crate::common::compile_file;
+use crate::common::install_rustls_provider_for_tests;
+use crate::common::limit_store;
+use crate::common::report_fuel_used;
+use crate::common::runtime;
 use std::path::Path;
 use std::sync::OnceLock;
 use wasmtime::Store;
@@ -24,10 +33,10 @@ static INFLATE_COMPONENT: OnceLock<Component> = OnceLock::new();
 fn compile_driver(fixture_name: &str) -> Component {
     let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sub");
     let path = fixtures_dir.join(fixture_name);
-    let result = crate::common::compile_file(&path).unwrap_or_else(|e| {
+    let result = compile_file(&path).unwrap_or_else(|e| {
         panic!("Failed to compile {fixture_name}: {e:?}");
     });
-    let engine = crate::common::cli_engine();
+    let engine = cli_engine();
     Component::new(engine, &result.wasm)
         .unwrap_or_else(|e| panic!("Failed to create component for {fixture_name}: {e}"))
 }
@@ -41,11 +50,11 @@ fn inflate_component() -> &'static Component {
 }
 
 fn run_component(component: &Component, stdin: &[u8]) -> String {
-    let rt = crate::common::runtime();
-    let engine = crate::common::cli_engine();
+    let rt = runtime();
+    let engine = cli_engine();
 
     rt.block_on(async {
-        let linker = crate::common::cli_linker(engine).expect("failed to create linker");
+        let linker = cli_linker(engine).expect("failed to create linker");
 
         let stdout_pipe = MemoryOutputPipe::new(1 << 20);
         let stdout_clone = stdout_pipe.clone();
@@ -57,18 +66,18 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
             .stdout(stdout_pipe)
             .stderr(stderr_pipe)
             .build();
-        crate::common::install_rustls_provider_for_tests();
-        let state = crate::common::WasiState {
+        install_rustls_provider_for_tests();
+        let state = WasiState {
             ctx,
             table: wasmtime::component::ResourceTable::new(),
             http_ctx: wasmtime_wasi_http::WasiHttpCtx::new(),
-            http_hooks: crate::common::TestHttpCtx::new(),
+            http_hooks: TestHttpCtx::new(),
             tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
         };
         let mut store = Store::new(engine, state);
         // Set epoch deadline for timeout enforcement.
         // zlib tests push large buffers through the guest.
-        crate::common::limit_store(&mut store, 30_000);
+        limit_store(&mut store, 30_000);
 
         // `run` is exported through the `wasi:cli/run` instance; bind via
         // `Command` and drive the async export with `run_concurrent`.
@@ -79,7 +88,7 @@ fn run_component(component: &Component, stdin: &[u8]) -> String {
         let run_result = store
             .run_concurrent(async |accessor| command.wasi_cli_run().call_run(accessor).await)
             .await;
-        crate::common::report_fuel_used(&mut store, "zlib-interop", 30_000);
+        report_fuel_used(&mut store, "zlib-interop", 30_000);
         match run_result {
             Ok(Ok(result)) => {
                 if result.is_err() {

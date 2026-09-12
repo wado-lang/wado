@@ -612,6 +612,7 @@ impl SymbolTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstIdSpace;
     use crate::module_source::ModuleSourceInterner;
 
     #[test]
@@ -648,8 +649,8 @@ mod tests {
         // Ids use real per-module spaces, exactly as the parser mints them.
         let mut table = SymbolTable::new();
         let cli = ModuleSource::cli();
-        let space_a = crate::ast::AstIdSpace::next();
-        let space_b = crate::ast::AstIdSpace::next();
+        let space_a = AstIdSpace::next();
+        let space_b = AstIdSpace::next();
         assert_ne!(space_a, space_b, "each parse mints a distinct space");
 
         let id = table.define(

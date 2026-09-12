@@ -6,9 +6,16 @@ use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Visibility;
+use crate::hashmap;
 use crate::module_source::ModuleSource;
+use crate::name::CLOSURE_CALL_METHOD;
+use crate::name::CLOSURE_STRUCT_PREFIX;
+use crate::name::FqTraitName;
+use crate::name::is_fn_type_name;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir;
+use crate::tir::StructDef;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, TirBlock,
     TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam, TirPattern,
@@ -16,6 +23,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
+use crate::unparse::unparse_tir_closure_source;
 
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {
@@ -190,7 +198,7 @@ struct CollectedClosure {
     span: Span,
     /// Closure-scope address-taken locals (closure-local indices).
     /// Shifted by +1 onto `__call` to make room for `self`.
-    address_taken_locals: crate::hashmap::IndexSet<u32>,
+    address_taken_locals: hashmap::IndexSet<u32>,
 }
 
 /// Signature of a top-level function or impl method, used by Phase 0 to
@@ -488,12 +496,12 @@ impl ClosureLowerer {
 
             let struct_name = format!(
                 "{prefix}{id}",
-                prefix = crate::name::CLOSURE_STRUCT_PREFIX,
+                prefix = CLOSURE_STRUCT_PREFIX,
                 id = collected.id,
             );
             // A closure environment names no declaration — lowering mints it
             // — so its head is the shape, under the name lowering assigns.
-            let head = crate::tir::StructDef::Anon(
+            let head = StructDef::Anon(
                 type_table.intern_synthetic_struct(self.module_source.clone(), struct_name.clone()),
             );
             let struct_type_id = type_table.make_struct(head);
@@ -504,7 +512,7 @@ impl ClosureLowerer {
                 .enumerate()
                 .map(|(i, cap)| TirField {
                     name: format!("__capture_{i}"),
-                    visibility: crate::ast::Visibility::Private,
+                    visibility: Visibility::Private,
                     type_id: cap.type_id,
                     index: i as u32,
                     span: collected.span,
@@ -521,7 +529,7 @@ impl ClosureLowerer {
                 type_args: Vec::new(),
                 name: struct_name.clone(),
                 module_source: self.module_source.clone(),
-                visibility: crate::ast::Visibility::Private,
+                visibility: Visibility::Private,
                 type_params: Vec::new(),
                 monomorph_info: None,
                 fields,
@@ -535,7 +543,7 @@ impl ClosureLowerer {
             let qualified_method_name = MethodName::format_local(
                 &FqTypeName::shape(&self.module_source, &struct_name),
                 None,
-                crate::name::CLOSURE_CALL_METHOD,
+                CLOSURE_CALL_METHOD,
             );
             let self_ref_type = type_table.make_ref(struct_type_id);
 
@@ -612,14 +620,14 @@ impl ClosureLowerer {
                 name: "self".to_string(),
                 type_id: self_ref_type,
                 is_mut: false,
-                span: crate::token::Span::default(),
+                span: Span::default(),
             });
             for (name, ty) in &collected.params {
                 locals.push(TirLocal {
                     name: name.clone(),
                     type_id: *ty,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: Span::default(),
                 });
             }
 
@@ -660,7 +668,7 @@ impl ClosureLowerer {
             let method_info = LocalMethodName::new(
                 FqTypeName::shape(&self.module_source, &struct_name),
                 None,
-                crate::name::CLOSURE_CALL_METHOD.to_string(),
+                CLOSURE_CALL_METHOD.to_string(),
             );
 
             let call_method = TirFunction {
@@ -668,7 +676,7 @@ impl ClosureLowerer {
                 def_id: None,
                 is_async: false,
                 name: qualified_method_name,
-                visibility: crate::ast::Visibility::Private,
+                visibility: Visibility::Private,
                 is_export: false, // Closure method, not a world export
                 type_params: Vec::new(),
                 impl_type_params: Vec::new(),
@@ -703,7 +711,7 @@ impl ClosureLowerer {
                 declared_return_convention: None,
                 kind: FunctionKind::Regular,
 
-                return_abi: crate::tir::ReturnAbi::default(),
+                return_abi: tir::ReturnAbi::default(),
             };
 
             let call_method_rc = Rc::new(RefCell::new(call_method));
@@ -734,7 +742,7 @@ impl ClosureLowerer {
             // remains the canonical inspect-debug representation per
             // WEP: Inspect (Debug Output) > Closure Inspect via
             // Runtime Dispatch.
-            let source = crate::unparse::unparse_tir_closure_source(
+            let source = unparse_tir_closure_source(
                 &collected.params,
                 &collected.captures,
                 &collected.body,
@@ -765,7 +773,7 @@ impl ClosureLowerer {
         let formatter_fq = type_table.compiler_struct_fq_name(CompilerItem::Formatter);
         let formatter_type = {
             let def = type_table.require_compiler_item_def(CompilerItem::Formatter);
-            type_table.make_struct(crate::tir::StructDef::Decl(def))
+            type_table.make_struct(StructDef::Decl(def))
         };
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
@@ -813,7 +821,7 @@ impl ClosureLowerer {
     fn build_functor_write_method(
         &self,
         struct_name: &str,
-        trait_name: &crate::name::FqTraitName,
+        trait_name: &FqTraitName,
         method_name: &str,
         plain: &str,
         alternate: &str,
@@ -903,9 +911,9 @@ impl ClosureLowerer {
     fn build_functor_delegate_method(
         &self,
         struct_name: &str,
-        trait_name: &crate::name::FqTraitName,
+        trait_name: &FqTraitName,
         method_name: &str,
-        target_trait: &crate::name::FqTraitName,
+        target_trait: &FqTraitName,
         target_method: &str,
         self_ref_type: TypeId,
         formatter_mut_ref: TypeId,
@@ -970,7 +978,7 @@ impl ClosureLowerer {
     fn make_functor_method(
         &self,
         struct_name: &str,
-        trait_name: &crate::name::FqTraitName,
+        trait_name: &FqTraitName,
         method_name: &str,
         body: TirBlock,
         self_ref_type: TypeId,
@@ -986,7 +994,7 @@ impl ClosureLowerer {
                 Some(trait_name),
                 method_name,
             ),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             is_export: false,
             type_params: Vec::new(),
             impl_type_params: Vec::new(),
@@ -1026,13 +1034,13 @@ impl ClosureLowerer {
                     name: "self".to_string(),
                     type_id: self_ref_type,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: Span::default(),
                 },
                 TirLocal {
                     name: "f".to_string(),
                     type_id: formatter_mut_ref,
                     is_mut: false,
-                    span: crate::token::Span::default(),
+                    span: Span::default(),
                 },
             ],
             address_taken_locals: IndexSet::default(),
@@ -1049,7 +1057,7 @@ impl ClosureLowerer {
             declared_return_convention: None,
             kind: FunctionKind::Regular,
 
-            return_abi: crate::tir::ReturnAbi::default(),
+            return_abi: tir::ReturnAbi::default(),
         }
     }
 
@@ -1194,8 +1202,8 @@ impl ClosureLowerer {
             def_id: None,
             is_async: false,
             name: specialized_name.clone(),
-            visibility: crate::ast::Visibility::Private, // Specialized functions are always private
-            is_export: false, // Specialized functions are not world exports
+            visibility: Visibility::Private, // Specialized functions are always private
+            is_export: false,                // Specialized functions are not world exports
             type_params: callee.type_params.clone(),
             impl_type_params: callee.impl_type_params.clone(),
             monomorph_info: callee.monomorph_info.clone(),
@@ -1223,7 +1231,7 @@ impl ClosureLowerer {
             declared_return_convention: callee.declared_return_convention,
             kind: FunctionKind::Regular,
 
-            return_abi: crate::tir::ReturnAbi::default(),
+            return_abi: tir::ReturnAbi::default(),
         };
 
         self.generated_functions
@@ -1690,7 +1698,7 @@ impl ClosureCallSiteLowerer<'_> {
             Some(info) => info,
             None => return,
         };
-        if !crate::name::is_fn_type_name(&info.base_struct_name()) {
+        if !is_fn_type_name(&info.base_struct_name()) {
             return;
         }
         let Some(base_trait) = info.base_trait_name() else {

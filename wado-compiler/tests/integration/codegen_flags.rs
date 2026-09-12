@@ -8,6 +8,8 @@
 
 use std::path::Path;
 
+use crate::common::compile_source_with_compiler_options;
+use crate::common::run_wasm;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// A string-building loop. `String` append (`+`) lowers to
@@ -32,7 +34,7 @@ fn compile_to_wat(codegen_flags: Vec<String>) -> String {
         codegen_flags,
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
+    let result = compile_source_with_compiler_options(
         Path::new("codegen_flags_test.wado"),
         ARRAY_COPY_SOURCE,
         options,
@@ -106,7 +108,7 @@ fn compile_branch_hints(codegen_flags: Vec<String>) -> Vec<u8> {
         codegen_flags,
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(
+    compile_source_with_compiler_options(
         Path::new("codegen_flags_branch_hint_test.wado"),
         BRANCH_HINT_SOURCE,
         options,
@@ -163,7 +165,7 @@ fn compile_assert_source(opt_level: OptLevel, codegen_flags: Vec<String>) -> Vec
         codegen_flags,
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(
+    compile_source_with_compiler_options(
         Path::new("codegen_flags_assert_test.wado"),
         ASSERT_SOURCE,
         options,
@@ -274,7 +276,7 @@ fn compile_wide_arith(codegen_flags: Vec<String>) -> Vec<u8> {
         codegen_flags,
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(
+    compile_source_with_compiler_options(
         Path::new("wide_arith_test.wado"),
         WIDE_ARITH_SOURCE,
         options,
@@ -312,8 +314,8 @@ fn no_wide_arithmetic_flag_lowers_to_plain_i64() {
 
 #[test]
 fn no_wide_arithmetic_preserves_results() {
-    let native = crate::common::run_wasm(compile_wide_arith(Vec::new())).expect("run native");
-    let soft = crate::common::run_wasm(compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
+    let native = run_wasm(compile_wide_arith(Vec::new())).expect("run native");
+    let soft = run_wasm(compile_wide_arith(vec!["no-wide-arithmetic".to_string()]))
         .expect("run software-lowered");
     assert!(
         !native.trapped && !soft.trapped,
@@ -333,7 +335,7 @@ fn unknown_codegen_flag_is_rejected() {
         codegen_flags: vec!["bogus".to_string()],
         ..Default::default()
     };
-    let result = crate::common::compile_source_with_compiler_options(
+    let result = compile_source_with_compiler_options(
         Path::new("codegen_flags_test.wado"),
         ARRAY_COPY_SOURCE,
         options,

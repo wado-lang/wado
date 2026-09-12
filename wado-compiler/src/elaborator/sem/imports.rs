@@ -6,6 +6,7 @@
 
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::name::namespace_member_alias;
 
 /// Per-module name-resolution context derived from `use` declarations.
 #[derive(Default, Clone)]
@@ -52,7 +53,7 @@ pub(crate) fn canonical_ns_ref(
         return None;
     }
     let rest = &name[pos + 2..];
-    Some(crate::name::namespace_member_alias(prefix, rest))
+    Some(namespace_member_alias(prefix, rest))
 }
 
 /// Free-function form of [`ModuleImports::strip_ns_prefix`]. Returns `None`

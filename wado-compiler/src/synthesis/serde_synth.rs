@@ -11,9 +11,16 @@ use std::rc::Rc;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItems;
 use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
+use crate::name::TypeHead;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_local_trait_method};
 use crate::package::Package;
+use crate::tir;
+use crate::tir::TirField;
+use crate::tir::TirStruct;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, ResolvedType, SynthTrait, SynthesisRequest,
     TirBinaryOp, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirStmt, TypeId,
@@ -32,12 +39,12 @@ use crate::token::Span;
 /// implement.
 #[derive(Clone, Debug)]
 pub(super) struct SerdeStdlibNames {
-    pub deserialize: crate::name::FqTraitName,
-    pub field_schema: crate::name::FqTraitName,
+    pub deserialize: FqTraitName,
+    pub field_schema: FqTraitName,
 }
 
 impl SerdeStdlibNames {
-    pub fn from_type_table(type_table: &crate::tir::TypeTable) -> Self {
+    pub fn from_type_table(type_table: &TypeTable) -> Self {
         let items = type_table.compiler_items();
         Self {
             deserialize: items.trait_fq(CompilerItem::Deserialize),
@@ -59,7 +66,7 @@ use super::common::{
 /// verbatim (identity — `user_id` stays `"user_id"`, `userId` stays
 /// `"userId"`). Used by both the serialize and deserialize synthesisers so the
 /// two never disagree.
-fn serialized_field_name(f: &crate::tir::TirField, struct_def: &crate::tir::TirStruct) -> String {
+fn serialized_field_name(f: &TirField, struct_def: &TirStruct) -> String {
     f.wire_name_override.clone().unwrap_or_else(|| {
         if let Some(strategy) = &struct_def.wire_name_policy {
             apply_name_policy(&f.name, strategy)
@@ -186,7 +193,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
     // its `TypeId` (`SynthesisRequest` needs one), instead of an O(requests
     // × types) rescan per entry. Keyed by the head the request recorded, so
     // two modules' same-named declarations stay apart.
-    let by_head: IndexMap<crate::name::TypeHead, TypeId> = {
+    let by_head: IndexMap<TypeHead, TypeId> = {
         let tt = type_table.borrow();
         tt.all_types()
             .filter_map(|(id, resolved)| match resolved {
@@ -245,7 +252,7 @@ fn collect_existing_trait_methods(module: &TirModule) -> IndexSet<String> {
         .collect()
 }
 
-fn find_struct<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::TirStruct> {
+fn find_struct<'a>(module: &'a TirModule, name: &str) -> Option<&'a TirStruct> {
     module.structs.iter().find(|s| s.name == name)
 }
 
@@ -255,7 +262,7 @@ fn find_struct<'a>(module: &'a TirModule, name: &str) -> Option<&'a crate::tir::
 /// `ReflectStruct` blanket in `core:serde` (WEP 2026-06-13).
 fn generate_field_schema(
     module: &TirModule,
-    req: &crate::tir::SynthesisRequest,
+    req: &tir::SynthesisRequest,
     names: &SerdeStdlibNames,
 ) -> Option<(TirFunction, TirFunction)> {
     let struct_def = find_struct(module, &req.target_type_name)?;
@@ -268,10 +275,10 @@ fn generate_field_schema(
     // trait signature.
     let key_slice_type = {
         let base = {
-            let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::Slice);
+            let def = tt.require_compiler_item_def(CompilerItem::Slice);
             tt.make_generic_instance(def, vec![TypeTable::U8])
         };
-        let def = tt.require_compiler_item_def(crate::compiler_item::CompilerItem::ByteSlice);
+        let def = tt.require_compiler_item_def(CompilerItem::ByteSlice);
         tt.make_newtype(def, base)
     };
     let fields: Vec<(String, String, TypeId, u32)> = struct_def
@@ -339,10 +346,10 @@ fn key_get_byte_as_i32_expr(
     key_ref: TirExpr,
     index_expr: TirExpr,
     span: Span,
-    compiler_items: &crate::compiler_item::CompilerItems,
+    compiler_items: &CompilerItems,
 ) -> TirExpr {
     let get_byte_call = byte_slice_method_call(
-        crate::compiler_item::CompilerItem::ByteSliceGetUnchecked,
+        CompilerItem::ByteSliceGetUnchecked,
         key_ref,
         vec![CallArg::new(index_expr, false)],
         TypeTable::U8,
@@ -361,13 +368,9 @@ fn key_get_byte_as_i32_expr(
 
 /// Build a `key.len()` expression on a `ByteSlice` (`Slice<u8>`) key,
 /// returning the byte length as `i32`.
-fn byte_slice_len_expr(
-    key_ref: TirExpr,
-    span: Span,
-    compiler_items: &crate::compiler_item::CompilerItems,
-) -> TirExpr {
+fn byte_slice_len_expr(key_ref: TirExpr, span: Span, compiler_items: &CompilerItems) -> TirExpr {
     byte_slice_method_call(
-        crate::compiler_item::CompilerItem::ByteSliceLen,
+        CompilerItem::ByteSliceLen,
         key_ref,
         vec![],
         TypeTable::I32,
@@ -385,12 +388,12 @@ fn byte_slice_len_expr(
 /// function's type parameters — the same shape as the generic `default()`
 /// call synthesised for field defaults.
 fn byte_slice_method_call(
-    item: crate::compiler_item::CompilerItem,
+    item: CompilerItem,
     receiver: TirExpr,
     args: Vec<CallArg>,
     return_type: TypeId,
     span: Span,
-    compiler_items: &crate::compiler_item::CompilerItems,
+    compiler_items: &CompilerItems,
 ) -> TirExpr {
     let (module_source, _, name) = compiler_items.require_method(item);
     let module_source = module_source.clone();
@@ -400,7 +403,7 @@ fn byte_slice_method_call(
         name.to_string(),
     )
     .with_struct_type_args(&[FqTypeName::builtin("u8")]);
-    let monomorph_info = crate::tir::MonomorphInfo {
+    let monomorph_info = tir::MonomorphInfo {
         generic_name: method_info.base_struct_name(),
         impl_type_args: vec![TypeTable::U8],
         method_type_args: vec![],
@@ -456,7 +459,7 @@ fn i32_eq(left: TirExpr, right: TirExpr, span: Span) -> TirExpr {
 #[allow(clippy::too_many_arguments)]
 fn field_schema_method_fn(
     type_name: &FqTypeName,
-    field_schema_trait: &crate::name::FqTraitName,
+    field_schema_trait: &FqTraitName,
     method: &str,
     param_name: &str,
     param_type: TypeId,
@@ -470,7 +473,7 @@ fn field_schema_method_fn(
         module_source: ModuleSource::default(),
         name: MethodName::format_local(type_name, Some(field_schema_trait), method),
         def_id: None,
-        visibility: crate::ast::Visibility::Public,
+        visibility: Visibility::Public,
         is_export: false,
         is_cm_export: false,
         is_ambient: false,
@@ -510,7 +513,7 @@ fn field_schema_method_fn(
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -527,7 +530,7 @@ struct LookupTree<'a> {
     key_slice_type: TypeId,
     option_i32: TypeId,
     span: Span,
-    compiler_items: &'a crate::compiler_item::CompilerItems,
+    compiler_items: &'a CompilerItems,
     locals: Vec<TirLocal>,
     next_local: u32,
 }
@@ -667,13 +670,13 @@ fn group_by_byte<'a>(keys: &[Key<'a>], pos: usize) -> IndexMap<u8, Vec<Key<'a>>>
 
 fn generate_lookup_function(
     type_name: &FqTypeName,
-    field_schema_trait: &crate::name::FqTraitName,
+    field_schema_trait: &FqTraitName,
     fields: &[(String, String, TypeId, u32)],
     positional_flags: &[bool],
     key_slice_type: TypeId,
     option_i32: TypeId,
     span: Span,
-    compiler_items: &crate::compiler_item::CompilerItems,
+    compiler_items: &CompilerItems,
 ) -> TirFunction {
     let mut tree = LookupTree {
         key_slice_type,
@@ -738,11 +741,11 @@ fn generate_lookup_function(
 /// assignment as `lookup`.
 fn generate_positional_at_function(
     type_name: &FqTypeName,
-    field_schema_trait: &crate::name::FqTraitName,
+    field_schema_trait: &FqTraitName,
     positional_flags: &[bool],
     option_i32: TypeId,
     span: Span,
-    compiler_items: &crate::compiler_item::CompilerItems,
+    compiler_items: &CompilerItems,
 ) -> TirFunction {
     let locals = vec![param_local("__rank", TypeTable::I32, false)];
     let next_local: u32 = 1;

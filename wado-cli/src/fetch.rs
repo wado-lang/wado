@@ -12,7 +12,16 @@
 use std::fmt::Write as _;
 
 use crate::args::{self, CliExit};
+use crate::build_dep::fetch_build_dependencies;
+use crate::build_dep::locked_generator_versions;
+use crate::build_dep::resolve_build_dependencies;
+use crate::cache::component_path;
+use crate::cache::generator_path;
+use crate::cache::write_atomic;
+use crate::git::materialize;
+use crate::manifest::ProjectManifest;
 use crate::manifest::discover;
+use crate::manifest::emit_manifest_warnings;
 use crate::oci;
 use crate::registry::FilesystemProvider;
 
@@ -47,7 +56,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
     let project = discover(&cwd)
         .map_err(CliExit::error)?
         .ok_or_else(|| CliExit::error("no wado.toml found"))?;
-    crate::manifest::emit_manifest_warnings(&project);
+    emit_manifest_warnings(&project);
 
     let provider = FilesystemProvider::new(project.root.clone());
     let packages = wado_manifest::resolve(&project.manifest, &provider)
@@ -61,7 +70,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
         if package.integrity.is_some() {
             let (registry_url, coordinate, _name) = split_registry_id(&package.id)
                 .ok_or_else(|| CliExit::error(format!("unexpected lock id {:?}", package.id)))?;
-            let out = crate::cache::component_path(registry_url, coordinate, &package.version)
+            let out = component_path(registry_url, coordinate, &package.version)
                 .map_err(CliExit::error)?;
             if !out.is_file() {
                 let reference = oci::reference(registry_url, coordinate, &package.version)
@@ -69,7 +78,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
                 let bytes = oci::pull_component(&reference).await.map_err(|e| {
                     CliExit::error(format!("fetching {coordinate}@{}: {e}", package.version))
                 })?;
-                crate::cache::write_atomic(&out, &bytes)
+                write_atomic(&out, &bytes)
                     .map_err(|e| CliExit::error(format!("writing {}: {e}", out.display())))?;
             }
             eprintln!(
@@ -84,11 +93,10 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
                 .to_string();
             let (version, sha) = (package.version.clone(), sha.clone());
             let url_for_msg = url.clone();
-            let worktree =
-                tokio::task::spawn_blocking(move || crate::git::materialize(&url, &version, &sha))
-                    .await
-                    .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
-                    .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
+            let worktree = tokio::task::spawn_blocking(move || materialize(&url, &version, &sha))
+                .await
+                .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?
+                .map_err(|e| CliExit::error(format!("materializing {}: {e}", package.id)))?;
             eprintln!(
                 "Fetched {url_for_msg}@{} → {}",
                 package.version,
@@ -105,7 +113,7 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
     // cannot be pre-fetched here (offline, missing registry) is a warning, not a
     // hard failure that would leave the just-fetched `[dependencies]` orphaned.
     // The `wado.lock` pin is preferred over a live version listing.
-    let locked = crate::build_dep::locked_generator_versions(&project.root);
+    let locked = locked_generator_versions(&project.root);
     let generators = match fetch_generators(&project, &locked).await {
         Ok(n) => n,
         Err(e) => {
@@ -122,14 +130,13 @@ pub async fn run(_opts: FetchOptions) -> Result<(), CliExit> {
 /// cache; returns the number pulled. Separated so `run` can treat a failure as a
 /// non-fatal warning.
 async fn fetch_generators(
-    project: &crate::manifest::ProjectManifest,
+    project: &ProjectManifest,
     locked: &indexmap::IndexMap<String, String>,
 ) -> Result<usize, String> {
-    let build_deps =
-        crate::build_dep::resolve_build_dependencies(&project.manifest, locked).await?;
-    let generators = crate::build_dep::fetch_build_dependencies(&build_deps).await?;
+    let build_deps = resolve_build_dependencies(&project.manifest, locked).await?;
+    let generators = fetch_build_dependencies(&build_deps).await?;
     for dep in &build_deps {
-        let path = crate::cache::generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
+        let path = generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         eprintln!(
             "Fetched {}@{} (generator) → {}",
             dep.coordinate,

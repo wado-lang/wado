@@ -8,6 +8,8 @@
 
 use crate::hashmap::IndexMap;
 
+use crate::ast::Attribute;
+use crate::ast::CmImport;
 use crate::ast::{Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
 use crate::module_source::ModuleSource;
 
@@ -239,10 +241,10 @@ pub struct WorldRegistry {
 /// Extract the fully-qualified world name (without version) from `#[cm("...")]` attribute.
 ///
 /// For example, `#[cm("wasi:cli/command@0.3.0-rc-2026-01-06")]` returns `"wasi:cli/command"`.
-fn fq_name_from_attrs(attrs: &[crate::ast::Attribute]) -> Option<String> {
+fn fq_name_from_attrs(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find_map(|a| a.as_cm_import().map(crate::ast::CmImport::bare_path))
+        .find_map(|a| a.as_cm_import().map(CmImport::bare_path))
 }
 
 impl WorldRegistry {
@@ -376,7 +378,15 @@ impl WorldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstId;
+    use crate::ast::CmBoundary;
+    use crate::ast::CmImport;
+    use crate::ast::GenericType;
+    use crate::ast::NamedType;
+    use crate::ast::Visibility;
+    use crate::ast::WorldExportFn;
     use crate::ast::{self, Attribute};
+    use crate::component_model::CmInterfaceRegistry;
     use crate::token::Span;
 
     fn make_span() -> Span {
@@ -388,19 +398,19 @@ mod tests {
         let mut registry = WorldRegistry::new();
 
         let world = WorldDecl {
-            id: crate::ast::AstId::fresh(),
+            id: AstId::fresh(),
             name: "Command".to_string(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             attrs: vec![Attribute {
                 name: "cm".to_string(),
                 args: vec![ast::AttrArg::Str("wasi:cli/command@0.3.0".to_string())],
-                cm_boundary: Some(crate::ast::CmBoundary::Import(
-                    crate::ast::CmImport::parse("wasi:cli/command@0.3.0").unwrap(),
+                cm_boundary: Some(CmBoundary::Import(
+                    CmImport::parse("wasi:cli/command@0.3.0").unwrap(),
                 )),
                 span: make_span(),
             }],
             imports: vec![],
-            exports: vec![WorldExport::Function(crate::ast::WorldExportFn {
+            exports: vec![WorldExport::Function(WorldExportFn {
                 name: "run".to_string(),
                 is_async: true,
                 params: vec![],
@@ -435,8 +445,7 @@ mod tests {
         // when registering the `wasi:cli/command` world. Without it,
         // `export Run;` would expand to zero methods (lookup callback returns
         // `None`).
-        let (_registry, world_registry) =
-            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
 
         assert!(
             world_registry.has_world("wasi:cli/command"),
@@ -458,8 +467,7 @@ mod tests {
 
     #[test]
     fn test_kiln_generator_world_registered() {
-        let (_registry, world_registry) =
-            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
         assert!(
             world_registry.has_world("core:kiln/generator"),
             "core:kiln/generator world should be registered"
@@ -492,20 +500,12 @@ mod tests {
 
     /// Build a `Result<Ok, Err>` return type from two named-type names.
     fn result_return(ok: &str, err: &str) -> Type {
-        Type::Generic(crate::ast::GenericType {
-            id: crate::ast::AstId::fresh(),
+        Type::Generic(GenericType {
+            id: AstId::fresh(),
             name: "Result".to_string(),
             args: vec![
-                Type::Named(crate::ast::NamedType::new(
-                    crate::ast::AstId::fresh(),
-                    ok.to_string(),
-                    make_span(),
-                )),
-                Type::Named(crate::ast::NamedType::new(
-                    crate::ast::AstId::fresh(),
-                    err.to_string(),
-                    make_span(),
-                )),
+                Type::Named(NamedType::new(AstId::fresh(), ok.to_string(), make_span())),
+                Type::Named(NamedType::new(AstId::fresh(), err.to_string(), make_span())),
             ],
             span: make_span(),
         })
@@ -516,8 +516,7 @@ mod tests {
         // Characterization: the stdlib worlds keep their current classification
         // after the detection logic moves from namespace+`Response` sniffing to
         // the structural `from_interface_fq` + non-unit `Result` check.
-        let (_registry, world_registry) =
-            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
 
         assert!(
             world_registry
@@ -657,8 +656,7 @@ mod tests {
         // `import KilnHost { ... }` in `lib/core/kiln/worlds.wado`, so the
         // populated registry must surface that import. The cli Command world
         // imports several effects (Stdout, Stdin, Environment, ...).
-        let (_registry, world_registry) =
-            crate::component_model::CmInterfaceRegistry::build_from_stdlib();
+        let (_registry, world_registry) = CmInterfaceRegistry::build_from_stdlib();
 
         let kiln = world_registry
             .get("core:kiln/generator")

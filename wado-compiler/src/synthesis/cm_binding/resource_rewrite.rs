@@ -30,6 +30,24 @@ use crate::synthesis::common::{
 
 use super::synthesize_lift;
 use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
+use crate::ast;
+use crate::ast::GenericType;
+use crate::ast::Visibility;
+use crate::component_model::classify_future_payload;
+use crate::component_model::classify_stream_payload;
+use crate::component_model::cm_align_with_registry_scoped;
+use crate::component_model::cm_payload_type_from_type_id;
+use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::is_u8_stream_element;
+use crate::component_model::peel_newtypes;
+use crate::flat_package::FlatPackage;
+use crate::synthesis::cm_binding::PayloadsValidated;
+use crate::synthesis::cm_binding::future_stream_payload_site;
+use crate::synthesis::cm_binding::lower::synthesize_lower_list_to_buffer;
+use crate::synthesis::cm_binding::lower::synthesize_lower_wasi_type_to_memory;
+use crate::synthesis::cm_binding::types::cm_package_from_source;
+use crate::tir;
+use crate::tir::TirStructField;
 
 /// CM async built-ins (`stream-read`, `stream-write`, `future-read`, …)
 /// pack their result as `(count << 4) | status`, with `-1` meaning BLOCKED.
@@ -81,12 +99,12 @@ fn copy_report_literal(
             struct_type: type_id,
             struct_name,
             fields: vec![
-                crate::tir::TirStructField {
+                TirStructField {
                     name: moved_field.to_string(),
                     value: moved,
                     field_index: 0,
                 },
-                crate::tir::TirStructField {
+                TirStructField {
                     name: "result".to_string(),
                     value: result,
                     field_index: 1,
@@ -151,7 +169,7 @@ struct SynthCtx<'a> {
 /// generic body names its payload with a type parameter, and the helper it
 /// needs is minted per instance, after monomorphize.
 pub(super) fn payload_is_bindable(tt: &TypeTable, expr: &TirExpr) -> bool {
-    super::future_stream_payload_site(tt, expr).is_none_or(|(payload, _)| tt.is_concrete(payload))
+    future_stream_payload_site(tt, expr).is_none_or(|(payload, _)| tt.is_concrete(payload))
 }
 
 /// Applies `find` to every expression, recording helper-name → key per match.
@@ -213,7 +231,7 @@ impl<'a> BindingSites<'a> {
         }
     }
 
-    fn from_flat(flat: &'a crate::flat_package::FlatPackage) -> Self {
+    fn from_flat(flat: &'a FlatPackage) -> Self {
         Self {
             functions: flat.functions.clone(),
             existing: flat
@@ -322,13 +340,11 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
     });
     // Scope the layout and the lift alike to the record's own package, so
     // nested field names resolve the same way on both sides.
-    let (_, elem_pkg) = super::types::cm_package_from_source(&source)
+    let (_, elem_pkg) = cm_package_from_source(&source)
         .expect("`find_binding_struct_source` yields only bundled-namespace sources");
     let scope = Some(elem_pkg);
-    let elem_size =
-        crate::component_model::cm_size_with_registry_scoped(&ast_type, registry, scope) as i32;
-    let elem_align =
-        crate::component_model::cm_align_with_registry_scoped(&ast_type, registry, scope) as i32;
+    let elem_size = cm_size_with_registry_scoped(&ast_type, registry, scope) as i32;
+    let elem_align = cm_align_with_registry_scoped(&ast_type, registry, scope) as i32;
     let cm_record_name = registry
         .get_struct_cm_name_by_source(&source, &elem_name)
         .unwrap_or(&elem_name)
@@ -426,25 +442,21 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 
 /// The AST type a payload lays out as: a newtype has no representation of its
 /// own, so its base's, at every level.
-fn payload_ast_type(
-    payload: TypeId,
-    tt: &TypeTable,
-    registry: &CmInterfaceRegistry,
-) -> crate::ast::Type {
-    let id = crate::component_model::peel_newtypes(tt, payload);
+fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegistry) -> ast::Type {
+    let id = peel_newtypes(tt, payload);
     // Peeled off the TypeId, not the produced AST: a lib-local alias's
     // synthesized `NamedType` carries no source interface to look it up by.
     if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
         let name = tt.def_name(*def).to_string();
-        let args: Vec<crate::ast::Type> = type_args
+        let args: Vec<ast::Type> = type_args
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
             .collect();
         return if TypeTable::is_tuple_type(&name) {
-            crate::ast::Type::Tuple(args)
+            ast::Type::Tuple(args)
         } else {
-            crate::ast::Type::Generic(crate::ast::GenericType {
-                id: crate::ast::AstId::fresh(),
+            ast::Type::Generic(GenericType {
+                id: AstId::fresh(),
                 name,
                 args,
                 span: synth_span(),
@@ -457,8 +469,7 @@ fn payload_ast_type(
 /// Asked directly rather than through `classify_stream_payload`, which panics
 /// instead of answering `false`.
 fn has_value_payload(tt: &TypeTable, elem: TypeId) -> bool {
-    !crate::component_model::is_u8_stream_element(tt, elem)
-        && crate::component_model::cm_payload_type_from_type_id(tt, elem).is_some()
+    !is_u8_stream_element(tt, elem) && cm_payload_type_from_type_id(tt, elem).is_some()
 }
 
 /// The stream-write element type for a scalar / structural `stream-write`, or
@@ -512,10 +523,7 @@ fn rewrite_async_primitives_at(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFu
 
 /// Pre-monomorphize half: every body whose payloads are already concrete.
 /// Consumes the witness — these rewrites destroy the shape the scan matches.
-pub(super) fn rewrite_async_primitives(
-    project: &mut Package,
-    _validated: super::PayloadsValidated,
-) {
+pub(super) fn rewrite_async_primitives(project: &mut Package, _validated: PayloadsValidated) {
     let generated = rewrite_async_primitives_at(&BindingSites::from_package(project));
     if generated.is_empty() {
         return;
@@ -532,8 +540,8 @@ pub(super) fn rewrite_async_primitives(
 /// Post-monomorphize half: the bodies that were generic, where a `#[cm]` call's
 /// payload only became concrete when the instance was minted.
 pub fn rewrite_async_primitives_monomorphized(
-    flat: &mut crate::flat_package::FlatPackage,
-    _validated: super::PayloadsValidated,
+    flat: &mut FlatPackage,
+    _validated: PayloadsValidated,
 ) {
     let generated = rewrite_async_primitives_at(&BindingSites::from_flat(flat));
     // Link is what stamps a module source on a pre-monomorphize helper, by the
@@ -567,22 +575,16 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     let (func_name, write_name, elem_ast, elem_size, elem_align) = {
         let tt = type_table.borrow();
         let func_name = stream_write_func_name(&tt, elem_type_id);
-        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let payload = classify_stream_payload(&tt, elem_type_id);
         let write_name = CanonicalIntrinsic::StreamWrite(payload);
         let elem_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
         // Match the package the element buffer is packed with below
         // (`synthesize_lower_list_to_buffer`, wasi_package "cli"), so the retry
         // pointer stride can't disagree with the buffer's element size.
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            &elem_ast,
-            cm_interface_registry,
-            Some("cli"),
-        ) as i32;
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            &elem_ast,
-            cm_interface_registry,
-            Some("cli"),
-        ) as i32;
+        let size =
+            cm_size_with_registry_scoped(&elem_ast, cm_interface_registry, Some("cli")) as i32;
+        let align =
+            cm_align_with_registry_scoped(&elem_ast, cm_interface_registry, Some("cli")) as i32;
         (func_name, write_name, elem_ast, size, align)
     };
 
@@ -613,7 +615,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         wasi_package: "cli",
         names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
-    let (lower_stmts, ptr_local, count_local) = super::lower::synthesize_lower_list_to_buffer(
+    let (lower_stmts, ptr_local, count_local) = synthesize_lower_list_to_buffer(
         &elem_ast,
         local_ref(data_idx, "data", list_type_id),
         &mut next_local,
@@ -692,7 +694,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         module_source: ModuleSource::default(),
         name: func_name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -741,7 +743,7 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -802,20 +804,16 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
     let (func_name, write_name, cm_package, payload_ast, size, align, awaits_reader) = {
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
-        let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
+        let payload = classify_future_payload(&tt, payload_type_id);
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some(&cm_package),
-        ) as i32;
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some(&cm_package),
-        ) as i32;
+        let size =
+            cm_size_with_registry_scoped(&payload_ast, cm_interface_registry, Some(&cm_package))
+                as i32;
+        let align =
+            cm_align_with_registry_scoped(&payload_ast, cm_interface_registry, Some(&cm_package))
+                as i32;
         let awaits_reader = matches!(
             payload,
             CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
@@ -882,7 +880,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         wasi_package: &cm_package,
         names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
-    stmts.extend(super::lower::synthesize_lower_wasi_type_to_memory(
+    stmts.extend(synthesize_lower_wasi_type_to_memory(
         &payload_ast,
         local_ref(value_idx, "value", payload_type_id),
         local_ref(ptr_idx, "ptr", TypeTable::I32),
@@ -932,7 +930,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         module_source: ModuleSource::default(),
         name: func_name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -981,7 +979,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -1029,20 +1027,16 @@ fn synthesize_future_read_func(
     let (func_name, read_name, cm_package, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
-        let payload = crate::component_model::classify_future_payload(&tt, payload_type_id);
+        let payload = classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some(&cm_package),
-        ) as i32;
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some(&cm_package),
-        ) as i32;
+        let size =
+            cm_size_with_registry_scoped(&payload_ast, cm_interface_registry, Some(&cm_package))
+                as i32;
+        let align =
+            cm_align_with_registry_scoped(&payload_ast, cm_interface_registry, Some(&cm_package))
+                as i32;
         (func_name, read_name, cm_package, payload_ast, size, align)
     };
 
@@ -1173,7 +1167,7 @@ fn synthesize_future_read_func(
         module_source: ModuleSource::default(),
         name: func_name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -1212,7 +1206,7 @@ fn synthesize_future_read_func(
         allocator_tag: None,
         declared_return_convention: None,
         kind: FunctionKind::Regular,
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -1229,7 +1223,7 @@ fn stream_receiver_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
     let (receiver, _) = expr.kind.call_receiver()?;
     // `type MyStream = Stream<u8>` names the same stream; the payload paths peel
     // it too, so a newtype receiver must answer with the element, not nothing.
-    let recv = crate::component_model::peel_newtypes(tt, tt.peel_refs(receiver.type_id));
+    let recv = peel_newtypes(tt, tt.peel_refs(receiver.type_id));
     tt.generic_type_args(recv)?.first().copied()
 }
 
@@ -1248,7 +1242,7 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
         return None;
     }
     let elem = stream_receiver_element(tt, expr)?;
-    (!crate::component_model::is_u8_stream_element(tt, elem)).then_some(elem)
+    (!is_u8_stream_element(tt, elem)).then_some(elem)
 }
 
 /// The `__cm_stream_read_<record>` helper name for a WASI record element.
@@ -1277,7 +1271,7 @@ fn synthesize_stream_read_func(
     let chunk_type_id = type_table.borrow_mut().make_stream_chunk(elem_type_id);
     // `List` is a declaration, so the receiver its methods are named after
     // carries it rather than the spelling `List` happens to have.
-    let list_fq = super::types::CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
+    let list_fq = CmStdlibNames::from_type_table(&type_table.borrow()).array_fq;
     let elem_fq = type_table.borrow().fq_type_name(elem_type_id);
     // `List<Elem>::<method>` — the instantiated receiver both calls hang off.
     let list_method = |method: &str| {
@@ -1560,7 +1554,7 @@ fn synthesize_stream_read_func(
         module_source: ModuleSource::default(),
         name: func_name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -1610,7 +1604,7 @@ fn synthesize_stream_read_func(
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }
 }
 
@@ -1625,19 +1619,13 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
     let (func_name, read_name, payload_ast, elem_size, elem_align) = {
         let tt = type_table.borrow();
         let func_name = stream_read_value_func_name(&tt, elem_type_id);
-        let payload = crate::component_model::classify_stream_payload(&tt, elem_type_id);
+        let payload = classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload);
         let payload_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
-        let size = crate::component_model::cm_size_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some("cli"),
-        ) as i32;
-        let align = crate::component_model::cm_align_with_registry_scoped(
-            &payload_ast,
-            cm_interface_registry,
-            Some("cli"),
-        ) as i32;
+        let size =
+            cm_size_with_registry_scoped(&payload_ast, cm_interface_registry, Some("cli")) as i32;
+        let align =
+            cm_align_with_registry_scoped(&payload_ast, cm_interface_registry, Some("cli")) as i32;
         (func_name, read_name, payload_ast, size, align)
     };
 
@@ -1839,7 +1827,7 @@ impl TirMutVisitor for CmMethodRewriter<'_> {
         // that got here unparameterized stays unbound and is reported.
         if cm_name.starts_with("stream-")
             && !stream_receiver_element(self.tt, expr)
-                .is_some_and(|e| crate::component_model::is_u8_stream_element(self.tt, e))
+                .is_some_and(|e| is_u8_stream_element(self.tt, e))
         {
             return;
         }
@@ -1890,7 +1878,7 @@ impl CmMethodRewriter<'_> {
 /// member declares a receiver: a constructor's first argument is a value
 /// (`ErrorContext::new(message)`), which casting would corrupt.
 fn is_cm_handle(tt: &TypeTable, type_id: TypeId) -> bool {
-    let peeled = crate::component_model::peel_newtypes(tt, tt.peel_refs(type_id));
+    let peeled = peel_newtypes(tt, tt.peel_refs(type_id));
     matches!(
         tt.get(peeled),
         ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
@@ -1913,10 +1901,10 @@ fn rewrite_cm_new(expr: &mut TirExpr, tt: &TypeTable, is_future: bool) {
         return;
     };
     let (canonical, helper) = if is_future {
-        let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+        let payload = classify_future_payload(tt, payload_tid);
         (CanonicalIntrinsic::FutureNew(payload), "cm_future_pair")
     } else {
-        let payload = crate::component_model::classify_stream_payload(tt, payload_tid);
+        let payload = classify_stream_payload(tt, payload_tid);
         (CanonicalIntrinsic::StreamNew(payload), "cm_stream_pair")
     };
     let result_type = expr.type_id;
@@ -1967,7 +1955,7 @@ fn parameterize_future_cm_name(
     let payload_tid = *tt
         .generic_type_args(tt.peel_refs(receiver.type_id))?
         .first()?;
-    let payload = crate::component_model::classify_future_payload(tt, payload_tid);
+    let payload = classify_future_payload(tt, payload_tid);
     CanonicalIntrinsic::future_op(cm_name, payload)
 }
 
@@ -1988,10 +1976,10 @@ fn parameterize_stream_cm_name(
     let elem = stream_receiver_element(tt, expr)?;
     // The same predicate the payload classification uses: a `type MyByte = u8`
     // stream must not drop under one canonical and read under another.
-    if crate::component_model::is_u8_stream_element(tt, elem) {
+    if is_u8_stream_element(tt, elem) {
         return None;
     }
-    let payload = crate::component_model::cm_payload_type_from_type_id(tt, elem).map_or_else(
+    let payload = cm_payload_type_from_type_id(tt, elem).map_or_else(
         || {
             // The element's declaring interface keys the CM-name lookup. Its
             // `module_source` is the loader identity (a `.wado` path); the
@@ -2044,6 +2032,10 @@ fn pascal_to_kebab(name: &str) -> String {
 #[cfg(test)]
 mod cm_binding_tests {
     use super::*;
+    use crate::ast::Attribute;
+    use crate::ast::Item;
+    use crate::parse;
+    use crate::stdlib::all_core_modules;
 
     /// What each Component Model primitive binds to. The table is the
     /// specification; [`cm_binding_function`] derives it rather than listing it.
@@ -2103,26 +2095,21 @@ mod cm_binding_tests {
     /// Every `#[cm("…")]` the prelude declares on a resource method — the same
     /// attribute reader the elaborator records `cm_name` from.
     fn declared_primitives() -> Vec<String> {
-        let source = crate::stdlib::all_core_modules()
+        let source = all_core_modules()
             .iter()
             .find(|(import, _)| *import == "core:prelude/types.wado")
             .expect("the prelude declares the Component Model primitives")
             .1;
-        crate::parse(source)
+        parse(source)
             .ast
             .items
             .iter()
             .filter_map(|item| match item {
-                crate::ast::Item::Resource(decl) => Some(&decl.methods),
+                Item::Resource(decl) => Some(&decl.methods),
                 _ => None,
             })
             .flatten()
-            .filter_map(|method| {
-                method
-                    .attrs
-                    .iter()
-                    .find_map(crate::ast::Attribute::cm_identifier)
-            })
+            .filter_map(|method| method.attrs.iter().find_map(Attribute::cm_identifier))
             .collect()
     }
 

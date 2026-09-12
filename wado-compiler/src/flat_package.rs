@@ -9,14 +9,21 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::builtin_registry::BuiltinRegistry;
+use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::loader::WasmAsset;
 use crate::module_source::ModuleSource;
+use crate::module_source::ModuleSourceInterner;
+use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
     BuiltinDeclaration, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
     TirVariantDecl, TypeTable,
 };
+use crate::token::Span;
 use crate::wir_build::component_plan::ComponentPlan;
+use crate::world_registry::GENERATOR_HOST_INTERFACE;
 use crate::world_registry::{self, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
@@ -34,11 +41,11 @@ pub struct FlatPackage {
 
     /// The package's `ModuleSource` interner, carried past link so a
     /// post-monomorphize synthesis can name a module the way the frontend did.
-    pub interner: Rc<RefCell<crate::module_source::ModuleSourceInterner>>,
+    pub interner: Rc<RefCell<ModuleSourceInterner>>,
 
     /// The effect-dispatch wrappers a resource `#[cm]` call routes through,
     /// for the calls that were still generic when the early pass ran.
-    pub resource_wrappers: crate::synthesis::effect_dispatch::ResourceWrapperIndex,
+    pub resource_wrappers: ResourceWrapperIndex,
 
     /// All functions from all modules. Each `TirFunction` carries its own `module_source`.
     pub functions: Vec<Rc<RefCell<TirFunction>>>,
@@ -77,7 +84,7 @@ pub struct FlatPackage {
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
-    pub codegen_flags: crate::codegen_flags::CodegenFlags,
+    pub codegen_flags: CodegenFlags,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")
@@ -96,18 +103,18 @@ pub struct FlatPackage {
     /// string (matches `namespace` in `#[canonical("wasm:<path>",
     /// "<export>")]` attributes). Consumed by
     /// `codegen::component::embed_imported_wasm_modules`.
-    pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+    pub wasm_assets: IndexMap<String, WasmAsset>,
 
     /// Project-wide trait knowledge inherited from `Package` and grown
     /// here by [`crate::monomorphize::monomorphize`], which adds the
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
-    pub trait_env: std::sync::Arc<crate::elaborator::trait_env::TraitEnv>,
+    pub trait_env: std::sync::Arc<TraitEnv>,
 
     /// Local last-use spans (WEP 2026-05-21). A span is present when the
     /// identifier use there is a move-eligible local's final use; the
     /// value-copy planner elides the copy there.
-    pub moved_local_spans: IndexSet<crate::token::Span>,
+    pub moved_local_spans: IndexSet<Span>,
 }
 
 impl FlatPackage {
@@ -130,7 +137,7 @@ impl FlatPackage {
     /// Whether the target world is a kiln generator world (imports
     /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
     pub fn is_generator_world(&self) -> bool {
-        self.world_imports_interface(crate::world_registry::GENERATOR_HOST_INTERFACE)
+        self.world_imports_interface(GENERATOR_HOST_INTERFACE)
     }
 
     /// Look up a variant by `(module_source, name)`.

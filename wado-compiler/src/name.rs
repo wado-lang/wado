@@ -4,7 +4,17 @@
 //! Module paths are filesystem representations, not URIs: normalized lexically
 //! ([`crate::path::normalize`]), never percent-encoded, and project-root-relative.
 
+use crate::ast;
+use crate::ast::AstId;
+use crate::ast::TestMetadata;
+use crate::defs::DefId;
+use crate::defs::DefTable;
+use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::path::normalize;
+use crate::path::relative_path;
+use crate::tir;
+use crate::tir::ResolvedType;
 use std::fmt;
 use std::hash::Hash;
 
@@ -46,7 +56,7 @@ pub const LOCAL_ITEM_ID_SEP: char = '@';
 /// items render to two names rather than one.
 /// Only `local` is encoded, never the `AstIdSpace` — that is a process-global
 /// counter, and encoding it would make mangled WIR names non-deterministic.
-pub fn mangle_local_item_name(name: &str, id: crate::ast::AstId) -> String {
+pub fn mangle_local_item_name(name: &str, id: AstId) -> String {
     format!("{name}{LOCAL_ITEM_ID_SEP}{}", id.local())
 }
 
@@ -518,7 +528,7 @@ pub struct LocalMethodName {
     /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
     /// per-op wrappers, with the resource's operation types substituted
     /// for that combination.
-    pub trait_type_args: Vec<crate::tir::TypeId>,
+    pub trait_type_args: Vec<tir::TypeId>,
     /// The receiver's type arguments, structured. Together with `receiver`
     /// they *are* `struct_name`: [`Self::fq_struct_name`] rebuilds the
     /// instantiated receiver from them rather than reading the rendered
@@ -562,20 +572,20 @@ impl RefKind {
 
     /// The ref kind of an AST type, or `None` for a non-reference.
     #[must_use]
-    pub fn from_ast(ty: &crate::ast::Type) -> Option<Self> {
+    pub fn from_ast(ty: &ast::Type) -> Option<Self> {
         match ty {
-            crate::ast::Type::Reference(_) => Some(RefKind::Shared),
-            crate::ast::Type::MutReference(_) => Some(RefKind::Mut),
+            ast::Type::Reference(_) => Some(RefKind::Shared),
+            ast::Type::MutReference(_) => Some(RefKind::Mut),
             _ => None,
         }
     }
 
     /// The ref kind of a resolved type, or `None` for a non-reference.
     #[must_use]
-    pub fn from_resolved(ty: &crate::tir::ResolvedType) -> Option<Self> {
+    pub fn from_resolved(ty: &ResolvedType) -> Option<Self> {
         match ty {
-            crate::tir::ResolvedType::Ref(_) => Some(RefKind::Shared),
-            crate::tir::ResolvedType::MutRef(_) => Some(RefKind::Mut),
+            ResolvedType::Ref(_) => Some(RefKind::Shared),
+            ResolvedType::MutRef(_) => Some(RefKind::Mut),
             _ => None,
         }
     }
@@ -725,7 +735,7 @@ impl LocalMethodName {
     /// keyed by identity. `None` for an inherent method, or where the
     /// reference reached no declaration.
     #[must_use]
-    pub fn trait_decl(&self) -> Option<crate::defs::DefId> {
+    pub fn trait_decl(&self) -> Option<DefId> {
         self.trait_name.as_ref().and_then(FqTraitName::canonical)
     }
 
@@ -1240,7 +1250,7 @@ pub fn normalize_module_path(path: &str) -> String {
     if has_special_prefix(path) {
         return path.to_string();
     }
-    crate::path::normalize(path)
+    normalize(path)
 }
 
 /// [`normalize_module_path`] gated by [`validate_module_path`]. Normalization
@@ -1294,7 +1304,7 @@ pub fn canonical_local_path(entry_dir: &str, resolved: &str) -> String {
     }
     // `relative_path` normalizes both arguments, so the anchored join needs no
     // separate normalize pass.
-    crate::path::relative_path(entry_dir, &format!("{entry_dir}/{resolved}"))
+    relative_path(entry_dir, &format!("{entry_dir}/{resolved}"))
 }
 
 /// The entry directory of an entry [`ModuleSource`], for use as the
@@ -1356,7 +1366,7 @@ pub fn resolve_import_with_invocations(
     from_module: &ModuleSource,
     import_source: &str,
     entry_module: Option<&ModuleSource>,
-    invocations: &crate::kiln::InvocationIndex,
+    invocations: &InvocationIndex,
 ) -> ModuleSource {
     if !invocations.is_empty() {
         let decl_file = match from_module {
@@ -1661,7 +1671,7 @@ impl MangledName {
     /// it is emitted under. The one way `func_map` keys are built, so a caller
     /// cannot assemble the pair in a namespace the map does not store.
     #[must_use]
-    pub fn in_module(module: &crate::module_source::ModuleSource, local_name: &str) -> Self {
+    pub fn in_module(module: &ModuleSource, local_name: &str) -> Self {
         Self(format!("{module}/{local_name}"))
     }
 
@@ -1959,11 +1969,7 @@ pub fn test_name_to_snake(name: &str) -> String {
 /// `__test_todo_…` for `#[TODO]`, `__test_tm{ms}_…` for `#[timeout_ms]`, and
 /// combinations such as `__test_trap_tm{ms}_…`. Both the annotate walk and reify
 /// call here, so the two cannot drift.
-pub fn test_function_name(
-    meta: &crate::ast::TestMetadata,
-    test_index: usize,
-    name: Option<&str>,
-) -> String {
+pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&str>) -> String {
     let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
         (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
         (true, _, None) => "__test_todo".to_string(),
@@ -1981,12 +1987,13 @@ pub fn test_function_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
 
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {
         let mut interner = ModuleSourceInterner::new();
-        let mut index = crate::compiler_host::DependencyIndex::default();
+        let mut index = DependencyIndex::default();
         index
             .resolved
             .insert("logger".to_string(), "../logger/src/lib.wado".to_string());
@@ -2380,20 +2387,14 @@ pub enum TypeHead {
     /// A shape no declaration names — an anonymous literal's, a closure
     /// environment's, a synthesised adapter's. Nothing declares it, so the
     /// rendering *is* the identity, scoped by the declaring module.
-    Shape {
-        module: crate::module_source::ModuleSource,
-        name: String,
-    },
+    Shape { module: ModuleSource, name: String },
     /// A shape no module declares — a primitive, `()`, `!`, the raw GC `Array`,
     /// a function type. Every mangler spells one the same way.
     Builtin(String),
     /// The index bucket one module's `impl` blocks binding a parameter of this
     /// spelling share. Its own head: spelled as a shape, an `impl` on an
     /// undeclared type of the same name would land in a blanket's bucket.
-    ParamBucket {
-        module: crate::module_source::ModuleSource,
-        name: String,
-    },
+    ParamBucket { module: ModuleSource, name: String },
     /// A template's own type-parameter binder (`T`, a pack member `F`), with
     /// the `impl` block that binds it. Without `owner`, `impl<T: A> Tr for T`
     /// and `impl<T: B> Tr for T` share one template and one silently replaces
@@ -2413,7 +2414,7 @@ impl TypeHead {
     /// (`List<…/Token>`). No declaration names one, so its rendering is its
     /// identity — the same rule [`Self::Shape`] carries.
     #[must_use]
-    pub fn instance(module: &crate::module_source::ModuleSource, mangled: &str) -> Self {
+    pub fn instance(module: &ModuleSource, mangled: &str) -> Self {
         Self::Shape {
             module: module.clone(),
             name: mangled.to_string(),
@@ -2452,7 +2453,7 @@ impl TypeHead {
     /// The declaration this head names, or `None` for a head that names none.
     /// This is identity: compare these, never [`Self::name`].
     #[must_use]
-    pub fn def(&self) -> Option<crate::defs::DefId> {
+    pub fn def(&self) -> Option<DefId> {
         match self {
             Self::Declared(head) => Some(head.def()),
             Self::Shape { .. }
@@ -2465,7 +2466,7 @@ impl TypeHead {
 
     /// The declaring module, or `None` for a head no module declares.
     #[must_use]
-    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+    pub fn module(&self) -> Option<&ModuleSource> {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
@@ -2487,7 +2488,7 @@ impl FqTypeName {
     /// `Module/Head<args>` but bare `[a,b]`, and no impl is registered under
     /// the qualified form.
     #[must_use]
-    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn declared(defs: &DefTable, def: DefId) -> Self {
         if defs.name(def) == TUPLE_TYPE_NAME {
             return Self::of_head_kind(TypeHead::Tuple);
         }
@@ -2496,7 +2497,7 @@ impl FqTypeName {
 
     /// `module` and `name` are the pair the type table interns the shape under.
     #[must_use]
-    pub fn shape(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+    pub fn shape(module: &ModuleSource, name: &str) -> Self {
         if name == TUPLE_TYPE_NAME {
             return Self::of_head_kind(TypeHead::Tuple);
         }
@@ -2525,11 +2526,7 @@ impl FqTypeName {
     /// `impl<T: Bound> Trait for T`). The one way to build this name, so no two
     /// callers can build two.
     #[must_use]
-    pub fn binder_of_impl(
-        defs: &crate::defs::DefTable,
-        def: crate::defs::DefId,
-        name: &str,
-    ) -> Self {
+    pub fn binder_of_impl(defs: &DefTable, def: DefId, name: &str) -> Self {
         Self::of_head_kind(TypeHead::Binder {
             name: name.to_string(),
             owner: Some(BinderOwner::of_impl(defs.module(def), defs.ast_id(def))),
@@ -2540,7 +2537,7 @@ impl FqTypeName {
     /// parameter spelled `name`. Keyed by the spelling, since that is the
     /// question it answers; not a binder, which is one parameter of one item.
     #[must_use]
-    pub fn param_bucket(module: &crate::module_source::ModuleSource, name: &str) -> Self {
+    pub fn param_bucket(module: &ModuleSource, name: &str) -> Self {
         Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
@@ -2573,7 +2570,7 @@ impl FqTypeName {
     /// [`Self::builtin`] for a declaration every mangler spells bare (`i32`,
     /// `[]`, `Array`), [`Self::declared`] otherwise.
     #[must_use]
-    pub fn of_head(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn of_head(defs: &DefTable, def: DefId) -> Self {
         if is_builtin_shape_name(defs.name(def)) {
             Self::builtin(defs.name(def))
         } else {
@@ -2621,7 +2618,7 @@ impl FqTypeName {
 
     /// The module that declares this type, or `None` for a builtin or binder.
     #[must_use]
-    pub fn module(&self) -> Option<&crate::module_source::ModuleSource> {
+    pub fn module(&self) -> Option<&ModuleSource> {
         self.head.module()
     }
 
@@ -2744,7 +2741,7 @@ impl std::fmt::Display for FqTypeName {
 /// template names whatever letter each spells its parameter (#1932).
 #[derive(Debug, Clone)]
 pub struct BinderOwner {
-    id: crate::ast::AstId,
+    id: AstId,
     /// What a mangle embeds: the declaring module plus the node's
     /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
     /// process-global counter and would make mangled names non-deterministic
@@ -2768,7 +2765,7 @@ impl std::hash::Hash for BinderOwner {
 
 impl BinderOwner {
     /// The receiver binder of the `impl` block declared at `id` in `module`.
-    fn of_impl(module: &crate::module_source::ModuleSource, id: crate::ast::AstId) -> Self {
+    fn of_impl(module: &ModuleSource, id: AstId) -> Self {
         Self {
             id,
             rendered: format!("{module}/{}", id.local()),
@@ -2785,7 +2782,7 @@ impl BinderOwner {
 /// Equality and hashing read the [`crate::defs::DefId`] alone.
 #[derive(Debug, Clone)]
 pub struct DeclaredHead {
-    def: crate::defs::DefId,
+    def: DefId,
     module: ModuleSource,
     /// As source writes it. Diagnostics.
     name: String,
@@ -2812,7 +2809,7 @@ impl DeclaredHead {
     /// Render `def`. The declaring module and the declared name come off the
     /// table, never from a caller.
     #[must_use]
-    pub fn new(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn new(defs: &DefTable, def: DefId) -> Self {
         let name = defs.name(def).to_string();
         let rendered = if defs.is_function_local(def) {
             mangle_local_item_name(&name, defs.ast_id(def))
@@ -2834,7 +2831,7 @@ impl DeclaredHead {
     }
 
     #[must_use]
-    pub fn def(&self) -> crate::defs::DefId {
+    pub fn def(&self) -> DefId {
         self.def
     }
 
@@ -2885,7 +2882,7 @@ impl TraitHead {
 
 impl FqTraitName {
     #[must_use]
-    pub fn declared(defs: &crate::defs::DefTable, def: crate::defs::DefId) -> Self {
+    pub fn declared(defs: &DefTable, def: DefId) -> Self {
         Self {
             head: TraitHead::Declared(DeclaredHead::new(defs, def)),
             args: Vec::new(),
@@ -2928,7 +2925,7 @@ impl FqTraitName {
     /// The trait this names, or `None` for a binder. This is the identity —
     /// compare these, never [`Self::base_name`].
     #[must_use]
-    pub fn canonical(&self) -> Option<crate::defs::DefId> {
+    pub fn canonical(&self) -> Option<DefId> {
         match &self.head {
             TraitHead::Declared(head) => Some(head.def()),
             TraitHead::Binder(_) => None,

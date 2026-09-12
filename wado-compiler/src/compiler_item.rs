@@ -6,7 +6,12 @@
 
 use std::fmt;
 
+use crate::ast::AstId;
+use crate::ast::Attribute;
+use crate::hashmap;
 use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
+use crate::name::FqTypeName;
 
 /// The two fields of the `List` / `String` sequence containers, which share a
 /// `{ repr: array<T>, used: i32 }` layout: an owned backing array plus the
@@ -1534,7 +1539,7 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     Variant {
         module_source: ModuleSource,
@@ -1542,20 +1547,20 @@ pub enum Resolved {
         /// The declaring node, so "is this type the compiler's `Result`" is a
         /// question about a declaration rather than about a spelling that
         /// another module's `Result` answers just as well.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     Enum {
         module_source: ModuleSource,
         name: String,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     /// A `resource` declaration (`Future<T>`, `Stream<T>`, …).
     Resource {
         module_source: ModuleSource,
         name: String,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     /// A `type X = Y;` declaration. Wado's `type` mints a nominal newtype, so
     /// this is a declaration like any other, not an alias.
@@ -1563,7 +1568,7 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     Trait {
         module_source: ModuleSource,
@@ -1572,13 +1577,13 @@ pub enum Resolved {
         /// the compiler knows by construction, so a consumer asking "is this
         /// that trait?" compares this rather than the spelling
         /// (WEP 2026-08-12).
-        decl: crate::ast::AstId,
+        decl: AstId,
         /// The trait as a mangled name's trait segment names it, rendered once
         /// at registration from the declaration itself. `None` only where the
         /// declaration is not in the table — a registry entry minted by a test.
         /// Every synthesis site reads this rather than spelling the trait, so
         /// none of them can spell the wrong one.
-        fq: Option<crate::name::FqTraitName>,
+        fq: Option<FqTraitName>,
         /// Primary method name of a **single-method** trait, captured when the
         /// elaborator registers its annotation; `None` for a multi-method trait
         /// such as `Serializer`. Lets the synthesiser read the name of a format
@@ -1606,7 +1611,7 @@ pub enum Resolved {
         /// That type's head, as the impl block's own frame resolved it — the
         /// receiver a synthesised call to this method hangs off. `None` only
         /// where a registry entry is minted by a test.
-        owner_head: Option<crate::name::FqTypeName>,
+        owner_head: Option<FqTypeName>,
         name: String,
     },
     /// The module that owns the tuple type family. Tuples have no
@@ -1615,7 +1620,7 @@ pub enum Resolved {
     TupleFamily {
         module_source: ModuleSource,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     /// A named, definition-less builtin type (`Array<T>`). Carries the
     /// owning module and the user-facing name so the type resolver can
@@ -1624,7 +1629,7 @@ pub enum Resolved {
         module_source: ModuleSource,
         name: String,
         /// The declaring node — see [`Self::Variant`]'s.
-        decl: crate::ast::AstId,
+        decl: AstId,
     },
     /// One case of a `variant` declaration. Carries the owning
     /// variant's name (`Option`, `Result`) so downstream consumers can
@@ -1695,7 +1700,7 @@ impl Resolved {
     /// The node that declares this item, for the kinds that name a type
     /// declaration of their own. A case belongs to its parent's declaration
     /// and a method to its impl block, so neither answers here.
-    pub fn decl(&self) -> Option<crate::ast::AstId> {
+    pub fn decl(&self) -> Option<AstId> {
         match self {
             Self::Struct { decl, .. }
             | Self::Variant { decl, .. }
@@ -1728,7 +1733,7 @@ pub struct CompilerItems {
     /// The inverse of [`CompilerItems::trait_decl`], maintained by `register`.
     /// Recognising a compiler item is on the hot trait-query path, so it is a
     /// lookup rather than a scan.
-    trait_by_decl: crate::hashmap::IndexMap<crate::ast::AstId, CompilerItem>,
+    trait_by_decl: hashmap::IndexMap<AstId, CompilerItem>,
 }
 
 impl Default for CompilerItems {
@@ -1763,7 +1768,7 @@ impl CompilerItems {
     pub fn new() -> Self {
         Self {
             items: vec![None; CompilerItem::COUNT],
-            trait_by_decl: crate::hashmap::IndexMap::default(),
+            trait_by_decl: hashmap::IndexMap::default(),
         }
     }
 
@@ -1940,7 +1945,7 @@ impl CompilerItems {
     /// the registry holds the declaration, so no synthesis site has to spell
     /// the trait and none can spell the wrong one.
     #[must_use]
-    pub fn trait_fq(&self, item: CompilerItem) -> crate::name::FqTraitName {
+    pub fn trait_fq(&self, item: CompilerItem) -> FqTraitName {
         self.trait_fq_opt(item)
             .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
@@ -1948,7 +1953,7 @@ impl CompilerItems {
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
     /// registered.
     #[must_use]
-    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<crate::name::FqTraitName> {
+    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
         match self.get(item)? {
             Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,
@@ -1971,7 +1976,7 @@ impl CompilerItems {
     /// "is this that trait?" resolves this to a `DefId` and compares that,
     /// rather than matching the spelling a user trait can share.
     #[must_use]
-    pub fn trait_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+    pub fn trait_decl(&self, item: CompilerItem) -> Option<AstId> {
         match self.get(item)? {
             Resolved::Trait { decl, .. } => Some(*decl),
             _ => None,
@@ -1981,12 +1986,12 @@ impl CompilerItems {
     /// Which compiler item `decl` is the trait of. The inverse of
     /// [`Self::trait_decl`].
     #[must_use]
-    pub fn trait_item_of_decl(&self, decl: crate::ast::AstId) -> Option<CompilerItem> {
+    pub fn trait_item_of_decl(&self, decl: AstId) -> Option<CompilerItem> {
         self.trait_by_decl.get(&decl).copied()
     }
 
     /// The declaring node of a [`CompilerItemKind::Variant`] item.
-    pub fn variant_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+    pub fn variant_decl(&self, item: CompilerItem) -> Option<AstId> {
         match self.get(item)? {
             Resolved::Variant { decl, .. } => Some(*decl),
             _ => None,
@@ -1994,7 +1999,7 @@ impl CompilerItems {
     }
 
     /// The declaring node of a [`CompilerItemKind::Struct`] item.
-    pub fn struct_decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+    pub fn struct_decl(&self, item: CompilerItem) -> Option<AstId> {
         match self.get(item)? {
             Resolved::Struct { decl, .. } => Some(*decl),
             _ => None,
@@ -2005,7 +2010,7 @@ impl CompilerItems {
     /// is. This is how a consumer holding only the item reaches an identity —
     /// [`crate::tir::TypeTable::compiler_item_def`] resolves it — so no stdlib
     /// type has to be reached for by spelling its name.
-    pub fn decl(&self, item: CompilerItem) -> Option<crate::ast::AstId> {
+    pub fn decl(&self, item: CompilerItem) -> Option<AstId> {
         self.get(item)?.decl()
     }
 
@@ -2114,7 +2119,7 @@ impl CompilerItems {
     /// The head of the type a [`CompilerItemKind::Method`] item is defined on,
     /// as the impl block's own frame resolved it. This is what a synthesised
     /// call hangs off, so no synthesis site spells the owner.
-    pub fn require_method_owner(&self, item: CompilerItem) -> &crate::name::FqTypeName {
+    pub fn require_method_owner(&self, item: CompilerItem) -> &FqTypeName {
         match self.require(item) {
             Resolved::Method { owner_head, .. } => owner_head
                 .as_ref()
@@ -2266,9 +2271,7 @@ impl fmt::Display for RegisterError {
 /// strings, so the elaborator can report one without losing its spelling. Valid
 /// stdlib code carries at most one such attribute per declaration, but multiple
 /// matches are not rejected here — the elaborator decides.
-pub fn parse_compiler_item_attrs(
-    attrs: &[crate::ast::Attribute],
-) -> (Vec<CompilerItem>, Vec<String>) {
+pub fn parse_compiler_item_attrs(attrs: &[Attribute]) -> (Vec<CompilerItem>, Vec<String>) {
     let mut items = Vec::new();
     let mut unknown = Vec::new();
     for attr in attrs {
@@ -2289,6 +2292,7 @@ pub fn parse_compiler_item_attrs(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstId;
     use std::assert_matches;
 
     #[test]
@@ -2323,7 +2327,7 @@ mod tests {
             .register(
                 CompilerItem::Option,
                 Resolved::Trait {
-                    decl: crate::ast::AstId::fresh(),
+                    decl: AstId::fresh(),
                     fq: None,
                     module_source: ModuleSource::types(),
                     name: "Option".into(),
@@ -2341,12 +2345,12 @@ mod tests {
         let first = Resolved::Variant {
             module_source: ModuleSource::types(),
             name: "Option".into(),
-            decl: crate::ast::AstId::fresh(),
+            decl: AstId::fresh(),
         };
         let second = Resolved::Variant {
             module_source: ModuleSource::prelude(),
             name: "Option".into(),
-            decl: crate::ast::AstId::fresh(),
+            decl: AstId::fresh(),
         };
         reg.register(CompilerItem::Option, first).unwrap();
         let err = reg.register(CompilerItem::Option, second).unwrap_err();
@@ -2359,7 +2363,7 @@ mod tests {
         let resolved = Resolved::Variant {
             module_source: ModuleSource::types(),
             name: "Option".into(),
-            decl: crate::ast::AstId::fresh(),
+            decl: AstId::fresh(),
         };
         reg.register(CompilerItem::Option, resolved.clone())
             .unwrap();
@@ -2372,7 +2376,7 @@ mod tests {
         reg.register(
             CompilerItem::Default,
             Resolved::Trait {
-                decl: crate::ast::AstId::fresh(),
+                decl: AstId::fresh(),
                 fq: None,
                 module_source: ModuleSource::traits(),
                 name: "Default".into(),
@@ -2438,7 +2442,7 @@ mod tests {
         reg.register(
             CompilerItem::Serializer,
             Resolved::Trait {
-                decl: crate::ast::AstId::fresh(),
+                decl: AstId::fresh(),
                 fq: None,
                 module_source: ModuleSource::serde(),
                 name: "Serializer".to_string(),

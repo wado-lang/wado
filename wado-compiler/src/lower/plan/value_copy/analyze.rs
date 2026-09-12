@@ -12,6 +12,11 @@ use super::ownership::{BuiltinDeclarations, OwnedCalls};
 use super::place::is_source_place;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
+use crate::lower::plan::value_copy;
+use crate::lower::plan::value_copy::array_clone_element_type_arg;
+use crate::lower::plan::value_copy::last_use::RefTargets;
+use crate::lower::translate::pattern::pattern_temp_type;
+use crate::tir;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable, receiver_value,
@@ -78,8 +83,8 @@ impl SeedWalker<'_> {
     }
 
     fn record_array_clone_element(&mut self, expr: &TirExpr) {
-        if let Some(t) = super::array_clone_element_type_arg(expr)
-            && super::needs_value_copy(t, self.type_table)
+        if let Some(t) = array_clone_element_type_arg(expr)
+            && value_copy::needs_value_copy(t, self.type_table)
         {
             self.out.insert(t);
         }
@@ -107,11 +112,7 @@ impl TirRefVisitor for SeedWalker<'_> {
                 // the helper it needs is that temp's.
                 self.record_wrap_target(
                     value,
-                    crate::lower::translate::pattern::pattern_temp_type(
-                        pattern,
-                        value.type_id,
-                        self.type_table,
-                    ),
+                    pattern_temp_type(pattern, value.type_id, self.type_table),
                 );
             }
             _ => {}
@@ -219,7 +220,7 @@ pub fn should_wrap_into(
     type_table: &TypeTable,
     oracle: &OwnedCalls,
 ) -> bool {
-    super::needs_value_copy(dest, type_table)
+    value_copy::needs_value_copy(dest, type_table)
         && !is_copy_value_call(expr)
         && !is_fresh_value(expr, oracle, type_table)
 }
@@ -231,7 +232,7 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
         &expr.kind,
         TirExprKind::Call { func, .. }
             if func.module_source.is_core_builtin()
-                && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
+                && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
     )
 }
 
@@ -601,7 +602,7 @@ pub fn is_source_immutable(
     expr: &TirExpr,
     immutable_locals: &IndexSet<u32>,
     type_table: &TypeTable,
-    ref_targets: &super::last_use::RefTargets,
+    ref_targets: &RefTargets,
 ) -> bool {
     source_root(expr, type_table, ref_targets).is_some_and(|r| immutable_locals.contains(&r))
 }
@@ -615,7 +616,7 @@ pub fn is_source_immutable(
 pub fn source_root(
     expr: &TirExpr,
     type_table: &TypeTable,
-    ref_targets: &super::last_use::RefTargets,
+    ref_targets: &RefTargets,
 ) -> Option<u32> {
     match &expr.kind {
         TirExprKind::Local { index, .. } => Some(*index),

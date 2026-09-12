@@ -11,9 +11,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::builtin_registry::BuiltinRegistry;
+use crate::codegen_flags::CodegenFlags;
 use crate::component_model::CmInterfaceRegistry;
+use crate::elaborator::trait_env::TraitEnv;
+use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::loader::WasmAsset;
+use crate::lower::plan::value_copy::ValueCopyHelpers;
 use crate::module_source::ModuleSource;
+use crate::name::FunctionId;
 use crate::name::LocalMethodName;
 use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
@@ -21,6 +27,7 @@ use crate::nir::{
 };
 use crate::tir::{TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
+use crate::world_registry::GENERATOR_HOST_INTERFACE;
 use crate::world_registry::{self, WorldRegistry};
 
 /// A linked Wado package ready for WIR building and code generation.
@@ -44,10 +51,10 @@ pub struct NirPackage {
     /// synthesizes calls to new builtins. Authoritative, never rebuilt or
     /// invalidated — the interner that keeps the "born resolved" invariant cheap
     /// (O(1) per synthesis site, no per-pass walk).
-    pub func_index: IndexMap<crate::name::FunctionId, FuncId>,
+    pub func_index: IndexMap<FunctionId, FuncId>,
     /// Which `$value_copy$` helper copies each type — the one join, so a
     /// consumer holding a `TypeId` asks here rather than re-deriving the key.
-    pub value_copy_helpers: crate::lower::plan::value_copy::ValueCopyHelpers<FuncId>,
+    pub value_copy_helpers: ValueCopyHelpers<FuncId>,
     /// Functions `optimize/sroa_param` minted, so it can refuse its own output
     /// as input. A clone is already scalarized in every position that pass
     /// found; re-admitting it chains `$scalar$scalar` and makes the result
@@ -102,7 +109,7 @@ pub struct NirPackage {
     pub strip_names: bool,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Consulted by the WIR emitter to select alternative lowerings.
-    pub codegen_flags: crate::codegen_flags::CodegenFlags,
+    pub codegen_flags: CodegenFlags,
     /// Maximum UTF-8 byte length for a string literal to get a constant
     /// `array.new_fixed<u8>` repr (which lets a constant string global promote
     /// to an eager Wasm constant). Longer strings keep the compact
@@ -127,13 +134,13 @@ pub struct NirPackage {
     /// string (matches `namespace` in `#[canonical("wasm:<path>",
     /// "<export>")]` attributes). Consumed by
     /// `codegen::component::embed_imported_wasm_modules`.
-    pub wasm_assets: IndexMap<String, crate::loader::WasmAsset>,
+    pub wasm_assets: IndexMap<String, WasmAsset>,
 
     /// Project-wide trait knowledge inherited from `Package` and grown
     /// here by [`crate::monomorphize::monomorphize`], which adds the
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
-    pub trait_env: std::sync::Arc<crate::elaborator::trait_env::TraitEnv>,
+    pub trait_env: std::sync::Arc<TraitEnv>,
 }
 
 impl NirPackage {
@@ -149,7 +156,7 @@ impl NirPackage {
     /// no `store[id]` deref (which a self-recursive callee would double-borrow).
     pub fn builtin_func_id(&self, name: &str) -> Option<FuncId> {
         self.func_id_of(&FunctionRef {
-            module_source: crate::module_source::ModuleSource::builtin(),
+            module_source: ModuleSource::builtin(),
             name: name.to_string(),
             monomorph_info: None,
             method_info: None,
@@ -258,7 +265,7 @@ impl NirPackage {
 
     /// The [`FuncId`]s of the synthesized `$value_copy$T` helpers, so a pass can
     /// identify a wrapper call by id membership (e.g. `value_copy_demote`).
-    pub fn value_copy_func_ids(&self) -> crate::hashmap::IndexSet<FuncId> {
+    pub fn value_copy_func_ids(&self) -> hashmap::IndexSet<FuncId> {
         self.functions
             .iter()
             .filter_map(|f| {
@@ -282,7 +289,7 @@ impl NirPackage {
     /// Whether the target world is a kiln generator world (imports
     /// [`crate::world_registry::GENERATOR_HOST_INTERFACE`]).
     pub fn is_generator_world(&self) -> bool {
-        self.world_imports_interface(crate::world_registry::GENERATOR_HOST_INTERFACE)
+        self.world_imports_interface(GENERATOR_HOST_INTERFACE)
     }
 
     /// Look up a variant by `(module_source, name)`.

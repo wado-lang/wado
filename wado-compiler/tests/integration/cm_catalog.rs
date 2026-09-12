@@ -30,7 +30,15 @@ use wasmtime::component::{
 };
 use wasmtime::{AsContextMut, Store, StoreContextMut};
 
+use crate::common::DEFAULT_TIMEOUT_MS;
+use crate::common::WasiState;
+use crate::common::compile_source_with_compiler_options;
+use crate::common::engine;
+use crate::common::limit_store;
+use crate::common::linker;
 use crate::common::lookup_func;
+use crate::common::opt_level_name;
+use crate::common::runtime;
 
 /// Stream producer that delivers a batch with `Completed`, then signals
 /// end-of-stream with a separate `Dropped` poll. Unlike the built-in `Vec`
@@ -317,7 +325,7 @@ fn flags(names: &[&str]) -> Val {
 }
 
 fn require_func(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &str,
@@ -330,7 +338,7 @@ fn require_func(
 /// lower a host-created `future<T>` carrying `payload`, then pipe the returned
 /// future into a oneshot and assert the lifted value equals `payload`.
 async fn future_round_trip<T>(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -389,7 +397,7 @@ where
 }
 
 async fn stream_round_trip<T>(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -456,7 +464,7 @@ where
 /// `wrap` builds the input `Val` around a `future<u32>`; `unwrap` extracts the
 /// inner `FutureAny` from the lifted result.
 async fn embedded_future_round_trip(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -497,7 +505,7 @@ async fn embedded_future_round_trip(
 }
 
 async fn embedded_stream_round_trip(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -557,7 +565,7 @@ fn compile_catalog_with_allocator(opt_level: OptLevel, allocator: &str) -> Vec<u
         allocator: Some(allocator.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
+    compile_source_with_compiler_options(Path::new(FIXTURE), &source, options)
         .expect("catalog failed to compile as a library world")
         .wasm
 }
@@ -565,23 +573,23 @@ fn compile_catalog_with_allocator(opt_level: OptLevel, allocator: &str) -> Vec<u
 /// Round-trip every case through the compiled component, asserting identity.
 fn run_round_trips(opt_level: OptLevel) {
     let wasm = compile_catalog(opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
         // The value-type library still imports the prelude's `wasi:cli/stderr`
         // (assertion/format diagnostics), so use the shared WASI linker.
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
         // The shared engine enables epoch interruption; without a deadline the
         // first call traps with `interrupt`.
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -799,7 +807,7 @@ fn compile_lib_source(source: &str, opt_level: OptLevel) -> Vec<u8> {
         allocator: Some("debug".to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
+    compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
         .expect("inline library failed to compile")
         .wasm
 }
@@ -807,7 +815,7 @@ fn compile_lib_source(source: &str, opt_level: OptLevel) -> Vec<u8> {
 /// Call a `mk_future_*` producer with `input`, then read its produced future back
 /// on the host and assert the lifted value equals `expected`.
 async fn produce_and_read_back<T>(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -855,19 +863,19 @@ where
 
 fn run_producer_round_trips(opt_level: OptLevel) {
     let wasm = compile_lib_source(PRODUCER_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -956,7 +964,7 @@ export async fn mk_stream_u32(data: List<u32>) -> Stream<u32> {
 "#;
 
 async fn produce_stream_and_read_back<T>(
-    store: &mut Store<crate::common::WasiState>,
+    store: &mut Store<WasiState>,
     instance: &Instance,
     iface: Option<&ComponentExportIndex>,
     export: &'static str,
@@ -1009,19 +1017,19 @@ where
 
 fn run_stream_producer_round_trips(opt_level: OptLevel) {
     let wasm = compile_lib_source(STREAM_PRODUCER_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1087,19 +1095,19 @@ where
 {
     let fn_name = export.replace('-', "_");
     let wasm = compile_lib_source(&future_identity_source(ty, &fn_name), opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1191,19 +1199,19 @@ export async fn id_future_point(v: Future<Point>) -> Future<Point> {
 
 fn run_record_future_identity(opt_level: OptLevel) {
     let wasm = compile_lib_source(RECORD_FUTURE_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1257,19 +1265,19 @@ export async fn id_stream_point(v: Stream<Point>) -> Stream<Point> {
 
 fn run_record_stream_identity(opt_level: OptLevel) {
     let wasm = compile_lib_source(RECORD_STREAM_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1440,19 +1448,19 @@ export async fn id_stream_perms(v: Stream<Perms>) -> Stream<Perms> {
 
 fn run_named_future_identity(opt_level: OptLevel) {
     let wasm = compile_lib_source(NAMED_ASYNC_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1522,19 +1530,19 @@ fn cm_future_named_identity_o2() {
 /// Each batch mixes cases, to catch a stride taken from one case's payload.
 fn run_named_stream_identity(opt_level: OptLevel) {
     let wasm = compile_lib_source(NAMED_ASYNC_SOURCE, opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1634,19 +1642,19 @@ where
 {
     let fn_name = export.replace('-', "_");
     let wasm = compile_lib_source(&stream_identity_source(ty, &fn_name), opt_level);
-    let engine = crate::common::engine();
-    let rt = crate::common::runtime();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let rt = runtime();
+    let opt = opt_level_name(opt_level);
 
     rt.block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await
@@ -1707,7 +1715,7 @@ fn try_compile_lib(source: &str) -> Result<(), String> {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
+    compile_source_with_compiler_options(Path::new("lib.wado"), source, options)
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
@@ -1879,18 +1887,18 @@ fn cm_catalog_round_trip_o2() {
 /// back on the next call. The catalog is the widest shape corpus available.
 fn run_double_free_guard(opt_level: OptLevel) {
     let wasm = compile_catalog_with_allocator(opt_level, "freelist");
-    let engine = crate::common::engine();
-    let opt = crate::common::opt_level_name(opt_level);
+    let engine = engine();
+    let opt = opt_level_name(opt_level);
 
-    crate::common::runtime().block_on(async {
+    runtime().block_on(async {
         let component = Component::new(engine, &wasm).expect("instantiate component type");
-        let linker = crate::common::linker(engine).expect("build linker");
-        let state = crate::common::WasiState::new_with_pipes(
+        let linker = linker(engine).expect("build linker");
+        let state = WasiState::new_with_pipes(
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
             wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(65536),
         );
         let mut store = Store::new(engine, state);
-        crate::common::limit_store(&mut store, crate::common::DEFAULT_TIMEOUT_MS);
+        limit_store(&mut store, DEFAULT_TIMEOUT_MS);
         let instance = linker
             .instantiate_async(&mut store, &component)
             .await

@@ -21,6 +21,28 @@ use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+use crate::ast::AstId;
+use crate::ast::SelfKind;
+use crate::elaborator::sig;
+use crate::elaborator::sig::TraitSig;
+use crate::elaborator::trait_env::BlanketBound;
+use crate::elaborator::trait_env::BlanketImpl;
+use crate::elaborator::trait_env::BlanketReceiver;
+use crate::elaborator::trait_env::ImplHeader;
+use crate::elaborator::trait_env::TraitDeclHeader;
+use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_env::get_type_name_static;
+use crate::elaborator::trait_env::header_answers_bare_bound;
+use crate::elaborator::types::RequiredTrait;
+use crate::elaborator::types::StructFieldInfo;
+use crate::elaborator::types::VariantInfo;
+use crate::name::DeclName;
+use crate::name::FqTraitName;
+use crate::resolve::Resolution;
+use crate::resolve::Resolutions;
+use crate::resolve::head_site;
+use crate::tir::SlotProjections;
+use crate::tir::TraitRef;
 
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
@@ -150,7 +172,7 @@ impl StructuralMember<'_> {
 /// constant to the same identity.
 pub(super) fn assoc_const_owner(
     qualifier: Option<&ast::Type>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Option<DefId> {
     let site = match qualifier? {
         ast::Type::Named(t) => t.id,
@@ -159,7 +181,7 @@ pub(super) fn assoc_const_owner(
         _ => return None,
     };
     match resolutions.get(site) {
-        crate::resolve::Resolution::Def(def) => Some(def),
+        Resolution::Def(def) => Some(def),
         _ => None,
     }
 }
@@ -171,11 +193,11 @@ pub(super) fn assoc_const_owner(
 /// holds.
 pub(super) fn assoc_const_owner_of_path(
     ident: &ast::IdentExpr,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Option<DefId> {
     let owner = ident.segments.len().checked_sub(2)?;
     match resolutions.get(ident.segments[owner].id) {
-        crate::resolve::Resolution::Def(def) => Some(def),
+        Resolution::Def(def) => Some(def),
         _ => None,
     }
 }
@@ -217,10 +239,10 @@ fn mentions_self(ty: &ast::Type) -> bool {
 /// pass. Reads the digest the decl pass recorded, never the declaring module's
 /// AST, and answers `None` for a declaration that is no trait.
 pub(crate) fn trait_sig_of_with<'a>(
-    decl: crate::defs::DefId,
-    trait_env: &super::trait_env::TraitEnv,
-    signatures: &'a super::sig::Signatures,
-) -> Option<&'a super::sig::TraitSig> {
+    decl: DefId,
+    trait_env: &TraitEnv,
+    signatures: &'a sig::Signatures,
+) -> Option<&'a TraitSig> {
     if !trait_env.decl_index.contains(&decl) {
         return None;
     }
@@ -269,7 +291,7 @@ impl TypeSystem {
     pub(super) fn auto_derive_by_method(
         &self,
         method_name: &str,
-    ) -> Option<(crate::compiler_item::CompilerItem, String, TypeId)> {
+    ) -> Option<(CompilerItem, String, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS
             .iter()
             .find(|(_, m)| *m == method_name)
@@ -289,10 +311,7 @@ impl TypeSystem {
     ///
     /// Returning the item, not just the type, is what lets the caller name the
     /// trait by its declaration rather than re-deriving one from the spelling.
-    pub(super) fn auto_derive_by_trait(
-        &self,
-        trait_name: &str,
-    ) -> Option<(crate::compiler_item::CompilerItem, TypeId)> {
+    pub(super) fn auto_derive_by_trait(&self, trait_name: &str) -> Option<(CompilerItem, TypeId)> {
         let item = Self::AUTO_DERIVED_METHODS.iter().find_map(|(item, _)| {
             let name = self
                 .type_table
@@ -382,10 +401,7 @@ impl TypeSystem {
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration header of the trait `trait_name` names in this frame.
-    pub(super) fn trait_decl_header_in_frame(
-        &self,
-        trait_name: &str,
-    ) -> Option<&super::trait_env::TraitDeclHeader> {
+    pub(super) fn trait_decl_header_in_frame(&self, trait_name: &str) -> Option<&TraitDeclHeader> {
         self.trait_decl_header_of(&self.decl_key_or_local(trait_name)?)
     }
 
@@ -394,10 +410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Every by-name form here funnels through this one, so a caller holding a
     /// site answers about the declaration that site resolved to rather than
     /// re-resolving the spelling in its own frame.
-    pub(super) fn trait_decl_header_of(
-        &self,
-        key: &crate::defs::DefId,
-    ) -> Option<&super::trait_env::TraitDeclHeader> {
+    pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
         let loc = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.trait_env.trait_decl_headers.get(loc)
     }
@@ -487,8 +500,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let trait_name = self.get_type_name(trait_type);
         // The header's own site says which trait it names, so an aliased
         // `impl B for T` enforces `Base`'s supertraits.
-        let Some(trait_decl) = crate::resolve::head_site(trait_type)
-            .and_then(|site| self.decl_key_at(site, &trait_name))
+        let Some(trait_decl) =
+            head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))
         else {
             return;
         };
@@ -534,10 +547,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
     /// The declared type parameters of an already-identified trait.
-    pub(super) fn trait_decl_type_params_of(
-        &self,
-        key: &crate::defs::DefId,
-    ) -> Option<Vec<ast::GenericParam>> {
+    pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
         let loc = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys
             .trait_env
@@ -847,7 +857,7 @@ impl TypeSystem {
 
     /// The declaration a synthesis-driving trait names, from the compiler-item
     /// registry rather than the spelling that classified it.
-    pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<crate::defs::DefId> {
+    pub(super) fn synth_trait_key(&self, on_bound: OnBoundTrait) -> Option<DefId> {
         self.type_table
             .borrow()
             .compiler_items()
@@ -1001,7 +1011,7 @@ impl TypeSystem {
         // at `Gen<i32>`, however deep the parameter sits.
         let at_instance =
             |type_args: &[TypeId], tid: TypeId| self.substitute_type_params(tid, type_args);
-        let walk_struct = |info: &super::types::StructFieldInfo,
+        let walk_struct = |info: &StructFieldInfo,
                            type_args: &[TypeId],
                            visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
@@ -1009,7 +1019,7 @@ impl TypeSystem {
                 visit(StructuralMember::Field(fname), at_instance(type_args, *tid))
             })
         };
-        let walk_variant = |info: &super::types::VariantInfo,
+        let walk_variant = |info: &VariantInfo,
                             type_args: &[TypeId],
                             visit: &mut dyn FnMut(StructuralMember<'_>, TypeId) -> bool|
          -> bool {
@@ -1185,8 +1195,7 @@ impl TypeSystem {
         // signature: `kind() -> String` forwards, `-> Option<Self>` cannot.
         trait_sig_of_with(trait_, &self.trait_env, &self.signatures).is_some_and(|sig| {
             sig.methods.values().any(|m| {
-                m.sig.self_kind == crate::ast::SelfKind::None
-                    && self.receiverless_method_mentions_self(&m.sig)
+                m.sig.self_kind == SelfKind::None && self.receiverless_method_mentions_self(&m.sig)
             })
         })
     }
@@ -1194,7 +1203,7 @@ impl TypeSystem {
     /// Whether a receiverless method's signature names `Self` — in a parameter,
     /// the return type, or a bound on one of its own type parameters. Slot 0 of
     /// a trait method's frame is `Self`.
-    fn receiverless_method_mentions_self(&self, sig: &super::sig::MethodSig) -> bool {
+    fn receiverless_method_mentions_self(&self, sig: &sig::MethodSig) -> bool {
         let table = self.type_table.borrow();
         let in_types = sig
             .decl
@@ -1524,14 +1533,14 @@ impl TypeSystem {
 
     /// Whether a bare bound on the header's trait selects it — see
     /// [`super::trait_env::header_answers_bare_bound`].
-    fn header_answers_bare_bound(&self, header: &super::trait_env::ImplHeader) -> bool {
+    fn header_answers_bare_bound(&self, header: &ImplHeader) -> bool {
         let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
             return true;
         };
         let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
             return true;
         };
-        super::trait_env::header_answers_bare_bound(
+        header_answers_bare_bound(
             trait_type,
             &header.ty,
             &decl_header.type_params,
@@ -1589,11 +1598,7 @@ impl TypeSystem {
     /// [`Self::type_implements_trait_inner`]'s primitive arm, asked of a
     /// receiver key. An impl-index lookup finds `impl Ord for i32` but not the
     /// compiler-supplied `Add`, so a blanket bounded by one needs this.
-    fn primitive_satisfies_builtin_trait(
-        &self,
-        type_key: &Receiver,
-        bound: &super::trait_env::BlanketBound,
-    ) -> bool {
+    fn primitive_satisfies_builtin_trait(&self, type_key: &Receiver, bound: &BlanketBound) -> bool {
         let Receiver::Type(fq) = type_key else {
             return false;
         };
@@ -1685,8 +1690,7 @@ impl TypeSystem {
             // answer one. This is what left `&i32: Sum` holding with nothing to
             // dispatch to.
             .filter(|b| {
-                b.receiver == super::trait_env::BlanketReceiver::Value
-                    && !matches!(type_key, Receiver::Ref(_))
+                b.receiver == BlanketReceiver::Value && !matches!(type_key, Receiver::Ref(_))
             })
             .filter(|b| !(structural && self.is_reflect_bounded(scope, b)))
         {
@@ -1711,7 +1715,7 @@ impl TypeSystem {
     pub(super) fn blanket_assoc_constraints_hold(
         &self,
         subject: Option<TypeId>,
-        bounds: &[super::trait_env::BlanketBound],
+        bounds: &[BlanketBound],
     ) -> bool {
         bounds.iter().all(|bound| {
             if bound.pinned_to_receiver.is_empty() {
@@ -1731,11 +1735,7 @@ impl TypeSystem {
 
     /// Whether `blanket`'s receiver bound is a reflection trait — the shape the
     /// stdlib derives structural traits through.
-    fn is_reflect_bounded(
-        &self,
-        scope: &TypeLookup,
-        blanket: &super::trait_env::BlanketImpl,
-    ) -> bool {
+    fn is_reflect_bounded(&self, scope: &TypeLookup, blanket: &BlanketImpl) -> bool {
         blanket.bounds.iter().any(|bound| {
             self.classify_on_bound_trait(scope, &bound.name)
                 .is_some_and(OnBoundTrait::is_reflect)
@@ -1745,11 +1745,7 @@ impl TypeSystem {
     /// The module declaring `def`, when `def` is a newtype. The kind with no
     /// members carries no member info to read a module off, so the declaration
     /// answers directly.
-    fn newtype_declaring_module(
-        &self,
-        scope: &TypeLookup,
-        def: crate::defs::DefId,
-    ) -> Option<ModuleSource> {
+    fn newtype_declaring_module(&self, scope: &TypeLookup, def: DefId) -> Option<ModuleSource> {
         // A generic declaration is a newtype too, and it is recorded in its own
         // table: each instantiation resolves the base afresh, so there is no
         // single type to key it by.
@@ -1768,7 +1764,7 @@ impl TypeSystem {
     fn synthesized_reflect_bound_holds(
         &self,
         scope: &TypeLookup,
-        type_name: &crate::name::DeclName,
+        type_name: &DeclName,
         bound_name: &str,
     ) -> bool {
         let Some(on_bound) = self.classify_on_bound_trait(scope, bound_name) else {
@@ -1827,7 +1823,7 @@ impl TypeSystem {
 /// `None` for any other kind, and for a bound that is not a reflection kind.
 fn declaring_module_of_kind(
     scope: &TypeLookup,
-    def: crate::defs::DefId,
+    def: DefId,
     on_bound: OnBoundTrait,
 ) -> Option<ModuleSource> {
     match on_bound {
@@ -1854,7 +1850,7 @@ fn declaring_module_of_kind(
 /// An associated type paired with the trait that *declares* it: a subtrait's
 /// default body may name a supertrait's, and keying the projection to the
 /// dispatched-through trait made `<T as Base>::Elem` and `Derived`'s two types.
-type DeclaredAssocType = (crate::defs::DefId, ast::AssociatedTypeDecl);
+type DeclaredAssocType = (DefId, ast::AssociatedTypeDecl);
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait declaration a reference site names, from
@@ -1863,11 +1859,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// `written` feeds the fallback only, for a site answering with something that
     /// is no trait at all — a same-named enum case in the prelude.
-    pub(super) fn trait_decl_at(
-        &self,
-        site: crate::ast::AstId,
-        written: &str,
-    ) -> Option<crate::defs::DefId> {
+    pub(super) fn trait_decl_at(&self, site: AstId, written: &str) -> Option<DefId> {
         if let Some(def) = self.tysys.resolutions.declared(site)
             && self.tysys.trait_env.decl_index.contains(&def)
         {
@@ -1879,7 +1871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait `key` names declares `method_name`. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
-    fn trait_declares_method_of(&self, key: &crate::defs::DefId, method_name: &str) -> bool {
+    fn trait_declares_method_of(&self, key: &DefId, method_name: &str) -> bool {
         self.trait_decl_header_of(key)
             .is_some_and(|header| header.methods.iter().any(|m| m.name == method_name))
     }
@@ -1894,9 +1886,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// panics rather than reading as "no such method".
     fn trait_method_of(
         &self,
-        key: &crate::defs::DefId,
+        key: &DefId,
         method_name: &str,
-    ) -> Option<(super::sig::MethodSig, Vec<DeclaredAssocType>)> {
+    ) -> Option<(sig::MethodSig, Vec<DeclaredAssocType>)> {
         let header = self.trait_decl_header_of(key)?;
         if !header.methods.iter().any(|m| m.name == method_name) {
             return None;
@@ -1943,7 +1935,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// its declared name and resolving that again is what broke an aliased
     /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
     /// second resolution found nothing.
-    pub(super) fn trait_sig_of(&self, key: &crate::defs::DefId) -> Option<&super::sig::TraitSig> {
+    pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
         if !self.tysys.trait_env.decl_index.contains(key) {
             return None;
         }
@@ -1970,7 +1962,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (declaring, decl) in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<crate::name::FqTraitName> = decl
+                let bound_names: Vec<FqTraitName> = decl
                     .bounds
                     .iter()
                     .map(|b| self.fq_trait_name_at(b.id, &b.name))
@@ -2006,8 +1998,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
-        required_trait: Option<&super::types::RequiredTrait>,
-    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<(FqTraitName, MethodInfo)> {
         self.find_method_in_trait_bounds_with(
             bounds,
             &IndexMap::default(),
@@ -2029,28 +2021,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn find_method_in_trait_bounds_with(
         &mut self,
         bounds: &[ast::TraitBound],
-        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+        known: &IndexMap<AstId, FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
-        required_trait: Option<&super::types::RequiredTrait>,
-    ) -> Option<(crate::name::FqTraitName, MethodInfo)> {
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<(FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bounds_with(bounds, known);
         // Which trait each bound means is settled once, here: a bound reached
         // through a supertrait was written in the *declaring* module, so
         // resolving its spelling in this frame would miss an aliased one.
-        let keyed: Vec<(ast::TraitBound, crate::defs::DefId)> = bounds
+        let keyed: Vec<(ast::TraitBound, DefId)> = bounds
             .iter()
             .filter_map(|b| {
                 // A synthesised bound carries its referent, so it is read off
                 // the bound rather than looked up by an id the walk never saw.
                 let key = b
                     .resolved
-                    .or_else(|| {
-                        known
-                            .get(&b.id)
-                            .and_then(crate::name::FqTraitName::canonical)
-                    })
+                    .or_else(|| known.get(&b.id).and_then(FqTraitName::canonical))
                     .or_else(|| self.trait_decl_at(b.id, &b.name));
                 key.map(|key| (b.clone(), key))
             })
@@ -2062,14 +2050,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Base::tag(x)` names a supertrait the frame never wrote. Comparing
         // declarations, not spellings, keeps another module's same-named trait
         // from answering for the one the call named.
-        let candidates: Vec<(ast::TraitBound, crate::defs::DefId)> = keyed
+        let candidates: Vec<(ast::TraitBound, DefId)> = keyed
             .into_iter()
             .filter(|(_, key)| {
                 required_trait.is_none_or(|w| match w.decl {
                     // A binder or an unreached name declares no trait, so it
                     // competes with none — which is what the fabricated key
                     // amounted to.
-                    crate::resolve::Resolution::Def(def) => def == *key,
+                    Resolution::Def(def) => def == *key,
                     _ => false,
                 }) && self.trait_declares_method_of(key, method_name)
             })
@@ -2081,7 +2069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if candidates.len() > 1 {
             // Two candidates can share a spelling; reporting both as "Base"
             // names no escape from the collision.
-            let ambiguous_spelling = |bound: &ast::TraitBound, key: &crate::defs::DefId| {
+            let ambiguous_spelling = |bound: &ast::TraitBound, key: &DefId| {
                 candidates
                     .iter()
                     .any(|(other, other_key)| other.name == bound.name && other_key != key)
@@ -2112,16 +2100,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
-        let fq_trait_name = known.get(&bound.id).cloned().unwrap_or_else(|| {
-            crate::name::FqTraitName::declared(self.tysys.resolutions.defs(), decl)
-        });
+        let fq_trait_name = known
+            .get(&bound.id)
+            .cloned()
+            .unwrap_or_else(|| FqTraitName::declared(self.tysys.resolutions.defs(), decl));
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bare_bound_slots(decl, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
-            &crate::tir::SlotProjections::from_iter([(0, answers)]),
+            &SlotProjections::from_iter([(0, answers)]),
         );
         let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
 
@@ -2383,7 +2372,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// none of them positionally (`T: Add<Output = T>` binds an assoc type).
     pub(super) fn bare_bound_slots(
         &mut self,
-        decl: crate::defs::DefId,
+        decl: DefId,
         self_type_id: TypeId,
     ) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::from_iter([(0, self_type_id)]);
@@ -2450,7 +2439,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The trait a bound's own reference site names.
-    pub(super) fn bound_trait_def(&self, site: crate::ast::AstId) -> Option<DefId> {
+    pub(super) fn bound_trait_def(&self, site: AstId) -> Option<DefId> {
         self.tysys.resolutions.declared(site)
     }
 
@@ -2479,7 +2468,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn register_assoc_types_for_concrete_type_and_trait(
         &mut self,
         concrete_type_id: TypeId,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
     ) {
         // Get the base type name and concrete type args for impl block lookup.
         // For newtypes, follow the chain to the underlying type to find the trait impl,
@@ -2488,7 +2477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (type_name, concrete_type_args) = {
             let tt = self.tysys.type_table.borrow();
             let effective_id = tt.representation_head(concrete_type_id);
-            let list_name = tt.compiler_struct_fq_name(crate::compiler_item::CompilerItem::List);
+            let list_name = tt.compiler_struct_fq_name(CompilerItem::List);
             match tt.get(effective_id).clone() {
                 ResolvedType::GenericInstance { type_args, .. } => {
                     (tt.fq_type_name(effective_id).head_only(), type_args)
@@ -2513,7 +2502,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this block implements, as its own header names it —
             /// the key the registration must use.
-            trait_key: crate::defs::DefId,
+            trait_key: DefId,
             /// The written trait reference and the impl's target, so the
             /// registration can name the instantiation the block implements.
             trait_type: ast::Type,
@@ -2631,7 +2620,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_param_bounds: Vec<ast::TraitBound>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this blanket implements, as its own header names it.
-            trait_key: crate::defs::DefId,
+            trait_key: DefId,
         }
         let blanket_infos: Vec<BlanketImplInfo> = {
             let mut result = vec![];
@@ -2642,7 +2631,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if header.associated_types.is_empty() {
                     continue;
                 }
-                let impl_type_name = super::trait_env::get_type_name_static(&header.ty);
+                let impl_type_name = get_type_name_static(&header.ty);
                 let Some(blanket_param) = header
                     .type_params
                     .iter()
@@ -2712,7 +2701,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .register_assoc_type_resolution(
                             concrete_type_id,
-                            crate::tir::TraitRef::bare(trait_key),
+                            TraitRef::bare(trait_key),
                             binding.name.clone(),
                             resolved_id,
                         );

@@ -12,6 +12,7 @@
 /// `false`: each field's default encodes the compiler's current preferred
 /// codegen strategy. `-f <flag>` forces it on and `-f no-<flag>` forces it
 /// off, so an empty flag set reproduces [`CodegenFlags::default`].
+use crate::OptLevel;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Lower `builtin::array_copy` to the native Wasm `array.copy` instruction
@@ -60,9 +61,9 @@ impl CodegenFlags {
     /// [`bare_asserts`](Self::bare_asserts) on: a size-optimized build drops the
     /// power-assert diagnostic by default (an `-f no-bare-asserts` overrides it).
     #[must_use]
-    pub fn for_opt_level(opt_level: crate::OptLevel) -> Self {
+    pub fn for_opt_level(opt_level: OptLevel) -> Self {
         Self {
-            bare_asserts: matches!(opt_level, crate::OptLevel::Os),
+            bare_asserts: matches!(opt_level, OptLevel::Os),
             ..Self::default()
         }
     }
@@ -100,7 +101,7 @@ impl CodegenFlags {
         )
     }
 
-    pub fn parse<I, S>(flags: I, opt_level: crate::OptLevel) -> Result<Self, String>
+    pub fn parse<I, S>(flags: I, opt_level: OptLevel) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,

@@ -24,12 +24,19 @@ use super::types::{
     LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
     field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
+use crate::compiler_item::CompilerItem;
+use crate::component_model::cm_align_with_registry_scoped;
+use crate::component_model::cm_size_with_registry_scoped;
+use crate::name::FqTypeName;
+use crate::synthesis::cm_binding::types::cm_val_type_to_type_id;
+use crate::synthesis::cm_binding::types::cm_zero;
+use crate::tir::TirBlock;
 
 /// Join two CM flat slot types via the single Canonical ABI join
 /// ([`cm_abi::CmValType::join`]) so a lowered flat arg matches the core import's
 /// signature: `{i32, f32}` widens to `i32`, any other mismatch to `i64`.
 fn join_flat_slot(a: Option<TypeId>, b: Option<TypeId>) -> TypeId {
-    super::types::cm_val_type_to_type_id(cm_abi::CmValType::join(
+    cm_val_type_to_type_id(cm_abi::CmValType::join(
         a.map(cm_val_type_from_type_id),
         b.map(cm_val_type_from_type_id),
     ))
@@ -40,9 +47,9 @@ fn flat_slot_zero(tid: TypeId) -> TirExpr {
     if tid == TypeTable::I64 {
         i64_const(0)
     } else if tid == TypeTable::F32 {
-        super::types::cm_zero(cm_abi::CmValType::F32)
+        cm_zero(cm_abi::CmValType::F32)
     } else if tid == TypeTable::F64 {
-        super::types::cm_zero(cm_abi::CmValType::F64)
+        cm_zero(cm_abi::CmValType::F64)
     } else {
         i32_const(0)
     }
@@ -334,7 +341,7 @@ fn synthesize_lower_variant_to_memory(
                 },
                 guard: None,
                 body: TirExpr::new(
-                    TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+                    TirExprKind::Block(TirBlock::new(case_stmts, span)),
                     TypeTable::UNIT,
                     span,
                 ),
@@ -350,7 +357,7 @@ fn synthesize_lower_variant_to_memory(
                 },
                 guard: None,
                 body: TirExpr::new(
-                    TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                    TirExprKind::Block(TirBlock::new(Vec::new(), span)),
                     TypeTable::UNIT,
                     span,
                 ),
@@ -485,9 +492,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     let inner_type_id = {
         let tt = ctx.type_table.borrow();
         match tt.get(value_type_id) {
-            crate::tir::ResolvedType::GenericInstance { type_args, .. }
-                if !type_args.is_empty() =>
-            {
+            ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                 type_args[0]
             }
             _ => {
@@ -529,7 +534,7 @@ pub(super) fn synthesize_lower_option_to_memory(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TirExprKind::Block(TirBlock::new(case_stmts, span)),
             TypeTable::UNIT,
             span,
         ),
@@ -544,7 +549,7 @@ pub(super) fn synthesize_lower_option_to_memory(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TirExprKind::Block(TirBlock::new(Vec::new(), span)),
             TypeTable::UNIT,
             span,
         ),
@@ -580,10 +585,10 @@ pub(super) fn synthesize_lower_result_to_memory(
         let tt = ctx.type_table.borrow();
         let (_, _, ok_name, _) = tt
             .compiler_items()
-            .require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
+            .require_variant_case(CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = tt
             .compiler_items()
-            .require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+            .require_variant_case(CompilerItem::ResultErr);
         let (ok_tid, err_tid) = match tt.get(value_type_id) {
             ResolvedType::GenericInstance { type_args, .. } if type_args.len() == 2 => {
                 (type_args[0], type_args[1])
@@ -633,12 +638,12 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
-    let elem_size = crate::component_model::cm_size_with_registry_scoped(
+    let elem_size = cm_size_with_registry_scoped(
         &elem_resolved,
         ctx.cm_interface_registry,
         Some(ctx.wasi_package),
     ) as i32;
-    let elem_align = crate::component_model::cm_align_with_registry_scoped(
+    let elem_align = cm_align_with_registry_scoped(
         &elem_resolved,
         ctx.cm_interface_registry,
         Some(ctx.wasi_package),
@@ -650,9 +655,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let elem_type_id = {
         let tt = ctx.type_table.borrow();
         match tt.get(list_type_id) {
-            crate::tir::ResolvedType::GenericInstance { type_args, .. }
-                if !type_args.is_empty() =>
-            {
+            ResolvedType::GenericInstance { type_args, .. } if !type_args.is_empty() => {
                 type_args[0]
             }
             _ => {
@@ -758,7 +761,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
             names
                 .index_value
                 .clone()
-                .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
+                .with_args(vec![FqTypeName::builtin("i32")]),
         ),
         "index_value".to_string(),
     );
@@ -1024,7 +1027,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             },
                             guard: None,
                             body: TirExpr::new(
-                                TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+                                TirExprKind::Block(TirBlock::new(case_stmts, span)),
                                 TypeTable::UNIT,
                                 span,
                             ),
@@ -1040,7 +1043,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             },
                             guard: None,
                             body: TirExpr::new(
-                                TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                                TirExprKind::Block(TirBlock::new(Vec::new(), span)),
                                 TypeTable::UNIT,
                                 span,
                             ),
@@ -1347,7 +1350,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(some_stmts, span)),
+            TirExprKind::Block(TirBlock::new(some_stmts, span)),
             TypeTable::UNIT,
             span,
         ),
@@ -1362,7 +1365,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+            TirExprKind::Block(TirBlock::new(Vec::new(), span)),
             TypeTable::UNIT,
             span,
         ),
@@ -1495,7 +1498,7 @@ fn flatten_result_case_arm(
             },
             guard: None,
             body: TirExpr::new(
-                TirExprKind::Block(crate::tir::TirBlock::new(Vec::new(), span)),
+                TirExprKind::Block(TirBlock::new(Vec::new(), span)),
                 TypeTable::UNIT,
                 span,
             ),
@@ -1559,7 +1562,7 @@ fn flatten_result_case_arm(
         },
         guard: None,
         body: TirExpr::new(
-            TirExprKind::Block(crate::tir::TirBlock::new(case_stmts, span)),
+            TirExprKind::Block(TirBlock::new(case_stmts, span)),
             TypeTable::UNIT,
             span,
         ),

@@ -34,6 +34,17 @@ use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
     cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
 };
+use crate::ast::Visibility;
+use crate::cm_abi::CmValType;
+use crate::cm_abi::layout_tuple_with_registry_scoped;
+use crate::compiler_item::CompilerItem;
+use crate::component_model::cm_align_with_registry_scoped;
+use crate::component_model::cm_return_needs_outptr;
+use crate::component_model::cm_size_with_registry_scoped;
+use crate::component_model::cm_variant_size_align_scoped;
+use crate::name::FqTypeName;
+use crate::name::cm_wrap_async_func_name;
+use crate::tir;
 
 /// Build the binding function name for a WASI import.
 pub fn binding_func_name(interface_name: &str, method_name: &str) -> String {
@@ -82,10 +93,8 @@ fn synthesize_lift_flat_result(
         let (ok_name, ok_index, err_name, err_index) = {
             let tt = ctx.type_table.borrow();
             let items = tt.compiler_items();
-            let (_, _, ok_n, ok_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultOk);
-            let (_, _, err_n, err_i) =
-                items.require_variant_case(crate::compiler_item::CompilerItem::ResultErr);
+            let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
+            let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
             (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
         };
 
@@ -197,7 +206,7 @@ pub(super) fn make_binding_function(
         module_source: ModuleSource::default(),
         name,
         def_id: None,
-        visibility: crate::ast::Visibility::Private,
+        visibility: Visibility::Private,
         is_export: false,
         is_async: false,
         type_params: vec![],
@@ -227,7 +236,7 @@ pub(super) fn make_binding_function(
         declared_return_convention: None,
         kind: FunctionKind::Regular,
 
-        return_abi: crate::tir::ReturnAbi::default(),
+        return_abi: tir::ReturnAbi::default(),
     }))
 }
 
@@ -245,9 +254,10 @@ fn wasi_return_type_id(
         // Async canon lower: raw call returns subtask handle (i32)
         TypeTable::I32
     } else {
-        let needs_outptr = func_info.return_type.as_ref().is_some_and(|rt| {
-            crate::component_model::cm_return_needs_outptr(rt, cm_interface_registry)
-        });
+        let needs_outptr = func_info
+            .return_type
+            .as_ref()
+            .is_some_and(|rt| cm_return_needs_outptr(rt, cm_interface_registry));
         if needs_outptr {
             // Raw call returns void; the result is read from the outptr.
             TypeTable::UNIT
@@ -470,7 +480,7 @@ fn synthesize_async_wrap_function(
 /// materialized.
 fn lift_flat_struct_return(
     resolved: &Type,
-    flat: crate::cm_abi::CmValType,
+    flat: CmValType,
     raw_call: TirExpr,
     raw_call_type: TypeId,
     next_local: &mut u32,
@@ -750,13 +760,13 @@ fn cm_return_size_align(
     pkg: Option<&str>,
 ) -> (u32, u32) {
     if let Type::Named(named) = return_type
-        && let Some(sa) = crate::component_model::cm_variant_size_align_scoped(named, registry, pkg)
+        && let Some(sa) = cm_variant_size_align_scoped(named, registry, pkg)
     {
         return sa;
     }
     (
-        crate::component_model::cm_size_with_registry_scoped(return_type, registry, pkg),
-        crate::component_model::cm_align_with_registry_scoped(return_type, registry, pkg),
+        cm_size_with_registry_scoped(return_type, registry, pkg),
+        cm_align_with_registry_scoped(return_type, registry, pkg),
     )
 }
 
@@ -1046,10 +1056,8 @@ impl<'a> AdapterBuilder<'a> {
         // Use registry-aware layout so named WASI struct/variant/enum/flags
         // element types walk at their true CM stride/alignment instead of
         // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
-        let elem_size =
-            crate::component_model::cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
-        let elem_align =
-            crate::component_model::cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
+        let elem_size = cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
+        let elem_align = cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
 
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
@@ -1146,7 +1154,7 @@ impl<'a> AdapterBuilder<'a> {
                     .names
                     .index_value
                     .clone()
-                    .with_args(vec![crate::name::FqTypeName::builtin("i32")]),
+                    .with_args(vec![FqTypeName::builtin("i32")]),
             ),
             "index_value".to_string(),
         );
@@ -1289,7 +1297,7 @@ impl<'a> AdapterBuilder<'a> {
         // written. `layout_tuple_*` lays a param sequence out exactly like the
         // buffer: each param aligned then placed, padded to the max align.
         let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
-        let layout = crate::cm_abi::layout_tuple_with_registry_scoped(
+        let layout = layout_tuple_with_registry_scoped(
             &param_types,
             registry,
             Some(self.lower_ctx.wasi_package),
@@ -1386,10 +1394,7 @@ impl<'a> AdapterBuilder<'a> {
     /// append its address as the last flat arg.
     fn alloc_sync_outptr(&mut self) -> Option<OutptrBuffer> {
         let return_type = self.func_info.return_type.as_ref()?;
-        if !crate::component_model::cm_return_needs_outptr(
-            return_type,
-            self.lower_ctx.cm_interface_registry,
-        ) {
+        if !cm_return_needs_outptr(return_type, self.lower_ctx.cm_interface_registry) {
             return None;
         }
         let (size, align) = cm_return_size_align(
@@ -1505,7 +1510,7 @@ impl<'a> AdapterBuilder<'a> {
             None => (0, 0),
         };
         self.auxiliary.push(synthesize_async_wrap_function(
-            crate::name::cm_wrap_async_func_name(&func_info.interface_name, &func_info.method_name),
+            cm_wrap_async_func_name(&func_info.interface_name, &func_info.method_name),
             func_info,
             inner_type_id,
             subtask_type,

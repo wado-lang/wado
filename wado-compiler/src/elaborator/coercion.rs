@@ -3,10 +3,24 @@
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
+use crate::ast::LiteralMember;
 use crate::ast::{self, Expr, Literal, UnaryOp};
 use crate::compiler_host::CompilerHost;
+use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
+use crate::elaborator::sem::types::CoercionKind;
+use crate::elaborator::sem::types::KeyValueCoercionFacts;
+use crate::elaborator::sem::types::LiteralCallee;
+use crate::elaborator::sem::types::LiteralFromCall;
+use crate::elaborator::sem::types::SequenceCoercionFacts;
+use crate::elaborator::typecheck::TypeCheckResult;
+use crate::elaborator::typecheck::check_assignable;
+use crate::elaborator::types::FromArrayInfo;
 use crate::hashmap::IndexSet;
+use crate::module_source::ModuleSource;
+use crate::name::FqTraitName;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 /// Whether `expr` is a literal — the only position implicit conversion reaches
 /// (WEP 2026-08-24). A template string, a variable, and a call are not.
@@ -231,11 +245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
     ) -> Option<TypeId> {
         let coerced = self.try_coerce_numeric_literal_inner(expr, target_type)?;
-        self.record_coercion(
-            expr.id(),
-            super::sem::types::CoercionKind::NumericLiteral,
-            target_type,
-        );
+        self.record_coercion(expr.id(), CoercionKind::NumericLiteral, target_type);
         self.record_expression_type(expr.id(), target_type);
         // `-NUM` consumes both the outer Unary node and the inner Literal
         // node directly (no recursive resolve_expr fires on the inner),
@@ -443,11 +453,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .as_option(target_type)
                 .is_some()
         {
-            self.record_coercion(
-                expr.id(),
-                super::sem::types::CoercionKind::NullToOption,
-                target_type,
-            );
+            self.record_coercion(expr.id(), CoercionKind::NullToOption, target_type);
             return Some(target_type);
         }
 
@@ -467,7 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .compiler_struct_name(crate::compiler_item::CompilerItem::String)
+                .compiler_struct_name(CompilerItem::String)
                 .to_string();
             let is_string_newtype = matches!(
                 self.tysys.type_table.borrow().get(base_id),
@@ -477,11 +483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_string_newtype {
                 // Walk the inner literal / template for fact recording.
                 self.resolve_expr(expr, ctx, None);
-                self.record_coercion(
-                    expr.id(),
-                    super::sem::types::CoercionKind::StringNewtype,
-                    target_type,
-                );
+                self.record_coercion(expr.id(), CoercionKind::StringNewtype, target_type);
                 // The inner resolve_expr wrote expression_types[expr.id]
                 // with the unwrapped String type; overwrite with the
                 // outer target newtype so reify reads the newtype here.
@@ -496,11 +498,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if matches!(&lit.value, Literal::Bytes(_) | Literal::IncludeBytes(_))
         );
         if is_bytes_literal {
-            let list_u8 = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .make_list(crate::tir::TypeTable::U8);
+            let list_u8 = self.tysys.type_table.borrow_mut().make_list(TypeTable::U8);
             let base_id = self
                 .tysys
                 .type_table
@@ -516,11 +514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span: lit.span,
                     });
                 }
-                self.record_coercion(
-                    expr.id(),
-                    super::sem::types::CoercionKind::BytesNewtype,
-                    target_type,
-                );
+                self.record_coercion(expr.id(), CoercionKind::BytesNewtype, target_type);
                 self.record_expression_type(expr.id(), target_type);
                 return Some(target_type);
             }
@@ -543,11 +537,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Walk the closure for fact recording (param types,
                 // captures, body) under the unwrapped fn type.
                 self.resolve_expr(expr, ctx, Some(base_id));
-                self.record_coercion(
-                    expr.id(),
-                    super::sem::types::CoercionKind::ClosureToFnNewtype,
-                    target_type,
-                );
+                self.record_coercion(expr.id(), CoercionKind::ClosureToFnNewtype, target_type);
                 // Same pattern as StringNewtype above: overwrite the
                 // map's base-fn-type write with the outer newtype.
                 self.record_expression_type(expr.id(), target_type);
@@ -587,11 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// array at all. Asked of the target, so a coercion that declined for
     /// another reason — an ambiguity it has already reported — says nothing
     /// here that would contradict it.
-    pub(super) fn report_if_not_a_map_target(
-        &mut self,
-        target_type: TypeId,
-        span: crate::token::Span,
-    ) {
+    pub(super) fn report_if_not_a_map_target(&mut self, target_type: TypeId, span: Span) {
         if self.is_key_value_literal_target(target_type) {
             return;
         }
@@ -619,11 +605,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
     ) -> Option<TypeId> {
         let coerced = self.try_coerce_struct_to_map_inner(expr, ctx, target_type)?;
-        self.record_coercion(
-            expr.id(),
-            super::sem::types::CoercionKind::StructToMap,
-            target_type,
-        );
+        self.record_coercion(expr.id(), CoercionKind::StructToMap, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(coerced)
     }
@@ -661,14 +643,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+            .make_compiler_struct(CompilerItem::String);
         let key_incompatible = matches!(
-            super::typecheck::check_assignable(
-                string_type,
-                key_type,
-                &self.tysys.type_table.borrow(),
-            ),
-            super::typecheck::TypeCheckResult::Incompatible
+            check_assignable(string_type, key_type, &self.tysys.type_table.borrow(),),
+            TypeCheckResult::Incompatible
         );
         if key_incompatible {
             let (type_name, key_name) = {
@@ -706,7 +684,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let call = self.literal_from_call(&from_info, output_type);
         self.sem.types.key_value_coercions.insert(
             expr.id(),
-            super::sem::types::KeyValueCoercionFacts {
+            KeyValueCoercionFacts {
                 value_type,
                 pair_type: from_info.element_type,
                 newtype_cast_to: needs_newtype_cast.then_some(target_type),
@@ -736,22 +714,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut value_type = value_type;
         for member in struct_lit.members() {
             match member {
-                crate::ast::LiteralMember::Spread(_, spread) => {
+                LiteralMember::Spread(_, spread) => {
                     self.resolve_expr(&spread.expr, ctx, Some(output_type));
                 }
-                crate::ast::LiteralMember::Field(_, field) => {
+                LiteralMember::Field(_, field) => {
                     let value = self.resolve_expr(&field.value, ctx, Some(value_type));
                     // Route through the shared check rather than comparing ids:
                     // an undecided value type — a callee's slot the call site
                     // instantiated — defers to its solver instead of rejecting
                     // every value.
                     let incompatible = matches!(
-                        super::typecheck::check_assignable(
-                            value,
-                            value_type,
-                            &self.tysys.type_table.borrow(),
-                        ),
-                        super::typecheck::TypeCheckResult::Incompatible
+                        check_assignable(value, value_type, &self.tysys.type_table.borrow(),),
+                        TypeCheckResult::Incompatible
                     );
                     if incompatible {
                         self.convert_literal_element(&field.value, value, value_type);
@@ -783,11 +757,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
     ) -> Option<TypeId> {
         let coerced = self.try_coerce_tuple_to_sequence_inner(expr, ctx, target_type)?;
-        self.record_coercion(
-            expr.id(),
-            super::sem::types::CoercionKind::TupleToSequence,
-            target_type,
-        );
+        self.record_coercion(expr.id(), CoercionKind::TupleToSequence, target_type);
         self.record_expression_type(expr.id(), target_type);
         Some(coerced)
     }
@@ -804,8 +774,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target_type: TypeId,
         want_pair: bool,
-        span: crate::token::Span,
-    ) -> Option<(super::types::FromArrayInfo, TypeId, bool)> {
+        span: Span,
+    ) -> Option<(FromArrayInfo, TypeId, bool)> {
         let resolve = |elaborator: &mut Self, ty: TypeId| {
             let name = elaborator.literal_target_name(ty)?;
             match elaborator
@@ -912,10 +882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(name) = self.literal_target_name(slot_type) else {
             return false;
         };
-        let Some(from_def) = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::From)
-        else {
+        let Some(from_def) = self.tysys.compiler_trait_def(CompilerItem::From) else {
             return false;
         };
         let found = self
@@ -926,7 +893,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         };
         let call = self.literal_from_call(
-            &super::types::FromArrayInfo {
+            &FromArrayInfo {
                 impl_def: Some(info.impl_def),
                 element_type: found_type,
                 array_type: found_type,
@@ -951,14 +918,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The `LiteralSpread::spread_literal` a `..base` member calls on
     /// `output_type`, or `None` where the type does not implement the trait.
-    fn literal_spread_call(
-        &mut self,
-        output_type: TypeId,
-    ) -> Option<super::sem::types::LiteralCallee> {
+    fn literal_spread_call(&mut self, output_type: TypeId) -> Option<LiteralCallee> {
         let name = self.literal_target_name(output_type)?;
-        let trait_ = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::LiteralSpread)?;
+        let trait_ = self.tysys.compiler_trait_def(CompilerItem::LiteralSpread)?;
         let info =
             self.find_arithmetic_trait_impl(&name, output_type, trait_, "spread_literal", None)?;
         Some(self.literal_callee(
@@ -974,10 +936,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// already remangled.
     fn literal_from_call(
         &mut self,
-        from_info: &super::types::FromArrayInfo,
+        from_info: &FromArrayInfo,
         output_type: TypeId,
-    ) -> super::sem::types::LiteralFromCall {
-        super::sem::types::LiteralFromCall {
+    ) -> LiteralFromCall {
+        LiteralFromCall {
             from_type: from_info.array_type,
             output_type,
             callee: self.literal_callee(
@@ -993,13 +955,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Name the trait method a literal calls on `output_type`, remangled.
     fn literal_callee(
         &mut self,
-        impl_def: Option<crate::defs::DefId>,
-        impl_module_source: crate::module_source::ModuleSource,
-        trait_name: crate::name::FqTraitName,
+        impl_def: Option<DefId>,
+        impl_module_source: ModuleSource,
+        trait_name: FqTraitName,
         output_type: TypeId,
         method: &'static str,
-    ) -> super::sem::types::LiteralCallee {
-        let mut callee = super::sem::types::LiteralCallee {
+    ) -> LiteralCallee {
+        let mut callee = LiteralCallee {
             method_def: impl_def.and_then(|def| self.tysys.declared_method(def, method)),
             impl_module_source,
             trait_name,
@@ -1075,7 +1037,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let call = self.literal_from_call(&from_info, output_type);
         self.sem.types.sequence_coercions.insert(
             tuple_lit.id,
-            super::sem::types::SequenceCoercionFacts {
+            SequenceCoercionFacts {
                 element_type,
                 newtype_cast_to: needs_newtype_cast.then_some(target_type),
                 call,
@@ -1094,12 +1056,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // enclosing body's own parameter), while a variable or a pack
             // defers to its solver.
             let incompatible = matches!(
-                super::typecheck::check_assignable(
-                    elem_expr,
-                    element_type,
-                    &self.tysys.type_table.borrow(),
-                ),
-                super::typecheck::TypeCheckResult::Incompatible
+                check_assignable(elem_expr, element_type, &self.tysys.type_table.borrow(),),
+                TypeCheckResult::Incompatible
             );
             if incompatible {
                 self.convert_literal_element(element, elem_expr, element_type);

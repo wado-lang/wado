@@ -3,12 +3,16 @@
 //! This module tests that compilation errors are properly reported with
 //! correct error types, messages, and source locations.
 
+use crate::common::compile_file;
+use crate::common::compile_source;
+use crate::common::compile_source_with_compiler_options;
+use crate::common::compile_source_with_opts;
 use std::path::Path;
 use wado_compiler::{CompileError, OptLevel};
 
 #[test]
 fn test_io_error_file_not_found() {
-    let result = crate::common::compile_file(Path::new("nonexistent_file.wado"));
+    let result = compile_file(Path::new("nonexistent_file.wado"));
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -23,7 +27,7 @@ fn test_io_error_file_not_found() {
 
 #[test]
 fn test_io_error_directory_instead_of_file() {
-    let result = crate::common::compile_file(Path::new("."));
+    let result = compile_file(Path::new("."));
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -47,7 +51,7 @@ fn main() {
 }
 "#;
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -74,7 +78,7 @@ fn main() {
 fn test_lexer_error_invalid_character() {
     let source = "fn main() { let x = @invalid; }";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -103,7 +107,7 @@ fn test_parser_error_missing_function_body() {
 fn main()
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -135,7 +139,7 @@ fn main() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -168,7 +172,7 @@ fn main() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -198,7 +202,7 @@ fn test_parser_error_invalid_use_statement() {
 use;
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -232,7 +236,7 @@ fn main() {
 }
 "#;
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -260,7 +264,7 @@ fn main() {
 }
 "#;
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -292,7 +296,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -324,7 +328,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -356,7 +360,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -388,7 +392,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -420,7 +424,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -452,7 +456,7 @@ fn run() {
 }
 ";
 
-    let result = crate::common::compile_source(source);
+    let result = compile_source(source);
     assert!(result.is_err());
 
     let err = result.unwrap_err();
@@ -555,7 +559,7 @@ fn test_error_display_analyzer_without_filename() {
 /// not a stdlib module (`core:libm.wat` before the fix). Regression for #1596.
 fn analyzer_filename(source: &str) -> String {
     let path = Path::new("orphan_phase_diag.wado");
-    let err = crate::common::compile_source_with_opts(path, source, OptLevel::default())
+    let err = compile_source_with_opts(path, source, OptLevel::default())
         .expect_err("expected a compile error");
     match err {
         CompileError::Analyzer { filename, .. } => {
@@ -586,7 +590,7 @@ fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
     // The impl lives in the imported submodule, so the file must be that
     // submodule — never the entry — which pins per-module attribution (#1596).
     let path = Path::new("tests/fixtures/orphan_xmod_entry.wado");
-    let err = crate::common::compile_file(path).expect_err("expected a compile error");
+    let err = compile_file(path).expect_err("expected a compile error");
     match err {
         CompileError::Analyzer {
             filename, message, ..
@@ -624,7 +628,7 @@ export fn run() {
 }
 ";
 
-    let err = crate::common::compile_source(source).expect_err("expected a type error");
+    let err = compile_source(source).expect_err("expected a type error");
     let text = err.to_string();
     assert!(
         text.contains("mutable reference to a primitive"),
@@ -650,7 +654,7 @@ export fn run() {
 }
 ";
 
-    let err = crate::common::compile_source(source).expect_err("expected a type error");
+    let err = compile_source(source).expect_err("expected a type error");
     let text = err.to_string();
     assert!(
         text.contains("mutable reference to a primitive"),
@@ -671,7 +675,7 @@ export fn run() {
 }
 ";
 
-    crate::common::compile_source(source).expect("a non-scalar &mut binding compiles");
+    compile_source(source).expect("a non-scalar &mut binding compiles");
 }
 
 #[test]
@@ -688,11 +692,9 @@ fn stdlib_identity_attribute_is_checked_in_an_imported_module_too() {
         target_world: Some("test".to_string()),
         ..Default::default()
     };
-    let Err(err) = crate::common::compile_source_with_compiler_options(
-        &dir.path().join("main_test.wado"),
-        entry,
-        options,
-    ) else {
+    let Err(err) =
+        compile_source_with_compiler_options(&dir.path().join("main_test.wado"), entry, options)
+    else {
         panic!("an imported module's malformed `#![stdlib]` must be rejected");
     };
     assert!(
@@ -706,7 +708,7 @@ fn stdlib_identity_attribute_naming_no_bundled_module_is_an_error() {
     // Any file can write the attribute, so this is a diagnostic, never a panic.
     let source = "#![stdlib(\"core:bogus.wado\")]\nfn main() {}\n";
 
-    let Err(err) = crate::common::compile_source(source) else {
+    let Err(err) = compile_source(source) else {
         panic!("an unregistered stdlib identity must be rejected");
     };
     match err {

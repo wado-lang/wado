@@ -10,15 +10,35 @@ use crate::hashmap::IndexSet;
 use crate::hashmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
+use crate::ast::AstIdSpace;
+use crate::ast::ImportAttributes;
+use crate::ast::UseDecl;
 use crate::ast::{Item, Module};
 use crate::bind;
+use crate::compiler_host::Diagnostic;
+use crate::compiler_host::InMemoryCompilerHost;
 use crate::compiler_host::{CompilerHost, SourceError};
+use crate::component_model::SourceInterfaceBatch;
+use crate::hashmap;
+use crate::kiln::InvocationIndex;
+use crate::lexer::LexError;
+use crate::lexer::lex;
 use crate::logger::Logger;
+use crate::module_source::is_bundled_specifier;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind};
+use crate::name::canonical_local_path;
+use crate::name::canonicalize_entry_point;
+use crate::name::entry_dir_of;
+use crate::name::resolve_import_with_invocations;
+use crate::name::resolve_local_identity;
 use crate::name::{normalize_module_path, resolve_module_path};
+use crate::parser;
 use crate::parser::Parser;
 use crate::path::is_cwd_relative;
+use crate::path::normalize;
 use crate::stdlib;
+use crate::wit_consume::ComponentBindings;
+use crate::wit_consume::build_bindings;
 
 /// Error that can occur during module loading
 #[derive(Debug, Clone)]
@@ -74,7 +94,7 @@ pub enum LoadError {
 
 impl LoadError {
     /// Build a `LexError` from a recovered [`crate::lexer::LexError`].
-    pub fn from_lex_error(e: &crate::lexer::LexError, module_source: ModuleSource) -> Self {
+    pub fn from_lex_error(e: &LexError, module_source: ModuleSource) -> Self {
         LoadError::LexError {
             module_source,
             message: e.to_string(),
@@ -84,7 +104,7 @@ impl LoadError {
     }
 
     /// Build a `ParseError` from a recovered [`crate::parser::ParseError`].
-    pub fn from_parse_error(e: &crate::parser::ParseError, module_source: ModuleSource) -> Self {
+    pub fn from_parse_error(e: &parser::ParseError, module_source: ModuleSource) -> Self {
         LoadError::ParseError {
             module_source,
             message: e.message.clone(),
@@ -184,7 +204,7 @@ fn stdlib_identity_message(path: Option<&str>) -> String {
 
 impl std::error::Error for LoadError {}
 
-impl From<LoadError> for crate::compiler_host::Diagnostic {
+impl From<LoadError> for Diagnostic {
     fn from(e: LoadError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
         match e {
@@ -203,7 +223,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
-                    space: crate::ast::AstIdSpace::FRESH,
+                    space: AstIdSpace::FRESH,
                 }),
             },
             LoadError::ParseError {
@@ -221,7 +241,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
-                    space: crate::ast::AstIdSpace::FRESH,
+                    space: AstIdSpace::FRESH,
                 }),
             },
             LoadError::BindError {
@@ -257,7 +277,7 @@ impl From<LoadError> for crate::compiler_host::Diagnostic {
                     column,
                     end_line: None,
                     end_column: None,
-                    space: crate::ast::AstIdSpace::FRESH,
+                    space: AstIdSpace::FRESH,
                 }),
             },
             ref other => Self {
@@ -367,23 +387,16 @@ impl WasmAsset {
 pub fn resolve_use_decl_source(
     interner: &mut ModuleSourceInterner,
     from: &ModuleSource,
-    use_decl: &crate::ast::UseDecl,
+    use_decl: &UseDecl,
     entry: Option<&ModuleSource>,
-    invocations: &crate::kiln::InvocationIndex,
+    invocations: &InvocationIndex,
 ) -> ModuleSource {
     if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref())
-        && let Ok(path) =
-            resolve_wasm_asset_path(from, &use_decl.source, &crate::name::entry_dir_of(entry))
+        && let Ok(path) = resolve_wasm_asset_path(from, &use_decl.source, &entry_dir_of(entry))
     {
         return interner.wasm(&path, kind);
     }
-    crate::name::resolve_import_with_invocations(
-        interner,
-        from,
-        &use_decl.source,
-        entry,
-        invocations,
-    )
+    resolve_import_with_invocations(interner, from, &use_decl.source, entry, invocations)
 }
 
 /// Whether `bytes` is a CM component (vs a core module), per the preamble encoding.
@@ -426,11 +439,11 @@ pub struct LoadResult {
     /// binding module resolves to, keyed by the reference's own site. The WIT
     /// importer is the only pass that knows a reference's precise owning
     /// interface, so it answers here rather than leaving a spelling behind.
-    pub cm_source_interfaces: crate::component_model::SourceInterfaceBatch,
+    pub cm_source_interfaces: SourceInterfaceBatch,
     /// Kiln invocation redirects propagated from the loader so later phases
     /// (analyze, elaborator) can also rewrite `use ... from "<schema>"`
     /// clauses consistently.
-    pub invocations: crate::kiln::InvocationIndex,
+    pub invocations: InvocationIndex,
     /// `ModuleSource` interner created during loading. Downstream phases
     /// (analyze / elaborator / synthesis / monomorphize) borrow this to
     /// canonicalize any `ModuleSource` they construct so that ptr-eq
@@ -454,7 +467,7 @@ pub fn path_to_kiln_uri(path: &str) -> String {
         encoder::{Data, Path},
     };
     // Encode per segment so `/` stays a separator.
-    let encoded = crate::path::normalize(path)
+    let encoded = normalize(path)
         .split('/')
         .map(|segment| {
             let mut e = EString::<Path>::new();
@@ -500,10 +513,8 @@ fn is_non_wado_schema(path: &str) -> bool {
 /// attributes. Returns `Some(kind)` for `with { type: "wat" | "wasm" }`,
 /// `None` otherwise (including for unrelated `with { ... }` attributes
 /// such as `with { version: "1.0" }`).
-pub fn wasm_asset_kind_from_attrs(
-    attrs: Option<&crate::ast::ImportAttributes>,
-) -> Option<WasmAssetKind> {
-    let type_hint = crate::ast::ImportAttributes::type_hint(attrs?)?;
+pub fn wasm_asset_kind_from_attrs(attrs: Option<&ImportAttributes>) -> Option<WasmAssetKind> {
+    let type_hint = ImportAttributes::type_hint(attrs?)?;
     match type_hint.as_str() {
         "wat" => Some(WasmAssetKind::Wat),
         "wasm" => Some(WasmAssetKind::Wasm),
@@ -538,14 +549,10 @@ pub fn resolve_wasm_asset_path(
             "{namespace}:{}",
             join_namespace_relative_path(interface, import_source)
         )),
-        ModuleSource::Local { path } => Ok(crate::name::resolve_local_identity(
-            entry_dir,
-            path,
-            import_source,
-        )),
+        ModuleSource::Local { path } => Ok(resolve_local_identity(entry_dir, path, import_source)),
         ModuleSource::Dependency { path, .. } => Ok(resolve_module_path(path, import_source)),
         ModuleSource::Remote { url, .. } => Ok(resolve_module_path(url, import_source)),
-        ModuleSource::EntryPoint { .. } => Ok(crate::name::canonical_local_path(
+        ModuleSource::EntryPoint { .. } => Ok(canonical_local_path(
             entry_dir,
             &normalize_module_path(import_source),
         )),
@@ -919,7 +926,7 @@ fn format_stdlib_error(
 }
 
 fn parse_bind_stdlib(label: &str, source: &str) -> Module {
-    let lex_result = crate::lexer::lex(source);
+    let lex_result = lex(source);
     if let Some(e) = lex_result.errors.first() {
         // Bundled stdlib must always lex cleanly; a recovered lex error here
         // is a compiler bug, so fail loudly rather than degrade.
@@ -955,11 +962,11 @@ fn parse_bind_stdlib(label: &str, source: &str) -> Module {
         );
     }
     {
-        let bind_host = crate::compiler_host::InMemoryCompilerHost::new();
+        let bind_host = InMemoryCompilerHost::new();
         let bind_logger = Logger::new(&bind_host, LogLevel::Off);
         // Only used for (unread) file attribution: a bind failure here is a
         // bundled-stdlib bug and the panic below formats against `label`.
-        let module_source = crate::module_source::ModuleSourceInterner::new().entry_point(label);
+        let module_source = ModuleSourceInterner::new().entry_point(label);
         bind::bind_module(&ast, &module_source, &bind_logger).unwrap_or_else(|_| {
             let diags = bind_host.diagnostics();
             let mut msg = format!("bind error in {label}:\n");
@@ -1107,7 +1114,7 @@ struct StdlibSlot {
     module: std::sync::OnceLock<Module>,
 }
 
-type StdlibSlotMap = crate::hashmap::IndexMap<&'static str, StdlibSlot>;
+type StdlibSlotMap = hashmap::IndexMap<&'static str, StdlibSlot>;
 
 fn stdlib_slots() -> &'static StdlibSlotMap {
     use std::sync::OnceLock;
@@ -1116,10 +1123,8 @@ fn stdlib_slots() -> &'static StdlibSlotMap {
     SLOTS.get_or_init(|| {
         let core = stdlib::all_core_modules();
         let bindings = stdlib::all_binding_modules();
-        let mut slots: StdlibSlotMap = crate::hashmap::IndexMap::with_capacity_and_hasher(
-            core.len() + bindings.len(),
-            FxBuildHasher,
-        );
+        let mut slots: StdlibSlotMap =
+            hashmap::IndexMap::with_capacity_and_hasher(core.len() + bindings.len(), FxBuildHasher);
         for &(path, source) in core.iter().chain(bindings) {
             slots.insert(
                 path,
@@ -1145,12 +1150,10 @@ fn cached_stdlib_module(import_path: &str) -> Option<&'static Module> {
 /// [`stdlib_slots`] for a *bundled* wasm asset's synthesized bindings: its bytes
 /// are fixed at build time, so it is parsed once per process too — an `AstId`
 /// must mean the same node in every compile (WEP 2026-08-12 §1).
-fn wasm_binding_slots()
--> &'static crate::hashmap::IndexMap<&'static str, std::sync::OnceLock<Module>> {
+fn wasm_binding_slots() -> &'static hashmap::IndexMap<&'static str, std::sync::OnceLock<Module>> {
     use std::sync::OnceLock;
 
-    static SLOTS: OnceLock<crate::hashmap::IndexMap<&'static str, OnceLock<Module>>> =
-        OnceLock::new();
+    static SLOTS: OnceLock<hashmap::IndexMap<&'static str, OnceLock<Module>>> = OnceLock::new();
     SLOTS.get_or_init(|| {
         stdlib::ALL_CORE_WASM_ASSETS
             .iter()
@@ -1202,14 +1205,14 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Wasm assets loaded via `use ... from "<path>" with { type: ... }`.
     /// Keyed by canonical namespace string (`wasm:<path>`).
     wasm_assets: IndexMap<String, WasmAsset>,
-    cm_source_interfaces: crate::component_model::SourceInterfaceBatch,
+    cm_source_interfaces: SourceInterfaceBatch,
     /// Set of wasm asset namespace keys whose bytes are already in
     /// `wasm_assets` (used for dedup across multiple imports of the same
     /// asset).
     loaded_wasm_namespaces: IndexSet<String>,
     /// Wasm asset imports queued by `load_implicit_modules` (sync method);
     /// drained by `load_all` after that runs so the async fetch can happen.
-    pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)>,
+    pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, UseDecl)>,
     /// Registry-component imports discovered during `collect_imports`: a
     /// coordinate `use { X } from "ns:pkg"` resolved to an already-materialized
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
@@ -1231,7 +1234,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     /// Kiln invocation redirects: `(decl_file, from_path)` → generated entry
     /// module path. Consulted by `resolve_import` so a bare `use { X } from
     /// "<schema>"` picks up the generator's output.
-    invocations: crate::kiln::InvocationIndex,
+    invocations: InvocationIndex,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1248,7 +1251,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             loading: IndexSet::default(),
             implicit_modules: IndexSet::default(),
             wasm_assets: IndexMap::default(),
-            cm_source_interfaces: crate::component_model::SourceInterfaceBatch::default(),
+            cm_source_interfaces: SourceInterfaceBatch::default(),
             loaded_wasm_namespaces: IndexSet::default(),
             pending_implicit_wasm_imports: Vec::new(),
             pending_component_imports: Vec::new(),
@@ -1256,7 +1259,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             entry_module_source: None,
             entry_canonical_name: None,
             entry_dir: String::new(),
-            invocations: crate::kiln::InvocationIndex::new(),
+            invocations: InvocationIndex::new(),
         }
     }
 
@@ -1271,7 +1274,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// [`Self::load_all`] so the index is available when imports are
     /// resolved.
     #[must_use]
-    pub fn with_invocations(mut self, invocations: crate::kiln::InvocationIndex) -> Self {
+    pub fn with_invocations(mut self, invocations: InvocationIndex) -> Self {
         self.invocations = invocations;
         self
     }
@@ -1336,15 +1339,15 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         )?
         .unwrap_or(tentative_entry_source);
         self.entry_module_source = Some(entry_module_source.clone());
-        self.entry_canonical_name = Some(crate::name::canonicalize_entry_point(resolved_filename));
-        self.entry_dir = crate::name::entry_dir_of(Some(&entry_module_source));
+        self.entry_canonical_name = Some(canonicalize_entry_point(resolved_filename));
+        self.entry_dir = entry_dir_of(Some(&entry_module_source));
 
         let entry_name = entry_module_source.to_string();
         self.logger.span_start(&format!("load {entry_name}"));
 
         // Collect imports from entry module (before bind)
         let mut pending: VecDeque<(ModuleSource, ModuleSource)> = VecDeque::new();
-        let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)> = Vec::new();
+        let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, UseDecl)> = Vec::new();
         self.collect_imports(
             &entry_ast,
             &entry_module_source,
@@ -1491,7 +1494,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         module: &Module,
         from_module_source: &ModuleSource,
         pending: &mut VecDeque<(ModuleSource, ModuleSource)>,
-        wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, crate::ast::UseDecl)>,
+        wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, UseDecl)>,
     ) -> Result<(), LoadError> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
@@ -1511,7 +1514,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     && use_decl
                         .attributes
                         .as_ref()
-                        .and_then(crate::ast::ImportAttributes::generator)
+                        .and_then(ImportAttributes::generator)
                         .is_none()
                 {
                     self.emit_kiln_missing_with(from_module_source, use_decl);
@@ -1533,7 +1536,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         &mut self,
         from_module_source: &ModuleSource,
         kind: WasmAssetKind,
-        use_decl: &crate::ast::UseDecl,
+        use_decl: &UseDecl,
     ) -> Result<(), LoadError> {
         let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &self.entry_dir)?;
         let source = self.interner.wasm(&path, kind);
@@ -1674,7 +1677,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         &self,
         source: &ModuleSource,
         bytes: &[u8],
-    ) -> Result<crate::wit_consume::ComponentBindings, LoadError> {
+    ) -> Result<ComponentBindings, LoadError> {
         let err = |message: String| LoadError::WasmImport {
             module_source: source.clone(),
             message,
@@ -1687,7 +1690,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 return Err(err("expected a component, found a WIT package".to_string()));
             }
         };
-        crate::wit_consume::build_bindings(&resolve, world).map_err(err)
+        build_bindings(&resolve, world).map_err(err)
     }
 
     /// Fetch the raw bytes of a wasm asset by canonical path. Stdlib paths
@@ -1698,7 +1701,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &ModuleSource,
         path: &str,
     ) -> Result<Vec<u8>, LoadError> {
-        if crate::module_source::is_bundled_specifier(path) {
+        if is_bundled_specifier(path) {
             return stdlib::get_stdlib_wasm_asset(path)
                 .map(<[u8]>::to_vec)
                 .ok_or_else(|| LoadError::ModuleNotFound {
@@ -1795,11 +1798,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// importing file. WEP 2026-04-12 §"Use-site syntax" makes such
     /// imports a hard error so the user gets a pointed message instead of
     /// a downstream parse failure on the schema content.
-    fn emit_kiln_missing_with(
-        &self,
-        from_module_source: &ModuleSource,
-        use_decl: &crate::ast::UseDecl,
-    ) {
+    fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = match from_module_source {
             ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
@@ -1870,8 +1869,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         if import_source.starts_with("./") || import_source.starts_with("../") {
             // For relative imports, resolve against from_module_source
             if let ModuleSource::Local { path: from_file } = from_module_source {
-                let resolved =
-                    crate::name::resolve_local_identity(&self.entry_dir, from_file, import_source);
+                let resolved = resolve_local_identity(&self.entry_dir, from_file, import_source);
                 // Fold a back-reference to the entry onto its EntryPoint identity.
                 if let Some(ref entry_canonical) = self.entry_canonical_name
                     && resolved == *entry_canonical
@@ -1895,10 +1893,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             // Entry imports canonicalize against the entry dir; stdlib / bare
             // relative imports are not anchored there, so they only normalize.
             if matches!(from_module_source, ModuleSource::EntryPoint { .. }) {
-                let resolved = crate::name::canonical_local_path(
-                    &self.entry_dir,
-                    &normalize_module_path(import_source),
-                );
+                let resolved =
+                    canonical_local_path(&self.entry_dir, &normalize_module_path(import_source));
                 return Ok(self.interner.local(&resolved));
             }
             let canonical = normalize_module_path(import_source);
@@ -2028,7 +2024,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         source: &str,
         module_source: &ModuleSource,
     ) -> Result<Module, LoadError> {
-        let lex_result = crate::lexer::lex(source);
+        let lex_result = lex(source);
         if let Some(e) = lex_result.errors.first() {
             return Err(LoadError::from_lex_error(e, module_source.clone()));
         }

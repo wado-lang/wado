@@ -3,7 +3,10 @@
 //! Initially a renamed copy of [`crate::unparse`]'s `TirUnparser`. See
 //! `docs/wep-2026-05-11-nir.md`.
 
+use crate::const_eval::Value;
 use crate::lexer::is_valid_ident;
+use crate::nir;
+use crate::nir::FuncId;
 use crate::nir::{
     NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule, NirParam,
     NirStruct, NirUnaryOp,
@@ -11,7 +14,14 @@ use crate::nir::{
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtId, StmtKind,
 };
+use crate::nir_package::NirPackage;
+use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::ValueKind;
+use crate::tir;
+use crate::tir::EffectRef;
+use crate::tir::ResolvedType;
 use crate::tir::TypeTable;
+use crate::unparse::unparse_with_row_into;
 
 fn escape_string(s: &str) -> String {
     let mut result = String::new();
@@ -42,7 +52,7 @@ pub struct NirUnparser<'a> {
     /// Callee descriptor for every function, indexed by `func_id.index()`.
     /// Calls render their callee by the stamped `func_id`; empty when unparsing
     /// a bare module with no package context.
-    callees: Vec<crate::nir::FunctionRef>,
+    callees: Vec<nir::FunctionRef>,
     /// Local names of the function being unparsed. A skeleton `Local` node
     /// carries its own name; a promoted `Opaque(Local)` carries only the index,
     /// so it reads the name from here.
@@ -61,7 +71,7 @@ impl<'a> NirUnparser<'a> {
     }
 
     /// Resolve a call's stamped `func_id` to its callee descriptor.
-    fn callee(&self, func_id: crate::nir::FuncId) -> Option<&crate::nir::FunctionRef> {
+    fn callee(&self, func_id: FuncId) -> Option<&nir::FunctionRef> {
         use cranelift_entity::EntityRef;
         self.callees.get(func_id.index())
     }
@@ -119,7 +129,7 @@ impl<'a> NirUnparser<'a> {
     }
 
     /// Emit a turbofish `::<T1, T2, ...>` for a list of monomorphized type ids.
-    fn unparse_type_args(&mut self, args: &[crate::tir::TypeId]) {
+    fn unparse_type_args(&mut self, args: &[tir::TypeId]) {
         if args.is_empty() {
             return;
         }
@@ -327,12 +337,12 @@ impl<'a> NirUnparser<'a> {
         }
     }
 
-    fn unparse_nir_with_clause(&mut self, effects: &[crate::tir::EffectRef], stores: &[String]) {
+    fn unparse_nir_with_clause(&mut self, effects: &[EffectRef], stores: &[String]) {
         let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         if !stores.is_empty() {
             items.push(format!("stores[{}]", stores.join(", ")));
         }
-        crate::unparse::unparse_with_row_into(&items, &mut self.output);
+        unparse_with_row_into(&items, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &NirParam) {
@@ -549,11 +559,10 @@ impl<'a> NirUnparser<'a> {
             Operand::Value(v) => {
                 // A pure constant renders as its literal; other graph values
                 // (opaques, derived nodes) render as `%id`.
-                if matches!(body.values.kind(v), crate::nir_value_graph::ValueKind::Unit) {
+                if matches!(body.values.kind(v), ValueKind::Unit) {
                     self.output.push_str("()");
                 } else if let Some(value) =
-                    crate::const_eval::Value::from_operand(body, op, self.type_table)
-                        .filter(crate::const_eval::Value::is_scalar)
+                    Value::from_operand(body, op, self.type_table).filter(Value::is_scalar)
                 {
                     // Scalars only: an aggregate constant has no NIR literal
                     // form, and `format_repr` panics rather than invent one.
@@ -572,7 +581,7 @@ impl<'a> NirUnparser<'a> {
     /// moves it into the pool; a bare `%id` would hide every arithmetic operand
     /// the freeze touches. Falls back to `%id` for a value with no expression
     /// form (a flow merge, a heap read whose receiver is itself opaque).
-    fn unparse_value(&mut self, body: &Body, v: crate::nir_value_graph::ValueId) {
+    fn unparse_value(&mut self, body: &Body, v: ValueId) {
         use crate::nir_value_graph::{OpaqueSource, ValueKind};
         match body.values.kind(v).clone() {
             ValueKind::Opaque(oid) => match body.values.opaque_source(oid) {
@@ -601,10 +610,8 @@ impl<'a> NirUnparser<'a> {
                 self.output.push_str(&self.type_table.type_name(target));
             }
             _ => {
-                let op = crate::nir_arena::Operand::Value(v);
-                match crate::const_eval::Value::from_operand(body, op, self.type_table)
-                    .filter(crate::const_eval::Value::is_scalar)
-                {
+                let op = Operand::Value(v);
+                match Value::from_operand(body, op, self.type_table).filter(Value::is_scalar) {
                     Some(value) => self.output.push_str(&value.format_repr()),
                     None => self.output.push_str(&format!("%{}", v.index())),
                 }
@@ -831,7 +838,7 @@ impl<'a> NirUnparser<'a> {
                     fields.iter().map(|f| (f.name.clone(), f.value)).collect();
                 // Functor structs are rendered as `&Name { ... }` to mirror the
                 // reference type that the elaborator attached.
-                if matches!(self.type_table.get(ty), crate::tir::ResolvedType::Ref(_)) {
+                if matches!(self.type_table.get(ty), ResolvedType::Ref(_)) {
                     self.output.push('&');
                 }
                 self.output.push_str(&struct_name);
@@ -962,12 +969,12 @@ fn emit_tir_literal_pattern(lit: &NirLiteralPattern, output: &mut String) {
 
 /// Map a NIR inline hint to its `#[inline...]` attribute, or `None` for the
 /// default (no attribute).
-fn inline_hint_attr(hint: crate::nir::InlineHint) -> Option<&'static str> {
+fn inline_hint_attr(hint: nir::InlineHint) -> Option<&'static str> {
     match hint {
-        crate::nir::InlineHint::Auto => None,
-        crate::nir::InlineHint::Hint => Some("#[inline]"),
-        crate::nir::InlineHint::Always => Some("#[inline(always)]"),
-        crate::nir::InlineHint::Never => Some("#[inline(never)]"),
+        nir::InlineHint::Auto => None,
+        nir::InlineHint::Hint => Some("#[inline]"),
+        nir::InlineHint::Always => Some("#[inline(always)]"),
+        nir::InlineHint::Never => Some("#[inline(never)]"),
     }
 }
 
@@ -1015,7 +1022,7 @@ pub fn unparse_nir(module: &NirModule) -> String {
 }
 
 /// Unparse a `NirPackage` (flat NIR lists) to pseudo-Wado source
-pub fn unparse_nir_package(package: &crate::nir_package::NirPackage) -> String {
+pub fn unparse_nir_package(package: &NirPackage) -> String {
     let type_table_ref = package.type_table.borrow();
     let mut unparser = NirUnparser::new(&type_table_ref);
     unparser.callees = package
@@ -1023,7 +1030,7 @@ pub fn unparse_nir_package(package: &crate::nir_package::NirPackage) -> String {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            crate::nir::FunctionRef::from_resolved(&f, f.module_source.clone())
+            nir::FunctionRef::from_resolved(&f, f.module_source.clone())
         })
         .collect();
 

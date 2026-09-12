@@ -8,11 +8,19 @@ use super::is_reference_type;
 use super::ownership::OwnedCalls;
 use super::stores::StoredParams;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lower::plan::value_copy::ValueCopyPlan;
+use crate::lower::plan::value_copy::analyze;
+use crate::lower::plan::value_copy::modref;
+use crate::lower::plan::value_copy::place;
+use crate::lower::plan::value_copy::place::field_owner;
+use crate::tir;
+use crate::tir::TirTemplatePart;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::token::Span;
 
 /// May-alias union-find over a function's locals, joining each binding to the
 /// root it was read out of. Read by the confinement check's `no_mut_alias`.
@@ -98,7 +106,7 @@ impl TirRefVisitor for AliasEdgeCollector {
                 if let Some(root) = alias_root(scrut) {
                     for arm in arms {
                         let mut binds: IndexSet<u32> = IndexSet::default();
-                        super::analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
+                        analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                         for b in binds {
                             self.edges.push((b, root));
                         }
@@ -118,7 +126,7 @@ pub struct MoveEligible {
     pub locals: IndexSet<u32>,
     /// Field and whole-value materializations that alias a dead aggregate out
     /// at a literal, keyed by the materialized expression's span.
-    pub place_spans: IndexSet<crate::token::Span>,
+    pub place_spans: IndexSet<Span>,
 }
 
 /// What one backward walk over a body decides: which locals a move can retire,
@@ -138,7 +146,7 @@ pub fn analyze_ownership(
     oracle: &OwnedCalls,
     type_table: &TypeTable,
     resolver: &Resolver<'_>,
-    plan: &super::ValueCopyPlan,
+    plan: &ValueCopyPlan,
 ) -> Ownership {
     let Some(body) = &func.body else {
         return Ownership::default();
@@ -202,7 +210,7 @@ pub fn analyze_ownership(
         })
         .collect();
 
-    let moved_places: Vec<&(u32, Option<u32>, crate::token::Span)> = a
+    let moved_places: Vec<&(u32, Option<u32>, Span)> = a
         .place_cands
         .iter()
         .filter(|(base, top, _)| {
@@ -210,8 +218,7 @@ pub fn analyze_ownership(
         })
         .collect();
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|(base, _, _)| *base).collect();
-    let place_spans: IndexSet<crate::token::Span> =
-        moved_places.iter().map(|(_, _, span)| *span).collect();
+    let place_spans: IndexSet<Span> = moved_places.iter().map(|(_, _, span)| *span).collect();
 
     let share_eligible = a.share_eligible(body, &place_move_bases);
     Ownership {
@@ -285,7 +292,7 @@ impl RefTargets {
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
-            } => super::place::place_root(place),
+            } => place::place_root(place),
             _ => None,
         }
     }
@@ -460,12 +467,12 @@ impl Analyzer<'_> {
     /// fields the callee names, re-rooted at the handle's own path.
     fn record_call_mutation(
         &mut self,
-        func: &crate::tir::FunctionRef,
+        func: &tir::FunctionRef,
         handle: &TirExpr,
         live: &IndexSet<u32>,
     ) {
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
-        let owner = super::place::field_owner(handle.type_id, self.type_table);
+        let owner = field_owner(handle.type_id, self.type_table);
         let Names::Place(path) = self.resolver.names(handle) else {
             self.record_mutation(handle, live);
             return;
@@ -668,7 +675,7 @@ struct Analyzer<'a> {
     returns_receiver_alias: &'a FuncKeySet,
     /// What each callee writes through a `&mut` it is handed, so a read of one
     /// field survives a call that writes another.
-    mod_ref: &'a super::modref::ModRef,
+    mod_ref: &'a modref::ModRef,
     /// The one answer to what an expression names, shared with `RefTargets` and
     /// the return-path walk rather than re-derived from syntax here.
     resolver: &'a Resolver<'a>,
@@ -690,7 +697,7 @@ struct Analyzer<'a> {
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
     /// filtered after the walk. A `None` field is a whole-value materialization.
-    place_cands: Vec<(u32, Option<u32>, crate::token::Span)>,
+    place_cands: Vec<(u32, Option<u32>, Span)>,
     /// Locals bound by a `skip_value_copy` `let` — storage handed over by the
     /// binding's producer, so owned without a source to prove it.
     declared_owned: IndexSet<u32>,
@@ -1033,7 +1040,7 @@ impl Analyzer<'_> {
 
     fn kill_pattern(&self, pat: &TirPattern, live: &mut IndexSet<u32>) {
         let mut binds: IndexSet<u32> = IndexSet::default();
-        super::analyze::collect_pattern_bindings(pat, &mut binds);
+        analyze::collect_pattern_bindings(pat, &mut binds);
         for b in binds {
             live.swap_remove(&b);
         }
@@ -1042,7 +1049,7 @@ impl Analyzer<'_> {
     /// Record place-level move candidates at a literal or `let`: a child
     /// materializing an aggregate root left dead and undisturbed after it.
     fn collect_place_moves(&mut self, children: &[&TirExpr], live_out: &IndexSet<u32>) {
-        let mut mats: IndexMap<u32, Vec<(Option<u32>, crate::token::Span)>> = IndexMap::default();
+        let mut mats: IndexMap<u32, Vec<(Option<u32>, Span)>> = IndexMap::default();
         let mut conflict: IndexSet<u32> = IndexSet::default();
         for child in children {
             let child = strip_casts(child);
@@ -1344,7 +1351,7 @@ impl Analyzer<'_> {
             let scrut_aliases_live = alias_root(scrut).is_some_and(|r| after.contains(&r));
             for arm in arms {
                 let mut binds: IndexSet<u32> = IndexSet::default();
-                super::analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
+                analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                 for b in &binds {
                     self.match_sources.push((*b, scrut.clone()));
                     if scrut_aliases_live {
@@ -1850,7 +1857,7 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
         K::TypePackExpansion { call_expr, .. } => out.push(call_expr),
         K::TemplateString { parts } => {
             for part in parts {
-                if let crate::tir::TirTemplatePart::Interpolation { expr, .. } = part {
+                if let TirTemplatePart::Interpolation { expr, .. } = part {
                     out.push(expr);
                 }
             }
@@ -1859,7 +1866,7 @@ fn collect_child_exprs<'e>(expr: &'e TirExpr, out: &mut Vec<&'e TirExpr>) {
     }
 }
 
-fn is_scalar_type(type_id: crate::tir::TypeId, type_table: &TypeTable) -> bool {
+fn is_scalar_type(type_id: tir::TypeId, type_table: &TypeTable) -> bool {
     type_table.is_primitive_like(type_id)
         || matches!(
             type_table.get(type_id),
@@ -1882,7 +1889,7 @@ fn union(a: &IndexSet<u32>, b: &IndexSet<u32>) -> IndexSet<u32> {
 pub fn compute_moved_roots(
     func: &TirFunction,
     move_eligible: &MoveEligible,
-    func_moved_spans: Option<&IndexSet<crate::token::Span>>,
+    func_moved_spans: Option<&IndexSet<Span>>,
 ) -> IndexSet<u32> {
     let Some(body) = &func.body else {
         return IndexSet::default();
@@ -1898,7 +1905,7 @@ pub fn compute_moved_roots(
 
 struct MovedRoots<'a> {
     move_eligible: &'a MoveEligible,
-    func_moved_spans: Option<&'a IndexSet<crate::token::Span>>,
+    func_moved_spans: Option<&'a IndexSet<Span>>,
     roots: IndexSet<u32>,
 }
 
@@ -1916,7 +1923,7 @@ impl TirRefVisitor for MovedRoots<'_> {
             _ => false,
         };
         if (moved_place || moved_local)
-            && let Some(root) = super::place::place_root(stripped)
+            && let Some(root) = place::place_root(stripped)
         {
             self.roots.insert(root);
         }

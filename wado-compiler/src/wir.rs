@@ -11,7 +11,9 @@ use std::rc::Rc;
 use crate::canonical::CanonicalIntrinsic;
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::compiler_item::CompilerItem;
 use crate::module_source::ModuleSource;
+use crate::tir::EffectRef;
 use crate::token::Span;
 
 /// How a CM interface is imported, so codegen dispatches to the right encoding.
@@ -139,7 +141,7 @@ pub struct TraitBoundViolation {
     /// re-deriving both halves from a string built for Wasm.
     pub type_display: String,
     pub trait_display: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 /// A call to a `#[cm("...")]` member left unresolved at WIR build: only the
@@ -150,7 +152,7 @@ pub struct CmImportViolation {
     /// [`TraitBoundViolation::type_display`].
     pub call_display: String,
     pub cm_name: String,
-    pub span: crate::token::Span,
+    pub span: Span,
 }
 
 impl CmImportViolation {
@@ -843,14 +845,14 @@ pub struct WirFunction {
     /// Generic instantiation origin.
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
-    pub effects: Vec<crate::tir::EffectRef>,
+    pub effects: Vec<EffectRef>,
     /// Parameter names declared in `stores[...]` — the function may store these references.
     /// Used by WIR optimizations for stores-aware alias analysis.
     pub stores: Vec<String>,
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].
-    pub compiler_item: Option<crate::compiler_item::CompilerItem>,
+    pub compiler_item: Option<CompilerItem>,
     /// Custom wasm export name from `#[export_name("...")]` attribute.
     pub export_name: Option<String>,
     /// Declared locals the emitter allocates from, finalized once per producer

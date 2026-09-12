@@ -9,6 +9,7 @@ use wasmparser::{ElementItems, ElementKind};
 
 use crate::dataref::DataRange;
 use crate::reach::{Keep, Live};
+use crate::segment_base;
 use crate::{Asset, Embed, Error};
 
 /// What an asset with no memory of its own is given, so every embedded module
@@ -259,8 +260,8 @@ fn split_segment(
     ranges: &[DataRange],
 ) {
     assert!(!ranges.is_empty(), "an empty run keeps no bytes");
-    let base = crate::segment_base(data)
-        .expect("`Keep::Ranges` is only reached for a constant-address segment");
+    let base =
+        segment_base(data).expect("`Keep::Ranges` is only reached for a constant-address segment");
     for range in ranges {
         let address = base.address + i64::from(range.offset);
         let offset = if base.is_64 {

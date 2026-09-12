@@ -10,10 +10,16 @@ use crate::unparse::unparse_expr_source;
 
 use super::Elaborator;
 use super::types::FunctionContext;
+use crate::compiler_item::CompilerItem;
+use crate::elaborator::sem::ModuleSemantics;
+use crate::elaborator::sem::types::AssertCaptureInfo;
+use crate::elaborator::sem::types::AssertSlot;
+use crate::elaborator::sem::types::DesugarKind;
+use crate::tir::TypeTable;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn desugar_assert(&mut self, assert_stmt: &AssertStmt, ctx: &mut FunctionContext) {
-        self.record_desugar(assert_stmt.id, super::sem::types::DesugarKind::Assert);
+        self.record_desugar(assert_stmt.id, DesugarKind::Assert);
 
         let mut scanner = CaptureScanner::new();
         scanner.scan_root(&assert_stmt.condition);
@@ -52,7 +58,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .make_compiler_struct(crate::compiler_item::CompilerItem::String);
+            .make_compiler_struct(CompilerItem::String);
         for name in conditional_names {
             ctx.add_local(name, string_type, false, None);
         }
@@ -81,11 +87,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 *entry = Some(ast_id);
             }
         }
-        let stage5_slots: Vec<super::sem::types::AssertSlot> = slots
+        let stage5_slots: Vec<AssertSlot> = slots
             .iter()
             .enumerate()
             .filter_map(|(i, c)| {
-                slot_ast_ids[i].map(|ast_id| super::sem::types::AssertSlot {
+                slot_ast_ids[i].map(|ast_id| AssertSlot {
                     ast_id,
                     capture_label: c.source.clone(),
                     conditional: c.conditional,
@@ -96,7 +102,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         self.record_assert_captures(
             assert_stmt.id,
-            super::sem::types::AssertCaptureInfo {
+            AssertCaptureInfo {
                 condition_source: unparse_expr_source(&assert_stmt.condition),
                 line: assert_stmt.span.line,
                 slots: stage5_slots,
@@ -150,12 +156,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             ctx.add_local(cap_name.clone(), type_id, !hoisted, None);
             if conditional {
-                ctx.add_local(
-                    seen_local_name(&cap_name),
-                    crate::tir::TypeTable::BOOL,
-                    true,
-                    None,
-                );
+                ctx.add_local(seen_local_name(&cap_name), TypeTable::BOOL, true, None);
             }
         }
 
@@ -177,7 +178,7 @@ pub(super) fn render_local_name(cap_name: &str) -> String {
 pub(super) const NOT_EVALUATED: &str = "<not evaluated>";
 
 /// Render every recorded capture plan, for `wado dump --assert-plan`.
-pub(crate) fn render_plans(sem: &super::sem::ModuleSemantics) -> String {
+pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
     let mut out = String::new();
     for info in sem.types.assert_captures.values() {
         out.push_str(&format!(

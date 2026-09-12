@@ -4,15 +4,40 @@
 //! for world exports.
 
 use super::component_context::{CmTypeKey, ComponentModelContext};
+use crate::ProviderComponent;
+use crate::ast;
+use crate::ast::AstId;
+use crate::ast::CmImport;
+use crate::ast::NamedType;
 use crate::ast::Type;
 use crate::canonical::{
     CanonicalIntrinsic, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload,
 };
+use crate::codegen::emit::emit_core_module;
+use crate::codegen_flags::CodegenFlags;
+use crate::component_model::CmDefined;
+use crate::component_model::CmInterfaceInfo;
+use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::CmTypeSink;
+use crate::component_model::InstanceSink;
+use crate::component_model::classify_future_payload_from_ast;
+use crate::component_model::classify_stream_payload_from_ast;
+use crate::component_model::cm_instance_key;
+use crate::component_model::cm_return_needs_outptr;
+use crate::component_model::emit_cm_defined;
+use crate::component_model::wado_primitive_name_to_cm;
 use crate::component_model::{CmFunctionInfo, CmTypeGen, CmVariantCase};
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::loader::WasmAsset;
 use crate::nir_package::NirPackage;
+use crate::test_names::SECTION_NAME;
+use crate::test_names::encode;
+use crate::token::Span;
+use crate::wir::ImportEntry;
+use crate::wir::ImportKind;
 use crate::wir::WirPackage;
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
+use crate::world_registry::fq_name_package;
 use wasm_encoder::{
     Alias, CanonicalOption, ComponentBuilder, ComponentExportKind, ComponentOuterAliasKind,
     ComponentValType, ExportKind, InstanceType, ModuleArg, PrimitiveValType, TypeBounds,
@@ -23,7 +48,7 @@ pub fn build_component(
     project: &NirPackage,
     core_module: &[u8],
     wir_package: &WirPackage,
-    providers: &[crate::ProviderComponent],
+    providers: &[ProviderComponent],
 ) -> Vec<u8> {
     let wasm_modules = &wir_package.wasm_modules;
     let mut builder = ComponentBuilder::default();
@@ -119,8 +144,8 @@ pub fn build_component(
         .iter()
         .any(|e| e.is_lib)
         .then(|| match lib_iface_fq.as_deref() {
-            Some(fq) => crate::component_model::CmTypeGen::with_interface_hint(fq),
-            None => crate::component_model::CmTypeGen::new(),
+            Some(fq) => CmTypeGen::with_interface_hint(fq),
+            None => CmTypeGen::new(),
         });
 
     // Define named record types referenced by `Value(Named)` future/stream
@@ -228,8 +253,8 @@ pub fn build_component(
         let pkg = wir_package
             .import_plan
             .iter()
-            .find(|e| e.kind == crate::wir::ImportKind::ResourceDefiningInterface)
-            .map(|e| crate::world_registry::fq_name_package(&e.fq).to_string())
+            .find(|e| e.kind == ImportKind::ResourceDefiningInterface)
+            .map(|e| fq_name_package(&e.fq).to_string())
             .expect("trailers future needs a resource-defining interface in the plan");
         let (t, defining_ft) =
             build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type, &pkg);
@@ -391,14 +416,14 @@ pub fn build_component(
     // ASCII-folded kebab export name. Emitted unconditionally for the test
     // world (even when empty) so the runner can rely on it being present.
     if !component_plan.test_exports.is_empty() {
-        let payload = crate::test_names::encode(
+        let payload = encode(
             component_plan
                 .test_exports
                 .iter()
                 .map(|t| (t.export_name.as_str(), t.original_name.as_deref())),
         );
         builder.custom_section(&wasm_encoder::CustomSection {
-            name: crate::test_names::SECTION_NAME.into(),
+            name: SECTION_NAME.into(),
             data: payload.into(),
         });
     }
@@ -433,12 +458,10 @@ fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
 
 fn wado_type_to_cm_primitive(ty: &Type) -> ComponentValType {
     match ty {
-        Type::Named(named) => {
-            match crate::component_model::wado_primitive_name_to_cm(&named.name) {
-                Some(prim) => ComponentValType::Primitive(prim),
-                None => panic!("unsupported Wado primitive type for CM: {}", named.name),
-            }
-        }
+        Type::Named(named) => match wado_primitive_name_to_cm(&named.name) {
+            Some(prim) => ComponentValType::Primitive(prim),
+            None => panic!("unsupported Wado primitive type for CM: {}", named.name),
+        },
         _ => panic!("unsupported Wado type for CM primitive: {ty:?}"),
     }
 }
@@ -553,7 +576,7 @@ fn emit_cm_val_type(
                         .iter()
                         .map(|(k, &v)| (k.as_str(), v))
                         .collect();
-                    let mut sink = crate::component_model::InstanceSink {
+                    let mut sink = InstanceSink {
                         it: instance_type,
                         next_idx: local_type_idx,
                     };
@@ -655,7 +678,7 @@ fn emit_cm_val_type(
                     .iter()
                     .map(|(k, &v)| (k.as_str(), v))
                     .collect();
-                let mut sink = crate::component_model::InstanceSink {
+                let mut sink = InstanceSink {
                     it: instance_type,
                     next_idx: local_type_idx,
                 };
@@ -733,7 +756,7 @@ fn build_cm_tuple_types(
 /// Used to build the `needed_resources` list for `generate_cm_imports`.
 fn collect_resources_in_type(
     ty: &Type,
-    cm_interface_registry: &crate::component_model::CmInterfaceRegistry,
+    cm_interface_registry: &CmInterfaceRegistry,
     out: &mut Vec<String>,
 ) {
     match ty {
@@ -770,7 +793,7 @@ fn collect_resources_in_type(
 
 /// A named type the shared generator spells as a declared CM type: a record,
 /// or a local newtype kept as its alias so the boundary matches `wado wit`.
-fn has_named_cm_form(ty: &Type, registry: &crate::component_model::CmInterfaceRegistry) -> bool {
+fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     let Type::Named(named) = ty else {
         return false;
     };
@@ -839,13 +862,9 @@ fn wado_type_to_cm_val_type(
 
 /// Emit the memory/allocator core module. It contains no `array.copy`, so
 /// codegen feature flags do not apply here.
-fn build_memory_module(strip_names: bool, wasm_mod: Option<&crate::wir::WirPackage>) -> Vec<u8> {
+fn build_memory_module(strip_names: bool, wasm_mod: Option<&WirPackage>) -> Vec<u8> {
     let wir = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
-    super::emit::emit_core_module(
-        wir,
-        strip_names,
-        crate::codegen_flags::CodegenFlags::default(),
-    )
+    emit_core_module(wir, strip_names, CodegenFlags::default())
 }
 
 /// Sanitise a wasm namespace string (e.g. `"wasm:core:libm.wat"`) into a
@@ -877,7 +896,7 @@ fn embed_imported_wasm_modules(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     imported_wasm_uses: &IndexMap<String, IndexSet<String>>,
-    wasm_assets: &IndexMap<String, crate::loader::WasmAsset>,
+    wasm_assets: &IndexMap<String, WasmAsset>,
     strip_names: bool,
 ) {
     if imported_wasm_uses.is_empty() {
@@ -989,7 +1008,7 @@ fn expose_self_owned_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    interface_info: &crate::component_model::CmInterfaceInfo,
+    interface_info: &CmInterfaceInfo,
     needed_resources: &[String],
 ) {
     for resource_name in needed_resources {
@@ -1526,10 +1545,10 @@ fn prebuild_value_named_types(
         else {
             continue;
         };
-        let named = Type::Named(crate::ast::NamedType::new(
-            crate::ast::AstId::fresh(),
+        let named = Type::Named(NamedType::new(
+            AstId::fresh(),
             wado_name,
-            crate::token::Span::new(0, 0, 1, 1),
+            Span::new(0, 0, 1, 1),
         ));
         let mut sink = TopLevelSink { builder, ctx };
         type_gen.ast_type_to_cm(
@@ -1793,12 +1812,7 @@ fn emit_canonical_intrinsics(
                 let defining_key = project
                     .cm_interface_registry
                     .resource_source_by_cm_name(cm_name)
-                    .map(|src| {
-                        format!(
-                            "{}-{cm_name}-resource",
-                            crate::world_registry::fq_name_package(src)
-                        )
-                    })
+                    .map(|src| format!("{}-{cm_name}-resource", fq_name_package(src)))
                     .filter(|key| ctx.has_type(key));
                 let type_idx = match defining_key {
                     Some(key) => ctx.type_idx(&key),
@@ -1847,8 +1861,7 @@ fn lib_task_return_valtype(
         return None;
     }
     let result_type = export.result_type.as_ref()?;
-    if matches!(result_type, crate::ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream")
-    {
+    if matches!(result_type, ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream") {
         return None;
     }
     let type_gen = lib_type_gen.as_mut()?;
@@ -1879,14 +1892,12 @@ fn resolve_task_return_valtype(
     stream_types: &IndexMap<CmStreamPayload, u32>,
 ) -> ComponentValType {
     if export.is_lib
-        && let Some(crate::ast::Type::Generic(g)) = &export.result_type
+        && let Some(ast::Type::Generic(g)) = &export.result_type
         && g.args.len() == 1
     {
         if g.name == "Future" {
-            let payload = crate::component_model::classify_future_payload_from_ast(
-                &g.args[0],
-                &project.cm_interface_registry,
-            );
+            let payload =
+                classify_future_payload_from_ast(&g.args[0], &project.cm_interface_registry);
             let idx = resolve_future_type(
                 payload,
                 trailers_future_type,
@@ -1897,10 +1908,8 @@ fn resolve_task_return_valtype(
             return ComponentValType::Type(idx);
         }
         if g.name == "Stream" {
-            let payload = crate::component_model::classify_stream_payload_from_ast(
-                &g.args[0],
-                &project.cm_interface_registry,
-            );
+            let payload =
+                classify_stream_payload_from_ast(&g.args[0], &project.cm_interface_registry);
             if let Some(&idx) = stream_types.get(&payload) {
                 return ComponentValType::Type(idx);
             }
@@ -1962,7 +1971,7 @@ fn cm_export_type_to_idx(
             // lookup — unlike the re-export in `collect_type_items`.
             is_resource: _,
         } => {
-            let pkg = crate::world_registry::fq_name_package(interface_fq);
+            let pkg = fq_name_package(interface_fq);
             assert!(
                 !pkg.is_empty(),
                 "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
@@ -2006,7 +2015,7 @@ fn cm_export_type_to_valtype(
 
 /// Map a Wado primitive type name to its Component Model `PrimitiveValType`.
 fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
-    match crate::component_model::wado_primitive_name_to_cm(name) {
+    match wado_primitive_name_to_cm(name) {
         Some(prim) => ComponentValType::Primitive(prim),
         None => panic!("unsupported CM primitive type name: {name}"),
     }
@@ -2022,13 +2031,13 @@ struct TopLevelSink<'a> {
     ctx: &'a mut ComponentModelContext,
 }
 
-impl crate::component_model::CmTypeSink for TopLevelSink<'_> {
-    fn define(&mut self, defined: crate::component_model::CmDefined<'_>) -> u32 {
+impl CmTypeSink for TopLevelSink<'_> {
+    fn define(&mut self, defined: CmDefined<'_>) -> u32 {
         // Reserve the ctx index first (mirrors `intern_cm_type`) so it matches
         // the builder's appended type index.
         let idx = self.ctx.register_anon_type();
         let (_, enc) = self.builder.ty(None);
-        crate::component_model::emit_cm_defined(enc.defined_type(), defined);
+        emit_cm_defined(enc.defined_type(), defined);
         idx
     }
 
@@ -2049,7 +2058,7 @@ fn emit_world_exports(
     project: &NirPackage,
     component_plan: &ComponentPlan,
     result_unit_type: u32,
-    lib_type_gen: &mut Option<crate::component_model::CmTypeGen>,
+    lib_type_gen: &mut Option<CmTypeGen>,
 ) {
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
 
@@ -2251,7 +2260,7 @@ fn generate_cm_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
+    import_plan: &[ImportEntry],
 ) {
     use crate::wir::ImportKind;
     let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
@@ -2698,7 +2707,7 @@ fn generate_cm_imports(
                             | Type::Error(_) => false,
                         };
                         let val_type = if is_component_import || is_named || is_composite {
-                            let mut sink = crate::component_model::InstanceSink {
+                            let mut sink = InstanceSink {
                                 it: &mut instance_type,
                                 next_idx: &mut local_type_idx,
                             };
@@ -2735,7 +2744,7 @@ fn generate_cm_imports(
                     if is_component_import
                         || has_named_cm_form(&resolved_ty, &project.cm_interface_registry)
                     {
-                        let mut sink = crate::component_model::InstanceSink {
+                        let mut sink = InstanceSink {
                             it: &mut instance_type,
                             next_idx: &mut local_type_idx,
                         };
@@ -2907,7 +2916,7 @@ fn import_resource_defining_interface(
     ctx: &mut ComponentModelContext,
     types_fq: &str,
 ) {
-    let pkg = crate::world_registry::fq_name_package(types_fq).to_string();
+    let pkg = fq_name_package(types_fq).to_string();
     let types_prefix = types_fq.split('@').next().unwrap_or(types_fq).to_string();
 
     let http_resources: Vec<(String, String)> = project
@@ -2978,7 +2987,7 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
-                    let mut sink = crate::component_model::InstanceSink {
+                    let mut sink = InstanceSink {
                         it: &mut instance_type,
                         next_idx: &mut type_idx,
                     };
@@ -2993,7 +3002,7 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
-                let mut sink = crate::component_model::InstanceSink {
+                let mut sink = InstanceSink {
                     it: &mut instance_type,
                     next_idx: &mut type_idx,
                 };
@@ -3059,7 +3068,7 @@ fn import_resource_defining_interface(
                 .params
                 .iter()
                 .map(|(_, cm_name, ty)| {
-                    let mut sink = crate::component_model::InstanceSink {
+                    let mut sink = InstanceSink {
                         it: &mut instance_type,
                         next_idx: &mut type_idx,
                     };
@@ -3074,7 +3083,7 @@ fn import_resource_defining_interface(
                 .collect();
 
             let cm_result = resolved_return.as_ref().map(|ty| {
-                let mut sink = crate::component_model::InstanceSink {
+                let mut sink = InstanceSink {
                     it: &mut instance_type,
                     next_idx: &mut type_idx,
                 };
@@ -3229,7 +3238,7 @@ fn component_type_idx_for_signature_type(
             if let Some(source) = registry.get_resource_source_interface(&named.name)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(source, &named.name)
             {
-                let pkg = crate::world_registry::fq_name_package(source);
+                let pkg = fq_name_package(source);
                 return ctx.type_idx(&format!("{pkg}-{cm}"));
             }
             // A non-resource named type (e.g. the error composite's `error-code`
@@ -3245,7 +3254,7 @@ fn component_type_idx_for_signature_type(
                         named.name
                     )
                 });
-            let pkg = crate::world_registry::fq_name_package(&source);
+            let pkg = fq_name_package(&source);
             let cm = registry
                 .get_variant_cm_name_by_source(&source, &named.name)
                 .or_else(|| registry.get_enum_cm_name_by_source(&source, &named.name))
@@ -3396,7 +3405,7 @@ fn import_resource_using_composite_interface(
 fn import_interface_with_resource(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    interface_info: &crate::component_model::CmInterfaceInfo,
+    interface_info: &CmInterfaceInfo,
 ) {
     let Some((_resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
         return;
@@ -3495,7 +3504,7 @@ fn import_resource_source(
     project: &NirPackage,
     source_path: &str,
 ) {
-    let Some(cm_import) = crate::ast::CmImport::parse(source_path) else {
+    let Some(cm_import) = CmImport::parse(source_path) else {
         return;
     };
 
@@ -3504,8 +3513,7 @@ fn import_resource_source(
     // interface `types`). The instance-type name doubles as the idempotency key:
     // it is a real builder type, so reusing it never desyncs the ctx/builder
     // type-index counters the way a phantom marker type would.
-    let instance_name =
-        crate::component_model::cm_instance_key(&cm_import.package, &cm_import.interface);
+    let instance_name = cm_instance_key(&cm_import.package, &cm_import.interface);
     let instance_type_name = format!("{instance_name}-instance-type");
     if ctx.has_type(&instance_type_name) {
         return;
@@ -3554,7 +3562,7 @@ fn import_resource_source(
                     .iter()
                     .map(|c| {
                         let payload = c.payload.as_ref().map(|ty| {
-                            let mut sink = crate::component_model::InstanceSink {
+                            let mut sink = InstanceSink {
                                 it: &mut instance_type,
                                 next_idx: &mut local_type_idx,
                             };
@@ -3606,7 +3614,7 @@ fn import_interfaces_with_resources(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
+    import_plan: &[ImportEntry],
 ) {
     use crate::wir::ImportKind;
     let interfaces_with_resources: Vec<_> = project
@@ -3687,7 +3695,7 @@ fn import_interfaces_with_resources(
 /// error composite, so they go through `import_resource_using_composite_interface`.
 fn resource_using_references_defining_interface(
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
+    import_plan: &[ImportEntry],
     iface_fq: &str,
 ) -> bool {
     let registry = &project.cm_interface_registry;
@@ -3710,9 +3718,9 @@ fn resource_using_references_defining_interface(
         registry
             .get_resource_source_interface(r)
             .is_some_and(|src| {
-                import_plan.iter().any(|e| {
-                    e.fq == src && e.kind == crate::wir::ImportKind::ResourceDefiningInterface
-                })
+                import_plan
+                    .iter()
+                    .any(|e| e.fq == src && e.kind == ImportKind::ResourceDefiningInterface)
             })
     })
 }
@@ -3726,7 +3734,7 @@ fn import_resource_using_interfaces(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
+    import_plan: &[ImportEntry],
 ) {
     use crate::wir::ImportKind;
     for interface_info in project.cm_interface_registry.interfaces() {
@@ -4033,8 +4041,8 @@ fn import_resource_using_interfaces(
 fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
-    providers: &[crate::ProviderComponent],
+    import_plan: &[ImportEntry],
+    providers: &[ProviderComponent],
 ) -> Vec<u8> {
     use crate::wir::ImportKind;
     use wasm_compose::graph::{
@@ -4168,16 +4176,16 @@ fn generate_cm_world_func_imports(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    import_plan: &[crate::wir::ImportEntry],
+    import_plan: &[ImportEntry],
 ) {
     use crate::wir::ImportKind;
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
+    let world_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
         .collect();
-    let mut type_gen = crate::component_model::CmTypeGen::new();
+    let mut type_gen = CmTypeGen::new();
     for func in &world_funcs {
         if !import_plan
             .iter()
@@ -4239,7 +4247,7 @@ fn lower_wasi_functions(
     // World functions (Phase 9): canon-lower each like an interface method —
     // asynchronously when the dependency exports an `async func`, so the caller
     // drives the subtask through its `AsyncCall<T>`.
-    let world_funcs: Vec<crate::component_model::CmFunctionInfo> = project
+    let world_funcs: Vec<CmFunctionInfo> = project
         .cm_interface_registry
         .world_import_functions()
         .map(|(_, f)| f.clone())
@@ -4252,10 +4260,7 @@ fn lower_wasi_functions(
         ctx.register_core_func(&local_name);
         let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
             let resolved = project.cm_interface_registry.resolve_type(ty);
-            crate::component_model::cm_return_needs_outptr(
-                &resolved,
-                &project.cm_interface_registry,
-            )
+            cm_return_needs_outptr(&resolved, &project.cm_interface_registry)
         });
         let needs_memory =
             func.needs_memory_with_registry(&project.cm_interface_registry) || returns_via_outptr;
@@ -4294,10 +4299,7 @@ fn lower_wasi_functions(
             // `MAX_FLAT_RESULTS` core values, e.g. a tuple or composite return).
             let returns_via_outptr = func.return_type.as_ref().is_some_and(|ty| {
                 let resolved = project.cm_interface_registry.resolve_type(ty);
-                crate::component_model::cm_return_needs_outptr(
-                    &resolved,
-                    &project.cm_interface_registry,
-                )
+                cm_return_needs_outptr(&resolved, &project.cm_interface_registry)
             });
             let needs_memory = func.needs_memory_with_registry(&project.cm_interface_registry)
                 || returns_via_outptr;
@@ -4351,7 +4353,7 @@ fn append_interface_instance_exports(
                 {
                     return;
                 }
-                let pkg = crate::world_registry::fq_name_package(interface_fq);
+                let pkg = fq_name_package(interface_fq);
                 // Kind from the descriptor, not a type-registry name probe.
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))

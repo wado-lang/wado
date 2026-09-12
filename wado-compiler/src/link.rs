@@ -6,12 +6,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
+use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
 use crate::tir::{BuiltinDeclaration, TirFunction, TypeTable};
 use crate::wir_build::component_plan;
+use crate::world_registry::TEST_WORLD;
 
 /// Snapshot what a `core:builtin` declared about storage, before
 /// monomorphization drops the generic declarations the plan phase would read.
@@ -68,7 +70,7 @@ pub fn link(package: Package) -> FlatPackage {
         .clone();
 
     // Build the component plan before consuming tir_modules.
-    let is_test_world = package.target_world == super::world_registry::TEST_WORLD;
+    let is_test_world = package.target_world == TEST_WORLD;
     let entry_tests = &package.entry_module().tests;
     let component_plan = component_plan::build_component_plan(
         is_test_world,
@@ -178,12 +180,8 @@ pub fn link(package: Package) -> FlatPackage {
 /// WIR build. Running it at each stage boundary names the stage at fault. Shape
 /// stubs and `core:builtin` / `core:rt` intrinsic pairs are not collisions.
 #[cfg(debug_assertions)]
-pub(crate) fn assert_no_stub_shadowing(
-    functions: &[Rc<RefCell<crate::tir::TirFunction>>],
-    stage: &str,
-) {
-    let mut bodied: crate::hashmap::IndexMap<String, ModuleSource> =
-        crate::hashmap::IndexMap::default();
+pub(crate) fn assert_no_stub_shadowing(functions: &[Rc<RefCell<TirFunction>>], stage: &str) {
+    let mut bodied: hashmap::IndexMap<String, ModuleSource> = hashmap::IndexMap::default();
     for f in functions {
         let f = f.borrow();
         if f.body.is_some() {

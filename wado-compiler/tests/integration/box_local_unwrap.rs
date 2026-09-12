@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use crate::common::wir_function_body;
 use wado_compiler::OptLevel;
 
 const SOURCE: &str = r#"
@@ -31,7 +32,7 @@ export fn run() {
 "#;
 
 fn count_body() -> String {
-    crate::common::wir_function_body(
+    wir_function_body(
         Path::new("box_local_unwrap_test.wado"),
         SOURCE,
         OptLevel::O2,

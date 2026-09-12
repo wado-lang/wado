@@ -23,7 +23,13 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
 use super::gate::{FunctionGate, GatedPass};
+use crate::ast::Visibility;
+use crate::compiler_trace;
+use crate::module_source::ModuleSource;
+use crate::name::shallow_copy_helper_name;
 use crate::nir::FuncId;
+use crate::optimize::dce::DescriptorCache;
+use crate::optimize::dce::callee_descriptor;
 use cranelift_entity::EntityRef;
 
 /// A function's canonical [`FuncId`]: the wrapper / demoted / shallow sets key
@@ -41,13 +47,13 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 pub fn demote_value_copies(
     project: &mut NirPackage,
     gate: &mut FunctionGate,
-    descriptor_cache: &mut super::dce::DescriptorCache,
+    descriptor_cache: &mut DescriptorCache,
 ) -> bool {
     // Intern the `array_clone_shallow` builtin the synthesized twins call, so
     // those calls are born resolved. One id serves all instantiations (the key
     // ignores type args, which ride the node).
     let array_clone_shallow_id = project.intern_extern(&FunctionRef {
-        module_source: crate::module_source::ModuleSource::builtin(),
+        module_source: ModuleSource::builtin(),
         name: "array_clone_shallow".to_string(),
         monomorph_info: None,
         method_info: None,
@@ -79,7 +85,7 @@ pub fn demote_value_copies(
             }
         }
     }
-    crate::compiler_trace!(
+    compiler_trace!(
         "demote",
         "array-wrapper value-copy helpers: {}",
         list_wrapper_copies.len()
@@ -130,7 +136,7 @@ pub fn demote_value_copies(
             demoted_keys.insert(site_key[loc]);
         }
     }
-    crate::compiler_trace!("demote", "demoted helper keys: {}", demoted_keys.len());
+    compiler_trace!("demote", "demoted helper keys: {}", demoted_keys.len());
     if demoted_keys.is_empty() {
         return false;
     }
@@ -148,7 +154,7 @@ pub fn demote_value_copies(
         // `monomorph_info` / `method_info`.
         let (new_name, existing_ref) = {
             let deep = project.functions[deep_key.index()].borrow();
-            let new_name = crate::name::shallow_copy_helper_name(&deep.name);
+            let new_name = shallow_copy_helper_name(&deep.name);
             let existing_ref = FunctionRef {
                 module_source: deep.module_source.clone(),
                 name: new_name.clone(),
@@ -166,7 +172,7 @@ pub fn demote_value_copies(
         let mut shallow = project.functions[deep_key.index()].borrow().clone();
         shallow.name.clone_from(&new_name);
         shallow.kind = FunctionKind::Regular;
-        shallow.visibility = crate::ast::Visibility::Private;
+        shallow.visibility = Visibility::Private;
         shallow.is_export = false;
         let id = FuncId::new(next);
         next += 1;
@@ -314,7 +320,7 @@ fn array_clone_element_type(body: &Body, call: ExprId) -> Option<TypeId> {
 /// `String` wrapper copies use the latter; both demote the same way).
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref(),
+        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
         Some("builtin::array_clone" | "builtin::array_clone_prefix")
     )
 }
@@ -443,7 +449,7 @@ fn demote_candidate(
         _ => return false,
     };
     if !an.handle_is_element_clean(body, target_idx) {
-        crate::compiler_trace!(
+        compiler_trace!(
             "demote",
             "target local {} not element-clean — skip",
             target_idx
@@ -468,11 +474,7 @@ fn demote_candidate(
             let clean = is_immutable_ref_param(params, an.type_table, root)
                 || an.arg_local_is_element_clean(body, root);
             if !clean {
-                crate::compiler_trace!(
-                    "demote",
-                    "arg root local {} not element-clean — skip",
-                    root
-                );
+                compiler_trace!("demote", "arg root local {} not element-clean — skip", root);
             }
             clean
         }
@@ -565,7 +567,7 @@ impl Analyzer<'_> {
     fn is_method_element_immutable(&mut self, key: FuncKey) -> bool {
         let mut visiting: IndexSet<FuncKey> = IndexSet::default();
         let r = self.verify(key, &mut visiting);
-        crate::compiler_trace!("demote", "eimm({}) = {}", key.index(), r);
+        compiler_trace!("demote", "eimm({}) = {}", key.index(), r);
         r
     }
 
@@ -577,7 +579,7 @@ impl Analyzer<'_> {
             return false; // recursion guard — conservative
         }
         let Some(func_rc) = self.funcs.get(key.index()) else {
-            crate::compiler_trace!(
+            compiler_trace!(
                 "demote",
                 "verify: callee {} not found in package",
                 key.index()
@@ -611,7 +613,7 @@ impl Analyzer<'_> {
     /// `select` forward values), so a by-value argument moved into one cannot
     /// reach the demoted spine's shared elements.
     fn callee_is_builtin(&self, callee: FuncKey) -> bool {
-        builtin_gname(super::dce::callee_descriptor(self.descriptors, callee)).is_some()
+        builtin_gname(callee_descriptor(self.descriptors, callee)).is_some()
     }
 
     /// True when every use of local `idx` in `body` keeps the array's
@@ -1019,7 +1021,7 @@ impl ElementImmutable<'_, '_, '_> {
             } => {
                 let inner = *inner;
                 if is_self_derived_op(body, inner, &self.tainted, tt, self.analyzer.descriptors) {
-                    crate::compiler_trace!("demote", "verify reject: &mut of self-derived");
+                    compiler_trace!("demote", "verify reject: &mut of self-derived");
                     self.clean = false;
                     return;
                 }
@@ -1051,7 +1053,7 @@ impl ElementImmutable<'_, '_, '_> {
                     _ => false,
                 };
                 if bad {
-                    crate::compiler_trace!("demote", "verify reject: element field/index write");
+                    compiler_trace!("demote", "verify reject: element field/index write");
                     self.clean = false;
                     return;
                 }
@@ -1080,7 +1082,7 @@ impl ElementImmutable<'_, '_, '_> {
                         None => false,
                     };
                     if !ok {
-                        crate::compiler_trace!(
+                        compiler_trace!(
                             "demote",
                             "verify reject: unsafe call on self-derived recv {}",
                             callee.index()
@@ -1098,7 +1100,7 @@ impl ElementImmutable<'_, '_, '_> {
                 for a in args {
                     self.visit_call_arg(body, a);
                     if !self.clean {
-                        crate::compiler_trace!(
+                        compiler_trace!(
                             "demote",
                             "verify reject: bad arg to method {}",
                             callee.index()
@@ -1112,7 +1114,7 @@ impl ElementImmutable<'_, '_, '_> {
                 // (`array_set` rewrites a spine slot; `array_get_value` / `select`
                 // only forward values), so a self-derived arg to a builtin is
                 // harmless. Opaque (non-builtin) calls still gate.
-                let callee = super::dce::callee_descriptor(self.analyzer.descriptors, *func_id);
+                let callee = callee_descriptor(self.analyzer.descriptors, *func_id);
                 let is_builtin = builtin_gname(callee).is_some();
                 let fname = callee.name.clone();
                 let args: Vec<Operand> = args.iter().map(|a| a.expr).collect();
@@ -1138,7 +1140,7 @@ impl ElementImmutable<'_, '_, '_> {
                         self.visit_call_arg(body, a);
                     }
                     if !self.clean {
-                        crate::compiler_trace!(
+                        compiler_trace!(
                             "demote",
                             "verify reject: self-derived arg to call {}",
                             fname
@@ -1153,7 +1155,7 @@ impl ElementImmutable<'_, '_, '_> {
                 let callee = *callee;
                 let args = args.clone();
                 if is_self_derived_op(body, callee, &self.tainted, tt, self.analyzer.descriptors) {
-                    crate::compiler_trace!(
+                    compiler_trace!(
                         "demote",
                         "verify reject: indirect call of self-capturing closure"
                     );
@@ -1170,7 +1172,7 @@ impl ElementImmutable<'_, '_, '_> {
                     let Some(ae) = a.as_expr() else { continue };
                     self.visit_call_arg(body, ae);
                     if !self.clean {
-                        crate::compiler_trace!(
+                        compiler_trace!(
                             "demote",
                             "verify reject: self-derived arg to indirect call"
                         );
@@ -1258,7 +1260,7 @@ fn is_self_derived(
             // `container_sroa` rewrites it to the builtin. Other array
             // builtins (`array_clone`, `array_new`) and every by-value return
             // (`$value_copy$T`) produce fresh storage.
-            let callee = super::dce::callee_descriptor(descriptors, *func_id);
+            let callee = callee_descriptor(descriptors, *func_id);
             let hands_back_borrow = callee.array_element_access().is_some()
                 || matches!(
                     tt.borrow().get(body.exprs[id].type_id),

@@ -6,6 +6,9 @@
 //! rewritten with it. Runs before SROA.
 
 use crate::hashmap::IndexMap;
+use crate::name::VARIANT_DISCRIMINANT_FIELD;
+use crate::name::is_variant_payload_field;
+use crate::wir::WirVariantCase;
 use crate::wir::{WirAbstractHeapType, WirInstr, WirPackage, WirType, WirTypeDef, WirVariantRepr};
 
 /// Lower eligible variants to the `NullableRef` representation. Mandatory at every
@@ -71,7 +74,7 @@ pub(super) fn lower_nullable_refs(module: &mut WirPackage) {
 /// Determine whether a variant is eligible for `NullableRef` optimization.
 ///
 /// Returns `(payload_case_idx, nullable_payload_type)` if eligible, `None` otherwise.
-fn is_nullable_ref_eligible(cases: &[crate::wir::WirVariantCase]) -> Option<(u32, WirType)> {
+fn is_nullable_ref_eligible(cases: &[WirVariantCase]) -> Option<(u32, WirType)> {
     if cases.len() != 2 {
         return None;
     }
@@ -401,7 +404,7 @@ fn transform_instr(
                 expr: inner,
                 ..
             } = lhs.as_ref()
-                && field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
+                && field_name == VARIANT_DISCRIMINANT_FIELD
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
                 && let WirInstr::I32Const(case_idx) = rhs.as_ref()
             {
@@ -431,7 +434,7 @@ fn transform_instr(
             expr,
             result_ty,
         } => {
-            if crate::name::is_variant_payload_field(field_name)
+            if is_variant_payload_field(field_name)
                 && let Some(&(variant_idx, case_idx)) = vci.get(&type_id.index())
                 && let Some(&(payload_case, _)) = nullable_map.get(&variant_idx)
                 && case_idx == payload_case
@@ -446,7 +449,7 @@ fn transform_instr(
             // guard) materialise the tag itself and compare it later, against
             // a local. There is no discriminant field to read, so compute the
             // tag from the null check.
-            if field_name == crate::name::VARIANT_DISCRIMINANT_FIELD
+            if field_name == VARIANT_DISCRIMINANT_FIELD
                 && let Some(&(payload_case, _)) = nullable_map.get(&type_id.index())
             {
                 transform_instr(expr, types, vci, nullable_map);

@@ -12,6 +12,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
+use crate::tir;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
@@ -31,14 +32,14 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 
 pub(super) struct Ctx {
     /// `FuncId` of `push_str`, the call this rule recognizes.
-    push_str_id: crate::nir::FuncId,
+    push_str_id: FuncId,
     /// `FuncId` of `push_char`, captured at resolution so the synthesized
     /// per-byte `push(ch)` calls are born resolved.
-    push_char_id: crate::nir::FuncId,
+    push_char_id: FuncId,
     /// `FuncId` of `push_ascii_unchecked`, the retarget for a constant-ASCII
     /// `push`. Independent of the two above: absent (`None`) it only disables
     /// [`ConstAsciiPushRule`], leaving [`ShortPushStrRule`] intact.
-    push_ascii_id: Option<crate::nir::FuncId>,
+    push_ascii_id: Option<FuncId>,
     /// The four `String` primitives [`AppendFuseRule`] writes a fused run in
     /// terms of. All four or none: a missing one only disables that rule.
     fused: Option<FusedIds>,
@@ -55,9 +56,9 @@ pub(super) struct FusedIds {
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str_id: Option<crate::nir::FuncId> = None;
-        let mut push_char_id: Option<crate::nir::FuncId> = None;
-        let mut push_ascii_id: Option<crate::nir::FuncId> = None;
+        let mut push_str_id: Option<FuncId> = None;
+        let mut push_char_id: Option<FuncId> = None;
+        let mut push_ascii_id: Option<FuncId> = None;
         let mut len_id: Option<FuncId> = None;
         let mut reserve_id: Option<FuncId> = None;
         let mut set_byte_id: Option<FuncId> = None;
@@ -142,8 +143,8 @@ impl Rule for ShortPushStrRule {
 /// [`ShortPushStrRule`], whose per-byte output is all ASCII. The rewrite is an
 /// in-place call edit — swap the callee, coerce the `char` to its `u8`.
 pub(super) struct ConstAsciiPushRule {
-    push_char_id: crate::nir::FuncId,
-    push_ascii_id: crate::nir::FuncId,
+    push_char_id: FuncId,
+    push_ascii_id: FuncId,
 }
 
 impl ConstAsciiPushRule {
@@ -188,7 +189,7 @@ impl Rule for ConstAsciiPushRule {
             return false;
         }
         let byte_arg = engine.const_operand(
-            crate::nir_value_graph::ValueKind::Int(u64::from(code), TypeTable::U8),
+            ValueKind::Int(u64::from(code), TypeTable::U8),
             TypeTable::U8,
         );
         engine.replace_expr_kind(
@@ -252,7 +253,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
             };
             fields
                 .iter()
-                .find(|f| f.name == crate::compiler_item::SeqField::Backing.field_name())
+                .find(|f| f.name == SeqField::Backing.field_name())
                 .map(|f| f.value)?
         };
         let repr_e = repr.as_expr()?;
@@ -270,8 +271,7 @@ fn try_split_stmt(engine: &mut Engine, stmt: StmtId, ctx: &Ctx) -> Option<Vec<St
     for &byte in &bytes {
         let ch = char::from(byte);
         let recv_clone = engine.clone_expr(receiver_expr);
-        let char_arg =
-            engine.const_operand(crate::nir_value_graph::ValueKind::Char(ch), TypeTable::CHAR);
+        let char_arg = engine.const_operand(ValueKind::Char(ch), TypeTable::CHAR);
         let call = engine.alloc_expr(
             ExprKind::method_call(
                 ctx.push_char_id,
@@ -564,7 +564,7 @@ impl AppendFuseRule {
         recv: ExprId,
         receiver_is_mut: bool,
         args: Vec<Operand>,
-        type_id: crate::tir::TypeId,
+        type_id: tir::TypeId,
         span: Span,
     ) -> Operand {
         let receiver = engine.clone_expr(recv);
@@ -650,7 +650,7 @@ fn groups(run: Vec<(StmtId, Piece)>) -> Vec<Vec<(StmtId, Piece)>> {
 fn let_stmt(
     engine: &mut Engine,
     local: u32,
-    type_id: crate::tir::TypeId,
+    type_id: tir::TypeId,
     value: Operand,
     span: Span,
 ) -> StmtId {

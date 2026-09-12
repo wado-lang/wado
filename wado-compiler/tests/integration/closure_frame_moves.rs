@@ -3,6 +3,8 @@
 //! The move analysis used to abandon any function that built one, so a single
 //! `map(|x| …)` left every other local in that body copying.
 
+use crate::common::assert_pushes_by_move;
+use crate::common::wir_function_body;
 use std::path::Path;
 
 const SOURCE: &str = r#"
@@ -42,11 +44,11 @@ export fn run() {
 
 #[test]
 fn a_closure_leaves_the_rest_of_the_frame_moving() {
-    let body = crate::common::wir_function_body(
+    let body = wir_function_body(
         Path::new("closure_frame_moves_test.wado"),
         SOURCE,
         wado_compiler::OptLevel::O2,
         "fn \"closure_frame_moves_test.wado/build\"",
     );
-    crate::common::assert_pushes_by_move(&body, "next");
+    assert_pushes_by_move(&body, "next");
 }

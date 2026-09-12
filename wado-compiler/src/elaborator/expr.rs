@@ -22,6 +22,30 @@ use super::instantiate::Instantiation;
 use super::typecheck::{TypeCheckResult, check_assignable};
 use super::types::{FunctionContext, TypeError, VarRef};
 use super::util;
+use crate::ast::RangeExpr;
+use crate::ast::Visibility;
+use crate::compiler_item::CompilerItem;
+use crate::defs::DefId;
+use crate::elaborator::control_flow::collect_unresolved_null_breaks;
+use crate::elaborator::control_flow::collect_unresolved_null_tails;
+use crate::elaborator::control_flow::collect_unresolved_null_tails_in_block;
+use crate::elaborator::infer::unify;
+use crate::elaborator::sem::decls::FunctionSig;
+use crate::elaborator::sem::types::AssignPlace;
+use crate::elaborator::sem::types::DesugarKind;
+use crate::elaborator::sem::types::FromCallFacts;
+use crate::elaborator::sem::types::GenericInstantiation;
+use crate::elaborator::sem::types::OperatorDispatch;
+use crate::elaborator::trait_env::written_type_arg;
+use crate::elaborator::types::ImplMemberKind;
+use crate::elaborator::types::StructFieldInfo;
+use crate::elaborator::types::newtype_member_owner;
+use crate::elaborator::util::unescape_byte;
+use crate::elaborator::util::unescape_char;
+use crate::hashmap;
+use crate::tir::AnonStructId;
+use crate::tir::PrimitiveType;
+use crate::tir::StructDef;
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -88,10 +112,7 @@ pub(super) enum IndexAccess {
 /// `(name, concrete type, declared index, visibility)`.
 type BaseSpreadInfo = (
     bool,
-    Option<(
-        ModuleSource,
-        Vec<(String, TypeId, u32, crate::ast::Visibility)>,
-    )>,
+    Option<(ModuleSource, Vec<(String, TypeId, u32, Visibility)>)>,
 );
 
 /// One field of an anonymous composition's union, and where its value comes from.
@@ -126,10 +147,7 @@ fn debug_assert_key_matches(impl_key: Option<TypeId>, elaborated: TypeId) {
 /// Peel references off `type_id` and, if it names a struct, return its
 /// `(name, defining module, type arguments)`. Shared by the resolve and reify
 /// spread-field projections so both classify a base identically.
-pub(super) fn peel_to_struct(
-    tt: &TypeTable,
-    type_id: TypeId,
-) -> Option<(crate::tir::StructDef, Vec<TypeId>)> {
+pub(super) fn peel_to_struct(tt: &TypeTable, type_id: TypeId) -> Option<(StructDef, Vec<TypeId>)> {
     let peeled = tt.peel_refs(type_id);
     match tt.get(peeled) {
         // An anonymous shape names no declaration, so the head is what
@@ -137,7 +155,7 @@ pub(super) fn peel_to_struct(
         // path on the floor.
         ResolvedType::Struct { def, .. } => Some((*def, Vec::new())),
         ResolvedType::GenericInstance { def, type_args } => {
-            Some((crate::tir::StructDef::Decl(*def), type_args.clone()))
+            Some((StructDef::Decl(*def), type_args.clone()))
         }
         _ => None,
     }
@@ -684,7 +702,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // Reify rebuilds the `Local` (`reify_ident`);
                     // record the place so `assign_to_target` can classify an
                     // ident l-value without the resolved `kind`.
-                    self.record_assign_place(ident.id, super::sem::types::AssignPlace::Local);
+                    self.record_assign_place(ident.id, AssignPlace::Local);
                     return type_id;
                 }
                 VarRef::Capture {
@@ -715,7 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                     self.record_assign_place(
                         ident.id,
-                        super::sem::types::AssignPlace::DerefCapture { through_mut_ref },
+                        AssignPlace::DerefCapture { through_mut_ref },
                     );
                     return inner_type_id;
                 }
@@ -736,7 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(&assoc.module),
                 MemberOwner::Named(assoc_const_owner_segment(ident)),
                 ident.segments.last().map_or(&ident.name, |s| &s.name),
-                super::types::ImplMemberKind::AssociatedConstant,
+                ImplMemberKind::AssociatedConstant,
                 Some(ident.id),
                 ident.span,
             );
@@ -764,7 +782,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `GlobalVarSet` projection without the resolved `kind`.
             self.record_assign_place(
                 ident.id,
-                super::sem::types::AssignPlace::Global {
+                AssignPlace::Global {
                     name: ident.name.clone(),
                     mutable,
                 },
@@ -787,7 +805,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // matching the pre-7-B message that read it off `GlobalVarGet`.
             self.record_assign_place(
                 ident.id,
-                super::sem::types::AssignPlace::Global {
+                AssignPlace::Global {
                     name: original_name,
                     mutable,
                 },
@@ -929,9 +947,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A newtype reaches its base's members and keeps its own identity, so
         // `C::Green` on `type C = Color` reads Color's cases and is a `C` —
         // the implicit form of `Color::Green as C`.
-        let through_newtype = owner.and_then(|def| {
-            super::types::newtype_member_owner(&self.type_lookup(), &self.tysys, def)
-        });
+        let through_newtype =
+            owner.and_then(|def| newtype_member_owner(&self.type_lookup(), &self.tysys, def));
         let owner = through_newtype.map(|(base, _)| base).or(owner);
         let pos = spelled.find("::")?;
         let prefix = &spelled[..pos];
@@ -1083,16 +1100,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The case `name` of the expected type, spelled `Owner::name`.
-    fn bare_case_in(
-        &self,
-        expected: Option<TypeId>,
-        name: &str,
-    ) -> Option<(crate::defs::DefId, String)> {
+    fn bare_case_in(&self, expected: Option<TypeId>, name: &str) -> Option<(DefId, String)> {
         let decl = self.tysys.type_table.borrow().decl_of_type(expected?)?;
         let owner = self.tysys.resolutions.defs().of_ast_id(decl)?;
         let lookup = self.type_lookup();
-        let members = super::types::newtype_member_owner(&lookup, &self.tysys, owner)
-            .map_or(owner, |(base, _)| base);
+        let members =
+            newtype_member_owner(&lookup, &self.tysys, owner).map_or(owner, |(base, _)| base);
         let declared = lookup
             .variant_cases_of(members)
             .is_some_and(|v| v.cases.iter().any(|c| c.name == name))
@@ -1111,7 +1124,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `TypeParam` slots positionally.
     pub(super) fn compute_func_ref_type_from_sig(
         &mut self,
-        sig: &super::sem::decls::FunctionSig,
+        sig: &FunctionSig,
         type_args: &[TypeId],
     ) -> Option<TypeId> {
         // Every slot must be pinned: a bare reference to a generic function
@@ -1240,7 +1253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let key = ident_id;
         self.sem.types.generic_instantiations.insert(
             key,
-            super::sem::types::GenericInstantiation {
+            GenericInstantiation {
                 type_args: type_args.to_vec(),
                 instance_type,
                 mangled_name: None,
@@ -1257,7 +1270,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn lookup_func_sig_for_ref(
         &self,
         ident: &ast::IdentExpr,
-    ) -> Option<(super::sem::decls::FunctionSig, ModuleSource, String)> {
+    ) -> Option<(FunctionSig, ModuleSource, String)> {
         let def = self.free_function_at(ident.id)?;
         let sig = self.tysys.signatures.function_sig(def)?.clone();
         let defs = self.tysys.resolutions.defs();
@@ -1271,7 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `NotApplicable` so callers can raise a focused diagnostic.
     fn infer_func_ref_type_args(
         &mut self,
-        sig: &super::sem::decls::FunctionSig,
+        sig: &FunctionSig,
         expected: TypeId,
     ) -> FuncRefInference {
         let (expected_params, expected_return) = {
@@ -1282,13 +1295,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut probe = expected;
             loop {
                 match table.get(probe) {
-                    crate::tir::ResolvedType::Function {
+                    ResolvedType::Function {
                         params,
                         return_type,
                         ..
                     } => break (params.clone(), *return_type),
-                    crate::tir::ResolvedType::Ref(inner)
-                    | crate::tir::ResolvedType::MutRef(inner) => probe = *inner,
+                    ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => probe = *inner,
                     _ => return FuncRefInference::NotApplicable,
                 }
             }
@@ -1308,7 +1320,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return FuncRefInference::NotApplicable;
         }
 
-        let mut infer = super::infer::InferCtx::new(&self.tysys.type_table, type_param_ids.clone());
+        let mut infer = InferCtx::new(&self.tysys.type_table, type_param_ids.clone());
         for (decl, expected) in decl_params.iter().zip(expected_params.iter()) {
             infer.add(*decl, *expected);
         }
@@ -1363,7 +1375,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let resolved = self.tysys.type_table.borrow().get(receiver_type).clone();
         let struct_head = match resolved {
             ResolvedType::Struct { def, .. } => Some(def),
-            ResolvedType::GenericInstance { def, .. } => Some(crate::tir::StructDef::Decl(def)),
+            ResolvedType::GenericInstance { def, .. } => Some(StructDef::Decl(def)),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
                 return self.record_field_reference(inner, field_name, use_id);
             }
@@ -1529,11 +1541,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `visibility` is `None` where the member does not decide its own reach.
     pub(super) fn check_inherent_member_visibility(
         &mut self,
-        visibility: Option<crate::ast::Visibility>,
+        visibility: Option<Visibility>,
         impl_module: Option<&ModuleSource>,
         owner: MemberOwner<'_>,
         member_name: &str,
-        member_kind: super::types::ImplMemberKind,
+        member_kind: ImplMemberKind,
         node: Option<ast::AstId>,
         span: Span,
     ) {
@@ -1914,7 +1926,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // outer `Deref` wrap is needed.
                 self.record_operator_dispatch(
                     index.id,
-                    super::sem::types::OperatorDispatch {
+                    OperatorDispatch {
                         function_ref: func,
                         method_def: Some(trait_info.method_def),
                         self_kind: trait_info.self_kind,
@@ -1966,7 +1978,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // shape returns the value by copy.
                 self.record_operator_dispatch(
                     index.id,
-                    super::sem::types::OperatorDispatch {
+                    OperatorDispatch {
                         function_ref: func,
                         method_def: Some(trait_info.method_def),
                         self_kind: trait_info.self_kind,
@@ -2037,7 +2049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 base_type_id,
                 &lookup_name,
                 lookup_type_id,
-                super::Elaborator::find_index_assign_trait_impl,
+                Elaborator::find_index_assign_trait_impl,
             )
             .and_then(|(i, _)| i.index_type)
         })
@@ -2052,7 +2064,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
-                self.record_desugar(if_expr.id, super::sem::types::DesugarKind::IfLetChain);
+                self.record_desugar(if_expr.id, DesugarKind::IfLetChain);
                 // The chain bindings are not visible in `else`, so resolve it
                 // in the outer scope.
                 if let Some(b) = &if_expr.else_block {
@@ -2330,7 +2342,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut spans = Vec::new();
         let ctx = self.ctrl_flow_ctx();
         for block in blocks {
-            super::control_flow::collect_unresolved_null_tails_in_block(ctx, block, &mut spans);
+            collect_unresolved_null_tails_in_block(ctx, block, &mut spans);
         }
         self.report_unresolved_nulls(&spans, result_type);
     }
@@ -2355,7 +2367,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut spans = Vec::new();
         let ctx = self.ctrl_flow_ctx();
         for arm in &match_expr.arms {
-            super::control_flow::collect_unresolved_null_tails(ctx, &arm.body, &mut spans);
+            collect_unresolved_null_tails(ctx, &arm.body, &mut spans);
         }
         self.report_unresolved_nulls(&spans, result_type);
     }
@@ -2380,7 +2392,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let spans = {
             let ctx = self.ctrl_flow_ctx();
-            super::control_flow::collect_unresolved_null_breaks(ctx, block, label)
+            collect_unresolved_null_breaks(ctx, block, label)
         };
         self.report_unresolved_nulls(&spans, result_type);
     }
@@ -2826,7 +2838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
                 self.check_variant_exhaustiveness(&classified, scrutinee_type, span);
             }
-            ResolvedType::Primitive(crate::tir::PrimitiveType::Bool) => {
+            ResolvedType::Primitive(PrimitiveType::Bool) => {
                 let has_true = classified
                     .iter()
                     .any(|(_, pat)| Self::pattern_contains_bool(pat, true));
@@ -2978,9 +2990,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .type_table
                             .borrow()
-                            .compiler_variant_case_name(
-                                crate::compiler_item::CompilerItem::OptionNone,
-                            )
+                            .compiler_variant_case_name(CompilerItem::OptionNone)
                             .to_string(),
                     )
                 } else {
@@ -2999,7 +3009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_variant_case_name(crate::compiler_item::CompilerItem::OptionNone)
+            .compiler_variant_case_name(CompilerItem::OptionNone)
             .to_string();
         variant_info
             .cases
@@ -3196,7 +3206,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    fn primitive_range(prim: crate::tir::PrimitiveType) -> Option<(i128, i128)> {
+    fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
         use crate::tir::PrimitiveType;
         match prim {
             PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
@@ -3341,8 +3351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let target_base = tt.representation_head(target_type);
         let slice_elem = |id| match tt.get(id) {
             ResolvedType::GenericInstance { def, type_args }
-                if tt.compiler_item_def(crate::compiler_item::CompilerItem::Slice)
-                    == Some(*def)
+                if tt.compiler_item_def(CompilerItem::Slice) == Some(*def)
                     && type_args.len() == 1 =>
             {
                 Some(type_args[0])
@@ -3670,10 +3679,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The struct declaration an unnamed literal's target names, or `None`
     /// where it declares none and the literal interns by its fields.
-    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<crate::defs::DefId> {
+    fn implicit_struct_target(&self, expected_type: Option<TypeId>) -> Option<DefId> {
         match *self.tysys.type_table.borrow().get(expected_type?) {
             ResolvedType::Struct {
-                def: crate::tir::StructDef::Decl(def),
+                def: StructDef::Decl(def),
                 ..
             } => Some(def),
             _ => None,
@@ -3777,7 +3786,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return fields;
                 };
                 let mut tt = self.tysys.type_table.borrow_mut();
-                let substitution: crate::hashmap::IndexMap<u32, TypeId> = params
+                let substitution: hashmap::IndexMap<u32, TypeId> = params
                     .iter()
                     .zip(args.iter())
                     .filter_map(|(param, arg)| match tt.get(*param) {
@@ -4231,10 +4240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn spread_struct_fields(
         &self,
         type_id: TypeId,
-    ) -> Option<(
-        ModuleSource,
-        Vec<(String, TypeId, u32, crate::ast::Visibility)>,
-    )> {
+    ) -> Option<(ModuleSource, Vec<(String, TypeId, u32, Visibility)>)> {
         let (head, type_args) = peel_to_struct(&self.tysys.type_table.borrow(), type_id)?;
         let info = self.lookup_struct_fields_of(head)?.clone();
         let subst: IndexMap<u32, TypeId> = (0..type_args.len() as u32)
@@ -4275,7 +4281,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Dead-write: a member whose every field is contributed by a later member.
-        let members: Vec<(crate::token::Span, Vec<String>)> = struct_lit
+        let members: Vec<(Span, Vec<String>)> = struct_lit
             .members()
             .iter()
             .map(|m| match m {
@@ -4451,7 +4457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|(fname, fty)| (fname.clone(), *fty))
                 .collect(),
         );
-        let head = crate::tir::StructDef::Anon(shape);
+        let head = StructDef::Anon(shape);
         let anon_name = self.tysys.type_table.borrow().anon_struct_mangle(shape);
 
         let existing_type = self.tysys.type_table.borrow().find_struct_type(head);
@@ -4496,16 +4502,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// tagged template both reach their type here.
     pub(super) fn mint_anonymous_struct(
         &mut self,
-        shape: crate::tir::AnonStructId,
+        shape: AnonStructId,
         anon_name: &str,
         fields: &[(String, TypeId)],
         defined_at: AstId,
         span: Span,
     ) -> TypeId {
-        let head = crate::tir::StructDef::Anon(shape);
+        let head = StructDef::Anon(shape);
         let struct_type = self.tysys.type_table.borrow_mut().make_struct(head);
 
-        let field_info = super::types::StructFieldInfo {
+        let field_info = StructFieldInfo {
             name: anon_name.to_string(),
             module_source: self.current_module_source.clone(),
             // A shape has no `StructDecl`; the expression minting it is the
@@ -4514,7 +4520,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             defined_at,
             fields: fields
                 .iter()
-                .map(|(fname, fty)| (fname.clone(), *fty, crate::ast::Visibility::Public))
+                .map(|(fname, fty)| (fname.clone(), *fty, Visibility::Public))
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
@@ -4529,7 +4535,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .enumerate()
             .map(|(i, (fname, fty))| TirField {
                 name: fname.clone(),
-                visibility: crate::ast::Visibility::Public,
+                visibility: Visibility::Public,
                 type_id: *fty,
                 index: i as u32,
                 span,
@@ -4546,7 +4552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_args: Vec::new(),
             name: anon_name.to_string(),
             module_source: self.current_module_source.clone(),
-            visibility: crate::ast::Visibility::Private,
+            visibility: Visibility::Private,
             type_params: Vec::new(),
             monomorph_info: None,
             fields: tir_fields,
@@ -4572,7 +4578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// unbound parameter keeps its `TypeParam` id for the monomorphizer.
     pub(super) fn infer_struct_type_args(
         &mut self,
-        struct_decl: Option<crate::defs::DefId>,
+        struct_decl: Option<DefId>,
         fields: &[ResolvedField],
         expected_type: Option<TypeId>,
         span: Span,
@@ -4618,7 +4624,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declared_pairs(fields, &field_types, &decl_field_names)
         {
             let mut bindings: IndexMap<TypeId, TypeId> = IndexMap::default();
-            super::infer::unify(
+            unify(
                 &self.tysys.type_table,
                 expected_field_type,
                 struct_field.type_id,
@@ -4634,8 +4640,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     !table.contains_undecided(first)
                         && !table.contains_undecided(answer)
                         && matches!(
-                            super::typecheck::check_assignable(answer, first, &table),
-                            super::typecheck::TypeCheckResult::Incompatible
+                            check_assignable(answer, first, &table),
+                            TypeCheckResult::Incompatible
                         )
                 };
                 if disagrees {
@@ -4933,7 +4939,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // per field.
                         elem_types.extend(inner_elems);
                     } else {
-                        let _ = self.emit(crate::elaborator::types::TypeError::InvalidLiteral {
+                        let _ = self.emit(TypeError::InvalidLiteral {
                             message: "spread operator `..` can only be used with tuple types"
                                 .to_string(),
                             span: elem.span(),
@@ -5179,7 +5185,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target_type: TypeId,
         from_type: TypeId,
-        caller_id: crate::ast::AstId,
+        caller_id: AstId,
     ) -> TypeId {
         let tt = self.tysys.type_table.borrow();
         // Reify reads the names below back as written, so an unsolved type
@@ -5190,7 +5196,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let target_name = tt.type_name(target_type);
         let from_name = tt.fq_type_name(from_type);
-        let from_trait_name = tt.compiler_trait_fq(crate::compiler_item::CompilerItem::From);
+        let from_trait_name = tt.compiler_trait_fq(CompilerItem::From);
         drop(tt);
 
         // `From<SourceType>` as the trait segment disambiguates several `From`
@@ -5207,7 +5213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let key = caller_id;
         self.sem.types.from_call_facts.insert(
             key,
-            super::sem::types::FromCallFacts {
+            FromCallFacts {
                 method_def: impl_def.and_then(|def| self.tysys.declared_method(def, "from")),
                 module_source,
                 mangled_name: method_name,
@@ -5225,19 +5231,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn find_from_impl(
         &self,
         target_name: &str,
-        from_name: &crate::name::FqTypeName,
-    ) -> (Option<crate::defs::DefId>, ModuleSource) {
+        from_name: &FqTypeName,
+    ) -> (Option<DefId>, ModuleSource) {
         let from_trait_name = self
             .tysys
             .type_table
             .borrow()
-            .compiler_trait_name(crate::compiler_item::CompilerItem::From)
+            .compiler_trait_name(CompilerItem::From)
             .to_string();
         // Read off the impl headers: a block's trait reference and its
         // argument are header facts, so the impls are reached by the target's
         // canonical key rather than by scanning every module for one whose
         // written target name matches.
-        let declares_from = |key: &crate::defs::DefId| -> bool {
+        let declares_from = |key: &DefId| -> bool {
             self.tysys
                 .trait_env
                 .impl_headers
@@ -5249,7 +5255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             // The header's argument and the call's source type
                             // are compared as the declarations they name, not
                             // as the spellings each side wrote.
-                            super::trait_env::written_type_arg(arg, &self.tysys.resolutions)
+                            written_type_arg(arg, &self.tysys.resolutions)
                                 == *from_name
                         }))
                 })
@@ -5312,10 +5318,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         s.parse::<i128>().ok().map(LiteralOrdValue::Int)
                     }
                 }
-                Literal::Char(s) => super::util::unescape_char(s)
+                Literal::Char(s) => unescape_char(s)
                     .ok()
                     .map(|c| LiteralOrdValue::Char(c as u32)),
-                Literal::Byte(s) => super::util::unescape_byte(s)
+                Literal::Byte(s) => unescape_byte(s)
                     .ok()
                     .map(|b| LiteralOrdValue::Int(i128::from(b))),
                 _ => None,
@@ -5333,11 +5339,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve a range expression: `a..<b` or `a..=b`
-    pub(super) fn resolve_range(
-        &mut self,
-        range: &crate::ast::RangeExpr,
-        ctx: &mut FunctionContext,
-    ) -> TypeId {
+    pub(super) fn resolve_range(&mut self, range: &RangeExpr, ctx: &mut FunctionContext) -> TypeId {
         use crate::ast::RangeKind;
 
         let order = range_endpoint_order(&self.tysys.type_table.borrow(), &range.start, &range.end);
@@ -5376,11 +5378,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .compiler_trait_name(crate::compiler_item::CompilerItem::Ord)
+            .compiler_trait_name(CompilerItem::Ord)
             .to_string();
-        let ord = self
-            .tysys
-            .compiler_trait_def(crate::compiler_item::CompilerItem::Ord);
+        let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
         if element_type != TypeTable::ERROR
             && !ord.is_some_and(|trait_| {
                 self.tysys.type_implements_trait(
@@ -5429,8 +5429,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let item = match range.kind {
-            RangeKind::Exclusive => crate::compiler_item::CompilerItem::RangeExclusive,
-            RangeKind::Inclusive => crate::compiler_item::CompilerItem::RangeInclusive,
+            RangeKind::Exclusive => CompilerItem::RangeExclusive,
+            RangeKind::Inclusive => CompilerItem::RangeInclusive,
         };
         let struct_name = self
             .tysys
@@ -5522,10 +5522,7 @@ impl AstVisitor for MutatedVarsCollector<'_> {
 /// A bare name (`Red`, `Some`) read as a case at a site.
 pub(super) enum BareCase {
     /// A case of the expected type, `spelled` in its `Type::Case` form.
-    Of {
-        owner: crate::defs::DefId,
-        spelled: String,
-    },
+    Of { owner: DefId, spelled: String },
     /// A case with no expected type to supply it; the error is emitted.
     NeedsContext,
     /// No case.

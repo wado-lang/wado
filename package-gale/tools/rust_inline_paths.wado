@@ -27,31 +27,35 @@ pub struct InlinePath {
 }
 
 /// The character offset of every `crate` / `super` that opens a path outside a
-/// `use` item, paired with the text a report quotes for it.
+/// `use` item or a visibility, paired with the text a report quotes for it.
+///
+/// A `pub(in ...)` names a module scope rather than reading an item, and Rust's
+/// grammar admits only a path there — no import can stand in for it.
 fn path_roots(result: &rust::ParseResult) -> List<[i32, String]> {
     let cst = &result.cst;
     let toks = &result.tokens;
     let mut out: List<[i32, String]> = [];
     let mut depth = 0;
-    // A `use` item nests no other, so the depth the first one opened at is
-    // enough to know when its subtree closes.
-    let mut use_depth = -1;
+    // Neither exempt rule nests the other, so the depth the first one opened at
+    // is enough to know when its subtree closes.
+    let mut free_depth = -1;
     for let mut row = 0; row < cst.row_count(); row += 1 {
         match cst.tag[row] {
             Open => {
                 depth += 1;
-                if use_depth < 0 && cst.kind(row) == rust::RK_USEDECLARATION {
-                    use_depth = depth;
+                let kind = cst.kind(row);
+                if free_depth < 0 && (kind == rust::RK_USEDECLARATION || kind == rust::RK_VISIBILITY) {
+                    free_depth = depth;
                 }
             },
             Close => {
-                if use_depth == depth {
-                    use_depth = -1;
+                if free_depth == depth {
+                    free_depth = -1;
                 }
                 depth -= 1;
             },
             Tok => {
-                if use_depth < 0 {
+                if free_depth < 0 {
                     let tok = cst.token_index(row);
                     let kind = toks.kind_at(tok);
                     let root = kind == rust::TK_KW_CRATE || kind == rust::TK_KW_SUPER;
@@ -320,11 +324,9 @@ test "a precise capture list is not a use item" {
     assert hits[0].text == "crate::";
 }
 
-test "a bare crate or super with no path separator is not a path root" {
+test "a visibility names a scope, which no import can stand in for" {
     let source = "pub(crate) fn f() {}\npub(super) fn g() {}\npub(in crate::a) fn h() {}\n";
-    let hits = find_inline_paths(&source).unwrap();
-    assert hits.len() == 1;
-    assert hits[0].line == 3;
+    assert find_inline_paths(&source).unwrap().len() == 0;
 }
 
 test "every path root in a chain counts" {

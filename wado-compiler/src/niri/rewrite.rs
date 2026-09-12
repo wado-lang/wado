@@ -18,10 +18,13 @@ use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
 use super::{BodySink, EditSink, Interpreter, Lattice, PatBindings};
+use crate::compiler_trace;
+use crate::hashmap;
+use crate::token::Span;
 
 /// A set of local indices, in the form [`crate::nir_value_graph::ValueGraph`]'s
 /// opaque-local collection hands back.
-type LocalIndexSet = crate::hashmap::IndexSet<u32>;
+type LocalIndexSet = hashmap::IndexSet<u32>;
 
 /// Widest literal tree the writer will emit, counted in the operands it would
 /// place. A value the engine holds is bounded per sequence and by nothing across
@@ -109,7 +112,7 @@ impl Interpreter<'_> {
         let node_type = sink.body().exprs[e].type_id;
         if value.is_scalar() {
             if self.type_table.is_reference_shaped(node_type) {
-                crate::compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
+                compiler_trace!("region_seed", "commit {e:?}: refused, reference-shaped");
                 return false;
             }
             if sink.replace_with_value(e, value.clone()) {
@@ -123,16 +126,16 @@ impl Interpreter<'_> {
         // Writing a literal over the `array_new` that opens a buffer would hand
         // the writes that follow a data segment's worth of zeros instead.
         if matches!(value, Value::Seq { .. }) {
-            crate::compiler_trace!("region_seed", "commit {e:?}: a bare backing array");
+            compiler_trace!("region_seed", "commit {e:?}: a bare backing array");
             return false;
         }
         if sink.edits_the_program() && !self.yields_own_object(sink.body(), e) {
-            crate::compiler_trace!("region_seed", "commit {e:?}: not an object of its own");
+            compiler_trace!("region_seed", "commit {e:?}: not an object of its own");
             return false;
         }
         let consumes = consumes_its_source(&sink.body().exprs[e].kind);
         let committed = self.materialize_via(sink, e, &value);
-        crate::compiler_trace!(
+        compiler_trace!(
             "region_seed",
             "commit {e:?} ({}): aggregate materialize -> {committed} (consumes={consumes})",
             self.type_table.type_name(node_type)
@@ -239,7 +242,7 @@ impl Interpreter<'_> {
         existing: Option<Operand>,
         value: &Value,
         ty: TypeId,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         // A reference names storage; a literal is a fresh object, and `ref.eq`
         // tells the two apart. The node's own type answers for the root, and
@@ -297,7 +300,7 @@ impl Interpreter<'_> {
         backing: (&Value, TypeId, &[Value]),
         type_id: TypeId,
         ty: TypeId,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         if ty != type_id {
             return None;
@@ -344,7 +347,7 @@ impl Interpreter<'_> {
         fields: &[(u32, Value)],
         type_id: TypeId,
         ty: TypeId,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         if ty != type_id {
             return None;
@@ -407,7 +410,7 @@ impl Interpreter<'_> {
         elements: &[Value],
         type_id: TypeId,
         ty: TypeId,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         if ty != type_id {
             return None;
@@ -461,7 +464,7 @@ impl Interpreter<'_> {
         case_name: &str,
         payload: Option<&Value>,
         ty: TypeId,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         if ty != type_id {
             return None;
@@ -509,7 +512,7 @@ impl Interpreter<'_> {
         previous: Option<Vec<Option<Operand>>>,
         type_id: TypeId,
         fields: Vec<(String, Operand)>,
-        span: crate::token::Span,
+        span: Span,
     ) -> Option<Operand> {
         if already_holds(&previous, fields.iter().map(|(_, op)| *op)) {
             return existing;
@@ -892,7 +895,7 @@ pub(super) struct ArmParts {
     guard: Option<Operand>,
     pattern: PatId,
     body: Operand,
-    span: crate::token::Span,
+    span: Span,
 }
 
 impl ArmParts {
@@ -1188,7 +1191,7 @@ pub(super) fn is_discardable(body: &Body, e: ExprId) -> bool {
 
 /// Operand form of [`is_discardable`]: a promoted pure value (a constant) is
 /// always discardable.
-pub(super) fn is_discardable_operand(body: &Body, op: crate::nir_arena::Operand) -> bool {
+pub(super) fn is_discardable_operand(body: &Body, op: Operand) -> bool {
     op.as_expr().is_none_or(|e| is_discardable(body, e))
 }
 
@@ -1411,7 +1414,7 @@ pub(super) struct EnumEqReplacement {
     enum_type: TypeId,
     case_index: u32,
     case_name: String,
-    span: crate::token::Span,
+    span: Span,
 }
 
 #[cfg(test)]
@@ -1419,6 +1422,7 @@ mod tests {
     use super::*;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::niri::BodySink;
+    use crate::tir::PrimitiveType;
     use crate::token::Span;
 
     /// `20 + 22`, as the two pooled operands the skeleton carries.
@@ -1453,7 +1457,7 @@ mod tests {
     fn int(value: u64) -> Value {
         Value::Int {
             value,
-            prim: crate::tir::PrimitiveType::I32,
+            prim: PrimitiveType::I32,
         }
     }
 

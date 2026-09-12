@@ -29,6 +29,30 @@ use super::types::{
     MethodOwner, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+use crate::elaborator::callee::CalleeRef;
+use crate::elaborator::expr::MemberOwner;
+use crate::elaborator::scope;
+use crate::elaborator::scope::param_decl;
+use crate::elaborator::sem::types::DesugarKind;
+use crate::elaborator::sem::types::OperatorDispatch;
+use crate::elaborator::sig;
+use crate::elaborator::sig::ImplSig;
+use crate::elaborator::solver_bridge::Ordered;
+use crate::elaborator::trait_env::written_type_arg;
+use crate::elaborator::trait_env::written_type_args;
+use crate::elaborator::types::ImplMemberKind;
+use crate::elaborator::types::RequiredTrait;
+use crate::elaborator::types::TraitMethodMatch;
+use crate::elaborator::tysys::operator_compiler_item;
+use crate::elaborator::tysys::operator_trait_method;
+use crate::name::DeclName;
+use crate::name::FqTraitName;
+use crate::name::FqTypeName;
+use crate::name::RefKind;
+use crate::name::TypeHead;
+use crate::resolve::Resolution;
+use crate::resolve::head_site;
+use crate::unparse::binary_op_str;
 
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` borrow say
 /// the same thing about the same refusal.
@@ -56,7 +80,7 @@ fn impl_header<'a>(trait_env: &'a TraitEnv, r: &ImplBlockRef) -> &'a ImplHeader 
 
 impl<H: CompilerHost> Elaborator<'_, H> {
     /// The declaration facts the decl pass recorded for an indexed impl block.
-    fn impl_sig(&self, r: &ImplBlockRef) -> &super::sig::ImplSig {
+    fn impl_sig(&self, r: &ImplBlockRef) -> &ImplSig {
         self.tysys
             .signatures
             .impl_sig(r.0)
@@ -100,7 +124,7 @@ pub(super) struct MethodInferenceInput<'a> {
     /// the method lookup for same-named methods on different traits (e.g.
     /// `payload` on Serialize vs Deserialize). A declaration, not a spelling:
     /// two modules' same-named traits are two traits.
-    pub trait_decl: Option<crate::defs::DefId>,
+    pub trait_decl: Option<DefId>,
     /// Module declaring the method. See
     /// [`Elaborator::fill_defaulted_method_type_args`].
     pub declaring_module: Option<ModuleSource>,
@@ -205,10 +229,7 @@ impl TypeSystem {
             },
             Type::Tuple(elems) => {
                 let tt = self.type_table.borrow();
-                let is_tuple = matches!(
-                    tt.fq_base_type_name(recv).head(),
-                    crate::name::TypeHead::Tuple
-                );
+                let is_tuple = matches!(tt.fq_base_type_name(recv).head(), TypeHead::Tuple);
                 let recv_elems = tt.generic_type_args(recv).unwrap_or_default();
                 drop(tt);
                 is_tuple
@@ -222,8 +243,7 @@ impl TypeSystem {
             // site looks one up under the receiver's, so it applies exactly
             // where the two agree. Looser, and the call has no impl to name.
             Type::Function(_) => {
-                let written_name =
-                    super::trait_env::written_type_arg(written, &self.resolutions).to_mangled();
+                let written_name = written_type_arg(written, &self.resolutions).to_mangled();
                 let recv_name = self.type_table.borrow().mangle_type_arg_for_generic(recv);
                 written_name == recv_name
             }
@@ -238,8 +258,8 @@ impl TypeSystem {
             // A written head: a binder matches anything, a declaration matches
             // its own, and the arguments recurse.
             _ => {
-                let Some(def) = crate::resolve::head_site(written)
-                    .and_then(|site| self.resolutions.declared_if_walked(site))
+                let Some(def) =
+                    head_site(written).and_then(|site| self.resolutions.declared_if_walked(site))
                 else {
                     // A binder, or a name reaching nothing: no one type to
                     // require, so it accepts whatever the receiver supplies.
@@ -249,7 +269,7 @@ impl TypeSystem {
                 // `TypeHead` compares a declaration by `DefId` and an
                 // undeclared shape by its rendering, which is all it has.
                 // `nominal_def` answers `None` for `i32` and `()`.
-                let written_head = crate::name::FqTypeName::of_head(self.resolutions.defs(), def);
+                let written_head = FqTypeName::of_head(self.resolutions.defs(), def);
                 if *written_head.head() != *tt.fq_base_type_name(recv).head() {
                     return false;
                 }
@@ -283,11 +303,8 @@ impl TypeSystem {
     /// site, so `ns::Tag` beside an `impl<Tag>` binder stays a declaration.
     fn nests_a_binder(&self, arg: &Type) -> bool {
         fn walk(this: &TypeSystem, ty: &Type, inside: bool) -> bool {
-            let is_binder = crate::resolve::head_site(ty).is_some_and(|site| {
-                matches!(
-                    this.resolutions.walked(site),
-                    Some(crate::resolve::Resolution::Binder(_))
-                )
+            let is_binder = head_site(ty).is_some_and(|site| {
+                matches!(this.resolutions.walked(site), Some(Resolution::Binder(_)))
             });
             if inside && is_binder {
                 return true;
@@ -335,7 +352,7 @@ impl TypeSystem {
     /// Whether this type's head reaches a declaration. A binder and a name that
     /// reaches nothing both answer `false` — neither is one type.
     fn head_is_declared(&self, ty: &Type) -> bool {
-        crate::resolve::head_site(ty)
+        head_site(ty)
             .and_then(|site| self.resolutions.declared_if_walked(site))
             .is_some()
     }
@@ -400,7 +417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
+        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -437,7 +454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         target: &ImplTargetKey,
         concrete_type_args: &[TypeId],
-        trait_matches: impl Fn(&str, Option<crate::defs::DefId>) -> bool,
+        trait_matches: impl Fn(&str, Option<DefId>) -> bool,
         mut project: impl FnMut(
             &mut Self,
             &ImplBlockRef,
@@ -471,7 +488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         rhs: Option<&ArgClass>,
         span: Span,
     ) -> Option<TypeId> {
-        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let (item, method_name) = operator_trait_method(op)?;
         let trait_ = self.tysys.compiler_trait_def(item)?;
         // A type parameter has no impl block to read the rhs off; its bounds
         // say it, and `Shl::shl(&self, rhs: u32)` is why a literal needs to be
@@ -502,9 +519,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The declaration an operator dispatches through, as a compiler item
     /// names it.
-    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<crate::defs::DefId> {
-        self.tysys
-            .compiler_trait_def(super::tysys::operator_compiler_item(op)?)
+    pub(super) fn operator_trait_decl(&self, op: &BinaryOp) -> Option<DefId> {
+        self.tysys.compiler_trait_def(operator_compiler_item(op)?)
     }
 
     /// The right-hand type `trait_`'s declaration gives `method_name`, read off
@@ -513,7 +529,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn bound_declared_rhs_type(
         &mut self,
         param_name: &str,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         method_name: &str,
         self_type_id: TypeId,
     ) -> Option<TypeId> {
@@ -575,7 +591,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let type_name = tt.type_name(base_type_id);
         drop(tt);
         let _ = self.emit(TypeError::AmbiguousOperatorRhs {
-            op: crate::unparse::binary_op_str(op).to_string(),
+            op: binary_op_str(op).to_string(),
             type_name,
             candidates,
             span,
@@ -591,7 +607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         op: &BinaryOp,
     ) -> Option<TypeId> {
         let struct_name = self.tysys.struct_name_for_type(rhs_type_id)?;
-        let (item, method_name) = super::tysys::operator_trait_method(op)?;
+        let (item, method_name) = operator_trait_method(op)?;
         let trait_ = self.tysys.compiler_trait_def(item)?;
         // `1 + m` reads the impl on the right operand's type and gives the
         // literal that same type, so the impl must be the one whose right-hand
@@ -882,7 +898,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Coherence lets any same-package module host an `impl <struct_name>`.
         if struct_module_source.is_some() {
             let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
-                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+                &self.impl_target_of(base_type_id, &DeclName::new(&struct_name)),
             );
             // The receiver's own declaration, which is what an impl header
             // targeting it must name.
@@ -896,8 +912,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // receiver" is one comparison of declarations rather than a
                 // spelling match plus a second lookup asking that module what
                 // the spelling means there.
-                let header_decl = crate::resolve::head_site(&header.ty)
-                    .and_then(|site| self.tysys.resolutions.declared(site));
+                let header_decl =
+                    head_site(&header.ty).and_then(|site| self.tysys.resolutions.declared(site));
                 let targets_receiver = match (header_decl, receiver_decl) {
                     (Some(header), Some(receiver)) => header == receiver,
                     // A target that names no declaration — a tuple, a function
@@ -920,7 +936,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if struct_module_source.is_none() {
             let entries: Vec<DefId> = self.tysys.trait_env.inherent_impl_keys(
-                &self.impl_target_of(base_type_id, &crate::name::DeclName::new(&struct_name)),
+                &self.impl_target_of(base_type_id, &DeclName::new(&struct_name)),
             );
             for entry in &entries {
                 let impl_ref = ImplBlockRef(*entry);
@@ -1042,7 +1058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// found on it directly — no name, no module, and so no scan (issue #1416).
     fn find_resource_method_info(
         &mut self,
-        def: crate::defs::DefId,
+        def: DefId,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
@@ -1069,7 +1085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// `def` and every resource it extends. Collected, so the walk's own
     /// lookups can borrow the type table again.
-    fn resource_chain_of(&self, def: crate::defs::DefId) -> Vec<crate::defs::DefId> {
+    fn resource_chain_of(&self, def: DefId) -> Vec<DefId> {
         self.tysys.type_table.borrow().resource_chain(def).collect()
     }
 
@@ -1079,9 +1095,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// walk passes it by.
     pub(super) fn resource_instance_method(
         &self,
-        def: crate::defs::DefId,
+        def: DefId,
         method_name: &str,
-    ) -> Option<(crate::defs::DefId, super::sig::MethodSig)> {
+    ) -> Option<(DefId, sig::MethodSig)> {
         self.resource_chain_of(def).into_iter().find_map(|current| {
             let sig = self
                 .tysys
@@ -1115,7 +1131,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::find_resource_method_info`] without the `extends` walk.
     fn resource_method_info_on(
         &mut self,
-        def: crate::defs::DefId,
+        def: DefId,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
     ) -> Option<MethodInfo> {
@@ -1210,7 +1226,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
-        trait_decl: Option<crate::defs::DefId>,
+        trait_decl: Option<DefId>,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         inferred: &mut [TypeId],
@@ -1475,7 +1491,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// declares. The node is the caller's to state, never this helper's to
     /// find — see [`super::scope::param_decl`].
     fn bind_type_param(
-        scope: &mut super::scope::TypeParamScope<'_, '_, H>,
+        scope: &mut scope::TypeParamScope<'_, '_, H>,
         decl: Option<ast::AstId>,
         name: &str,
         slot: u32,
@@ -1529,12 +1545,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (`Alpha::describe(&x)`), where only impls of that trait's
         // declaration may answer; its `args`, when present (turbofish), pin
         // one argument list.
-        required_trait: Option<&super::types::RequiredTrait>,
+        required_trait: Option<&RequiredTrait>,
         // `probe`: the call's arguments, classified on demand to select
         // among one trait's argument lists. `None` from callers with no
         // argument list at hand.
         probe: Option<&mut ArgProbe<'_>>,
-    ) -> Option<super::types::TraitMethodMatch> {
+    ) -> Option<TraitMethodMatch> {
         use super::solver_bridge::Ordered;
         use super::types::TraitMethodMatch;
 
@@ -1544,7 +1560,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order names the impls; the matches are read off those blocks and
         // nothing else (`docs/wep-2026-09-01-trait-resolution.md`).
         let order = self.order_for_call(type_key, receiver_type_id, method_name, required_trait);
-        let named: &[Option<crate::defs::DefId>] = match &order {
+        let named: &[Option<DefId>] = match &order {
             Some(Ordered::One(def)) => std::slice::from_ref(def),
             Some(
                 Ordered::AmbiguousTraits(defs)
@@ -1557,7 +1573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // does not also read as a missing method.
             Some(Ordered::OutOfScope { traits, impls }) => {
                 let defs = self.tysys.resolutions.defs();
-                let _ = self.emit(super::types::TypeError::TraitNotImported {
+                let _ = self.emit(TypeError::TraitNotImported {
                     method: method_name.to_string(),
                     receiver: receiver_display.clone(),
                     traits: traits.iter().map(|&t| defs.name(t).to_string()).collect(),
@@ -1610,15 +1626,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the derived template.
     fn materialize_matches(
         &mut self,
-        named: &[Option<crate::defs::DefId>],
+        named: &[Option<DefId>],
         type_key: &ImplTargetKey,
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
-    ) -> Vec<super::types::TraitMethodMatch> {
+    ) -> Vec<TraitMethodMatch> {
         let mut found = Vec::new();
         // An impl the order names at two levels of the chain is one block.
-        let mut seen: IndexSet<Option<crate::defs::DefId>> = IndexSet::default();
+        let mut seen: IndexSet<Option<DefId>> = IndexSet::default();
         for def in named.iter().filter(|def| seen.insert(**def)) {
             match def {
                 Some(def) => found.extend(self.collect_trait_method_matches_from_impl(
@@ -1658,7 +1674,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         receiver_type_args: Option<&[TypeId]>,
         receiver_type_id: Option<TypeId>,
-    ) -> Vec<super::types::TraitMethodMatch> {
+    ) -> Vec<TraitMethodMatch> {
         use super::types::TraitMethodMatch;
         let mut found_traits: Vec<TraitMethodMatch> = Vec::new();
 
@@ -1759,7 +1775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if i < type_args.len() {
                     Self::bind_type_param(
                         &mut scope,
-                        super::scope::param_decl(&header.type_params, name),
+                        param_decl(&header.type_params, name),
                         name,
                         *idx,
                         type_args[i],
@@ -1776,7 +1792,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .make_tuple(type_args.to_vec());
                 Self::bind_type_param(
                     &mut scope,
-                    super::scope::param_decl(&header.type_params, pack_name),
+                    param_decl(&header.type_params, pack_name),
                     pack_name,
                     *pack_idx,
                     pack_type,
@@ -1812,7 +1828,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             Self::bind_type_param(
                 &mut scope,
-                super::scope::param_decl(&header.type_params, name),
+                param_decl(&header.type_params, name),
                 name,
                 slot,
                 bound,
@@ -1993,12 +2009,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
                 trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                    crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                        super::trait_env::written_type_args(
-                            &trait_type_for_name,
-                            &scope.tysys.resolutions,
-                        ),
-                    ),
+                    FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
+                        &trait_type_for_name,
+                        &scope.tysys.resolutions,
+                    )),
                     &trait_type_for_name,
                     &target_for_name,
                     &scope.tysys.resolutions,
@@ -2060,12 +2074,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
                     trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                        crate::name::FqTraitName::declared(&defs, trait_decl).with_args(
-                            super::trait_env::written_type_args(
-                                &trait_type_for_name,
-                                &scope.tysys.resolutions,
-                            ),
-                        ),
+                        FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
+                            &trait_type_for_name,
+                            &scope.tysys.resolutions,
+                        )),
                         &trait_type_for_name,
                         &target_for_name,
                         &scope.tysys.resolutions,
@@ -2117,18 +2129,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-03-14 §5 Rule 2).
     fn report_ambiguous_value_blankets(
         &mut self,
-        tied: &[super::types::TraitMethodMatch],
+        tied: &[TraitMethodMatch],
         receiver_display: &str,
         span: Span,
     ) {
-        let binders: IndexSet<&crate::name::FqTypeName> = tied
+        let binders: IndexSet<&FqTypeName> = tied
             .iter()
             .filter_map(|m| m.blanket_binder.as_ref())
             .collect();
         if binders.len() < 2 {
             return;
         }
-        let _ = self.emit(super::types::TypeError::AmbiguousValueBlankets {
+        let _ = self.emit(TypeError::AmbiguousValueBlankets {
             trait_name: tied[0].trait_name.to_display(),
             receiver: receiver_display.to_string(),
             bounds: tied
@@ -2147,15 +2159,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_key: &ImplTargetKey,
         receiver_type_id: Option<TypeId>,
         method_name: &str,
-        required_trait: Option<&super::types::RequiredTrait>,
-    ) -> Option<super::solver_bridge::Ordered> {
+        required_trait: Option<&RequiredTrait>,
+    ) -> Option<Ordered> {
         let bridge = self.tysys.solver.as_ref()?;
         let required = match required_trait.map(|r| r.decl) {
-            Some(crate::resolve::Resolution::Def(def)) => Some(def),
+            Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.
-            Some(
-                crate::resolve::Resolution::Binder(_) | crate::resolve::Resolution::Unresolved,
-            ) => {
+            Some(Resolution::Binder(_) | Resolution::Unresolved) => {
                 return None;
             }
             None => None,
@@ -2164,7 +2174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // The order reads the reference as a level of the receiver's chain, so
         // it has to be put back.
         let through_ref = match type_key {
-            ImplTargetKey::Ref(kind) => Some(*kind == crate::name::RefKind::Mut),
+            ImplTargetKey::Ref(kind) => Some(*kind == RefKind::Mut),
             ImplTargetKey::Decl(_)
             | ImplTargetKey::Undeclared(..)
             | ImplTargetKey::TypeParam(..)
@@ -2186,11 +2196,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// match wins otherwise.
     fn select_trait_match(
         &mut self,
-        mut found_traits: Vec<super::types::TraitMethodMatch>,
+        mut found_traits: Vec<TraitMethodMatch>,
         method_name: &str,
         span: Span,
         probe: Option<&mut ArgProbe<'_>>,
-    ) -> Option<super::types::TraitMethodMatch> {
+    ) -> Option<TraitMethodMatch> {
         // The overload set is the concrete candidates of one declaration.
         // Distinct traits never form one, and a blanket neither forms nor
         // defeats one, having lost to every concrete impl already.
@@ -2263,7 +2273,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// nothing to work with.
     fn report_trait_argument_ambiguity(
         &self,
-        found_traits: &[super::types::TraitMethodMatch],
+        found_traits: &[TraitMethodMatch],
         method_name: &str,
         classes: &[ArgClass],
         span: Span,
@@ -2285,7 +2295,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// caller to annotate an already-pinned argument would be wrong advice.
     fn report_no_admitted_overload(
         &self,
-        found_traits: &[super::types::TraitMethodMatch],
+        found_traits: &[TraitMethodMatch],
         method_name: &str,
         classes: &[ArgClass],
         span: Span,
@@ -2303,9 +2313,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The competing spellings of one declaration's overload set, in candidate
     /// order, or `None` when the candidates are not an overload set.
-    fn overload_spellings(found_traits: &[super::types::TraitMethodMatch]) -> Option<Vec<String>> {
+    fn overload_spellings(found_traits: &[TraitMethodMatch]) -> Option<Vec<String>> {
         let first = found_traits.first()?;
-        let rivals: Vec<&super::types::TraitMethodMatch> = found_traits
+        let rivals: Vec<&TraitMethodMatch> = found_traits
             .iter()
             .filter(|m| m.trait_decl == first.trait_decl && m.trait_args != first.trait_args)
             .collect();
@@ -2338,15 +2348,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31).
     fn report_cross_trait_ambiguity(
         &self,
-        found_traits: &[super::types::TraitMethodMatch],
+        found_traits: &[TraitMethodMatch],
         method_name: &str,
         span: Span,
     ) {
         // Named on declarations, so two same-named traits from different
         // modules still collide even though their spellings agree — identity is
         // the declaration, not the name.
-        let seen: IndexSet<crate::defs::DefId> =
-            found_traits.iter().map(|m| m.trait_decl).collect();
+        let seen: IndexSet<DefId> = found_traits.iter().map(|m| m.trait_decl).collect();
         assert!(
             seen.len() > 1,
             "the order tied {} trait(s) declaring `{method_name}`",
@@ -2403,7 +2412,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The fq receiver name for an indexing-trait dispatch on `matched_type_id`
     /// — the `TypeId` [`Self::index_lookup_or_newtype_base`] reports alongside
     /// the impl it found.
-    pub(super) fn fq_index_receiver(&self, matched_type_id: TypeId) -> crate::name::FqTypeName {
+    pub(super) fn fq_index_receiver(&self, matched_type_id: TypeId) -> FqTypeName {
         self.tysys.fq_receiver_head(matched_type_id)
     }
 
@@ -2474,13 +2483,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .compiler_trait_fq(crate::compiler_item::CompilerItem::From),
+                    .compiler_trait_fq(CompilerItem::From),
             }]
         } else {
-            let Some(from_def) = self
-                .tysys
-                .compiler_trait_def(crate::compiler_item::CompilerItem::From)
-            else {
+            let Some(from_def) = self.tysys.compiler_trait_def(CompilerItem::From) else {
                 return Vec::new();
             };
             self.find_arithmetic_trait_impls(struct_name, base_type_id, from_def, "from", None)
@@ -2577,7 +2583,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
@@ -2601,7 +2607,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         struct_name: &str,
         base_type_id: TypeId,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Vec<ArithmeticTraitInfo> {
@@ -2616,7 +2622,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
 
         self.collect_trait_impls(
-            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
+            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
             |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
@@ -2718,10 +2724,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Look up the type parameters of a function from its AST definition.
-    pub(super) fn lookup_function_type_params(
-        &self,
-        callee: &super::callee::CalleeRef,
-    ) -> Vec<ast::GenericParam> {
+    pub(super) fn lookup_function_type_params(&self, callee: &CalleeRef) -> Vec<ast::GenericParam> {
         let callee_module = callee.module();
         let func_name = callee.name();
         let fn_type_params = &self.tysys.trait_env.function_type_params;
@@ -2757,7 +2760,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let trait_ = self.tysys.compiler_trait_def(item)?;
         self.probe_trait_impls(
-            &self.impl_target_of(base_type_id, &crate::name::DeclName::new(struct_name)),
+            &self.impl_target_of(base_type_id, &DeclName::new(struct_name)),
             &concrete_type_args,
             |_, found| found == Some(trait_),
             |s, impl_ref, impl_sig, declared| {
@@ -2968,7 +2971,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Look up method info to check if it needs &mut self
         let mut method_info = self.lookup_method_info(output_type, &method_call.method);
-        let mut method_trait_name: Option<crate::name::FqTraitName> = None;
+        let mut method_trait_name: Option<FqTraitName> = None;
         let mut method_trait_impl_source: Option<ModuleSource> = None;
 
         // This lookup commits the call's resolution (the desugared call is
@@ -3028,9 +3031,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.check_inherent_member_visibility(
             inherent_visibility,
             impl_module.as_ref(),
-            super::expr::MemberOwner::Type(output_type),
+            MemberOwner::Type(output_type),
             &method_call.method,
-            super::types::ImplMemberKind::Method,
+            ImplMemberKind::Method,
             Some(method_call.id),
             method_call.span,
         );
@@ -3058,7 +3061,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // this entry tells it the inner call.
         self.record_operator_dispatch(
             index_expr.id,
-            super::sem::types::OperatorDispatch {
+            OperatorDispatch {
                 function_ref: FunctionRef {
                     module_source: index_mut_info.impl_module_source.clone(),
                     name: mangled_index_mut_name,
@@ -3135,10 +3138,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_args,
             false,
         );
-        self.record_desugar(
-            method_call.id,
-            super::sem::types::DesugarKind::IndexMutMethodCall,
-        );
+        self.record_desugar(method_call.id, DesugarKind::IndexMutMethodCall);
 
         // The `__index_mut_val` local reify synthesizes comes from the
         // recorded `IndexMutMethodCall` desugar, not from this walk.

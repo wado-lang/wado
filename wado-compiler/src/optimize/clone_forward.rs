@@ -7,9 +7,12 @@
 use super::alias::{FirstParamTypes, first_param_types, method_mutates_receiver};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir_arena::ArenaCallArg;
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::optimize::dce::build_callee_descriptors;
+use crate::optimize::dce::callee_descriptor;
 use crate::tir::TypeTable;
 
 /// The builtin general-name of a call's callee descriptor, resolving a
@@ -26,7 +29,7 @@ fn builtin_gname(func: &FunctionRef) -> Option<String> {
 /// clone would change the result length — prefix bindings never forward.
 fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref(),
+        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
         Some("builtin::array_clone" | "builtin::array_clone_shallow")
     )
 }
@@ -37,7 +40,7 @@ fn is_array_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
 /// present) is untouched by the forward.
 fn is_consuming_clone(func_id: FuncId, descriptors: &[FunctionRef]) -> bool {
     matches!(
-        builtin_gname(super::dce::callee_descriptor(descriptors, func_id)).as_deref(),
+        builtin_gname(callee_descriptor(descriptors, func_id)).as_deref(),
         Some(
             "builtin::array_clone" | "builtin::array_clone_shallow" | "builtin::array_clone_prefix"
         )
@@ -241,11 +244,7 @@ fn stmt_disturbs_place(
 }
 
 /// Whether a `mut` call argument roots at the local place root.
-fn mut_arg_hits_root(
-    body: &Body,
-    args: &[crate::nir_arena::ArenaCallArg],
-    root: &PlaceRoot,
-) -> bool {
+fn mut_arg_hits_root(body: &Body, args: &[ArenaCallArg], root: &PlaceRoot) -> bool {
     args.iter().any(|a| {
         a.is_mut
             && matches!(
@@ -490,7 +489,7 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
 /// residual clones it targets only take their flat shape after the post-loop
 /// `const_object_globalization`, so there is no earlier iteration to be dirty in.
 pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
-    let descriptors = super::dce::build_callee_descriptors(project);
+    let descriptors = build_callee_descriptors(project);
     let fpt = first_param_types(project);
     let type_table = project.type_table.clone();
     let type_table = type_table.borrow();

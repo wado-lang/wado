@@ -10,11 +10,16 @@
 
 use cranelift_entity::SecondaryMap;
 
+use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::nir::NirLocal;
 use crate::nir::{FuncId, NirUnaryOp};
+use crate::nir_arena::ArenaCallArg;
+use crate::nir_arena::PatId;
 use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
+use crate::niri::AliasClasses;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
@@ -44,8 +49,8 @@ impl AliasGroups {
         self.root_of.is_empty()
     }
 
-    pub fn to_classes(&self) -> crate::niri::AliasClasses {
-        crate::niri::AliasClasses::new(self.root_of.clone(), self.members_of.clone())
+    pub fn to_classes(&self) -> AliasClasses {
+        AliasClasses::new(self.root_of.clone(), self.members_of.clone())
     }
 
     /// The alias class containing `local`, itself included, with the canonical
@@ -82,7 +87,7 @@ pub(super) struct AliasWalkResult {
 /// forget an alias. `untrackable` mirrors `stores_aliased_locals` exactly.
 pub(super) fn build_alias_info(
     body: &Body,
-    locals: &[crate::nir::NirLocal],
+    locals: &[NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
@@ -233,7 +238,7 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
 /// granularity uses the full `aliased`; only call effects consult `mut_escaped`.
 pub(super) fn builder_alias_sets(
     body: &Body,
-    locals: &[crate::nir::NirLocal],
+    locals: &[NirLocal],
     address_taken_locals: &IndexSet<u32>,
     stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
@@ -298,7 +303,7 @@ pub(super) fn builder_alias_sets(
 /// whole group's fields. `syntactic_mut` is [`build_alias_info`]'s walk output
 /// plus `stores_aliased_locals`, whose mutability is unknown.
 fn build_mut_escaped(
-    locals: &[crate::nir::NirLocal],
+    locals: &[NirLocal],
     aliased: &IndexSet<u32>,
     syntactic_mut: IndexSet<u32>,
     call_immutability: &CallImmutability,
@@ -375,12 +380,8 @@ impl<'a> CallImmutability<'a> {
             })
             .collect();
         let items = type_table.compiler_items();
-        let box_name = items
-            .struct_name(crate::compiler_item::CompilerItem::Box)
-            .to_string();
-        let list_name = items
-            .struct_name(crate::compiler_item::CompilerItem::List)
-            .to_string();
+        let box_name = items.struct_name(CompilerItem::Box).to_string();
+        let list_name = items.struct_name(CompilerItem::List).to_string();
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
             compute_receiver_mutating(project, type_table, &first_param_types);
@@ -471,10 +472,10 @@ use super::arena_query::storage_root;
 pub(super) struct CallVerdicts {
     /// Calls that mutate no caller local: no `mut` argument, every by-value
     /// argument call-immutable. An unknown callee stays impure for a receiver.
-    pub pure: IndexSet<crate::nir_arena::ExprId>,
+    pub pure: IndexSet<ExprId>,
     /// Calls whose callee cannot write through the receiver, whatever the other
     /// arguments do.
-    pub receiver_immutable: IndexSet<crate::nir_arena::ExprId>,
+    pub receiver_immutable: IndexSet<ExprId>,
 }
 
 /// Classify every call in `body`. See [`CallVerdicts`].
@@ -484,7 +485,7 @@ pub(super) fn call_verdicts(
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
 ) -> CallVerdicts {
-    let arg_safe = |arg: &crate::nir_arena::ArenaCallArg| -> bool {
+    let arg_safe = |arg: &ArenaCallArg| -> bool {
         if arg.is_mut {
             return false;
         }
@@ -566,7 +567,7 @@ pub(super) fn call_verdicts(
 /// known-callee verdict.
 pub(super) fn method_mutates_receiver(
     body: &Body,
-    receiver: crate::nir_arena::ExprId,
+    receiver: ExprId,
     func_id: FuncId,
     first_param_types: &FirstParamTypes,
     type_table: &TypeTable,
@@ -679,17 +680,12 @@ fn compute_receiver_mutating(
 /// self-derived local. `storage_root` sees through field, index,
 /// variant-payload, reference, deref, and cast projections.
 fn roots_self(body: &Body, self_derived: &IndexSet<u32>, e: ExprId, p0: u32) -> bool {
-    super::arena_query::storage_root(body, e).is_some_and(|r| r == p0 || self_derived.contains(&r))
+    storage_root(body, e).is_some_and(|r| r == p0 || self_derived.contains(&r))
 }
 
 /// Collect the locals a pattern binds into `set`, flagging `changed` when the
 /// set grows. Used to fixpoint self-derived locals through match arms.
-fn collect_pattern_locals(
-    body: &Body,
-    pat: crate::nir_arena::PatId,
-    set: &mut IndexSet<u32>,
-    changed: &mut bool,
-) {
+fn collect_pattern_locals(body: &Body, pat: PatId, set: &mut IndexSet<u32>, changed: &mut bool) {
     use crate::nir_arena::PatKind;
     match &body.pats[pat].kind {
         PatKind::Binding { local_index, .. } => {
@@ -820,8 +816,7 @@ fn summarize_receiver_writes(
     type_table: &TypeTable,
 ) -> (bool, Vec<FuncId>) {
     let self_derived = self_derived_locals(body, p0, type_table);
-    let projects_p0 =
-        |e: crate::nir_arena::ExprId| -> bool { roots_self(body, &self_derived, e, p0) };
+    let projects_p0 = |e: ExprId| -> bool { roots_self(body, &self_derived, e, p0) };
     let mut direct = false;
     let mut pending: Vec<FuncId> = Vec::new();
     walk_all(body, NodeRef::Block(body.root), &mut |body, node| {
@@ -923,7 +918,7 @@ fn collect_ref_arg_escapes(
 /// escapes its root local.
 fn escape_ref_arg(
     body: &Body,
-    arg: crate::nir_arena::Operand,
+    arg: Operand,
     call_immutability: &CallImmutability,
     aliased: &mut LocalSet,
     syntactic_mut: &mut IndexSet<u32>,
@@ -1041,10 +1036,7 @@ fn reference_pointee_struct_key(
 /// params included) that point at the same struct. Two such references may
 /// alias the same heap object, so a write through one must widen invalidation
 /// to the others. Connected as a star to each pointee's first-seen local.
-fn same_pointee_reference_edges(
-    locals: &[crate::nir::NirLocal],
-    type_table: &TypeTable,
-) -> Vec<(u32, u32)> {
+fn same_pointee_reference_edges(locals: &[NirLocal], type_table: &TypeTable) -> Vec<(u32, u32)> {
     let mut rep: IndexMap<(String, ModuleSource), u32> = IndexMap::default();
     let mut edges = Vec::new();
     for (i, l) in locals.iter().enumerate() {
@@ -1119,8 +1111,8 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
 /// as monomorphized `Struct` records carrying the generic name in `base_name`.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
     let items = type_table.compiler_items();
-    let box_name = items.struct_name(crate::compiler_item::CompilerItem::Box);
-    let list_name = items.struct_name(crate::compiler_item::CompilerItem::List);
+    let box_name = items.struct_name(CompilerItem::Box);
+    let list_name = items.struct_name(CompilerItem::List);
     let is_box_or_list_name = |n: &str| n == box_name || n == list_name;
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
@@ -1166,7 +1158,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// single arena node. Conservative — false positives only cost missed
 /// optimizations.
 fn collect_aliased_node(body: &Body, node: NodeRef, out: &mut LocalSet) {
-    let local = |id: crate::nir_arena::ExprId| -> Option<u32> {
+    let local = |id: ExprId| -> Option<u32> {
         match &body.exprs[id].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,

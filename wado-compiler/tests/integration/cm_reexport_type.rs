@@ -5,6 +5,7 @@
 //! Regression for the CM instance emitter's missing component-interface
 //! fallback (it had `wasi:` / `core:kiln/` fallbacks only).
 
+use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -24,7 +25,7 @@ export fn mk(v: Point) -> Point {
         lib_world: Some(LIB_WORLD_FQ.to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new(path), source, options)
+    compile_source_with_compiler_options(Path::new(path), source, options)
         .expect("re-exporting a component-owned type compiles (no unresolved-type ICE)")
         .wasm
 }

@@ -12,7 +12,13 @@ use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::context::WirContext;
 use super::translate::{FunctionTranslator, declare_and_set_local};
+use crate::lower::plan::value_copy;
+use crate::nir;
+use crate::nir::FuncId;
 use crate::nir_arena::{ArenaCallArg, Body, Operand};
+use crate::tir::ResolvedType;
+use crate::wir::WirFuncId;
+use crate::wir_build::translate::ref_binding_needs_boxing;
 
 /// The compile-time constant of a SIMD lane operand — a promoted
 /// `Operand::Value` int constant in the function's value pool.
@@ -143,10 +149,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Resolve a TIR `FunctionRef` to a `WirFuncId`.
-    pub(super) fn resolve_function_ref(
-        &self,
-        func_ref: &crate::nir::FunctionRef,
-    ) -> Option<crate::wir::WirFuncId> {
+    pub(super) fn resolve_function_ref(&self, func_ref: &nir::FunctionRef) -> Option<WirFuncId> {
         let module_source = &func_ref.module_source;
         let name = &func_ref.name;
 
@@ -179,9 +182,9 @@ impl FunctionTranslator<'_, '_> {
     /// not a node field (the call node carries no `FunctionRef`).
     pub(super) fn resolve_call(
         &self,
-        descriptor: &crate::nir::FunctionRef,
-        func_id: crate::nir::FuncId,
-    ) -> Option<crate::wir::WirFuncId> {
+        descriptor: &nir::FunctionRef,
+        func_id: FuncId,
+    ) -> Option<WirFuncId> {
         if let Some(wid) = self.ctx.funcid_map.get(&func_id) {
             return Some(wid.clone());
         }
@@ -193,10 +196,10 @@ impl FunctionTranslator<'_, '_> {
     /// diagnostics. Reads it from the function record by `func_id` — the single
     /// source of truth (`FuncId == store position`, Phase 4), and the sole callee
     /// reference now that the call node carries no `FunctionRef`.
-    pub(super) fn callee_descriptor(&self, func_id: crate::nir::FuncId) -> crate::nir::FunctionRef {
+    pub(super) fn callee_descriptor(&self, func_id: FuncId) -> nir::FunctionRef {
         use cranelift_entity::EntityRef;
         let rec = self.ctx.package.functions[func_id.index()].borrow();
-        crate::nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
+        nir::FunctionRef::from_resolved(&rec, rec.module_source.clone())
     }
 
     /// The 128-bit pattern a constant `i128` / `u128` operand denotes, or `None`
@@ -237,7 +240,7 @@ impl FunctionTranslator<'_, '_> {
     /// `BuiltinArray(elem)`, the `$value_copy$` helper to invoke on every
     /// element when `elem` is itself value-typed. `None` for a primitive
     /// element, where Wasm GC's plain `array.set` is already a deep copy.
-    fn array_element_copy(&self, src_type_id: TypeId) -> Option<crate::wir::WirFuncId> {
+    fn array_element_copy(&self, src_type_id: TypeId) -> Option<WirFuncId> {
         use crate::tir::ResolvedType;
         let mut ty = src_type_id;
         while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.type_table.get(ty) {
@@ -247,7 +250,7 @@ impl FunctionTranslator<'_, '_> {
             ResolvedType::BuiltinArray(elem) => *elem,
             _ => return None,
         };
-        if !crate::lower::plan::value_copy::needs_value_copy(elem, self.type_table) {
+        if !value_copy::needs_value_copy(elem, self.type_table) {
             return None;
         }
         // Falling back to the bulk clone would answer a deep copy with a
@@ -571,7 +574,7 @@ impl FunctionTranslator<'_, '_> {
                     result_ty: elem_ty.clone(),
                 };
                 let result_wir = self.wir_type(result_type_id);
-                if super::translate::ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
+                if ref_binding_needs_boxing(&result_wir, Some(&elem_ty))
                     && let WirType::Ref {
                         type_id: box_tid, ..
                     } = result_wir
@@ -1143,7 +1146,7 @@ impl FunctionTranslator<'_, '_> {
         // Look up the Function type to get param/result info
         let fn_type = self.type_table.get(callee_ty);
         let (param_types, return_type) = match fn_type {
-            crate::tir::ResolvedType::Function {
+            ResolvedType::Function {
                 params,
                 return_type,
                 ..
@@ -1266,7 +1269,7 @@ impl FunctionTranslator<'_, '_> {
         // Look up the canonical closure struct type for the target function type
         let fn_resolved = self.type_table.get(target_fn_type);
         let (param_types, return_type) = match fn_resolved {
-            crate::tir::ResolvedType::Function {
+            ResolvedType::Function {
                 params,
                 return_type,
                 ..

@@ -8,10 +8,16 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::DefId;
+use crate::defs::DefTable;
+use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
+use crate::loader::resolve_use_decl_source;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name;
+use crate::resolve::Resolution;
+use crate::resolve::Resolutions;
+use crate::resolve::head_site;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
@@ -41,7 +47,7 @@ pub(super) fn namespace_imports_of(
                 | ast::UseItem::Wildcard => None,
             });
             for ns in namespaces {
-                let source = crate::loader::resolve_use_decl_source(
+                let source = resolve_use_decl_source(
                     interner,
                     from_module,
                     use_decl,
@@ -116,7 +122,7 @@ impl ImplTargetKey {
     /// [`name::FqTypeName::of_head`]: a shape every mangler spells bare drops
     /// its declaration, so a definition reached through a written head and a
     /// lookup reached through a resolved type land on the same key.
-    pub(crate) fn of_decl(defs: &crate::defs::DefTable, def: DefId) -> Self {
+    pub(crate) fn of_decl(defs: &DefTable, def: DefId) -> Self {
         if name::is_builtin_shape_name(defs.name(def)) {
             return ImplTargetKey::Builtin(defs.name(def).to_string());
         }
@@ -138,7 +144,7 @@ impl ImplTargetKey {
     /// The receiver this target indexes under. Built from the same declaration
     /// `TypeTable::impl_receiver_key` reads off a resolved type, so a
     /// definition and a lookup agree by construction.
-    pub(crate) fn receiver(&self, defs: &crate::defs::DefTable) -> name::Receiver {
+    pub(crate) fn receiver(&self, defs: &DefTable) -> name::Receiver {
         match self {
             ImplTargetKey::Decl(def) => name::Receiver::Type(name::FqTypeName::of_head(defs, *def)),
             ImplTargetKey::Undeclared(module, name) => {
@@ -154,7 +160,7 @@ impl ImplTargetKey {
         }
     }
 
-    pub(crate) fn type_name<'a>(&'a self, defs: &'a crate::defs::DefTable) -> Option<&'a str> {
+    pub(crate) fn type_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
         match self {
             ImplTargetKey::Decl(def) => Some(defs.name(*def)),
             ImplTargetKey::Undeclared(_, name)
@@ -166,7 +172,7 @@ impl ImplTargetKey {
 
     /// How to spell this target in a diagnostic — the declaration name, or the
     /// reference prefix for a `&T` / `&mut T` target.
-    pub(crate) fn display_name<'a>(&'a self, defs: &'a crate::defs::DefTable) -> &'a str {
+    pub(crate) fn display_name<'a>(&'a self, defs: &'a DefTable) -> &'a str {
         match self {
             ImplTargetKey::Decl(def) => defs.name(*def),
             ImplTargetKey::Undeclared(_, name)
@@ -182,7 +188,7 @@ impl ImplTargetKey {
 ///
 /// [`crate::tir::TypeTable::decl_render_name`] one layer down, for the callers
 /// that hold a [`crate::defs::DefTable`] and no type table.
-pub(crate) fn render_decl_name(defs: &crate::defs::DefTable, def: DefId) -> String {
+pub(crate) fn render_decl_name(defs: &DefTable, def: DefId) -> String {
     if defs.is_function_local(def) {
         return name::mangle_local_item_name(defs.name(def), defs.ast_id(def));
     }
@@ -195,7 +201,7 @@ pub(super) type TraitImplIndex = IndexMap<ImplTargetKey, Vec<DefId>>;
 
 type ReceiverImplIndex = IndexMap<name::Receiver, Vec<DefId>>;
 
-fn index_by_receiver(index: &TraitImplIndex, defs: &crate::defs::DefTable) -> ReceiverImplIndex {
+fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplIndex {
     let mut out: ReceiverImplIndex = IndexMap::default();
     for (key, entries) in index {
         out.entry(key.receiver(defs))
@@ -229,7 +235,7 @@ pub(super) struct ImplHeader {
     /// lookup compares declarations rather than spellings two modules can share
     /// (WEP 2026-08-12). `None` for an inherent block, and for a trait position
     /// whose site names no declaration.
-    pub(super) trait_ref: Option<crate::defs::DefId>,
+    pub(super) trait_ref: Option<DefId>,
     /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
     /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
     /// The memoised head name of [`Self::trait_type`], so the index filters
@@ -271,10 +277,7 @@ impl ImplHeader {
     /// module that declares it, carrying the header's written type arguments.
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
-    pub(super) fn fq_trait(
-        &self,
-        resolutions: &crate::resolve::Resolutions,
-    ) -> Option<name::FqTraitName> {
+    pub(super) fn fq_trait(&self, resolutions: &Resolutions) -> Option<name::FqTraitName> {
         let trait_type = self.trait_type.as_ref()?;
         match self.trait_key.as_ref()? {
             ImplTargetKey::Decl(def) => Some(
@@ -311,7 +314,7 @@ pub(crate) enum BlanketParamSource {
 fn blanket_param_sources(
     impl_headers: &IndexMap<DefId, ImplHeader>,
     blanket_impls: &IndexMap<DefId, Vec<BlanketImpl>>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> IndexMap<DefId, Vec<BlanketParamSource>> {
     let mut out: IndexMap<DefId, Vec<BlanketParamSource>> = IndexMap::default();
     for blanket in blanket_impls.values().flatten() {
@@ -378,10 +381,7 @@ pub(super) struct ImplMethodHeader {
 
 /// Digest each method a `trait` or `impl` block declares. One producer, so the
 /// two cannot disagree about what a header says.
-fn method_headers(
-    defs: &crate::defs::DefTable,
-    methods: &[ast::Function],
-) -> Vec<ImplMethodHeader> {
+fn method_headers(defs: &DefTable, methods: &[ast::Function]) -> Vec<ImplMethodHeader> {
     methods
         .iter()
         .map(|m| ImplMethodHeader {
@@ -417,7 +417,7 @@ pub(crate) struct BlanketBound {
     pub(crate) name: String,
     /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
-    pub(crate) decl_ref: Option<crate::defs::DefId>,
+    pub(crate) decl_ref: Option<DefId>,
     /// Associated types the bound pins to the receiver param itself (`Output`
     /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
     /// receiver; any other right-hand side is the instantiation's to answer.
@@ -448,7 +448,7 @@ pub(crate) struct BlanketImpl {
 impl BlanketImpl {
     /// Where every template name for this blanket comes from — one built from
     /// the spelling alone looks up a *different* template, silently.
-    pub(crate) fn receiver_binder(&self, defs: &crate::defs::DefTable) -> name::FqTypeName {
+    pub(crate) fn receiver_binder(&self, defs: &DefTable) -> name::FqTypeName {
         name::FqTypeName::binder_of_impl(defs, self.def, &self.param)
     }
 }
@@ -687,7 +687,7 @@ fn push_module(
 /// instance is materialised in the receiver type's.
 fn index_impl_modules(
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
     concrete_only: bool,
 ) -> ImplModuleIndex {
     let defs = resolutions.defs();
@@ -749,7 +749,7 @@ pub struct TraitEnv {
     /// Every declaration in the program. Held here so a query keyed by an
     /// identity can render one for a diagnostic without every caller threading
     /// the table.
-    pub(crate) defs: std::sync::Arc<crate::defs::DefTable>,
+    pub(crate) defs: std::sync::Arc<DefTable>,
     /// Effect name → effect declaration location.
     pub(super) effect_decl_index: EffectDeclIndex,
     /// Resource name → resource declaration location. Used alongside
@@ -902,7 +902,7 @@ impl TraitEnv {
         interner: &mut ModuleSourceInterner,
         entry_module: Option<&ModuleSource>,
         invocations: &InvocationIndex,
-        resolutions: &crate::resolve::Resolutions,
+        resolutions: &Resolutions,
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
         let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
@@ -1118,10 +1118,10 @@ impl TraitEnv {
                 };
                 let impl_def = defs.def_at(impl_block.id);
                 let type_key = impl_target_key_at(&impl_block.ty, module_source, resolutions);
-                let trait_ref: Option<crate::defs::DefId> = impl_block
+                let trait_ref: Option<DefId> = impl_block
                     .trait_type
                     .as_ref()
-                    .and_then(crate::resolve::head_site)
+                    .and_then(head_site)
                     .and_then(|site| resolutions.declared(site));
                 // Implementing a trait is naming it, so the header's own
                 // site answers and a position reaching nothing is an error —
@@ -1389,7 +1389,7 @@ impl TraitEnv {
     pub(super) fn fq_trait_of_impl(
         &self,
         header: &ImplHeader,
-        resolutions: &crate::resolve::Resolutions,
+        resolutions: &Resolutions,
     ) -> Option<name::FqTraitName> {
         let fq = header.fq_trait(resolutions)?;
         let trait_type = header.trait_type.as_ref()?;
@@ -1403,7 +1403,7 @@ impl TraitEnv {
         fq: name::FqTraitName,
         trait_type: &ast::Type,
         target: &ast::Type,
-        resolutions: &crate::resolve::Resolutions,
+        resolutions: &Resolutions,
     ) -> name::FqTraitName {
         let Some(params) = fq
             .canonical()
@@ -1471,7 +1471,7 @@ impl TraitEnv {
     pub(crate) fn has_any_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
     ) -> bool {
         self.entries_by_receiver(receiver)
             .any(|entry| self.methodful_header_matches(entry, trait_))
@@ -1479,13 +1479,13 @@ impl TraitEnv {
 
     /// `key` itself when it declares a trait, else `None` — the question the
     /// callers actually ask, phrased as the identity they then compare.
-    pub(crate) fn trait_def(&self, key: &DefId) -> Option<crate::defs::DefId> {
+    pub(crate) fn trait_def(&self, key: &DefId) -> Option<DefId> {
         self.decl_index.contains(key).then_some(*key)
     }
 
     /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
     /// declaration.
-    pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<crate::defs::DefId> {
+    pub(crate) fn trait_def_of_fq(&self, fq: &name::FqTraitName) -> Option<DefId> {
         self.trait_def(&fq.canonical()?)
     }
 
@@ -1494,7 +1494,7 @@ impl TraitEnv {
     pub(crate) fn has_methodful_impl_by_receiver(
         &self,
         receiver: &name::Receiver,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
         module_source: &ModuleSource,
     ) -> bool {
         self.entries_by_receiver(receiver).any(|entry| {
@@ -1519,7 +1519,7 @@ impl TraitEnv {
             })
     }
 
-    fn methodful_header_matches(&self, entry: DefId, trait_: crate::defs::DefId) -> bool {
+    fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         self.impl_headers
             .get(&entry)
             .is_some_and(|header| !header.methods.is_empty() && header.trait_ref == Some(trait_))
@@ -1714,7 +1714,7 @@ impl ReceiverCandidate {
 fn impl_target_key_at(
     ty: &ast::Type,
     module_source: &ModuleSource,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> ImplTargetKey {
     sited_impl_target_key(ty, module_source, resolutions)
         .unwrap_or_else(|| ImplTargetKey::of_undeclared(module_source, &get_type_name_static(ty)))
@@ -1729,26 +1729,24 @@ fn impl_target_key_at(
 fn sited_impl_target_key(
     ty: &ast::Type,
     module_source: &ModuleSource,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Option<ImplTargetKey> {
     // A reference target buckets by kind alone: the table resolves `&List<T>`
     // to `List`, which is the referent, not the bucket.
     if let Some(kind) = name::RefKind::from_ast(ty) {
         return Some(ImplTargetKey::Ref(kind));
     }
-    let site = crate::resolve::head_site(ty)?;
+    let site = head_site(ty)?;
     match resolutions.get(site) {
         // The impl's own binder, which shadows any declaration of that name —
         // `impl<T> Trait for T` written where a `struct T` exists stays a
         // blanket.
-        crate::resolve::Resolution::Binder(_) => Some(ImplTargetKey::TypeParam(
+        Resolution::Binder(_) => Some(ImplTargetKey::TypeParam(
             module_source.clone(),
             get_type_name_static(ty),
         )),
-        crate::resolve::Resolution::Def(def) => {
-            Some(ImplTargetKey::of_decl(resolutions.defs(), def))
-        }
-        crate::resolve::Resolution::Unresolved => None,
+        Resolution::Def(def) => Some(ImplTargetKey::of_decl(resolutions.defs(), def)),
+        Resolution::Unresolved => None,
     }
 }
 
@@ -1809,9 +1807,7 @@ fn classify_position(
         // which also covers a name reaching no declaration: reading that as
         // uncovered loses the coherence error `impl Undeclared { … }` deserves
         // and invents an orphan violation for `impl From<Local> for Undeclared`.
-        Type::Named(_) | Type::Generic(_)
-            if super::written::binder_of(ty, &header.type_params).is_some() =>
-        {
+        Type::Named(_) | Type::Generic(_) if binder_of(ty, &header.type_params).is_some() => {
             PositionKind::UncoveredTypeParam
         }
         // Everything else is an identity question: the package owns this
@@ -1908,7 +1904,7 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
 /// followed, keeping the closure finite.
 fn build_supertrait_closures(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     headers: &IndexMap<DefId, TraitDeclHeader>,
     resolve: ResolveTrait<'_>,
 ) -> (SupertraitClosureIndex, Vec<(ModuleSource, TypeError)>) {
@@ -1935,7 +1931,7 @@ fn build_supertrait_closures(
 }
 
 fn expand_supertraits(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     loc: DefId,
     headers: &IndexMap<DefId, TraitDeclHeader>,
     resolve: ResolveTrait<'_>,
@@ -2014,7 +2010,7 @@ fn index_closures_by_name(
 /// Report the cycle closed by the edge back to `stack[pos]`, attributing it to
 /// that trait — the one that turned out to be its own supertrait.
 fn report_supertrait_cycle(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     pos: usize,
     stack: &[DefId],
     headers: &IndexMap<DefId, TraitDeclHeader>,
@@ -2179,7 +2175,7 @@ fn conflicting_impl_location(conflict: &ModuleSource, here: &ModuleSource) -> St
 
 fn check_impl_coherence(
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     use super::solver_bridge::{Lowering, lower_impls};
     use crate::trait_solver::{CoherenceError, ImplId, Program, coherence_errors};
@@ -2233,7 +2229,7 @@ fn check_impl_coherence(
 /// written. Grouping is by trait *declaration*, so two modules may each keep
 /// their own. The same walk refuses a target the compiler cannot implement.
 fn check_variadic_impl_overlap(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut violations = Vec::new();
@@ -2338,9 +2334,9 @@ fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
 /// Rejected, as in Rust. Keyed by the resolved [`ImplTargetKey`], never the
 /// written head — two modules' `Box_` are two types, and a spelling cannot say so.
 fn check_inherent_impl_collisions(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Vec<(ModuleSource, TypeError)> {
     let mut generic_methods_by_target: IndexMap<&ImplTargetKey, IndexSet<&str>> =
         IndexMap::default();
@@ -2415,7 +2411,7 @@ fn check_inherent_impl_collisions(
 /// Only impl blocks in local (user) modules are checked. Each violation is
 /// paired with the offending impl's [`ModuleSource`] for file attribution.
 fn check_all_orphan_rules(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
     decl_index: &TraitDeclIndex,
     type_decl_index: &IndexSet<DefId>,
@@ -2483,7 +2479,7 @@ fn check_all_orphan_rules(
 /// maps first so source order is kept, and each declaration landing once — a
 /// duplicate would make a caller taking the unique answer see two.
 fn index_decls_by_name(
-    defs: &crate::defs::DefTable,
+    defs: &DefTable,
     sets: [&IndexSet<DefId>; 4],
     maps: [&IndexMap<String, Vec<DefId>>; 2],
 ) -> IndexMap<String, Vec<DefId>> {
@@ -2522,7 +2518,7 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
 /// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
     ty: &ast::Type,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     match ty {
         ast::Type::Generic(_) | ast::Type::NamespacedGeneric(_) => written_arg_nodes(ty)
@@ -2541,7 +2537,7 @@ fn args_without_declared_defaults(
     trait_type: &ast::Type,
     target: &ast::Type,
     params: &[ast::GenericParam],
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     let mut kept = written;
     kept.truncate(non_default_arg_count(
@@ -2560,7 +2556,7 @@ pub(super) fn header_answers_bare_bound(
     trait_type: &ast::Type,
     target: &ast::Type,
     params: &[ast::GenericParam],
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> bool {
     let ast_args = written_arg_nodes(trait_type);
     ast_args.iter().enumerate().all(|(i, arg)| {
@@ -2577,7 +2573,7 @@ fn restates_default(
     arg: &ast::Type,
     default: &ast::Type,
     target: &ast::Type,
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> bool {
     match default {
         ast::Type::Named(named) if named.name == "Self" => {
@@ -2595,7 +2591,7 @@ pub(super) fn non_default_arg_count(
     trait_type: &ast::Type,
     target: &ast::Type,
     params: &[ast::GenericParam],
-    resolutions: &crate::resolve::Resolutions,
+    resolutions: &Resolutions,
 ) -> usize {
     let ast_args = written_arg_nodes(trait_type);
     let mut kept = ast_args.len();
@@ -2618,10 +2614,7 @@ pub(super) fn non_default_arg_count(
 ///
 /// A name that reaches no declaration keeps its spelling — there is no identity
 /// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
-pub(super) fn written_type_arg(
-    ty: &ast::Type,
-    resolutions: &crate::resolve::Resolutions,
-) -> name::FqTypeName {
+pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> name::FqTypeName {
     let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
         args.iter()
             .map(|arg| written_type_arg(arg, resolutions))
@@ -2664,14 +2657,10 @@ pub(super) fn written_type_arg(
             ))
         }
         _ => {
-            let head = match crate::resolve::head_site(ty).map(|site| resolutions.get(site)) {
-                Some(crate::resolve::Resolution::Def(def)) => {
-                    name::FqTypeName::of_head(resolutions.defs(), def)
-                }
-                Some(crate::resolve::Resolution::Binder(_)) => {
-                    name::FqTypeName::binder(&get_type_name_static(ty))
-                }
-                Some(crate::resolve::Resolution::Unresolved) | None => {
+            let head = match head_site(ty).map(|site| resolutions.get(site)) {
+                Some(Resolution::Def(def)) => name::FqTypeName::of_head(resolutions.defs(), def),
+                Some(Resolution::Binder(_)) => name::FqTypeName::binder(&get_type_name_static(ty)),
+                Some(Resolution::Unresolved) | None => {
                     name::FqTypeName::builtin(&get_type_name_static(ty))
                 }
             };

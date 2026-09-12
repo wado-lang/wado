@@ -13,7 +13,11 @@ use lexopt::Arg::Value;
 use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
+use crate::compile::attach_manifest_and_component_deps;
+use crate::compile::load_nearest_manifest;
+use crate::compile::prepare_kiln;
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::kiln_driver::check_pipeline;
 use crate::kiln_driver::{CheckOutcome, PipelineError};
 use crate::knobs::{CompileKnobs, KnobOpt};
 
@@ -127,8 +131,8 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         .unwrap_or_default();
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
-    let manifest_pair = crate::compile::load_nearest_manifest(path);
-    let host = crate::compile::attach_manifest_and_component_deps(
+    let manifest_pair = load_nearest_manifest(path);
+    let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),
         manifest_pair.as_ref(),
         &base_path,
@@ -140,13 +144,13 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
 
     // Same setup `wado compile` runs its generators through — only the pipeline
     // below differs: `check` dry-runs and byte-compares instead of writing.
-    let kiln = crate::compile::prepare_kiln(path, &host, opts.knobs.no_cache, manifest_pair)
+    let kiln = prepare_kiln(path, &host, opts.knobs.no_cache, manifest_pair)
         .await
         .map_err(silent_or_reported)?;
     let outcome = match kiln {
         None => CheckOutcome::default(),
         Some(mut kiln) => {
-            let mut outcome = crate::kiln_driver::check_pipeline(
+            let mut outcome = check_pipeline(
                 &kiln.manifest,
                 &kiln.manifest_root,
                 &kiln.host,

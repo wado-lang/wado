@@ -10,13 +10,26 @@ use wado_compiler::Severity;
 use wado_compiler::wit_bundle;
 
 use crate::args::{self, CliExit};
+use crate::build_dep::GENERATOR_WORLD_FQ;
+use crate::build_dep::locked_generator_versions;
+use crate::build_dep::spec_key;
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::fetch_component_dependencies;
+use crate::dep_component::resolve_inline_component_dependencies;
+use crate::dep_component::resolve_inline_git_dependencies;
+use crate::git::materialize;
+use crate::kiln_driver;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::CliGeneratorProvider;
+use crate::kiln_provider::RegistryContext;
 use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
 use crate::manifest;
 use crate::manifest::openable_dir;
+use crate::manifest::resolve_manifest;
+use crate::metadata_embed::clean_git_revision;
+use crate::metadata_embed::embed_metadata_sections;
 use crate::run_cache::RunCache;
+use crate::wit::default_interface_name;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OutputFormat {
@@ -514,11 +527,7 @@ async fn manifest_and_component_index(
             .values()
             .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
         if has_registry_dep {
-            let components = crate::dep_component::fetch_component_dependencies(
-                &project.manifest,
-                &project.root,
-            )
-            .await?;
+            let components = fetch_component_dependencies(&project.manifest, &project.root).await?;
             for (name, path) in components {
                 index.unresolved.swap_remove(&name);
                 index.components.insert(name, path);
@@ -527,19 +536,14 @@ async fn manifest_and_component_index(
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let inline = crate::dep_component::resolve_inline_component_dependencies(
-        entry_source,
-        manifest,
-        fetch_missing,
-    )
-    .await?;
+    let inline =
+        resolve_inline_component_dependencies(entry_source, manifest, fetch_missing).await?;
     index.components.extend(inline.resolved);
     index.unresolved.extend(inline.unresolved);
 
     // Inline git sources (`use … from "<name>" with { git }`) are source deps:
     // their materialized worktree entry lands in `resolved`, compiled in.
-    let inline_git =
-        crate::dep_component::resolve_inline_git_dependencies(entry_source, fetch_missing).await?;
+    let inline_git = resolve_inline_git_dependencies(entry_source, fetch_missing).await?;
     for (name, path) in inline_git.resolved {
         index.unresolved.swap_remove(&name);
         index.resolved.insert(name, path);
@@ -574,7 +578,7 @@ async fn materialize_git_dependencies(
             continue;
         };
         let (url, version, sha) = (url.clone(), version.clone(), sha.clone());
-        tokio::task::spawn_blocking(move || crate::git::materialize(&url, &version, &sha))
+        tokio::task::spawn_blocking(move || materialize(&url, &version, &sha))
             .await
             .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?
             .map_err(|e| format!("materializing git dependency {name:?}: {e}"))?;
@@ -655,10 +659,10 @@ pub(crate) async fn prepare_kiln(
     let provider = CliGeneratorProvider::new(manifest_root.clone())
         .with_run_cache(host.run_cache())
         .with_no_cache(no_cache)
-        .with_registry_context(crate::kiln_provider::RegistryContext {
+        .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
-            locked_versions: crate::build_dep::locked_generator_versions(&manifest_root),
+            locked_versions: locked_generator_versions(&manifest_root),
         });
     let kiln_host = host.rebased(manifest_root.clone());
     Ok(Some(KilnSetup {
@@ -705,7 +709,7 @@ pub(crate) async fn maybe_run_pipeline(
     let Some(mut kiln) = prepare_kiln(entry_file, host, no_cache, project).await? else {
         return Ok(PipelineOutcome::default());
     };
-    let mut outcome = crate::kiln_driver::run_pipeline(
+    let mut outcome = kiln_driver::run_pipeline(
         &kiln.manifest,
         &kiln.manifest_root,
         &kiln.host,
@@ -737,7 +741,7 @@ pub(crate) fn rewrite_build_dep_modules(
         let GeneratorModule::Spec(spec) = &inv.module else {
             continue;
         };
-        let key = crate::build_dep::spec_key(&spec.spec);
+        let key = spec_key(&spec.spec);
         if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
             inv.module = GeneratorModule::LocalPath(local);
         }
@@ -803,12 +807,8 @@ fn build_dep_generator_local_path(
 /// both spellings land on the same entry file.
 fn package_generator_entry(pkg_dir: &Path) -> Option<String> {
     let manifest_text = fs::read_to_string(pkg_dir.join("wado.toml")).ok()?;
-    let manifest = crate::manifest::resolve_manifest(pkg_dir, &manifest_text).ok()?;
-    Some(
-        manifest
-            .world_entry(crate::build_dep::GENERATOR_WORLD_FQ)?
-            .to_string(),
-    )
+    let manifest = resolve_manifest(pkg_dir, &manifest_text).ok()?;
+    Some(manifest.world_entry(GENERATOR_WORLD_FQ)?.to_string())
 }
 
 /// Empty in-memory `wado.toml` manifest used as a fallback when the
@@ -961,7 +961,7 @@ fn embed_package_metadata(
     let Some(pkg) = project.manifest.package.as_ref() else {
         return wasm;
     };
-    let revision = crate::metadata_embed::clean_git_revision(&project.root);
+    let revision = clean_git_revision(&project.root);
     let license_text = match read_license_text(project, pkg) {
         Ok(text) => text,
         Err(e) => {
@@ -971,7 +971,7 @@ fn embed_package_metadata(
     };
     let sections =
         wado_manifest::metadata_sections(pkg, revision.as_deref(), license_text.as_deref());
-    crate::metadata_embed::embed_metadata_sections(wasm, &sections)
+    embed_metadata_sections(wasm, &sections)
 }
 
 /// Read the `license-file` text to embed, resolving the path against the
@@ -1040,7 +1040,7 @@ pub async fn compile_to_artifact(opts: CompileOptions) -> Result<Artifact, CliEx
         flags.embed_wit_contract = Some(wado_compiler::wit_emit::wit_contract(
             opts.target_world.as_deref(),
             opts.lib_world.as_deref(),
-            Some(&crate::wit::default_interface_name(&opts.input)),
+            Some(&default_interface_name(&opts.input)),
         ));
     }
     let result = try_compile(&opts.input, &flags)

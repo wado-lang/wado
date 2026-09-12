@@ -4,10 +4,16 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::defs::DefId;
 use crate::elaborator::trait_env::{ImplReceiver, ReceiverCandidate, TraitEnv};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::monomorphize::dispatch_receiver_name;
+use crate::name::DeclName;
+use crate::name::FqTraitName;
+use crate::name::MangledName;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, RefKind, mangle_generic_name};
+use crate::tir::TirTypeParam;
 use crate::tir::{InstantiationKey, ResolvedType, TirFunction, TypeId, TypeTable};
 
 /// Tracks struct monomorphization state
@@ -439,7 +445,7 @@ impl Monomorphizer {
         &self,
         key: &InstantiationKey,
         type_table: &TypeTable,
-        impl_type_params: &[crate::tir::TirTypeParam],
+        impl_type_params: &[TirTypeParam],
     ) -> String {
         // Use method_info metadata instead of parsing key.name
         let Some(ref method_info) = key.method_info else {
@@ -546,7 +552,7 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        trait_name: Option<&crate::name::FqTraitName>,
+        trait_name: Option<&FqTraitName>,
     ) -> Option<FqTypeName> {
         type_table
             .newtype_link_owning(type_id, |tid| match trait_name {
@@ -573,7 +579,7 @@ impl Monomorphizer {
         &self,
         type_table: &TypeTable,
         tid: TypeId,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
     ) -> bool {
         self.functions
             .trait_env
@@ -586,7 +592,7 @@ impl Monomorphizer {
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
-        trait_: crate::defs::DefId,
+        trait_: DefId,
     ) -> Option<TypeId> {
         type_table.newtype_link_owning(type_id, |tid| {
             self.has_own_trait_impl(type_table, tid, trait_)
@@ -622,18 +628,15 @@ impl Monomorphizer {
         receiver_type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        trait_name: Option<&crate::name::FqTraitName>,
-    ) -> (
-        Option<String>,
-        Vec<(String, Option<crate::name::FqTraitName>)>,
-    ) {
+        trait_name: Option<&FqTraitName>,
+    ) -> (Option<String>, Vec<(String, Option<FqTraitName>)>) {
         let own_name = self.newtype_own_struct_name_with_impl(
             receiver_type_id,
             type_table,
             method_name,
             trait_name,
         );
-        let mut names: Vec<(String, Option<crate::name::FqTraitName>)> = Vec::new();
+        let mut names: Vec<(String, Option<FqTraitName>)> = Vec::new();
         let mut push_for = |s: FqTypeName| {
             names.push((MethodName::format_local(&s, None, method_name), None));
             if let Some(tn) = trait_name {
@@ -648,7 +651,7 @@ impl Monomorphizer {
         }
         // The key's `impl_type_args` are empty here — the instantiation is
         // spelled into the name, so the receiver keeps its type arguments.
-        push_for(super::dispatch_receiver_name(type_table, receiver_type_id));
+        push_for(dispatch_receiver_name(type_table, receiver_type_id));
         (own_name.map(|n| n.to_mangled()), names)
     }
 
@@ -662,7 +665,7 @@ impl Monomorphizer {
         info: Option<&'a LocalMethodName>,
         struct_name: &'a str,
     ) -> Vec<ReceiverCandidate> {
-        let mangled = |s: &str| ReceiverCandidate::Instantiated(crate::name::MangledName::new(s));
+        let mangled = |s: &str| ReceiverCandidate::Instantiated(MangledName::new(s));
         let mut c: Vec<ReceiverCandidate> = Vec::new();
         // `own_name` is `FqTypeName::to_mangled`, so it carries its module.
         if let Some(own) = own_name {
@@ -675,9 +678,7 @@ impl Monomorphizer {
         // `struct_name` is `get_struct_name_from_type`'s rendered spelling —
         // the declaration's own name, with no module. Asking the mangled map
         // for it reaches nothing, because every key there is module-qualified.
-        c.push(ReceiverCandidate::Declared(crate::name::DeclName::new(
-            struct_name,
-        )));
+        c.push(ReceiverCandidate::Declared(DeclName::new(struct_name)));
         c
     }
 
@@ -688,7 +689,7 @@ impl Monomorphizer {
         type_id: TypeId,
         type_table: &TypeTable,
         method_name: &str,
-        trait_name: Option<&crate::name::FqTraitName>,
+        trait_name: Option<&FqTraitName>,
     ) -> Option<(String, Vec<TypeId>)> {
         let own = self
             .newtype_own_struct_name_with_impl(type_id, type_table, method_name, trait_name)

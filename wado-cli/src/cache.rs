@@ -18,6 +18,7 @@
 //! fetches) and the language server (which reads offline) resolve one identical
 //! path. This module adds the concrete `PathBuf`s and the atomic writer.
 
+use crate::build_dep::GENERATOR_WORLD_SEGMENT;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -109,7 +110,7 @@ pub fn generator_path(
     relative_under_root(
         registry_url,
         coordinate,
-        Some(crate::build_dep::GENERATOR_WORLD_SEGMENT),
+        Some(GENERATOR_WORLD_SEGMENT),
         version,
     )
 }
@@ -171,6 +172,10 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::cache::component_path;
+    use crate::cache::config_root_value;
+    use crate::cache::generator_path;
+    use crate::cache::write_atomic;
     use std::path::Path;
 
     #[test]
@@ -186,7 +191,7 @@ mod tests {
                 .map(|_| {
                     s.spawn(|| {
                         barrier.wait();
-                        super::write_atomic(&path, &bytes)
+                        write_atomic(&path, &bytes)
                     })
                 })
                 .collect();
@@ -205,12 +210,12 @@ mod tests {
     #[test]
     fn config_root_value_reads_the_root_string() {
         assert_eq!(
-            super::config_root_value("root = \"~/ghq\"\n").as_deref(),
+            config_root_value("root = \"~/ghq\"\n").as_deref(),
             Some("~/ghq")
         );
-        assert_eq!(super::config_root_value("# empty\n"), None);
-        assert_eq!(super::config_root_value("root = 42\n"), None);
-        assert_eq!(super::config_root_value("not valid ["), None);
+        assert_eq!(config_root_value("# empty\n"), None);
+        assert_eq!(config_root_value("root = 42\n"), None);
+        assert_eq!(config_root_value("not valid ["), None);
     }
 
     // SAFETY: single-threaded test, env restored before returning.
@@ -223,11 +228,11 @@ mod tests {
         unsafe { std::env::set_var("WADO_ROOT", "/custom/cache") };
 
         assert_eq!(
-            super::component_path("oci://ghcr.io", "docs:regex", "0.1.2").unwrap(),
+            component_path("oci://ghcr.io", "docs:regex", "0.1.2").unwrap(),
             Path::new("/custom/cache/ghcr.io/docs/regex/0.1.2/component.wasm")
         );
         assert_eq!(
-            super::generator_path("oci://ghcr.io", "wado-lang:gale", "0.0.9").unwrap(),
+            generator_path("oci://ghcr.io", "wado-lang:gale", "0.0.9").unwrap(),
             Path::new(
                 "/custom/cache/ghcr.io/wado-lang/gale/core-kiln-generator/0.0.9/component.wasm"
             )

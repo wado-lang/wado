@@ -8,13 +8,20 @@
 //! exactly that, scoped to the *reachable* operands — the pool is append-only, so
 //! seeding from it wholesale would keep long-folded locals alive forever.
 
+use crate::hashmap;
 use crate::hashmap::IndexSet;
+use crate::nir::FuncId;
+use crate::nir::NirLocal;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::Engine;
+use crate::nir_value_graph::ValuePool;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::optimize::mod_ref;
+use crate::optimize::value_copy::mutation::MutationOracle;
+use crate::tir::ResolvedType;
 use crate::tir::TypeTable;
 
 /// Every reachable block, each before the blocks nested under it.
@@ -77,10 +84,7 @@ pub(super) fn promoted_read_count_at(body: &Body, node: NodeRef, idx: u32) -> us
 /// A pass rewriting *every* read of `idx` — globalizing it, propagating it away
 /// — can replace these, because the local fills the slot whole;
 /// [`buried_promoted_reads`] names the ones it cannot.
-pub(super) fn bare_promoted_reads(
-    body: &Body,
-    idx: u32,
-) -> IndexSet<crate::nir_value_graph::ValueId> {
+pub(super) fn bare_promoted_reads(body: &Body, idx: u32) -> IndexSet<ValueId> {
     let mut out = IndexSet::default();
     for node in reachable_nodes(body) {
         body.for_each_operand(node, |op| {
@@ -264,7 +268,7 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
 pub(super) fn strip_one_value_copy(
     body: &Body,
     e: ExprId,
-    value_copy_ids: &IndexSet<crate::nir::FuncId>,
+    value_copy_ids: &IndexSet<FuncId>,
 ) -> Option<ExprId> {
     let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
         return None;
@@ -394,9 +398,9 @@ pub(super) fn projected_const_field(body: &Body, field_access: ExprId) -> Option
 pub(super) fn is_pure_nontrapping_expr_typed(
     body: &Body,
     id: ExprId,
-    types: Option<&crate::tir::TypeTable>,
+    types: Option<&TypeTable>,
 ) -> bool {
-    is_pure_expr(body, id) && !super::mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
+    is_pure_expr(body, id) && !mod_ref::ModRef::of_expr_typed(body, id, types).may_trap
 }
 
 /// [`is_pure_nontrapping_expr_typed`] for an operand. A promoted value is pure
@@ -405,7 +409,7 @@ pub(super) fn is_pure_nontrapping_expr_typed(
 pub(super) fn is_pure_nontrapping_operand_typed(
     body: &Body,
     op: Operand,
-    types: Option<&crate::tir::TypeTable>,
+    types: Option<&TypeTable>,
 ) -> bool {
     match op {
         Operand::Expr(e) => is_pure_nontrapping_expr_typed(body, e, types),
@@ -503,7 +507,7 @@ pub(super) fn unary_op_may_trap(op: NirUnaryOp) -> bool {
 ///
 /// Conservative on `Cast`: classifying one needs the operand's source type, and
 /// nothing guarantees the type-erased tree recorded it.
-pub(super) fn value_may_trap(pool: &crate::nir_value_graph::ValuePool, v: ValueId) -> bool {
+pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
     match pool.kind(v) {
         ValueKind::Binary { op, lhs, rhs, .. } => {
             binary_op_may_trap(*op) || value_may_trap(pool, *lhs) || value_may_trap(pool, *rhs)
@@ -589,7 +593,7 @@ pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
 /// cannot hold a reference into this frame's fresh locals.
 #[derive(Debug, Default)]
 pub(super) struct MutRefAliases {
-    entries: crate::hashmap::IndexMap<u32, AliasEntry>,
+    entries: hashmap::IndexMap<u32, AliasEntry>,
     /// Locals whose storage some `&mut` may alias — the conservative target
     /// set for writes through an unknown-provenance reference.
     borrowed: IndexSet<u32>,
@@ -649,9 +653,9 @@ impl MutRefAliases {
     /// (the layout `wir_build` also relies on).
     pub(super) fn of_body(
         body: &Body,
-        locals: &[crate::nir::NirLocal],
+        locals: &[NirLocal],
         param_count: usize,
-        type_table: &crate::tir::TypeTable,
+        type_table: &TypeTable,
     ) -> Self {
         use crate::tir::ResolvedType;
         let mut map = Self::default();
@@ -833,10 +837,10 @@ impl RootMutation {
     }
 }
 
-fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &crate::tir::TypeTable) -> bool {
+fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(body.exprs[e].type_id),
-        crate::tir::ResolvedType::MutRef(_)
+        ResolvedType::MutRef(_)
     )
 }
 
@@ -848,8 +852,8 @@ fn is_mut_ref_typed(body: &Body, e: ExprId, type_table: &crate::tir::TypeTable) 
 pub(super) fn for_each_mutated_root(
     body: &Body,
     id: ExprId,
-    type_table: &crate::tir::TypeTable,
-    oracle: &super::value_copy::mutation::MutationOracle<'_>,
+    type_table: &TypeTable,
+    oracle: &MutationOracle<'_>,
     aliases: &MutRefAliases,
     sink: &mut impl FnMut(RootMutation),
 ) {
@@ -917,8 +921,8 @@ pub(super) fn for_each_mutated_root(
 pub(super) fn locals_possibly_mutated(
     body: &Body,
     node: NodeRef,
-    type_table: &crate::tir::TypeTable,
-    oracle: &super::value_copy::mutation::MutationOracle<'_>,
+    type_table: &TypeTable,
+    oracle: &MutationOracle<'_>,
     aliases: &MutRefAliases,
 ) -> IndexSet<u32> {
     let mut out = IndexSet::default();

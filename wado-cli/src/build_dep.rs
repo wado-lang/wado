@@ -17,7 +17,10 @@ use indexmap::IndexMap;
 
 use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest};
 
+use crate::cache::generator_path;
+use crate::cache::write_atomic;
 use crate::oci;
+use crate::registry::parse_version_tag;
 
 /// The specifier grammar lives with [`wado_compiler::kiln::GeneratorSpec`], the
 /// type that carries it: the LSP resolves the same `module:` string against the
@@ -43,7 +46,7 @@ pub async fn resolve_generator_version(
         .await
         .map_err(|e| format!("listing versions of `{package}`: {e}"))?;
     tags.iter()
-        .filter_map(|t| crate::registry::parse_version_tag(t))
+        .filter_map(|t| parse_version_tag(t))
         .filter(|v| req.matches(v))
         .max()
         .map(|v| v.to_string())
@@ -141,7 +144,7 @@ pub async fn resolve_build_dependencies(
 /// Returns the number pulled.
 pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<usize, String> {
     for dep in resolved {
-        let out = crate::cache::generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
+        let out = generator_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         if out.is_file() {
             continue;
         }
@@ -151,8 +154,7 @@ pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<u
                 dep.coordinate, dep.version
             )
         })?;
-        crate::cache::write_atomic(&out, &bytes)
-            .map_err(|e| format!("writing {}: {e}", out.display()))?;
+        write_atomic(&out, &bytes).map_err(|e| format!("writing {}: {e}", out.display()))?;
     }
     Ok(resolved.len())
 }

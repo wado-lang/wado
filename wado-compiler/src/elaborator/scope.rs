@@ -15,6 +15,10 @@ use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
+use crate::ast::AstId;
+use crate::ast::AstIdSpace;
+use crate::defs::DefId;
+use crate::name::FqTraitName;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
@@ -78,11 +82,11 @@ pub(super) struct TraitContext {
     /// The trait `Self` is being elaborated against — the trait an `impl` block
     /// names. Qualifies `Self::Assoc` when `Self` is a concrete type, where
     /// there is no `Self` bound to read the declaring trait off.
-    pub(super) self_trait: Option<crate::defs::DefId>,
+    pub(super) self_trait: Option<DefId>,
     /// The `impl` block whose type parameters are in scope, paired with the
     /// node declaring its receiver binder — what names that binder in a mangle.
     /// The node, not the spelling: a method parameter may shadow the letter.
-    pub(super) impl_owner: Option<(crate::defs::DefId, Option<ast::AstId>)>,
+    pub(super) impl_owner: Option<(DefId, Option<ast::AstId>)>,
     /// Effect parameters (`<effect E>`) in scope, name → declaration
     /// `AstId`. `resolve_effects` consults this to classify a name as
     /// `EffectRef::Param` and to record its use→def edge.
@@ -108,7 +112,7 @@ impl TraitContext {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(super) struct TraitCheckFrame {
     pub(super) type_id: TypeId,
-    pub(super) trait_: crate::defs::DefId,
+    pub(super) trait_: DefId,
     /// `Scope::member_edges` when the question was asked.
     pub(super) member_edges: u32,
 }
@@ -136,7 +140,7 @@ pub(super) struct Scope {
     /// The module a visibility question is asked from, with the id space it
     /// applies to: foreign AST answers to its declaring module, while the
     /// caller's own arguments spliced into it keep their own space.
-    pub(super) foreign_vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
+    pub(super) foreign_vantage: Option<(ModuleSource, AstIdSpace)>,
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -247,7 +251,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// in `space`. See [`Scope::foreign_vantage`].
     pub(super) fn with_foreign_vantage<R>(
         &mut self,
-        vantage: Option<(ModuleSource, crate::ast::AstIdSpace)>,
+        vantage: Option<(ModuleSource, AstIdSpace)>,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
         self.with_scope_field(|scope| &mut scope.foreign_vantage, vantage, body)
@@ -270,12 +274,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn elaborate_bounds_with(
         &self,
         bounds: &[ast::TraitBound],
-        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+        known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<ast::TraitBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
-        let mut out: Vec<(ast::TraitBound, Option<crate::defs::DefId>)> =
-            Vec::with_capacity(bounds.len());
+        let mut out: Vec<(ast::TraitBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for bound in bounds {
             self.merge_bound(&mut out, bound, known);
             if bound.fn_signature.is_some() {
@@ -297,9 +300,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// sites stay two bounds, and only a bound repeated at one site merges.
     fn merge_bound(
         &self,
-        out: &mut Vec<(ast::TraitBound, Option<crate::defs::DefId>)>,
+        out: &mut Vec<(ast::TraitBound, Option<DefId>)>,
         bound: &ast::TraitBound,
-        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+        known: &IndexMap<AstId, FqTraitName>,
     ) {
         if bound.fn_signature.is_some() {
             if !out
@@ -332,11 +335,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn bound_decl(
         &self,
         bound: &ast::TraitBound,
-        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
-    ) -> Option<crate::defs::DefId> {
+        known: &IndexMap<AstId, FqTraitName>,
+    ) -> Option<DefId> {
         known
             .get(&bound.id)
-            .and_then(crate::name::FqTraitName::canonical)
+            .and_then(FqTraitName::canonical)
             .or_else(|| self.trait_decl_at(bound.id, &bound.name))
     }
 
@@ -349,7 +352,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn supertraits_of_bound(
         &self,
         bound: &ast::TraitBound,
-        known: &IndexMap<crate::ast::AstId, crate::name::FqTraitName>,
+        known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<InheritedBound> {
         self.bound_decl(bound, known)
             .map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())

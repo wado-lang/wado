@@ -5,6 +5,7 @@
 //!
 //! Pipeline: `WirPackage` → `emit` (core bytes) → `component` (wrapped) → `Vec<u8>`
 
+use crate::ProviderComponent;
 use crate::module_source::ModuleSource;
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
@@ -17,7 +18,7 @@ mod emit;
 pub fn emit_wasm(
     package: &NirPackage,
     wir_package: &WirPackage,
-    providers: &[crate::ProviderComponent],
+    providers: &[ProviderComponent],
 ) -> Vec<u8> {
     // Step 1: Emit core module bytes from WirPackage
     let core_module =

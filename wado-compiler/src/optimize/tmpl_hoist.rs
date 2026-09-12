@@ -25,6 +25,9 @@ use crate::token::Span;
 
 use super::arena_query::{is_local, stmt_mentions_local};
 use super::gate::{FunctionGate, GatedPass};
+use crate::name::TEMPLATE_RESULT_LOCAL;
+use crate::nir_value_graph::ValueKind;
+use crate::tir::ResolvedType;
 use cranelift_entity::EntityRef;
 
 /// Everything the recognizers match a node against, resolved once per pass run:
@@ -820,7 +823,7 @@ fn extract_tmpl_candidate(
                 value,
                 type_id,
                 ..
-            } if name == crate::name::TEMPLATE_RESULT_LOCAL => {
+            } if name == TEMPLATE_RESULT_LOCAL => {
                 let local_index = *local_index;
                 let value = *value;
                 let type_id = *type_id;
@@ -1011,7 +1014,7 @@ fn extract_fmt_candidates(
 
             // Verify the Formatter type is a struct
             let resolved = type_table.get(ff.value_type_id);
-            if !matches!(resolved, crate::tir::ResolvedType::Struct { .. }) {
+            if !matches!(resolved, ResolvedType::Struct { .. }) {
                 continue;
             }
 
@@ -1451,10 +1454,7 @@ fn build_field_reset(
         field_type,
         span,
     );
-    let zero = engine.const_operand(
-        crate::nir_value_graph::ValueKind::Int(0, field_type),
-        field_type,
-    );
+    let zero = engine.const_operand(ValueKind::Int(0, field_type), field_type);
     let assign = engine.alloc_expr(
         ExprKind::Assign {
             target: field,
@@ -1633,6 +1633,7 @@ fn collect_local_mentions(body: &Body, node: NodeRef, index: u32, out: &mut Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nir::FuncId;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::tir::TypeId;
 
@@ -1683,7 +1684,7 @@ mod tests {
         use cranelift_entity::EntityRef;
         body.exprs.push(ExprNode {
             kind: ExprKind::Call {
-                func_id: crate::nir::FuncId::new(0),
+                func_id: FuncId::new(0),
                 type_args: vec![],
                 args: vec![ArenaCallArg {
                     expr: arg.into(),

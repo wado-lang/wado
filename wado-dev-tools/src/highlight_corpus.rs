@@ -19,6 +19,8 @@
 use std::fmt::Write as _;
 use std::fs;
 
+use crate::grammar_corpus::collect_corpus;
+use crate::grammar_corpus::emit_corpus_to;
 use lexopt::Arg::{Long, Value};
 use wado_compiler::hashmap::IndexMap;
 use wado_lsp::semantic_tokens::{
@@ -237,7 +239,7 @@ pub fn run(mut parser: lexopt::Parser) {
     }
 
     if let Some(out) = emit_corpus {
-        crate::grammar_corpus::emit_corpus_to(&out);
+        emit_corpus_to(&out);
         return;
     }
 
@@ -445,7 +447,7 @@ fn diverge(path: &str, source: &str, mine: &[Piece], theirs: &[Piece]) -> (Vec<D
 
 fn compare_with_gale(gale_tsv: &str, report_path: Option<&str>) {
     let gale = read_gale_dump(gale_tsv);
-    let corpus = crate::grammar_corpus::collect_corpus();
+    let corpus = collect_corpus();
 
     let mut divergences: Vec<Divergence> = Vec::new();
     let mut compared = 0usize;

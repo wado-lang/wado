@@ -10,6 +10,9 @@
 
 use std::future::Future;
 
+use crate::ast::AstIdSpace;
+use crate::hashmap;
+use crate::kiln::options_check::CanonicalOptions;
 use crate::token::Span;
 
 /// Log level for filtering diagnostics and log messages
@@ -289,7 +292,7 @@ pub struct DiagnosticSpan {
     /// The parse these coordinates index, carried from the [`Span`].
     /// [`crate::logger::Logger`] renders `file` from it, so the location stays
     /// whole however far the diagnostic travels from the walk that raised it.
-    pub space: crate::ast::AstIdSpace,
+    pub space: AstIdSpace,
 }
 
 impl DiagnosticSpan {
@@ -430,16 +433,16 @@ pub struct DependencyIndex {
     /// name → entry-module path (the dependency's `[package].lib`), relative
     /// to the host base. These are *source* (path) dependencies, compiled into
     /// the consuming component.
-    pub resolved: crate::hashmap::IndexMap<String, String>,
+    pub resolved: hashmap::IndexMap<String, String>,
     /// name → local `.wasm` path of a *prebuilt component* dependency (a
     /// registry dependency fetched by the CLI), relative to the host base.
     /// Imported across the Component Model boundary, like a
     /// `with { type: "wasm" }` asset, rather than compiled from source.
-    pub components: crate::hashmap::IndexMap<String, String>,
+    pub components: hashmap::IndexMap<String, String>,
     /// name → human-readable reason a *declared* dependency could not be
     /// resolved (e.g. its package declares no `[package].lib`). Surfaced at
     /// the `use` site instead of a generic "invalid module path".
-    pub unresolved: crate::hashmap::IndexMap<String, String>,
+    pub unresolved: hashmap::IndexMap<String, String>,
 }
 
 /// Request handed to a Kiln generator by the compiler.
@@ -457,7 +460,7 @@ pub struct GeneratorRequest {
     /// introspected `generate` options parameter — and passes it as a typed
     /// argument, so the generator receives its `Options` directly. Empty when
     /// the generator takes no options.
-    pub options: crate::kiln::options_check::CanonicalOptions,
+    pub options: CanonicalOptions,
 }
 
 /// One schema file passed to a Kiln generator.
@@ -572,7 +575,7 @@ pub const KILN_GENERATOR_WIT: &str = include_str!("../lib/core/kiln/generator.wi
 #[derive(Debug, Default)]
 pub struct InMemoryCompilerHost {
     /// Source files by path (stored as raw bytes)
-    sources: crate::hashmap::IndexMap<String, Vec<u8>>,
+    sources: hashmap::IndexMap<String, Vec<u8>>,
     /// Collected diagnostics
     diagnostics: std::sync::Mutex<Vec<Diagnostic>>,
 }
@@ -631,6 +634,8 @@ impl CompilerHost for InMemoryCompilerHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::AstIdSpace;
+    use crate::kiln::options_check::CanonicalOptions;
     use std::assert_matches;
 
     #[test]
@@ -668,7 +673,7 @@ mod tests {
                         content: "syntax = \"proto3\";".to_string(),
                     },
                     inputs: vec![],
-                    options: crate::kiln::options_check::CanonicalOptions::default(),
+                    options: CanonicalOptions::default(),
                 };
                 let result = host.run_generator(b"\0asm", req).await;
                 assert_matches!(result, Err(GeneratorRunnerError::Unsupported));
@@ -699,7 +704,7 @@ mod tests {
                 column: 5,
                 end_line: None,
                 end_column: None,
-                space: crate::ast::AstIdSpace::FRESH,
+                space: AstIdSpace::FRESH,
             }),
         };
 

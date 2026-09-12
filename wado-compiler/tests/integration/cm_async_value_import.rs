@@ -2,6 +2,8 @@
 //! hands the readable end over, and drains what comes back — a channel between
 //! two components. See `docs/wep-2026-06-26-wasm-cm-component-import.md`.
 
+use crate::common::compile_source_with_compiler_options;
+use crate::common::run_wasm;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
 
@@ -28,7 +30,7 @@ fn compile_dep(source: &str) -> Vec<u8> {
         lib_world: Some("test:dep/dep@0.1.0".to_string()),
         ..Default::default()
     };
-    crate::common::compile_source_with_compiler_options(Path::new("dep.wado"), source, options)
+    compile_source_with_compiler_options(Path::new("dep.wado"), source, options)
         .expect("dependency compiles as a library world")
         .wasm
 }
@@ -39,7 +41,7 @@ fn run_against_dep(dep_source: &str, consumer_source: &str) -> String {
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(dir.path().join("dep.wasm"), compile_dep(dep_source)).expect("write dep.wasm");
 
-    let wasm = crate::common::compile_source_with_compiler_options(
+    let wasm = compile_source_with_compiler_options(
         &dir.path().join("main.wado"),
         consumer_source,
         CompilerOptions {
@@ -50,7 +52,7 @@ fn run_against_dep(dep_source: &str, consumer_source: &str) -> String {
     .expect("consumer compiles against the imported component")
     .wasm;
 
-    let result = crate::common::run_wasm(wasm).expect("composed component runs");
+    let result = run_wasm(wasm).expect("composed component runs");
     assert!(!result.trapped, "composed component trapped: {result:?}");
     result.stdout
 }

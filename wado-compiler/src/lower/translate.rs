@@ -21,7 +21,22 @@ use crate::lower::plan::{LowerPlan, closure, value_copy};
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use cranelift_entity::EntityRef;
 
+use crate::compiler_item::CompilerItem;
+use crate::lower::bare_asserts;
+use crate::lower::plan::boxing::BoxPlan;
+use crate::lower::plan::string;
+use crate::lower::wide_int_literal;
+use crate::lower::wide_int_literal::literal_from_repr;
+use crate::name::CLOSURE_CALL_METHOD;
+use crate::name::FunctionId;
+use crate::name::case_construct_helper_name;
+use crate::name::case_extract_helper_name;
+use crate::name::field_get_helper_name;
+use crate::name::hole_fmt_helper_name;
+use crate::name::hole_get_helper_name;
+use crate::name::variant_tag_helper_name;
 use crate::nir;
+use crate::nir::FuncId;
 use crate::nir::{
     NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
     NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
@@ -35,6 +50,8 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir;
+use crate::tir::ResolvedType;
+use crate::tir::StructDef;
 use crate::tir::{
     CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, TirBlock, TirCapture, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
@@ -69,8 +86,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     // Lower the `assert_failed` marker before string planning, so a bare-asserts
     // build never collects the dropped diagnostic literals into the data section
     // (and a default build routes the marker back to a plain `panic`).
-    crate::lower::bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
-    let strings = crate::lower::plan::string::plan(&flat);
+    bare_asserts::lower(&flat, flat.codegen_flags.bare_asserts);
+    let strings = string::plan(&flat);
     let FlatPackage {
         entry_module_source,
         type_table,
@@ -104,19 +121,17 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     } = flat;
 
     // For `try_expand_deref_aggregate_assign`.
-    let mut struct_fields_map: IndexMap<
-        (crate::tir::StructDef, Vec<crate::tir::TypeId>),
-        Vec<crate::tir::TirField>,
-    > = IndexMap::default();
+    let mut struct_fields_map: IndexMap<(StructDef, Vec<tir::TypeId>), Vec<TirField>> =
+        IndexMap::default();
     for s in &structs {
         struct_fields_map.insert((s.def, s.type_args.clone()), s.fields.clone());
     }
     // Pre-register every in-package function's canonical `FuncId` (its position,
     // 1:1 with the final function list). Calls stamp against this at construction.
-    let mut ids: IndexMap<crate::name::FunctionId, crate::nir::FuncId> = IndexMap::default();
+    let mut ids: IndexMap<FunctionId, FuncId> = IndexMap::default();
     for (i, func_rc) in functions.iter().enumerate() {
         let key = tir_function_key(&func_rc.borrow());
-        let prev = ids.insert(key, crate::nir::FuncId::new(i));
+        let prev = ids.insert(key, FuncId::new(i));
         // Load-bearing: two functions sharing a canonical key would share a
         // FuncId (a miscompile). The check is O(1); keep it always-on.
         assert!(
@@ -227,19 +242,18 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
     );
     nir.functions.extend(stubs);
     for (i, func_rc) in nir.functions.iter().enumerate() {
-        func_rc.borrow_mut().id = Some(crate::nir::FuncId::new(i));
+        func_rc.borrow_mut().id = Some(FuncId::new(i));
     }
     nir.func_index = ids;
     nir
 }
 
 struct Translator<'a> {
-    box_plan: &'a crate::lower::plan::boxing::BoxPlan,
+    box_plan: &'a BoxPlan,
     value_copy: &'a value_copy::ValueCopyPlan,
     closure: &'a closure::ClosurePlan,
     type_table: Rc<RefCell<TypeTable>>,
-    struct_fields_map:
-        IndexMap<(crate::tir::StructDef, Vec<crate::tir::TypeId>), Vec<crate::tir::TirField>>,
+    struct_fields_map: IndexMap<(StructDef, Vec<tir::TypeId>), Vec<TirField>>,
     /// Mints each call's canonical `FuncId` at construction ("born resolved"),
     /// so the call node never carries a `FunctionRef`. In-package callees resolve
     /// against the pre-built `FunctionId → FuncId` map (positions in
@@ -255,7 +269,7 @@ struct Translator<'a> {
 
 /// Construction-time callee-id minting (see [`Translator::interner`]).
 struct Interner {
-    ids: IndexMap<crate::name::FunctionId, crate::nir::FuncId>,
+    ids: IndexMap<FunctionId, FuncId>,
     stubs: Vec<Rc<RefCell<NirFunction>>>,
     base_len: usize,
     /// Stubs minted for a name the package defines — see `resolve`.
@@ -266,7 +280,7 @@ struct Interner {
 impl Interner {
     /// The `FuncId` of `func_ref`: its pre-registered in-package id, or a freshly
     /// interned extern stub's id.
-    fn resolve(&mut self, func_ref: &nir::FunctionRef) -> crate::nir::FuncId {
+    fn resolve(&mut self, func_ref: &nir::FunctionRef) -> FuncId {
         let key = func_ref.function_id();
         if let Some(&id) = self.ids.get(&key) {
             return id;
@@ -278,16 +292,16 @@ impl Interner {
         #[cfg(debug_assertions)]
         {
             let name = &func_ref.name;
-            let same_name = |k: &crate::name::FunctionId| match k {
-                crate::name::FunctionId::Free(f) => f.name == *name,
-                crate::name::FunctionId::Method(_) => false,
+            let same_name = |k: &FunctionId| match k {
+                FunctionId::Free(f) => f.name == *name,
+                FunctionId::Method(_) => false,
             };
             if let Some(defined) = self.ids.keys().find(|k| same_name(k)) {
                 self.shadowed
                     .push(format!("{key:?} vs defined {defined:?}"));
             }
         }
-        let id = crate::nir::FuncId::new(self.base_len + self.stubs.len());
+        let id = FuncId::new(self.base_len + self.stubs.len());
         let mut stub = NirFunction::extern_stub(func_ref);
         stub.id = Some(id);
         self.stubs.push(Rc::new(RefCell::new(stub)));
@@ -299,7 +313,7 @@ impl Interner {
 /// The canonical `FunctionId` of a TIR function — the same identity its
 /// converted `NirFunction` yields (`FunctionRef::function_id`), so the
 /// pre-built id map agrees with every call site's `convert_function_ref`.
-fn tir_function_key(f: &TirFunction) -> crate::name::FunctionId {
+fn tir_function_key(f: &TirFunction) -> FunctionId {
     nir::FunctionRef {
         module_source: f.module_source.clone(),
         name: f.name.clone(),
@@ -333,7 +347,7 @@ struct FunctionTranslator<'a, 'p> {
     /// Spans of field / whole-value materializations that alias out of a *dead*
     /// aggregate at a struct/tuple literal (place-level move): the copy is elided
     /// exactly as for a whole-local final-use move, but for a projection.
-    move_eligible_place_spans: IndexSet<crate::token::Span>,
+    move_eligible_place_spans: IndexSet<Span>,
     /// Whether this function hands a returned variant's payload out uncopied,
     /// so `return Some(place)` delivers the borrow exactly as `return place`
     /// does ([`value_copy::hands_out_payload`]).
@@ -548,7 +562,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             name,
             type_id,
             is_mut: false,
-            span: crate::token::Span::default(),
+            span: Span::default(),
         });
         index
     }
@@ -862,7 +876,7 @@ impl FunctionTranslator<'_, '_> {
             return None;
         }
         let inner_type_id = match self.base.type_table.borrow().get(ref_type_id) {
-            crate::tir::ResolvedType::MutRef(inner) => *inner,
+            ResolvedType::MutRef(inner) => *inner,
             _ => return None,
         };
 
@@ -873,7 +887,7 @@ impl FunctionTranslator<'_, '_> {
         // layout comes from `SeqField`; and a tuple, with positional fields.
         let inner_resolved = self.base.type_table.borrow().get(inner_type_id).clone();
         let fields: Vec<(String, u32, tir::TypeId)> =
-            if let crate::tir::ResolvedType::Struct { def, type_args } = inner_resolved {
+            if let ResolvedType::Struct { def, type_args } = inner_resolved {
                 self.base
                     .struct_fields_map
                     .get(&(def, type_args))?
@@ -896,7 +910,7 @@ impl FunctionTranslator<'_, '_> {
                         (
                             SeqField::Len.field_name().to_string(),
                             SeqField::Len.index(),
-                            crate::tir::TypeTable::I32,
+                            TypeTable::I32,
                         ),
                     ]
                 } else {
@@ -1230,7 +1244,7 @@ impl FunctionTranslator<'_, '_> {
                 assert!(
                     !matches!(
                         self.base.type_table.borrow().get(expr.type_id),
-                        crate::tir::ResolvedType::Primitive(_)
+                        ResolvedType::Primitive(_)
                     ),
                     "[lower] `null` typed as a primitive: a synthesized placeholder \
                      at a primitive slot needs a zero of that type, not a reference null"
@@ -1352,10 +1366,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Which wide-integer struct `type_id` is; `None` for every other type.
-    fn wide_int_of(
-        &self,
-        type_id: crate::tir::TypeId,
-    ) -> Option<crate::compiler_item::CompilerItem> {
+    fn wide_int_of(&self, type_id: tir::TypeId) -> Option<CompilerItem> {
         self.base.type_table.borrow().wide_int_item(type_id)
     }
 
@@ -1433,7 +1444,7 @@ impl FunctionTranslator<'_, '_> {
         if let TirExprKind::IntLiteral { repr, .. } = &expr.kind
             && let Some(item) = self.wide_int_of(expr.type_id)
         {
-            let literal = crate::lower::wide_int_literal::literal_from_repr(
+            let literal = literal_from_repr(
                 item,
                 repr,
                 expr.type_id,
@@ -1444,14 +1455,8 @@ impl FunctionTranslator<'_, '_> {
         }
         if let TirExprKind::Binary { left, op, right } = &expr.kind
             && let Some(item) = self.wide_int_of(left.type_id)
-            && let Some(call) = crate::lower::wide_int_literal::compare(
-                item,
-                *op,
-                left,
-                right,
-                &self.base.type_table,
-                expr.span,
-            )
+            && let Some(call) =
+                wide_int_literal::compare(item, *op, left, right, &self.base.type_table, expr.span)
         {
             return self.convert_expr(&call);
         }
@@ -1520,13 +1525,9 @@ impl FunctionTranslator<'_, '_> {
         {
             let nir_receiver = self.convert_expr(callee);
             let functor_fq = FqTypeName::shape(&functor.module_source, &functor.struct_name);
-            let call_method_name =
-                MethodName::format_local(&functor_fq, None, crate::name::CLOSURE_CALL_METHOD);
-            let call_method_info = LocalMethodName::new(
-                functor_fq,
-                None,
-                crate::name::CLOSURE_CALL_METHOD.to_string(),
-            );
+            let call_method_name = MethodName::format_local(&functor_fq, None, CLOSURE_CALL_METHOD);
+            let call_method_info =
+                LocalMethodName::new(functor_fq, None, CLOSURE_CALL_METHOD.to_string());
             let call_method_borrow = functor.call_method.borrow();
             // `ArenaCallArg::is_mut` means "the callee may write the caller's
             // storage through this slot", which is `is_mut_ref` — the same
@@ -1882,7 +1883,7 @@ impl FunctionTranslator<'_, '_> {
         has_receiver: bool,
     ) -> ExprKind {
         if func.module_source.is_core_builtin()
-            && crate::tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
+            && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
             && args.len() == 1
             && let Some(type_id) = func.monomorph_info.as_ref().and_then(|mi| {
                 mi.impl_type_args
@@ -2029,7 +2030,7 @@ impl FunctionTranslator<'_, '_> {
                 let peeled = tt.peel_refs(arg_ty);
                 let box_name = tt
                     .compiler_items()
-                    .struct_name(crate::compiler_item::CompilerItem::Box)
+                    .struct_name(CompilerItem::Box)
                     .to_string();
                 let unboxed = self
                     .base
@@ -2055,16 +2056,12 @@ impl FunctionTranslator<'_, '_> {
                 let items = tt.compiler_items();
                 let name = match tt.get(variant_ty) {
                     tir::ResolvedType::GenericInstance { .. } => {
-                        crate::name::variant_tag_helper_name(
-                            &tt.mangle_type_arg_unboxed(variant_ty),
-                        )
+                        variant_tag_helper_name(&tt.mangle_type_arg_unboxed(variant_ty))
                     }
-                    _ => crate::name::MethodName::format_local(
+                    _ => MethodName::format_local(
                         &tt.fq_type_name(variant_ty),
-                        Some(&items.trait_fq(crate::compiler_item::CompilerItem::ReflectVariant)),
-                        items.method_name(
-                            crate::compiler_item::CompilerItem::ReflectVariantDiscriminant,
-                        ),
+                        Some(&items.trait_fq(CompilerItem::ReflectVariant)),
+                        items.method_name(CompilerItem::ReflectVariantDiscriminant),
                     ),
                 };
                 (name, variant_ty)
@@ -2076,7 +2073,7 @@ impl FunctionTranslator<'_, '_> {
             let ta = Self::marker_type_args::<2>(type_args, mi, "struct_field_get");
             let name = {
                 let tt = self.base.type_table.borrow();
-                crate::name::field_get_helper_name(
+                field_get_helper_name(
                     &tt.mangle_type_arg_unboxed(ta[0]),
                     &tt.mangle_type_arg_unboxed(ta[1]),
                 )
@@ -2090,7 +2087,7 @@ impl FunctionTranslator<'_, '_> {
             let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
             let name = {
                 let tt = self.base.type_table.borrow();
-                crate::name::hole_get_helper_name(
+                hole_get_helper_name(
                     &tt.mangle_type_arg_unboxed(ta[0]),
                     &tt.mangle_type_arg_unboxed(ta[1]),
                 )
@@ -2099,17 +2096,16 @@ impl FunctionTranslator<'_, '_> {
         }
         if matches_builtin(&func.name, mi, "hole_fmt") {
             let ta = Self::marker_type_args::<1>(type_args, mi, "hole_fmt");
-            let name = crate::name::hole_fmt_helper_name(
-                &self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]),
-            );
+            let name =
+                hole_fmt_helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
             return Some(self.bridge_call(ta[0], name, args, "hole_fmt"));
         }
 
         let helper_name_for: fn(&str, &str) -> String =
             if matches_builtin(&func.name, mi, "variant_case_extract") {
-                crate::name::case_extract_helper_name
+                case_extract_helper_name
             } else if matches_builtin(&func.name, mi, "variant_case_construct") {
-                crate::name::case_construct_helper_name
+                case_construct_helper_name
             } else {
                 return None;
             };
@@ -2274,7 +2270,7 @@ impl FunctionTranslator<'_, '_> {
     /// `List<u8>` into `struct_fields_map`, but `String` is always present.
     fn seq_u8_repr_type(&self) -> tir::TypeId {
         use crate::compiler_item::{CompilerItem, SeqField};
-        let string_head = crate::tir::StructDef::Decl(
+        let string_head = StructDef::Decl(
             self.base
                 .type_table
                 .borrow()
@@ -2299,11 +2295,8 @@ impl FunctionTranslator<'_, '_> {
         let array_u8_ty = self.seq_u8_repr_type();
         let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(
-                i64::from(len) as u64,
-                crate::tir::TypeTable::I32,
-            ),
-            crate::tir::TypeTable::I32,
+            ValueKind::Int(i64::from(len) as u64, TypeTable::I32),
+            TypeTable::I32,
         );
         let kind = ExprKind::StructLiteral {
             struct_type: seq_type_id,

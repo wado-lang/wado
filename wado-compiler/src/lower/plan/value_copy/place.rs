@@ -6,7 +6,11 @@ use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
 use super::ownership::BuiltinDeclarations;
 use crate::compiler_item::{CompilerItem, CompilerItems};
+use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
+use crate::lower::plan::value_copy::analyze::carries_no_storage;
+use crate::lower::plan::value_copy::analyze::returned_value;
+use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{
     FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt,
@@ -130,8 +134,8 @@ pub type ReturnPaths = FuncKeyMap<ReturnPath>;
 /// turns an `Unknown` into a place, so a recorded entry stays valid.
 #[must_use]
 pub fn compute_return_paths(
-    flat: &crate::flat_package::FlatPackage,
-    call_graph: &super::callgraph::CallGraph,
+    flat: &FlatPackage,
+    call_graph: &callgraph::CallGraph,
     type_table: &TypeTable,
     returns_owned: &FuncKeySet,
     builtins: &BuiltinDeclarations,
@@ -190,8 +194,8 @@ impl TirRefVisitor for ReturnedPlace<'_, '_> {
             // A returned construction hands its payload out uncopied, so the
             // storage the call names is the payload's; an empty case carries
             // none and abstains.
-            let value = super::analyze::returned_value(value, true, self.resolver.type_table);
-            if !super::analyze::carries_no_storage(value) {
+            let value = returned_value(value, true, self.resolver.type_table);
+            if !carries_no_storage(value) {
                 let names = self.resolver.names(value);
                 self.names = match self.names.take() {
                     None => Some(names),

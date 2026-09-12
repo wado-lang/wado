@@ -13,8 +13,10 @@ use cranelift_entity::EntityRef;
 
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::SeqField;
+use crate::compiler_trace;
 use crate::const_eval::{Value, prim_of};
 use crate::hashmap::IndexSet;
+use crate::nir::FuncId;
 use crate::nir::NirFunction;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
@@ -23,12 +25,17 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
+use crate::nir_value_graph::ValueKind;
+use crate::niri::guard_declares_locals;
 use crate::niri::{
     AggregateShapes, BorrowRoot, CalleeMap, CtfeBuiltinMap, EditSink, GlobalEnv, GlobalFieldEnv,
     GlobalKey, Interpreter, Lattice, MaterializingGlobals, build_callee_map,
     build_ctfe_builtin_map, materializing_globals,
 };
+use crate::optimize::alias::alias_classes;
+use crate::optimize::arena_query::projected_const_field;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::token::Span;
 
 /// The whole-program maps [`fold_constants`] feeds its interpreter that depend
 /// on the *set* of functions and globals rather than on body content. Each is a
@@ -108,7 +115,7 @@ pub fn fold_constants(
         let func = &project.functions[fid.index()];
         let changed = fold_function(func, &mut visitor, &mut buffers, &type_table);
         if changed {
-            crate::compiler_trace!("const_fold", "changed {}", func.borrow().name);
+            compiler_trace!("const_fold", "changed {}", func.borrow().name);
         }
         changed
     })
@@ -156,7 +163,7 @@ fn fold_function(
     type_table: &TypeTable,
 ) -> bool {
     let mut func = func_rc.borrow_mut();
-    crate::compiler_trace!("region_seed", "folding {}", func.name);
+    compiler_trace!("region_seed", "folding {}", func.name);
     let NirFunction { body, locals, .. } = &mut *func;
     let Some(body) = body.as_mut() else {
         return false;
@@ -167,7 +174,7 @@ fn fold_function(
     visitor.interpreter.record_aggregate_locals(body);
     visitor
         .interpreter
-        .record_alias_classes(super::alias::alias_classes(body, type_table).to_classes());
+        .record_alias_classes(alias_classes(body, type_table).to_classes());
     let mut engine = Engine::new(body, buffers, locals);
     let root = engine.body.root;
     visitor.visit_block(&mut engine, root)
@@ -231,14 +238,10 @@ impl EditSink for EngineSink<'_, '_> {
     fn replace_kind(&mut self, e: ExprId, kind: ExprKind) {
         self.engine.replace_expr_kind(e, kind);
     }
-    fn replace_with_value(&mut self, e: ExprId, value: crate::const_eval::Value) -> bool {
+    fn replace_with_value(&mut self, e: ExprId, value: Value) -> bool {
         self.engine.replace_expr_with_value(e, value)
     }
-    fn const_operand(
-        &mut self,
-        kind: crate::nir_value_graph::ValueKind,
-        type_id: TypeId,
-    ) -> crate::nir_arena::Operand {
+    fn const_operand(&mut self, kind: ValueKind, type_id: TypeId) -> Operand {
         self.engine.const_operand(kind, type_id)
     }
     fn become_expr(&mut self, dst: ExprId, src: ExprId) {
@@ -247,20 +250,16 @@ impl EditSink for EngineSink<'_, '_> {
     fn redirect_to_value(&mut self, e: ExprId, v: ValueId) -> bool {
         self.engine.redirect_expr(e, Operand::Value(v))
     }
-    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: crate::token::Span) -> ExprId {
+    fn alloc_expr(&mut self, kind: ExprKind, type_id: TypeId, span: Span) -> ExprId {
         self.engine.alloc_expr(kind, type_id, span)
     }
-    fn alloc_stmt(&mut self, kind: StmtKind, span: crate::token::Span) -> StmtId {
+    fn alloc_stmt(&mut self, kind: StmtKind, span: Span) -> StmtId {
         self.engine.alloc_stmt(kind, span)
     }
-    fn alloc_block(
-        &mut self,
-        stmts: Vec<StmtId>,
-        span: crate::token::Span,
-    ) -> crate::nir_arena::BlockId {
+    fn alloc_block(&mut self, stmts: Vec<StmtId>, span: Span) -> BlockId {
         self.engine.alloc_block(stmts, span)
     }
-    fn set_block_stmts(&mut self, block: crate::nir_arena::BlockId, stmts: Vec<StmtId>) {
+    fn set_block_stmts(&mut self, block: BlockId, stmts: Vec<StmtId>) {
         self.engine.set_block_stmts(block, stmts);
     }
 }
@@ -569,7 +568,7 @@ impl GlobalStoreCollector<'_> {
     /// storage.
     ///
     /// [`NirParam::is_mut_ref`]: crate::nir::NirParam::is_mut_ref
-    fn callee_mutates_self(&self, func_id: crate::nir::FuncId) -> Option<bool> {
+    fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
         let func = self.funcs.get(func_id.index())?.borrow();
         let receiver = func.params.first()?;
         Some(
@@ -805,7 +804,7 @@ impl ConstFoldVisitor<'_> {
                     // them. Folding it to its constant would take the bindings
                     // with it.
                     if let Some(g) = arm.guard
-                        && !crate::niri::guard_declares_locals(engine.body, g)
+                        && !guard_declares_locals(engine.body, g)
                     {
                         changed |= self.visit_operand(engine, g);
                     }
@@ -877,7 +876,7 @@ impl ConstFoldVisitor<'_> {
     /// Reports the redirect the engine made, which for this shape is not yet the
     /// same as the projection going away — see #1963.
     fn project_struct_literal(&mut self, engine: &mut Engine, e: ExprId) -> bool {
-        let Some(proj) = super::arena_query::projected_const_field(engine.body, e) else {
+        let Some(proj) = projected_const_field(engine.body, e) else {
             return false;
         };
         engine.redirect_expr(e, proj)

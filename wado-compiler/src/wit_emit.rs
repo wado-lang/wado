@@ -13,11 +13,21 @@ use wit_encoder::{
 
 use std::sync::Arc;
 
+use crate::ast;
+use crate::ast::NamedType;
+use crate::component_model::CmFunctionInfo;
+use crate::component_model::CmInterfaceInfo;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
+use crate::module_source::is_bundled_specifier;
 use crate::name::to_kebab;
 use crate::semantics::Semantics;
+use crate::tir::TirEnum;
+use crate::tir::TirFlags;
+use crate::tir::TirNewtype;
+use crate::tir::TirStruct;
+use crate::tir::TirVariantDecl;
 use crate::tir::{PrimitiveType, ResolvedType, TirModule, TypeId, TypeTable};
 use crate::world_registry::WorldRegistry;
 
@@ -273,11 +283,11 @@ struct ExportedFn {
 /// Name-indexed view of the user-authored type declarations.
 #[derive(Default)]
 struct TypeDecls<'a> {
-    structs: BTreeMap<String, &'a crate::tir::TirStruct>,
-    enums: BTreeMap<String, &'a crate::tir::TirEnum>,
-    variants: BTreeMap<String, &'a crate::tir::TirVariantDecl>,
-    flags: BTreeMap<String, &'a crate::tir::TirFlags>,
-    newtypes: BTreeMap<String, &'a crate::tir::TirNewtype>,
+    structs: BTreeMap<String, &'a TirStruct>,
+    enums: BTreeMap<String, &'a TirEnum>,
+    variants: BTreeMap<String, &'a TirVariantDecl>,
+    flags: BTreeMap<String, &'a TirFlags>,
+    newtypes: BTreeMap<String, &'a TirNewtype>,
 }
 
 impl<'a> Emitter<'a> {
@@ -458,7 +468,7 @@ impl<'a> Emitter<'a> {
         let Some(registry) = self.cm_interface_registry else {
             return roots;
         };
-        let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
+        let infos: Vec<CmInterfaceInfo> = registry.interfaces().collect();
 
         let mut visited: BTreeSet<String> = BTreeSet::new();
         let mut work: Vec<String> = roots.into_iter().collect();
@@ -500,7 +510,7 @@ impl<'a> Emitter<'a> {
         let Some(registry) = self.cm_interface_registry else {
             return Ok(Vec::new());
         };
-        let infos: Vec<crate::component_model::CmInterfaceInfo> = registry.interfaces().collect();
+        let infos: Vec<CmInterfaceInfo> = registry.interfaces().collect();
 
         // Group the referenced interface FQs by their owning package.
         let mut by_package: BTreeMap<(String, String, String), Vec<String>> = BTreeMap::new();
@@ -541,8 +551,8 @@ impl<'a> Emitter<'a> {
     fn reconstruct_interface(
         &self,
         fq: &str,
-        infos: &[crate::component_model::CmInterfaceInfo],
-        registry: &crate::component_model::CmInterfaceRegistry,
+        infos: &[CmInterfaceInfo],
+        registry: &CmInterfaceRegistry,
     ) -> Result<Interface, WitEmitError> {
         let local_name = FqParts::parse(fq)
             .map(|p| p.interface)
@@ -661,7 +671,7 @@ impl<'a> Emitter<'a> {
     /// Reconstruct one resource method/static/constructor as a `ResourceFunc`.
     fn build_resource_func(
         &self,
-        func: &crate::component_model::CmFunctionInfo,
+        func: &CmFunctionInfo,
         kind: ResKind,
         member: &str,
         fq: &str,
@@ -690,7 +700,7 @@ impl<'a> Emitter<'a> {
     /// wrapper on async functions and collapsing unit to "no result".
     fn map_cm_result(
         &self,
-        ret: &Option<crate::ast::Type>,
+        ret: &Option<ast::Type>,
         is_async: bool,
         fq: &str,
         uses: &mut Vec<(String, String)>,
@@ -719,7 +729,7 @@ impl<'a> Emitter<'a> {
     /// references match their definitions. Records a cross-interface `use`.
     fn cm_type_name(
         &self,
-        named: &crate::ast::NamedType,
+        named: &NamedType,
         current_fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> String {
@@ -752,7 +762,7 @@ impl<'a> Emitter<'a> {
     /// render here.
     fn map_ast_type(
         &self,
-        ty: &crate::ast::Type,
+        ty: &ast::Type,
         current_fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> Result<Type, WitEmitError> {
@@ -764,7 +774,7 @@ impl<'a> Emitter<'a> {
 
     /// The universal handle an extern-handle-backed resource crosses as. It
     /// names no WIT type, so `&handle` renders as the handle, not a `borrow`.
-    fn extern_handle(&self, named: &crate::ast::NamedType) -> Option<Type> {
+    fn extern_handle(&self, named: &NamedType) -> Option<Type> {
         let registry = self.cm_interface_registry?;
         let source = registry.source_interface(named)?;
         registry
@@ -775,7 +785,7 @@ impl<'a> Emitter<'a> {
     /// Render an AST leaf: primitive, named CM type, or `&Resource` borrow.
     fn map_ast_leaf(
         &self,
-        ty: &crate::ast::Type,
+        ty: &ast::Type,
         current_fq: &str,
         uses: &mut Vec<(String, String)>,
     ) -> Result<Type, WitEmitError> {
@@ -1059,7 +1069,7 @@ fn assemble<T>(
 /// Classify a CM-signature AST type into its structural shape. `AsyncCall<T>`
 /// is transparent; a `&Named` (a CM resource) is a leaf rendered `borrow<R>`,
 /// while other references are transparent.
-fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
+fn classify_ast(ty: &ast::Type) -> CmShape<ast::Type> {
     use crate::ast::Type as AstType;
     match ty {
         AstType::Tuple(elems) => CmShape::Tuple(elems.clone()),
@@ -1087,7 +1097,7 @@ fn classify_ast(ty: &crate::ast::Type) -> CmShape<crate::ast::Type> {
 }
 
 /// A `Result` arm in AST form: a unit arm is absent (`_`).
-fn non_unit_ast(ty: &crate::ast::Type) -> Option<crate::ast::Type> {
+fn non_unit_ast(ty: &ast::Type) -> Option<ast::Type> {
     if ty.is_unit() { None } else { Some(ty.clone()) }
 }
 
@@ -1231,7 +1241,7 @@ fn primitive_by_name(name: &str) -> Option<Type> {
 /// by `ty` (recursing through generics, tuples, references, and function
 /// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
 fn collect_named_type_sources(
-    ty: &crate::ast::Type,
+    ty: &ast::Type,
     registry: &CmInterfaceRegistry,
     out: &mut Vec<String>,
 ) {
@@ -1239,7 +1249,7 @@ fn collect_named_type_sources(
     match ty {
         Type::Named(named) => {
             if let Some(src) = registry.source_interface(named)
-                && crate::module_source::is_bundled_specifier(&src)
+                && is_bundled_specifier(&src)
             {
                 out.push(src);
             }

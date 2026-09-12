@@ -1,5 +1,7 @@
 // AST definitions for Wado
 
+use crate::defs::DefId;
+use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
@@ -2581,7 +2583,7 @@ impl Expr {
     /// reference to an earlier parameter (`fn make_rect(w, h = w)`) into the
     /// caller's value. Traverses only the forms a simple, pure default may
     /// contain; blocks, closures and match/if cannot appear in one.
-    pub fn substitute_idents(&mut self, subs: &crate::hashmap::IndexMap<String, Expr>) {
+    pub fn substitute_idents(&mut self, subs: &hashmap::IndexMap<String, Expr>) {
         match self {
             Expr::Ident(ident) => {
                 if let Some(replacement) = subs.get(&ident.name) {
@@ -3511,7 +3513,7 @@ pub struct TraitBound {
     /// at its own site by the resolve pass; a bound the compiler rebuilds
     /// already knows its referent, and recording it here is what keeps that
     /// referent from being re-derived out of `name`.
-    pub resolved: Option<crate::defs::DefId>,
+    pub resolved: Option<DefId>,
 }
 
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`

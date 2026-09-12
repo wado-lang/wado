@@ -8,10 +8,12 @@
 //! counts as used so a function only it calls is not reported dead, but is
 //! emitted only when a call reaches it.
 
+use crate::ast::type_head_name;
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, Function, Item, Module, for_each_pattern_binding,
 };
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::CmNamespace;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -155,7 +157,7 @@ pub(crate) fn compute(
                     let synthesis_dispatched = compiler_named
                         .synthesis_dispatched_impls
                         .contains(&impl_block.id);
-                    let self_name = crate::ast::type_head_name(&impl_block.ty);
+                    let self_name = type_head_name(&impl_block.ty);
                     for method in &impl_block.methods {
                         let key = method.id;
                         graph.add_function_edges(method, references, &key);
@@ -1075,7 +1077,7 @@ pub(crate) fn is_user_authored(source: &ModuleSource) -> bool {
             let path = path.as_str();
             !(path.starts_with("core:")
                 || path.starts_with("wasm:")
-                || crate::module_source::CmNamespace::split_specifier(path).is_some())
+                || CmNamespace::split_specifier(path).is_some())
         }
         _ => false,
     }

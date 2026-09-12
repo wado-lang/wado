@@ -13,6 +13,14 @@ use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
+use crate::niri::CtfeBuiltinMap;
+use crate::niri::build_ctfe_builtin_map;
+use crate::optimize::alias::CallImmutability;
+use crate::optimize::alias::FirstParamTypes;
+use crate::optimize::alias::builder_alias_sets;
+use crate::optimize::alias::first_param_types;
+use crate::optimize::extract::extract_const;
+use crate::optimize::extract::is_place_read;
 use crate::tir::TypeTable;
 
 /// Forwards stores to loads in every function. Used by the post-`field_scalarize`
@@ -21,10 +29,10 @@ use crate::tir::TypeTable;
 /// a later pass, and the only one that runs after it.
 pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
     let type_table = project.type_table.borrow();
-    let first_param_types = super::alias::first_param_types(project);
-    let call_immutability = super::alias::CallImmutability::new(project, &type_table);
+    let first_param_types = first_param_types(project);
+    let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let ctfe_builtins = crate::niri::build_ctfe_builtin_map(project);
+    let ctfe_builtins = build_ctfe_builtin_map(project);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -47,10 +55,10 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
 fn forward_one(
     func: &mut NirFunction,
     type_table: &TypeTable,
-    first_param_types: &super::alias::FirstParamTypes,
-    call_immutability: &super::alias::CallImmutability,
+    first_param_types: &FirstParamTypes,
+    call_immutability: &CallImmutability,
     pure_builtin_callees: &IndexSet<FuncId>,
-    ctfe_builtins: &crate::niri::CtfeBuiltinMap,
+    ctfe_builtins: &CtfeBuiltinMap,
     buffers: &mut EngineBuffers,
 ) -> bool {
     if func.body.is_none() {
@@ -77,7 +85,7 @@ fn forward_one(
         ..
     } = &mut *func;
     let body = body.as_mut().expect("checked above");
-    let (aliased, untrackable, mut_escaped) = super::alias::builder_alias_sets(
+    let (aliased, untrackable, mut_escaped) = builder_alias_sets(
         body,
         locals,
         address_taken_locals,
@@ -171,7 +179,7 @@ fn forward_at_root(
         // not the value, is used; forwarding the stored literal would destroy
         // the place and lose a callee's write-back (`g(&mut obj.f)` → `g(&mut
         // 5)`). Mirrors the sibling `extract::freeze_pure_arith` guard.
-        if super::extract::is_place_read(engine, expr) {
+        if is_place_read(engine, expr) {
             continue;
         }
         // A read not in `forwarded` has no re-emittable value.
@@ -180,7 +188,7 @@ fn forward_at_root(
         };
         // The constant promotes into `expr`'s parent operand slot (WEP: The Live
         // ValueGraph).
-        let Some(value) = super::extract::extract_const(engine, vid, expr) else {
+        let Some(value) = extract_const(engine, vid, expr) else {
             continue;
         };
         changed |= engine.replace_expr_with_value(expr, value);

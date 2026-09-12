@@ -13,6 +13,14 @@ use crate::nir_arena::{
 use crate::tir::TypeTable;
 
 use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
+use crate::compiler_trace;
+use crate::const_eval::MAX_SEQ_ELEMENTS;
+use crate::const_eval::Value;
+use crate::nir_value_graph::value_kind_to_const;
+use crate::niri::CtfeBuiltin;
+use crate::niri::CtfeBuiltinMap;
+use crate::tir;
+use crate::tir::PrimitiveType;
 
 /// Per-function heap-version tracker: every node that may write the heap bumps
 /// the covering generation, and a read's effective version is the max over all
@@ -482,7 +490,7 @@ struct Builder<'a> {
     assigned_fields: IndexSet<u32>,
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// this walk saw `array_new` allocate folds to the length it was given.
-    ctfe_builtins: crate::niri::CtfeBuiltinMap,
+    ctfe_builtins: CtfeBuiltinMap,
     /// Locals a struct literal bound, whose value therefore names an object
     /// rather than a datum. See [`Builder::bump_call_effects`].
     seeded_aggregates: IndexSet<u32>,
@@ -547,7 +555,7 @@ impl<'a> Builder<'a> {
             ref_targets: IndexMap::default(),
             field_ref_targets: IndexMap::default(),
             assigned_fields: assigned_field_indices(body),
-            ctfe_builtins: crate::niri::CtfeBuiltinMap::default(),
+            ctfe_builtins: CtfeBuiltinMap::default(),
             seeded_aggregates: IndexSet::default(),
             array_lengths: IndexMap::default(),
             type_table,
@@ -561,7 +569,7 @@ impl<'a> Builder<'a> {
 
     /// Type of an operand during the build: from the skeleton expr, or from the
     /// build pool for a promoted constant (its source type was seeded there).
-    fn operand_type(&self, op: Operand) -> crate::tir::TypeId {
+    fn operand_type(&self, op: Operand) -> tir::TypeId {
         match op {
             Operand::Expr(e) => self.body.exprs[e].type_id,
             Operand::Value(v) => self
@@ -583,7 +591,7 @@ impl<'a> Builder<'a> {
         rhs: ValueId,
         left: Operand,
         right: Operand,
-        result_type: crate::tir::TypeId,
+        result_type: tir::TypeId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         // Reflexivity: operands sharing a `ValueId` are the same value, so
@@ -595,11 +603,7 @@ impl<'a> Builder<'a> {
             && matches!(op, NirBinaryOp::Eq | NirBinaryOp::NotEq)
             && !matches!(
                 const_eval::prim_of(self.operand_type(left), tt),
-                Some(
-                    crate::tir::PrimitiveType::F32
-                        | crate::tir::PrimitiveType::F64
-                        | crate::tir::PrimitiveType::V128
-                )
+                Some(PrimitiveType::F32 | PrimitiveType::F64 | PrimitiveType::V128)
             )
         {
             return Some(
@@ -650,7 +654,7 @@ impl<'a> Builder<'a> {
         op: NirUnaryOp,
         operand: ValueId,
         inner: Operand,
-        result_type: crate::tir::TypeId,
+        result_type: tir::TypeId,
     ) -> Option<ValueId> {
         let tt = self.type_table?;
         let v = self.value_to_const(operand, inner, tt)?;
@@ -668,12 +672,12 @@ impl<'a> Builder<'a> {
         tt: &TypeTable,
     ) -> Option<const_eval::Value> {
         let prim = const_eval::prim_of(self.operand_type(op), tt);
-        super::value_kind_to_const(self.pool.kind(vn), prim)
+        value_kind_to_const(self.pool.kind(vn), prim)
     }
 
     /// Intern a folded constant, carrying the folded expr's NIR type as the
     /// width-bearing type.
-    fn const_to_value(&mut self, v: const_eval::Value, result_type: crate::tir::TypeId) -> ValueId {
+    fn const_to_value(&mut self, v: const_eval::Value, result_type: tir::TypeId) -> ValueId {
         self.pool.intern_const(v, result_type)
     }
 
@@ -734,7 +738,7 @@ impl<'a> Builder<'a> {
             return None;
         }
         let array = self.pool.fresh_opaque_with_source(OpaqueSource::Expr(call));
-        crate::compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
+        compiler_trace!("vg_field", "[{}] array_new -> len {len:?}", self.trace_id);
         self.array_lengths.insert(array, len);
         Some(array)
     }
@@ -754,7 +758,7 @@ impl<'a> Builder<'a> {
         // lower phase writes, which names the same allocation.
         loop {
             if let Some(len) = self.array_lengths.get(&array).copied() {
-                crate::compiler_trace!(
+                compiler_trace!(
                     "vg_field",
                     "[{}] array_len {array:?} -> {len:?}",
                     self.trace_id
@@ -881,7 +885,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn walk_block(&mut self, block: crate::nir_arena::BlockId) {
+    fn walk_block(&mut self, block: BlockId) {
         let stmts = self.body.blocks[block].stmts.clone();
         for s in stmts {
             self.walk_stmt(s);
@@ -1283,14 +1287,14 @@ impl<'a> Builder<'a> {
                 // Store→load forwarding: a value stored to this exact
                 // `(receiver, field, version)` is the value this read sees.
                 if let Some(&stored) = self.field_store.get(&(recv, field_index, heap_ver)) {
-                    crate::compiler_trace!(
+                    compiler_trace!(
                         "vg_field",
                         "[{}] hit: recv={recv:?} field={field_index} -> {stored:?}",
                         self.trace_id
                     );
                     return Some(stored);
                 }
-                crate::compiler_trace!(
+                compiler_trace!(
                     "vg_field",
                     "[{}] miss: recv={recv:?} field={field_index} root={root:?} ver={heap_ver:?}, \
                      {} store(s) seeded for that field",
@@ -1356,12 +1360,8 @@ impl<'a> Builder<'a> {
                 }
                 self.bump_call_effects(expr);
                 match (builtin, arg) {
-                    (Some(crate::niri::CtfeBuiltin::ArrayNew), Some(len)) => {
-                        self.allocated_array(expr, len)
-                    }
-                    (Some(crate::niri::CtfeBuiltin::ArrayLen), Some(array)) => {
-                        self.known_array_len(array)
-                    }
+                    (Some(CtfeBuiltin::ArrayNew), Some(len)) => self.allocated_array(expr, len),
+                    (Some(CtfeBuiltin::ArrayLen), Some(array)) => self.known_array_len(array),
                     _ => None,
                 }
             }
@@ -1392,18 +1392,18 @@ impl<'a> Builder<'a> {
                 // Length first: `Value::seq` declines past `MAX_SEQ_ELEMENTS`,
                 // and building a `Value` per byte only to throw the vector away
                 // would walk an embedded asset on every graph build.
-                if bytes.len() > crate::const_eval::MAX_SEQ_ELEMENTS {
+                if bytes.len() > MAX_SEQ_ELEMENTS {
                     return None;
                 }
                 let elements = bytes
                     .iter()
-                    .map(|b| crate::const_eval::Value::Int {
+                    .map(|b| Value::Int {
                         value: u64::from(*b),
-                        prim: crate::tir::PrimitiveType::U8,
+                        prim: PrimitiveType::U8,
                     })
                     .collect();
                 let ty = self.body.exprs[expr].type_id;
-                crate::const_eval::Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
+                Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
             }
             ExprKind::GlobalVarGet { .. } => None,
         }
@@ -1418,7 +1418,7 @@ impl<'a> Builder<'a> {
     fn seed_struct_literal_fields(&mut self, root: u32, recv: ValueId, value_expr: ExprId) {
         // `untrackable` (`stores`-aliased) receivers never seed.
         if self.untrackable.contains(&root) {
-            crate::compiler_trace!("vg_field", "local {root}: untrackable, no field seeded");
+            compiler_trace!("vg_field", "local {root}: untrackable, no field seeded");
             return;
         }
         let mut producer = value_expr;
@@ -1451,7 +1451,7 @@ impl<'a> Builder<'a> {
                 ExprKind::LabeledBlock { .. } => {
                     // Several producers leave no one literal to peel towards.
                     let Some(value) = self.body.block_yield(producer) else {
-                        crate::compiler_trace!("vg_field", "peel {root}: no single block value");
+                        compiler_trace!("vg_field", "peel {root}: no single block value");
                         return;
                     };
                     let Some(pe) = value.as_expr() else {
@@ -1483,7 +1483,7 @@ impl<'a> Builder<'a> {
                     self.aliased.contains(&pointee) || self.mut_escaped.contains(&pointee),
                     "a borrowed local escapes, so a stale pointee outlives no call"
                 );
-                crate::compiler_trace!(
+                compiler_trace!(
                     "vg_field",
                     "[{}] field {field_index} of {recv:?} borrows local {pointee}",
                     self.trace_id
@@ -1499,7 +1499,7 @@ impl<'a> Builder<'a> {
         if seeded > 0 {
             self.seeded_aggregates.insert(root);
         }
-        crate::compiler_trace!(
+        compiler_trace!(
             "vg_field",
             "[{}] seed local {root} ({}): {seeded} of {attempted} fields, recv={recv:?}",
             self.trace_id,
@@ -1885,7 +1885,7 @@ impl<'a> Builder<'a> {
     /// is a terminator. Never-type detection is missing for want of a
     /// `TypeTable`, so a `panic()`-terminated arm counts as falling through;
     /// it modifies no field, so the extra arm in a heap join changes nothing.
-    fn block_falls_through(&self, block: crate::nir_arena::BlockId) -> bool {
+    fn block_falls_through(&self, block: BlockId) -> bool {
         match self.body.blocks[block].stmts.last() {
             None => true,
             Some(&last) => self.stmt_falls_through(last),
@@ -1979,7 +1979,7 @@ impl<'a> Builder<'a> {
     /// neither pre- nor post-loop reads. Heap invalidation is selective
     /// ([`collect_loop_heap_effects`]) — a field the body never writes keeps its
     /// pre-loop version, so a store before a builtin-only loop still forwards.
-    fn walk_loop(&mut self, body_block: crate::nir_arena::BlockId) {
+    fn walk_loop(&mut self, body_block: BlockId) {
         let writes = writes_of_block(self.body, body_block, &mut self.block_writes);
         let heap_effects = collect_loop_heap_effects(self.body, &self.call_facts(), body_block);
         // Snapshot before the reassigned-local opaques below overwrite the
@@ -2066,7 +2066,7 @@ impl<'a> Builder<'a> {
     /// including locals written on a `break`-only path that fall-through
     /// never sees. Locals not written in the subtree keep their pre-block
     /// value.
-    fn dirty_all_writes_in_block(&mut self, block: crate::nir_arena::BlockId) {
+    fn dirty_all_writes_in_block(&mut self, block: BlockId) {
         let writes = writes_of_block(self.body, block, &mut self.block_writes);
         for &idx in writes.iter() {
             self.invalidate_local(idx);
@@ -2077,7 +2077,7 @@ impl<'a> Builder<'a> {
 
 fn writes_of_block(
     body: &Body,
-    block: crate::nir_arena::BlockId,
+    block: BlockId,
     cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) -> std::rc::Rc<IndexSet<u32>> {
     if let Some(ws) = cache.get(&block) {
@@ -2119,7 +2119,7 @@ pub struct CallFacts<'a> {
     pub receiver_immutable: &'a IndexSet<ExprId>,
     /// Which sequence builtin each callee id is, so `array_len` over an array
     /// the walk saw allocated folds to the length it was given.
-    pub ctfe_builtins: &'a crate::niri::CtfeBuiltinMap,
+    pub ctfe_builtins: &'a CtfeBuiltinMap,
 }
 
 /// A loop body's heap-write effects, used to invalidate exactly the fields a
@@ -2284,7 +2284,7 @@ fn record_loop_heap_write(
 /// of locals `Opaque` on entry/exit of flow-opaque constructs.
 fn collect_writes_in_block(
     body: &Body,
-    block: crate::nir_arena::BlockId,
+    block: BlockId,
     out: &mut IndexSet<u32>,
     cache: &mut IndexMap<BlockId, std::rc::Rc<IndexSet<u32>>>,
 ) {
@@ -2380,6 +2380,8 @@ fn collect_writes_in_pattern(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nir_value_graph::ValueKind;
+    use crate::niri::CtfeBuiltinMap;
     use TypeTable;
 
     // ----- Body builders for tests -----
@@ -2389,10 +2391,10 @@ mod tests {
     }
 
     fn int_lit(body: &mut Body, value: u64) -> Operand {
-        Operand::Value(body.values.alloc_unshared(
-            crate::nir_value_graph::ValueKind::Int(value, TypeTable::I32),
-            TypeTable::I32,
-        ))
+        Operand::Value(
+            body.values
+                .alloc_unshared(ValueKind::Int(value, TypeTable::I32), TypeTable::I32),
+        )
     }
 
     // ----- Tests -----
@@ -2491,7 +2493,7 @@ mod tests {
         builtin: IndexSet<FuncId>,
         pure: IndexSet<ExprId>,
         immutable: IndexSet<ExprId>,
-        ctfe_builtins: crate::niri::CtfeBuiltinMap,
+        ctfe_builtins: CtfeBuiltinMap,
     }
 
     impl TestFacts {
@@ -2641,7 +2643,7 @@ mod tests {
         let empty = IndexSet::default();
         let no_calls = IndexSet::default();
         let no_callees = IndexSet::default();
-        let no_builtin_map = crate::niri::CtfeBuiltinMap::default();
+        let no_builtin_map = CtfeBuiltinMap::default();
         let escaped = |order: [u32; 2]| order.into_iter().collect::<IndexSet<u32>>();
 
         let build_with = |mut_escaped: &IndexSet<u32>| {

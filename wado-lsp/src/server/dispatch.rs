@@ -7,6 +7,8 @@ use serde_json::Value;
 
 use crate::Engine;
 use crate::host::FilesystemCompilerHost;
+use crate::semantic_tokens::TOKEN_MODIFIERS;
+use crate::semantic_tokens::TOKEN_TYPES;
 use crate::server::rpc::{
     DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
     InitializeParams, InitializeResult, InlayHintParams, JsonRpcRequest, PublishDiagnosticsParams,
@@ -159,8 +161,8 @@ pub async fn dispatch<W: Write>(
                         document_highlight_provider: Some(true),
                         semantic_tokens_provider: Some(SemanticTokensOptions {
                             legend: SemanticTokensLegend {
-                                token_types: crate::semantic_tokens::TOKEN_TYPES,
-                                token_modifiers: crate::semantic_tokens::TOKEN_MODIFIERS,
+                                token_types: TOKEN_TYPES,
+                                token_modifiers: TOKEN_MODIFIERS,
                             },
                             full: true,
                         }),

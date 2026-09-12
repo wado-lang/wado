@@ -11,6 +11,7 @@ use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
 use crate::nir_arena::Operand;
+use crate::wir_build::packed_array_is_eager;
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
 /// it is represented as, together with signedness for integer types.
@@ -93,7 +94,7 @@ impl FunctionTranslator<'_, '_> {
                 type_id: array_type_id,
                 len: Box::new(WirInstr::I32Const(0)),
             }
-        } else if crate::wir_build::packed_array_is_eager(
+        } else if packed_array_is_eager(
             byte_len,
             self.ctx.package.string_inline_max_bytes,
             self.force_fixed_string_repr,

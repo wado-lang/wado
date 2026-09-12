@@ -26,5 +26,5 @@ if [ "${#corpus[@]}" -gt 0 ]; then
 fi
 
 cargo build --bin wado
-exec ./target/debug/wado run -O3 package-gale/tools/rust_inline_paths.wado -- \
+exec ./target/debug/wado run package-gale/tools/rust_inline_paths.wado -- \
     "${corpus[@]}" "$@"
