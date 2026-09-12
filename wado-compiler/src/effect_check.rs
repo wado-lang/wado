@@ -7,6 +7,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
+use crate::name::is_test_function;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
@@ -586,7 +587,7 @@ fn check_function_effects_sem(
     };
     // `#[ambient]` bypasses the effect system; test helpers implicitly hold
     // every effect.
-    if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_") {
+    if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
         return;
     }
     let caller_key = func.id;
@@ -1836,8 +1837,7 @@ impl StoresCtx<'_> {
         let Some(body) = &func.body else {
             return;
         };
-        if func.attrs.iter().any(|attr| attr.name == "ambient") || func.name.starts_with("__test_")
-        {
+        if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
             return;
         }
         let param_types = self

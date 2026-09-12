@@ -101,7 +101,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
             func.local_count += 1;
             let name = func.params[local_idx as usize].name.clone();
             func.locals.push(TirLocal {
-                name: format!("__boxed_param_{local_idx}"),
+                name: format!("$boxed_param_{local_idx}"),
                 type_id: box_type_id,
                 is_mut: false,
                 span: Span::default(),
@@ -154,7 +154,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
             );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
-                    name: format!("__boxed_param_{param_idx}"),
+                    name: format!("$boxed_param_{param_idx}"),
                     local_index: *shadow_idx,
                     is_mut: false,
                     is_reactive: false,

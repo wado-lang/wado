@@ -5327,7 +5327,7 @@ impl<'a> TirUnparser<'a> {
 
             // Lowered pattern matching nodes
             TirExprKind::VariantTag { expr } => {
-                self.output.push_str("__variant_tag(");
+                self.output.push_str("$variant_tag(");
                 self.unparse_expr(expr);
                 self.output.push(')');
             }
@@ -5336,7 +5336,7 @@ impl<'a> TirUnparser<'a> {
                 case_index,
                 case_name,
             } => {
-                self.output.push_str("__variant_test(");
+                self.output.push_str("$variant_test(");
                 self.unparse_expr(expr);
                 self.output
                     .push_str(&format!(", case={case_index}, name={case_name})"));
@@ -5344,7 +5344,7 @@ impl<'a> TirUnparser<'a> {
             TirExprKind::VariantPayload {
                 expr, case_index, ..
             } => {
-                self.output.push_str("__variant_payload(");
+                self.output.push_str("$variant_payload(");
                 self.unparse_expr(expr);
                 self.output.push_str(&format!(", case={case_index})"));
             }
@@ -5489,7 +5489,7 @@ fn tir_unary_op_str(op: TirUnaryOp) -> &'static str {
 
 /// Unparse a TIR closure as `|name: Type, …| body`, or `|…| captures[…] body`
 /// when it captures. `lower::plan::closure` bakes the result into
-/// `__Closure_N^Inspect::inspect` under the alternate flag. The `captures[…]` clause has no
+/// `$Closure_N^Inspect::inspect` under the alternate flag. The `captures[…]` clause has no
 /// surface syntax — closures capture implicitly — but is shown deliberately, so
 /// only a non-capturing closure round-trips through the parser.
 pub fn unparse_tir_closure_source(

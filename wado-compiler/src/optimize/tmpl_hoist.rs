@@ -1,7 +1,7 @@
 //! Template-string buffer hoisting: a `$tmpl` block inside a loop gets its
 //! `String` allocation lifted before the loop and reused, each iteration
 //! resetting `used = 0` instead of building a fresh struct. Sound only when
-//! neither the template result nor the inner `__r` escapes the iteration, which
+//! neither the template result nor the inner `$r` escapes the iteration, which
 //! [`EscapeScan`] and [`template_buf_escapes`] decide. Runs as a [`Rule`].
 //!
 //! The block comes from `synthesis::template`, whose module docs list the names
@@ -190,7 +190,7 @@ fn nearest_child_blocks(body: &Body, node: NodeRef, out: &mut Vec<BlockId>) {
 
 /// Information about a `$tmpl` block that can be hoisted.
 struct TmplCandidate {
-    /// Index of the `__r` local in the `$tmpl` block
+    /// Index of the `$r` local in the `$tmpl` block
     buf_local_index: u32,
     /// The init-value expression node id (e.g. `String { repr: array_new(N),
     /// used: 0 }`). Reused as the hoisted `Let`'s value — the original first
@@ -212,7 +212,7 @@ struct TmplCandidate {
 struct FmtCandidate {
     /// Index of the statement inside the `$tmpl` block that creates the Formatter
     stmt_index: usize,
-    /// The local index being assigned to (e.g., `__local_13`)
+    /// The local index being assigned to (e.g., `$local_13`)
     fmt_local_index: u32,
     /// The normalized Formatter struct-literal node id (`buf` pointing at the
     /// hoisted buffer). Reused as the hoisted `Let`'s value.
@@ -258,9 +258,9 @@ fn collect_escaping_locals(body: &Body, block: BlockId) -> IndexSet<u32> {
     scan.finish()
 }
 
-/// Whether the template's own `__r` buffer local escapes its `$tmpl` block
+/// Whether the template's own `$r` buffer local escapes its `$tmpl` block
 /// through any position other than the two shapes the transform itself
-/// rewrites: the verified trailing `break $tmpl: __r` (whose value becomes
+/// rewrites: the verified trailing `break $tmpl: $r` (whose value becomes
 /// the outer `let`, escape-checked separately) and Formatter `buf:` field
 /// linkage (normalized to the hoisted buffer by `extract_fmt_candidates`; a
 /// non-hoisted Formatter still only holds the buffer within the iteration).
@@ -282,7 +282,7 @@ struct EscapeScan<'a> {
     escaping: IndexSet<u32>,
     /// `(target, source)` per `let target = …source-chain…` binding.
     alias_edges: Vec<(u32, u32)>,
-    /// The template block's verified trailing `break $tmpl: __r`, exempt from
+    /// The template block's verified trailing `break $tmpl: $r`, exempt from
     /// break-value marking in the inner-buffer scan.
     exempt_break: Option<StmtId>,
     /// Exempt struct-literal fields named `buf` (Formatter linkage the
@@ -655,7 +655,7 @@ fn transform_stmt(
             && !template_buf_escapes(engine.body, tb, candidate.buf_local_index)
         {
             transform_tmpl_block(engine, tb, &candidate, hoist_stmts, type_table, idents);
-            // The hoisted String is reused; skip deep copy so `s` aliases `__tmpl_buf`.
+            // The hoisted String is reused; skip deep copy so `s` aliases `$tmpl_buf`.
             // This is a non-id field on `Let` and does not affect the engine's
             // parent map / use index, so the in-place write is safe.
             if let StmtKind::Let {
@@ -803,17 +803,17 @@ fn transform_expr(
     }
 }
 
-/// Check if a `$tmpl` block has the expected pattern: `let mut __r =
+/// Check if a `$tmpl` block has the expected pattern: `let mut $r =
 /// String::with_capacity(N)` before lowering, or the inlined
 /// `String { repr: array_new<u8>(N), used: 0 }` after, both closing with
-/// `break $tmpl: __r`.
+/// `break $tmpl: $r`.
 fn extract_tmpl_candidate(
     body: &Body,
     block: BlockId,
     label: &str,
     idents: &TmplIdents,
 ) -> Option<TmplCandidate> {
-    // First statement must be: let mut __r = ...
+    // First statement must be: let mut $r = ...
     let first_stmt = *body.blocks[block].stmts.first()?;
     let (buf_local_index, string_type, init_value, used_field_index, used_field_type, span) =
         match &body.stmts[first_stmt].kind {
@@ -891,7 +891,7 @@ fn extract_tmpl_candidate(
             _ => return None,
         };
 
-    // Last statement must be: break <this block>: __r
+    // Last statement must be: break <this block>: $r
     let last_stmt = *body.blocks[block].stmts.last()?;
     match &body.stmts[last_stmt].kind {
         StmtKind::Break {
@@ -927,11 +927,11 @@ struct FmtFields {
 /// Collect all Formatter struct literals in a `$tmpl` block that can be hoisted.
 ///
 /// Detects three patterns:
-///   1. Assign: `__local_N = Formatter { ... }`
-///   2. Let:    `let mut __f = Formatter { ... }`
+///   1. Assign: `$local_N = Formatter { ... }`
+///   2. Let:    `let mut $f = Formatter { ... }`
 ///   3. `LabeledBlock` (inlined `Formatter::new)`:
-///      `let __f = label: { let buf = &mut __tmpl_buf; break: Formatter { ..., buf } }`
-///      or `__local_N = label: { ... break: Formatter { ... } }`
+///      `let $f = label: { let buf = &mut $tmpl_buf; break: Formatter { ..., buf } }`
+///      or `$local_N = label: { ... break: Formatter { ... } }`
 fn extract_fmt_candidates(
     engine: &mut Engine,
     block: BlockId,
@@ -1036,12 +1036,12 @@ fn extract_fmt_candidates(
         let mut init_fields: Vec<ArenaStructField> = Vec::new();
         for (name, field_index, value) in &raw.ff.fields {
             let new_value: Operand = if name == FormatterField::Buf.field_name() {
-                // Normalize buf to &mut __tmpl_buf
+                // Normalize buf to &mut $tmpl_buf
                 let buf_ty = engine.body.operand_type(*value);
                 let local = engine.alloc_expr(
                     ExprKind::Local {
                         index: hoisted_buf_index,
-                        name: format!("__tmpl_buf_{hoisted_buf_index}"),
+                        name: format!("$tmpl_buf_{hoisted_buf_index}"),
                     },
                     buf_ty,
                     value_span,
@@ -1133,7 +1133,7 @@ fn extract_formatter_fields(
                 value_span,
             })
         }
-        // `{ let buf = &mut __tmpl_buf; break label: Formatter { …, buf } }`, as
+        // `{ let buf = &mut $tmpl_buf; break label: Formatter { …, buf } }`, as
         // the inlined `Formatter::new` leaves it, or the same block after
         // `branch_prune`'s C3 rewrite turned the `break` into a trailing value.
         ExprKind::LabeledBlock { block, .. } => {
@@ -1287,14 +1287,14 @@ fn buf_field_references_local(
     idents: &TmplIdents,
 ) -> bool {
     match &body.exprs[e].kind {
-        // &mut __tmpl_buf (NIR level)
+        // &mut $tmpl_buf (NIR level)
         ExprKind::Unary {
             op: NirUnaryOp::MutRef,
             expr: inner,
         } => inner
             .as_expr()
             .is_some_and(|ie| is_local(body, ie, local_index)),
-        // ref.as_non_null(__tmpl_buf) (WIR level / after lowering)
+        // ref.as_non_null($tmpl_buf) (WIR level / after lowering)
         ExprKind::Call { func_id, args, .. } => {
             TmplIdents::is(&idents.ref_as_non_null, *func_id)
                 && args.len() == 1
@@ -1348,9 +1348,9 @@ fn unwrap_block_tail(body: &Body, e: ExprId) -> ExprId {
 /// Transform a `$tmpl` block to reuse a hoisted String.
 ///
 /// The entire String (not just the backing array) is hoisted before the loop.
-/// Inside the block, `let mut __r = String { ... }` is replaced with
-/// `__tmpl_buf.used = 0` (field reset), and all references to `__r` are
-/// renamed to `__tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
+/// Inside the block, `let mut $r = String { ... }` is replaced with
+/// `$tmpl_buf.used = 0` (field reset), and all references to `$r` are
+/// renamed to `$tmpl_buf`. The outer Let binding gets `skip_value_copy = true`
 /// so the bound variable aliases the hoisted String directly.
 fn transform_tmpl_block(
     engine: &mut Engine,
@@ -1364,11 +1364,11 @@ fn transform_tmpl_block(
     let string_type = candidate.string_type;
 
     // Allocate a new local for the hoisted String via the engine.
-    let buf_local_name = format!("__tmpl_buf_{}", engine.locals().len());
+    let buf_local_name = format!("$tmpl_buf_{}", engine.locals().len());
     let buf_local_index =
         engine.alloc_local(buf_local_name.clone(), string_type, /* is_mut */ true);
 
-    // Hoist statement: let mut __tmpl_buf_N = String { repr: array_new(N), used: 0 };
+    // Hoist statement: let mut $tmpl_buf_N = String { repr: array_new(N), used: 0 };
     // Reuse the original init-value subtree (its old `Let` is replaced below).
     let hoist_let = engine.alloc_stmt(
         StmtKind::Let {
@@ -1384,8 +1384,8 @@ fn transform_tmpl_block(
     );
     hoist_stmts.push(hoist_let);
 
-    // Replace the first statement (let mut __r = String { ... }) with a field reset:
-    // __tmpl_buf_N.used = 0;
+    // Replace the first statement (let mut $r = String { ... }) with a field reset:
+    // $tmpl_buf_N.used = 0;
     let reset_stmt = build_field_reset(
         engine,
         buf_local_index,
@@ -1400,12 +1400,12 @@ fn transform_tmpl_block(
     new_stmts[0] = reset_stmt;
     engine.set_block_stmts(block, new_stmts);
 
-    // Rename all references from __r (old local index) to __tmpl_buf_N (new local index)
+    // Rename all references from $r (old local index) to $tmpl_buf_N (new local index)
     let old_index = candidate.buf_local_index;
     for s in engine.body.blocks[block].stmts.clone() {
         rename_local_in_stmt(engine, s, old_index, buf_local_index, &buf_local_name);
     }
-    // The init `let` is gone, so any surviving mention of `__r` would read an
+    // The init `let` is gone, so any surviving mention of `$r` would read an
     // uninitialized local — an incomplete rename is a compiler bug.
     for s in &engine.body.blocks[block].stmts {
         assert!(
@@ -1509,7 +1509,7 @@ fn transform_fmts_in_tmpl_block(
         // `Let`s by local index, with `tir_func.locals[idx].name` used as a
         // fallback when no `Let` is found, so matching names mainly
         // improves fallback / debug output consistency.
-        let hoisted_name = format!("__fmt_buf_{}", engine.locals().len());
+        let hoisted_name = format!("$fmt_buf_{}", engine.locals().len());
         let fmt_local_index = engine.alloc_local(
             hoisted_name.clone(),
             candidate.formatter_type,
@@ -1538,7 +1538,7 @@ fn transform_fmts_in_tmpl_block(
     }
 
     for info in &hoist_infos {
-        // Hoist statement: let mut __fmt_buf_N = Formatter { fill: ..., buf: ... };
+        // Hoist statement: let mut $fmt_buf_N = Formatter { fill: ..., buf: ... };
         // Reuse the normalized Formatter literal built during extraction.
         let hoist_let = engine.alloc_stmt(
             StmtKind::Let {
@@ -1555,7 +1555,7 @@ fn transform_fmts_in_tmpl_block(
         hoist_stmts.push(hoist_let);
 
         // Replace the Formatter struct literal with an indent field reset:
-        //   __fmt_buf_N.indent = 0;
+        //   $fmt_buf_N.indent = 0;
         //
         // IMPORTANT: Do NOT remove this indent = 0 reset! Format functions
         // (especially pretty-print with `:#?`) may modify the `indent` field
@@ -1658,7 +1658,7 @@ mod tests {
         body.exprs.push(ExprNode {
             kind: ExprKind::Local {
                 index: idx,
-                name: format!("__l{idx}"),
+                name: format!("$l{idx}"),
             },
             type_id: TypeId(0),
             span: Span::default(),
@@ -1764,7 +1764,7 @@ mod tests {
     fn let_stmt(body: &mut Body, local_index: u32, value: ExprId) -> StmtId {
         body.stmts.push(StmtNode {
             kind: StmtKind::Let {
-                name: format!("__l{local_index}"),
+                name: format!("$l{local_index}"),
                 local_index,
                 is_mut: false,
                 is_reactive: false,

@@ -1,8 +1,8 @@
 // Test that LabeledBlock+IfVariant fusion eliminates intermediate GC Option allocations.
 //
 // When an inlined function returns Option<T>, TIR generates:
-//   let __tmp = labeled_block { ... break null / break Some(v) };
-//   if VariantTest(__tmp) { ... }
+//   let $tmp = labeled_block { ... break null / break Some(v) };
+//   if VariantTest($tmp) { ... }
 //
 // The fusion pass detects this pattern and merges them into a single block,
 // eliminating the heap-allocated Option<T> intermediate.

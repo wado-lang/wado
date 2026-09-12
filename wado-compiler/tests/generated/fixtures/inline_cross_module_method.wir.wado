@@ -11,7 +11,7 @@ struct core:prelude//List<i32> {  // TypeId(1)
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//inline_cross_module_method.wado/__cm_export__run" = fn();  // TypeId(3)
+type "functype//inline_cross_module_method.wado/$cm_export__run" = fn();  // TypeId(3)
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow" = fn(ref "core:prelude//List<i32>");  // TypeId(4)
 
@@ -21,7 +21,7 @@ import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "inline_cross_module_method.wado/__cm_export__run"() {
+fn "inline_cross_module_method.wado/$cm_export__run"() {
     let arr: ref "core:prelude//List<i32>";
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     if @unlikely(3 >= builtin::array_len(arr.repr)) {
@@ -44,4 +44,4 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
     self.repr = new_repr;
 }
 
-export fn "inline_cross_module_method.wado/__cm_export__run" as "run"
+export fn "inline_cross_module_method.wado/$cm_export__run" as "run"

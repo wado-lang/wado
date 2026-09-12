@@ -2,7 +2,7 @@
 // occurrences of a repeated arith tree into runs at each statement that
 // assigns a leaf. The assignment scan must see writes nested in expression-
 // level blocks (an if-expression arm) and in nested loop bodies — both were
-// missed, so the two `x + y` below shared one `__cse` temp and the second
+// missed, so the two `x + y` below shared one `$cse` temp and the second
 // occurrence read the pre-decrement value (156 instead of 153).
 //
 // `black_box` keeps the arguments off the constant path: with constant ones
@@ -54,5 +54,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "153\n153\n",
-    "wir_not_expect:O2": ["__cse_"]
+    "wir_not_expect:O2": ["$cse_"]
 }

@@ -386,7 +386,7 @@ fn licm_children(
 /// `hoist_locals` set from it, recognizing hoisted handles persisting from a
 /// prior LICM invocation so their clobbered-object sub-fields stay un-hoisted;
 /// within a session the set itself is authoritative.
-const LICM_HOIST_PREFIX: &str = "_licm_";
+const LICM_HOIST_PREFIX: &str = "$licm_";
 
 /// Apply LICM to a single loop, returning hoisting statement ids to prepend.
 fn licm_loop(
@@ -459,9 +459,9 @@ fn licm_loop(
         if candidates.is_empty() {
             // Field-hoisting has converged for this loop. Try hoisting maximal
             // pre-header-stable pure-arithmetic subexpressions (e.g. the
-            // `_licm_end - _licm_start` a scan loop recomputes in its guard
+            // `$licm_end - $licm_start` a scan loop recomputes in its guard
             // every iteration). Runs here, after field-hoisting, so the
-            // `_licm_*` locals it created are visible as stable operands.
+            // `$licm_*` locals it created are visible as stable operands.
             if hoist_invariant_arith(engine, loop_body, &modified_vars, &mut all_hoist_stmts, ctx) {
                 continue;
             }
@@ -1147,7 +1147,7 @@ fn gate_eval_node(
 }
 
 /// Count field reads `source.field` under `node` that are *genuine* uses, i.e.
-/// not the value of a reload assignment `_licm_x = source.field` a prior run
+/// not the value of a reload assignment `$licm_x = source.field` a prior run
 /// (or an earlier candidate) already inserted. Zero genuine reads means the
 /// hoist already happened — skipping keeps the rule idempotent across the
 /// optimizer's fixed-point iterations.
@@ -2355,7 +2355,7 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
             // bound by a top-level `let` before `min_i`. The value graph already
             // proved every occurrence equal, so any in-scope occurrence computes the
             // right value; cloning a bare alias read of an inner-scope local (e.g.
-            // `let __cse = a` where `a` is bound inside a nested block) would read a
+            // `let $cse = a` where `a` is bound inside a nested block) would read a
             // stale loop-carried value. Skip the value if none qualifies.
             let Some(&(_, src_expr)) = occs
                 .iter()
@@ -2364,7 +2364,7 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
                 continue;
             };
             let span = engine.body.exprs[src_expr].span;
-            let name = format!("__cse_{}", engine.locals().len());
+            let name = format!("$cse_{}", engine.locals().len());
             let temp = engine.alloc_local(name.clone(), ty, /* is_mut */ false);
             // Clone the chosen occurrence's skeleton subtree for the temp's value
             // (the value itself is a sourceless-Opaque tree the extractor can not
@@ -2382,10 +2382,10 @@ fn cse_loop_body(engine: &mut Engine, loop_body: BlockId, modified: &ModifiedVar
                 },
                 span,
             );
-            // Redirect each occurrence to a *skeleton* `local.get __cse` (not a
+            // Redirect each occurrence to a *skeleton* `local.get $cse` (not a
             // promoted value): the temp is reassigned every iteration, so a value
-            // operand `Opaque(Local(__cse))` would read as loop-invariant to the
-            // arith hoist. `__cse` has no loop-entry value, so a skeleton read is
+            // operand `Opaque(Local($cse))` would read as loop-invariant to the
+            // arith hoist. `$cse` has no loop-entry value, so a skeleton read is
             // correctly treated as loop-carried.
             let mut any = false;
             for (_, e) in &occs {
@@ -2495,7 +2495,7 @@ fn is_cse_candidate_expr(body: &Body, e: ExprId) -> bool {
 }
 
 /// Hoist loop-invariant promoted *value* operands into a pre-header
-/// `let _licm_arith_N`. Operand promotion can leave a loop-invariant compound
+/// `let $licm_arith_N`. Operand promotion can leave a loop-invariant compound
 /// (e.g. `hi - lo`, born as a value before the loop) as a bare `Operand::Value`
 /// slot with no skeleton expr, so [`ArithHoist`] (which scans skeleton trees)
 /// never sees it. Materialise each distinct invariant value once in the

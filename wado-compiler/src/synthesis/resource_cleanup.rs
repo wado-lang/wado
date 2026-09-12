@@ -61,7 +61,7 @@ impl Cx<'_> {
     /// payloads inside synthesized structural-drop `match`es).
     fn alloc_local(&mut self, type_id: TypeId, prefix: &str) -> (u32, String) {
         let idx = self.locals.len() as u32;
-        let name = format!("__{prefix}_{idx}");
+        let name = format!("${prefix}_{idx}");
         self.locals.push(TirLocal {
             name: name.clone(),
             type_id,
@@ -887,7 +887,7 @@ fn append_block_drops(stmts: Vec<TirStmt>, drops: Vec<TirStmt>, cx: &mut Cx) -> 
         out.extend(drops);
         return out;
     }
-    // Preserve the value: `let __block_v = { <stmts> }; <drops>; __block_v`.
+    // Preserve the value: `let $block_v = { <stmts> }; <drops>; $block_v`.
     let (v, vname) = cx.alloc_local(result_ty, "block_v");
     let inner_expr = TirExpr::new(TirExprKind::Block(inner), result_ty, span);
     let mut out = vec![let_stmt(&vname, v, result_ty, inner_expr)];

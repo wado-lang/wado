@@ -133,8 +133,8 @@ fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> Inde
 }
 
 /// Register one wrapper per `CanonicalClosure_K` vtable slot for each reachable
-/// functor — `__closure_wrapper_N` forwarding to `__call`, plus
-/// `__closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
+/// functor — `$closure_wrapper_N` forwarding to `$call`, plus
+/// `$closure_inspect_wrapper_N` / `_alt_` forwarding to the per-functor
 /// `^Inspect` impls — each refcasting its args first. Must run before
 /// `translate_function_bodies`, which resolves `ClosureToCanonical` against it.
 pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
@@ -150,8 +150,8 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
             continue;
         }
 
-        // Look up the __call func_id, scoped to the correct module.
-        // If __call was removed by DCE (closure never used), skip this functor entirely.
+        // Look up the $call func_id, scoped to the correct module.
+        // If $call was removed by DCE (closure never used), skip this functor entirely.
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
@@ -170,7 +170,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // closure signature — the param / return types of the user-written
         // closure literal — not by the live `call_method.params`, which
         // TIR DAE may have shrunk. Decoupling here is what lets DAE drop
-        // an unused `self` (no captures) or unused user args from `__call`
+        // an unused `self` (no captures) or unused user args from `$call`
         // without desynchronising the function-table slot type from the
         // typed-fn callers that dispatch through it.
         let user_param_count = functor.canonical_user_params.len();
@@ -236,8 +236,8 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // in the wrapper. Position 0 is always self (env, refcast); the
         // other positions match canonical_user_params by name. The mapping
         // tells `register_call_wrapper` exactly which wrapper-local to
-        // forward into the inner `__call` per surviving param, so DAE can
-        // freely shrink `__call.params` without breaking the wrapper.
+        // forward into the inner `$call` per surviving param, so DAE can
+        // freely shrink `$call.params` without breaking the wrapper.
         let call_func = functor.call_method.borrow();
         // Map each surviving `call_method.params` entry back to its source.
         // The synthesised env self always lives at position 0 with name
@@ -261,7 +261,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                     .position(|(name, _)| name == &p.name)
                     .unwrap_or_else(|| {
                         panic!(
-                            "closure {functor_name}::__call param `{}` has no matching \
+                            "closure {functor_name}::$call param `{}` has no matching \
                              canonical user param (canonical: {:?})",
                             p.name,
                             functor
@@ -272,7 +272,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
                         )
                     });
                 // A unit-typed param is erased from both the wrapper and
-                // `__call`'s own WIR signature, so nothing is forwarded.
+                // `$call`'s own WIR signature, so nothing is forwarded.
                 canonical_to_wrapper[idx].map(CallWrapperArg::UserParam)
             })
             .collect();
@@ -280,7 +280,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
 
         // Register the call wrapper.
         let global_id = ctx.closure_wrapper_funcs.len();
-        let call_wrapper_fq = format!("closure/{module_source}/__closure_wrapper_{global_id}");
+        let call_wrapper_fq = format!("closure/{module_source}/$closure_wrapper_{global_id}");
         let call_wrapper_id = register_call_wrapper(
             ctx,
             &call_wrapper_fq,
@@ -295,7 +295,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         );
 
         // Register the inspect wrapper only when the functor's signature is
-        // inspectable. It forwards to the per-functor `__Closure_N^Inspect`
+        // inspectable. It forwards to the per-functor `$Closure_N^Inspect`
         // impl synthesised in lower (Phase 2). When DCE pruned that impl or
         // the `Formatter` struct isn't registered, the wrapper body falls back
         // to `Unreachable` — the slot stays populated so the canonical struct
@@ -330,21 +330,21 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
     }
 }
 
-/// Source of an argument the wrapper forwards into the inner `__call`.
+/// Source of an argument the wrapper forwards into the inner `$call`.
 /// One entry per surviving `call_method.params` slot.
 #[derive(Debug, Clone, Copy)]
 enum CallWrapperArg {
-    /// The refcast `__typed_env` local — corresponds to `__call`'s `self`.
+    /// The refcast `$typed_env` local — corresponds to `$call`'s `self`.
     TypedEnv,
-    /// The wrapper's `__pN` user-param local at the given canonical index.
+    /// The wrapper's `$pN` user-param local at the given canonical index.
     UserParam(usize),
 }
 
-/// Build a call wrapper: refcast `env` to `&__Closure_N` (only when the
-/// surviving `__call` still expects `self`), then `call __Closure_N::__call`
+/// Build a call wrapper: refcast `env` to `&$Closure_N` (only when the
+/// surviving `$call` still expects `self`), then `call $Closure_N::$call`
 /// with the surviving args. The wrapper's external signature stays
 /// `(env, canonical_user_params...) -> canonical_return` regardless of
-/// which `__call` params have been DAE'd.
+/// which `$call` params have been DAE'd.
 #[allow(clippy::too_many_arguments)]
 fn register_call_wrapper(
     ctx: &mut WirContext<'_>,
@@ -360,8 +360,8 @@ fn register_call_wrapper(
 ) -> WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    let env_local = "__env".to_string();
-    let typed_env_local = "__typed_env".to_string();
+    let env_local = "$env".to_string();
+    let typed_env_local = "$typed_env".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
@@ -401,7 +401,7 @@ fn register_call_wrapper(
                 result_ty: functor_wir_type.clone(),
             },
             CallWrapperArg::UserParam(idx) => WirInstr::LocalGet {
-                name: format!("__p{idx}"),
+                name: format!("$p{idx}"),
                 result_ty: user_params[*idx].clone(),
             },
         })
@@ -421,7 +421,7 @@ fn register_call_wrapper(
 
     let mut param_names = vec![env_local];
     for i in 0..user_param_count {
-        param_names.push(format!("__p{i}"));
+        param_names.push(format!("$p{i}"));
     }
 
     let func = WirFunction {
@@ -461,8 +461,8 @@ fn register_inspect_wrapper(
 ) -> WirFuncId {
     use crate::wir::{WirFunction, WirName, WirType};
 
-    let env_local = "__env".to_string();
-    let formatter_local = "__formatter".to_string();
+    let env_local = "$env".to_string();
+    let formatter_local = "$formatter".to_string();
     let abstract_struct_nullable = WirType::AbstractRef {
         heap_type: WirAbstractHeapType::Struct,
         nullable: true,
@@ -521,8 +521,8 @@ fn register_inspect_wrapper(
                     "[WIR] `{functor_name}^{trait_name}::{method_name}` is in `func_map` but has no live function record"
                 )
             });
-            let typed_env_local = "__typed_env".to_string();
-            let typed_formatter_local = "__typed_formatter".to_string();
+            let typed_env_local = "$typed_env".to_string();
+            let typed_formatter_local = "$typed_formatter".to_string();
             let needs_typed_env = impl_params.iter().any(|n| n == "self");
             let needs_typed_formatter = impl_params.iter().any(|n| n == "f");
 
@@ -601,7 +601,7 @@ fn register_inspect_wrapper(
         }
     };
 
-    let wrapper_fq = format!("closure/{module_source}/__closure_{method_name}_wrapper_{global_id}");
+    let wrapper_fq = format!("closure/{module_source}/$closure_{method_name}_wrapper_{global_id}");
     let func = WirFunction {
         name: WirName { fq: wrapper_fq },
         type_id: callback_fn_type_id,
@@ -673,7 +673,7 @@ fn build_fn_canonical_dispatch_body(
 
     // Local that holds the refcast `self` so we can read both
     // `env` and the chosen vtable slot off it without re-casting.
-    let typed_self = "__typed_self".to_string();
+    let typed_self = "$typed_self".to_string();
     Some(vec![
         WirInstr::DeclareLocal {
             name: typed_self.clone(),
@@ -960,9 +960,9 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     pub(super) resolved_local_names: IndexMap<u32, String>,
     /// TIR locals holding a multi-value-call result, mapped to the WIR split
     /// locals they were unpacked into and keyed by field name. A later
-    /// `FieldAccess(LocalGet(__tmp), name)` reads the matching split local
-    /// instead of `StructGet(__tmp, name)`, which would panic at codegen —
-    /// `__tmp` was never assigned a struct ref.
+    /// `FieldAccess(LocalGet($tmp), name)` reads the matching split local
+    /// instead of `StructGet($tmp, name)`, which would panic at codegen —
+    /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
     /// Set while lowering a call whose N results have a taker: the split locals
     /// of a `let` bind, the wildcards of a discard, or the enclosing
@@ -981,14 +981,14 @@ pub(super) struct FunctionTranslator<'a, 'b> {
 
 impl FunctionTranslator<'_, '_> {
     /// The WIR local name for `index`, as [`resolve_local_names`] computed it,
-    /// falling back to `__local_N`. Codegen resolves locals by name, so two
+    /// falling back to `$local_N`. Codegen resolves locals by name, so two
     /// sharing one would silently mis-resolve — hence the disambiguation there,
     /// which mirrors `wir_build::functions`' construction of `param_names`.
     pub(super) fn local_name(&self, index: u32) -> String {
         self.resolved_local_names
             .get(&index)
             .cloned()
-            .unwrap_or_else(|| format!("__local_{index}"))
+            .unwrap_or_else(|| format!("$local_{index}"))
     }
 
     /// Build a `LocalGet` with the WIR type resolved from a TIR local index.
@@ -1198,7 +1198,7 @@ impl FunctionTranslator<'_, '_> {
             );
         };
         let type_id = type_id.clone();
-        let name = self.fresh_local("__mv_return");
+        let name = self.fresh_local("$mv_return");
         let fields: Vec<WirInstr> = field_names
             .iter()
             .zip(&result_types)
@@ -1398,9 +1398,9 @@ impl FunctionTranslator<'_, '_> {
             .collect();
 
         // WIR-unique prefix: codegen dedups `DeclareLocal` by name, so this must
-        // not clash with the lower path's `__deref_ref_{nir_idx}` temps.
-        let ref_local = self.fresh_local("__expr_deref_ref");
-        let val_local = self.fresh_local("__expr_deref_val");
+        // not clash with the lower path's `$deref_ref_{nir_idx}` temps.
+        let ref_local = self.fresh_local("$expr_deref_ref");
+        let val_local = self.fresh_local("$expr_deref_val");
         let ref_ty = WirType::Ref {
             type_id: type_id.clone(),
             nullable: false,
@@ -2024,7 +2024,7 @@ impl FunctionTranslator<'_, '_> {
                 let ty = self
                     .ctx
                     .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-                let name = self.fresh_local("__arg_spill");
+                let name = self.fresh_local("$arg_spill");
                 let value = self.translate_operand(op);
                 prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
                 call_args.push(WirInstr::LocalGet {

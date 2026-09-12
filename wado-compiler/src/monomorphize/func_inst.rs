@@ -3731,7 +3731,7 @@ impl Monomorphizer {
         };
 
         let uid = *unique_id;
-        let temp_name = format!("__tuple_{uid}");
+        let temp_name = format!("$tuple_{uid}");
         let binding_local_idx = *binding_local;
         let b_name = binding_name.clone();
         let b_mut = *is_mut;
@@ -3789,7 +3789,7 @@ impl Monomorphizer {
 
         let mut outer_stmts = Vec::new();
 
-        // let __tuple_N = iterable;
+        // let $tuple_N = iterable;
         if temp_read || !Self::is_pure_place(iterable) {
             outer_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
@@ -3805,7 +3805,7 @@ impl Monomorphizer {
             ));
         }
 
-        // For each element, create: { let v = __tuple_N.i; body }
+        // For each element, create: { let v = $tuple_N.i; body }
         for (i, &elem_type) in elements.iter().enumerate() {
             let mut iter_stmts = Vec::new();
 
@@ -4283,7 +4283,7 @@ impl Monomorphizer {
 
         // Private to this unroll, one reader per field — so each element binding
         // moves its field out (`skip_value_copy`) rather than deep-copying it.
-        let temp_name = format!("__comp_{uid}");
+        let temp_name = format!("$comp_{uid}");
         let temp_local = *local_count;
         *local_count += 1;
         locals.push(TirLocal {

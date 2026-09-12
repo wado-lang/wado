@@ -1,14 +1,14 @@
 // Constant Object Globalization: a constant-shaped struct or array global
 // initializer is promoted to an eager Wasm constant by
 // `wir_optimize::const_global`, instead of being assigned at runtime in
-// `__initialize_module`.
+// `$initialize_module`.
 //
 // - `ORIGIN` (struct literal) lowers to a const `struct.new`.
 // - `NUMS` (array literal) lowers to a const `struct.new` wrapping
 //   `array.new_fixed`.
 //   Both become immutable Wasm globals with an eager init, so the
 //   `global:const_global_object.wado::ORIGIN = …` / `global:const_global_object.wado::NUMS = …` runtime assignments vanish from
-//   `__initialize_module`.
+//   `$initialize_module`.
 // - `GREET` (short string, ≤ 8 bytes) is also eager: short strings get a
 //   constant `array.new_fixed<u8>` repr (a valid Wasm constant instruction)
 //   instead of a `array.new_data` data segment, so they promote too.

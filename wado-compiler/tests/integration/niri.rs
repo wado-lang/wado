@@ -6914,14 +6914,14 @@ fn a_binding_the_arm_body_reads_blocks_the_splice() {
     );
 }
 
-/// `{ x: __lit_1, y: __lit_2 }` — the shape the elaborator lowers a struct
+/// `{ x: $lit_1, y: $lit_2 }` — the shape the elaborator lowers a struct
 /// pattern with literal fields to, its literals moved into the arm guard.
 fn point_binding_pat(point: TypeId) -> PatBuild {
     struct_pat(
         point,
         vec![
-            (0, "x", binding_pat("__lit_1", 1, TypeTable::I32)),
-            (1, "y", binding_pat("__lit_2", 2, TypeTable::I32)),
+            (0, "x", binding_pat("$lit_1", 1, TypeTable::I32)),
+            (1, "y", binding_pat("$lit_2", 2, TypeTable::I32)),
         ],
         false,
     )
@@ -6938,8 +6938,8 @@ fn eq_lit(local: u32, value: u64, repr: &'static str) -> Build {
 
 #[test]
 fn a_guard_over_pattern_bindings_decides_the_arm() {
-    // `match Point { x: 10, y: 32 } { { x: __lit_1, y: __lit_2 }
-    //      && __lit_1 == 10 && __lit_2 == 32 => 1013, _ => 1019 }`.
+    // `match Point { x: 10, y: 32 } { { x: $lit_1, y: $lit_2 }
+    //      && $lit_1 == 10 && $lit_2 == 32 => 1013, _ => 1019 }`.
     let mut table = TypeTable::new();
     let point = point_type(&mut table);
     let expr = match_expr(
@@ -7506,10 +7506,10 @@ fn a_region_writing_an_outer_local_is_refused() {
 fn a_labeled_region_folds_through_its_own_break() {
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "__tmpl",
+        "$tmpl",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
-            break_stmt_b(Some("__tmpl"), Some(local_expr(0, TypeTable::I32))),
+            break_stmt_b(Some("$tmpl"), Some(local_expr(0, TypeTable::I32))),
         ],
         TypeTable::I32,
     );
@@ -7529,7 +7529,7 @@ fn a_region_breaking_to_an_outer_label_is_refused() {
     // Control flow leaves the block, so its value cannot stand for it.
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "__tmpl",
+        "$tmpl",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
             break_stmt_b(Some("outer"), Some(local_expr(0, TypeTable::I32))),
@@ -7691,7 +7691,7 @@ fn an_alias_read_as_a_value_does_not_become_a_copy() {
 
 #[test]
 fn an_alias_captured_in_an_aggregate_is_not_a_constant() {
-    // A struct field holding a `&mut` — `Formatter { buf: &mut __r }` — would
+    // A struct field holding a `&mut` — `Formatter { buf: &mut $r }` — would
     // have to carry the place, not the referent's value. The engine has no
     // such value, so capturing one is not a constant: a write through the
     // field would otherwise land in the copy while `c` kept a value it no

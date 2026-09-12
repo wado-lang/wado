@@ -44,9 +44,9 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//variant_import_struct.wado/run" = fn();  // TypeId(13)
 
-type "functype//variant_import_struct.wado/__cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
+type "functype//variant_import_struct.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//variant_import_struct.wado/__cm_export__run" = fn();  // TypeId(15)
+type "functype//variant_import_struct.wado/$cm_export__run" = fn();  // TypeId(15)
 
 type "functype//./variant_import_struct_module.wado/format_with_opts" = fn(ref "core:prelude/string.wado//String", ref "./variant_import_struct_module.wado//Options") -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
@@ -79,18 +79,18 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:./variant_import_struct_module.wado::__const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
-global global:variant_import_struct.wado::__const_obj_3: ref null Array<u8> = array.new_fixed<u8>(93);
-global global:variant_import_struct.wado::__const_obj_4: ref null Array<u8> = array.new_fixed<u8>(91);
+global global:./variant_import_struct_module.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
+global global:variant_import_struct.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(93);
+global global:variant_import_struct.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(91);
 
 fn "variant_import_struct.wado/run"() with Stdout {
     let opts: ref "./variant_import_struct_module.wado//Options";
     let s1: ref "core:prelude/string.wado//String";
     let s2: ref "core:prelude/string.wado//String";
     let s3: ref "core:prelude/string.wado//String";
-    let __local_4_4: ref "core:prelude/string.wado//String";
-    let __local_5: ref "core:prelude/string.wado//String";
-    let __local_6: ref "core:prelude/string.wado//String";
+    let $local_4_4: ref "core:prelude/string.wado//String";
+    let $local_5: ref "core:prelude/string.wado//String";
+    let $local_6: ref "core:prelude/string.wado//String";
     let handle_17: i32;
     let self_30: i32;
     let new_used_33: i32;
@@ -121,77 +121,77 @@ fn "variant_import_struct.wado/run"() with Stdout {
     opts = struct.new "./variant_import_struct_module.wado//Options" { align: struct.new "./variant_import_struct_module.wado//Align" { 1 }, width: 0 };
     opts.width = 10;
     s1 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "./variant_import_struct_module.wado//Options" { align: opts.align, width: 10 });
-    __local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-    __local_4_4.used = 1;
-    builtin::array_copy<u8>(__local_4_4.repr, 0, global:variant_import_struct.wado::__const_obj_4, 0, 1);
+    $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
+    $local_4_4.used = 1;
+    builtin::array_copy<u8>($local_4_4.repr, 0, global:variant_import_struct.wado::$const_obj_4, 0, 1);
     self_30 = s1.used;
     new_used_33 = 1 + (1 + self_30);
     if @unlikely(new_used_33 > 18) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_4_4, new_used_33);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_33);
     }
-    start_34 = __local_4_4.used;
-    __local_4_4.used = new_used_33;
-    self_36 = __local_4_4.repr;
+    start_34 = $local_4_4.used;
+    $local_4_4.used = new_used_33;
+    self_36 = $local_4_4.repr;
     builtin::array_copy<u8>(self_36, start_34, s1.repr, 0, self_30);
-    self_40 = __local_4_4.repr;
-    builtin::array_copy<u8>(self_40, start_34 + self_30, global:variant_import_struct.wado::__const_obj_3, 0, 1);
+    self_40 = $local_4_4.repr;
+    builtin::array_copy<u8>(self_40, start_34 + self_30, global:variant_import_struct.wado::$const_obj_3, 0, 1);
     rx_45 = builtin::i32_wrap_i64(local.tee packed_44("wasi/stream-new"()));
     tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
-    handle_17 = "variant_import_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_45);
-    "core:rt/write_string_to_stream"(tx_46, __local_4_4);
+    handle_17 = "variant_import_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
+    "core:rt/write_string_to_stream"(tx_46, $local_4_4);
     "wasi/future-drop-readable:transmission-cli"(handle_17);
     opts.align = struct.new "./variant_import_struct_module.wado//Align" { 0 };
     s2 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, struct.new "./variant_import_struct_module.wado//Options" { align: opts.align, width: opts.width });
-    __local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-    __local_5.used = 1;
-    builtin::array_copy<u8>(__local_5.repr, 0, global:variant_import_struct.wado::__const_obj_4, 0, 1);
+    $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
+    $local_5.used = 1;
+    builtin::array_copy<u8>($local_5.repr, 0, global:variant_import_struct.wado::$const_obj_4, 0, 1);
     self_68 = s2.used;
     new_used_71 = 1 + (1 + self_68);
     if @unlikely(new_used_71 > 18) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_5, new_used_71);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_71);
     }
-    start_72 = __local_5.used;
-    __local_5.used = new_used_71;
-    self_74 = __local_5.repr;
+    start_72 = $local_5.used;
+    $local_5.used = new_used_71;
+    self_74 = $local_5.repr;
     builtin::array_copy<u8>(self_74, start_72, s2.repr, 0, self_68);
-    self_78 = __local_5.repr;
-    builtin::array_copy<u8>(self_78, start_72 + self_68, global:variant_import_struct.wado::__const_obj_3, 0, 1);
+    self_78 = $local_5.repr;
+    builtin::array_copy<u8>(self_78, start_72 + self_68, global:variant_import_struct.wado::$const_obj_3, 0, 1);
     rx_83 = builtin::i32_wrap_i64(local.tee packed_82("wasi/stream-new"()));
     tx_84 = builtin::i32_wrap_i64(packed_82 >> 32_i64);
-    handle_55 = "variant_import_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_83);
-    "core:rt/write_string_to_stream"(tx_84, __local_5);
+    handle_55 = "variant_import_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_83);
+    "core:rt/write_string_to_stream"(tx_84, $local_5);
     "wasi/future-drop-readable:transmission-cli"(handle_55);
     opts.align = struct.new "./variant_import_struct_module.wado//Align" { 2 };
     s3 = "./variant_import_struct_module.wado/format_with_opts"(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 }, opts);
-    __local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-    __local_6.used = 1;
-    builtin::array_copy<u8>(__local_6.repr, 0, global:variant_import_struct.wado::__const_obj_4, 0, 1);
+    $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
+    $local_6.used = 1;
+    builtin::array_copy<u8>($local_6.repr, 0, global:variant_import_struct.wado::$const_obj_4, 0, 1);
     self_105 = s3.used;
     new_used_108 = 1 + (1 + self_105);
     if @unlikely(new_used_108 > 18) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(__local_6, new_used_108);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_108);
     }
-    start_109 = __local_6.used;
-    __local_6.used = new_used_108;
-    self_111 = __local_6.repr;
+    start_109 = $local_6.used;
+    $local_6.used = new_used_108;
+    self_111 = $local_6.repr;
     builtin::array_copy<u8>(self_111, start_109, s3.repr, 0, self_105);
-    self_115 = __local_6.repr;
-    builtin::array_copy<u8>(self_115, start_109 + self_105, global:variant_import_struct.wado::__const_obj_3, 0, 1);
+    self_115 = $local_6.repr;
+    builtin::array_copy<u8>(self_115, start_109 + self_105, global:variant_import_struct.wado::$const_obj_3, 0, 1);
     rx_120 = builtin::i32_wrap_i64(local.tee packed_119("wasi/stream-new"()));
     tx_121 = builtin::i32_wrap_i64(packed_119 >> 32_i64);
-    handle_92 = "variant_import_struct.wado/__cm_binding__Stdout_write_via_stream"(rx_120);
-    "core:rt/write_string_to_stream"(tx_121, __local_6);
+    handle_92 = "variant_import_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_120);
+    "core:rt/write_string_to_stream"(tx_121, $local_6);
     "wasi/future-drop-readable:transmission-cli"(handle_92);
 }
 
-fn "variant_import_struct.wado/__cm_binding__Stdout_write_via_stream"(data) with Stdout {
+fn "variant_import_struct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
 
-fn "variant_import_struct.wado/__cm_export__run"() {
+fn "variant_import_struct.wado/$cm_export__run"() {
     "variant_import_struct.wado/run"();
     "wasi/task-return"(0);
 }
@@ -222,17 +222,17 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
     let self_75: i32;
     let new_used_78: i32;
     let start_79: i32;
-    let _av_90: i32;
-    let _av_91: i32;
-    _av_90 = opts.width;
-    if _av_90 <= 0 {
+    let $av_90: i32;
+    let $av_91: i32;
+    $av_90 = opts.width;
+    if $av_90 <= 0 {
         return s;
     }
-    _av_91 = s.used;
-    if _av_91 >= _av_90 {
+    $av_91 = s.used;
+    if $av_91 >= $av_90 {
         return s;
     }
-    pad = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee pad_len(_av_90 - _av_91)), used: 0 };
+    pad = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee pad_len($av_90 - $av_91)), used: 0 };
     i_4 = 0;
     b5: block {
         l6: loop {
@@ -244,17 +244,17 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
             }
             start_22 = pad.used;
             pad.used = new_used_21;
-            builtin::array_copy<u8>(pad.repr, start_22, global:./variant_import_struct_module.wado::__const_obj_0, 0, 1);
+            builtin::array_copy<u8>(pad.repr, start_22, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
             i_4 = i_4 + 1;
             continue l6;
         };
     };
-    return let __match_scrut_0: ref "./variant_import_struct_module.wado//Align", __match_scrut_0 = opts.align, (if __match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
+    return let $match_scrut_0: ref "./variant_import_struct_module.wado//Align", $match_scrut_0 = opts.align, (if $match_scrut_0.discriminant == 0 -> ref "core:prelude/string.wado//String" {
         result_26 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(s.used + pad.used), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_26, s);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_26, pad);
         result_26;
-    } else if __match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
+    } else if $match_scrut_0.discriminant == 1 -> ref "core:prelude/string.wado//String" {
         result_29 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(pad.used + s.used), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_29, pad);
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_29, s);
@@ -275,7 +275,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
                 }
                 start_40 = lpad.used;
                 lpad.used = new_used_39;
-                builtin::array_copy<u8>(lpad.repr, start_40, global:./variant_import_struct_module.wado::__const_obj_0, 0, 1);
+                builtin::array_copy<u8>(lpad.repr, start_40, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
                 i_9 = i_9 + 1;
                 continue l11;
             };
@@ -291,7 +291,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
                 }
                 start_50 = rpad.used;
                 rpad.used = new_used_49;
-                builtin::array_copy<u8>(rpad.repr, start_50, global:./variant_import_struct_module.wado::__const_obj_0, 0, 1);
+                builtin::array_copy<u8>(rpad.repr, start_50, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
                 i_10 = i_10 + 1;
                 continue l14;
             };
@@ -387,26 +387,26 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let ws: i32;
     let evt_ptr: i32;
     let status_41: i32;
-    let __sroa_data_start: i32;
-    let __sroa_written_count: i32;
-    let __sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
-    let _av_52: i32;
-    let _av_53: i32;
-    _av_52 = data.start;
-    _av_53 = data.end;
-    if (_av_53 - _av_52) == 0 {
+    let $sroa_data_start: i32;
+    let $sroa_written_count: i32;
+    let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
+    let $av_52: i32;
+    let $av_53: i32;
+    $av_52 = data.start;
+    $av_53 = data.end;
+    if ($av_53 - $av_52) == 0 {
         return;
     }
     repr_2 = data.repr;
-    end_3 = _av_52 + (_av_53 - _av_52);
+    end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
         l23: loop {
-            __sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - __sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
+            $sroa_data_start = offset;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b24: block {
                 l25: loop {
                     break_if b24 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, __sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
                     continue l25;
                 };
@@ -424,21 +424,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
                 "wasi/waitable-set-drop"(ws);
                 result = status_41;
             }
-            __sroa_written_count = result >> 4;
-            __sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
-                let __match_scrut_0: i32;
-                __match_scrut_0 = result & 15;
-                if __match_scrut_0 == 0 {
+            $sroa_written_count = result >> 4;
+            $sroa_written_result = $inline_cm_copy_result_14: block -> "core:prelude/types.wado//enum:CopyResult" {
+                let $match_scrut_0: i32;
+                $match_scrut_0 = result & 15;
+                if $match_scrut_0 == 0 {
                     break $inline_cm_copy_result_14: 0;
-                } else if __match_scrut_0 == 1 {
+                } else if $match_scrut_0 == 1 {
                     break $inline_cm_copy_result_14: 1;
                 } else {
                 }
                 break $inline_cm_copy_result_14: 2;
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
-            offset = offset + __sroa_written_count;
-            if select i32(select i32(__sroa_written_result != 0, 1, __sroa_written_count <= 0), 1, offset >= end_3) {
+            offset = offset + $sroa_written_count;
+            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
             continue l23;
@@ -446,4 +446,4 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     };
 }
 
-export fn "variant_import_struct.wado/__cm_export__run" as "run"
+export fn "variant_import_struct.wado/$cm_export__run" as "run"

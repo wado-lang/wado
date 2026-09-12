@@ -115,7 +115,7 @@ pub(super) fn run_peephole(
         // Labeled-block fusion runs post-inline only: the `let temp = LB { ...;
         // break L: Some(v); }; if VariantTest(temp, …)` shape it folds is what
         // `inline` exposes when an `Option`/`Result`-returning helper is copied
-        // into an if-let caller. The rule allocates fresh `__fused_payload_N`
+        // into an if-let caller. The rule allocates fresh `$fused_payload_N`
         // locals via the engine, so it sits next to the other block-level
         // rules.
         // One rule, two entry points: `apply_block` fuses the value-discarding

@@ -37,7 +37,7 @@ capture is taken where the operand sits.
 
 The scanner walks the condition in evaluation order carrying one fact: whether
 everything so far is bound ahead of the condition. While it holds, the next slot
-binds ahead too, as `let __vK = …;` — a scope the failure branch reaches, and an
+binds ahead too, as `let $vK = …;` — a scope the failure branch reaches, and an
 ordinary binding to the optimizer. The first fragment left behind clears it, and
 every later slot is captured where it sits; a receiver and a callee clear it for
 the operands under them, though the node containing them may still bind ahead,
@@ -97,13 +97,13 @@ short-circuit can skip each one:
 
 ```
 6: assert i < list.len() && list[i] == 1
-  __v0  always       re-read   i
-  __v1  always       re-read   list
-  __v2  always       hoisted   list.len()
-  __v3  always       hoisted   i < list.len()
-  __v4  conditional  in-place  i
-  __v5  conditional  in-place  list[i]
-  __v6  conditional  in-place  list[i] == 1
+  $v0  always       re-read   i
+  $v1  always       re-read   list
+  $v2  always       hoisted   list.len()
+  $v3  always       hoisted   i < list.len()
+  $v4  conditional  in-place  i
+  $v5  conditional  in-place  list[i]
+  $v6  conditional  in-place  list[i] == 1
 ```
 
 `tests/integration/assert_capture_plan.rs` reads that back for one `assert` per

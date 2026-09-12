@@ -50,10 +50,10 @@ export fn run() with Stdout {
         sum = sum + state.pos;          // OUTER read 3 — pushes total to 4
         // Inner non-HFS loop. The OUTER walker handles this via
         // walk_nested_loop. Inside the inner body, `state.pos` is read
-        // through the outer scalar (rewritten to __hfs_pos), then
+        // through the outer scalar (rewritten to $hfs_pos), then
         // `bump` mutates the field via &mut. Without the back-edge
         // sync added by walk_nested_loop, iter 2+ of the inner loop
-        // reads the stale __hfs_pos (set by iter 1 before bump) rather
+        // reads the stale $hfs_pos (set by iter 1 before bump) rather
         // than the bump()-updated field.
         let mut inner = 0;
         loop {
@@ -80,6 +80,6 @@ __DATA__
 {
     "stdout": "2370 360\n",
     "wir_expect:O2": [
-        "let __hfs_pos_"
+        "let $hfs_pos_"
     ]
 }

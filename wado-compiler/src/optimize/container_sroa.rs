@@ -468,7 +468,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
     for c in &safe_candidates {
         for (k, &elem_ty) in c.element_types.iter().enumerate() {
             let list_type = rule.type_table_rc.borrow_mut().make_list(elem_ty);
-            let name = format!("__csroa_{}_{}", c.local_name, k);
+            let name = format!("$csroa_{}_{}", c.local_name, k);
             let local_index = engine.alloc_local(name.clone(), list_type, /* is_mut */ false);
             field_map.insert(
                 (c.local_index, k as u32),

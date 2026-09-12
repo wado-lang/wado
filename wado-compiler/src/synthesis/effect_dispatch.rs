@@ -1,7 +1,7 @@
 //! Effect handler dispatch synthesis (WEP 2026-04-11 phase 4). For every effect
-//! with a user-written `impl E for T`, emit a `__Dispatch_<E>` struct (a chain
-//! through `outer`, one closure field per op), an `__effect_<E>` global, and an
-//! `__effect_dispatch__<E>__<op>` wrapper per op; then route every call site
+//! with a user-written `impl E for T`, emit a `$Dispatch_<E>` struct (a chain
+//! through `outer`, one closure field per op), an `$effect_<E>` global, and an
+//! `$effect_dispatch__<E>__<op>` wrapper per op; then route every call site
 //! through the wrappers and desugar `WithHandler` into install/restore blocks.
 
 use crate::ast::{RestClause, Visibility};
@@ -60,7 +60,7 @@ struct EffectMeta {
 /// covering both `effect` and `resource` declarations. Resources participate
 /// in the dispatch protocol identically to effects — same operation list,
 /// same wrapper synthesis, same call-site rewriting against
-/// `__cm_binding__<R>_<op>` adapters — so they share a single index. The
+/// `$cm_binding__<R>_<op>` adapters — so they share a single index. The
 /// `is_resource` flag distinguishes the kinds where it matters (currently
 /// only the wrapper's declared `effects` list).
 fn build_effect_index(project: &Package) -> IndexMap<EffectKey, EffectMeta> {
@@ -121,7 +121,7 @@ fn identify_uncovered_effects(
     // whole interface either way.
     //
     // One bare name, one owner: the triple is named after the name alone, so
-    // activating a second declaration under it emits `__Dispatch_<E>` twice.
+    // activating a second declaration under it emits `$Dispatch_<E>` twice.
     // A name an active instantiation owns is left to it — the call lands on
     // that dispatch and traps there when no handler is installed.
     let owned: IndexSet<&String> = active
@@ -185,24 +185,24 @@ impl TirRefVisitor for UncoveredEffectCallCollector<'_> {
 /// late synthesis half does not re-derive it.
 #[derive(Debug, Clone)]
 pub struct DispatchPlan {
-    /// `TypeId` of the synthesised `__Dispatch_<E>` struct.
+    /// `TypeId` of the synthesised `$Dispatch_<E>` struct.
     pub struct_type_id: TypeId,
-    /// `TypeId` of `Option<&__Dispatch_<E>>` — the global's runtime type
+    /// `TypeId` of `Option<&$Dispatch_<E>>` — the global's runtime type
     /// and the type of `outer` / dispatch wrapper-saved values.
     pub nullable_ref_type_id: TypeId,
-    /// `TypeId` of `&__Dispatch_<E>` — handed to `Option::Some` when
+    /// `TypeId` of `&$Dispatch_<E>` — handed to `Option::Some` when
     /// installing a fresh dispatch record.
     pub inner_ref_type_id: TypeId,
-    /// Name of the synthesised `__effect_<E>` mutable global.
+    /// Name of the synthesised `$effect_<E>` mutable global.
     pub global_name: String,
     /// Operation name → dispatch wrapper function name
-    /// (`__effect_dispatch__<E>__<op>`).
+    /// (`$effect_dispatch__<E>__<op>`).
     pub wrapper_names: IndexMap<String, String>,
     /// Operation name → dispatch struct field name (`op_<op>`).
     pub field_names: IndexMap<String, String>,
     /// Operation name → field type (`fn(<op_params>) -> <op_ret>`).
     pub field_types: IndexMap<String, TypeId>,
-    /// Operation name → 0-based field index in `__Dispatch_<E>`. The
+    /// Operation name → 0-based field index in `$Dispatch_<E>`. The
     /// `outer` field always sits at index 0; ops start at 1.
     pub field_indices: IndexMap<String, u32>,
     /// Cached operation declarations (cloned from `EffectMeta`) so the
@@ -296,7 +296,7 @@ fn substitute_operations(
         .collect()
 }
 
-/// Synthesise the `__Dispatch_<E>` struct — `outer: Option<&__Dispatch_<E>>`
+/// Synthesise the `$Dispatch_<E>` struct — `outer: Option<&$Dispatch_<E>>`
 /// plus one `fn(<op_params>) -> <op_ret>` field per operation — into the entry
 /// module, where all dispatch infrastructure lives. The recursive `outer` field
 /// needs two phases: `make_struct` interns a forward-declared id first, then the
@@ -419,9 +419,9 @@ fn synthesize_dispatch_struct(
     }
 }
 
-/// Synthesise the `__effect_<E>` mutable global for one effect.
+/// Synthesise the `$effect_<E>` mutable global for one effect.
 ///
-/// The slot stores `Option<&__Dispatch_<E>>` and starts at `null`
+/// The slot stores `Option<&$Dispatch_<E>>` and starts at `null`
 /// (meaning: no handler installed). `is_nullable: true` makes the Wasm
 /// validator accept the `ref.null` initializer for the `(mut (ref null
 /// $Dispatch))` slot, and keeps codegen from narrowing `global.get` reads
@@ -454,7 +454,7 @@ fn synthesize_dispatch_global(
     entry_module.globals.push(global);
 }
 
-/// Synthesise the `__effect_dispatch__<E>__<op>` wrapper functions, each with
+/// Synthesise the `$effect_dispatch__<E>__<op>` wrapper functions, each with
 /// the operation's own signature so call-site rewriting is a name swap. A
 /// wrapper installs `d.outer` for the duration of the closure call — that is
 /// what lets a handler method delegate to the outer chain without recursing —
@@ -546,7 +546,7 @@ fn build_dispatch_wrapper_function(
     let nullable_ref_type_id = plan.nullable_ref_type_id;
     let inner_ref_type_id = plan.inner_ref_type_id;
 
-    // Allocate locals: params, then __saved, __d (if-let binding), __result.
+    // Allocate locals: params, then $saved, $d (if-let binding), $result.
     let mut params: Vec<TirParam> = Vec::with_capacity(op.params.len());
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut next_local: u32 = 0;
@@ -591,7 +591,7 @@ fn build_dispatch_wrapper_function(
 
     let mut stmts: Vec<TirStmt> = Vec::new();
 
-    // let __saved = global.get __effect_<E>;
+    // let $saved = global.get $effect_<E>;
     let global_get_expr = TirExpr::new(
         TirExprKind::GlobalVarGet {
             module_source: entry_source.clone(),
@@ -602,7 +602,7 @@ fn build_dispatch_wrapper_function(
     );
     stmts.push(TirStmt::new(
         TirStmtKind::Let {
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
             local_index: saved_local,
             is_mut: false,
             is_reactive: false,
@@ -619,14 +619,14 @@ fn build_dispatch_wrapper_function(
         TirExpr::new(
             TirExprKind::Local {
                 index: d_local,
-                name: "__d".to_string(),
+                name: "$d".to_string(),
             },
             inner_ref_type_id,
             span,
         )
     };
 
-    // global.set __effect_<E> = d.outer;
+    // global.set $effect_<E> = d.outer;
     let outer_field_access = TirExpr::new(
         TirExprKind::FieldAccess {
             expr: Box::new(d_local_expr()),
@@ -649,7 +649,7 @@ fn build_dispatch_wrapper_function(
         span,
     ));
 
-    // let __result = (d.op_<op>)(args);
+    // let $result = (d.op_<op>)(args);
     let op_field_index = *plan.field_indices.get(op_name).expect("op field index");
     let op_field_name = plan
         .field_names
@@ -678,7 +678,7 @@ fn build_dispatch_wrapper_function(
     if let Some(rl) = result_local {
         then_stmts.push(TirStmt::new(
             TirStmtKind::Let {
-                name: "__result".to_string(),
+                name: "$result".to_string(),
                 local_index: rl,
                 is_mut: false,
                 is_reactive: false,
@@ -692,11 +692,11 @@ fn build_dispatch_wrapper_function(
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(indirect_call), span));
     }
 
-    // global.set __effect_<E> = __saved;
+    // global.set $effect_<E> = $saved;
     let saved_expr = TirExpr::new(
         TirExprKind::Local {
             index: saved_local,
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
         },
         nullable_ref_type_id,
         span,
@@ -714,12 +714,12 @@ fn build_dispatch_wrapper_function(
         span,
     ));
 
-    // return __result;  /  return;
+    // return $result;  /  return;
     if let Some(rl) = result_local {
         let result_expr = TirExpr::new(
             TirExprKind::Local {
                 index: rl,
-                name: "__result".to_string(),
+                name: "$result".to_string(),
             },
             return_type,
             span,
@@ -872,11 +872,11 @@ fn build_dispatch_wrapper_function(
     }
     let else_block = TirBlock::new(else_stmts, span);
 
-    // if let Some(d) = __saved { ... } else { fallback }.
+    // if let Some(d) = $saved { ... } else { fallback }.
     let saved_pattern_scrutinee = TirExpr::new(
         TirExprKind::Local {
             index: saved_local,
-            name: "__saved".to_string(),
+            name: "$saved".to_string(),
         },
         nullable_ref_type_id,
         span,
@@ -890,7 +890,7 @@ fn build_dispatch_wrapper_function(
         enum_type: nullable_ref_type_id,
         variant_name: some_case_name,
         bindings: vec![TirPattern::Binding {
-            name: "__d".to_string(),
+            name: "$d".to_string(),
             local_index: d_local,
             type_id: inner_ref_type_id,
         }],
@@ -944,7 +944,7 @@ fn build_dispatch_wrapper_function(
         // every effect / resource call site — propagates nothing to the caller.
         // The wrapper is what satisfies the effect: its `if let Some(d)` branch
         // dispatches into the installed handler, its `else` branch emits the
-        // placeholder cm_binding rewrites. `__cm_binding__*` adapters likewise.
+        // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
         stores: vec![],
         body: Some(body),
@@ -1078,7 +1078,7 @@ struct DispatchEnv<'a> {
 }
 
 /// Mutable context threaded through the dispatch-aware lowering walker, holding
-/// the local table the desugarer allocates `__h_<E>` / `__save_<E>` / `__d_<E>`
+/// the local table the desugarer allocates `$h_<E>` / `$save_<E>` / `$d_<E>`
 /// from. Descending into a `Closure` body pushes a fresh scope so a nested
 /// `WithHandler` lands in the closure's local-index space.
 struct LowerCtx {
@@ -1109,7 +1109,7 @@ impl LowerCtx {
                 let idx = *next_local;
                 *next_local += 1;
                 locals.push(TirLocal {
-                    name: format!("__local_{idx}"),
+                    name: format!("$local_{idx}"),
                     type_id: ty,
                     is_mut: false,
                     span: token::Span::default(),
@@ -1460,7 +1460,7 @@ impl TirRefVisitor for MaxLocalIndex {
 
 /// Replace a `WithHandler { bindings, body }` in place with the dispatch
 /// protocol: per binding, in source order, bind the handler, save the global,
-/// build a `__Dispatch_<E>` whose `outer` is the saved value and whose op fields
+/// build a `$Dispatch_<E>` whose `outer` is the saved value and whose op fields
 /// forward to the handler's methods, and install it — then restore in reverse
 /// order after the body. A binding with no matching plan panics: annotate and
 /// this pass are out of sync.
@@ -1478,7 +1478,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
     let mut prelude: Vec<TirStmt> = Vec::new();
     let mut restore: Vec<TirStmt> = Vec::new();
     // bundle_group id -> (h_local, h_name). Bindings expanded from one
-    // bundled `with &mut h do` clause share a single `__h_<bundle>` local
+    // bundled `with &mut h do` clause share a single `$h_<bundle>` local
     // so the handler expression is evaluated exactly once and mutations
     // through any installed effect are observed by every other effect's
     // dispatch closure (closures all capture the same local).
@@ -1562,15 +1562,15 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // Mangled instantiation label, e.g. `Stream<u8>` for
         // `(Stream, [u8])`. Used both as the struct-literal type name
         // (must agree with `synthesize_dispatch_struct`) and for the
-        // synthesised local names (`__h_<label>` etc.) so dumps stay
+        // synthesised local names (`$h_<label>` etc.) so dumps stay
         // readable when multiple instantiations of the same base
         // resource are installed in nested `with` blocks.
         let label =
             instantiation_label(&interface_name, &trait_type_args, &env.type_table.borrow());
 
-        // 1. let __h_<E> = handler_expr;
+        // 1. let $h_<E> = handler_expr;
         //
-        // Bundled bindings share one `__h_<bundle>` local: the first
+        // Bundled bindings share one `$h_<bundle>` local: the first
         // binding in the group emits the `Let`, subsequent bindings
         // reuse the local without re-evaluating the handler expression.
         // Explicit `Effect => handler` bindings always get their own
@@ -1581,7 +1581,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
                 (*existing_local, existing_name.clone())
             } else {
                 let local = ctx.alloc_local(handler_type);
-                let name = format!("__h_bundle_{group_id}");
+                let name = format!("$h_bundle_{group_id}");
                 prelude.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: name.clone(),
@@ -1599,7 +1599,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             }
         } else {
             let local = ctx.alloc_local(handler_type);
-            let name = format!("__h_{label}");
+            let name = format!("$h_{label}");
             prelude.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: name.clone(),
@@ -1615,9 +1615,9 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             (local, name)
         };
 
-        // 2. let __save_<E> = global.get __effect_<E>;
+        // 2. let $save_<E> = global.get $effect_<E>;
         let save_local = ctx.alloc_local(plan.nullable_ref_type_id);
-        let save_name = format!("__save_{label}");
+        let save_name = format!("$save_{label}");
         let global_get = TirExpr::new(
             TirExprKind::GlobalVarGet {
                 module_source: env.entry_source.clone(),
@@ -1639,7 +1639,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 3. let __d_<E> = __Dispatch_<E> { outer: __save_<E>, op_n: ..., ... };
+        // 3. let $d_<E> = $Dispatch_<E> { outer: $save_<E>, op_n: ..., ... };
         let mut struct_fields: Vec<TirStructField> = Vec::new();
         struct_fields.push(TirStructField {
             name: "outer".to_string(),
@@ -1690,7 +1690,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             });
         }
         let d_local = ctx.alloc_local(plan.struct_type_id);
-        let d_name = format!("__d_{label}");
+        let d_name = format!("$d_{label}");
         let struct_lit = TirExpr::new(
             TirExprKind::StructLiteral {
                 struct_type: plan.struct_type_id,
@@ -1713,7 +1713,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
             span,
         ));
 
-        // 4. global.set __effect_<E> = Some(&__d_<E>);
+        // 4. global.set $effect_<E> = Some(&$d_<E>);
         let d_local_expr = TirExpr::new(
             TirExprKind::Local {
                 index: d_local,
@@ -1791,7 +1791,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
         // matching `synthesis::resource_cleanup::append_block_drops`.
         let body_span = body.span;
         let local = ctx.alloc_local(result_type);
-        let name = format!("__with_result_{local}");
+        let name = format!("$with_result_{local}");
         let body_expr = TirExpr::new(TirExprKind::Block(body), result_type, body_span);
         stmts.push(TirStmt::new(
             TirStmtKind::Let {
@@ -1823,7 +1823,7 @@ fn desugar_with_handler(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut LowerCt
 /// Splice the restore sequence in front of every jump that leaves the `with`
 /// body and would otherwise skip the fall-through restore: any `Return`, and a
 /// `Break`/`Continue` whose target is not open inside the body. A value-carrying
-/// jump binds its value to `__early_jump_<n>` first, so `return Counter::next()`
+/// jump binds its value to `$early_jump_<n>` first, so `return Counter::next()`
 /// evaluates under the do-block's handler. `Closure` bodies are skipped.
 struct RestoreInjector<'a, 'b> {
     /// The restore statements to splice in front of every exit, in
@@ -1887,7 +1887,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
                 let value_expr =
                     std::mem::replace(v, TirExpr::new(TirExprKind::Unit, value_type, stmt_span));
                 let temp_local = self.ctx.alloc_local(value_type);
-                let temp_name = format!("__early_jump_{temp_local}");
+                let temp_name = format!("$early_jump_{temp_local}");
                 to_insert.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: temp_name.clone(),
@@ -2108,7 +2108,7 @@ impl<'a, 'b> RestoreInjector<'a, 'b> {
 }
 
 /// Repackage a handler method's resolved `T` as the `AsyncCall<T>` its call
-/// site reads, through the interface's `__cm_wrap_async__<E>__<op>` adapter.
+/// site reads, through the interface's `$cm_wrap_async__<E>__<op>` adapter.
 /// The adapter takes no argument when `T` is unit, so the method call becomes a
 /// statement and the wrap is the block's trailing expression.
 fn wrap_async_result(
@@ -2122,7 +2122,7 @@ fn wrap_async_result(
     assert!(
         op.cm_name.is_some(),
         "handled async op `{}` without a CM import binding — no \
-         `__cm_wrap_async__` adapter exists to repackage the handler's result \
+         `$cm_wrap_async__` adapter exists to repackage the handler's result \
          (the elaborator rejects handler impls for user-defined async effects)",
         op.name
     );
@@ -2161,11 +2161,11 @@ fn wrap_async_result(
     )
 }
 
-/// Build the `op_<n>` closure `|<op_params>| __h_<E>.<E>::<op>(<op_params>)` for
+/// Build the `op_<n>` closure `|<op_params>| $h_<E>.<E>::<op>(<op_params>)` for
 /// one (effect, op, handler-impl) triple. The receiver is a `Capture { index: 0 }`
-/// holding whatever `__h_<E>` holds, which the lower-phase closure pass turns
+/// holding whatever `$h_<E>` holds, which the lower-phase closure pass turns
 /// into a field access on the functor struct. Typed at the call-site type, so an
-/// async operation wraps the result in `__cm_wrap_async__<E>__<op>`.
+/// async operation wraps the result in `$cm_wrap_async__<E>__<op>`.
 fn build_handler_op_closure(
     op: &TirEffectOp,
     impl_info: &HandlerImplInfo,
@@ -2204,7 +2204,7 @@ fn build_handler_op_closure(
         })
         .collect();
 
-    // Body: __h.<E>::<op>(<args>)
+    // Body: $h.<E>::<op>(<args>)
     let receiver = TirExpr::new(
         TirExprKind::Capture {
             index: 0,
@@ -2462,7 +2462,7 @@ fn build_forward_closure(
 /// Runs before `cm_binding`, so it matches the two pre-adapter shapes the
 /// elaborator emits: a `Call` in `ModuleSource::Local { path: "<E>" }` for
 /// `Effect::op(…)`, and one with `func.method_info.cm_name` set for a resource
-/// op. Calls inside `__effect_dispatch__*` are left alone.
+/// op. Calls inside `$effect_dispatch__*` are left alone.
 fn rewrite_call_sites_to_wrappers(
     project: &mut Package,
     plans: &IndexMap<InstantiationKey, DispatchPlan>,

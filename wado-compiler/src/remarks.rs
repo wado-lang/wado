@@ -256,7 +256,7 @@ pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
 ///
 /// The second kind is what `core:log` reads at its gate
 /// (`global LOG_STATIC_LEVEL: Level = level_from_str(LOG_LEVEL)`).
-/// `globals::extract` has moved such an initializer into `__initialize_module`
+/// `globals::extract` has moved such an initializer into `$initialize_module`
 /// by now, so the assignment is an ordinary `GlobalVarSet` in a body.
 fn parameter_decided_globals(package: &NirPackage) -> IndexMap<GlobalKey, ParamOrigin> {
     let mut decided: IndexMap<GlobalKey, ParamOrigin> = package

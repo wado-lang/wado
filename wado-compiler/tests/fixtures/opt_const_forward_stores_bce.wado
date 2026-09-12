@@ -6,7 +6,7 @@
 // call, folding each `N >= used` comparison away.
 //
 // The list literal binds straight to `arr` and SROA leaves only the backing
-// array behind, so the reads name the scalarized field. The `0 >= __v1`-style
+// array behind, so the reads name the scalarized field. The `0 >= $v1`-style
 // patterns below are the pre-fold bounds-check shape that must not survive.
 
 use { println, Stdout } from "core:cli";
@@ -34,14 +34,14 @@ __DATA__
 {
     "stdout": "10 20 31 61\n",
     "wir_expect:O2": [
-        "builtin::array_get_value<i32>(__sroa_arr_repr, 0)",
-        "builtin::array_get_value<i32>(__sroa_arr_repr, 1)",
-        "builtin::array_get_value<i32>(__sroa_arr_repr, 2)",
-        "builtin::array_set<i32>(__sroa_arr_repr, 2, 31)"
+        "builtin::array_get_value<i32>($sroa_arr_repr, 0)",
+        "builtin::array_get_value<i32>($sroa_arr_repr, 1)",
+        "builtin::array_get_value<i32>($sroa_arr_repr, 2)",
+        "builtin::array_set<i32>($sroa_arr_repr, 2, 31)"
     ],
     "wir_not_expect:O2": [
-        "0 >= __v1",
-        "1 >= __v1",
-        "2 >= __v1"
+        "0 >= $v1",
+        "1 >= $v1",
+        "2 >= $v1"
     ]
 }

@@ -668,11 +668,11 @@ The `try_translate_canonical_method` / `emit_*` design above put canonical
 operation lowering in `wir_build`. That responsibility has since moved wholesale
 into the synthesis phase (`synthesis/cm_binding/`): stream / future read and
 write, waitable-set, and error-context operations are rewritten to per-payload
-binding functions (`__cm_stream_read_<T>`, `__cm_future_write_<T>`, …) built as
+binding functions (`$cm_stream_read_<T>`, `$cm_future_write_<T>`, …) built as
 ordinary TIR, using the shared `synthesize_lift` / `synthesize_lower` +
 `cm_abi` machinery. The transmission-shaped `future-write`
 (`Result<(), E>`, `Result<Option<resource>, E>`) was the last operation still
-hand-emitted in `wir_build`; it now routes through `__cm_future_write_<T>` too,
+hand-emitted in `wir_build`; it now routes through `$cm_future_write_<T>` too,
 lowering its value with the generic variant/option/resource memory lowerer and
 awaiting a BLOCKED write via `core:rt`'s `cm_await_blocked`.
 `wir_build` no longer contains any CM canonical emission.

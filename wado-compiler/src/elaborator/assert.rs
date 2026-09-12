@@ -38,9 +38,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let cond_type = self.resolve_condition_expr(&assert_stmt.condition, ctx);
 
-        // Reserved here because `reify_assert` allocates `__cond` at this
+        // Reserved here because `reify_assert` allocates `$cond` at this
         // point too, and the two walks must stay in local-index lockstep.
-        let _cond_local_index = ctx.add_local("__cond".to_string(), cond_type, false, None);
+        let _cond_local_index = ctx.add_local("$cond".to_string(), cond_type, false, None);
 
         // Matches the cold-branch allocation in `reify_assert`.
         let conditional_names: Vec<String> = ctx
@@ -76,9 +76,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .expect("assert_capture_ctx must survive resolution");
 
         // WEP 2026-05-26: record the capture-slot table
-        // so reify can pick the same sub-expressions for `let __vK = …;`
+        // so reify can pick the same sub-expressions for `let $vK = …;`
         // materialisation. Invert `ast_id_to_slot` so the recorded `slots`
-        // vector is indexed by slot (matching `__vK` naming).
+        // vector is indexed by slot (matching `$vK` naming).
         let mut slot_ast_ids: Vec<Option<AstId>> = vec![None; slots.len()];
         for (&ast_id, &slot_idx) in &ast_id_to_slot {
             if let Some(entry) = slot_ast_ids.get_mut(slot_idx) {
@@ -108,9 +108,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         ctx.exit_scope();
-
-        // Keeps reify's `__assert_N` labels in source order.
-        ctx.next_assert_id += 1;
     }
 
     /// Hook the body walk calls on an `AstId` flagged for capture: resolves
@@ -199,7 +196,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
                 (false, false) => "in-place",
             };
             out.push_str(&format!(
-                "  __v{i}  {reach:<11}  {bind:<8}  {}\n",
+                "  $v{i}  {reach:<11}  {bind:<8}  {}\n",
                 slot.capture_label
             ));
         }
@@ -209,7 +206,7 @@ pub(crate) fn render_plans(sem: &ModuleSemantics) -> String {
 
 /// One sub-expression captured during the power-assert scan.
 struct Capture {
-    /// Variable name (`__v0`, `__v1`, …) the rewritten condition refers to.
+    /// Variable name (`$v0`, `$v1`, …) the rewritten condition refers to.
     name: String,
     /// Source text of the original sub-expression, used in the failure message.
     source: String,
@@ -299,7 +296,7 @@ impl AssertCaptureContext {
 struct CaptureScanner {
     slots: Vec<Capture>,
     ast_id_to_slot: IndexMap<AstId, usize>,
-    /// The condition itself, which `__cond` already holds.
+    /// The condition itself, which `$cond` already holds.
     is_root: bool,
     /// A short-circuit lies above, so the capture may go unevaluated.
     conditional: bool,
@@ -344,7 +341,7 @@ impl CaptureScanner {
         } else {
             let idx = self.slots.len();
             self.slots.push(Capture {
-                name: format!("__v{idx}"),
+                name: format!("$v{idx}"),
                 source,
                 conditional,
                 is_place,

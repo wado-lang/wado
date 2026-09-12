@@ -6,7 +6,7 @@
 // stopped at the value-copy wrapper and hard-escaped `s`, blocking SROA entirely
 // (the struct stayed on the heap with struct.set / struct.get). Peeling the
 // wrapper makes the wrapped bare-local use a soft, reconstructible position, so
-// `s` decomposes into `__sroa_s_x` / `__sroa_s_y` scalars and the literal is
+// `s` decomposes into `$sroa_s_x` / `$sroa_s_y` scalars and the literal is
 // reconstructed only inside the copy (which then copies a fresh literal — a
 // redundant, sound no-op that later passes demote).
 use { println, Stdout } from "core:cli";
@@ -38,9 +38,9 @@ __DATA__
 {
     "stdout": "ok\n",
     "wir_expect:O2": [
-        "__sroa_s_x"
+        "$sroa_s_x"
     ],
     "wir_not_expect:O0": [
-        "__sroa_s_x"
+        "$sroa_s_x"
     ]
 }

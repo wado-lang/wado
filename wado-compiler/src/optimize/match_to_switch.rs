@@ -92,7 +92,7 @@ fn run_globals(
 ) -> bool {
     let mut changed = false;
     // Global initializer bodies have no owning function — and no locals (any
-    // runtime-computed local is hoisted into `__initialize_module`). Lend an
+    // runtime-computed local is hoisted into `$initialize_module`). Lend an
     // empty scratch list, reused across globals; `MatchToSwitchRule` never
     // allocates, so it stays empty.
     let mut no_locals: Vec<NirLocal> = Vec::new();

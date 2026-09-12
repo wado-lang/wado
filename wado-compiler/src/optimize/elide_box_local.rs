@@ -701,7 +701,7 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("__l{index}"),
+                name: format!("$l{index}"),
             },
         )
     }

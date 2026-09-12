@@ -132,7 +132,7 @@ pub struct ValueCopyPlan {
     /// projection / element read). Because it admits borrowed projections it
     /// must not feed the move / owned decision.
     pub returns_receiver_alias: FuncKeySet,
-    /// Return types for which every closure `__call` — the complete set of
+    /// Return types for which every closure `$call` — the complete set of
     /// indirect-call targets after closure lowering — returns owned, so an
     /// indirect call yielding that type is fresh.
     pub indirect_owned_returns: IndexSet<TypeId>,

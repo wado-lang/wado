@@ -112,8 +112,8 @@
     (import "mem" "realloc" (func (;0;) (type 0)))
     (import "mem" "memory" (memory (;0;) 1))
     (import "wasi" "task-return" (func (;1;) (type 2)))
-    (export "run" (func $ops.mess_dirty.wado/__cm_export__run))
-    (func $ops.mess_dirty.wado/__cm_export__run (;2;) (type 1)
+    (export "run" (func $ops.mess_dirty.wado/$cm_export__run))
+    (func $ops.mess_dirty.wado/$cm_export__run (;2;) (type 1)
       (call 1
         (i32.const 0))
     )

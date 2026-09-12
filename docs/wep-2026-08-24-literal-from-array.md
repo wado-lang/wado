@@ -151,9 +151,9 @@ members becomes one `T::from([…])` call, and each `..base` becomes one
 ```wado
 let m: T = { ..base, "c": 3 };
 // {
-//     let mut __acc: T = base;
-//     __acc.spread_literal(T::from([["c", 3]]));
-//     break __kv_lit: __acc;
+//     let mut $acc: T = base;
+//     $acc.spread_literal(T::from([["c", 3]]));
+//     break $kv_lit: $acc;
 // }
 ```
 

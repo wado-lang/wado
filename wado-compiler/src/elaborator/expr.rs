@@ -319,8 +319,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Power-assert capture hook. While `desugar_assert` is resolving
         // an assert condition, the scanner-flagged sub-expressions are
-        // extracted into `let __vK = <resolved>;` bindings and replaced
-        // with `Local(__vK)`. Common case (no assert in flight): a
+        // extracted into `let $vK = <resolved>;` bindings and replaced
+        // with `Local($vK)`. Common case (no assert in flight): a
         // single `Option` discriminant check, so the cost on the hot
         // path is negligible. See `elaborator/assert.rs` for the design.
         if let Some(cap_ctx) = ctx.assert_capture_ctx.as_ref() {
@@ -715,7 +715,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     defining_ast_id,
                 } => {
                     self.record_reference_opt(ident.id, defining_ast_id);
-                    // Deref capture: `*self.__capture_N` where the field holds
+                    // Deref capture: `*self.$capture_N` where the field holds
                     // `&mut T` (mutable closure capture). Reify
                     // rebuilds the `*capture` shape; record the place so the
                     // assign path can validate it (assignable iff the captured
@@ -5111,12 +5111,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Allocate a local for the Some payload binding (walk-order parity).
         ctx.enter_scope();
-        let _v_local = ctx.add_local("__qm_v".to_string(), some_type, false, None);
+        let _v_local = ctx.add_local("$qm_v".to_string(), some_type, false, None);
         ctx.exit_scope();
 
         // Reify rebuilds the `Option` `?` desugar
         // (`reify_question_mark_option`) from the AST, allocating its own
-        // `__qm_v` local. The body walk keeps the scope/local allocation
+        // `$qm_v` local. The body walk keeps the scope/local allocation
         // (walk-order parity) and projects the unwrapped `Some` payload type.
         some_type
     }
@@ -5145,10 +5145,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         ctx.enter_scope();
-        // The `__qm_v` local is allocated for walk-order parity; reify rebuilds
+        // The `$qm_v` local is allocated for walk-order parity; reify rebuilds
         // the `?` desugar and its own bindings, so the index is not kept here.
-        ctx.add_local("__qm_v".to_string(), ok_type, false, None);
-        ctx.add_local("__qm_e".to_string(), inner_err_type, false, None);
+        ctx.add_local("$qm_v".to_string(), ok_type, false, None);
+        ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
         // Record the `From::from(e)` conversion facts when the inner and outer
         // error types differ (no-op when they match). `resolve_from_call`

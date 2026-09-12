@@ -919,7 +919,7 @@ mod tests {
             body,
             ExprKind::Local {
                 index,
-                name: format!("__l{index}"),
+                name: format!("$l{index}"),
             },
         )
     }
@@ -957,7 +957,7 @@ mod tests {
         ps(
             body,
             StmtKind::Let {
-                name: format!("__l{index}"),
+                name: format!("$l{index}"),
                 local_index: index,
                 is_mut: false,
                 is_reactive: false,

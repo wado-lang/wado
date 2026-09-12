@@ -6540,8 +6540,14 @@ mod tests {
     use super::*;
     use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
     use crate::lexer::lex;
+<<<<<<< HEAD
     use crate::name::SYNTHETIC_LABEL_PREFIX;
     use crate::{ast, format};
+||||||| fe30fd382
+    use crate::name::SYNTHETIC_LABEL_PREFIX;
+=======
+    use crate::name::INTERNAL_PREFIX;
+>>>>>>> origin/main
     use std::assert_matches;
 
     /// Parse helper for tests: maps the error-recovering parser back to a
@@ -7661,12 +7667,13 @@ mod tests {
         }
     }
 
-    /// The compiler's label namespace needs no reservation rule: no Wado
-    /// identifier starts with [`SYNTHETIC_LABEL_PREFIX`], so a pass that knows a
-    /// synthesised block by its label cannot be fooled by a written one.
+    /// The compiler's own namespace needs no reservation rule: no Wado
+    /// identifier starts with [`INTERNAL_PREFIX`], so a pass that knows a
+    /// synthesised block by its label cannot be fooled by a written one, and a
+    /// synthesised local or function can never shadow one an author wrote.
     #[test]
-    fn test_synthetic_label_prefix_is_unwritable() {
-        let source = format!("fn f() {{ {SYNTHETIC_LABEL_PREFIX}tmpl: {{}} }}");
+    fn test_internal_prefix_is_unwritable() {
+        let source = format!("fn f() {{ {INTERNAL_PREFIX}tmpl: {{}} }}");
         assert!(!lex(&source).errors.is_empty(), "{source} must not lex");
 
         // Every label the source *can* spell is its own, `__` included.

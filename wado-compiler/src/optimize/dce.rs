@@ -36,15 +36,23 @@ type CallGraph = IndexMap<FunctionId, IndexSet<FunctionId>>;
 /// Effect usage: function ID -> set of (`interface_name`, `operation_name`) pairs
 type EffectUsageMap = IndexMap<FunctionId, IndexSet<(String, String)>>;
 
-/// A pending `__Closure_N` `inspect` edge collected during the call-graph
+/// A pending `$Closure_N` `inspect` edge collected during the call-graph
 /// walk. The edge is only added to the graph once the inspectable signature set
 /// (computed from the reachable-without-inspect-roots set) is known. Storing them
 /// out-of-band lets us build the call graph in a single AST walk instead of twice.
 #[derive(Debug, Clone)]
 struct PendingInspectEdge {
     closure_module: ModuleSource,
+<<<<<<< HEAD
     /// `__Closure_{functor_id}` struct name.
     struct_name: FqTypeName,
+||||||| fe30fd382
+    /// `__Closure_{functor_id}` struct name.
+    struct_name: crate::name::FqTypeName,
+=======
+    /// `$Closure_{functor_id}` struct name.
+    struct_name: crate::name::FqTypeName,
+>>>>>>> origin/main
     /// `(arity, return_type)` key into `InspectableSignatures`.
     key: (usize, TypeId),
 }
@@ -56,7 +64,7 @@ struct FunctionAnalysis {
     callees: IndexSet<FunctionId>,
     /// Effect calls: (`interface_name`, `op_name`)
     effect_calls: IndexSet<(String, String)>,
-    /// Pending `__Closure_N^Inspect::inspect` edges, added to the graph by
+    /// Pending `$Closure_N^Inspect::inspect` edges, added to the graph by
     /// `apply_inspect_edges` once the inspectable-signature set is known.
     pending_inspects: Vec<PendingInspectEdge>,
     /// `(module-path-joined-by-::, name)` pairs that this function reads via
@@ -247,7 +255,7 @@ pub(super) fn callee_descriptor(descriptors: &[FunctionRef], func_id: FuncId) ->
 ///
 /// Consumes the call graph (and its pending inspect edges) built in the single
 /// AST walk of [`build_analysis_graph`]; mutates the graph by adding the gated
-/// per-functor `__Closure_N^Inspect` edges once the inspectable-signature set
+/// per-functor `$Closure_N^Inspect` edges once the inspectable-signature set
 /// is known.
 fn compute_function_reachability(
     project: &mut NirPackage,
@@ -255,7 +263,7 @@ fn compute_function_reachability(
     graph: &mut AnalysisGraph,
 ) -> IndexSet<usize> {
     // Phase 2a: compute the provisional reachable set from the raw graph
-    // (without per-functor `__Closure_N^Inspect` edges). This is what
+    // (without per-functor `$Closure_N^Inspect` edges). This is what
     // determines whether a `:?` / `:#?` call site is actually live.
     let reachable_v1 = compute_reachable_from_entries(project, &graph.call_graph);
 
@@ -638,7 +646,7 @@ fn collect_bytes_literals_block(body: &Body, root: BlockId, used: &mut IndexSet<
         ControlFlow::Continue(true)
     });
 }
-/// Remove closure functors whose `__call` method was eliminated by function DCE.
+/// Remove closure functors whose `$call` method was eliminated by function DCE.
 pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
     // Build a set of surviving (module_source, func_name) pairs for O(1) lookup.
     let surviving_funcs: IndexSet<(ModuleSource, String)> = project
@@ -646,7 +654,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
         .iter()
         .filter_map(|f| {
             let func = f.borrow();
-            // A dead `__call` lingers in `functions` (Phase 4 marks, never removes),
+            // A dead `$call` lingers in `functions` (Phase 4 marks, never removes),
             // so filter by liveness rather than mere presence.
             if func.is_dead {
                 return None;
@@ -666,7 +674,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
 }
 
 /// Per-caller pending inspect edges, keyed by the caller's `FunctionId`.
-/// Each entry collects every `__Closure_N` observed in that caller's body
+/// Each entry collects every `$Closure_N` observed in that caller's body
 /// alongside its `(arity, return_type)` signature. After the
 /// inspectable-signature set is computed, `apply_inspect_edges` walks this
 /// map and adds the matching `inspect` edges to the call graph.
@@ -680,7 +688,7 @@ type PendingInspectsByCaller = IndexMap<FunctionId, Vec<PendingInspectEdge>>;
 type FuncPositions = IndexMap<FunctionId, usize>;
 
 /// Result of the single call-graph build. The call graph is the raw
-/// reachability graph *without* `__Closure_N^Inspect` edges; those
+/// reachability graph *without* `$Closure_N^Inspect` edges; those
 /// edges are gated by the inspectable-signature set and added after the
 /// fact by `apply_inspect_edges`.
 ///
@@ -772,7 +780,7 @@ fn build_analysis_graph(project: &NirPackage, descriptors: &[FunctionRef]) -> An
     }
 }
 
-/// Augment `call_graph` with the gated `__Closure_N^Inspect::inspect`
+/// Augment `call_graph` with the gated `$Closure_N^Inspect::inspect`
 /// edges. Inserts exactly one edge per (caller, struct, trait) match against
 /// the inspectable-signature set computed in Phase 1b.
 fn apply_inspect_edges(
@@ -1293,7 +1301,7 @@ impl<'a> DceWalker<'a> {
         target_fn_type: TypeId,
         closure_module: &ModuleSource,
     ) {
-        // `__call` is always live: the canonical closure struct holds
+        // `$call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
         let struct_name = FqTypeName::shape(
             closure_module,
@@ -1308,7 +1316,7 @@ impl<'a> DceWalker<'a> {
                 CLOSURE_CALL_METHOD.to_string(),
             )));
 
-        // A per-functor `__Closure_N^Inspect` impl only needs to stay alive
+        // A per-functor `$Closure_N^Inspect` impl only needs to stay alive
         // when its matching `fn(..)^Inspect` dispatch stub is reachable, so a
         // program that never prints a closure of that shape keeps neither it
         // nor its per-literal source-string constant. The gating set is derived
@@ -1641,7 +1649,7 @@ fn populate_type_reachability(
 
         // Reachable globals' declared type + initializer types. At NIR
         // level non-constant initializers have already been extracted
-        // into `__initialize_module` (see `lower::plan::globals`), so
+        // into `$initialize_module` (see `lower::plan::globals`), so
         // each surviving `global.initializer` here is a constant
         // expression — DceWalker on it only walks the literal tree.
         for global in &project.globals {
@@ -1661,7 +1669,7 @@ fn populate_type_reachability(
             }
         }
 
-        // A reachable `__call` keeps its functor's struct / ref types live:
+        // A reachable `$call` keeps its functor's struct / ref types live:
         // `register_closure_wrappers` reads `ref_type_id` for the wrapper's
         // `ref.cast`, and DAE can drop every other NIR-side mention by removing
         // the env `self`. Compare by pointer identity — `functor.call_method`
@@ -2360,7 +2368,7 @@ fn compute_global_reachability(
 /// Retain only globals whose `(module_key, name)` is in
 /// `used_globals` (computed by [`analyze_dce`]), then strip every
 /// `GlobalVarSet` for a dead global from surviving function bodies
-/// (covers both the original `__initialize_module` and any inlined
+/// (covers both the original `$initialize_module` and any inlined
 /// copies).
 pub fn remove_unreachable_globals(
     project: &mut NirPackage,

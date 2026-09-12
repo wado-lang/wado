@@ -6,8 +6,14 @@
 use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
+<<<<<<< HEAD
 use crate::name::kebab_export_name;
 use crate::package::test_selected;
+||||||| fe30fd382
+use crate::name::kebab_export_name;
+=======
+use crate::name::{INTERNAL_PREFIX, kebab_export_name};
+>>>>>>> origin/main
 use crate::tir::TirTest;
 use crate::world_registry::{WorldExportInfo, WorldInfo, WorldRegistry};
 
@@ -38,7 +44,7 @@ pub struct WorldExportPlan {
     /// underscore→kebab transform. WASI names (`run`, `handle`, `generate`) are
     /// already kebab-safe, so this equals `name` for them.
     pub cm_export_name: String,
-    /// Core function name in the Wasm module (e.g., `"__cm_export__run"` if adapter exists, or `"run"`)
+    /// Core function name in the Wasm module (e.g., `"$cm_export__run"` if adapter exists, or `"run"`)
     pub core_func_name: String,
     /// Whether this is an async export
     pub is_async: bool,
@@ -133,7 +139,7 @@ pub enum CmExportType {
 /// A test function to export from the component.
 #[derive(Debug, Clone)]
 pub struct TestExportPlan {
-    /// Internal function name (e.g., "__`test_0_simple`", "__`test_trap_0_panics`", or "__`test_todo_0_not_yet`")
+    /// Internal function name (e.g., "$`test_0_simple`", "$`test_trap_0_panics`", or "$`test_todo_0_not_yet`")
     pub function_name: String,
     /// Core function name in Wasm module (adapter name if adapter exists, otherwise same as `function_name`)
     pub core_func_name: String,
@@ -412,7 +418,7 @@ fn resolve_cm_export_type(
     panic!("unsupported world export type shape: {ty:?}");
 }
 
-/// Convert a test function name (e.g., `__test_0_my_name`) to a valid kebab-case
+/// Convert a test function name (e.g., `$test_0_my_name`) to a valid kebab-case
 /// CM export name (e.g., `test-0-my-name`).
 ///
 /// Test names may contain consecutive underscores when non-alphanumeric characters
@@ -420,7 +426,9 @@ fn resolve_cm_export_type(
 /// elaborator. A naive `replace('_', '-')` would produce consecutive dashes which
 /// violate the kebab-case requirement of the Component Model.
 fn sanitize_kebab_export_name(function_name: &str) -> String {
-    let raw = function_name.trim_start_matches('_').replace('_', "-");
+    let raw = function_name
+        .trim_start_matches(INTERNAL_PREFIX)
+        .replace('_', "-");
     // Collapse consecutive dashes and strip trailing dashes
     let mut prev_dash = false;
     let collapsed: String = raw
@@ -449,44 +457,44 @@ mod tests {
     fn test_sanitize_kebab_export_name() {
         // Simple case
         assert_eq!(
-            sanitize_kebab_export_name("__test_0_simple"),
+            sanitize_kebab_export_name("$test_0_simple"),
             "test-0-simple"
         );
         // Consecutive underscores from parentheses in test name
         assert_eq!(
-            sanitize_kebab_export_name("__test_23_compression_level_0__stored__round_trip"),
+            sanitize_kebab_export_name("$test_23_compression_level_0__stored__round_trip"),
             "test-23-compression-level-0-stored-round-trip"
         );
         // Trailing underscores
         assert_eq!(
-            sanitize_kebab_export_name("__test_1_trailing__"),
+            sanitize_kebab_export_name("$test_1_trailing__"),
             "test-1-trailing"
         );
         // Unnamed test (no name part)
-        assert_eq!(sanitize_kebab_export_name("__test_5"), "test-5");
+        assert_eq!(sanitize_kebab_export_name("$test_5"), "test-5");
         // expect_trap tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_trap_0_panics_on_zero"),
+            sanitize_kebab_export_name("$test_trap_0_panics_on_zero"),
             "test-trap-0-panics-on-zero"
         );
-        assert_eq!(sanitize_kebab_export_name("__test_trap_3"), "test-trap-3");
+        assert_eq!(sanitize_kebab_export_name("$test_trap_3"), "test-trap-3");
         // TODO tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_todo_0_not_yet_implemented"),
+            sanitize_kebab_export_name("$test_todo_0_not_yet_implemented"),
             "test-todo-0-not-yet-implemented"
         );
-        assert_eq!(sanitize_kebab_export_name("__test_todo_2"), "test-todo-2");
+        assert_eq!(sanitize_kebab_export_name("$test_todo_2"), "test-todo-2");
         // timeout_ms tests
         assert_eq!(
-            sanitize_kebab_export_name("__test_tm2000_0_slow"),
+            sanitize_kebab_export_name("$test_tm2000_0_slow"),
             "test-tm2000-0-slow"
         );
         assert_eq!(
-            sanitize_kebab_export_name("__test_trap_tm500_0_panics"),
+            sanitize_kebab_export_name("$test_trap_tm500_0_panics"),
             "test-trap-tm500-0-panics"
         );
         assert_eq!(
-            sanitize_kebab_export_name("__test_todo_tm3000_1"),
+            sanitize_kebab_export_name("$test_todo_tm3000_1"),
             "test-todo-tm3000-1"
         );
     }

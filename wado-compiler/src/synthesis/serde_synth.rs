@@ -536,7 +536,7 @@ struct LookupTree<'a> {
 impl LookupTree<'_> {
     fn byte_at(&self, pos: usize) -> TirExpr {
         key_get_byte_as_i32_expr(
-            local_ref(0, "__key", self.key_slice_type),
+            local_ref(0, "$key", self.key_slice_type),
             i32_const(pos as i32),
             self.span,
             self.compiler_items,
@@ -613,7 +613,7 @@ impl LookupTree<'_> {
             return keys.iter().map(|k| self.confirm(k, decided)).collect();
         };
         let groups = group_by_byte(keys, pos);
-        let name = format!("__b{pos}");
+        let name = format!("$b{pos}");
         let local = alloc_named_local(
             &mut self.next_local,
             &mut self.locals,
@@ -681,13 +681,13 @@ fn generate_lookup_function(
         option_i32,
         span,
         compiler_items,
-        locals: vec![param_local("__key", key_slice_type, false)],
+        locals: vec![param_local("$key", key_slice_type, false)],
         next_local: 1,
     };
 
     let len_local = alloc_local(&mut tree.next_local, &mut tree.locals, TypeTable::I32);
-    let len_expr = byte_slice_len_expr(local_ref(0, "__key", key_slice_type), span, compiler_items);
-    let mut stmts = vec![let_stmt("__len", len_local, TypeTable::I32, len_expr)];
+    let len_expr = byte_slice_len_expr(local_ref(0, "$key", key_slice_type), span, compiler_items);
+    let mut stmts = vec![let_stmt("$len", len_local, TypeTable::I32, len_expr)];
 
     // A positional field is ordinal, never matched by name, so the tree omits
     // it. `positional_at` enumerates it instead.
@@ -706,7 +706,7 @@ fn generate_lookup_function(
     // byte the branches below it read is in range only because it ran first.
     for (len, group) in by_len {
         let condition = i32_eq(
-            local_ref(len_local, "__len", TypeTable::I32),
+            local_ref(len_local, "$len", TypeTable::I32),
             i32_const(len as i32),
             span,
         );
@@ -720,7 +720,7 @@ fn generate_lookup_function(
         type_name,
         field_schema_trait,
         "lookup",
-        "__key",
+        "$key",
         key_slice_type,
         option_i32,
         tree.locals,
@@ -745,23 +745,19 @@ fn generate_positional_at_function(
     span: Span,
     compiler_items: &CompilerItems,
 ) -> TirFunction {
-    let locals = vec![param_local("__rank", TypeTable::I32, false)];
+    let locals = vec![param_local("$rank", TypeTable::I32, false)];
     let next_local: u32 = 1;
 
     let mut stmts = Vec::new();
 
     // For each positional field (in declaration order), generate:
-    //   if __rank == R { return Some(field_index); }
+    //   if $rank == R { return Some(field_index); }
     let mut rank: i32 = 0;
     for (field_index, &is_positional) in positional_flags.iter().enumerate() {
         if !is_positional {
             continue;
         }
-        let condition = i32_eq(
-            local_ref(0, "__rank", TypeTable::I32),
-            i32_const(rank),
-            span,
-        );
+        let condition = i32_eq(local_ref(0, "$rank", TypeTable::I32), i32_const(rank), span);
         stmts.push(if_stmt(
             condition,
             block(vec![return_stmt(Some(option_some(
@@ -779,7 +775,7 @@ fn generate_positional_at_function(
         type_name,
         field_schema_trait,
         "positional_at",
-        "__rank",
+        "$rank",
         TypeTable::I32,
         option_i32,
         locals,

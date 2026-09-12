@@ -82,7 +82,7 @@ pub(super) fn materialize_if_needed(
     // primitive types and handles (i32, i64, f32, f64, u8, u16, bool, char).
     let type_id = expr.type_id;
     let local = alloc_local(next_local, locals, type_id);
-    let name = format!("__lifted_result_{local}");
+    let name = format!("$lifted_result_{local}");
     stmts.push(let_stmt(&name, local, type_id, expr));
     local_ref(local, &name, type_id)
 }
@@ -376,13 +376,13 @@ fn try_lift_wasi_struct(
     // Materialize the struct into a local
     let result_local = alloc_local(next_local, locals, struct_type_id);
     stmts.push(let_stmt(
-        "__struct_result",
+        "$struct_result",
         result_local,
         struct_type_id,
         struct_expr,
     ));
 
-    Some(local_ref(result_local, "__struct_result", struct_type_id))
+    Some(local_ref(result_local, "$struct_result", struct_type_id))
 }
 
 /// Lift a WASI variant type (e.g., `Method`) from linear memory.
@@ -406,7 +406,7 @@ fn synthesize_lift_wasi_variant(
     // Load discriminant: 1 byte (u8) for variants with ≤ 256 cases
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__vdisc",
+        "$vdisc",
         disc_local,
         TypeTable::I32,
         builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
@@ -415,7 +415,7 @@ fn synthesize_lift_wasi_variant(
     // Result local (typed as the variant type)
     let result_local = alloc_local(next_local, locals, variant_type);
     stmts.push(let_mut_stmt(
-        "__vresult",
+        "$vresult",
         result_local,
         variant_type,
         null_expr(variant_type),
@@ -463,7 +463,7 @@ fn synthesize_lift_wasi_variant(
             synth_span(),
         );
         case_stmts.push(expr_stmt(assign(
-            local_ref(result_local, "__vresult", variant_type),
+            local_ref(result_local, "$vresult", variant_type),
             construct,
         )));
 
@@ -474,7 +474,7 @@ fn synthesize_lift_wasi_variant(
             // Build if statement: if disc == i { ... } else { current_else }
             let cond = binary(
                 TirBinaryOp::Eq,
-                local_ref(disc_local, "__vdisc", TypeTable::I32),
+                local_ref(disc_local, "$vdisc", TypeTable::I32),
                 i32_const(i as i32),
                 TypeTable::BOOL,
             );
@@ -490,7 +490,7 @@ fn synthesize_lift_wasi_variant(
         }
     }
 
-    local_ref(result_local, "__vresult", variant_type)
+    local_ref(result_local, "$vresult", variant_type)
 }
 
 /// Lift a WASI enum type from an i32 discriminant.
@@ -507,7 +507,7 @@ fn synthesize_lift_wasi_enum(
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     let load_name = disc_load_op(cm_enum_byte_size(case_names.len()));
     stmts.push(let_stmt(
-        "__edisc",
+        "$edisc",
         disc_local,
         TypeTable::I32,
         builtin_call(load_name, vec![addr], TypeTable::I32),
@@ -517,7 +517,7 @@ fn synthesize_lift_wasi_enum(
     // Enums are represented as i32, so use 0 as the initial value (not null_expr
     // which emits ref.null for non-Option types).
     stmts.push(let_mut_stmt(
-        "__eresult",
+        "$eresult",
         result_local,
         enum_type,
         i32_const(0),
@@ -538,7 +538,7 @@ fn synthesize_lift_wasi_enum(
             synth_span(),
         );
         let assign_stmt = expr_stmt(assign(
-            local_ref(result_local, "__eresult", enum_type),
+            local_ref(result_local, "$eresult", enum_type),
             construct,
         ));
 
@@ -547,7 +547,7 @@ fn synthesize_lift_wasi_enum(
         } else {
             let cond = binary(
                 TirBinaryOp::Eq,
-                local_ref(disc_local, "__edisc", TypeTable::I32),
+                local_ref(disc_local, "$edisc", TypeTable::I32),
                 i32_const(i as i32),
                 TypeTable::BOOL,
             );
@@ -562,7 +562,7 @@ fn synthesize_lift_wasi_enum(
         }
     }
 
-    local_ref(result_local, "__eresult", enum_type)
+    local_ref(result_local, "$eresult", enum_type)
 }
 
 /// Lift a `list<T>` from linear memory at `addr`.
@@ -612,7 +612,7 @@ pub(super) fn synthesize_lift_list(
 
     let base_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__base",
+        "$base",
         base_local,
         TypeTable::I32,
         builtin_call("i32_load", vec![addr.clone()], TypeTable::I32),
@@ -620,7 +620,7 @@ pub(super) fn synthesize_lift_list(
 
     let count_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__count",
+        "$count",
         count_local,
         TypeTable::I32,
         builtin_call(
@@ -632,7 +632,7 @@ pub(super) fn synthesize_lift_list(
 
     let result_local = alloc_local(next_local, locals, array_type_id);
     stmts.push(let_mut_stmt(
-        "__result",
+        "$result",
         result_local,
         array_type_id,
         generic_static_call(
@@ -640,40 +640,40 @@ pub(super) fn synthesize_lift_list(
             "with_capacity",
             ModuleSource::list(),
             vec![elem_type_id],
-            vec![local_ref(count_local, "__count", TypeTable::I32)],
+            vec![local_ref(count_local, "$count", TypeTable::I32)],
             array_type_id,
         ),
     ));
 
     let i_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_mut_stmt("__i", i_local, TypeTable::I32, i32_const(0)));
+    stmts.push(let_mut_stmt("$i", i_local, TypeTable::I32, i32_const(0)));
 
     // Build loop body
     let mut loop_stmts: Vec<TirStmt> = Vec::new();
 
-    // if __i >= __count { break; }
+    // if $i >= $count { break; }
     loop_stmts.push(if_stmt(
         binary(
             TirBinaryOp::GtEq,
-            local_ref(i_local, "__i", TypeTable::I32),
-            local_ref(count_local, "__count", TypeTable::I32),
+            local_ref(i_local, "$i", TypeTable::I32),
+            local_ref(count_local, "$count", TypeTable::I32),
             TypeTable::BOOL,
         ),
         block(vec![break_stmt()]),
         None,
     ));
 
-    // __elem_addr = __base + __i * elem_size
+    // $elem_addr = $base + $i * elem_size
     let elem_addr_local = alloc_local(next_local, locals, TypeTable::I32);
     loop_stmts.push(let_stmt(
-        "__elem_addr",
+        "$elem_addr",
         elem_addr_local,
         TypeTable::I32,
         binary_add(
-            local_ref(base_local, "__base", TypeTable::I32),
+            local_ref(base_local, "$base", TypeTable::I32),
             binary(
                 TirBinaryOp::Mul,
-                local_ref(i_local, "__i", TypeTable::I32),
+                local_ref(i_local, "$i", TypeTable::I32),
                 i32_const(elem_size as i32),
                 TypeTable::I32,
             ),
@@ -684,7 +684,7 @@ pub(super) fn synthesize_lift_list(
     let mut elem_lift_stmts: Vec<TirStmt> = Vec::new();
     let lifted_elem = synthesize_lift_inner(
         elem_ty,
-        local_ref(elem_addr_local, "__elem_addr", TypeTable::I32),
+        local_ref(elem_addr_local, "$elem_addr", TypeTable::I32),
         next_local,
         &mut elem_lift_stmts,
         locals,
@@ -692,9 +692,9 @@ pub(super) fn synthesize_lift_list(
     );
     loop_stmts.extend(elem_lift_stmts);
 
-    // __result.push(lifted_elem)
+    // $result.push(lifted_elem)
     loop_stmts.push(expr_stmt(generic_method_call(
-        local_ref(result_local, "__result", array_type_id),
+        local_ref(result_local, "$result", array_type_id),
         &list_head,
         "push",
         ModuleSource::list(),
@@ -705,34 +705,34 @@ pub(super) fn synthesize_lift_list(
     // Free element's linear memory
     loop_stmts.extend(synthesize_free_element(
         elem_ty,
-        local_ref(elem_addr_local, "__elem_addr", TypeTable::I32),
+        local_ref(elem_addr_local, "$elem_addr", TypeTable::I32),
         &string_name_for_free(ctx),
         ctx,
     ));
 
-    // __i = __i + 1
+    // $i = $i + 1
     loop_stmts.push(expr_stmt(assign(
-        local_ref(i_local, "__i", TypeTable::I32),
-        binary_add(local_ref(i_local, "__i", TypeTable::I32), i32_const(1)),
+        local_ref(i_local, "$i", TypeTable::I32),
+        binary_add(local_ref(i_local, "$i", TypeTable::I32), i32_const(1)),
     )));
 
     stmts.push(loop_stmt(block(loop_stmts)));
 
-    // Free list buffer: realloc(__base, __count * elem_size, elem_align, 0)
+    // Free list buffer: realloc($base, $count * elem_size, elem_align, 0)
     stmts.push(if_stmt(
         binary(
             TirBinaryOp::Gt,
-            local_ref(count_local, "__count", TypeTable::I32),
+            local_ref(count_local, "$count", TypeTable::I32),
             i32_const(0),
             TypeTable::BOOL,
         ),
         block(vec![expr_stmt(builtin_call(
             "realloc",
             vec![
-                local_ref(base_local, "__base", TypeTable::I32),
+                local_ref(base_local, "$base", TypeTable::I32),
                 binary(
                     TirBinaryOp::Mul,
-                    local_ref(count_local, "__count", TypeTable::I32),
+                    local_ref(count_local, "$count", TypeTable::I32),
                     i32_const(elem_size as i32),
                     TypeTable::I32,
                 ),
@@ -744,7 +744,7 @@ pub(super) fn synthesize_lift_list(
         None,
     ));
 
-    local_ref(result_local, "__result", array_type_id)
+    local_ref(result_local, "$result", array_type_id)
 }
 
 /// Lift an `option<T>` from linear memory at `addr`.
@@ -776,7 +776,7 @@ fn synthesize_lift_option_inner(
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     stmts.push(let_stmt(
-        "__disc",
+        "$disc",
         disc_local,
         TypeTable::I32,
         builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
@@ -788,13 +788,13 @@ fn synthesize_lift_option_inner(
         option_none(option_type_id, tt.compiler_items())
     };
     stmts.push(let_mut_stmt(
-        "__option_result",
+        "$option_result",
         result_local,
         option_type_id,
         none_init,
     ));
 
-    // if __disc != 0 { __option_result = Some(lift(inner, addr + offset)); }
+    // if $disc != 0 { $option_result = Some(lift(inner, addr + offset)); }
     let mut then_stmts: Vec<TirStmt> = Vec::new();
     let payload_addr = binary_add(addr, i32_const(payload_offset as i32));
     let lifted = synthesize_lift_inner(
@@ -810,7 +810,7 @@ fn synthesize_lift_option_inner(
         option_some(lifted, option_type_id, tt.compiler_items())
     };
     then_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__option_result", option_type_id),
+        local_ref(result_local, "$option_result", option_type_id),
         some_expr,
     )));
     then_stmts.extend(synthesize_free_element(
@@ -823,7 +823,7 @@ fn synthesize_lift_option_inner(
     stmts.push(if_stmt(
         binary(
             TirBinaryOp::NotEq,
-            local_ref(disc_local, "__disc", TypeTable::I32),
+            local_ref(disc_local, "$disc", TypeTable::I32),
             i32_const(0),
             TypeTable::BOOL,
         ),
@@ -831,7 +831,7 @@ fn synthesize_lift_option_inner(
         None,
     ));
 
-    local_ref(result_local, "__option_result", option_type_id)
+    local_ref(result_local, "$option_result", option_type_id)
 }
 
 /// Lift a `result<T, E>` from linear memory at `addr`.
@@ -857,7 +857,7 @@ fn synthesize_lift_result_inner(
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
     // Result is a variant with 2 cases; CM spec discriminant is u8 (1 byte).
     stmts.push(let_stmt(
-        "__disc",
+        "$disc",
         disc_local,
         TypeTable::I32,
         builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
@@ -886,7 +886,7 @@ fn synthesize_lift_result_inner(
 
     let result_local = alloc_local(next_local, locals, result_type_id);
     stmts.push(let_mut_stmt(
-        "__result_val",
+        "$result_val",
         result_local,
         result_type_id,
         null_expr(result_type_id),
@@ -911,7 +911,7 @@ fn synthesize_lift_result_inner(
         Some(Box::new(lifted))
     };
     ok_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__result_val", result_type_id),
+        local_ref(result_local, "$result_val", result_type_id),
         TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
@@ -941,7 +941,7 @@ fn synthesize_lift_result_inner(
         Some(Box::new(lifted))
     };
     err_stmts.push(expr_stmt(assign(
-        local_ref(result_local, "__result_val", result_type_id),
+        local_ref(result_local, "$result_val", result_type_id),
         TirExpr::new(
             TirExprKind::VariantConstruct {
                 variant_type: result_type_id,
@@ -957,7 +957,7 @@ fn synthesize_lift_result_inner(
     stmts.push(if_stmt(
         binary(
             TirBinaryOp::Eq,
-            local_ref(disc_local, "__disc", TypeTable::I32),
+            local_ref(disc_local, "$disc", TypeTable::I32),
             i32_const(0),
             TypeTable::BOOL,
         ),
@@ -965,7 +965,7 @@ fn synthesize_lift_result_inner(
         Some(block(err_stmts)),
     ));
 
-    local_ref(result_local, "__result_val", result_type_id)
+    local_ref(result_local, "$result_val", result_type_id)
 }
 
 /// Lift a tuple from linear memory at `addr`.

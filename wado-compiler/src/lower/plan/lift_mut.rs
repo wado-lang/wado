@@ -99,7 +99,7 @@ impl MutBindingLifter {
                 let original_name = name.clone();
                 let original_index = *local_index;
                 let original_type = *type_id;
-                let fresh_name = format!("__match_mut_lift_{fresh_index}");
+                let fresh_name = format!("$match_mut_lift_{fresh_index}");
                 prefix_stmts.push(TirStmt::new(
                     TirStmtKind::Let {
                         name: original_name,

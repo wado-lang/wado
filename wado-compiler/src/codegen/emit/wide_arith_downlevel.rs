@@ -29,7 +29,7 @@ impl WirEmitter<'_> {
     }
 
     fn wide_scratch_name(i: usize) -> String {
-        format!("__wide_arith_{i}")
+        format!("$wide_arith_{i}")
     }
 
     /// Software 64×64→128 multiply. Pushes `[low, high]` (high on top), matching

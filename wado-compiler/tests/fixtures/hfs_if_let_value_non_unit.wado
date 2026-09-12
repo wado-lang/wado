@@ -2,16 +2,16 @@
 // non-unit `If` used as a Let value with mixed arms (one calls
 // `&mut local`, the other reads/updates the scalar). Each arm is its
 // own sync scope, so the call arm gets a wrapper local to itself
-// (write_back / let __tmp / re_read / __tmp) and the scalar arm sees
+// (write_back / let $tmp / re_read / $tmp) and the scalar arm sees
 // no sync. The Let value flows through naturally.
 //
 // Trace per iteration:
-//   - i=0: cond i % 2 == 0 → arm 0 (scalar). val = __hfs_v + 1 (=1).
+//   - i=0: cond i % 2 == 0 → arm 0 (scalar). val = $hfs_v + 1 (=1).
 //          sum += 1. b.v not modified.
 //   - i=1: cond fails → arm 1 (call). pre b.v = 1; call sets b.v=11
-//          and returns 11; re-read __hfs_v = 11. val = 11. sum += 11.
+//          and returns 11; re-read $hfs_v = 11. val = 11. sum += 11.
 //   - i=2: arm 0. val = 12 (=11+1). sum += 12.
-//   - i=3: arm 1. pre b.v=12; call → b.v=22, ret 22; __hfs_v=22.
+//   - i=3: arm 1. pre b.v=12; call → b.v=22, ret 22; $hfs_v=22.
 //          val=22. sum += 22.
 //   sum = 1+11+12+22 = 46. final b.v = 22.
 
@@ -54,7 +54,7 @@ __DATA__
 {
     "stdout": "46 22\n",
     "wir_expect:O2": [
-        "let __hfs_v_",
-        "let __hfs_call_"
+        "let $hfs_v_",
+        "let $hfs_call_"
     ]
 }

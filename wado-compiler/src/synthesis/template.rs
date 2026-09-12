@@ -403,7 +403,7 @@ struct TemplateExpander<'a> {
 impl TirOptVisitor for TemplateExpander<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         // Closure bodies own an independent local-index namespace, so the
-        // template synth locals (`__r`, `__f`, …) must be allocated there;
+        // template synth locals (`$r`, `$f`, …) must be allocated there;
         // otherwise they collide with closure params or body lets and
         // `LocalCollector` merges incompatibly-typed locals into one Wasm
         // slot. Mirrors the closure-scope switch in pattern lowering.
@@ -477,7 +477,7 @@ fn build_template_block(
         span,
     };
 
-    // let mut __r = String::with_capacity(N);
+    // let mut $r = String::with_capacity(N);
     let with_capacity_call = string_call(
         CompilerItem::StringWithCapacity,
         None,
@@ -586,7 +586,7 @@ fn build_template_block(
         }
     }
 
-    // break $tmpl: __r;
+    // break $tmpl: $r;
     stmts.push(TirStmt::new(
         TirStmtKind::Break {
             label: Some(label.clone()),
@@ -606,7 +606,7 @@ fn build_template_block(
     )
 }
 
-/// The `__r` accumulator the expanded block appends into. Every read of it —
+/// The `$r` accumulator the expanded block appends into. Every read of it —
 /// the value, a `&`, a `&mut` — comes from here, so the local's identity is
 /// written once.
 struct BufLocal {
@@ -640,7 +640,7 @@ impl BufLocal {
         )
     }
 
-    /// `__r.push_str(&value)`.
+    /// `$r.push_str(&value)`.
     fn push_str(&self, value: TirExpr, ctx: &TemplateCtx) -> TirStmt {
         let arg = TirExpr::new(
             TirExprKind::Unary {
@@ -723,7 +723,7 @@ fn string_call(
     TirExpr::new(kind, return_type, span)
 }
 
-/// Build a `Formatter::new(&mut __r)` or, when the spec asks for padding or
+/// Build a `Formatter::new(&mut $r)` or, when the spec asks for padding or
 /// precision, the full `Formatter { ... }` literal.
 fn build_formatter_expr(
     buf: &BufLocal,

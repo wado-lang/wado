@@ -14,16 +14,25 @@ use crate::{ast, tir};
 use std::fmt;
 use std::hash::Hash;
 
-/// Canonical method name of the synthesised `__call` impl on every
+/// The one character every name the compiler mints starts with, whether local,
+/// label, global, or synthesized struct or function. A Wado identifier holds no
+/// dollar sign, so a minted name collides with nothing an author wrote and no
+/// source can `break` to a synthesized label.
+///
+/// The `AsyncCall::__cm_*` fields are the exception: the standard library
+/// declares them in Wado source, which cannot spell the prefix.
+pub const INTERNAL_PREFIX: &str = "$";
+
+/// Canonical method name of the synthesised `$call` impl on every
 /// closure functor struct. Defined as a single constant so the
 /// compiler-internal naming convention has one source of truth — the
 /// closure planner, the translator, and DCE all reach for this
-/// constant instead of writing the literal `"__call"` at each site.
+/// constant instead of writing the literal `"$call"` at each site.
 ///
 /// Unlike stdlib items wired through [`crate::compiler_item`], the
-/// `__call` symbol has no Wado-side declaration, so a `CompilerItem`
+/// `$call` symbol has no Wado-side declaration, so a `CompilerItem`
 /// anchor would have nothing to bind to. A `const` is the right shape.
-pub const CLOSURE_CALL_METHOD: &str = "__call";
+pub const CLOSURE_CALL_METHOD: &str = "$call";
 
 /// Separator between a namespace-import alias and the imported member in the
 /// canonical `ns$member` name a `ns::member` reference resolves to. `$` is not
@@ -113,13 +122,24 @@ pub fn display_function_name(name: &str) -> String {
 ///
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
+///
+/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
+/// character rather than a suffix marker.
 #[must_use]
 pub fn diagnostic_function_name(name: &str) -> &str {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name;
     }
     let unqualified = name.rsplit('/').next().unwrap_or(name);
-    unqualified.split('$').next().unwrap_or(unqualified)
+    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
+        INTERNAL_PREFIX.len()
+    } else {
+        0
+    };
+    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
+        Some(suffix) => &unqualified[..prefix_len + suffix],
+        None => unqualified,
+    }
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -176,6 +196,23 @@ pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
     format!("$hole_fmt${mangled_shape}")
+}
+
+/// Whether `name` is a per-type bridge — a helper synthesis mints for a *type*
+/// rather than for a call site: the value-copy pair, the reflect accessors
+/// ([`case_extract_helper_name`] and its siblings), an effect operation's
+/// default. No TIR body names one: lowering rewrites a `builtin::…` call to it,
+/// or the dispatch reaches it, so a reachability walk over TIR bodies must root
+/// them all.
+///
+/// Every such helper spells the mangle of the type it belongs to after its
+/// kind, so a second [`INTERNAL_PREFIX`] is what tells one from the plainly
+/// synthesized functions that carry no type (`$initialize_module`, `$test_0`,
+/// `$cm_export__run`).
+#[must_use]
+pub fn is_type_bridge(name: &str) -> bool {
+    name.strip_prefix(INTERNAL_PREFIX)
+        .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
 /// Prefix of a template shape's mangled name; the rest is the shape's hash.
@@ -254,24 +291,16 @@ pub fn to_kebab(name: &str) -> String {
 }
 
 /// Prefix the compiler stamps onto every synthesised closure-functor
-/// struct (`__Closure_0`, `__Closure_1`, …). Like
+/// struct (`$Closure_0`, `$Closure_1`, …). Like
 /// [`CLOSURE_CALL_METHOD`], this is purely a compiler-internal
 /// convention — there is no Wado-side declaration to anchor it to.
-pub const CLOSURE_STRUCT_PREFIX: &str = "__Closure_";
-
-/// Prefix every compiler-synthesised block label carries.
-///
-/// `$` begins no Wado identifier, so the source cannot spell one of these
-/// whatever it tries — a pass that recognises a synthesised block by name
-/// cannot be fooled by a hand-written block wearing the same label, and the
-/// parser needs no rule to keep it that way.
-pub const SYNTHETIC_LABEL_PREFIX: &str = "$";
+pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
 /// The label a block no `break` names carries: `what` says which construct put
 /// the block there, `id` makes it unique within the body.
 #[must_use]
 pub fn plain_block_label(what: &str, id: usize) -> String {
-    format!("{SYNTHETIC_LABEL_PREFIX}{what}_{id}")
+    format!("{INTERNAL_PREFIX}{what}_{id}")
 }
 
 /// Label the template-string synthesiser stamps on the block wrapping an
@@ -289,27 +318,27 @@ pub fn is_template_block(label: &str) -> bool {
 
 /// Name of the result accumulator local in an expanded template block.
 /// Recognised by the template-hoist optimizer; single-sourced here.
-pub const TEMPLATE_RESULT_LOCAL: &str = "__r";
+pub const TEMPLATE_RESULT_LOCAL: &str = "$r";
 
 /// Name of the `Formatter` local in an expanded template block. Producer-only
 /// today, kept beside its siblings so the template-local convention lives in
 /// one place.
-pub const TEMPLATE_FORMATTER_LOCAL: &str = "__f";
+pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
 
 /// Per-module initializer function the lowering phase synthesises to run a
 /// module's global initializers. The optimizer's liveness / const-object
 /// passes treat it as a root, so producer and consumers share this name.
-pub const MODULE_INIT_FUNCTION: &str = "__initialize_module";
+pub const MODULE_INIT_FUNCTION: &str = "$initialize_module";
 
 /// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
 /// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
 /// over the latter still covers both.
-pub const MODULES_INIT_FUNCTION: &str = "__initialize_modules";
+pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
-/// constant aggregates into (`__const_obj_0`, …). It both mints and rescans
+/// constant aggregates into (`$const_obj_0`, …). It both mints and rescans
 /// these names, so the prefix lives here rather than as a repeated literal.
-pub const CONST_OBJ_GLOBAL_PREFIX: &str = "__const_obj_";
+pub const CONST_OBJ_GLOBAL_PREFIX: &str = "$const_obj_";
 
 /// Maximum UTF-8 byte length for an `InlineRef`-hoisted global (see
 /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`]) to override the
@@ -521,7 +550,7 @@ pub struct LocalMethodName {
     /// recorded outside of impl-block method context. The dispatch
     /// synthesis consumes this to produce **per-monomorphisation**
     /// dispatch infrastructure: each unique `(base_trait, trait_type_args)`
-    /// pair gets its own `__Dispatch_<R>__<args>` struct + global +
+    /// pair gets its own `$Dispatch_<R>__<args>` struct + global +
     /// per-op wrappers, with the resource's operation types substituted
     /// for that combination.
     pub trait_type_args: Vec<tir::TypeId>,
@@ -1085,7 +1114,7 @@ impl LocalMethodName {
         self.trait_name.is_some()
     }
 
-    /// True for the synthesized `__call` on a `__Closure_N` functor struct.
+    /// True for the synthesized `$call` on a `$Closure_N` functor struct.
     /// Syntactically these are inherent methods, but they dispatch through the
     /// closure's canonical type, whose Wasm signature is fixed — so a caller
     /// that reshapes ABIs must filter them out or the signature will no longer
@@ -1911,28 +1940,28 @@ pub fn mangle_local_trait_method(struct_name: &str, trait_name: &str, method_nam
 /// effect-dispatch synthesis (`Counter`, `Stream<u8>`, …).
 ///
 /// Examples:
-/// - `dispatch_struct_name("Counter")` → `"__Dispatch_Counter"`
-/// - `dispatch_struct_name("Stream<u8>")` → `"__Dispatch_Stream<u8>"`
+/// - `dispatch_struct_name("Counter")` → `"$Dispatch_Counter"`
+/// - `dispatch_struct_name("Stream<u8>")` → `"$Dispatch_Stream<u8>"`
 pub fn dispatch_struct_name(label: &str) -> String {
-    format!("__Dispatch_{label}")
+    format!("$Dispatch_{label}")
 }
 
 /// Build the per-instantiation effect-dispatch global name.
 ///
 /// Examples:
-/// - `dispatch_global_name("Counter")` → `"__effect_Counter"`
-/// - `dispatch_global_name("Stream<u8>")` → `"__effect_Stream<u8>"`
+/// - `dispatch_global_name("Counter")` → `"$effect_Counter"`
+/// - `dispatch_global_name("Stream<u8>")` → `"$effect_Stream<u8>"`
 pub fn dispatch_global_name(label: &str) -> String {
-    format!("__effect_{label}")
+    format!("$effect_{label}")
 }
 
 /// Build the per-operation effect-dispatch wrapper function name.
 ///
 /// Examples:
-/// - `dispatch_wrapper_name("Counter", "next")` → `"__effect_dispatch__Counter__next"`
-/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"__effect_dispatch__Stream<u8>__read"`
+/// - `dispatch_wrapper_name("Counter", "next")` → `"$effect_dispatch__Counter__next"`
+/// - `dispatch_wrapper_name("Stream<u8>", "read")` → `"$effect_dispatch__Stream<u8>__read"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("__effect_dispatch__{label}__{op_name}")
+    format!("$effect_dispatch__{label}__{op_name}")
 }
 
 /// Build the dispatch struct's per-operation field name.
@@ -1945,7 +1974,7 @@ pub fn dispatch_field_name(op_name: &str) -> String {
 }
 
 pub fn cm_wrap_async_func_name(interface_name: &str, method_name: &str) -> String {
-    format!("__cm_wrap_async__{interface_name}_{method_name}")
+    format!("$cm_wrap_async__{interface_name}_{method_name}")
 }
 
 /// Convert a `test "name"` string into the snake-case segment of the internal
@@ -1960,19 +1989,23 @@ pub fn test_name_to_snake(name: &str) -> String {
         .to_lowercase()
 }
 
-/// Build a test block's exported name: `__test_{index}[_{snake}]`, with the
-/// prefix encoding attributes — `__test_trap_…` for `#[expect_trap]`,
-/// `__test_todo_…` for `#[TODO]`, `__test_tm{ms}_…` for `#[timeout_ms]`, and
-/// combinations such as `__test_trap_tm{ms}_…`. Both the annotate walk and reify
+/// What every test function's name opens with; what follows encodes the test's
+/// attributes.
+const TEST_PREFIX: &str = "$test";
+
+/// Build a test block's exported name: `$test_{index}[_{snake}]`, with the
+/// prefix encoding attributes — `$test_trap_…` for `#[expect_trap]`,
+/// `$test_todo_…` for `#[TODO]`, `$test_tm{ms}_…` for `#[timeout_ms]`, and
+/// combinations such as `$test_trap_tm{ms}_…`. Both the annotate walk and reify
 /// call here, so the two cannot drift.
 pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&str>) -> String {
     let prefix = match (meta.is_todo, meta.expect_trap, meta.timeout_ms) {
-        (true, _, Some(ms)) => format!("__test_todo_tm{ms}"),
-        (true, _, None) => "__test_todo".to_string(),
-        (_, true, Some(ms)) => format!("__test_trap_tm{ms}"),
-        (_, true, None) => "__test_trap".to_string(),
-        (_, _, Some(ms)) => format!("__test_tm{ms}"),
-        (_, _, None) => "__test".to_string(),
+        (true, _, Some(ms)) => format!("{TEST_PREFIX}_todo_tm{ms}"),
+        (true, _, None) => format!("{TEST_PREFIX}_todo"),
+        (_, true, Some(ms)) => format!("{TEST_PREFIX}_trap_tm{ms}"),
+        (_, true, None) => format!("{TEST_PREFIX}_trap"),
+        (_, _, Some(ms)) => format!("{TEST_PREFIX}_tm{ms}"),
+        (_, _, None) => TEST_PREFIX.to_string(),
     };
     match name {
         Some(name) => format!("{prefix}_{test_index}_{}", test_name_to_snake(name)),
@@ -1980,11 +2013,47 @@ pub fn test_function_name(meta: &TestMetadata, test_index: usize, name: Option<&
     }
 }
 
+/// Whether `name` is what [`test_function_name`] built, whatever attributes its
+/// prefix encodes.
+#[must_use]
+pub fn is_test_function(name: &str) -> bool {
+    name.starts_with(TEST_PREFIX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
+
+    #[test]
+    fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
+        assert_eq!(
+            diagnostic_function_name("core:prelude/string.wado/String::grow$scalar"),
+            "String::grow"
+        );
+        assert_eq!(diagnostic_function_name("main.wado/run"), "run");
+        // A minted name opens with the prefix; cutting there would leave nothing.
+        assert_eq!(diagnostic_function_name("$test_0_adds"), "$test_0_adds");
+        assert_eq!(
+            diagnostic_function_name("main.wado/$cm_export__run"),
+            "$cm_export__run"
+        );
+        assert_eq!(
+            diagnostic_function_name("$value_copy$Point$shallow"),
+            "$value_copy"
+        );
+    }
+
+    #[test]
+    fn type_bridges_are_told_from_plainly_synthesized_functions() {
+        assert!(is_type_bridge(&value_copy_helper_name("main.wado/Point")));
+        assert!(is_type_bridge(&effect_default_impl_name("Log", "event")));
+        assert!(is_type_bridge(&hole_fmt_helper_name("$tmpl$abc")));
+        assert!(!is_type_bridge(MODULE_INIT_FUNCTION));
+        assert!(!is_type_bridge("$test_0_adds"));
+        assert!(!is_type_bridge("run"));
+    }
 
     #[test]
     fn bare_dep_resolves_only_for_consumer_not_inside_dependency() {

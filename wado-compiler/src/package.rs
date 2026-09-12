@@ -76,7 +76,7 @@ pub struct Package {
 
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
-    /// For example: `"run"` → `"__cm_export__run"`.
+    /// For example: `"run"` → `"$cm_export__run"`.
     pub export_binding_names: IndexMap<String, String>,
     /// Maps world export name → `post-return` function name, for the sync-lifted
     /// exports that return indirectly. Populated alongside
