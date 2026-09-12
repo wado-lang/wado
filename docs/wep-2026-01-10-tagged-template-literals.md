@@ -553,16 +553,12 @@ synthesis and the fold; then the prelude tags and fixtures.
 
 ## Known gaps
 
-- A tag that carries a state across holes by scanning the literal segments
-  folds to the per-hole decision only while that scan fits the inliner's size
-  budget. That is the `html` example's shape, and the one a code generator
-  needs. Past the budget the call survives with every argument constant, and
-  each hole rescans a string the compiler knows. Writing the scan as a
-  two-statement loop over a separate per-character transition gets it back
-  under the budget at any state count, so the gap costs a shape the tag author
-  has to know rather than the fold.
-  `tagged_template_lit_scan_fold.wado` pins all three shapes. The gap is the
-  optimizer's: [the optimizer guide](./optimizer.md#not-yet-implemented)
+- A tag that carries a state across holes by scanning the literal segments —
+  the `html` example's shape, and the one a code generator needs — folds to the
+  per-hole decision only while that scan fits the inliner's budget. Writing the
+  per-character transition as its own function gets it back under the budget at
+  any state count, so the tag author has a shape to know. The gap is the
+  optimizer's, and [the optimizer guide](./optimizer.md#not-yet-implemented)
   carries it.
 - A hole whose type mentions the enclosing function's type parameter. The
   shape would have to be generic over that parameter and instantiated with the

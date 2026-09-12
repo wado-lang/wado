@@ -232,20 +232,21 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,
       payload opaque" is inexpressible there.
-- [ ] Folding a call to an effect-free callee whose arguments are all constant,
-      past the inliner's size budget. A tagged template's per-hole context scan
-      is the standing case. The shape holds every literal segment as a constant,
-      so the scan reads nothing else. It folds to its answer while the scan fits
-      `inline_threshold` (16 at -O2, 26 at -O3), and survives as one call per
-      hole once the scan is larger. A code generator then rescans a string the
-      compiler knows on every emitted line. Splitting the per-character
-      transition out of the loop brings both halves under the budget at any
-      state count. WadoPoet's `wado` tag folds away entirely that way, so the
-      gap costs a shape the author has to know rather than the fold itself.
-      `niri` already admits such a callee (`is_ctfe_eligible`), and
-      `--optimize-inline-threshold 200` folds the undivided form, so what is
-      missing is reaching the fold without the inliner paying for the body
-      first. `tagged_template_lit_scan_fold.wado` pins all three shapes.
+- [ ] Folding a call whose callee is effect-free and whose arguments are all
+      constant, when the callee is bigger than the inliner's budget. The
+      standing case is a tagged template that scans its literal segments to
+      decide each hole. A template shape holds every segment as a constant, so
+      the scan reads nothing else and has one answer per hole. It folds while
+      the scan fits `inline_threshold` (16 at -O2, 26 at -O3). Past that the
+      call survives, and a code generator rescans a string the compiler already
+      knows on every line it emits. Writing the per-character transition as its
+      own function brings both halves under the budget at any state count,
+      which is how WadoPoet's `wado` tag folds away entirely. So the gap costs
+      the tag author a shape to know, not the fold. `niri` already admits such
+      a callee (`is_ctfe_eligible`) and `--optimize-inline-threshold 200` folds
+      the undivided form; what is missing is reaching the fold without the
+      inliner paying for the body first.
+      `tagged_template_lit_scan_fold.wado` pins all three shapes.
 
 ## Tried and found ineffective
 

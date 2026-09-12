@@ -144,15 +144,15 @@ describing its own reach.
       pattern — is a `PRIVATE_SYMBOL` compile error.
 - [x] The prelude is in scope everywhere, so what it puts there is what
       `core:prelude` exports: its own `pub` declarations and its `pub use`
-      re-exports, plus the builtin types, which are universal by nature rather
-      than by export. A name in that tier is read from outside `core:` too, so
-      it must reach that far on its own — `Visibility::reachable_from(false)`
-      gates both halves. A symbol an implementation module declares for its
-      siblings is not a prelude symbol: `core:prelude/fpfmt.wado`'s
-      `UnpackResult` needs an import, which
-      `prelude_internal_not_visible.wado` pins, and
-      `prelude_tier_holds_only_what_reaches_every_module` pins that a
-      prelude-private helper stays out of the tier.
+      re-exports. Both are read from modules outside `core:`, so
+      `Visibility::reachable_from` gates each against a caller in another
+      package. The builtin types join them on other grounds — `i32` is
+      universal by nature rather than by export. A symbol an implementation
+      module declares for its siblings is not a prelude symbol:
+      `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which
+      `prelude_internal_not_visible.wado` pins. A prelude-private helper stays
+      out of the tier too, which
+      `prelude_tier_holds_only_what_reaches_every_module` pins.
 - [x] Impl members (methods, associated constants) likewise, in expression and
       pattern position alike, and `export` on one is a compile error with a
       targeted diagnostic. Only _inherent_ members carry a ladder; a trait
@@ -162,14 +162,14 @@ describing its own reach.
 
 ## Known gaps
 
-- The stdlib's implementation modules still mark sibling-only symbols `pub`,
-  which the migration would have turned into `internal`. So
+- The stdlib's implementation modules still mark sibling-only symbols `pub`.
+  The migration would have made those `internal`. So
   `core:prelude/fpfmt.wado`'s `UnpackResult` is out of the prelude tier but
   still importable by path from any package, and `core:`'s published API is
-  wider than its facade. Closing it means walking each `core:` implementation
-  module, demoting what only its siblings use, and keeping whatever
-  `core:prelude` re-exports `pub`. It narrows a published API, so it is the
-  human's call.
+  wider than its facade. Closing the gap means walking each `core:`
+  implementation module, demoting what only its siblings use, and leaving `pub`
+  on whatever `core:prelude` re-exports. It narrows a published API, so it is
+  the human's call.
 
 ## References
 

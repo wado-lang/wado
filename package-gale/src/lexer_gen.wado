@@ -5062,7 +5062,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     for let rule of lexer_rules {
         if !rule.is_fragment {
             let trailer = if rule.is_virtual { "  // virtual" } else { "" };
-            w.line(&`TK_${rule.name} => "${rule.name}",${trailer}`);
+            w.line(&wado`TK_${rule.name} => "${rule.name}",${trailer}`);
         }
     }
     w.line(&"TK_EOF => \"Eof\",");

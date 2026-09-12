@@ -4,8 +4,8 @@
 // leaving neither a call nor a loop.
 //
 // It folds only while the scan fits `inline_threshold` (16 at -O2, 26 at -O3).
-// `small` is under it and folds away. `big` is the same automaton with four
-// states written as one function, sits over it, and survives as one call per
+// `small` is under it and folds away. `big` writes the same four-state
+// automaton as one function, sits over the budget, and survives as one call per
 // hole, each rescanning a string the compiler knows.
 //
 // Splitting the per-character transition out of the loop closes that, at any
@@ -14,8 +14,6 @@
 // automaton, and only the shape decides whether the answer is a constant. A tag
 // wanting a scan bigger than the budget writes it this way rather than reaching
 // for `--optimize-inline-threshold`.
-//
-// All three sides are pinned below.
 use { println, Stdout } from "core:cli";
 
 enum Small {

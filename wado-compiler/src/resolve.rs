@@ -128,18 +128,17 @@ impl Scopes {
         defs: &DefTable,
     ) -> Self {
         let mut out = Self::default();
-        // The prelude scope is what `core:prelude` exports — its own
-        // declarations and what it re-exports. A name that lands here is in
-        // scope in every module of the program, `core:` or not, so it has to
-        // reach that far on its own: `reachable_from(false)`. An
-        // implementation module's symbol is `pub` so its siblings can name it,
-        // and a prelude-private helper is nobody's to name.
+        // The prelude scope is what `core:prelude` exports: its own
+        // declarations and its re-exports. Both are read from modules outside
+        // `core:`, so each must reach that far on its own — which is what
+        // `reachable_from` answers for a caller in another package.
         let prelude = ModuleSource::prelude();
+        let in_another_package = false;
         let mut surface: IndexMap<String, DefId> = IndexMap::default();
         for name in symbols.reexport_names(&prelude) {
             let reexport_reaches = symbols
                 .get_reexport(&prelude, &name)
-                .is_some_and(|r| r.visibility.reachable_from(false));
+                .is_some_and(|r| r.visibility.reachable_from(in_another_package));
             if reexport_reaches
                 && let Some(sym) = symbols.lookup_in_module(&prelude, &name)
                 && let Some(def) = defs.of_ast_id(sym.defined_at)
@@ -148,16 +147,15 @@ impl Scopes {
             }
         }
         for sym in symbols.get_module_symbols(&prelude) {
-            if sym.visibility.reachable_from(false)
+            if sym.visibility.reachable_from(in_another_package)
                 && let Some(def) = defs.of_ast_id(sym.defined_at)
             {
                 surface.entry(sym.name.clone()).or_insert(def);
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
-        // names the same thing in a module that imports nothing, including one
-        // carrying `#![no_prelude]`, so where it was declared says nothing
-        // about who may write it.
+        // names the same thing in a module that imports nothing, `#![no_prelude]`
+        // included, so where it was declared says nothing about who may write it.
         for (id, sym) in symbols.iter() {
             if matches!(sym.kind, SymbolKind::BuiltinType)
                 && is_prelude_module(sym.module_source())
@@ -674,30 +672,26 @@ mod tests {
         (r, e, o)
     }
 
-    fn resolve_with_ast(
-        entry: &str,
-        other: &str,
-    ) -> (
+    /// The table, both module sources, and the ASTs a test walks for reference
+    /// sites.
+    type Resolved = (
         Resolutions,
         ModuleSource,
         ModuleSource,
         IndexMap<ModuleSource, Module>,
-    ) {
+    );
+
+    fn resolve_with_ast(entry: &str, other: &str) -> Resolved {
         resolve_sources(entry, other, |i| i.local("./other.wado"))
     }
 
-    /// As `resolve_with_ast`, with the second module's source chosen by the
-    /// caller — `core:prelude` for a test about the prelude tier.
+    /// Resolve `entry` against a second module whose source the caller mints —
+    /// `core:prelude` for a test about the prelude tier.
     fn resolve_sources(
         entry: &str,
         other: &str,
         mint_other: impl FnOnce(&mut ModuleSourceInterner) -> ModuleSource,
-    ) -> (
-        Resolutions,
-        ModuleSource,
-        ModuleSource,
-        IndexMap<ModuleSource, Module>,
-    ) {
+    ) -> Resolved {
         // One interner: `ModuleSource` equality is pointer identity, so two
         // interners would mint values that never compare equal and every import
         // would resolve to a module the map does not hold.

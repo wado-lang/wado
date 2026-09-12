@@ -139,13 +139,11 @@ impl CodeWriter {
     }
 }
 
-/// The lexical state the template text of a `wado` tag is in at a hole. Covers
-/// the same contexts as the compiler's own lexer, which is what it must agree
-/// with; a pending backslash, `/` or `*` is a state of its own, so `step` needs
-/// no memory beyond the one it is given.
-///
-/// A template needs no nesting count: its interpolations are the tag's own
-/// holes, so a `${` never reaches the literal text, and backticks alternate.
+/// The lexical state the template text of a `wado` tag is in at a hole — the
+/// contexts the compiler's own lexer has, which this must agree with. A pending
+/// backslash, `/` or `*` is a state of its own, so `step` carries no other
+/// memory. `Tpl` needs no nesting count either: the tag's own holes are the
+/// interpolations, so a `${` never reaches the literal text.
 enum Ctx {
     Code,
     CodeSlash,
@@ -203,8 +201,7 @@ fn step(ctx: Ctx, c: char) -> Ctx {
     };
 }
 
-/// The state `c` opens from code: a literal's own state, a pending `/`, or code
-/// again.
+/// The state `c` opens from code.
 fn open(c: char) -> Ctx {
     return match c {
         '"' => Ctx::Str,
@@ -230,8 +227,7 @@ fn advance(ctx: Ctx, lit: &String) -> Ctx {
 /// written as it renders.
 fn hole_quote(ctx: Ctx) -> Option<u8> {
     return match ctx {
-        Ctx::Code | Ctx::CodeSlash => null,
-        Ctx::LineComment | Ctx::BlockComment | Ctx::BlockCommentStar => null,
+        Ctx::Code | Ctx::CodeSlash | Ctx::LineComment | Ctx::BlockComment | Ctx::BlockCommentStar => null,
         Ctx::Str | Ctx::StrEscape => Option::Some(b'"'),
         Ctx::Chr | Ctx::ChrEscape => Option::Some(b'\''),
         Ctx::Tpl | Ctx::TplEscape => Option::Some(b'`'),
@@ -239,16 +235,16 @@ fn hole_quote(ctx: Ctx) -> Option<u8> {
 }
 
 /// Whether `b` may not stand as itself inside a Wado literal delimited by
-/// `quote`. Every other byte passes through, so printable non-ASCII survives.
-/// A `$` is text everywhere but a template, where `${` would open a hole of the
-/// generated code's own.
+/// `quote`. Every other byte passes through, so printable non-ASCII survives —
+/// but a `$` in a template would open a hole of the generated code's own.
 fn needs_escape(b: u8, quote: u8) -> bool {
     return b < 0x20 || b == 0x7f || b == quote || b == b'\\' || quote == b'`' && b == b'$';
 }
 
 /// Append `b` in the form a Wado literal delimited by `quote` reads back. The
-/// escape set mirrors `Inspect for String` in core's `format.wado`; keep the
-/// two in lockstep (see WEP: Inspect).
+/// control-char policy mirrors `Inspect for String` in core's `format.wado`;
+/// keep the two in lockstep (see WEP: Inspect). Which delimiter is escaped, and
+/// the `$` a template needs, are this tag's own.
 fn write_escaped(out: &mut String, b: u8, quote: u8) {
     assert needs_escape(b, quote);
     if b == quote || b == b'\\' || b == b'$' {
