@@ -1405,3 +1405,157 @@ impl From<char> for String {
         return s;
     }
 }
+
+/// A view of a string's UTF-8 bytes over the byte range `[start, end)`, both
+/// ends on character boundaries. Creating one copies nothing.
+///
+/// A newtype over `ByteSlice` could not carry that invariant, since `as`
+/// converts both ways for free. The fields are private and every constructor
+/// that can land off a boundary checks.
+pub struct StrSlice {
+    repr: &Array<u8>,
+    start: i32,
+    end: i32,
+}
+
+impl StrSlice {
+    /// Wrap a byte range already known to be on character boundaries
+    /// (stdlib use only).
+    internal fn internal_new(repr: &Array<u8>, start: i32, end: i32) -> StrSlice with stores[repr] {
+        return StrSlice { repr, start, end };
+    }
+
+    /// Length in bytes.
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.end == self.start;
+    }
+
+    /// Read the byte at `index`, counted from the view's start, without bounds
+    /// checks.
+    ///
+    /// # Safety (caller-side preconditions)
+    /// - `0 <= index < self.len()`.
+    #[inline]
+    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.repr[self.start + index];
+    }
+
+    /// Returns true if `index`, counted from the view's start, is 0, `len()`,
+    /// or the start of a character.
+    pub fn is_char_boundary(&self, index: i32) -> bool {
+        if index == 0 || index == self.len() {
+            return true;
+        }
+        if index < 0 || index > self.len() {
+            return false;
+        }
+        // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
+        let b = self.repr[self.start + index];
+        return b < 0x80 || b >= 0xC0;
+    }
+
+    /// A sub-view over `[start, end)`, counted from this view's start.
+    /// Panics if the range is out of bounds or either end is off a character
+    /// boundary.
+    pub fn sub(&self, start: i32, end: i32) -> StrSlice {
+        assert 0 <= start && start <= end && end <= self.len(), "byte range out of bounds";
+        assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
+        return self.sub_unchecked(start, end);
+    }
+
+    /// A sub-view without bounds or UTF-8 boundary checks.
+    ///
+    /// # Safety (caller-side preconditions)
+    /// - `0 <= start <= end <= self.len()`.
+    /// - `start` and `end` lie on UTF-8 character boundaries.
+    #[inline]
+    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
+        return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
+    }
+
+    /// The view's UTF-8 bytes.
+    pub fn as_bytes(&self) -> ByteSlice {
+        return Slice::internal_new(self.repr, self.start, self.end) as ByteSlice;
+    }
+
+    /// Returns an iterator over the Unicode scalar values (chars) of the view.
+    pub fn chars(&self) -> StrCharIter {
+        return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
+    }
+
+    /// Returns an iterator over the UTF-8 bytes of the view.
+    pub fn bytes(&self) -> StrUtf8ByteIter {
+        return StrUtf8ByteIter { repr: self.repr, used: self.end, index: self.start };
+    }
+
+    /// Copy the view into an owned `String`.
+    pub fn to_string(&self) -> String {
+        return substring(self.repr, self.start, self.len());
+    }
+}
+
+/// Conversion to a `StrSlice` that copies no bytes.
+///
+/// Implemented by `String` and `StrSlice`, so one signature takes an owned
+/// string, a reference to one, or a view of part of one.
+pub trait AsStrSlice {
+    fn as_str_slice(&self) -> StrSlice with stores[self];
+}
+
+impl AsStrSlice for String {
+    fn as_str_slice(&self) -> StrSlice with stores[self] {
+        return StrSlice::internal_new(&self.repr as &Array<u8>, 0, self.used);
+    }
+}
+
+impl AsStrSlice for StrSlice {
+    fn as_str_slice(&self) -> StrSlice with stores[self] {
+        return *self;
+    }
+}
+
+impl Eq for StrSlice {
+    pub fn eq(&self, other: &Self) -> bool {
+        let len = self.len();
+        if len != other.len() {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.get_byte_unchecked(i) != other.get_byte_unchecked(i) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl Ord for StrSlice {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        let len_a = self.len();
+        let len_b = other.len();
+        let min_len = i32::min(len_a, len_b);
+
+        for let mut i = 0; i < min_len; i += 1 {
+            let a_byte = self.get_byte_unchecked(i);
+            let b_byte = other.get_byte_unchecked(i);
+            if a_byte < b_byte {
+                return Ordering::Less;
+            }
+            if a_byte > b_byte {
+                return Ordering::Greater;
+            }
+        }
+
+        if len_a < len_b {
+            return Ordering::Less;
+        }
+        if len_a > len_b {
+            return Ordering::Greater;
+        }
+        return Ordering::Equal;
+    }
+}

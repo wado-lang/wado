@@ -8,7 +8,7 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 use { Display, Inspect } from "core:prelude/traits.wado";
-use { String, StrCharIter } from "core:prelude/string.wado";
+use { String, StrCharIter, StrSlice } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
 
@@ -471,6 +471,20 @@ impl Inspect for String {
         if truncated {
             f.write_str(&"...");
         }
+    }
+}
+
+// A view renders as the text it views, so both traits copy it out and defer to
+// `String`'s. Placed here for the same reason `impl Display for String` is.
+impl Display for StrSlice {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.to_string().fmt(f);
+    }
+}
+
+impl Inspect for StrSlice {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.to_string().inspect(f);
     }
 }
 
