@@ -5,9 +5,9 @@ The Wado compiler crate.
 ## Rules
 
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
-  are denied at the crate root. A user-facing message goes through `Logger`, a
-  developer trace through `compiler_trace!`, and what only a broken stdlib can
-  reach through `assert!`.
+  are denied at the crate root. A user-facing message goes through `Logger` and
+  a developer trace through `compiler_trace!`. An `assert!` is for what only a
+  broken stdlib can reach.
 - `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go
@@ -19,16 +19,16 @@ The Wado compiler crate.
   (`FunctionContext::fresh_serial`), never a local index the site has yet to
   allocate. A step that reads one before recursing hands its own names to
   whatever nests inside it (issue #1987).
-- A declaration is identified by its `DefId`, never by its name — see
+- A declaration is identified by its `DefId`, never by its name. See
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver
   over the IR rather than partial walkers, which each miss a different shape.
 - Optimize to the limit correctness allows, and nothing short of it. Wrong code
-  is never a trade, and a conservatism is not caution but a defect: measure what
-  one buys, and delete it when that is nothing.
-- `cargo check` while iterating. The e2e fixtures cover the language, so
-  `cargo test -p wado-compiler --test e2e` is the signal that matters: O0 and O2
-  by default, the other levels only under `CI` or `WADO_FULL_TEST`.
+  is never a trade for speed. A conservatism is not caution but a defect:
+  measure what it buys, and delete it when that is nothing.
+- `cargo check` while iterating. The e2e fixtures cover the language, so run
+  `cargo test -p wado-compiler --test e2e` for anything the language touches. It
+  runs O0 and O2, and the other levels only under `CI` or `WADO_FULL_TEST`.
   `mise run test` and `mise run test-wado` take an hour, so they belong at the
   end and not in the loop.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
@@ -36,7 +36,7 @@ The Wado compiler crate.
 
 ## Standard Libraries
 
-`src/stdlib.rs` maps every stdlib import to its file under `lib/`. A dev build
+`src/stdlib.rs` maps every import to its file under `lib/`. A dev build
 reads them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
