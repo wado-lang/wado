@@ -133,6 +133,11 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
+    /// The share-eligible locals whose source place was repointed afterwards and
+    /// whose every read is final, so the binding holds the only reference to what
+    /// the place gave up and hands it on. A share alone is no such licence: the
+    /// storage is still readable where it was read from.
+    pub share_released: IndexSet<u32>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -216,13 +221,27 @@ pub fn analyze_ownership(
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|(base, _, _)| *base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|(_, _, span)| *span).collect();
 
-    let share_eligible = a.share_eligible(body, &place_move_bases);
+    let (share_eligible, released) = a.share_eligible(body, &place_move_bases);
+    // A released share owns what the place gave up, so it hands that storage on
+    // under the same terms a move does: every read of it final, and no other name
+    // for the storage still read. A release travelling down a chain of bindings
+    // frees each to leave the function, which is not the same as holding the only
+    // reference — the binding it came from may still be read.
+    let share_released: IndexSet<u32> = released
+        .into_iter()
+        .filter(|idx| {
+            !a.non_final.contains(idx)
+                && !a.aliases_live.contains(idx)
+                && !a.borrow_escaped.contains_key(idx)
+        })
+        .collect();
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
             place_spans,
         },
         share_eligible,
+        share_released,
     }
 }
 
@@ -390,9 +409,14 @@ impl Analyzer<'_> {
         fresh
     }
 
-    /// The read-only bindings that may alias the storage they were read out of.
-    /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
-    fn share_eligible(&self, body: &TirBlock, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
+    /// The read-only bindings that may alias the storage they were read out of,
+    /// and those of them whose source place was repointed afterwards. Every rule
+    /// below is stated in WEP 2026-05-21, _Sharing_.
+    fn share_eligible(
+        &self,
+        body: &TirBlock,
+        place_move_bases: &IndexSet<u32>,
+    ) -> (IndexSet<u32>, IndexSet<u32>) {
         let parents = self.alias_parents();
         let inputs = ShareInputs {
             at_write: self
@@ -415,11 +439,15 @@ impl Analyzer<'_> {
         for &local in self.share_sources.keys() {
             self.decide_share(local, &inputs, &mut decided, &mut deciding);
         }
-        decided
-            .into_iter()
-            .filter(|(_, v)| v.eligible)
-            .map(|(local, _)| local)
-            .collect()
+        let mut eligible: IndexSet<u32> = IndexSet::default();
+        let mut released: IndexSet<u32> = IndexSet::default();
+        for (local, verdict) in decided.into_iter().filter(|(_, v)| v.eligible) {
+            eligible.insert(local);
+            if verdict.released {
+                released.insert(local);
+            }
+        }
+        (eligible, released)
     }
 
     /// One binding's verdict, memoized. Its root may itself be a binding, so a
@@ -1406,33 +1434,43 @@ impl Analyzer<'_> {
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        // `live` is the match's live-out, so a binding aliases live storage
-        // exactly when a scrutinee local is live here.
         let after = live.clone();
-        if record {
-            let scrut_aliases_live = alias_root(scrut).is_some_and(|r| after.contains(&r));
-            for arm in arms {
-                let mut binds: IndexSet<u32> = IndexSet::default();
+        let scrut_root = alias_root(scrut);
+        let arm_binds: Vec<IndexSet<u32>> = arms
+            .iter()
+            .map(|arm| {
+                let mut binds = IndexSet::default();
                 analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
-                for b in &binds {
+                binds
+            })
+            .collect();
+        if record {
+            for binds in &arm_binds {
+                for b in binds {
                     self.match_sources.push((*b, scrut.clone()));
                     // An arm binding is its scrutinee's storage under a second
                     // name, so the share rule reads the path the resolver gives.
                     if let Some(Names::Place(path)) = self.resolver.binding(*b) {
                         self.share_sources.insert(*b, path);
                     }
-                    if scrut_aliases_live {
-                        self.aliases_live.insert(*b);
-                    }
                 }
             }
         }
         let mut merged: IndexSet<u32> = IndexSet::default();
-        for arm in arms {
+        for (arm, binds) in arms.iter().zip(&arm_binds) {
             let mut arm_live = after.clone();
             self.walk_expr(&arm.body, &mut arm_live, record);
             if let Some(guard) = &arm.guard {
                 self.walk_expr(guard, &mut arm_live, record);
+            }
+            // The binding holds its scrutinee's storage under a second name, so
+            // it aliases storage something still reads when a scrutinee local is
+            // live anywhere the binding is: after the match, or at a read the arm
+            // makes for itself.
+            if record && scrut_root.is_some_and(|r| arm_live.contains(&r)) {
+                for b in binds {
+                    self.aliases_live.insert(*b);
+                }
             }
             self.kill_pattern(&arm.pattern, &mut arm_live);
             merged = union(&merged, &arm_live);

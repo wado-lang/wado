@@ -401,6 +401,14 @@ it. Two reads are such a move: a value read of the binding, and a place-level
 move of a field out of it. A binding with neither is handed nowhere, so refusing
 it a share on move-eligibility alone costs a copy that defends nothing.
 
+A share licenses the binding and nothing built out of it. `let mut b = a` and
+`Wrapper { inner: a }` mint a second owner, which outlives the binding and may be
+written through, so each owes its copy though `a` shares. Only a released share is
+exempt, and only on a move's terms: every read of the binding final, and no other
+name for the storage still read. The release travelling down a chain frees each
+binding in it to leave the function, which is not the same as holding the only
+reference — `let c = a;` under a release still leaves `a` readable.
+
 A `match` over a writable place is hoisted into a temp, and the fold decides that
 temp's copy for every binding under it. One wrap site answers for the whole arm:
 the bindings read the temp, so each is as defended as the temp is. A place nothing
@@ -665,6 +673,16 @@ Verified against the tree.
       a variant payload reported nothing to its caller at all. Harmless only
       while a defensive copy stood in the way; the item above removed that copy
       and `value_copy_nested_write_through_payload` miscompiled.
+- [x] A wrap site skips its copy for a released share, not for any share. The two
+      were one set, so a second owner minted out of a plain share — `let mut b = a`,
+      `Wrapper { inner: a }` — aliased the place the binding was read out of and a
+      write through it landed there. The release is the licence, and it carries a
+      move's terms with it: every read of the binding final, and no other name for
+      the storage still read. The second half is what a chain needs, the release
+      travelling down one without making its root unreadable.
+- [x] An arm binding aliases live storage when the scrutinee is live where _that
+      arm_ reads it, decided from the live set the arm's own walk produced. One set
+      merged over every arm made a sibling arm's read refuse this arm's share.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp. The temp exists for `labeled_block_fusion`, and
       putting the copy on it makes which syntactic position a `match` sits in
