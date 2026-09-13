@@ -129,7 +129,10 @@ each payload reached.
 - [x] `while builtin::black_box(false) { … }` as a second guard shape. Every
       A shape is calibrated for and dropped on its own, as a payload is, and
       `corpus.txt` carries the shapes each source answers for.
-- [ ] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
+- [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
+      `O2` is what a release build and `wado test` run, and it was not covered.
+      `WADO_EMI_LEVELS` trades levels for corpus in a run that has to fit a
+      given time.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
       stdlib's own tests under `O3`, which nothing else does — `wado test` runs
       them at `O2` — and the baselines that failed there were two wrong-code

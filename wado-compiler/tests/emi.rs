@@ -14,7 +14,8 @@
 //! ```
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
-//! `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`, `WADO_EMI_OUT`.
+//! `WADO_EMI_LEVELS`, `WADO_EMI_SHARD` (`k/n`), `WADO_EMI_LIMIT`,
+//! `WADO_EMI_OUT`.
 
 mod common;
 
@@ -28,10 +29,44 @@ use wado_compiler::ast::{
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::{CompilerOptions, OptLevel};
 
-/// Levels the calibration compares. `O0` is the reference the optimizer must
-/// agree with; `O3` runs every pass the most times, so it is where a guard is
-/// most likely to perturb something.
-const CALIBRATION_LEVELS: [OptLevel; 2] = [OptLevel::O0, OptLevel::O3];
+/// The levels both stages compare a mutant against its own baseline at.
+///
+/// Each is its own oracle: a level answers only for the pipeline it runs, and
+/// `O2` — what `wado test` and a release build use — is not the `O3` the
+/// campaign started with.
+const OPT_LEVELS: [OptLevel; 5] = [
+    OptLevel::O0,
+    OptLevel::O1,
+    OptLevel::O2,
+    OptLevel::Os,
+    OptLevel::O3,
+];
+
+/// What a selection knob was set to, or `None` if it says nothing. A workflow
+/// input that was left blank arrives as an empty string, which selects
+/// everything rather than nothing.
+fn selection(variable: &str) -> Option<String> {
+    std::env::var(variable)
+        .ok()
+        .filter(|spec| !spec.trim().is_empty())
+}
+
+/// The levels `WADO_EMI_LEVELS` selects by name, all of them by default. A run
+/// that has to fit an hour trades levels for corpus here.
+fn levels() -> Vec<OptLevel> {
+    let Some(spec) = selection("WADO_EMI_LEVELS") else {
+        return OPT_LEVELS.to_vec();
+    };
+    spec.split(',')
+        .map(|name| {
+            let name = name.trim();
+            OPT_LEVELS
+                .into_iter()
+                .find(|level| common::opt_level_name(*level) == name)
+                .unwrap_or_else(|| panic!("WADO_EMI_LEVELS names no level `{name}`"))
+        })
+        .collect()
+}
 
 // ---------------------------------------------------------------------------
 // Guard
@@ -1141,7 +1176,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut refused = None;
     let path = &subject.path;
 
-    for level in CALIBRATION_LEVELS {
+    for level in levels() {
         let baseline = match evaluate(path, &canonical, &spec, level) {
             Evaluation::Ran(outcome) => outcome,
             Evaluation::CompileError(detail) => {
@@ -1301,7 +1336,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut alive: Vec<&Shape> = subject.shapes.clone();
     let mut refused = None;
 
-    for level in CALIBRATION_LEVELS {
+    for level in levels() {
         let baseline = match evaluate(path, &canonical, &spec, level) {
             Evaluation::Ran(outcome) => outcome,
             Evaluation::CompileError(detail) => {
@@ -1432,7 +1467,7 @@ fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
 
 /// The roots `WADO_EMI_ROOTS` selects by name, all of them by default.
 fn selected_roots() -> Vec<Root> {
-    let Ok(spec) = std::env::var("WADO_EMI_ROOTS") else {
+    let Some(spec) = selection("WADO_EMI_ROOTS") else {
         return ROOTS.to_vec();
     };
     spec.split(',')
@@ -1447,7 +1482,7 @@ fn selected_roots() -> Vec<Root> {
 }
 
 fn corpus_sources() -> Vec<Source> {
-    let filter = std::env::var("WADO_EMI_FILTER").unwrap_or_default();
+    let filter = selection("WADO_EMI_FILTER").unwrap_or_default();
     let mut sources: Vec<Source> = selected_roots()
         .into_iter()
         .flat_map(|root| {
@@ -1459,10 +1494,10 @@ fn corpus_sources() -> Vec<Source> {
         .filter(|source| filter.is_empty() || source.name().contains(filter.as_str()))
         .collect();
     sources.sort_by_key(Source::name);
-    if let Ok(shard) = std::env::var("WADO_EMI_SHARD") {
+    if let Some(shard) = selection("WADO_EMI_SHARD") {
         sources = take_shard(sources, &shard);
     }
-    if let Ok(limit) = std::env::var("WADO_EMI_LIMIT") {
+    if let Some(limit) = selection("WADO_EMI_LIMIT") {
         let limit: usize = limit.parse().expect("WADO_EMI_LIMIT must be a number");
         sources.truncate(limit);
     }
@@ -1488,7 +1523,7 @@ fn corpus_subjects() -> Vec<Source> {
 }
 
 fn jobs() -> usize {
-    if let Ok(jobs) = std::env::var("WADO_EMI_JOBS") {
+    if let Some(jobs) = selection("WADO_EMI_JOBS") {
         return jobs.parse().expect("WADO_EMI_JOBS must be a number");
     }
     std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1).max(1))
