@@ -4743,16 +4743,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
     pub(super) fn type_contains_pack(&self, type_id: TypeId) -> bool {
-        let ty = self.tysys.type_table.borrow().get(type_id).clone();
-        match ty {
-            ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) =>
-            {
-                type_args.iter().any(|e| self.type_contains_pack(*e))
-            }
-            _ => false,
-        }
+        self.tysys.type_table.borrow().contains_type_pack(type_id)
     }
 
     /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,

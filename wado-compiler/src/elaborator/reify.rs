@@ -6850,20 +6850,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// True when `type_id` is a `TypePack` or a tuple whose elements
-    /// transitively contain one.
+    /// Check if a type contains a `TypePack` (variadic pack parameter).
     fn type_contains_pack(&self, type_id: TypeId) -> bool {
-        use crate::tir::{ResolvedType, TypeTable};
-        let ty = self.tysys.type_table.borrow().get(type_id).clone();
-        match ty {
-            ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) =>
-            {
-                type_args.iter().any(|e| self.type_contains_pack(*e))
-            }
-            _ => false,
-        }
+        self.tysys.type_table.borrow().contains_type_pack(type_id)
     }
 
     /// Record on a default's `TypePackExpansion` the tuple the call settled the
@@ -6901,7 +6890,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         }
         let settled: Vec<TypeId> = type_args[at..type_args.len() - after].to_vec();
-        if settled.iter().any(|t| self.type_contains_pack(*t)) {
+        if settled.iter().any(|&t| self.type_contains_pack(t)) {
             return;
         }
         let settled = self.tysys.type_table.borrow_mut().make_tuple(settled);

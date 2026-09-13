@@ -123,6 +123,22 @@ fn packed<..T: Default>(tag: String, t: [..T] = [..T::default()]) -> String {
     return s;
 }
 
+// An `fn`-bound parameter ahead of the pack. Its bound fixes it to one function
+// type, so it holds no slot and the pack is the first the arguments index.
+fn applied<F: fn(i32) -> i32, ..T: Default>(f: F, t: [..T] = [..T::default()]) -> String {
+    let mut s = `${f(1)}`;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
+// A caller forwarding a pack of its own. Its pack interns to the same type as
+// the callee's, so nothing here may read the slot as left over.
+fn forwarded_pack<..T: Default>(t: [..T]) -> String {
+    return packed("f:", t);
+}
+
 fn headed<A: Default, ..T: Default>(a: A = A::default(), t: [..T] = [..T::default()]) -> String {
     let mut s = `${a:?}`;
     for let v of t {
@@ -165,6 +181,7 @@ impl<T: Default> Box2<T> {
 // A default's pack is spliced into whatever takes it, and a global initializer
 // takes one as a function body does.
 global PACKED: String = packed::<i32, String>("g:");
+global EMPTY: String = packed("h:");
 
 // A field default: the parameter comes from the annotation, or from a sibling
 // field where the literal carries none.
@@ -254,6 +271,21 @@ test "a variadic pack's default names the pack it stands for" {
     assert bi.headed::<i32, String, bool>() == "0\"\"false";
     assert bi.headed::<String, i32>() == "\"\"0";
     assert PACKED == "g:0\"\"";
+}
+
+// A pack stands for the arguments left over, so a site leaving none over
+// settles it to the empty pack rather than asking inference for it.
+test "a pack nothing settles is empty" {
+    assert headed::<i32>() == "0";
+    assert packed("e:") == "e:";
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.spread() == "1";
+    assert bi.headed::<i32>() == "0";
+    assert Box2::<i32>::spread_static() == "";
+    assert EMPTY == "h:";
+    assert forwarded_pack([1, "x"]) == "f:1\"x\"";
+    assert applied(|x| x + 1) == "2";
+    assert applied::<i32, bool>(|x| x + 1) == "20false";
 }
 
 // From the annotation, then from a sibling field.
