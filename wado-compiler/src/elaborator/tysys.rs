@@ -153,14 +153,19 @@ impl TypeSystem {
     }
 
     /// Whether an `impl<...>` entry spells a concrete type instead of declaring
-    /// a parameter. Only a primitive does, as `impl<i32> IndexValue<i32>` writes.
+    /// a parameter. A bound settles it: only a parameter can carry one.
     ///
-    /// Every other spelling is a binder, free to shadow a type the module
-    /// declares the way a function's or a struct's parameter is. Reading it as
-    /// concrete drops the parameter, and the target's own argument then names
-    /// nothing at all.
-    pub(crate) fn impl_param_is_concrete_type(&self, name: &str) -> bool {
-        TypeTable::primitive_by_name(name).is_some()
+    /// `impl<...>` spells both today — `impl<i32> IndexValue<i32>` instantiates
+    /// at a type, `impl<Zero: Mark> Wrapper<Zero>` declares a binder — so a bare
+    /// entry naming a visible type stays that type. Reading a bounded one that
+    /// way drops the parameter, and the target's own argument then names
+    /// nothing; reading a bare one as a binder shadows the type it meant.
+    pub(crate) fn impl_param_is_concrete_type(
+        &self,
+        module: &ModuleSource,
+        param: &GenericParam,
+    ) -> bool {
+        param.bounds.is_empty() && self.is_known_type_name_in(module, &param.name)
     }
 
     /// The `Type::Case` spelling of the case the resolve walk names at a bare

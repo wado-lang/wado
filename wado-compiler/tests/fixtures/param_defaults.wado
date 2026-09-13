@@ -12,11 +12,18 @@ global HARD: String = "decl";
 #[param]
 global UNTOUCHED: String = "decl";
 
+// A host default aimed at another library's parameter can land on a same-named
+// declaration of an unrelated type. The user wrote neither the name nor the
+// value, so it falls back to the initializer rather than failing the build.
+#[param]
+global WRONG_TYPE: i32 = 7;
+
 export fn run() with Stdout {
     println(`PLAIN=${PLAIN}`);
     println(`ENVED=${ENVED}`);
     println(`HARD=${HARD}`);
     println(`UNTOUCHED=${UNTOUCHED}`);
+    println(`WRONG_TYPE=${WRONG_TYPE}`);
 }
 
 __DATA__
@@ -25,9 +32,10 @@ __DATA__
         "PLAIN": "host",
         "ENVED": "host",
         "HARD": "host",
-        "NOT_DECLARED": "host"
+        "NOT_DECLARED": "host",
+        "WRONG_TYPE": "warn"
     },
     "param_env": { "PD_ENV": "env" },
     "params": { "HARD": "flag" },
-    "stdout": "PLAIN=host\nENVED=env\nHARD=flag\nUNTOUCHED=decl\n"
+    "stdout": "PLAIN=host\nENVED=env\nHARD=flag\nUNTOUCHED=decl\nWRONG_TYPE=7\n"
 }

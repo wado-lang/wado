@@ -286,6 +286,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A type parameter's `= Default` names the declaration it belongs to, so
+    /// filling the slot would ask for itself.
+    RecursiveTypeParamDefault {
+        name: String,
+        span: Span,
+    },
+
     /// A type position names an `interface` or a `trait`. Both share the type
     /// namespace, and neither denotes a type.
     NotAType {
@@ -1173,6 +1180,14 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::RecursiveTypeParamDefault { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "the default for this type parameter names '{name}', the declaration \
+                     it belongs to, so it stands for itself"
+                ),
+                *span,
+            ),
             TypeError::NotAType { name, kind, span } => (
                 Code::UnknownType,
                 format!(

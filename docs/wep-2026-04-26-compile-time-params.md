@@ -71,6 +71,8 @@ A higher source short-circuits the lower ones. Overrides (1, 2, 3) are strings, 
 
 A host default is the embedding tool's own fallback for a library's parameter, not a name a user typed. `wado test` quiets `core:log`'s `log.level` this way. It therefore sits below the two sources the user controls, and one matching no declaration is silent rather than `--param-unknown`: the program being compiled need not import the library the default was aimed at.
 
+An unconvertible host default is silent for the same reason, rather than `--param-invalid`. The name it matched may be an unrelated declaration of another type, and reporting there blames the user's `global` for a string the tool injected.
+
 ### Resolution Policy
 
 Three failures can occur, each a diagnostic class with a CLI-set level (`error`, `warn`, `ignore`):

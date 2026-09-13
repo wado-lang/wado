@@ -76,6 +76,29 @@ pub struct ParamInputs {
     pub policy: ParamPolicy,
 }
 
+/// Which source supplied a parameter's value, and so who a diagnostic about it
+/// would be addressed to.
+enum OverrideSource {
+    Cli,
+    Env(String),
+    HostDefault,
+}
+
+impl OverrideSource {
+    /// What to name as the value's origin, or `None` for one the user did not
+    /// supply. A host default aimed at another library's parameter can land on
+    /// a same-named declaration of an unrelated type, and blaming that
+    /// declaration for a string the tool injected reports a fault nobody wrote
+    /// — the reason such a default is exempt from `unknown` too.
+    fn blamed_origin(&self, name: &str) -> Option<String> {
+        match self {
+            Self::Cli => Some(format!("parameter {name}")),
+            Self::Env(env) => Some(format!("environment variable {env}")),
+            Self::HostDefault => None,
+        }
+    }
+}
+
 /// Resolve every `#[param]` global in `flat` against `params`, in the order
 /// `overrides` / `from_env` / `defaults` / initializer.
 ///
@@ -159,11 +182,14 @@ pub fn resolve_params<H: CompilerHost>(
             .from_env
             .as_ref()
             .and_then(|env| logger.host().env_var(env).map(|v| (v, env.clone())));
-        let (raw, from_env_name) = match overrides.get(&spec.name) {
-            Some(value) => (Some(value.clone()), None),
+        let (raw, source) = match overrides.get(&spec.name) {
+            Some(value) => (Some(value.clone()), OverrideSource::Cli),
             None => match from_env {
-                Some((value, env)) => (Some(value), Some(env)),
-                None => (defaults.get(&spec.name).cloned(), None),
+                Some((value, env)) => (Some(value), OverrideSource::Env(env)),
+                None => (
+                    defaults.get(&spec.name).cloned(),
+                    OverrideSource::HostDefault,
+                ),
             },
         };
 
@@ -183,12 +209,8 @@ pub fn resolve_params<H: CompilerHost>(
         {
             // A resolved parameter is a literal, so the storage can hold it.
             global.init = GlobalInit::Direct(literal);
-        } else {
+        } else if let Some(origin) = source.blamed_origin(&spec.name) {
             let type_name = type_table.borrow().type_name(global.ty);
-            let origin = match &from_env_name {
-                Some(env) => format!("environment variable {env}"),
-                None => format!("parameter {}", spec.name),
-            };
             emit(
                 policy.invalid,
                 Code::ParamInvalid,

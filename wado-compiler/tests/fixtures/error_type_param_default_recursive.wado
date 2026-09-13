@@ -1,0 +1,15 @@
+// A default naming the declaration it belongs to asks for itself, so filling
+// the slot has no fixpoint. Expanding it used to recurse until the stack ran
+// out, which reports nothing at all.
+
+struct Rec<T = Rec> {
+    v: i32,
+}
+
+export fn run() {
+    let r: Rec = Rec { v: 1 };
+    assert r.v == 1;
+}
+
+__DATA__
+{"compile_error": "the default for this type parameter names 'Rec', the declaration it belongs to, so it stands for itself"}

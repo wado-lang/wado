@@ -147,6 +147,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
+    /// The declarations whose `= Default` type arguments are being expanded
+    /// right now. A default naming its own declaration (`struct Rec<T = Rec>`)
+    /// has no fixpoint, so one already on the walk is reported, not re-entered.
+    pub(super) expanding_type_param_defaults: hashmap::IndexSet<DefId>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
@@ -159,7 +163,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let mut actual_idx = 0u32;
         for param in &impl_block.type_params {
-            if self.tysys.impl_param_is_concrete_type(&param.name) {
+            if self
+                .tysys
+                .impl_param_is_concrete_type(&self.current_module_source, param)
+            {
                 // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                 if !param.bounds.is_empty() {
                     self.annotate_ctx
