@@ -6,7 +6,7 @@
 //! 3. Name resolution (binding identifiers to their definitions)
 
 use crate::ast::{AstId, Function, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
-use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
@@ -138,161 +138,11 @@ pub enum AnalyzeError {
     },
 }
 
-impl std::fmt::Display for AnalyzeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl AnalyzeError {
+    /// The code, message, and location this error reports. Both the `Display`
+    /// text and the [`Diagnostic`] are built from it, so they cannot drift.
+    fn report(&self) -> (Code, String, Span) {
         match self {
-            AnalyzeError::ModuleNotFound {
-                module_source,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: module not found: '{}'",
-                    span.line, span.column, module_source
-                )
-            }
-            AnalyzeError::ImportNotFound {
-                module_source,
-                name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: symbol '{}' not found in module '{}'",
-                    span.line, span.column, name, module_source
-                )
-            }
-            AnalyzeError::DuplicateDefinition { name, span, first } => {
-                write!(
-                    f,
-                    "{}:{}: duplicate definition '{}' (first defined at {}:{})",
-                    span.line, span.column, name, first.line, first.column
-                )
-            }
-            AnalyzeError::ImportShadowsDefinition {
-                name,
-                span,
-                declared,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: import of '{}' collides with the declaration at {}:{}",
-                    span.line, span.column, name, declared.line, declared.column
-                )
-            }
-            AnalyzeError::MissingFunctionBody { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: function '{}' has no body",
-                    span.line, span.column, name
-                )
-            }
-            AnalyzeError::UndefinedSymbol { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: undefined symbol '{}'",
-                    span.line, span.column, name
-                )
-            }
-            AnalyzeError::InvalidModulePath {
-                path,
-                message,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: invalid module path '{}': {}",
-                    span.line, span.column, path, message
-                )
-            }
-            AnalyzeError::PreludeTypeCollision { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: type '{}' conflicts with prelude type of the same name",
-                    span.line, span.column, name
-                )
-            }
-            AnalyzeError::SymbolNotVisible {
-                name,
-                module_source,
-                visibility,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    symbol_not_visible_message(name, module_source, *visibility)
-                )
-            }
-            AnalyzeError::ReExportWidensVisibility {
-                name,
-                module_source,
-                source_visibility,
-                reexport_visibility,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    reexport_widens_message(
-                        name,
-                        module_source,
-                        *source_visibility,
-                        *reexport_visibility
-                    )
-                )
-            }
-        }
-    }
-}
-
-fn reexport_widens_message(
-    name: &str,
-    module_source: &ModuleSource,
-    source_visibility: Visibility,
-    reexport_visibility: Visibility,
-) -> String {
-    let reexport = reexport_visibility.keyword().trim_end();
-    let declared = match source_visibility {
-        Visibility::Private => "file-private".to_string(),
-        Visibility::Internal | Visibility::Public => {
-            format!("`{}`", source_visibility.keyword().trim_end())
-        }
-    };
-    format!(
-        "`{reexport} use` of '{name}' reaches further than '{name}' itself, which is \
-         {declared} in '{module_source}'; widen the declaration, or narrow the re-export"
-    )
-}
-
-pub(crate) fn symbol_not_visible_message(
-    name: &str,
-    module_source: &ModuleSource,
-    visibility: Visibility,
-) -> String {
-    match visibility {
-        Visibility::Internal => format!(
-            "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
-             from another package; mark it `pub` to export it across packages"
-        ),
-        // `Public` never reaches here (always importable); folded in for exhaustiveness.
-        Visibility::Private | Visibility::Public => format!(
-            "symbol '{name}' is private to '{module_source}' and cannot be imported; \
-             mark it `internal` (same package) or `pub` (cross package) to export it"
-        ),
-    }
-}
-
-impl std::error::Error for AnalyzeError {}
-
-impl From<AnalyzeError> for Diagnostic {
-    fn from(e: AnalyzeError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let (code, message, span) = match &e {
             AnalyzeError::ModuleNotFound {
                 module_source,
                 span,
@@ -380,7 +230,59 @@ impl From<AnalyzeError> for Diagnostic {
                 ),
                 *span,
             ),
-        };
+        }
+    }
+}
+
+impl std::fmt::Display for AnalyzeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (_, message, span) = self.report();
+        write!(f, "{}:{}: {message}", span.line, span.column)
+    }
+}
+
+fn reexport_widens_message(
+    name: &str,
+    module_source: &ModuleSource,
+    source_visibility: Visibility,
+    reexport_visibility: Visibility,
+) -> String {
+    let reexport = reexport_visibility.keyword().trim_end();
+    let declared = match source_visibility {
+        Visibility::Private => "file-private".to_string(),
+        Visibility::Internal | Visibility::Public => {
+            format!("`{}`", source_visibility.keyword().trim_end())
+        }
+    };
+    format!(
+        "`{reexport} use` of '{name}' reaches further than '{name}' itself, which is \
+         {declared} in '{module_source}'; widen the declaration, or narrow the re-export"
+    )
+}
+
+pub(crate) fn symbol_not_visible_message(
+    name: &str,
+    module_source: &ModuleSource,
+    visibility: Visibility,
+) -> String {
+    match visibility {
+        Visibility::Internal => format!(
+            "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
+             from another package; mark it `pub` to export it across packages"
+        ),
+        // `Public` never reaches here (always importable); folded in for exhaustiveness.
+        Visibility::Private | Visibility::Public => format!(
+            "symbol '{name}' is private to '{module_source}' and cannot be imported; \
+             mark it `internal` (same package) or `pub` (cross package) to export it"
+        ),
+    }
+}
+
+impl std::error::Error for AnalyzeError {}
+
+impl From<AnalyzeError> for Diagnostic {
+    fn from(e: AnalyzeError) -> Self {
+        let (code, message, span) = e.report();
         Diagnostic {
             severity: Severity::Error,
             code,
