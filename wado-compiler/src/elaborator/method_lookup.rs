@@ -17,7 +17,7 @@ use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTab
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{merge_turbofish_type_args, turbofish_holes};
+use super::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -3019,7 +3019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
-            return_type,
+            mut return_type,
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
@@ -3110,52 +3110,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above; the body walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
-        // A `_` resolves to UNKNOWN; `turbofish_holes` records where, so a
-        // partial turbofish takes the rest from inference.
+        // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
 
-        // This path answers the call itself, so it runs the method's own
-        // inference rather than leaving the arguments to meet rigid slots:
-        // instantiate, walk the arguments against the variables, settle what
-        // they answered back onto the slots, then infer whatever is left. The
-        // sequence `resolve_method_call_with` runs, which a subscript receiver
-        // does not get to skip.
-        let arg_inst = (!method_type_param_ids.is_empty()).then(|| {
-            self.instantiate(
-                &method_type_param_ids,
-                &Instantiation {
-                    kind: "method",
-                    name: &method_call.method,
-                    span: method_call.span,
-                    type_args: &type_args,
-                },
-            )
-        });
-        if let Some(inst) = &arg_inst {
-            self.record_slot_bounds(inst, &method_own_params, method_call.span);
-        }
-        let instantiated_param_types = arg_inst
-            .as_ref()
-            .map(|inst| self.instantiate_types(&param_types, inst));
-        let arg_param_types = instantiated_param_types.as_ref().unwrap_or(&param_types);
-        let mut args = self.resolve_args_against_params(
-            &method_call.args,
+        // This path answers the call, so the method's own inference is its to
+        // run — a subscript receiver does not decide whether an argument meets
+        // a rigid slot.
+        let args = self.resolve_args_through_slots(
             ctx,
-            arg_param_types,
-            arg_inst.as_ref(),
+            &method_call.args,
+            &param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: &method_call.method,
+                span: method_call.span,
+                type_args: &type_args,
+            },
         );
-        if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &method_type_param_ids, &mut args);
-        }
 
-        let mut return_type = return_type;
         if !method_type_param_ids.is_empty() {
-            let holes = turbofish_holes(&method_call.type_args);
-            if type_args.is_empty() || holes.iter().any(|&h| h) {
+            if type_args.is_empty() || turbofish_has_hole(&method_call.type_args) {
                 let inferred = self.infer_method_type_args(MethodInferenceInput {
                     receiver_type: output_type,
                     method_name: &method_call.method,
@@ -3173,6 +3153,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if type_args.is_empty() {
                     type_args = inferred;
                 } else {
+                    let holes = turbofish_holes(&method_call.type_args);
                     merge_turbofish_type_args(&mut type_args, &holes, &inferred);
                 }
             }

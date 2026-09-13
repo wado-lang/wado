@@ -662,44 +662,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types
         };
 
-        // Instantiate the method's own slots before an argument is resolved
-        // against one of its parameter types, as `resolve_call` does for a free
-        // function. A rigid slot is the declaration's own: a closure passed to
-        // `fn(Acc, Item) -> Acc` would meet an `Acc` no expression can
-        // construct, where against a variable its body defers and a sibling
-        // argument answers it. The lookup already instantiated the declaring
-        // level, so only these slots remain.
-        let arg_inst = (!method_type_param_ids.is_empty()).then(|| {
-            self.instantiate(
-                &method_type_param_ids,
-                &Instantiation {
-                    kind: "method",
-                    name: method_name,
-                    span,
-                    type_args: &type_args,
-                },
-            )
-        });
-        // Carry each slot's declared bounds onto the variable now. An argument
-        // may pin a variable here and nowhere else, and the pinned answer is
-        // the only thing a bound was ever written about.
-        if let Some(inst) = &arg_inst {
-            self.record_slot_bounds(inst, &method_own_params, span);
-        }
-        let instantiated_param_types = arg_inst
-            .as_ref()
-            .map(|inst| self.instantiate_types(&expected_param_types, inst));
-        let arg_param_types = instantiated_param_types
-            .as_ref()
-            .unwrap_or(&expected_param_types);
-
-        // Resolve arguments with coercion using method parameter types
-        let mut args: Vec<TypeId> =
-            self.resolve_args_against_params(args_ast, ctx, arg_param_types, arg_inst.as_ref());
-
-        if let Some(inst) = &arg_inst {
-            self.settle_onto_slots(inst, &method_type_param_ids, &mut args);
-        }
+        // Only the method's own slots: the lookup instantiated the declaring
+        // level already, so `Self::Item` is concrete here and `Acc` is not.
+        let mut args: Vec<TypeId> = self.resolve_args_through_slots(
+            ctx,
+            args_ast,
+            &expected_param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: method_name,
+                span,
+                type_args: &type_args,
+            },
+        );
 
         // The module that declares this method: the scope its own defaults —
         // parameter values and type-parameter defaults alike — resolve in,

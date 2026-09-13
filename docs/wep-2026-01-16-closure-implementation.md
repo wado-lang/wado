@@ -50,9 +50,11 @@ The compiler chooses static (specialised) vs dynamic (canonical) dispatch via es
 
 A closure literal's parameter types come from the expected `fn(..)` type at its use site, matched by position. Every row of the table above supplies one, as does a `let` carrying a `fn(..)` annotation and a newtype over `fn(..)`. An annotation is needed only where nothing supplies one, and always wins over what would have been inferred.
 
-The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`. A slot the call's turbofish names is solved at that instantiation, so `go::<String>(|a| a.len())` types the closure from what the source wrote.
+The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`.
 
-Resolving an argument and answering a variable with it are separately ordered, since the argument that can answer is not always the one that has to go first.
+A slot the turbofish names is solved at that instantiation, so `go::<String>(|a| a.len())` types the closure from what the call wrote.
+
+Resolving an argument and answering a variable with it are ordered separately: the argument that can answer a variable is not always the one that must resolve first.
 
 Arguments resolve in two passes:
 

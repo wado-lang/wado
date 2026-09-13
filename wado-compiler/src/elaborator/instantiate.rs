@@ -10,7 +10,8 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use crate::ast::GenericParam;
+use super::types::FunctionContext;
+use crate::ast::{self, GenericParam};
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
 /// slot is never solved.
@@ -22,14 +23,12 @@ pub(super) struct Instantiation<'a> {
     /// Where the use site is.
     pub(super) span: Span,
     /// What the use site's turbofish names, in slot order:
-    /// [`TypeTable::UNKNOWN`] where it wrote `_` or stopped short, and empty
-    /// where it wrote no turbofish at all.
+    /// [`TypeTable::UNKNOWN`] where it wrote `_` or stopped short, empty where
+    /// it wrote none.
     ///
-    /// A field rather than a later call, so a site cannot instantiate without
-    /// saying what it already knows. An argument is checked against these
-    /// slots, and a turbofish applied after that walk is applied too late:
-    /// `go::<String>(|a| a.len())` would resolve the closure body against a
-    /// variable nothing has answered.
+    /// A field, so a site cannot instantiate without saying what it already
+    /// knows. Applied after the argument walk instead, it would reach a
+    /// closure body only once that body had been resolved against a hole.
     pub(super) type_args: &'a [TypeId],
 }
 
@@ -149,6 +148,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.solve_infer_var(var, answer);
             }
         }
+    }
+
+    /// Resolve a call's arguments against `slots` rather than against the
+    /// declaration's own parameters: instantiate, carry the bounds, walk, and
+    /// settle what the arguments answered back onto the slots.
+    ///
+    /// The whole sequence is one call, so a path that answers a call gets all
+    /// of it or none. Resolving against a rigid slot instead hands a closure a
+    /// type no expression can construct.
+    pub(super) fn resolve_args_through_slots(
+        &mut self,
+        ctx: &mut FunctionContext,
+        args_ast: &[ast::Expr],
+        param_types: &[TypeId],
+        slots: &[TypeId],
+        own_params: &[GenericParam],
+        of: &Instantiation<'_>,
+    ) -> Vec<TypeId> {
+        if slots.is_empty() {
+            return self.resolve_args_against_params(args_ast, ctx, param_types, None);
+        }
+        let inst = self.instantiate(slots, of);
+        self.record_slot_bounds(&inst, own_params, of.span);
+        let param_types = self.instantiate_types(param_types, &inst);
+        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
+        self.settle_onto_slots(&inst, slots, &mut args);
+        args
     }
 
     /// Settle the variables an argument walk used back onto the slots they
