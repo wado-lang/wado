@@ -8,6 +8,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::is_test_function;
+use crate::defs::DefId;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
@@ -1788,9 +1789,10 @@ impl TypeRefCtx {
         match tt.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
+            ResolvedType::GenericInstance { def, type_args }
+            | ResolvedType::GenericResource { def, type_args } => {
                 type_args.iter().any(|t| self.walk(tt, *t, visited))
+                    || self.declaration_holds_ref(tt, *def, visited)
             }
             ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
             ResolvedType::Struct { def, .. } => self
@@ -1818,6 +1820,16 @@ impl TypeRefCtx {
             | ResolvedType::Resource { .. }
             | ResolvedType::Flags { .. } => false,
         }
+    }
+
+    /// Whether the members `def` declares hold a reference, asked of a generic
+    /// instance whose type arguments hold none: `Slice<T>` keeps `&Array<T>` in
+    /// a field for every `T`.
+    fn declaration_holds_ref(&self, tt: &TypeTable, def: DefId, visited: &mut TypeSet) -> bool {
+        let key = (tt.def_module(def).clone(), tt.def_name(def).to_string());
+        let fields = self.struct_fields.get(&key).into_iter().flatten();
+        let payloads = self.variant_payloads.get(&key).into_iter().flatten();
+        fields.chain(payloads).any(|t| self.walk(tt, *t, visited))
     }
 }
 
