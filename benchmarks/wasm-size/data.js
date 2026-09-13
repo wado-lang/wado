@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789264540903,
+  "lastUpdate": 1789267460285,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55497,6 +55497,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/015a274d4299911ca368c91e492222db0d5c35a7"
         },
         "date": 1789264539957,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fc7efb905a76020e5730dbf715fbd079f4c586c4",
+          "message": "Merge pull request #2043 from wado-lang/claude/claude-code-config-pbclqj\n\ndocs: make the agent rules state defaults, not enumerate cases",
+          "timestamp": "2026-09-13T11:25:05+09:00",
+          "tree_id": "027659fa1bd41de762bad47497014247d6eabc19",
+          "url": "https://github.com/wado-lang/wado/commit/fc7efb905a76020e5730dbf715fbd079f4c586c4"
+        },
+        "date": 1789267459588,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
