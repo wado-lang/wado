@@ -2261,8 +2261,26 @@ let parse = |s: String| -> Result<i32, String> {
 };
 ```
 
-Parameter types are always required (never inferred). A `?` in the body needs
-the return type known — via `-> Type` or an expected `fn(..) -> R`.
+A parameter type is inferred from the expected `fn(..)` type, matched by
+position. Any context that supplies such a type counts: a typed binding, a
+function or method parameter, a struct field, a newtype over a `fn(..)`.
+Annotate only where nothing supplies one; an annotation always wins:
+
+```wado
+let arr: List<i32> = [1, 2, 3];
+arr.into_iter().map(|x| x * 2);             // `x: i32`, from `Iterator::Item`
+arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from the body
+let add_one = |x: i32| x + 1;               // no expected type: annotate
+```
+
+The expected type may be one of the callee's own type parameters. A sibling
+argument then supplies it, whichever side of the closure it is written on. A
+numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
+takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
+is reported at the call, not inside the closure.
+
+A `?` in the body needs the return type known — via `-> Type` or an expected
+`fn(..) -> R`.
 
 A closure declares neither effects nor stores; both are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
@@ -2342,6 +2360,15 @@ connect("localhost", 3000, 60);
 fn make_rect(width: f64, height: f64 = width) -> Rect { ... }
 make_rect(10.0);  // → make_rect(10.0, 10.0)
 ```
+
+- Default expressions may name a type parameter of the declaration that wrote them. It stands for the type argument the call site settled on, whether a turbofish spelled it, an argument beside it pinned it, or the parameter's own default supplied it:
+
+```wado
+fn info<T: Default>(msg: String, fields: T = T::default()) -> String { ... }
+info::<i32>("count");  // → info::<i32>("count", 0)
+```
+
+The same holds for an instance or static method, where the `impl` block's parameters come from the receiver, and for a struct field default, where they come from the type the literal is annotated with.
 
 #### Restrictions
 
@@ -2660,7 +2687,7 @@ ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 
 Default expressions are evaluated at the construction site. They must be effect-free (validated by the effect system) and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected — destructuring sees every field regardless of defaults.
 
-A non-generic struct whose every field has a default auto-derives `Default`; see [Default Trait](#default-trait).
+A non-generic struct whose every field has a default auto-derives `Default`. A fieldless struct has no field to default, so it qualifies. See [Default Trait](#default-trait).
 
 ### Generic Type Inference
 
@@ -2709,14 +2736,20 @@ explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
 an omitted turbofish on an uninferable parameter. It is scoped to turbofish
 arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
 
+A turbofish may also stop short of the declared parameters. The ones it does not
+name are inferred, as a `_` in their place would be.
+
 ```wado
 let r = Result::<_, MyErr>::Ok(42);    // infers Ok payload type, pins the error type
 let a = pick::<_, bool>(1, true);      // infers the first type argument
+let b = pick::<i32>(1, true);          // stops short: infers the second
 ```
 
 ### Traits
 
 Traits define shared behavior that types can implement. Wado uses static dispatch for trait methods - all calls are resolved at compile time.
+
+A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
 ```wado
 // Trait declaration
@@ -3300,7 +3333,7 @@ rest_iter.next();  // skip first
 let rest = rest_iter.collect();  // [2, 3, 4, 5]
 
 // Terminals compose with the adapters
-let total = arr.iter_value().filter(|x: i32| x % 2 == 1).sum();  // Some(9)
+let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 ```
 
 #### Value Semantics
@@ -3358,21 +3391,21 @@ Iterators support `map`, `filter`, and `fold` for functional-style data processi
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
-let doubled = arr.iter().map(|x: i32| x * 2).collect();
+let doubled = arr.iter().map(|x| x * 2).collect();
 // [2, 4, 6, 8, 10]
 
 // filter - keep elements matching predicate
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+let evens = arr.iter().filter(|x| x % 2 == 0).collect();
 // [2, 4]
 
 // fold - reduce to single value
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+let sum = arr.iter().fold(0, |acc, x| acc + x);
 // 15
 
 // Chaining combinators
 let result = arr.iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
     .collect();
 // [30, 40, 50]
 ```
@@ -3479,7 +3512,7 @@ let arr = make_default::<List<String>>();  // []
 
 #### Auto-Derivation
 
-`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`), synthesized on demand where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it — not for every eligible struct. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
+`Default` is auto-derived for a non-generic struct when every field has a declared default expression (`f: T = expr`), synthesized on demand where a `S::default()` call, a `T: Default` bound, or an `impl Default for S;` marker needs it — not for every eligible struct. A fieldless struct qualifies, having exactly one value; this is what lets a marker like `NoFields` serve as a type parameter's default. See [Struct Field Defaults](#struct-field-defaults). A user-written `impl Default for S` overrides the auto-derived one. Generic structs require an explicit impl.
 
 ```wado
 struct Config {

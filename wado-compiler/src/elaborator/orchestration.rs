@@ -1648,9 +1648,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
-            let errors_before = logger.error_count();
+            let errors_before = logger.offered_error_count();
             elaborator.annotate_module_decls(module, module_source.clone());
-            if logger.error_count() > errors_before {
+            if logger.offered_error_count() > errors_before {
                 decl_failed.insert(module_source.clone());
             }
             let saved_sem = elaborator.sem;
@@ -1748,9 +1748,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
-            let errors_before = logger.error_count();
+            let errors_before = logger.offered_error_count();
             elaborator.annotate_module_bodies(module, module_source.clone());
-            let module_walk_clean = logger.error_count() == errors_before;
+            let module_walk_clean = logger.offered_error_count() == errors_before;
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
             // so the LSP can answer cursor queries against whatever bindings
@@ -2103,8 +2103,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                         }
                     }
+                    // A `trait` and an `interface` are in the type namespace
+                    // without being types. This validator only knows names, so
+                    // it passes them on; `reject_unresolved_annotation` has the
+                    // declaration and says what each one is.
                     Item::Trait(trait_decl) => {
                         module_known_names.insert(trait_decl.name.clone());
+                    }
+                    Item::Interface(interface_decl) => {
+                        module_known_names.insert(interface_decl.name.clone());
                     }
                     _ => {}
                 }

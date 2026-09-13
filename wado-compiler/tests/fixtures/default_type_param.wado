@@ -1,0 +1,157 @@
+//! Type parameter defaults (`<T = Fallback>`): what fills a slot a call site
+//! leaves unbound, and what must not. The sibling of the value defaults in
+//! `default_arg_*`; both kinds resolve in the declaring module's scope.
+
+use { Serialize } from "core:serde";
+use { Value, to_value } from "core:value";
+use { to_string } from "core:json";
+
+struct Fallback {
+    tag: i32 = 7,
+}
+
+fn pick<T = Fallback>(v: T = Fallback {}) -> T {
+    return v;
+}
+
+// The default was parsed and exempted the call from the "cannot infer type
+// parameter" diagnostic, but never substituted, so the unbound `TypeParam`
+// reached codegen: "unsubstituted TypeParam `T` (index 0) reached codegen".
+test "an omitted argument falls back to the declared default type" {
+    assert pick().tag == 7;
+    assert pick(42) == 42;
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+fn wrap<T, U = T>(v: T) -> Wrap<U> {
+    return Wrap { v: v as U };
+}
+
+// `U` appears only in the return type, so nothing but its default can bind it.
+test "a default naming an earlier type parameter picks up that one's argument" {
+    assert wrap(7).v == 7;
+    assert wrap(true).v == true;
+}
+
+struct NoFields {}
+
+fn box_fields<T: Serialize = NoFields>(fields: T = NoFields {}) -> Value {
+    return match to_value(&fields) {
+        Ok(v) => v,
+        Err(_) => Value::Null,
+    };
+}
+
+fn outer<T: Serialize = NoFields>(fields: T = NoFields {}) -> Value {
+    return box_fields(fields);
+}
+
+fn rendered(v: Value) -> String {
+    return match to_string(&v) {
+        Ok(json) => json,
+        Err(_) => panic("serialize failed"),
+    };
+}
+
+// The `core:log` facade shape. With the bound present the pipeline crashed
+// later than the unbounded case above: "type mismatch: expected (ref $type),
+// found (ref (exact $type))".
+test "a bounded default type parameter carries an optional payload" {
+    assert rendered(box_fields()) == `\{\}`;
+    assert rendered(box_fields({ a: 1 })) == `\{"a":1\}`;
+}
+
+// Default-fill treated the forwarded (unbound) `TypeParam` as "needs default"
+// and pinned it to the default type, producing invalid core Wasm. The forward
+// is the monomorphizer's to resolve, per instantiation.
+test "a callee's default does not clobber a forwarded type parameter" {
+    assert rendered(outer()) == `\{\}`;
+    assert rendered(outer({ a: 1 })) == `\{"a":1\}`;
+}
+
+struct Priv {
+    n: i32 = 5,
+}
+
+trait Tagged {
+    fn tag(&self) -> i32;
+}
+
+impl Tagged for Priv {
+    fn tag(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Tagged for i32 {
+    fn tag(&self) -> i32 {
+        return *self;
+    }
+}
+
+fn free<T: Tagged = Priv>(v: T = Priv {}) -> i32 {
+    return v.tag();
+}
+
+struct Holder {
+    base: i32,
+}
+
+impl Holder {
+    fn scaled<T: Tagged = Priv>(&self, v: T = Priv {}) -> i32 {
+        return self.base + v.tag();
+    }
+}
+
+struct Boxed<A> {
+    item: A,
+}
+
+impl<A: Tagged> Boxed<A> {
+    fn scaled<T: Tagged = Priv>(&self, v: T = Priv {}) -> i32 {
+        return self.item.tag() + v.tag();
+    }
+}
+
+// A value default is checked against its parameter type with the signature's
+// own type-parameter defaults applied: `Priv {}` satisfies `v: T` only for the
+// `T` a caller gets by default.
+test "a value default is checked against its type parameter's default" {
+    assert free() == 5;
+    assert free(9) == 9;
+
+    let h = Holder { base: 1 };
+    assert h.scaled() == 6;
+    assert h.scaled(9) == 10;
+}
+
+// `Boxed<A>::scaled` puts the method's `T` at slot 1, so the substitution keys
+// on the index the declaration gave the parameter, not on its position among
+// the method's own.
+test "a method on a generic impl numbers its own slots after the impl's" {
+    let b = Boxed { item: 2 };
+    assert b.scaled() == 7;
+    assert b.scaled(9) == 11;
+}
+
+// `Default` here is the trait's own type parameter, not the prelude trait.
+trait Container<T, Default = i32> {
+    fn value(&self) -> T;
+}
+
+struct IntBox {
+    x: i32,
+}
+
+impl<i32> Container<i32, i32> for IntBox {
+    fn value(&self) -> i32 {
+        return self.x;
+    }
+}
+
+test "a trait declares a type parameter default" {
+    assert IntBox { x: 42 }.value() == 42;
+}

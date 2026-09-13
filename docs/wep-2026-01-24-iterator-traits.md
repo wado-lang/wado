@@ -514,7 +514,7 @@ for let i of 0..<10 {
 }
 
 // With combinators
-let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);  // 5050
+let sum = (1..<101).fold(0, |acc, x| acc + x);  // 5050
 ```
 
 ### 12. String Iterator
@@ -773,12 +773,12 @@ fn run() with Stdout {
 ```wado
 fn run() with Stdout {
     // Sum of 1 to 100
-    let sum = (1..<101).fold(0, |acc: i32, x: i32| acc + x);
+    let sum = (1..<101).fold(0, |acc, x| acc + x);
     println(`Sum 1-100: ${sum}`);  // 5050
 
     // Generate squares
     let squares: List<i32> = (1..<6)
-        .map(|x: i32| x * x)
+        .map(|x| x * x)
         .collect();
     // [1, 4, 9, 16, 25]
 }
@@ -902,18 +902,6 @@ fn run() with Stdout {
 
 - **Trait bounds**: `type Iter: Iterator` constraints are not enforced at trait level,
   only checked at usage sites.
-
-- **Closure parameter type inference**: Closures passed to functions require explicit
-  parameter type annotations. Type inference from function signature context is not
-  yet supported.
-
-  ```wado
-  // This doesn't work:
-  apply(5, |x| x * 2);  // Error: can't infer type of x
-
-  // This works:
-  apply(5, |x: i32| x * 2);  // OK: explicit type annotation
-  ```
 
 ### TODO
 

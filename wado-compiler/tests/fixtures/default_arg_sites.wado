@@ -1,0 +1,100 @@
+//! Which declarations may carry a default, and which spellings of a call fill
+//! it. A trait's are the trait's own and have their own file
+//! (`default_arg_trait.wado`); everything an `impl` block declares for itself
+//! is here.
+
+use counter from "./sub/default_arg_static_lib.wado";
+
+struct Circle {
+    radius: f64,
+}
+
+impl Circle {
+    fn scale(&self, factor: f64 = 2.0) -> f64 {
+        return self.radius * factor;
+    }
+
+    fn area(&self, width: f64, height: f64 = width) -> f64 {
+        return self.radius + width * height;
+    }
+}
+
+test "an inherent method declares defaults" {
+    let c = Circle { radius: 5.0 };
+    assert c.scale() == 10.0;
+    assert c.scale(3.0) == 15.0;
+}
+
+test "an inherent method's default names an earlier parameter" {
+    let c = Circle { radius: 0.0 };
+    assert c.area(10.0) == 100.0;
+    assert c.area(10.0, 20.0) == 200.0;
+}
+
+struct Counter {
+    start: i32,
+    step: i32,
+}
+
+impl Counter {
+    fn make(start: i32 = 5, step: i32 = start + 1) -> Counter {
+        return Counter { start, step };
+    }
+
+    fn sum(&self) -> i32 {
+        return self.start + self.step;
+    }
+}
+
+// The instance and free-function paths already padded at reify time; the static
+// path did not, so codegen emitted a call missing its argument and the WIR
+// pipeline produced invalid Wasm ("expected i32 but nothing on stack").
+test "a static method fills omitted defaults" {
+    let a = Counter::make();
+    assert a.start == 5;
+    assert a.step == 6;
+
+    let b = Counter::make(10);
+    assert b.start == 10;
+    assert b.step == 11;
+
+    assert Counter::make(1, 2).sum() == 3;
+}
+
+// The namespace static-method dispatch recorded empty `param_defaults`, so
+// reify padded nothing and the same invalid Wasm came out.
+test "a namespace-qualified static call fills omitted defaults" {
+    let a = counter::Counter::make();
+    assert a.start == 5;
+    assert a.step == 6;
+
+    let b = counter::Counter::make(10);
+    assert b.start == 10;
+    assert b.step == 11;
+
+    assert counter::Counter::make(1, 2).sum() == 3;
+}
+
+struct MyBox<T> {
+    value: T,
+}
+
+impl<T> MyBox<T> {
+    fn new(value: T) -> MyBox<T> {
+        return MyBox { value };
+    }
+
+    fn scaled(&self, factor: i32 = 2) -> i32 {
+        return factor + 10;
+    }
+}
+
+test "each monomorphization of a generic method inherits the default" {
+    let bi = MyBox::<i32>::new(1);
+    assert bi.scaled() == 12;
+    assert bi.scaled(5) == 15;
+
+    let bs = MyBox::<String>::new("x");
+    assert bs.scaled() == 12;
+    assert bs.scaled(100) == 110;
+}

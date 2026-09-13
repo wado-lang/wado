@@ -391,70 +391,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.logger.has_errors() {
             return;
         }
-        match ty {
-            ast::Type::Named(named) => {
-                if named.name == "Self"
-                    || self
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .contains_key(&named.name)
-                    || self.type_decl_at(Some(named.id), &named.name).is_some()
-                {
-                    return;
-                }
-                if self.resolve_named_type(named.id, &named.name, named.span, false)
-                    != TypeTable::UNKNOWN
-                {
-                    return;
-                }
-                let _ = self.emit(TypeError::UnknownType {
-                    name: named.name.clone(),
-                    span: named.span,
-                });
+        self.walk_type_heads(ty, &mut |scope, id, name, span, has_args| {
+            if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+                return false;
             }
-            ast::Type::Generic(generic) => {
-                // With the head unknown the arguments are noise.
-                if !BUILTIN_GENERIC_HEADS.contains(&generic.name.as_str())
-                    && generic.name != TypeTable::ARRAY_TYPE_NAME
-                    && !self
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .contains_key(&generic.name)
-                    && self.type_decl_at(Some(generic.id), &generic.name).is_none()
-                {
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: generic.name.clone(),
-                        span: generic.span,
-                    });
-                    return;
-                }
-                for arg in &generic.args {
-                    self.reject_unresolved_annotation(arg);
-                }
+            // A builtin head answers for itself; only a written one is looked up.
+            if has_args
+                && (BUILTIN_GENERIC_HEADS.contains(&name) || name == TypeTable::ARRAY_TYPE_NAME)
+            {
+                return false;
             }
-            ast::Type::NamespacedGeneric(namespaced) => {
-                for arg in &namespaced.args {
-                    self.reject_unresolved_annotation(arg);
-                }
+            if scope.reject_non_type_decl(id, name, span) {
+                return true;
             }
-            ast::Type::Function(func_ty) => {
-                for param in &func_ty.params {
-                    self.reject_unresolved_annotation(param);
-                }
-                self.reject_unresolved_annotation(&func_ty.return_type);
+            if scope.type_decl_at(Some(id), name).is_some() {
+                return false;
             }
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                self.reject_unresolved_annotation(inner);
+            // A bare name has tiers no declaration index covers, `Self` and the
+            // frame's parameters among them. A head carrying arguments has none.
+            if !has_args && scope.resolve_named_type(id, name, span, false) != TypeTable::UNKNOWN {
+                return false;
             }
-            ast::Type::Tuple(elems) => {
-                for elem in elems {
-                    self.reject_unresolved_annotation(elem);
-                }
-            }
-            ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
-        }
+            let _ = scope.emit(TypeError::UnknownType {
+                name: name.to_string(),
+                span,
+            });
+            true
+        });
     }
 
     /// Resolve a local newtype, reporting whether its base came out known.
@@ -2566,8 +2529,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name: "into_iter",
                 method_id: None,
                 call_id: None,
+                defaults_site: None,
                 type_args: vec![],
-                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,
@@ -2618,8 +2581,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name: "next",
                 method_id: None,
                 call_id: None,
+                defaults_site: None,
                 type_args: vec![],
-                type_arg_holes: vec![],
                 args: &[],
                 expected_type: None,
                 span,

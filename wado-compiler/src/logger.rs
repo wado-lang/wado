@@ -43,6 +43,8 @@ pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,
     error_count: Cell<usize>,
+    /// Faults offered, counting the ones the dedup swallowed.
+    offered_error_count: Cell<usize>,
     /// Nesting depth of [`Logger::quiet`] scopes. While non-zero, an error is
     /// dropped instead of emitted and does not count.
     quiet_depth: Cell<usize>,
@@ -73,6 +75,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             host,
             level,
             error_count: Cell::new(0),
+            offered_error_count: Cell::new(0),
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
             parses: std::cell::RefCell::default(),
@@ -134,6 +137,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
+        self.offered_error_count
+            .set(self.offered_error_count.get() + 1);
         if let Some(identity) = Self::identity(&diag)
             && !self.reported.borrow_mut().insert(identity)
         {
@@ -212,6 +217,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             return Err(Bail);
         }
         self.error_count.set(self.error_count.get() + 1);
+        self.offered_error_count
+            .set(self.offered_error_count.get() + 1);
         self.emit(err.into());
         Err(Bail)
     }
@@ -236,6 +243,12 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Get the number of errors reported
     pub fn error_count(&self) -> usize {
         self.error_count.get()
+    }
+
+    /// Faults offered, the already-said among them included. A walk asking
+    /// whether it reported reads this; the dedup holds `error_count` still.
+    pub fn offered_error_count(&self) -> usize {
+        self.offered_error_count.get()
     }
 
     /// Return `Ok(value)` if no errors have been reported, `Err(Bail)` otherwise.
@@ -549,6 +562,39 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(logger.error_count(), MAX_ERRORS);
+    }
+
+    /// The same fault at the same place is printed once, so only the offered
+    /// count moves for the second report.
+    #[test]
+    fn test_dedup_moves_only_the_offered_count() {
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Error);
+        let twice = || Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: "unknown function 'T::default'".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "a.wado".to_string(),
+                line: 3,
+                column: 46,
+                end_line: None,
+                end_column: None,
+                space: AstIdSpace::FRESH,
+            }),
+        };
+
+        let _ = logger.error(twice());
+        assert_eq!(logger.error_count(), 1);
+        assert_eq!(logger.offered_error_count(), 1);
+
+        let before = logger.offered_error_count();
+        let _ = logger.error(twice());
+        assert_eq!(logger.error_count(), 1, "the dedup keeps it from printing");
+        assert!(
+            logger.offered_error_count() > before,
+            "but the second walk did report, and must be able to tell"
+        );
     }
 
     #[test]
