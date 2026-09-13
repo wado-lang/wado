@@ -676,6 +676,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: "method",
                     name: method_name,
                     span,
+                    type_args: &type_args,
                 },
             )
         });

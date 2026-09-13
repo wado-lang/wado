@@ -7,15 +7,15 @@
 //   1. The call instantiates the callee's slots into inference variables before
 //      it resolves an argument, so the closure body meets a variable rather
 //      than a rigid `Acc` no expression can construct.
-//   2. Arguments are resolved in three tiers, each pinning what it answers:
-//      everything but a closure still holding a variable, then those closures,
-//      then numeric literals. A `String` seed answers `acc` under the first
-//      tier; a closure written ahead of the deciding argument is answered under
-//      the second.
+//   2. Arguments resolve in two passes — everything but a closure still holding
+//      a variable, then those closures — and each answers as it resolves. A
+//      `String` seed answers `acc` in the first pass; a closure written ahead of
+//      the deciding argument is answered in the second.
 //
-// The literal tier is last because `i32` is a default, not an answer. In the
-// `List<i64>` case below the body says the accumulator is `i64`; in
-// `fold(0, |acc, x| x)` the `0` is all there is.
+// A numeric literal answers after both passes, and only where nothing else did,
+// because `i32` is a default rather than an answer. In the `List<i64>` case
+// below the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0`
+// is all there is.
 
 struct Counter {
     v: i32,

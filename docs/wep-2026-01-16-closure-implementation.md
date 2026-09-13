@@ -50,13 +50,16 @@ The compiler chooses static (specialised) vs dynamic (canonical) dispatch via es
 
 A closure literal's parameter types come from the expected `fn(..)` type at its use site, matched by position. Every row of the table above supplies one, as does a `let` carrying a `fn(..)` annotation and a newtype over `fn(..)`. An annotation is needed only where nothing supplies one, and always wins over what would have been inferred.
 
-The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`.
+The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`. A slot the call's turbofish names is solved at that instantiation, so `go::<String>(|a| a.len())` types the closure from what the source wrote.
 
-Arguments are then resolved in three tiers, each pinning what it answers about those variables. An argument that depends on the answer therefore reads a settled type:
+Resolving an argument and answering a variable with it are separately ordered, since the argument that can answer is not always the one that has to go first.
+
+Arguments resolve in two passes:
 
 1. Everything but a closure whose parameter types still hold a variable, in source order.
 2. Those closures. A closure takes its parameter types off the signature, and its body applies operators and methods to them right away. An operator applied to a variable resolves against nothing, so the closure waits for the arguments that can answer it. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
-3. Numeric literals, answering only what is still open. `i32` / `f64` is a default, not an answer. In `fold(0, |acc, x| acc + x)` over a `List<i64>` the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0` is all there is.
+
+Each argument answers as it resolves, except a numeric literal, which answers after both passes and only where nothing else did. `i32` / `f64` is a default, not an answer: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0` is all there is.
 
 An argument answers only the variables the call itself minted. A parameter type can be built over a hole some other site deferred, such as the receiver's element type. That hole has its own sink, and nothing re-checks the sink against an answer pinned here, so an argument that merely agrees with the hole would fix it to the wrong type and be believed.
 
@@ -65,6 +68,8 @@ Once every argument is resolved each variable is settled back onto its slot, so 
 A variable renders in a diagnostic as the slot it stands for. `?0` names nothing the source wrote, where `A` is exactly what the reader would annotate. A mangled name keeps the variable's own identity, so two same-named slots cannot collapse onto one name.
 
 The receiver's type parameters are not part of that step. Method lookup has already instantiated the declaring level, so `Self::Item` is concrete before the first argument is looked at.
+
+A `&mut self` method reached through a subscript (`xs[i].m(..)`) is rewritten through `IndexMut` by a path of its own, which answers the call rather than delegating. It runs the same sequence, so the receiver's spelling does not decide whether a closure argument gets a type.
 
 ### Generic Bound Syntax
 
@@ -309,7 +314,7 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 5. Closures cannot cross Component Model boundary (MVP).
    - Mitigation: documented; resource adapter as future work.
 
-## Future Work
+## Known gaps
 
 - A closure with no expected type at all (`let f = |x| x + 1;`) still needs its parameters annotated: nothing infers them from the body, or from a later call of the binding.
 - Two closures in one call that could only answer each other (`f(|a| g(a), |b| h(b))` where each slot is written in both) are resolved in source order, so the second reads whatever the first settled and nothing revisits the first. A general fixed point over the argument list would need the body walk to be replayable, which it is not.

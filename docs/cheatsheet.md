@@ -1189,7 +1189,8 @@ iter.next();                              // Option<i32>
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
-// Combinators: the closure's parameter types come from the receiver
+// Combinators: the closure's parameter types come from the call — the item type
+// from the receiver, an accumulator from the seed or the body
 let doubled = arr.into_iter().map(|x| x * 2).collect();            // [2, 4, 6, 8, 10]
 let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();      // [2, 4]
 let acc = arr.into_iter().fold(0, |acc, x| acc + x);               // 15

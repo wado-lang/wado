@@ -2279,9 +2279,10 @@ a closure is checked after the arguments that do not need it. A sibling argument
 therefore fixes the closure's parameter types whether it is written before or
 after the closure. A numeric literal settles last, answering only what nothing
 else did: `fold(0, |acc, x| acc + x)` over a `List<i64>` takes `i64` from the
-body, not `i32` from the `0`. A parameter nothing settles is reported as
-uninferred at the call (`cannot infer type parameter ...`), not as an error
-inside the closure.
+body, not `i32` from the `0`. A turbofish settles the slots it names before any
+argument is checked, so `go::<String>(|a| a.len())` types the closure from what
+the call wrote. A parameter nothing settles is reported as uninferred at the
+call (`cannot infer type parameter ...`), not as an error inside the closure.
 
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.

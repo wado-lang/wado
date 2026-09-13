@@ -302,9 +302,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// ([`Self::solve_own_infer_holes_against`]). A callee that declares no
     /// slots has none, and the walk is then a plain in-order resolve.
     ///
-    /// Three tiers decide who answers first, as the solver's own tiers do
-    /// ([`InferCtx::add`], [`InferCtx::add_expected_return`],
-    /// [`InferCtx::add_deferred`]):
+    /// Resolving and answering are ordered apart, since the argument that can
+    /// answer is not always the one that has to resolve first. Two passes
+    /// resolve:
     ///
     /// 1. Everything but a closure whose parameter types still hold a
     ///    variable, in source order.
@@ -313,8 +313,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///    applied to a variable dispatches against nothing and reaches WIR
     ///    with no lowering. Waiting is what lets `late(|a, b| a + b, seed)`
     ///    read `seed`'s type.
-    /// 3. Numeric literals, answering only what is still open. `i32` / `f64`
-    ///    is a default, not an answer.
+    ///
+    /// An argument answers as it resolves, except a numeric literal, which
+    /// answers after both passes and only where nothing else did — `i32` /
+    /// `f64` is a default, not an answer. The solver orders its own sinks the
+    /// same way ([`InferCtx::add`], [`InferCtx::add_expected_return`],
+    /// [`InferCtx::add_deferred`]).
     pub(super) fn resolve_args_against_params(
         &mut self,
         args: &[ast::Expr],
@@ -708,6 +712,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these, not into the variables.
         let declared_param_types = param_types.clone();
 
+        // Resolve explicit type arguments (`_` resolves to UNKNOWN). Read here
+        // rather than where inference merges them below, since the
+        // instantiation answers a named slot with what the source wrote.
+        let mut type_args: Vec<TypeId> = call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
         // own and opaque here, so a literal checked against `List<T>` reports
@@ -720,6 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: "function",
                     name: effective_name,
                     span: call.span,
+                    type_args: &type_args,
                 },
             )
         });
@@ -1743,12 +1757,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
         // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)
@@ -2359,6 +2367,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: "builtin",
                     name: func_name,
                     span,
+                    // A builtin's signature is looked up by name, with no
+                    // turbofish to read.
+                    type_args: &[],
                 },
             );
             let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
@@ -2437,6 +2448,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "function",
                 name: func_name,
                 span,
+                // This is the inference pass itself, run over already-resolved
+                // arguments. Its caller merges the turbofish into the answer
+                // afterwards, so every slot is open here.
+                type_args: &[],
             },
         );
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
