@@ -1,12 +1,60 @@
-export fn run() {
+//! The `Default` trait: what the prelude implements it for, and what the
+//! `impl Default for T;` marker asserts. The field defaults it derives from are
+//! in `default_field.wado`; the on-demand synthesis rule needs a WIR assertion
+//! and stays in `default_bound_driven_absence.wado`.
+
+test "the prelude types have a default" {
     assert i32::default() == 0;
     assert f64::default() == 0.0;
     assert bool::default() == false;
     assert String::default() == "";
-
-    let a = List::<i32>::default();
-    assert a.len() == 0;
+    assert List::<i32>::default().len() == 0;
 }
 
-__DATA__
-{"stdout": ""}
+struct Config {
+    retries: i32 = 3,
+    verbose: bool = false,
+}
+
+// The marker is a conformance check, otherwise interchangeable with the
+// structural auto-derive: it asserts every field carries a default expression.
+// `default_on_bound_marker_ineligible.wado` pins the rejection.
+impl Default for Config;
+
+test "the marker validates and derives the same impl" {
+    let c = Config::default();
+    assert c.retries == 3;
+    assert !c.verbose;
+}
+
+struct Manual {
+    id: i32,
+}
+
+impl Default for Manual {
+    pub fn default() -> Manual {
+        return Manual { id: 42 };
+    }
+}
+
+test "a written impl wins over the derived one" {
+    assert Manual::default().id == 42;
+}
+
+fn make<T: Default>() -> T {
+    return T::default();
+}
+
+test "a T: Default bound resolves through the marker'd type" {
+    let c: Config = make();
+    assert c.retries == 3;
+}
+
+struct NoFields {}
+
+// A fieldless struct qualifies vacuously — it has exactly one value — which is
+// what lets a marker like this serve as a type parameter's default.
+test "a fieldless struct has a default" {
+    assert NoFields::default() matches { NoFields {} };
+    let _ = make::<NoFields>();
+}
