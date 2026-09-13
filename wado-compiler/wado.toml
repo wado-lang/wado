@@ -13,16 +13,23 @@ version = "0.1.0"
 #
 # `lib/core/allocator.wado` is `#![wasm_module("mem")]`: its code lands in
 # `mem`, leaving no component to emit, so an entry declaring one is rejected.
+#
+# `lib/core/log_level_test.wado` asserts on events below `Warn`, which the
+# `-D log.level=warn` `wado test` builds with compiles away. `mise run
+# test-log-levels` names it with a tier-1 level that admits them.
 exclude = [
     "tests/**",
     "lib/core/prelude/**",
     "lib/core/allocator.wado",
+    "lib/core/log_level_test.wado",
 ]
 
-# The `*_test.wado` files inside those excluded directories *are* meant to be
-# run, so this override keeps them visible to discovery.
+# The prelude's own tests live inside the excluded `lib/core/prelude/**`, so
+# this override keeps them visible to discovery. Scoped to that directory: a
+# blanket `lib/**/*_test.wado` would also override the exclusions above, which
+# an `include` always wins against.
 include = [
-    "lib/**/*_test.wado",
+    "lib/core/prelude/**/*_test.wado",
 ]
 
 [format]

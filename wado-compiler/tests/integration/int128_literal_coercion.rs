@@ -36,6 +36,7 @@ fn byte_literal_at_int128_reifies_to_the_constructor_call() {
         wado_compiler::OptOverrides::default(),
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
+        &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),
         wado_compiler::kiln::InvocationIndex::default(),
     ))

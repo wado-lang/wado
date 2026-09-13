@@ -227,6 +227,10 @@ impl ParamOpt {
 #[derive(Clone, Debug, Default)]
 pub struct ParamArgs {
     pub overrides: wado_compiler::hashmap::IndexMap<String, String>,
+    /// Fallbacks a subcommand supplies for itself (`wado test` quieting
+    /// `log.level`), below `-D` and `from_env`. Never a user's typo, so one
+    /// naming no `#[param]` is silent rather than `--param-unknown`.
+    pub defaults: wado_compiler::hashmap::IndexMap<String, String>,
     pub policy: wado_compiler::param_resolution::ParamPolicy,
 }
 

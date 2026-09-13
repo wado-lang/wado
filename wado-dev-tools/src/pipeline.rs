@@ -529,6 +529,7 @@ async fn render_phases(
             wado_compiler::OptOverrides::default(),
             &[],
             &wado_compiler::hashmap::IndexMap::default(),
+            &wado_compiler::hashmap::IndexMap::default(),
             wado_compiler::param_resolution::ParamPolicy::default(),
             wado_compiler::kiln::InvocationIndex::default(),
         )

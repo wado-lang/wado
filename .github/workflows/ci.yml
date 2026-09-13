@@ -88,6 +88,10 @@ jobs:
 
       - run: cargo test --locked --all -- --skip fixture_test_
 
+      # `test-level` runs the stdlib with tier 1 at `wado test`'s `warn`, so the
+      # core:log tiers below it are covered only here.
+      - run: mise run test-log-levels
+
   # One job per optimization level: the e2e fixtures, then the stdlib, both
   # compiled at that level. An optimizer bug reachable from `core:*` shows at
   # some levels and not others, so `fail-fast: false` lets every level finish —

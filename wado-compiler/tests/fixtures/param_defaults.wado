@@ -1,0 +1,33 @@
+use { println, Stdout } from "core:cli";
+
+#[param]
+global PLAIN: String = "decl";
+
+#[param(from_env = "PD_ENV")]
+global ENVED: String = "decl";
+
+#[param]
+global HARD: String = "decl";
+
+#[param]
+global UNTOUCHED: String = "decl";
+
+export fn run() with Stdout {
+    println(`PLAIN=${PLAIN}`);
+    println(`ENVED=${ENVED}`);
+    println(`HARD=${HARD}`);
+    println(`UNTOUCHED=${UNTOUCHED}`);
+}
+
+__DATA__
+{
+    "param_defaults": {
+        "PLAIN": "host",
+        "ENVED": "host",
+        "HARD": "host",
+        "NOT_DECLARED": "host"
+    },
+    "param_env": { "PD_ENV": "env" },
+    "params": { "HARD": "flag" },
+    "stdout": "PLAIN=host\nENVED=env\nHARD=flag\nUNTOUCHED=decl\n"
+}

@@ -63,12 +63,17 @@ impl Default for ParamPolicy {
     }
 }
 
-/// Resolve every `#[param]` global in `flat` against `overrides` / env / policy.
+/// Resolve every `#[param]` global in `flat` against `overrides` / env /
+/// `defaults` / policy, in that precedence.
+///
+/// A `defaults` entry is the host's own fallback rather than a user's `-D`, so
+/// one naming no declaration is silent where an `overrides` entry is `unknown`.
 ///
 /// Returns `Err(Bail)` if any diagnostic was emitted at `error` level.
 pub fn resolve_params<H: CompilerHost>(
     flat: &mut FlatPackage,
     overrides: &IndexMap<String, String>,
+    defaults: &IndexMap<String, String>,
     policy: &ParamPolicy,
     file: &str,
     logger: &Logger<'_, H>,
@@ -136,12 +141,16 @@ pub fn resolve_params<H: CompilerHost>(
             continue;
         }
 
-        // `-D` takes precedence over `from_env`.
+        // `-D` takes precedence over `from_env`, and both over a host default.
+        let from_env = spec
+            .from_env
+            .as_ref()
+            .and_then(|env| logger.host().env_var(env).map(|v| (v, env.clone())));
         let (raw, from_env_name) = match overrides.get(&spec.name) {
             Some(value) => (Some(value.clone()), None),
-            None => match &spec.from_env {
-                Some(env) => (logger.host().env_var(env), Some(env.clone())),
-                None => (None, None),
+            None => match from_env {
+                Some((value, env)) => (Some(value), Some(env)),
+                None => (defaults.get(&spec.name).cloned(), None),
             },
         };
 

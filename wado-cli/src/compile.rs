@@ -403,6 +403,7 @@ pub async fn try_compile_with_run_cache(
         allocator: knobs.allocator.clone(),
         codegen_flags: knobs.codegen_flags.clone(),
         param_overrides: knobs.params.overrides.clone(),
+        param_defaults: knobs.params.defaults.clone(),
         param_policy: knobs.params.policy,
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,

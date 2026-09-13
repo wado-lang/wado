@@ -230,6 +230,18 @@ fi
 ./scripts/exclusive.sh test-stdlib cargo run -p wado-cli -- test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
+[tasks.test-log-levels]
+description = "Run the core:log tier tests at a tier-1 level that admits trace"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# `wado test` defaults tier 1 to `warn`, which compiles a trace/debug/info call
+# away before any sink sees it — so the tests that assert on one are excluded
+# from discovery (`[test].exclude` in `wado-compiler/wado.toml`) and named here
+# instead. An explicit path bypasses `[test].exclude`, unlike `--exclude`.
+cargo run -p wado-cli -- test -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+"""
+
 [tasks.test-hooks]
 description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"

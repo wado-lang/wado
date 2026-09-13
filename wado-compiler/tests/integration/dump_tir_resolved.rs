@@ -37,6 +37,7 @@ fn tir_resolved_unparses_generic_struct_without_panicking() {
         wado_compiler::OptOverrides::default(),
         &[],
         &wado_compiler::hashmap::IndexMap::default(),
+        &wado_compiler::hashmap::IndexMap::default(),
         wado_compiler::param_resolution::ParamPolicy::default(),
         wado_compiler::kiln::InvocationIndex::default(),
     ))

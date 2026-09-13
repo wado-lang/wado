@@ -346,6 +346,10 @@ pub struct CompilerOptions {
     /// Consumed by the param-resolution pass against `#[param]` globals; an
     /// entry matching no declaration is reported per `param_policy.unknown`.
     pub param_overrides: hashmap::IndexMap<String, String>,
+    /// The host's own parameter fallbacks, below `-D` and `from_env` and above
+    /// the declaration's initializer. An entry matching no declaration is
+    /// silent, since the host aims it at a library rather than this program.
+    pub param_defaults: hashmap::IndexMap<String, String>,
     /// Severity policy for the three param-resolution diagnostic classes
     /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
     pub param_policy: param_resolution::ParamPolicy,
@@ -374,6 +378,7 @@ impl Default for CompilerOptions {
             lib_interface_export: false,
             providers: Vec::new(),
             param_overrides: hashmap::IndexMap::default(),
+            param_defaults: hashmap::IndexMap::default(),
             param_policy: param_resolution::ParamPolicy::default(),
             embed_wit_contract: None,
         }
@@ -955,6 +960,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
             param_overrides: parent.param_overrides.clone(),
+            param_defaults: parent.param_defaults.clone(),
             param_policy: parent.param_policy,
             ..Default::default()
         };
@@ -1543,6 +1549,7 @@ fn compile_after_load<H: CompilerHost>(
         param_resolution::resolve_params(
             &mut flat,
             &options.param_overrides,
+            &options.param_defaults,
             &options.param_policy,
             &entry_filename,
             logger,
@@ -1669,11 +1676,7 @@ fn compile_after_load<H: CompilerHost>(
     // The Kiln guarantee on the imports actually planned, which is the first
     // point a transitive `core:*` dependency on WASI is visible. Before
     // codegen, so a generator that cannot instantiate never reaches bytes.
-    if kiln::import_check::check_cm_imports(
-        is_kiln_generator,
-        &wir_package.import_plan,
-        logger,
-    ) > 0
+    if kiln::import_check::check_cm_imports(is_kiln_generator, &wir_package.import_plan, logger) > 0
     {
         return Err(Bail);
     }
@@ -1770,6 +1773,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         OptOverrides::default(),
         &[],
         &hashmap::IndexMap::default(),
+        &hashmap::IndexMap::default(),
         param_resolution::ParamPolicy::default(),
         kiln::InvocationIndex::default(),
     )
@@ -1795,6 +1799,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     opt: OptOverrides,
     codegen_flags: &[String],
     param_overrides: &hashmap::IndexMap<String, String>,
+    param_defaults: &hashmap::IndexMap<String, String>,
     param_policy: param_resolution::ParamPolicy,
     invocations: kiln::InvocationIndex,
 ) -> Result<DumpResult, Bail> {
@@ -1986,6 +1991,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 param_resolution::resolve_params(
                     &mut flat,
                     param_overrides,
+                    param_defaults,
                     &param_policy,
                     &entry_source.source_path(),
                     &logger,

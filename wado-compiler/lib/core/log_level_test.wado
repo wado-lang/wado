@@ -1,0 +1,189 @@
+// Tests whose assertions need an event below `Warn` to reach the subscriber,
+// so they only hold where tier 1 admits one.
+//
+// `wado test` builds with `-D log.level=warn`, which compiles a `trace` /
+// `debug` / `info` call away before any of the run-time tiers see it — so this
+// file is excluded from discovery (`[test].exclude` in `wado.toml`) and run by
+// `mise run test-log-levels`, which names it with `-D log.level=trace`. Its
+// sibling `log_test.wado` holds everything that is level-agnostic, including
+// the mirror assertions for tier 1 at `warn`.
+
+use {
+    CaptureSink,
+    Filter,
+    Level,
+    Log,
+    NopSink,
+    debug,
+    enabled,
+    error,
+    event,
+    in_span,
+    info,
+    log_level,
+    parse_directives,
+    set_log_level,
+    span,
+    trace,
+    warn,
+} from "core:log";
+
+test "tier 1 at trace admits every level" {
+    // Tier 3 has the last word, so this needs a sink that admits everything:
+    // the default subscriber stops at `Info` on its own.
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        assert enabled(Level::Trace);
+        assert enabled(Level::Info);
+    };
+}
+
+test "every level wrapper reaches the sink" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        trace(`t`);
+        debug(`d`);
+        info(`i`);
+        warn(`w`);
+        error(`e`);
+    };
+    assert sink.events.len() == 5;
+    assert sink.events[0].meta.level matches { Trace };
+    assert sink.events[4].meta.level matches { Error };
+}
+
+test "tier 3 drops events below the sink's minimum level" {
+    let mut sink = CaptureSink { min: Level::Warn };
+    with Log => &mut sink do {
+        info(`dropped`);
+        warn(`kept`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}
+
+test "tier 2 drops events below the process-wide level" {
+    let mut sink = CaptureSink {};
+    set_log_level(Level::Warn);
+    assert log_level() matches { Warn };
+    with Log => &mut sink do {
+        info(`dropped`);
+        warn(`kept`);
+    };
+    set_log_level(Level::Trace);
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}
+
+test "enabled guards fields too expensive to build" {
+    let mut sink = CaptureSink { min: Level::Warn };
+    let mut built = 0;
+    with Log => &mut sink do {
+        if enabled(Level::Debug) {
+            built += 1;
+            info(`never`);
+        }
+        if enabled(Level::Error) {
+            built += 1;
+            error(`always`);
+        }
+    };
+    assert built == 1;
+    assert sink.events.len() == 1;
+}
+
+test "a filter layer composes over a sink" {
+    let mut sink = CaptureSink {};  // passes everything
+    let filt = Filter { directives: parse_directives("warn") };
+    with Log => &mut sink do {
+        with Log => &filt do {
+            info(`drop`);
+            warn(`keep`);
+        };
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "keep";
+}
+
+test "a directive matches the target an event is actually emitted with" {
+    // The target defaults to the caller's `#function`, so a directive names a
+    // function, not a module path. Passing `target` explicitly is how events
+    // get grouped under a name of the application's choosing.
+    let mut sink = CaptureSink {};
+    let filt = Filter { directives: parse_directives("error,db=debug") };
+    with Log => &mut sink do {
+        with Log => &filt do {
+            info(`unmatched target falls to the default level`);
+            info(`grouped under db`, {}, "db");
+            info(`grouped under db::query`, {}, "db::query");
+        };
+    };
+    assert sink.events.len() == 2;
+    assert sink.events[0].meta.target == "db";
+    assert sink.events[1].meta.target == "db::query";
+}
+
+test "the raw event emitter runs the run-time gates too" {
+    // Only tier 1 is weaker for a computed level: a level that is not a
+    // literal is not a comparison the optimizer can fold. Tiers 2 and 3 apply.
+    let mut sink = CaptureSink { min: Level::Warn };
+    with Log => &mut sink do {
+        event(Level::Info, `dropped by the sink`);
+        event(Level::Error, `kept`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+
+    let mut sink2 = CaptureSink {};
+    set_log_level(Level::Error);
+    with Log => &mut sink2 do {
+        event(Level::Trace, `dropped by the process level`);
+        event(Level::Error, `kept`);
+    };
+    set_log_level(Level::Trace);
+    assert sink2.events.len() == 1;
+    assert sink2.events[0].message == "kept";
+}
+
+// === The default subscriber ===
+//
+// With no handler installed the interface's own default implementations run:
+// `Info` and above, one text line per event on stderr. `wado test` captures a
+// test's stderr and shows it only when the test fails, so these lines are
+// post-mortem detail rather than noise.
+
+test "logging with no sink installed neither traps nor is silent" {
+    // No `with Log` anywhere: every call lands on a default implementation.
+    info(`default subscriber`, { k: "v" });
+    warn(`still fine`);
+    debug(`below the default threshold`);
+    assert enabled(Level::Info);
+    assert enabled(Level::Error);
+    assert !enabled(Level::Debug);
+    assert !enabled(Level::Trace);
+}
+
+test "an installed sink overrides the default for its scope" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        // Below the default threshold, but the installed sink admits it.
+        debug(`captured`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "captured";
+    // Outside the block the default is back, and it drops this one.
+    assert !enabled(Level::Debug);
+}
+
+test "nop sink drops everything and gates at tier 3" {
+    let mut sink = NopSink {};
+    let mut reached = 0;
+    with Log => &mut sink do {
+        assert !enabled(Level::Error);
+        in_span(&span(Level::Info, `s`), || {
+            reached += 1;
+            info(`dropped`);
+        });
+    };
+    assert reached == 1;
+}

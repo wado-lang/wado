@@ -106,6 +106,19 @@ default for unmatched targets; `target=level` overrides it for targets under
 that prefix. A malformed directive is skipped: a typo in an environment
 variable must not stop a program from starting.
 
+## Traits
+
+### `pub trait Clock`
+
+How a sink stamps an event with a time, or declines to. `None` is no stamp.
+
+A type parameter rather than a field because only a type can remove the
+clock: a sink over [`NoClock`] monomorphizes to code that never reads one,
+so the component carries no `wasi:clocks` import. A runtime flag cannot do
+that — the call stays reachable, and at `-O0` nothing folds it away.
+
+#### `fn now() -> Option<String>`
+
 ## Effects
 
 ### `pub interface Log`
@@ -206,7 +219,35 @@ Record a non-parent causal link: this span follows from `cause`.
 Close a span entered by hand. [`in_span`] closes on every exit path, so
 this is only for a span the caller opened without it.
 
-### `pub struct TextSink`
+### `pub struct NoClock`
+
+No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
+program that installs nothing logs in any world — including
+`core:kiln/generator`, whose linker offers no WASI at all.
+
+This is the conservative end of the trade, not a verdict on what a default
+line should carry: giving worlds that do have a clock a stamped default is a
+compatible change, and may replace this once there is a mechanism that keeps
+the guarantee.
+
+#### `impl Clock for NoClock`
+
+##### `fn now() -> Option<String>`
+
+### `pub struct WallClock`
+
+Wall-clock stamps with millisecond precision. Installing a sink over this
+adds a `wasi:clocks` import, so it belongs only in a world that has one.
+
+`#[ambient]` for the same reason the facade is: a sink's operations are
+`Log`'s, whose signatures carry no effect, so the clock read cannot be
+declared on them.
+
+#### `impl Clock for WallClock`
+
+##### `fn now() -> Option<String>`
+
+### `pub struct TextSink<C: Clock = NoClock>`
 
 One human-readable line per event on stderr:
 
@@ -216,9 +257,8 @@ One human-readable line per event on stderr:
 
 Each part its configuration turns off is omitted; `location` appends
 `at file:line`. Writes through the ambient `log_stderr`, so the sink needs
-no `Stderr` in its signature and installs in any world.
-
-#### `timestamp: bool`
+no `Stderr` in its signature and installs in any world. `C` selects the
+timestamp: `TextSink<WallClock>` stamps, the default `TextSink` does not.
 
 #### `seq: bool`
 
@@ -230,7 +270,7 @@ The line this sink would write for `event`, without writing it — the
 hook for sending the same format somewhere other than stderr. Consumes
 a sequence number, so one call is one line.
 
-#### `impl Log for TextSink`
+#### `impl Log for TextSink<C>`
 
 ##### `fn enabled(&self, level: Level) -> bool`
 
@@ -250,7 +290,7 @@ a sequence number, so one call is one line.
 
 ##### `fn event(&mut self, event: Event)`
 
-### `pub struct JsonSink`
+### `pub struct JsonSink<C: Clock = NoClock>`
 
 One JSON object per line (JSONL) on stderr, through `json::to_string`:
 
@@ -258,9 +298,8 @@ One JSON object per line (JSONL) on stderr, through `json::to_string`:
 {"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
 ```
 
-Keys a switch turns off are absent rather than null.
-
-#### `timestamp: bool`
+Keys a switch turns off are absent rather than null. `C` selects the `ts`
+key the way it does for [`TextSink`].
 
 #### `seq: bool`
 
@@ -273,7 +312,7 @@ Consumes a sequence number, so one call is one line. A sink swallows its
 own serialize errors, so an unserializable event renders as `{}` rather
 than aborting the program.
 
-#### `impl Log for JsonSink`
+#### `impl Log for JsonSink<C>`
 
 ##### `fn enabled(&self, level: Level) -> bool`
 

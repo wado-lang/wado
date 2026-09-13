@@ -359,6 +359,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.opt,
         &knobs.codegen_flags,
         &knobs.params.overrides,
+        &knobs.params.defaults,
         knobs.params.policy,
         invocations,
     )

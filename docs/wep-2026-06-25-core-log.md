@@ -63,6 +63,16 @@ build says what it strips rather than what it keeps. `#[param]` accepts only
 built-in types today, hence the conversion through `level_from_str` — see
 [Language and optimizer requirements](#language-and-optimizer-requirements).
 
+`wado test` is the one caller that moves the threshold on its own, to `warn`: a
+passing test prints nothing, so the `trace` default would bury a run in the
+diagnostics a library emits while working. It supplies it as a host default
+rather than a `-D`, so it sits under both `-D log.level=` and
+`WADO_LOG_LEVEL`, and naming no `#[param]` in a program that never imports
+`core:log` is silent rather than `--param-unknown`. A test that asserts on an
+event below `warn` therefore needs the level raised — in-tree,
+`wado-compiler/lib/core/log_level_test.wado` is excluded from discovery and run
+by `mise run test-log-levels`.
+
 Tier 2 — process-wide runtime threshold: a global read and a comparison, no call
 and no allocation. The threshold belongs to `core:log`, not to the installed
 sink, and is set explicitly through `set_log_level` (read back with `log_level`),

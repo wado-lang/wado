@@ -1,6 +1,12 @@
 // Tests for `core:log`. The subscriber under test is `CaptureSink`, so
 // assertions read the events rather than captured output; the two writing
 // sinks are exercised through `render`, which builds the line they write.
+//
+// `wado test` builds with `-D log.level=warn`, so every event here is at
+// `Warn` or above: a `trace` / `debug` / `info` call is compiled away before
+// any sink sees it, and the level carries no meaning in what these tests
+// assert. The tests that do need a lower one live in `log_level_test.wado`,
+// which runs under a raised tier 1.
 
 use {
     CaptureSink,
@@ -47,32 +53,34 @@ test "captures message, level, and caller location" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
         let expected_line = #line + 1;
-        info(`hello`);
+        warn(`hello`);
         assert sink.events.len() == 1;
         let e = sink.events[0];
         assert e.message == "hello";
-        assert e.meta.level matches { Info };
+        assert e.meta.level matches { Warn };
         assert e.meta.line == expected_line;
         assert e.meta.file.contains("log_test.wado");
 
-        warn(`heads up`, { code: 1 });
+        error(`heads up`, { code: 1 });
         assert sink.events.len() == 2;
-        assert sink.events[1].meta.level matches { Warn };
+        assert sink.events[1].meta.level matches { Error };
     };
 }
 
-test "every level wrapper reaches the sink" {
+test "tier 1 folds a call below the build threshold away" {
+    // `-D log.level=warn`, so this holds however permissive the sink is: the
+    // gate is a constant the optimizer settles before the sink is consulted.
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        trace(`t`);
-        debug(`d`);
-        info(`i`);
-        warn(`w`);
-        error(`e`);
+        assert !enabled(Level::Info);
+        assert enabled(Level::Warn);
+        info(`never built`);
+        debug(`nor this`);
+        trace(`nor this`);
+        warn(`kept`);
     };
-    assert sink.events.len() == 5;
-    assert sink.events[0].meta.level matches { Trace };
-    assert sink.events[4].meta.level matches { Error };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
 }
 
 test "the raw event emitter takes a run-time level" {
@@ -88,7 +96,7 @@ test "the raw event emitter takes a run-time level" {
 test "generic field accepts any Serialize value, preserving the data model" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        info(`with fields`, { user: "alice", n: 42 });
+        warn(`with fields`, { user: "alice", n: 42 });
         let e = sink.events[0];
         if let Object(map) = e.fields {
             assert map.len() == 2;
@@ -104,7 +112,7 @@ test "generic field accepts any Serialize value, preserving the data model" {
 test "an event with no fields carries an empty object" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        info(`bare`);
+        warn(`bare`);
     };
     assert sink.events[0].fields matches { Object(map) && map.len() == 0 };
 }
@@ -129,45 +137,15 @@ test "levels are ordered by declaration" {
 }
 
 // === Filtering ===
+//
+// The three tiers themselves are in `log_level_test.wado`: each needs an event
+// below `Warn` to reach the tier under test.
 
-test "tier 3 drops events below the sink's minimum level" {
-    let mut sink = CaptureSink { min: Level::Warn };
-    with Log => &mut sink do {
-        info(`dropped`);
-        warn(`kept`);
-    };
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "kept";
-}
-
-test "tier 2 drops events below the process-wide level" {
-    let mut sink = CaptureSink {};
-    set_log_level(Level::Warn);
-    assert log_level() matches { Warn };
-    with Log => &mut sink do {
-        info(`dropped`);
-        warn(`kept`);
-    };
+test "tier 2 reports the level it was set to" {
+    set_log_level(Level::Error);
+    assert log_level() matches { Error };
     set_log_level(Level::Trace);
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "kept";
-}
-
-test "enabled guards fields too expensive to build" {
-    let mut sink = CaptureSink { min: Level::Warn };
-    let mut built = 0;
-    with Log => &mut sink do {
-        if enabled(Level::Debug) {
-            built += 1;
-            info(`never`);
-        }
-        if enabled(Level::Error) {
-            built += 1;
-            error(`always`);
-        }
-    };
-    assert built == 1;
-    assert sink.events.len() == 1;
+    assert log_level() matches { Trace };
 }
 
 // === Spans ===
@@ -177,9 +155,9 @@ test "span lifecycle fires and events parent to the current span" {
     with Log => &mut sink do {
         let s = span(Level::Info, `request`);
         in_span(&s, || {
-            info(`inside`);
+            warn(`inside`);
         });
-        info(`outside`);
+        warn(`outside`);
     };
     let ops: List<String> = ["new:request#1", "enter:1", "exit:1", "close:1"];
     assert sink.ops == ops;
@@ -214,12 +192,12 @@ test "nested spans parent to the innermost span" {
     with Log => &mut sink do {
         let outer = span(Level::Info, `outer`);
         in_span(&outer, || {
-            info(`in outer`);
+            warn(`in outer`);
             let inner = span(Level::Info, `inner`);
             in_span(&inner, || {
-                info(`in inner`);
+                warn(`in inner`);
             });
-            info(`back in outer`);
+            warn(`back in outer`);
         });
     };
     assert sink.events[0].parent matches { Some(1) };
@@ -272,7 +250,7 @@ test "context layer prepends fields and forwards the rest" {
     };
     with Log => &mut sink do {
         with Log => &ctx do {
-            info(`x`, { k: "v" });
+            warn(`x`, { k: "v" });
         };
     };
     assert sink.events.len() == 1;
@@ -293,7 +271,7 @@ test "an event field overrides the context layer's" {
     };
     with Log => &mut sink do {
         with Log => &ctx do {
-            info(`x`, { k: "inner" });
+            warn(`x`, { k: "inner" });
         };
     };
     if let Object(map) = sink.events[0].fields {
@@ -314,26 +292,13 @@ test "a forwarding layer passes span operations through untouched" {
             let s = span(Level::Info, `request`);
             in_span(&s, || {
                 s.record({ user: "alice" });
-                info(`inside`);
+                warn(`inside`);
             });
         };
     };
     let ops: List<String> = ["new:request#1", "enter:1", "record:1:user", "exit:1", "close:1"];
     assert sink.ops == ops;
     assert sink.events[0].parent matches { Some(1) };
-}
-
-test "a filter layer composes over a sink" {
-    let mut sink = CaptureSink {};  // passes everything
-    let filt = Filter { directives: parse_directives("warn") };
-    with Log => &mut sink do {
-        with Log => &filt do {
-            info(`drop`);
-            warn(`keep`);
-        };
-    };
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "keep";
 }
 
 test "a filter's per-target directive overrides its default" {
@@ -442,35 +407,19 @@ test "the writing sinks track spans like any subscriber" {
     };
 }
 
-test "nop sink drops everything and gates at tier 3" {
-    let mut sink = NopSink {};
-    let mut reached = 0;
-    with Log => &mut sink do {
-        assert !enabled(Level::Error);
-        in_span(&span(Level::Info, `s`), || {
-            reached += 1;
-            info(`dropped`);
-        });
-    };
-    assert reached == 1;
-}
-
 // === The default subscriber ===
 //
 // With no handler installed the interface's own default implementations run:
-// `Info` and above, one text line per event on stderr. `wado test` captures a
-// test's stderr and shows it only when the test fails, so these lines are
-// post-mortem detail rather than noise.
+// one text line per event on stderr. `wado test` captures a test's stderr and
+// shows it only when the test fails, so these lines are post-mortem detail
+// rather than noise. What the default admits is in `log_level_test.wado`.
 
 test "logging with no sink installed neither traps nor is silent" {
     // No `with Log` anywhere: every call lands on a default implementation.
-    info(`default subscriber`, { k: "v" });
-    warn(`still fine`);
-    debug(`below the default threshold`);
-    assert enabled(Level::Info);
+    warn(`default subscriber`, { k: "v" });
+    error(`still fine`);
+    assert enabled(Level::Warn);
     assert enabled(Level::Error);
-    assert !enabled(Level::Debug);
-    assert !enabled(Level::Trace);
 }
 
 test "spans work against the default subscriber" {
@@ -483,18 +432,6 @@ test "spans work against the default subscriber" {
     assert current() matches { None };
 }
 
-test "an installed sink overrides the default for its scope" {
-    let mut sink = CaptureSink {};
-    with Log => &mut sink do {
-        // Below the default threshold, but the installed sink admits it.
-        debug(`captured`);
-    };
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "captured";
-    // Outside the block the default is back, and it drops this one.
-    assert !enabled(Level::Debug);
-}
-
 test "NopSink is how a program asks for silence" {
     let mut sink = NopSink {};
     with Log => &mut sink do {
@@ -503,42 +440,15 @@ test "NopSink is how a program asks for silence" {
     };
 }
 
-test "the raw event emitter runs the run-time gates too" {
-    // Only tier 1 is weaker for a computed level: a level that is not a
-    // literal is not a comparison the optimizer can fold. Tiers 2 and 3 apply.
-    let mut sink = CaptureSink { min: Level::Warn };
-    with Log => &mut sink do {
-        event(Level::Info, `dropped by the sink`);
-        event(Level::Error, `kept`);
-    };
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "kept";
-
-    let mut sink2 = CaptureSink {};
-    set_log_level(Level::Error);
-    with Log => &mut sink2 do {
-        event(Level::Trace, `dropped by the process level`);
-        event(Level::Error, `kept`);
-    };
-    set_log_level(Level::Trace);
-    assert sink2.events.len() == 1;
-    assert sink2.events[0].message == "kept";
-}
-
-test "a directive matches the target an event is actually emitted with" {
-    // The target defaults to the caller's `#function`, so a directive names a
-    // function, not a module path. Passing `target` explicitly is how events
-    // get grouped under a name of the application's choosing.
+test "an explicit target replaces the caller's #function" {
+    // The target defaults to the caller's `#function`, so a `Filter` directive
+    // names a function, not a module path. Passing `target` explicitly is how
+    // events get grouped under a name of the application's choosing.
     let mut sink = CaptureSink {};
-    let filt = Filter { directives: parse_directives("error,db=debug") };
     with Log => &mut sink do {
-        with Log => &filt do {
-            info(`unmatched target falls to the default level`);
-            info(`grouped under db`, {}, "db");
-            info(`grouped under db::query`, {}, "db::query");
-        };
+        warn(`default target`);
+        warn(`grouped under db`, {}, "db");
     };
-    assert sink.events.len() == 2;
-    assert sink.events[0].meta.target == "db";
-    assert sink.events[1].meta.target == "db::query";
+    assert sink.events[0].meta.target.contains("explicit_target");
+    assert sink.events[1].meta.target == "db";
 }

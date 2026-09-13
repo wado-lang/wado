@@ -294,6 +294,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         opt_level: OptLevel::O0,
         ..CompileKnobs::default()
     };
+    // A passing test says nothing on stdout, so `core:log`'s own default
+    // (`trace`) would bury a run in the diagnostics a library emits while
+    // working. A test that asserts on an `info` event raises it back with
+    // `-D log.level=...`, which wins over this.
+    knobs
+        .params
+        .defaults
+        .insert("log.level".to_string(), "warn".to_string());
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
