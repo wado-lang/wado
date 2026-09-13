@@ -71,17 +71,19 @@ Payload decides what the dead region does to the live program:
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
-Each payload is its own subject, injected alone against the same baseline: a
-fixture the compiler refuses one payload at stays in the campaign under the
-others.
+Each combination of the two is its own subject, injected alone against the same
+baseline: a fixture the compiler refuses one payload or one shape at stays in
+the campaign under the others.
 
 ### Calibration precedes mutation
 
 A fixture must be a valid oracle before it can be a subject. Calibration injects
-an empty guard everywhere and keeps the fixtures whose observable behaviour is
-unmoved; one that moves observes something an injection perturbs — a column, an
-allocation address, a generated test-export name — and is recorded with that
-reason rather than silently dropped.
+an empty guard of each shape everywhere and keeps the fixtures whose observable
+behaviour is unmoved; one that moves observes something an injection perturbs —
+a column, an allocation address, a generated test-export name — and is recorded
+with that reason rather than silently dropped. It is a shape at a time, so the
+corpus records which shapes each source answers for and the mutation stage runs
+only those.
 
 A fixture whose own output moves between runs of the same program is a separate
 case, and conflating it with a guard's doing is how a campaign learns to cry
@@ -124,7 +126,9 @@ each payload reached.
       read payload.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
-- [ ] `while builtin::black_box(false) { … }` as a second guard shape.
+- [x] `while builtin::black_box(false) { … }` as a second guard shape. Every
+      A shape is calibrated for and dropped on its own, as a payload is, and
+      `corpus.txt` carries the shapes each source answers for.
 - [ ] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
       stdlib's own tests under `O3`, which nothing else does — `wado test` runs

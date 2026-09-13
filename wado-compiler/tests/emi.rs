@@ -3,7 +3,8 @@
 //! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
 //!
 //! The material comes from every [`Root`]: the e2e fixtures, the stdlib modules
-//! that carry `test` blocks, and the `example/` programs.
+//! that carry `test` blocks, and the `example/` programs. Each guard is written
+//! in every [`Shape`], so a dead region is compiled as a branch and as a loop.
 //!
 //! The design and what is left to build are in
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
@@ -36,12 +37,30 @@ const CALIBRATION_LEVELS: [OptLevel; 2] = [OptLevel::O0, OptLevel::O3];
 // Guard
 // ---------------------------------------------------------------------------
 
-/// Wrap `payload` in a guard the compiler cannot decide.
+/// The control flow a guard wraps its payload in.
 ///
-/// Single-line by construction: an injection must not move the code after it,
-/// or every source that reports a line of its own would drop out of the corpus.
-fn guard(payload: &str) -> String {
-    format!("if builtin::black_box(false) {{ {payload} }} ")
+/// Both are unreachable at run time and compiled all the same; they differ in
+/// which analysis family sees the dead region, the loop passes reaching only
+/// the second.
+struct Shape {
+    /// The keyword that opens the guard, and the shape's name in a report.
+    keyword: &'static str,
+}
+
+static SHAPES: [Shape; 2] = [Shape { keyword: "if" }, Shape { keyword: "while" }];
+
+impl Shape {
+    /// Wrap `payload` in a guard the compiler cannot decide.
+    ///
+    /// Single-line by construction: an injection must not move the code after
+    /// it, or every source that reports a line of its own would drop out of
+    /// the corpus.
+    fn guard(&self, payload: &str) -> String {
+        format!(
+            "{} builtin::black_box(false) {{ {payload} }} ",
+            self.keyword
+        )
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,9 +157,23 @@ impl Root {
 struct Source {
     path: PathBuf,
     root: Root,
+    /// The guard shapes this source is an oracle for. Calibration decides them
+    /// and `corpus.txt` carries them; before it has run, every shape is a
+    /// candidate.
+    shapes: Vec<&'static Shape>,
 }
 
 impl Source {
+    /// A source every shape is still a candidate for, as it is before
+    /// calibration has ruled on it.
+    fn new(root: Root, path: PathBuf) -> Self {
+        Self {
+            path,
+            root,
+            shapes: SHAPES.iter().collect(),
+        }
+    }
+
     /// The corpus identity: the path relative to the repository root. A bare
     /// file name would not do — `json_test.wado` names two programs.
     fn name(&self) -> String {
@@ -157,10 +190,21 @@ impl Source {
             .into_iter()
             .find(|root| name.starts_with(root.rel_dir()))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
-        Self {
-            path: repo_root().join(name),
-            root,
-        }
+        Self::new(root, repo_root().join(name))
+    }
+
+    /// The shapes named in a `corpus.txt` column, `if,while`.
+    fn with_shapes(mut self, spec: &str) -> Self {
+        self.shapes = spec
+            .split(',')
+            .map(|name| {
+                SHAPES
+                    .iter()
+                    .find(|shape| shape.keyword == name)
+                    .unwrap_or_else(|| panic!("`{name}` is no guard shape"))
+            })
+            .collect();
+        self
     }
 }
 
@@ -690,13 +734,21 @@ fn injection_sites(source: &str) -> Vec<Site> {
         .into_iter()
         .filter(|site| starts.contains(&site.offset))
         .collect();
-    if parses(&inject(source, &sites, "")) {
+    if guards_parse(source, &sites) {
         return sites;
     }
     sites
         .into_iter()
-        .filter(|site| parses(&inject(source, std::slice::from_ref(site), "")))
+        .filter(|site| guards_parse(source, std::slice::from_ref(site)))
         .collect()
+}
+
+/// A site has to hold every shape: they stand in the same statement position,
+/// and a site only one of them parses at would be a shape-shaped false finding.
+fn guards_parse(source: &str, sites: &[Site]) -> bool {
+    SHAPES
+        .iter()
+        .all(|shape| parses(&inject(source, shape, sites, "")))
 }
 
 /// The offsets a token starts at.
@@ -718,17 +770,22 @@ fn parses(source: &str) -> bool {
     wado_compiler::format(source).is_ok()
 }
 
-fn inject(source: &str, sites: &[Site], payload: &str) -> String {
-    inject_each(source, sites, |_| payload.to_string())
+fn inject(source: &str, shape: &Shape, sites: &[Site], payload: &str) -> String {
+    inject_each(source, shape, sites, |_| payload.to_string())
 }
 
 /// Insert a guard at each of `sites`, its body written for that site.
 ///
 /// Offsets are consumed back to front so the earlier ones stay valid.
-fn inject_each(source: &str, sites: &[Site], payload: impl Fn(&Site) -> String) -> String {
+fn inject_each(
+    source: &str,
+    shape: &Shape,
+    sites: &[Site],
+    payload: impl Fn(&Site) -> String,
+) -> String {
     let mut mutant = source.to_string();
     for site in sites.iter().rev() {
-        mutant.insert_str(site.offset, &guard(&payload(site)));
+        mutant.insert_str(site.offset, &shape.guard(&payload(site)));
     }
     mutant
 }
@@ -744,7 +801,7 @@ struct Payload {
 
 /// Ordered by the analysis family each attacks: alias and mod/ref for the
 /// write, liveness and escape for the read.
-const PAYLOADS: [Payload; 2] = [
+static PAYLOADS: [Payload; 2] = [
     Payload {
         name: "write",
         render: opaque_writes,
@@ -920,10 +977,12 @@ fn panic_message(payload: &dyn std::any::Any) -> String {
 // Calibration
 // ---------------------------------------------------------------------------
 
-/// A source that survived calibration, with the number of guards it accepted.
+/// A source that survived a stage, with the number of guards it accepted and
+/// the shapes it accepted them in.
 struct Eligible {
     name: String,
     sites: usize,
+    shapes: Vec<&'static str>,
 }
 
 /// A mutant that misbehaved in a way an injection is not allowed to.
@@ -1052,6 +1111,12 @@ fn is_finding(excluded: &Excluded) -> bool {
     )
 }
 
+/// At calibration an empty guard that moves the output disqualifies the shape
+/// instead: only a crash is wrong code there.
+fn is_calibration_finding(excluded: &Excluded) -> bool {
+    matches!(excluded, Excluded::GuardCrashed { .. })
+}
+
 /// Inject each payload at every site it reaches, and compare the result against
 /// the program it came from.
 ///
@@ -1064,9 +1129,11 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         wado_compiler::format(source).map_err(|e| Excluded::FormatFailed(e.to_string()))?;
 
     let all = injection_sites(&canonical);
-    let mut alive: Vec<&Payload> = PAYLOADS
+    let mut alive: Vec<(&Shape, &Payload)> = subject
+        .shapes
         .iter()
-        .filter(|payload| !sites_for(&all, payload).is_empty())
+        .flat_map(|shape| PAYLOADS.iter().map(move |payload| (*shape, payload)))
+        .filter(|(_, payload)| !sites_for(&all, payload).is_empty())
         .collect();
     if alive.is_empty() {
         return Err(Excluded::NoBindingInScope);
@@ -1085,19 +1152,19 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             }
         };
         let mut survivors = Vec::new();
-        for payload in alive {
+        for (shape, payload) in alive {
             let sites = sites_for(&all, payload);
             match mutate_once(
-                path, &canonical, &spec, level, &baseline, payload, sites, &name,
+                path, &canonical, &spec, level, &baseline, shape, payload, sites, &name,
             ) {
-                Ok(()) => survivors.push(payload),
+                Ok(()) => survivors.push((shape, payload)),
                 Err(excluded) if is_finding(&excluded) => return Err(excluded),
                 Err(excluded) => refused = Some(excluded),
             }
         }
         alive = survivors;
         if alive.is_empty() {
-            return Err(refused.expect("a payload that dropped out left its reason"));
+            return Err(refused.expect("a combination that dropped out left its reason"));
         }
     }
 
@@ -1106,12 +1173,15 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         .filter(|site| {
             alive
                 .iter()
-                .any(|payload| !(payload.render)(site).is_empty())
+                .any(|(_, payload)| !(payload.render)(site).is_empty())
         })
         .count();
+    let mut shapes: Vec<&'static str> = alive.iter().map(|(shape, _)| shape.keyword).collect();
+    shapes.dedup();
     Ok(Eligible {
         name,
         sites: covered,
+        shapes,
     })
 }
 
@@ -1124,12 +1194,13 @@ fn mutate_once(
     spec: &Spec,
     level: OptLevel,
     baseline: &Outcome,
+    shape: &Shape,
     payload: &Payload,
     sites: Vec<Site>,
     name: &str,
 ) -> Result<(), Excluded> {
     let reproduces = |subset: &[Site], what: Misbehaviour| {
-        let mutant = inject_each(canonical, subset, payload.render);
+        let mutant = inject_each(canonical, shape, subset, payload.render);
         match evaluate(path, &mutant, spec, level) {
             Evaluation::Ran(outcome) => {
                 what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
@@ -1138,9 +1209,20 @@ fn mutate_once(
             Evaluation::CompileError(_) => false,
         }
     };
-    let report = |detail: String| format!("{} payload: {detail}", payload.name);
+    let report = |detail: String| {
+        format!(
+            "{} guard, {} payload: {detail}",
+            shape.keyword, payload.name
+        )
+    };
+    let record = |reduced: &[Site]| {
+        write_finding(
+            &format!("{}-{}-{name}", shape.keyword, payload.name),
+            &inject_each(canonical, shape, reduced, payload.render),
+        );
+    };
 
-    let mutant = inject_each(canonical, &sites, payload.render);
+    let mutant = inject_each(canonical, shape, &sites, payload.render);
     match evaluate(path, &mutant, spec, level) {
         Evaluation::Ran(outcome) => {
             let differences = baseline.differences(&outcome);
@@ -1154,10 +1236,7 @@ fn mutate_once(
                 let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
                     reproduces(subset, Misbehaviour::Diverged)
                 });
-                write_finding(
-                    &format!("{}-{name}", payload.name),
-                    &inject_each(canonical, &reduced, payload.render),
-                );
+                record(&reduced);
                 return Err(Excluded::GuardChangedOutput {
                     level,
                     detail: report(format!("{narrowed} — {}", differences.join("; "))),
@@ -1174,10 +1253,7 @@ fn mutate_once(
             let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
                 reproduces(subset, Misbehaviour::Crashed)
             });
-            write_finding(
-                &format!("{}-{name}", payload.name),
-                &inject_each(canonical, &reduced, payload.render),
-            );
+            record(&reduced);
             return Err(Excluded::GuardCrashed {
                 level,
                 detail: report(format!("{narrowed} — {detail}")),
@@ -1219,7 +1295,11 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     if sites.is_empty() {
         return Err(Excluded::NoInjectionSite);
     }
-    let mutant = inject(&canonical, &sites, "");
+
+    // A shape the source is no oracle for drops out alone: the campaign keeps
+    // it under the shapes it does answer for, as it does for a payload.
+    let mut alive: Vec<&Shape> = subject.shapes.clone();
+    let mut refused = None;
 
     for level in CALIBRATION_LEVELS {
         let baseline = match evaluate(path, &canonical, &spec, level) {
@@ -1238,36 +1318,64 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             });
         }
 
-        match evaluate(path, &mutant, &spec, level) {
-            Evaluation::Ran(outcome) => {
-                let differences = baseline.differences(&outcome);
-                if !differences.is_empty() {
-                    if let Some(detail) = baseline_moved(path, &canonical, &spec, level, &baseline)
-                    {
-                        return Err(Excluded::Nondeterministic { level, detail });
-                    }
-                    return Err(Excluded::GuardChangedOutput {
-                        level,
-                        detail: differences.join("; "),
-                    });
-                }
+        let mut survivors = Vec::new();
+        for shape in alive {
+            match calibrate_once(path, &canonical, &spec, level, &baseline, shape, &sites) {
+                Ok(()) => survivors.push(shape),
+                Err(excluded) if is_calibration_finding(&excluded) => return Err(excluded),
+                Err(excluded) => refused = Some(excluded),
             }
-            // An empty guard is valid wherever a statement is, except where the
-            // surrounding value must stay constant; that is a rejection, not a
-            // divergence.
-            Evaluation::CompileError(detail) => {
-                return Err(Excluded::GuardRejected { level, detail });
-            }
-            Evaluation::Crashed(detail) => {
-                return Err(Excluded::GuardCrashed { level, detail });
-            }
+        }
+        alive = survivors;
+        if alive.is_empty() {
+            return Err(refused.expect("a shape that dropped out left its reason"));
         }
     }
 
     Ok(Eligible {
         name,
         sites: sites.len(),
+        shapes: alive.iter().map(|shape| shape.keyword).collect(),
     })
+}
+
+/// Run one shape's empty guard at one level, at every site at once.
+fn calibrate_once(
+    path: &Path,
+    canonical: &str,
+    spec: &Spec,
+    level: OptLevel,
+    baseline: &Outcome,
+    shape: &Shape,
+    sites: &[Site],
+) -> Result<(), Excluded> {
+    let report = |detail: String| format!("{} guard: {detail}", shape.keyword);
+    match evaluate(path, &inject(canonical, shape, sites, ""), spec, level) {
+        Evaluation::Ran(outcome) => {
+            let differences = baseline.differences(&outcome);
+            if !differences.is_empty() {
+                if let Some(detail) = baseline_moved(path, canonical, spec, level, baseline) {
+                    return Err(Excluded::Nondeterministic { level, detail });
+                }
+                return Err(Excluded::GuardChangedOutput {
+                    level,
+                    detail: report(differences.join("; ")),
+                });
+            }
+            Ok(())
+        }
+        // An empty guard is valid wherever a statement is, except where the
+        // surrounding value must stay constant; that is a rejection, not a
+        // divergence.
+        Evaluation::CompileError(detail) => Err(Excluded::GuardRejected {
+            level,
+            detail: report(detail),
+        }),
+        Evaluation::Crashed(detail) => Err(Excluded::GuardCrashed {
+            level,
+            detail: report(detail),
+        }),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1346,7 +1454,7 @@ fn corpus_sources() -> Vec<Source> {
             wado_files(&root.dir(), root.is_recursive())
                 .into_iter()
                 .filter(move |path| root.is_subject(path))
-                .map(move |path| Source { path, root })
+                .map(move |path| Source::new(root, path))
         })
         .filter(|source| filter.is_empty() || source.name().contains(filter.as_str()))
         .collect();
@@ -1370,8 +1478,12 @@ fn corpus_subjects() -> Vec<Source> {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {} — calibrate first: {e}", path.display()));
     text.lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .map(Source::from_name)
+        .filter_map(|line| {
+            let mut columns = line.split_whitespace();
+            let name = columns.next()?;
+            let shapes = columns.nth(1).expect("a corpus line names its shapes");
+            Some(Source::from_name(name).with_shapes(shapes))
+        })
         .collect()
 }
 
@@ -1488,9 +1600,7 @@ fn campaign(
 #[ignore = "EMI campaign — minutes to hours over the full corpus"]
 fn calibrate_corpus() {
     let subjects = corpus_sources();
-    let results = campaign(&subjects, calibrate, |excluded| {
-        matches!(excluded, Excluded::GuardCrashed { .. })
-    });
+    let results = campaign(&subjects, calibrate, is_calibration_finding);
     write_corpus(&results);
     write_report(&results, &subjects, "calibration");
 
@@ -1536,7 +1646,12 @@ fn write_corpus(results: &Results) {
         .unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
     let mut corpus = String::new();
     for eligible in &results.eligible {
-        corpus.push_str(&format!("{} {}\n", eligible.name, eligible.sites));
+        corpus.push_str(&format!(
+            "{} {} {}\n",
+            eligible.name,
+            eligible.sites,
+            eligible.shapes.join(",")
+        ));
     }
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
 }
@@ -1556,6 +1671,7 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
         results.findings.len(),
     ));
     report.push_str(&per_root(results, subjects));
+    report.push_str(&per_shape(results));
 
     if !results.findings.is_empty() {
         report.push_str("\n=== findings ===\n");
@@ -1619,6 +1735,26 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
     out
 }
 
+/// How many sources each guard shape survived on, so a shape that costs its
+/// compile time without reaching anything is visible.
+fn per_shape(results: &Results) -> String {
+    let mut out = String::from("\n=== guard shapes ===\n");
+    for shape in &SHAPES {
+        let eligible: Vec<&Eligible> = results
+            .eligible
+            .iter()
+            .filter(|e| e.shapes.contains(&shape.keyword))
+            .collect();
+        let sites: usize = eligible.iter().map(|e| e.sites).sum();
+        out.push_str(&format!(
+            "{}: {} source(s) ({sites} sites)\n",
+            shape.keyword,
+            eligible.len(),
+        ));
+    }
+    out
+}
+
 /// One line per site: offset, the line and column it lands on, the statement
 /// kind, and the text that follows it. A site whose text does not look like the
 /// statement it claims to be is a span the collector should not have trusted.
@@ -1656,13 +1792,16 @@ fn dump_mutants() {
             continue;
         };
         let sites = injection_sites(&canonical);
-        let mutant = inject(&canonical, &sites, "");
 
         let into = dir.join(&name);
         std::fs::create_dir_all(&into)
             .unwrap_or_else(|e| panic!("cannot create {}: {e}", into.display()));
         std::fs::write(into.join("canonical.wado"), &canonical).expect("cannot write canonical");
-        std::fs::write(into.join("mutant.wado"), &mutant).expect("cannot write mutant");
+        for shape in &SHAPES {
+            let mutant = inject(&canonical, shape, &sites, "");
+            std::fs::write(into.join(format!("mutant-{}.wado", shape.keyword)), &mutant)
+                .expect("cannot write mutant");
+        }
         std::fs::write(into.join("sites.txt"), describe_sites(&canonical, &sites))
             .expect("cannot write sites");
         eprintln!("[emi] {name}: {} sites — {}", sites.len(), into.display());
@@ -1674,8 +1813,38 @@ fn dump_mutants() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn guard_is_single_line() {
-    assert!(!guard("let x = 1;").contains('\n'));
+fn every_guard_shape_is_single_line() {
+    for shape in &SHAPES {
+        assert!(!shape.guard("let x = 1;").contains('\n'));
+    }
+}
+
+/// The loop shape is what reaches the loop passes, and it must reach them with
+/// the payload inside the loop rather than beside it.
+#[test]
+fn the_loop_shape_puts_the_payload_in_a_loop_body() {
+    let source = "fn f(mut n: i32) -> i32 {\n    return n;\n}\n";
+    let sites = injection_sites(source);
+    let loop_shape = SHAPES
+        .iter()
+        .find(|shape| shape.keyword == "while")
+        .expect("the loop shape");
+    let mutant = inject_each(source, loop_shape, &sites, opaque_writes);
+    assert!(
+        mutant.contains("while builtin::black_box(false) { n = builtin::black_box(n); }"),
+        "{mutant}"
+    );
+    assert_eq!(source.lines().count(), mutant.lines().count());
+    wado_compiler::format(&mutant).expect("a mutant must still parse");
+}
+
+/// A corpus line carries the shapes calibration left, so the mutation stage
+/// does not re-run a shape the source is no oracle for.
+#[test]
+fn a_corpus_line_names_the_shapes_it_was_calibrated_for() {
+    let source = Source::from_name("example/fizzbuzz.wado").with_shapes("while");
+    let shapes: Vec<&str> = source.shapes.iter().map(|s| s.keyword).collect();
+    assert_eq!(shapes, vec!["while"]);
 }
 
 #[test]
@@ -1707,10 +1876,9 @@ fn f(n: i32) with Stdout {
     println(`v: ${if n > 0 { `pos` } else { `neg` }}`);
 }
 "#;
-    let mutant = inject(source, &injection_sites(source), "");
     assert!(
-        wado_compiler::format(&mutant).is_ok(),
-        "a mutant must still parse, got:\n{mutant}"
+        guards_parse(source, &injection_sites(source)),
+        "a mutant must still parse"
     );
 }
 
@@ -1745,10 +1913,12 @@ fn injection_preserves_line_count_and_parses() {
 }
 "#;
     let sites = injection_sites(source);
-    let mutant = inject(source, &sites, "");
-    assert_eq!(source.lines().count(), mutant.lines().count());
-    assert_eq!(mutant.matches("black_box").count(), sites.len());
-    wado_compiler::format(&mutant).expect("a mutant must still parse");
+    for shape in &SHAPES {
+        let mutant = inject(source, shape, &sites, "");
+        assert_eq!(source.lines().count(), mutant.lines().count());
+        assert_eq!(mutant.matches("black_box").count(), sites.len());
+        wado_compiler::format(&mutant).expect("a mutant must still parse");
+    }
 }
 
 #[test]
@@ -1775,10 +1945,7 @@ fn missing_data_section_runs_the_root_s_world() {
 /// `json_test.wado` is both a fixture and a stdlib module.
 #[test]
 fn a_corpus_name_names_its_root() {
-    let source = Source {
-        path: Root::Stdlib.dir().join("core/json_test.wado"),
-        root: Root::Stdlib,
-    };
+    let source = Source::new(Root::Stdlib, Root::Stdlib.dir().join("core/json_test.wado"));
     assert_eq!(source.name(), "wado-compiler/lib/core/json_test.wado");
     let recovered = Source::from_name(&source.name());
     assert_eq!(recovered.root, Root::Stdlib);
@@ -1836,10 +2003,10 @@ fn an_example_is_material_only_if_a_world_enters_it() {
 /// rather than as the built-in `core:*` it also is, still runs.
 #[test]
 fn a_stdlib_module_runs_from_its_own_path() {
-    let subject = Source {
-        path: Root::Stdlib.dir().join("core/base64_test.wado"),
-        root: Root::Stdlib,
-    };
+    let subject = Source::new(
+        Root::Stdlib,
+        Root::Stdlib.dir().join("core/base64_test.wado"),
+    );
     let source = std::fs::read_to_string(&subject.path).expect("source is readable");
     let spec = Spec::parse(subject.root, &source).expect("the stdlib carries no __DATA__");
     match evaluate(&subject.path, &source, &spec, OptLevel::O0) {
@@ -1869,10 +2036,10 @@ export fn run() with (Stdout, MonotonicClock) {
 __DATA__
 {}
 "#;
-    let subject = Source {
-        path: Root::Fixtures.dir().join("emi_clock_nondeterminism.wado"),
-        root: Root::Fixtures,
-    };
+    let subject = Source::new(
+        Root::Fixtures,
+        Root::Fixtures.dir().join("emi_clock_nondeterminism.wado"),
+    );
     let excluded = calibrate(&subject, source)
         .err()
         .expect("a printed clock reading cannot be an oracle");
