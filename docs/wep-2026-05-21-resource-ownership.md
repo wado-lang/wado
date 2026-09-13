@@ -646,9 +646,10 @@ Verified against the tree.
       to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
       test minted no owned scrutinee temp and the binding aliased the caller's
       payload.
-- [ ] Drive the helper seed from declared types rather than from expressions.
-      Predicting the temps pattern lowering mints is what the current seed does,
-      and each shape it misses is a copy the fold cannot emit.
+- [x] The helper seed is driven by the types a program names rather than by the
+      expressions it writes, so it predicts none of the temps pattern lowering
+      mints after it. A miss left the fold no helper to call, which
+      `wrap_value_copy` asserts on.
 - [ ] Decide a match arm's binding in the fold, by lowering it to an ordinary
       projection of the scrutinee as `let`-destructure already is. Deciding it in
       pattern lowering puts the copy on a temp that exists for

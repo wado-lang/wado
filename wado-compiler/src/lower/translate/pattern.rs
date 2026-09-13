@@ -283,13 +283,8 @@ fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
 }
 
 /// The type a compound pattern's temp holds: the scrutinee's, match-ergonomic
-/// references peeled. Shared with the value-copy seed walk, which mints no temp
-/// of its own and would otherwise spell the peel a second time.
-pub(crate) fn pattern_temp_type(
-    pattern: &TirPattern,
-    value_type: TypeId,
-    type_table: &TypeTable,
-) -> TypeId {
+/// references peeled.
+fn pattern_temp_type(pattern: &TirPattern, value_type: TypeId, type_table: &TypeTable) -> TypeId {
     if !matches!(pattern, TirPattern::Tuple(_, _) | TirPattern::Struct { .. }) {
         return value_type;
     }

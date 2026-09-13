@@ -3,58 +3,50 @@
 //! The fold (`lower::translate`) emits a `$value_copy$T(...)` wrap
 //! directly at each wrap site, using the shared predicates exported
 //! here ([`should_wrap`], [`is_fresh_value`], [`is_source_immutable`]).
-//! [`collect_seed_types`] walks every function with the same
-//! predicates to feed [`super::synthesize::synthesize_helpers`].
+//! [`collect_seed_types`] harvests the types those wraps can land on, to feed
+//! [`super::synthesize::synthesize_helpers`].
 
-use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::{BuiltinDeclarations, OwnedCalls};
-use super::place::is_source_place;
+use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
 use crate::lower::plan::value_copy::array_clone_element_type_arg;
 use crate::lower::plan::value_copy::last_use::RefTargets;
-use crate::lower::translate::pattern::pattern_temp_type;
 use crate::tir;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable, receiver_value,
+    TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Every `TypeId` the fold will wrap in `$value_copy$T(...)`, plus
-/// element types of `array_clone::<T>(...)` calls that codegen
-/// routes through the same helper.
+/// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, plus element types
+/// of `array_clone::<T>(...)` calls that codegen routes through the same helper.
 ///
-/// Runs before the return-convention fixpoint, so no body function is known
-/// owned yet. A seed the precise fold never calls is dead-code-eliminated.
-pub fn collect_seed_types(
-    project: &FlatPackage,
-    builtins: &BuiltinDeclarations,
-) -> IndexSet<TypeId> {
+/// Driven by the types the program names, not by the expressions it writes:
+/// pattern lowering runs at the top of `translate` and mints the temps some of
+/// those wraps land on, so a seed that predicted expression shapes left the fold
+/// no helper to call (WEP 2026-05-11). No later rewrite introduces a type the
+/// program did not already name, so a type harvest cannot miss one, and
+/// over-synthesis is free — `dce` drops a helper nothing calls.
+pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
-    let no_owned = FuncKeySet::default();
-    let no_self_proj = FuncKeyMap::default();
-    // The builtin declarations must be the real ones even here: they are
-    // declared rather than inferred, and an empty set reads every builtin as
-    // fresh, which misses the seed a borrowed one needs.
-    let oracle = OwnedCalls::new(&no_owned, &no_self_proj, builtins);
     let mut walker = SeedWalker {
         type_table: &type_table,
-        oracle: &oracle,
         out: IndexSet::default(),
-        immutable_locals: IndexSet::default(),
     };
+    for global in &project.globals {
+        walker.record(global.ty);
+    }
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        walker.immutable_locals = func
-            .locals
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| !l.is_mut)
-            .map(|(i, _)| u32::try_from(i).unwrap())
-            .collect();
+        for param in &func.params {
+            walker.record(param.type_id);
+        }
+        walker.record(func.return_type);
+        for local in &func.locals {
+            walker.record(local.type_id);
+        }
         if let Some(ref body) = func.body {
             walker.visit_block(body);
         }
@@ -64,163 +56,60 @@ pub fn collect_seed_types(
 
 struct SeedWalker<'a> {
     type_table: &'a TypeTable,
-    oracle: &'a OwnedCalls<'a>,
     out: IndexSet<TypeId>,
-    immutable_locals: IndexSet<u32>,
 }
 
 impl SeedWalker<'_> {
-    fn record_if_wrap(&mut self, expr: &TirExpr) {
-        self.record_wrap_target(expr, expr.type_id);
-    }
-
-    /// Seed the helper for what the fold *writes*, which differs from the
-    /// value's own type wherever the site writes through something.
-    fn record_wrap_target(&mut self, value: &TirExpr, dest: TypeId) {
-        if should_wrap_into(value, dest, self.type_table, self.oracle) {
-            self.out.insert(dest);
-        }
-    }
-
-    fn record_array_clone_element(&mut self, expr: &TirExpr) {
-        if let Some(t) = array_clone_element_type_arg(expr)
-            && value_copy::needs_value_copy(t, self.type_table)
-        {
-            self.out.insert(t);
+    /// Record `type_id` and the type a pattern temp lands on, which is
+    /// `type_id` with its references peeled: `let { x, y } = &p` writes a
+    /// `Point` temp out of a `&Point`.
+    fn record(&mut self, type_id: TypeId) {
+        for candidate in [type_id, self.type_table.peel_refs(type_id)] {
+            if value_copy::needs_value_copy(candidate, self.type_table) {
+                self.out.insert(candidate);
+            }
         }
     }
 }
 
 impl TirRefVisitor for SeedWalker<'_> {
-    fn visit_stmt(&mut self, stmt: &TirStmt) {
-        match &stmt.kind {
-            TirStmtKind::Let {
-                value,
-                type_id,
-                skip_value_copy,
-                ..
-            } => {
-                // Seed every candidate: whether an immutable source keeps its
-                // copy depends on per-function move analysis this walk cannot
-                // see. An unused helper is dead code `dce` removes.
-                if !*skip_value_copy {
-                    self.record_wrap_target(value, *type_id);
-                }
-            }
-            TirStmtKind::LetDestructure { pattern, value, .. } => {
-                // The copy lands on the temp `lower_let_pattern` mints, so
-                // the helper it needs is that temp's.
-                self.record_wrap_target(
-                    value,
-                    pattern_temp_type(pattern, value.type_id, self.type_table),
-                );
-            }
-            _ => {}
-        }
-        self.walk_stmt(stmt);
-    }
-
     fn visit_expr(&mut self, expr: &TirExpr) {
-        self.record_array_clone_element(expr);
-        match &expr.kind {
-            // Lowering binds a `Match` scrutinee to a temp that takes the copy,
-            // in any position. Nothing here sees it, so seed its type.
-            TirExprKind::Match {
-                expr: scrutinee, ..
-            } => self.record_if_wrap(scrutinee),
-            TirExprKind::Call {
-                args, has_receiver, ..
-            } => {
-                // A `copy_value::<T>` the source wrote needs the same helper
-                // the fold's markers do, and no wrap site seeds it.
-                if is_copy_value_call(expr) {
-                    self.out.insert(expr.type_id);
-                }
-                // Every by-value argument is copied — value semantics: passing
-                // a value to a function deep-copies it. `should_wrap` already
-                // excludes references (`&T` / `&mut T`), fresh values, and
-                // non-copy types, so a `&mut` arg is not copied.
-                for arg in args {
-                    self.record_if_wrap(&arg.expr);
-                }
-                // A `&mut self` call copies the value under the receiver's
-                // auto-reference, which the loop above sees only as a `&mut T`.
-                // Telling `&mut` receivers apart needs the return conventions
-                // this walk runs ahead of, so seed every non-place one.
-                if *has_receiver && let Some(arg) = args.first() {
-                    let value = receiver_value(&arg.expr);
-                    if !is_source_place(value, self.type_table.compiler_items()) {
-                        self.record_if_wrap(value);
-                    }
-                }
-            }
-            TirExprKind::IndirectCall { args, .. } => {
-                for arg in args {
-                    self.record_if_wrap(arg);
-                }
-            }
-            TirExprKind::Assign { target, value } => {
-                // A whole-local rebind (`x = v`) and a whole-value deref-assign
-                // (`*ref = v`, lowered by `try_expand_deref_aggregate_assign`)
-                // both replace the value, so the RHS needs a defensive copy.
-                // Field / index writes mutate an existing slot in place and
-                // don't.
-                let replaces_whole_value = matches!(
-                    &target.kind,
-                    TirExprKind::Local { .. }
-                        | TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            ..
-                        }
-                );
-                if replaces_whole_value {
-                    self.record_if_wrap(value);
-                    // `try_expand_deref_aggregate_assign` copies the RHS as
-                    // the referent's type, which a coercion can widen.
-                    self.record_wrap_target(value, target.type_id);
-                }
-            }
-            // An aggregate literal stores each element / field by value, so a
-            // non-fresh aggregate element is deep-copied into the fresh literal.
-            TirExprKind::StructLiteral { fields, .. } => {
-                for field in fields {
-                    self.record_if_wrap(&field.value);
-                }
-            }
-            TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
-                for element in elements {
-                    self.record_if_wrap(element);
-                }
-            }
-            TirExprKind::VariantConstruct {
-                payload: Some(payload),
-                ..
-            } => {
-                self.record_if_wrap(payload);
-            }
-            _ => {}
+        self.record(expr.type_id);
+        // An `array_clone::<T>` element is copied through the same helper, and
+        // its type is the call's type argument rather than the call's own.
+        if let Some(element) = array_clone_element_type_arg(expr) {
+            self.record(element);
+        }
+        // A `copy_value::<T>` the source wrote is rewritten into the helper for
+        // `T` whatever `T` is, a scalar included, so it is not the copy rules
+        // that decide whether this one exists.
+        if let Some(marked) = copy_value_type_arg(expr) {
+            self.out.insert(marked);
         }
         self.walk_expr(expr);
     }
+}
+
+/// The `T` of a `builtin::copy_value::<T>(x)` marker.
+fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
+    if !is_copy_value_call(expr) {
+        return None;
+    }
+    let TirExprKind::Call { func, .. } = &expr.kind else {
+        return None;
+    };
+    let mono = func.monomorph_info.as_ref()?;
+    mono.impl_type_args
+        .first()
+        .or(mono.method_type_args.first())
+        .copied()
 }
 
 /// Shape predicate shared with the fold. Site-specific gating
 /// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
 /// `Local`-target check for `Assign`) is the caller's job.
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
-    should_wrap_into(expr, expr.type_id, type_table, oracle)
-}
-
-/// [`should_wrap`] where the value lands in a destination of type `dest`: the
-/// type test is the destination's, since `let { x, y } = &p` writes a `Point`
-/// temp out of a `&Point`.
-pub fn should_wrap_into(
-    expr: &TirExpr,
-    dest: TypeId,
-    type_table: &TypeTable,
-    oracle: &OwnedCalls,
-) -> bool {
-    value_copy::needs_value_copy(dest, type_table)
+    value_copy::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)
         && !is_fresh_value(expr, oracle, type_table)
 }

@@ -145,7 +145,7 @@ pub fn plan(
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
-    let seed = analyze::collect_seed_types(flat, &builtins);
+    let seed = analyze::collect_seed_types(flat);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present
     // in `flat.functions`, and shared: every summary below is a monotone
