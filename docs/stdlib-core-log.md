@@ -29,17 +29,18 @@ is how a program asks for silence.
 info(`starting up`);
 
 // An installed sink takes over for its scope. `CaptureSink` is the one a
-// test reads back; `TextSink` and `JsonSink` write.
+// test reads back; `TextSink` and `JsonSink` write. The events asserted on
+// are at `Warn`, since `wado test` compiles the threshold down to it.
 let mut sink = CaptureSink {};
 with Log => &mut sink do {
     in_span(&span(Level::Info, `request`), || {
-        info(`user logged in`, { user_id: 7 });
+        warn(`disk almost full`, { free_bytes: 7 });
     });
 };
 
 assert sink.events.len() == 1;
-assert sink.events[0].message == "user logged in";
-assert sink.events[0].meta.level matches { Info };
+assert sink.events[0].message == "disk almost full";
+assert sink.events[0].meta.level matches { Warn };
 assert sink.events[0].parent matches { Some(1) };
 ```
 
