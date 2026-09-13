@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789337101004,
+  "lastUpdate": 1789340182561,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55717,6 +55717,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/77fc2ec788842e86cf372501fb8365ea0974291a"
         },
         "date": 1789337100396,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b857806bc46ef16fc6e791a311de0622480c641d",
+          "message": "Merge pull request #2047 from wado-lang/gfx/turbofish-empty-trailing-pack\n\nfeat(elaborator): a variadic pack nothing settles is the empty pack",
+          "timestamp": "2026-09-14T07:39:14+09:00",
+          "tree_id": "ffd72de7446ecf55a191261171abd90c719b4440",
+          "url": "https://github.com/wado-lang/wado/commit/b857806bc46ef16fc6e791a311de0622480c641d"
+        },
+        "date": 1789340181747,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
