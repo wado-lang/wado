@@ -792,17 +792,19 @@ fn run_normal_test(
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
         allocator,
-        param_overrides: spec
-            .params
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-        param_defaults: spec
-            .param_defaults
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-        param_policy,
+        params: wado_compiler::param_resolution::ParamInputs {
+            overrides: spec
+                .params
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            defaults: spec
+                .param_defaults
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            policy: param_policy,
+        },
         ..Default::default()
     };
 

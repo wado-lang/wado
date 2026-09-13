@@ -6,7 +6,7 @@ use std::process;
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
-use wado_compiler::param_resolution::ParamPolicyLevel;
+use wado_compiler::param_resolution::{ParamInputs, ParamPolicyLevel};
 
 /// Outcome of a subcommand: a message to print and an exit code.
 ///
@@ -200,8 +200,8 @@ fn parse_param_policy_arg(opt: &str, parser: &mut Parser) -> Result<ParamPolicyL
 }
 
 /// The compile-time-parameter options shared by every subcommand that compiles
-/// (`compile` / `run` / `serve` / `test` / `dump`). Embed [`ParamArgs`] in the
-/// parse loop and add `ParamOpt::ALL` to the help output.
+/// (`compile` / `run` / `serve` / `test` / `dump`). Route a match through
+/// [`apply_param_opt`] and add `ParamOpt::ALL` to the help output.
 #[derive(Clone, Copy)]
 pub enum ParamOpt {
     Define,
@@ -223,36 +223,28 @@ impl ParamOpt {
     }
 }
 
-/// Accumulated `-D` overrides and `--param-*` policy from the command line.
-#[derive(Clone, Debug, Default)]
-pub struct ParamArgs {
-    pub overrides: wado_compiler::hashmap::IndexMap<String, String>,
-    /// Fallbacks a subcommand supplies for itself, such as `wado test` quieting
-    /// `log.level`. See [`wado_compiler::param_resolution::resolve_params`].
-    pub defaults: wado_compiler::hashmap::IndexMap<String, String>,
-    pub policy: wado_compiler::param_resolution::ParamPolicy,
-}
-
-impl ParamArgs {
-    /// Apply a matched [`ParamOpt`], consuming its value from the parser.
-    pub fn apply(&mut self, opt: ParamOpt, parser: &mut Parser) -> Result<(), CliExit> {
-        match opt {
-            ParamOpt::Define => {
-                let (name, value) = parse_define_arg(parser)?;
-                self.overrides.insert(name, value);
-            }
-            ParamOpt::Unknown => {
-                self.policy.unknown = parse_param_policy_arg("--param-unknown", parser)?;
-            }
-            ParamOpt::Invalid => {
-                self.policy.invalid = parse_param_policy_arg("--param-invalid", parser)?;
-            }
-            ParamOpt::Missing => {
-                self.policy.missing = parse_param_policy_arg("--param-missing", parser)?;
-            }
+/// Apply a matched [`ParamOpt`] to `params`, consuming its value from the parser.
+pub fn apply_param_opt(
+    params: &mut ParamInputs,
+    opt: ParamOpt,
+    parser: &mut Parser,
+) -> Result<(), CliExit> {
+    match opt {
+        ParamOpt::Define => {
+            let (name, value) = parse_define_arg(parser)?;
+            params.overrides.insert(name, value);
         }
-        Ok(())
+        ParamOpt::Unknown => {
+            params.policy.unknown = parse_param_policy_arg("--param-unknown", parser)?;
+        }
+        ParamOpt::Invalid => {
+            params.policy.invalid = parse_param_policy_arg("--param-invalid", parser)?;
+        }
+        ParamOpt::Missing => {
+            params.policy.missing = parse_param_policy_arg("--param-missing", parser)?;
+        }
     }
+    Ok(())
 }
 
 pub fn match_opt<T: Copy>(

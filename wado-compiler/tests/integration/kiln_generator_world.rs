@@ -76,6 +76,57 @@ fn kiln_options() -> CompilerOptions {
     }
 }
 
+fn diag_list(diags: &[Diagnostic]) -> String {
+    diags
+        .iter()
+        .map(|d| format!("  {d}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Compile `source` in the generator world, panicking with the diagnostics if it
+/// does not. `what` names the generator in that message.
+fn compile_generator(source: &str, what: &str) -> CompileResult {
+    let host = MapHost::new(&[]);
+    let result = block_on(compile_with_options(
+        source,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    match result {
+        Ok(result) => result,
+        Err(_) => panic!(
+            "{what} failed to compile:\n{}",
+            diag_list(&host.diagnostics())
+        ),
+    }
+}
+
+/// Assert `source` is refused for importing `interface`, whatever reached it.
+fn expect_forbidden_import(source: &str, interface: &str, what: &str) {
+    let host = MapHost::new(&[]);
+    let result = block_on(compile_with_options(
+        source,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(result.is_err(), "{what} should fail to compile");
+
+    let diags = host.diagnostics();
+    let found = diags.iter().any(|d| {
+        d.severity == Severity::Error
+            && d.code == Code::KilnGeneratorForbiddenImport
+            && d.message.contains(interface)
+    });
+    assert!(
+        found,
+        "expected KilnGeneratorForbiddenImport naming {interface}, got:\n{}",
+        diag_list(&diags)
+    );
+}
+
 const NOOP_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 
@@ -87,24 +138,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn noop_generator_compiles_to_component_bytes() {
-    let host = MapHost::new(&[]);
-    let result: Result<CompileResult, _> = block_on(compile_with_options(
-        NOOP_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ));
-    let Ok(result) = result else {
-        let diags = host.diagnostics();
-        panic!(
-            "noop generator failed to compile: {}",
-            diags
-                .iter()
-                .map(|d| format!("  {d}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    };
+    let result = compile_generator(NOOP_GENERATOR, "noop generator");
     assert!(
         !result.wasm.is_empty(),
         "noop generator produced empty wasm"
@@ -134,32 +168,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
 
 #[test]
 fn typed_options_generator_compiles_to_valid_component() {
-    let host = MapHost::new(&[]);
     // No `skip_validation`: the revision-3 typed-options `generate(primary, inputs,
     // options)` shape must produce a valid component (unlike the old
     // `raw-request` GC-reference mismatch).
-    let options = CompilerOptions {
-        log_level: Some(LogLevel::Warn),
-        target_world: Some("core:kiln/generator".to_string()),
-        ..CompilerOptions::default()
-    };
-    let result = block_on(compile_with_options(
-        TYPED_OPTIONS_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        options,
-    ));
-    let Ok(result) = result else {
-        let diags = host.diagnostics();
-        panic!(
-            "typed-options generator failed to compile:\n{}",
-            diags
-                .iter()
-                .map(|d| format!("  {d}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    };
+    let result = compile_generator(TYPED_OPTIONS_GENERATOR, "typed-options generator");
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
@@ -183,29 +195,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_with_extra_export_compiles_to_valid_component() {
-    let host = MapHost::new(&[]);
-    let options = CompilerOptions {
-        log_level: Some(LogLevel::Warn),
-        target_world: Some("core:kiln/generator".to_string()),
-        ..CompilerOptions::default()
-    };
-    let result = block_on(compile_with_options(
-        MULTI_EXPORT_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        options,
-    ));
-    let Ok(result) = result else {
-        let diags = host.diagnostics();
-        panic!(
-            "multi-export generator failed to compile:\n{}",
-            diags
-                .iter()
-                .map(|d| format!("  {d}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        );
-    };
+    let result = compile_generator(MULTI_EXPORT_GENERATOR, "multi-export generator");
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
@@ -222,29 +212,10 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_importing_wasi_clocks_is_rejected() {
-    let host = MapHost::new(&[]);
-    let result = block_on(compile_with_options(
+    expect_forbidden_import(
         FORBIDDEN_IMPORT_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ));
-    assert!(result.is_err(), "generator with wasi: import should fail");
-
-    let diags = host.diagnostics();
-    let found = diags.iter().any(|d| {
-        d.severity == Severity::Error
-            && d.code == Code::KilnGeneratorForbiddenImport
-            && d.message.contains("wasi:clocks")
-    });
-    assert!(
-        found,
-        "expected KilnGeneratorForbiddenImport diagnostic mentioning wasi:clocks, got: {}",
-        diags
-            .iter()
-            .map(|d| format!("  {d}"))
-            .collect::<Vec<_>>()
-            .join("\n")
+        "wasi:clocks",
+        "a generator with a wasi: import",
     );
 }
 
@@ -268,7 +239,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
 }
 "#;
 
-/// The `wasi:` interfaces a generator component imports, as printed names.
+/// The `wasi:` interfaces a component imports, as printed names.
 fn wasi_imports_of(wasm: &[u8]) -> Vec<String> {
     let wat = wasmprinter::print_bytes(wasm).expect("printable component");
     let mut names: Vec<String> = wat
@@ -281,30 +252,6 @@ fn wasi_imports_of(wasm: &[u8]) -> Vec<String> {
     names.sort();
     names.dedup();
     names
-}
-
-fn compile_generator(source: &str, what: &str) -> CompileResult {
-    let host = MapHost::new(&[]);
-    let result = block_on(compile_with_options(
-        source,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ));
-    match result {
-        Ok(result) => result,
-        Err(_) => {
-            let diags = host.diagnostics();
-            panic!(
-                "{what} failed to compile:\n{}",
-                diags
-                    .iter()
-                    .map(|d| format!("  {d}"))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            );
-        }
-    }
 }
 
 #[test]
@@ -341,31 +288,9 @@ export fn generate(req: Request) -> Result<Response, Error> {
 
 #[test]
 fn generator_installing_a_stamped_sink_is_rejected() {
-    let host = MapHost::new(&[]);
-    let result = block_on(compile_with_options(
+    expect_forbidden_import(
         WALL_CLOCK_SINK_GENERATOR,
-        &host,
-        Some("generator.wado"),
-        kiln_options(),
-    ));
-    assert!(
-        result.is_err(),
-        "a generator importing wasi:clocks through a sink should fail"
-    );
-
-    let diags = host.diagnostics();
-    let found = diags.iter().any(|d| {
-        d.severity == Severity::Error
-            && d.code == Code::KilnGeneratorForbiddenImport
-            && d.message.contains("wasi:clocks")
-    });
-    assert!(
-        found,
-        "expected KilnGeneratorForbiddenImport naming wasi:clocks, got: {}",
-        diags
-            .iter()
-            .map(|d| format!("  {d}"))
-            .collect::<Vec<_>>()
-            .join("\n")
+        "wasi:clocks",
+        "a generator reaching wasi:clocks through a sink",
     );
 }

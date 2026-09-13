@@ -1,12 +1,10 @@
-// Tests whose assertions need an event below `Warn` to reach the subscriber,
-// so they only hold where tier 1 admits one.
+// Tests whose assertions need an event below `Warn` to reach the subscriber.
+// They hold only where tier 1 admits one.
 //
-// `wado test` builds with `-D log.level=warn`, which compiles a `trace` /
-// `debug` / `info` call away before any of the run-time tiers see it — so this
-// file is excluded from discovery (`[test].exclude` in `wado.toml`) and run by
-// `mise run test-log-levels`, which names it with `-D log.level=trace`. Its
-// sibling `log_test.wado` holds everything that is level-agnostic, including
-// the mirror assertions for tier 1 at `warn`.
+// `wado test` builds at `warn`, so this file is excluded from discovery
+// (`[test].exclude` in `wado.toml`) and run by `mise run test-log-levels` with
+// `-D log.level=trace`. Its sibling `log_test.wado` holds every test whose
+// level is incidental, including the mirror assertions for tier 1 at `warn`.
 
 use {
     CaptureSink,
@@ -64,13 +62,14 @@ test "tier 3 drops events below the sink's minimum level" {
 
 test "tier 2 drops events below the process-wide level" {
     let mut sink = CaptureSink {};
+    let prev = log_level();
     set_log_level(Level::Warn);
     assert log_level() matches { Warn };
     with Log => &mut sink do {
         info(`dropped`);
         warn(`kept`);
     };
-    set_log_level(Level::Trace);
+    set_log_level(prev);
     assert sink.events.len() == 1;
     assert sink.events[0].message == "kept";
 }
@@ -106,9 +105,6 @@ test "a filter layer composes over a sink" {
 }
 
 test "a directive matches the target an event is actually emitted with" {
-    // The target defaults to the caller's `#function`, so a directive names a
-    // function, not a module path. Passing `target` explicitly is how events
-    // get grouped under a name of the application's choosing.
     let mut sink = CaptureSink {};
     let filt = Filter { directives: parse_directives("error,db=debug") };
     with Log => &mut sink do {
@@ -135,12 +131,13 @@ test "the raw event emitter runs the run-time gates too" {
     assert sink.events[0].message == "kept";
 
     let mut sink2 = CaptureSink {};
+    let prev = log_level();
     set_log_level(Level::Error);
     with Log => &mut sink2 do {
         event(Level::Trace, `dropped by the process level`);
         event(Level::Error, `kept`);
     };
-    set_log_level(Level::Trace);
+    set_log_level(prev);
     assert sink2.events.len() == 1;
     assert sink2.events[0].message == "kept";
 }

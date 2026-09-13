@@ -2,11 +2,10 @@
 // assertions read the events rather than captured output; the two writing
 // sinks are exercised through `render`, which builds the line they write.
 //
-// `wado test` builds with `-D log.level=warn`, so every event here is at
-// `Warn` or above: a `trace` / `debug` / `info` call is compiled away before
-// any sink sees it, and the level carries no meaning in what these tests
-// assert. The tests that do need a lower one live in `log_level_test.wado`,
-// which runs under a raised tier 1.
+// `wado test` builds with `-D log.level=warn`, which compiles a `trace` /
+// `debug` / `info` call away before any sink sees it. So every event here is at
+// `Warn` or above, and its level is incidental to what the test asserts. The
+// tests that need a lower one live in `log_level_test.wado`.
 
 use {
     CaptureSink,

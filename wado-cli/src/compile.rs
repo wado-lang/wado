@@ -248,7 +248,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CompileOptions, CliExit>
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            knobs.params.apply(p, &mut parser)?;
+            args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(e) = args::match_opt(&arg, EmbedOpt::WIT_ONLY, |e| e.spec()) {
             embed.apply(e)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -402,9 +402,7 @@ pub async fn try_compile_with_run_cache(
         log_level: Some(knobs.log_level),
         allocator: knobs.allocator.clone(),
         codegen_flags: knobs.codegen_flags.clone(),
-        param_overrides: knobs.params.overrides.clone(),
-        param_defaults: knobs.params.defaults.clone(),
-        param_policy: knobs.params.policy,
+        params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,
         test_name_filters: flags.test_name_filters.clone(),

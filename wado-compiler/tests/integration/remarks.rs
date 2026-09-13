@@ -158,15 +158,15 @@ export fn run() with Stdout {
 
 /// [`remarks_under`] at `-O2` with `-D` overrides.
 fn remarks_for_params(source: &str, overrides: &[(&str, &str)]) -> Vec<String> {
-    let mut param_overrides = wado_compiler::hashmap::IndexMap::default();
+    let mut params = wado_compiler::param_resolution::ParamInputs::default();
     for (k, v) in overrides {
-        param_overrides.insert((*k).to_string(), (*v).to_string());
+        params.overrides.insert((*k).to_string(), (*v).to_string());
     }
     remarks_under(
         source,
         CompilerOptions {
             opt_level: OptLevel::O2,
-            param_overrides,
+            params,
             ..CompilerOptions::default()
         },
     )

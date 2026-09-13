@@ -1,8 +1,8 @@
 //! Compile-time parameter resolution (`#[param]`, WEP 2026-04-26), between link
-//! and monomorphize: resolve each global's override — `-D NAME=value` first,
-//! then its `from_env` variable — and replace the initializer with the converted
-//! literal. Conversion is native Rust matching `LenientFromStr`, isolated in
-//! `convert_builtin` so a future wasm-CTFE path replaces only that boundary.
+//! and monomorphize: resolve each global against [`ParamInputs`] and replace the
+//! initializer with the converted literal. Conversion is native Rust matching
+//! `LenientFromStr`, isolated in `convert_builtin` so a future wasm-CTFE path
+//! replaces only that boundary.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -63,21 +63,34 @@ impl Default for ParamPolicy {
     }
 }
 
-/// Resolve every `#[param]` global in `flat` against `overrides` / env /
-/// `defaults` / policy, in that precedence.
-///
-/// A `defaults` entry is the host's own fallback rather than a user's `-D`, so
-/// one naming no declaration is silent where an `overrides` entry is `unknown`.
+/// What one `wado` invocation feeds parameter resolution: the user's `-D`, the
+/// host's own fallbacks, and the policy for each diagnostic class.
+#[derive(Debug, Clone, Default)]
+pub struct ParamInputs {
+    /// `-D NAME=value`, the highest-priority source.
+    pub overrides: IndexMap<String, String>,
+    /// The embedding tool's fallbacks for a library's parameter, below
+    /// `overrides` and `from_env`. Never a user's typo, so one naming no
+    /// declaration is silent where an `overrides` entry is `unknown`.
+    pub defaults: IndexMap<String, String>,
+    pub policy: ParamPolicy,
+}
+
+/// Resolve every `#[param]` global in `flat` against `params`, in the order
+/// `overrides` / `from_env` / `defaults` / initializer.
 ///
 /// Returns `Err(Bail)` if any diagnostic was emitted at `error` level.
 pub fn resolve_params<H: CompilerHost>(
     flat: &mut FlatPackage,
-    overrides: &IndexMap<String, String>,
-    defaults: &IndexMap<String, String>,
-    policy: &ParamPolicy,
+    params: &ParamInputs,
     file: &str,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
+    let ParamInputs {
+        overrides,
+        defaults,
+        policy,
+    } = params;
     // Nothing to resolve and no stray `-D` to flag — skip the type-table work.
     if overrides.is_empty() && flat.globals.iter().all(|g| g.param.is_none()) {
         return Ok(());
