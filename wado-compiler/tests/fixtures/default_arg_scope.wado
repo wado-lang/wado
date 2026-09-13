@@ -1,0 +1,232 @@
+//! A default expression is written at a declaration and resolved wherever the
+//! default is taken, so its names bind in the declaring module's scope and
+//! nothing of the taking site's reaches it. One `test` block per thing a
+//! default may name, each pinned across a module boundary — the direction that
+//! can tell the two ends apart.
+
+use g from "./sub/default_arg_ns_lib.wado";
+use { paint } from "./sub/default_arg_private_item_lib.wado";
+use { make } from "./sub/default_arg_private_fn_call_lib.wado";
+use { process as process_ctx } from "./sub/default_arg_unimported_type_lib.wado";
+use { Conf, Box, called, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
+use { Holder, picked, with_default } from "./sub/default_arg_namespaced_callee_a.wado";
+use {
+    Conf as NsConf,
+    called as ns_called,
+    takes as ns_takes,
+} from "./sub/default_arg_ns_global_lib.wado";
+use {
+    with_imported_global,
+    with_local_global,
+    with_imported_fn,
+    generic_with_imported_global,
+} from "./sub/default_arg_xmod_imported_global_mid.wado";
+use {
+    Grammar,
+    Rule,
+    Ctx as GrammarCtx,
+    process,
+} from "./sub/default_arg_cross_module_param_ref_lib.wado";
+use { Box3 } from "./sub/default_arg_xmod_method_lib.wado";
+use { without_base } from "./sub/default_arg_xmod_method_no_base.wado";
+use { plain, generic, Holder as PrivHolder } from "./sub/default_arg_xmod_private_lib.wado";
+use { speed } from "./sub/default_scope_xmod_lib.wado";
+use { text, bytes, section } from "./sub/default_arg_compile_time_literal_lib.wado";
+use { dep_make, DepThing } from "./sub/bug_default_arg_xmod_dep.wado";
+
+test "a default names a module-private item of its own module" {
+    assert paint() == 7;
+    assert paint(10) == 10;
+}
+
+// Issue #1308. Only `resolve_ident` consulted the declaring scope, so a default
+// *calling* a private function errored with "unknown function 'helper'".
+test "a default calls a module-private function of its own module" {
+    assert make() == 49;
+    assert make(10) == 10;
+}
+
+// Same name *and* same static method here, so a lookup answering from the
+// taking site picks the wrong declaration rather than merely failing to find
+// one.
+struct Ctx {
+    count: i32,
+}
+
+impl Ctx {
+    fn new() -> Ctx {
+        return Ctx { count: 1 };
+    }
+}
+
+test "a default names a type this module never imported" {
+    assert process_ctx() == 7;
+    assert Ctx::new().count == 1;
+}
+
+// Issue #1486. Annotate resolved a bare identifier in the declaring module but
+// not a qualified path, so this errored with "unknown identifier 'Mode::Slow'"
+// attributed to this file. `Mode` is deliberately not imported: importing it
+// would make the path resolvable here and mask the bug.
+test "a default names a variant case through a qualified path" {
+    assert speed(7) == 7;
+}
+
+// Keyed by the module taking the default instead, an include resolved to
+// nothing — "file not found" at a path that exists beside its author — and a
+// caller with no `__DATA__` of its own saw the program rejected outright.
+// `#file` / `#line` / `#function` go the other way on purpose and report the
+// call site; `default_arg_location_call_site.wado` pins that.
+test "a file-reading literal in a default reads the file that wrote it" {
+    assert text() == "Hello, World!\n";
+    assert bytes().len() == 14;
+    assert section() == "callee-section\n";
+}
+
+test "a default names an item its own module imported" {
+    assert with_imported_global() == 7;
+    assert with_imported_global(1) == 1;
+    assert with_local_global() == 3;
+    assert with_imported_fn() == 11;
+    assert generic_with_imported_global::<i32>() == 7;
+}
+
+// The free-function case used to panic the compiler outright.
+test "a default resolves its own module's import aliases" {
+    let h = Holder { q: 2 };
+    assert with_default() == 11;
+    assert h.scaled() == 22;
+    assert Holder::build().q == 11;
+    assert picked() == 41;
+}
+
+// A namespaced *function* call in a default already had coverage; a namespaced
+// *global* did not, and the alias was looked up in the module that took the
+// default. This file declares no `nsb`, so that lookup finds nothing.
+test "a default names a namespaced global of its own module" {
+    assert ns_takes() == 41;
+    assert ns_takes(3) == 3;
+    assert NsConf {}.v == 41;
+    assert ns_called() == 7;
+}
+
+// `reify_pad_args_with_defaults` bailed on any `::`-containing callee, so the
+// TIR call kept only the explicit arguments while annotate type-checked the
+// padded arity. WIR then lowered a call missing its trailing operand and the
+// core Wasm validator rejected it.
+test "a namespace-qualified call fills its callee's defaults" {
+    assert g::make().n == i32::MAX;
+    assert g::make(7).n == 7;
+}
+
+global SECRET: i32 = 7;
+
+struct LocalConf {
+    v: i32 = SECRET,
+}
+
+fn here(v: i32 = SECRET) -> i32 {
+    return v;
+}
+
+fn pair(a: i32, b: i32 = a) -> i32 {
+    return a * 1000 + b;
+}
+
+fn ninety_nine() -> i32 {
+    return 99;
+}
+
+// A caller's `let SECRET = 99` used to answer for the `SECRET` the author
+// wrote, in the same module and across one, in parameter and field defaults
+// alike. A function-typed global reaches its binding through a second lookup,
+// which `called` pins — that one also panicked the compiler when no caller
+// local shadowed it, the callee's own global being invisible from the site.
+//
+// Both modules spell `SECRET` as 7, so this block cannot say which end
+// answered; "a method's default resolves where it is declared" below can.
+test "a local of the function taking a default is not in scope for it" {
+    let SECRET = 99;
+    let MAKE: fn() -> i32 = ninety_nine;
+
+    assert here() == 7;
+    assert here(SECRET) == 99;
+    assert LocalConf {}.v == 7;
+
+    assert take() == 7;
+    assert take(SECRET) == 99;
+    assert Conf {}.v == 7;
+    assert Box::new(1).plus() == 8;
+    assert Box::of().base == 7;
+    assert called() == 7;
+    assert MAKE() == 99;
+
+    // Naming an earlier parameter means the value the call supplied for it,
+    // which the caller may well have built from its own locals.
+    assert pair(SECRET) == 99099;
+}
+
+global BASE: i32 = 500;
+
+// A method default naming its own module's global used to be answered in the
+// caller's module: the caller's value where it spelled the name, a compiler
+// panic where it spelled nothing. The two modules give `BASE` different values,
+// so answering at the wrong end is a wrong number rather than a tie, and
+// `without_base` is the caller that spells it nowhere.
+test "a method's default resolves where it is declared" {
+    assert Box3::new(1).plus() == 8;
+    assert Box3::new(1).scaled() == 22;
+    assert Box3::of().k == 7;
+    assert Box3::new(1).plus(BASE) == 501;
+    assert without_base() == 8;
+}
+
+// The `core:log` shape: `info(msg)` with a private `NoFields` sentinel. The
+// caller cannot name `Priv`, so only the default form is callable.
+test "a default constructs a type private to its own module" {
+    assert plain() == 5;
+    assert generic() == 5;
+    assert generic(9) == 9;
+}
+
+// The free-function path stood in the callee and the method path did not, so
+// `Priv` resolved to nothing here on both the value-default and the
+// type-parameter-default paths.
+test "a method's default names a type private to its own module" {
+    let h = PrivHolder { base: 1 };
+    assert h.scaled() == 6;
+    assert h.scaled(9) == 10;
+    assert h.offset() == 101;
+    assert h.offset::<i32>() == 1;
+}
+
+// The default is reified under the callee's perspective so `Ctx::new` resolves,
+// but the spliced-in caller argument (`&g`) carries the caller's `AstId`s.
+// Reifying the whole default under the callee's perspective mis-typed that node
+// and ICE'd in WIR build.
+test "a cross-module default naming an earlier parameter reads the caller's value" {
+    let grammar = Grammar {
+        rules: [Rule { name: "a" }, Rule { name: "b" }],
+    };
+    assert process(&grammar) == 2;
+    let mut ctx = GrammarCtx::new(&grammar.rules);
+    assert process(&grammar, &mut ctx) == 2;
+}
+
+struct LocalPair {
+    x: i32,
+    y: i32,
+}
+
+// Issue #1342. Each node's facts must land on the node's own identity, never on
+// a same-numbered local node; this used to overwrite a `LocalPair` literal
+// sharing the callee node's dense per-module id. `LocalPair` (2 fields) and
+// `DepThing` (4 fields) differ in shape, so a mis-attribution is a hard
+// `struct.new` type error. The root fix made every `AstId` globally unique, so
+// the collision is impossible by construction rather than merely avoided.
+test "a cross-module default's nodes keep their own identity" {
+    let p = LocalPair { x: 10, y: 20 };
+    assert p.x + p.y == 30;
+    assert dep_make(5) == 15;
+    assert DepThing { a: 7, b: 0, c: 0, d: 0 }.a == 7;
+}

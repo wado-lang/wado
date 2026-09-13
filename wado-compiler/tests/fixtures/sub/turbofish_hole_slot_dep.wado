@@ -1,0 +1,29 @@
+pub struct Cell {
+    pub v: i32,
+}
+
+impl Cell {
+    pub fn pair<A: Default, B: Default>(a: A, f: fn(B) -> i32) -> i32 {
+        return f(B::default());
+    }
+}
+
+pub trait Take {
+    fn take<T: Default>(&self, x: T) -> T;
+
+    fn map<T: Default>(&self, f: fn(T) -> i32) -> i32;
+}
+
+pub struct Box2 {
+    pub n: i32,
+}
+
+impl Take for Box2 {
+    fn take<T: Default>(&self, x: T) -> T {
+        return x;
+    }
+
+    fn map<T: Default>(&self, f: fn(T) -> i32) -> i32 {
+        return f(T::default());
+    }
+}

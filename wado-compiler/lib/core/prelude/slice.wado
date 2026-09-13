@@ -31,7 +31,7 @@ use { panic } from "core:rt";
 /// body over those two, so no default constructs a `Slice`. Methods needing an
 /// `Elem` bound (`contains`, `binary_search`, …) cannot live here — an
 /// associated type carries no bound — and stay bounded inherent impls.
-internal trait Sequence {
+pub trait Sequence {
     type Elem;
 
     fn len(&self) -> i32;
@@ -486,7 +486,7 @@ impl<T> IntoIterator for SliceChunks<T> {
 /// Reference view over a contiguous sequence. Implemented by `Array<T>`,
 /// `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 /// carries the real bodies.
-internal trait AsSlice: Sequence {
+pub trait AsSlice: Sequence {
     fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
 
     /// Sub-view over `[start, end)`, clamped to this sequence.

@@ -1,0 +1,27 @@
+// The cross-module half of `default_arg_callee_type_param.wado`. Every default
+// here names this module's own `T`, which the caller has no binder for at all,
+// so a default answered in the caller's scope could not resolve and one
+// answered against the declaration alone would hand every call site the same
+// value.
+
+pub struct Wrap<T> {
+    pub v: T,
+}
+
+impl<T: Default> Wrap<T> {
+    pub fn or_default(&self, fallback: T = T::default()) -> T {
+        return fallback;
+    }
+
+    pub fn empty(v: T = T::default()) -> Wrap<T> {
+        return Wrap { v };
+    }
+}
+
+pub struct Slot<T: Default> {
+    pub v: T = T::default(),
+}
+
+pub fn zero<T: Default>(v: T = T::default()) -> T {
+    return v;
+}

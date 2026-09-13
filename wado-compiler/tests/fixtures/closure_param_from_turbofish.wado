@@ -1,0 +1,47 @@
+// A turbofish is an answer the call site wrote down, so it reaches the
+// arguments: a closure passed alongside it sees the named type.
+//
+// Four spellings reach that instantiation, one test each.
+
+struct Counter {
+    v: i32,
+}
+
+impl Counter {
+    fn go<A: Default>(&self, f: fn(A) -> i32) -> i32 {
+        return f(A::default());
+    }
+
+    fn pair<A: Default, B: Default>(&self, f: fn(B) -> i32, seed: A) -> i32 {
+        return f(B::default());
+    }
+
+    fn mk<A: Default>(f: fn(A) -> i32) -> i32 {
+        return f(A::default());
+    }
+}
+
+fn free<A: Default>(f: fn(A) -> i32) -> i32 {
+    return f(A::default());
+}
+
+test "a free function's turbofish types the closure parameter" {
+    assert free::<String>(|a| a.len()) == 0;
+}
+
+test "an instance method's turbofish types the closure parameter" {
+    let c = Counter { v: 1 };
+    assert c.go::<String>(|a| a.len()) == 0;
+}
+
+test "a static method's turbofish types the closure parameter" {
+    assert Counter::mk::<String>(|a| a.len()) == 0;
+}
+
+test "a partial turbofish types the closure from its explicit position" {
+    let c = Counter { v: 1 };
+    assert c.pair::<_, String>(|b| b.len(), 1) == 0;
+}
+
+__DATA__
+{"test": {}}

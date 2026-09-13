@@ -1,0 +1,15 @@
+// The prelude's scope is what `core:prelude` exports, not what its
+// implementation modules happen to declare. `core:prelude` imports
+// `fpfmt.wado` without re-exporting anything from it, so `UnpackResult` is not
+// a prelude name and writing it without an import is an error. The symbol is
+// still `pub`: `use { UnpackResult } from "core:prelude/fpfmt.wado"` reaches
+// it. Only the auto-import went away.
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let r = UnpackResult { mantissa: 0, exponent: 0 };
+    println(`${r.exponent}`);
+}
+
+__DATA__
+{"compile_error": "UnpackResult"}

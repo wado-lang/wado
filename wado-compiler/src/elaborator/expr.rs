@@ -11,11 +11,13 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::tir::{FunctionRef, ResolvedType, TirField, TirStruct, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::turbofish_holes;
+use super::call::{DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1019,18 +1021,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // payload-less case has no payload to infer from, so
                         // the turbofish is the only source besides the
                         // expected type.
-                        let holes = turbofish_holes(&ident.type_args);
                         let explicit_args: Vec<TypeId> = ident
                             .type_args
                             .iter()
-                            .enumerate()
-                            .map(|(i, t)| {
-                                if holes[i] {
-                                    TypeTable::UNKNOWN
-                                } else {
-                                    self.resolve_type(t)
-                                }
-                            })
+                            .map(|t| self.resolve_type(t))
                             .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
@@ -1039,7 +1033,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             None,
                             expected_type,
                             &explicit_args,
-                            &holes,
                         );
                         self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
                     }
@@ -1650,72 +1643,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return;
                 }
             }
-        }
-    }
-
-    /// Substitute type parameters using a TypeId-to-TypeId map.
-    /// Unlike `substitute_type_params` (which substitutes by index), this only
-    /// replaces `TypeIds` that are explicitly in the map, leaving all others unchanged.
-    /// This is used in struct literal field type fixup to avoid incorrectly replacing
-    /// impl-scope `TypeParams` that share the same index as the struct's own `TypeParams`.
-    pub(super) fn substitute_type_params_by_map(
-        &mut self,
-        type_id: TypeId,
-        map: &IndexMap<TypeId, TypeId>,
-    ) -> TypeId {
-        if map.is_empty() {
-            return type_id;
-        }
-        if let Some(&concrete) = map.get(&type_id) {
-            return concrete;
-        }
-        let resolved_type = self.tysys.type_table.borrow().get(type_id).clone();
-        match resolved_type {
-            ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute_type_params_by_map(elem, map);
-                if new_elem == elem {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::BuiltinArray(new_elem))
-                }
-            }
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_type_params_by_map(inner, map);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys.type_table.borrow_mut().make_ref(new_inner)
-                }
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_type_params_by_map(inner, map);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys.type_table.borrow_mut().make_mut_ref(new_inner)
-                }
-            }
-            ResolvedType::GenericInstance {
-                def,
-                type_args: inner_args,
-            } => {
-                let new_args: Vec<TypeId> = inner_args
-                    .iter()
-                    .map(|&a| self.substitute_type_params_by_map(a, map))
-                    .collect();
-                if new_args == inner_args {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, new_args)
-                }
-            }
-            _ => type_id,
         }
     }
 
@@ -3804,6 +3731,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => None,
             });
+        let annotated_args = expected_args.clone();
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
             self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -4005,37 +3933,64 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
-            for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
-                if provided_names.contains(expected_name) {
-                    continue;
-                }
-                let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
-                if let Some(default_expr) = default_ast {
-                    // The default is the struct module's AST, and its scope,
-                    // its import aliases and the vantage its visibility is
-                    // judged from are all that module's. Fact keying stays
-                    // local, the default's nodes carrying their own globally
-                    // unique `AstId`s.
-                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                        self.with_resolving_home(Some(struct_module_source.clone()), |s| {
-                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
-                        })
-                    });
-                    self.typecheck(resolved, *expected_type_id, struct_lit.span);
-                    fields.push(ResolvedField {
-                        name: expected_name.clone(),
-                        type_id: resolved,
-                        field_index: idx as u32,
-                        span: default_expr.span(),
-                    });
-                } else {
-                    let _ = self.emit(TypeError::MissingField {
-                        struct_name: display_name.clone(),
-                        field_name: expected_name.clone(),
-                        span: struct_lit.span,
-                    });
-                }
-            }
+            // A literal that omits no defaulted field walks no default, and
+            // the loop below then only reports the required fields it left
+            // out. Settling the struct's parameters and keeping a walk of its
+            // own is for the walk, so neither runs without one.
+            let walks_a_default = struct_field_types
+                .iter()
+                .enumerate()
+                .any(|(idx, (name, _))| {
+                    !provided_names.contains(name)
+                        && struct_field_defaults.get(idx).is_some_and(Option::is_some)
+                });
+            let (field_default_bindings, settled_params) = if walks_a_default {
+                self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields)
+            } else {
+                (Vec::new(), SubstitutionContext::new())
+            };
+            // The default is the struct module's AST, and its scope, its import
+            // aliases and the vantage its visibility is judged from are all
+            // that module's.
+            self.resolving_defaults_at(
+                walks_a_default.then_some(struct_lit.id),
+                walks_a_default.then(|| struct_module_source.clone()),
+                &field_default_bindings,
+                |s| {
+                    for (idx, (expected_name, expected_type_id)) in
+                        struct_field_types.iter().enumerate()
+                    {
+                        if provided_names.contains(expected_name) {
+                            continue;
+                        }
+                        let Some(default_expr) =
+                            struct_field_defaults.get(idx).and_then(Option::clone)
+                        else {
+                            let _ = s.emit(TypeError::MissingField {
+                                struct_name: display_name.clone(),
+                                field_name: expected_name.clone(),
+                                span: struct_lit.span,
+                            });
+                            continue;
+                        };
+                        // The declared type still names the struct's own
+                        // parameters where no annotation pinned them, and the
+                        // default answers in the settled ones.
+                        let expected_type_id = settled_params
+                            .substitute(*expected_type_id, &mut s.tysys.type_table.borrow_mut());
+                        let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                            s.resolve_expr(&default_expr, ctx, Some(expected_type_id))
+                        });
+                        s.typecheck(resolved, expected_type_id, struct_lit.span);
+                        fields.push(ResolvedField {
+                            name: expected_name.clone(),
+                            type_id: resolved,
+                            field_index: idx as u32,
+                            span: default_expr.span(),
+                        });
+                    }
+                },
+            );
             fields.sort_by_key(|f| f.field_index);
         }
 
@@ -4097,21 +4052,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
                 fields
             } else {
-                let struct_param_map: IndexMap<TypeId, TypeId> = self
+                let slots = self
                     .struct_fields_of_written_decl(struct_decl)
-                    .map(|info| {
-                        info.type_param_type_ids
-                            .iter()
-                            .zip(type_args.iter())
-                            .map(|(&param_id, &concrete_id)| (param_id, concrete_id))
-                            .collect()
-                    })
+                    .map(|info| info.type_param_type_ids.clone())
                     .unwrap_or_default();
+                let subst = SubstitutionContext::new().bind(&slots, &type_args);
                 fields
                     .into_iter()
                     .map(|mut field| {
-                        field.type_id =
-                            self.substitute_type_params_by_map(field.type_id, &struct_param_map);
+                        field.type_id = subst
+                            .substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
                         field
                     })
                     .collect()
@@ -4595,6 +4545,59 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// What this literal settles the struct's own type parameters to: the
+    /// bindings a field default naming one (`b: T = T::default()`) resolves
+    /// against, and the same answer as a substitution for the declared field
+    /// types those defaults are checked against.
+    ///
+    /// Answered from the annotation and from the fields the literal wrote. Full
+    /// inference has not run yet — it reads the defaults this is for — and a
+    /// parameter neither source mentions settles to nothing rather than to
+    /// itself, which would send the default down the abstract path with no
+    /// caller to monomorphize it.
+    fn field_default_type_bindings(
+        &self,
+        struct_decl: Option<DefId>,
+        expected_args: Option<&[TypeId]>,
+        fields: &[ResolvedField],
+    ) -> (Vec<DefaultTypeBinding>, SubstitutionContext) {
+        let Some(info) = self.struct_fields_of_written_decl(struct_decl) else {
+            return (Vec::new(), SubstitutionContext::new());
+        };
+        let mut settled: IndexMap<TypeId, TypeId> = IndexMap::default();
+        // The annotation names the whole instantiation, so it answers for every
+        // parameter — including one no field mentions.
+        if let Some(args) = expected_args.filter(|a| a.len() == info.type_param_type_ids.len()) {
+            settled.extend(
+                info.type_param_type_ids
+                    .iter()
+                    .copied()
+                    .zip(args.iter().copied()),
+            );
+        }
+        for field in fields {
+            let Some((_, declared, _)) = info.fields.iter().find(|(n, _, _)| *n == field.name)
+            else {
+                continue;
+            };
+            unify(
+                &self.tysys.type_table,
+                *declared,
+                field.type_id,
+                &mut settled,
+            );
+        }
+        let (slots, args): (Vec<TypeId>, Vec<TypeId>) = info
+            .type_param_type_ids
+            .iter()
+            .filter_map(|slot| settled.get(slot).map(|&arg| (*slot, arg)))
+            .unzip();
+        (
+            slot_type_bindings(&self.tysys.type_table, &slots, &args),
+            SubstitutionContext::new().bind(&slots, &args),
+        )
+    }
+
     /// Infer a generic struct's type arguments by running [`InferCtx`] over its
     /// declared field types against the literal's values. An `expected_type`
     /// that is a `GenericInstance` of the same struct is unified in too, so a
@@ -4625,6 +4628,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "struct",
                 name: &struct_info.name,
                 span,
+                // A struct literal has no turbofish; its fields name the slots.
+                type_args: &[],
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();

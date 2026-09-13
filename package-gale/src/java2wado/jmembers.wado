@@ -360,7 +360,7 @@ fn parse_field(
 fn parse_method(tokens: &List<JToken>, pos: &mut i32, name: &String, ret_java: &String) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, &"{") {
-        return Result::Err(`java2wado: @members: expected '\{' for method '${*name}'`);
+        return Result::Err(`java2wado: @members: expected '{' for method '${*name}'`);
     }
     let close = find_braced_end(tokens, *pos)?;
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
@@ -401,7 +401,7 @@ fn build_method(
         };
         sig.push_str(&` -> ${rty}`);
     }
-    return Result::Ok(`${sig} \{ ${*body_wado} \}`);
+    return Result::Ok(`${sig} { ${*body_wado} }`);
 }
 
 /// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,

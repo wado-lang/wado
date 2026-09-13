@@ -1,0 +1,15 @@
+// `ns::Nope::method(…)` where the namespace declares no `Nope`. The branch
+// that reads the middle segment as a type had no answer and built a reference
+// to a function nothing declares, so the call typed `unknown` with nothing
+// reported: the `let` binding it fed was what complained, about a type never
+// imported.
+
+use m from "./sub/ufcs_namespaced_trait_target.wado";
+
+export fn run() {
+    let r = m::Nope::method(1);
+    assert r == 1;
+}
+
+__DATA__
+{"compile_error": "unknown function 'm::Nope::method'"}
