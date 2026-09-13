@@ -3,12 +3,11 @@
 ## Context
 
 A library decides what it will not offer as deliberately as what it will. Wado
-refuses `Option::map_or` because its argument order is a known trap, and
-refuses any method that borrows a Rust name for a different signature or a
-different meaning. Today that decision lives in a design document, where the
-caller never meets it: the compiler answers a call to `map_or` with "no method
-named `map_or`", which reads as an oversight and invites a pull request that
-adds it.
+does not offer `Option::map_or`, and does not offer any method that borrows a
+Rust name for a different signature or a different meaning. That decision
+lives in a design document, where the caller never meets it: the compiler
+answers a call to `map_or` with "no method named `map_or`", which reads as an
+oversight and invites a pull request that adds it.
 
 The same gap opens after a removal. A method taken out of the standard library
 leaves no trace, so an upgrade reports the same "no method named" and the
@@ -34,8 +33,8 @@ diagnostics: `static_assert` (C++11), `[[deprecated]]` (C++14),
 
 ## Decision
 
-Three attributes over one mechanism: a declaration carries a diagnostic
-instead of a body.
+A declaration carries a diagnostic instead of a body, and one attribute
+per state says which diagnostic. Working spelling:
 
 ```wado
 #[not_provided("argument order is a known trap; write `map(f).unwrap_or(v)`")]
@@ -50,29 +49,25 @@ error: `Option::map_or` is not provided: argument order is a known trap; write `
 error: `Option::into_result` was removed in 0.5.0: use `Option::ok_or`
 ```
 
-`#[deprecated(since = "...", "...")]` is the third member — still callable,
-reported as a warning — and is left to a later WEP. It is named here because
-the three share one implementation and one place in `wado doc`, and because
-the shape of the first two is chosen to leave room for it.
+### One attribute per state
 
-### Why three attributes rather than one with a state argument
+The states differ in what they must carry, not only in wording: a removal
+without a version tells an upgrading reader nothing, while a `since` on
+something that never existed is meaningless. Separate attributes let each
+require exactly its own fields, and the attribute name is then the verb the
+diagnostic needs.
 
 Swift unifies its three under `@available`, but that attribute's primary axis
-is the OS version, and carrying a message is optional there — an
-`unavailable` with no explanation is expressible. The whole value here is that
-the reason is mandatory, and the required information differs per state: a
-removal without a version tells an upgrading reader nothing, while a `since`
-on something that never existed is meaningless. Separate attributes let each
-require exactly its own fields, and the attribute name is already the verb the
-diagnostic needs.
+is the OS version, and a message is optional there — an `unavailable` with no
+explanation is expressible. Mandatory reasons are the whole point here.
 
 ### The reason is mandatory
 
-Each attribute takes its reason as a positional string, matching the existing
+Each attribute takes its reason as a positional string, as
 `#[compiler_item("option")]`, `#[cm("future-write")]`, and
-`#[timeout_ms(5000)]`. An empty or missing string is a compile error: the
-attribute exists for the sentence, and one that omits it is worse than no
-attribute at all, since it asserts a decision was made while hiding it.
+`#[timeout_ms(5000)]` take theirs. An empty or missing string is a compile
+error: an attribute that omits the sentence is worse than no attribute, since
+it asserts a decision was made while hiding it.
 
 `#[removed]` additionally requires `since = "<version>"`, in the
 `#[param(from_env = "PORT")]` key-value form.
@@ -87,52 +82,69 @@ attribute exists to record — Wado does not offer a Rust name under different
 parameters, so writing those parameters out is writing down the thing being
 refused.
 
-`#[removed]` may keep the signature the method had, as a record. It is held to
-the same rule: parsed, not resolved.
+`#[removed]` may keep the signature the method had, as a record, under the
+same rule.
 
 ### Name resolution
 
-The declaration participates in name resolution, which is the entire feature:
-the call site must reach it and receive the reason, not fall through to "no
-method named". It is excluded from everything else — trait implementation
-checking does not count it as satisfying a requirement, and it never reaches
-codegen.
+The declaration participates in name resolution, which is the whole feature:
+the call site reaches it and receives the reason rather than falling through
+to "no method named". It is excluded from everything else — it never satisfies
+a trait requirement, and it never reaches codegen.
+
+### Placement
+
+Module-level `fn`, `impl` method, and trait method.
 
 ### Documentation
 
 `wado doc` renders a "Not provided" and a "Removed" section from these
-declarations. The decision is written once, in the code, and arrives at both
-the caller who tries it and the reader who browses the API.
+declarations, so the decision reaches the reader browsing the API as well as
+the caller who tries the name.
 
-### Placement
-
-Module-level `fn`, `impl` method, and trait method. Types, traits, and globals
-are not covered; extending to them is mechanical and waits for a use.
-
-## Prerequisite: a bodyless function is an error
+### A bodyless function is otherwise an error
 
 These attributes sanction a declaration with no body, so the unsanctioned case
 has to mean something first. It did not: a bodyless `fn` at module level or in
-an `impl` was accepted, bound as a symbol, and reached WIR, where the call it
-could not resolve panicked with `[WIR] unresolved Call` (issue #2035).
+an `impl` was accepted and reached WIR, where the call it could not resolve
+panicked (issue #2035). A function with no body is now rejected unless
+something supplies one — a Component Model binding (`#[cm]` / `#[canonical]`),
+a `core:builtin` intrinsic, a binding or wasm-asset module, or a
+trait/interface method declaration. The two attributes join that list.
 
-`analyze` now rejects a function with no body unless something supplies one —
-a Component Model binding (`#[cm]` / `#[canonical]`), a `core:builtin`
-intrinsic, a binding or wasm-asset module, or a trait/interface method
-declaration. The two attributes above join that list.
+## Roadmap
 
-## Alternatives considered
+1. Settle the attribute spelling (see Known gaps). Nothing below starts until
+   the names are fixed, since each step writes them into source.
+2. Parse both attributes on a bodyless `fn` at module level, in an `impl`, and
+   in a `trait`, rejecting a missing or empty reason and a `#[removed]` with
+   no `since`. Done when a declaration carrying either parses and a
+   malformed one is diagnosed.
+3. Carry them through name resolution so a call reaches the declaration and
+   reports the reason, and so nothing else sees the name — no trait
+   requirement satisfied, nothing emitted. Done when a call to a
+   `#[not_provided]` method reports its reason and an `impl` carrying one does
+   not count as implementing it.
+4. Mark the methods Wado has already decided against, starting with
+   `Option::map_or` and `Option::map_or_else` (see
+   [WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)).
+   Done when calling either reports the reason rather than "no method named".
+5. Render the two `wado doc` sections. Done when a module declaring either
+   attribute shows it in generated documentation.
 
-**Leave it to documentation.** What the caller meets is the compiler, and the
-compiler said "no method named `map_or`" — indistinguishable from an
-oversight. A decision that only a design document carries is a decision the
-caller never receives.
+## Known gaps
 
-**One `#[unavailable(state, "...")]` attribute.** Nesting the state costs a
-level of syntax on every use, and the per-state required fields still have to
-be checked separately. The attribute name is free; spending it on the verb is
-the better trade.
-
-**Infer "removed" from a `since` argument on `#[not_provided]`.** Compact and
-obscure: two materially different statements would differ only by the presence
-of an optional argument.
+- The attribute names are not settled. `not_provided` / `removed` are the
+  working spelling used above; the alternatives raised are a single
+  `#[unavailable(state, "...")]` carrying the state as an argument, and
+  inferring "removed" from the presence of `since`. Closing this is a naming
+  call, and every step of the roadmap depends on it.
+- `#[deprecated(since = "...", "...")]` — still callable, reported as a
+  warning — is the third member of the family and is not designed here. It
+  shares the mechanism and the `wado doc` placement; what it needs beyond them
+  is a warning path and a decision on whether to match Rust's `note = "..."`
+  argument spelling.
+- Types, traits, and globals cannot carry these attributes. Extending to them
+  looks mechanical, and no use has asked for it.
+- Whether a `#[removed]` declaration is ever pruned, and on what schedule, is
+  undecided. Left alone, they accumulate.
