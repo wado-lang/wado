@@ -599,7 +599,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // type and buries the one diagnostic that names the cause.
             let filled = self
                 .declared_default_type_arg(def, slot, &resolved)
-                .or_else(|| self.declared_type_param_at(def, slot))
+                .or_else(|| {
+                    self.type_lookup()
+                        .declared_type_param_ids(def)?
+                        .get(slot)
+                        .copied()
+                })
                 .unwrap_or(TypeTable::ERROR);
             resolved.push(filled);
         }
@@ -607,26 +612,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Run `body` while `def`'s declared defaults count as being expanded.
-    /// `None` when they already are, which is a default that names `def`.
+    /// `None`, reported at `span`, when they already are: a default names `def`.
     fn expanding_defaults_of<R>(
         &mut self,
         def: DefId,
+        span: Span,
         body: impl FnOnce(&mut Self) -> R,
     ) -> Option<R> {
         if !self.expanding_type_param_defaults.insert(def) {
+            let name = self.tysys.resolutions.defs().name(def).to_string();
+            let _ = self.emit(TypeError::RecursiveTypeParamDefault { name, span });
             return None;
         }
         let out = body(self);
         self.expanding_type_param_defaults.shift_remove(&def);
         Some(out)
-    }
-
-    /// `def`'s own parameter in `slot`, as the type it stands for.
-    fn declared_type_param_at(&self, def: DefId, slot: usize) -> Option<TypeId> {
-        self.type_lookup()
-            .declared_type_param_ids(def)?
-            .get(slot)
-            .copied()
     }
 
     /// The type `def`'s slot takes from the `= Default` it declared, given the
@@ -646,16 +646,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params = self.type_lookup().declared_type_params(def)?;
         let default = params.get(slot)?.1.clone()?;
         let own = self.type_lookup().declared_type_param_ids(def)?.to_vec();
-        let Some(resolved) = self.expanding_defaults_of(def, |e| {
+        let resolved = self.expanding_defaults_of(def, default.span(), |e| {
             e.with_declared_type_params(def, |e| e.resolve_type(&default))
-        }) else {
-            let _ = self.emit(TypeError::RecursiveTypeParamDefault {
-                name: self.get_type_name(&default),
-                span: default.span(),
-            });
-            return None;
-        };
-        let resolved = resolved?;
+        })??;
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
             // name that reached nothing is named at the declaration instead.
@@ -714,20 +707,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Every argument here is one the declaration wrote, so the whole
                 // application resolves under the declaration's own parameters.
                 if let Some(args) = self.type_lookup().type_args_with_defaults(def, &[]) {
-                    let expanded = self.expanding_defaults_of(def, |e| {
-                        e.with_declared_type_params(def, |e| {
-                            e.resolve_generic_type_at(site, name, &args, span)
+                    return self
+                        .expanding_defaults_of(def, span, |e| {
+                            e.with_declared_type_params(def, |e| {
+                                e.resolve_generic_type_at(site, name, &args, span)
+                            })
+                            .unwrap_or_else(|| e.resolve_generic_type_at(site, name, &args, span))
                         })
-                        .unwrap_or_else(|| e.resolve_generic_type_at(site, name, &args, span))
-                    });
-                    let Some(type_id) = expanded else {
-                        let _ = self.emit(TypeError::RecursiveTypeParamDefault {
-                            name: name.to_string(),
-                            span,
-                        });
-                        return TypeTable::ERROR;
-                    };
-                    return type_id;
+                        .unwrap_or(TypeTable::ERROR);
                 }
                 if enforce_arity {
                     let _ = self.emit(TypeError::MissingTypeArguments {
