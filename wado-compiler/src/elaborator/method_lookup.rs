@@ -17,12 +17,10 @@ use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTab
 use crate::token::Span;
 
 use super::Elaborator;
-<<<<<<< HEAD
-use super::call::{DefaultTypeBinding, SettledAs, slot_type_bindings};
-||||||| 015a274d429
-=======
-use super::call::{merge_turbofish_type_args, turbofish_leaves_slot};
->>>>>>> origin/main
+use super::call::{
+    DefaultTypeBinding, SettledAs, merge_turbofish_type_args, slot_type_bindings,
+    turbofish_leaves_slot,
+};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1288,7 +1286,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         filled
     }
 
-<<<<<<< HEAD
     /// Resolve each method type parameter's declared type default, with `Self`
     /// set to the concrete receiver and `resolving_home` pointed at the
     /// declaring module — a default may name a type private to that module
@@ -1410,8 +1407,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 known[i] = default_ty;
             }
         }
-||||||| 015a274d429
-=======
+    }
+
     /// A method call's type arguments: what its turbofish names, plus inference
     /// for each `_`, which reaches here as [`TypeTable::UNKNOWN`] in `explicit`.
     fn resolve_method_type_args(
@@ -1446,7 +1443,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.enforce_type_arg_bounds(own_params, &type_args, span);
         }
         (type_args, subst)
->>>>>>> origin/main
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -3297,32 +3293,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // from the `operator_dispatch` recorded above; the index was resolved
         // there for its side effects.
 
-<<<<<<< HEAD
-        for (i, a) in method_call.args.iter().enumerate() {
-            let expected = param_types.get(i).copied();
-            self.resolve_expr(a, ctx, expected);
-        }
-
-        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
-||||||| 015a274d429
-        for (i, a) in method_call.args.iter().enumerate() {
-            let expected = param_types.get(i).copied();
-            self.resolve_expr(a, ctx, expected);
-        }
-
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-=======
         // A `_` resolves to UNKNOWN, and inference fills it below.
-        let mut type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
->>>>>>> origin/main
+        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
 
         // This path answers the call, so it runs the method's own inference too:
         // a subscript receiver does not decide whether an argument gets a type.

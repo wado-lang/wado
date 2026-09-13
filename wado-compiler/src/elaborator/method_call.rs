@@ -27,14 +27,7 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-<<<<<<< HEAD
-use crate::elaborator::call::{
-    merge_turbofish_type_args, slot_type_bindings, turbofish_has_hole, turbofish_holes,
-};
-||||||| 015a274d429
-use crate::elaborator::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
-=======
->>>>>>> origin/main
+use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -196,40 +189,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
-<<<<<<< HEAD
-        // A `_` resolves to UNKNOWN here; its position is recorded in the hole
-        // mask below so the dispatch fills it from inference.
-        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
-        // Build the mask only for the `_` case; an empty vec (no allocation)
-        // marks "no holes" for the fully-explicit common path.
-        let type_arg_holes = if turbofish_has_hole(&method_call.type_args) {
-            turbofish_holes(&method_call.type_args)
-        } else {
-            Vec::new()
-        };
-||||||| 015a274d429
-        // A `_` resolves to UNKNOWN here; its position is recorded in the hole
-        // mask below so the dispatch fills it from inference.
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-        // Build the mask only for the `_` case; an empty vec (no allocation)
-        // marks "no holes" for the fully-explicit common path.
-        let type_arg_holes = if turbofish_has_hole(&method_call.type_args) {
-            turbofish_holes(&method_call.type_args)
-        } else {
-            Vec::new()
-        };
-=======
         // A `_` resolves to UNKNOWN, so these are their own hole mask.
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
->>>>>>> origin/main
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
 
         let outcome = self.resolve_method_call_with(
             MethodCallInput {
@@ -757,7 +718,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let known = if !type_args.is_empty() && !type_arg_holes.iter().any(|&h| h) {
+            let known = if !turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 type_args.clone()
             } else {
                 let mut infer =
@@ -847,33 +808,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         receiver = adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table);
 
-<<<<<<< HEAD
-        let mut subst_ctx = SubstitutionContext::new();
-
-        // Inference runs when the turbofish is omitted entirely or carries an
-        // explicit `_` placeholder; in the latter case the inferred holes are
-        // merged into the explicit args, which always win.
-        let has_hole = type_arg_holes.iter().any(|&h| h);
         // `m::<i32, bool>()` spells one argument per pack element; the slot
         // holds the tuple, which is also the shape inference produces.
         let mut type_args = type_args;
         self.group_variadic_type_args_of(&method_own_params, &mut type_args);
-        let method_type_args = if type_args.is_empty() || has_hole {
-            let inferred = self.infer_method_type_args(MethodInferenceInput {
-||||||| 015a274d429
-        let mut subst_ctx = SubstitutionContext::new();
-
-        // Inference runs when the turbofish is omitted entirely or carries an
-        // explicit `_` placeholder; in the latter case the inferred holes are
-        // merged into the explicit args, which always win.
-        let has_hole = type_arg_holes.iter().any(|&h| h);
-        let method_type_args = if type_args.is_empty() || has_hole {
-            let inferred = self.infer_method_type_args(MethodInferenceInput {
-=======
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
->>>>>>> origin/main
                 receiver_type: receiver,
                 method_name,
                 slots: &method_type_param_ids,
@@ -1362,18 +1303,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 method_id,
                 call_id: None,
-<<<<<<< HEAD
                 // Reify pads this call under the `CallExpr`, where the static
                 // dispatch below is filed, so the walk is keyed there.
                 defaults_site: Some(call_id),
-                type_args: type_args.clone(),
-                type_arg_holes: vec![],
-||||||| 015a274d429
-                type_args: type_args.clone(),
-                type_arg_holes: vec![],
-=======
                 type_args,
->>>>>>> origin/main
                 args: rest,
                 expected_type,
                 span,
@@ -1809,18 +1742,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .is_some_and(|sig| sig.declaring_slot_count > 0);
         if let Some(sig) = callee_sig
-<<<<<<< HEAD
-            && static_call.type_args.is_empty()
-            && let Some(own) = sig.own_params.first()
-||||||| 015a274d429
-            && static_call.type_args.is_empty()
-            && sig.declaring_slot_count > 0
-            && let Some(own) = sig.own_params.first()
-=======
             && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
-            && sig.declaring_slot_count > 0
             && !sig.own_params.is_empty()
->>>>>>> origin/main
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
             let own_ids = sig.own_type_param_ids();
@@ -1838,47 +1761,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a block declaring slots of its own rejected the call the same
             // declaration accepts on a receiver that declares none.
             let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
-<<<<<<< HEAD
-            if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
-                method_type_args = inferred;
-                let declaring_args = self
-                    .receiver_declaring_args(Some(target_type_id), &[])
-                    .unwrap_or_default();
-                let declaring = sig
-                    .declaring_impl
-                    .and_then(|id| self.tysys.signatures.impl_sig(id))
-                    .cloned();
-                let instantiated = sig.instantiate_call_with(
-                    &self.tysys.type_table,
-                    declaring.as_ref(),
-                    &declaring_args,
-                    &method_type_args,
-                );
-                param_types = instantiated.param_types;
-                self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
-            } else if strict {
-||||||| 015a274d429
-            if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
-                method_type_args = inferred;
-                let declaring_args = self
-                    .receiver_declaring_args(Some(target_type_id), &[])
-                    .unwrap_or_default();
-                let declaring = sig
-                    .declaring_impl
-                    .and_then(|id| self.tysys.signatures.impl_sig(id))
-                    .cloned();
-                let instantiated = sig.instantiate_call_with(
-                    &self.tysys.type_table,
-                    declaring.as_ref(),
-                    &declaring_args,
-                    &method_type_args,
-                );
-                param_types = instantiated.param_types;
-                self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
-            } else {
-=======
             // A slot the turbofish names was substituted into `param_types`
-            // above, so inference has nothing left to bind for it.
+            // above, so inference has nothing left to bind for it. A block
+            // declaring no slot of its own leaves the method's to its type
+            // default, which is not the arguments' to answer.
             let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
                 !bindings.contains_key(id)
                     && method_type_args
@@ -1887,8 +1773,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             if let Some((i, _)) = unanswered
                 && !defaulted
+                && strict
             {
->>>>>>> origin/main
                 let _ = self.emit(TypeError::UninferredStaticTypeArg {
                     receiver,
                     method: static_call.method.clone(),

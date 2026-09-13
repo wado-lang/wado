@@ -754,11 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Read before the instantiation below, which answers a named slot with
         // it. A `_` resolves to UNKNOWN.
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -831,17 +827,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Unit
                 );
                 if !payload_is_unit {
-<<<<<<< HEAD
-                    let variant_type_args: Vec<TypeId> =
-                        self.resolve_turbofish_args(&call.type_args);
-||||||| 015a274d429
-                    let variant_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
-=======
->>>>>>> origin/main
                     let mut payload_type = case_data.payload;
                     if !type_args.is_empty() {
                         payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
@@ -954,90 +939,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
-<<<<<<< HEAD
-                // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
-                let mut method_type_args: Vec<TypeId> =
-                    self.resolve_turbofish_args(&call.type_args);
-                // Impl-level type args inferred from the LHS / receiver type.
-                // Only populated by `infer_static_method_type_args`; the
-                // explicit `call.type_args` only carries method-level args.
-                let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // Omitted turbofish infers both levels; an explicit `_` fills
-                // only the hole slots (see `infer_static_call_type_args`).
-                if method_type_args.is_empty() {
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    impl_type_args_inferred = impl_args;
-                    method_type_args = method_args;
-                } else if turbofish_has_hole(&call.type_args) {
-                    // Partial method-level turbofish (`Type::m::<_, U>(..)`):
-                    // fill the `_` slots from inference, explicit args stay put.
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    if impl_type_args_inferred.is_empty() {
-                        impl_type_args_inferred = impl_args;
-                    }
-                    let holes = turbofish_holes(&call.type_args);
-                    merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
-                }
-||||||| 015a274d429
-                // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
-                let mut method_type_args: Vec<TypeId> = call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect();
-                // Impl-level type args inferred from the LHS / receiver type.
-                // Only populated by `infer_static_method_type_args`; the
-                // explicit `call.type_args` only carries method-level args.
-                let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // Omitted turbofish infers both levels; an explicit `_` fills
-                // only the hole slots (see `infer_static_call_type_args`).
-                if method_type_args.is_empty() {
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    impl_type_args_inferred = impl_args;
-                    method_type_args = method_args;
-                } else if turbofish_has_hole(&call.type_args) {
-                    // Partial method-level turbofish (`Type::m::<_, U>(..)`):
-                    // fill the `_` slots from inference, explicit args stay put.
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    if impl_type_args_inferred.is_empty() {
-                        impl_type_args_inferred = impl_args;
-                    }
-                    let holes = turbofish_holes(&call.type_args);
-                    merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
-                }
-=======
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -1053,7 +954,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.span,
                     type_args.clone(),
                 );
->>>>>>> origin/main
                 // The method's own parameters, in the dense space its type
                 // arguments are indexed by — an effect or `fn`-bound parameter
                 // holds no slot in one.
@@ -1544,18 +1444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-<<<<<<< HEAD
-                    let mut method_type_args: Vec<TypeId> =
-                        self.resolve_turbofish_args(&call.type_args);
-||||||| 015a274d429
-                    let mut method_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
-=======
                     let method_type_args = type_args.clone();
->>>>>>> origin/main
 
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at
@@ -1901,18 +1790,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
-<<<<<<< HEAD
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
-||||||| 015a274d429
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-=======
->>>>>>> origin/main
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
         // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)

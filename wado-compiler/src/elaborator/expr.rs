@@ -17,12 +17,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-<<<<<<< HEAD
-use super::call::{DefaultTypeBinding, slot_type_bindings, turbofish_holes};
-||||||| 015a274d429
-use super::call::turbofish_holes;
-=======
->>>>>>> origin/main
+use super::call::{DefaultTypeBinding, slot_type_bindings};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
