@@ -793,11 +793,13 @@ call to it reports why instead of "no method named". See
 [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 
 ```wado
-#[unavailable("write `open_with(Options::default())` instead")]
-pub fn open(&self);                         // a name that never existed
+impl File {
+    #[unavailable("write `open_with(Options::default())` instead")]
+    pub fn open(&self);                     // a name that never existed
 
-#[unavailable("removed in 0.5.0; use `open_with`")]
-pub fn open_timeout(&self);                 // a name that was taken out
+    #[unavailable("removed in 0.5.0; use `open_with`")]
+    pub fn open_timeout(&self);             // a name that was taken out
+}
 ```
 
 The reason is required, and it is the attribute's only argument: a removal

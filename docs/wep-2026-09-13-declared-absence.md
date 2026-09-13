@@ -100,8 +100,8 @@ it never reaches codegen.
 ### Placement
 
 Module-level `fn`, `impl` method, and trait method. Anywhere the attribute is
-not yet read, writing it is an error rather than a line nobody acts on; Known
-gaps has the reach still to come. `export` is refused with it: the keyword
+not yet read, writing it is an error rather than a line nobody acts on. Known
+gaps names the placements still to come. `export` is refused with it: the keyword
 lowers a function at the component boundary, and this declaration has none to
 lower.
 
