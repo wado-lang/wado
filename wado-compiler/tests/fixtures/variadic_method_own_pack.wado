@@ -1,0 +1,47 @@
+//! A method declares its own variadic pack, alongside whatever its `impl`
+//! block declares. The two are separate spaces: the block's parameter comes
+//! from the receiver, the method's pack from the call.
+//!
+//! Both ways of settling it are read here. A turbofish spells one argument per
+//! element and the slot holds the tuple; inference reads the tuple off the
+//! argument. Either way `[..U]` splices into the parameter type — substituting
+//! the pack in without splicing made the parameter `[[i32, bool]]`, so every
+//! call reported a type mismatch against the tuple it had just passed.
+
+struct Box2<T> {
+    v: T,
+}
+
+impl<T: Default> Box2<T> {
+    fn spread<..U: Default>(&self, u: [..U]) -> String {
+        let mut s = `${self.v:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+
+    // The pack in a body, where the method's own instantiation settles it.
+    fn made<..U: Default>(&self) -> String {
+        let u: [..U] = [..U::default()];
+        let mut s = `${self.v:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+}
+
+test "a method's own pack is settled by a turbofish" {
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.spread::<i32, bool>([0, false]) == "10false";
+    assert bi.spread::<String>(["x"]) == "1\"x\"";
+    assert bi.made::<i32, bool>() == "10false";
+    assert bi.made::<String>() == "1\"\"";
+}
+
+test "a method's own pack is settled by the argument" {
+    let bs: Box2<String> = Box2 { v: "a" };
+    assert bs.spread([0, false]) == "\"a\"0false";
+    assert bs.spread([1]) == "\"a\"1";
+}

@@ -749,11 +749,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Unit
                 );
                 if !payload_is_unit {
-                    let variant_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
+                    let variant_type_args: Vec<TypeId> =
+                        self.resolve_turbofish_args(&call.type_args);
                     let mut payload_type = case_data.payload;
                     if !variant_type_args.is_empty() {
                         payload_type = self
@@ -896,11 +893,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
-                let mut method_type_args: Vec<TypeId> = call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect();
+                let mut method_type_args: Vec<TypeId> =
+                    self.resolve_turbofish_args(&call.type_args);
                 // Impl-level type args inferred from the LHS / receiver type.
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
@@ -1405,11 +1399,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    let mut method_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
+                    let mut method_type_args: Vec<TypeId> =
+                        self.resolve_turbofish_args(&call.type_args);
 
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at
@@ -1758,11 +1749,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
         // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)
@@ -3107,11 +3094,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the call has no pack or the args are already in per-param form (arg count
     /// ≤ param count), so inference results and single-arg packs pass through.
     fn group_variadic_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
-        let real: Vec<ast::GenericParam> = self
-            .lookup_function_type_params(callee)
-            .into_iter()
-            .filter(|p| !p.is_effect)
-            .collect();
+        let declared = self.lookup_function_type_params(callee);
+        self.group_variadic_type_args_of(&declared, type_args);
+    }
+
+    /// [`Self::group_variadic_type_args`] against a declaration already at
+    /// hand — a method's own parameters, which no callee lookup answers for.
+    pub(super) fn group_variadic_type_args_of(
+        &mut self,
+        declared: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
+        let real: Vec<&ast::GenericParam> = declared.iter().filter(|p| !p.is_effect).collect();
         let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
@@ -3586,11 +3580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
-            let mut method_type_args: Vec<TypeId> = call
-                .type_args
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect();
+            let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
 
             // If no explicit type args, infer method-level type params from argument
             // types via the shared `InferCtx` solver. `find_method_in_trait_bounds`

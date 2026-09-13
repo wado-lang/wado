@@ -2103,8 +2103,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                         }
                     }
+                    // A `trait` and an `interface` are in the type namespace
+                    // without being types. This validator only knows names, so
+                    // it passes them on; `reject_unresolved_annotation` has the
+                    // declaration and says what each one is.
                     Item::Trait(trait_decl) => {
                         module_known_names.insert(trait_decl.name.clone());
+                    }
+                    Item::Interface(interface_decl) => {
+                        module_known_names.insert(interface_decl.name.clone());
                     }
                     _ => {}
                 }

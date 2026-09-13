@@ -1345,7 +1345,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut known,
         );
-        slot_type_bindings(&self.tysys.type_table, own_ids, &known)
+        let mut bindings = slot_type_bindings(&self.tysys.type_table, own_ids, &known);
+        // A pack stays abstract through the walk — the call settles what it
+        // holds, never what it is — so `U::default()` dispatches on its bound
+        // rather than on a receiver. The declaration wrote that bound, and
+        // nothing at the call site carries it.
+        for binding in &mut bindings {
+            if binding.is_pack
+                && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
+            {
+                binding.bounds = param.bounds.clone();
+            }
+        }
+        bindings
     }
 
     /// The type arguments a value default resolves against, with a slot that
@@ -3277,6 +3289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .into_iter()
                 .zip(method_param_defaults)
                 .collect(),
+            param_types.clone(),
             defaults_module
                 .or_else(|| impl_module.clone())
                 .unwrap_or_else(|| self.current_module_source.clone()),

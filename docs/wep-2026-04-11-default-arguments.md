@@ -462,6 +462,7 @@ type arguments, in the declaring module and across a module boundary.
 | Trait method — method's own      | ✅        | ✅                          | ✅                               | ✅                  |
 | Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
 | Free function — variadic pack    | ✅        | ✅                          | —                                | ✅                  |
+| Instance method — variadic pack  | ✅        | ✅                          | —                                | ✅                  |
 
 ᴿ The receiver settles the `impl` block's parameters, so the column describes
 how the receiver's own type was settled. ᴬ The literal's annotation names the
@@ -615,12 +616,6 @@ let resp = Fetch::fetch(url, init).read();
 A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that
 had nothing to resolve against. The second diagnostic is the one to read.
-
-A method declaring its own variadic pack (`impl Box<T> { fn m<..U>(u: [..U]) }`)
-binds the pack to the whole tuple instead of splicing it, with or without a
-turbofish, so the call reports a type mismatch. That is the pack machinery
-rather than defaults — no method-level pack works today, defaulted or not — and
-the row above covers free functions for that reason.
 
 ## See Also
 

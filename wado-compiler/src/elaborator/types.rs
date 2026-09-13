@@ -286,6 +286,16 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A type position names an `interface` or a `trait`. Both share the type
+    /// namespace, and neither denotes a type.
+    NotAType {
+        name: String,
+        /// What the declaration is, with its article: `an interface` or
+        /// `a trait`.
+        kind: &'static str,
+        span: Span,
+    },
+
     /// An `impl` head names a type the module does not declare. A block's own
     /// `impl<…>` list is the only way to introduce a type parameter.
     UndeclaredImplTypeParam {
@@ -1163,6 +1173,14 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::NotAType { name, kind, span } => (
+                Code::UnknownType,
+                format!(
+                    "`{name}` is {kind}, not a type: it names a set of operations, \
+                     and no value has it as its type"
+                ),
+                *span,
+            ),
             TypeError::UndeclaredImplTypeParam { name, span } => (
                 Code::UnknownType,
                 format!(

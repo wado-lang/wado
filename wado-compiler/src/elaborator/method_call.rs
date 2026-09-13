@@ -177,11 +177,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A `_` resolves to UNKNOWN here; its position is recorded in the hole
         // mask below so the dispatch fills it from inference.
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
         // Build the mask only for the `_` case; an empty vec (no allocation)
         // marks "no holes" for the fully-explicit common path.
         let type_arg_holes = if turbofish_has_hole(&method_call.type_args) {
@@ -811,6 +807,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // explicit `_` placeholder; in the latter case the inferred holes are
         // merged into the explicit args, which always win.
         let has_hole = type_arg_holes.iter().any(|&h| h);
+        // `m::<i32, bool>()` spells one argument per pack element; the slot
+        // holds the tuple, which is also the shape inference produces.
+        let mut type_args = type_args;
+        self.group_variadic_type_args_of(&method_own_params, &mut type_args);
         let method_type_args = if type_args.is_empty() || has_hole {
             let inferred = self.infer_method_type_args(MethodInferenceInput {
                 receiver_type: receiver,
@@ -1164,6 +1164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_ref_impl,
                 param_is_mut,
                 defaults,
+                substituted_param_types.clone(),
                 callee_module,
                 return_type,
                 method_type_args,
@@ -1240,11 +1241,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args: None,
             display: self.declared_trait_name(trait_name),
         };
-        let type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // The edge for jump-to-definition is recorded against the method name.
         let method_id = match &call.callee {
             ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
@@ -1487,11 +1484,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };
-                let method_type_args: Vec<TypeId> = static_call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect();
+                let method_type_args: Vec<TypeId> =
+                    self.resolve_turbofish_args(&static_call.type_args);
                 return self.resolve_trait_qualified_call_parts(
                     required,
                     &static_call.method.clone(),
@@ -1687,11 +1681,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve method-level type arguments
-        let mut method_type_args: Vec<TypeId> = static_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&static_call.type_args);
 
         // Not folded into `lookup_static_method_param_types`: variant
         // constructors need its answer to stay empty.

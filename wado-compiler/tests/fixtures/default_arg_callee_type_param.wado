@@ -131,6 +131,18 @@ fn headed<A: Default, ..T: Default>(a: A = A::default(), t: [..T] = [..T::defaul
     return s;
 }
 
+impl<T: Default> Box2<T> {
+    // A pack the method declares itself, which the `impl`'s own parameter does
+    // not answer for.
+    fn spread<..U: Default>(&self, u: [..U] = [..U::default()]) -> String {
+        let mut s = `${self.v:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+}
+
 // A field default: the parameter comes from the annotation, or from a sibling
 // field where the literal carries none.
 struct Holder<T: Default> {
@@ -210,6 +222,10 @@ test "a variadic pack's default names the pack it stands for" {
     assert packed::<i32, String>("d:", [7, "x"]) == "d:7\"x\"";
     assert headed::<i32, String, bool>() == "0\"\"false";
     assert headed::<String, i32>() == "\"\"0";
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.spread::<i32, bool>() == "10false";
+    assert bi.spread::<String>() == "1\"\"";
+    assert bi.spread([7, "x"]) == "17\"x\"";
 }
 
 // From the annotation, then from a sibling field.

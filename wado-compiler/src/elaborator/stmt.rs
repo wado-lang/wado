@@ -399,6 +399,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .trait_ctx
                         .type_params
                         .contains_key(&named.name)
+                {
+                    return;
+                }
+                if self.reject_non_type_decl(named.id, &named.name, named.span)
                     || self.type_decl_at(Some(named.id), &named.name).is_some()
                 {
                     return;
@@ -422,13 +426,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .trait_ctx
                         .type_params
                         .contains_key(&generic.name)
-                    && self.type_decl_at(Some(generic.id), &generic.name).is_none()
                 {
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: generic.name.clone(),
-                        span: generic.span,
-                    });
-                    return;
+                    if self.reject_non_type_decl(generic.id, &generic.name, generic.span) {
+                        return;
+                    }
+                    if self.type_decl_at(Some(generic.id), &generic.name).is_none() {
+                        let _ = self.emit(TypeError::UnknownType {
+                            name: generic.name.clone(),
+                            span: generic.span,
+                        });
+                        return;
+                    }
                 }
                 for arg in &generic.args {
                     self.reject_unresolved_annotation(arg);

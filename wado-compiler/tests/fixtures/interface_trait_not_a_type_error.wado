@@ -1,0 +1,37 @@
+// An `interface` and a `trait` are declared in the type namespace — one name
+// reaches one declaration wherever it is written — and neither denotes a type.
+// A type position naming one says so where it was written.
+//
+// One annotation per file, because the annotation check stops at the first
+// error reported. The turbofish next to it is a separate route: type arguments
+// are resolved by the call, not by the annotation walk, and an unreported one
+// there resolves to `unknown`, which satisfies every bound. `mk::<Stdout>()`
+// passed its `T: Default` check that way and reached monomorphization, where
+// no impl exists and the compiler panicked.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+fn mk<T: Default>() -> T {
+    return T::default();
+}
+
+export fn run() {
+    let a = mk::<Counter>();
+    let b = mk::<Greet>();
+    let c = mk::<List<Greet>>();
+}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    "`Counter` is an interface, not a type",
+    "`Greet` is a trait, not a type"
+  ],
+  "compile_error": "`Counter` is an interface, not a type: it names a set of operations, and no value has it as its type"
+}

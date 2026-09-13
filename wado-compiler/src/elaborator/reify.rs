@@ -8855,7 +8855,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.reify_apply_param_defaults(
             &mut args,
             &dispatch.param_defaults,
-            &[],
+            &dispatch.param_types,
             &dispatch.defaults_module,
             method_call.id,
             method_call.span,

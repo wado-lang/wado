@@ -37,6 +37,10 @@ pub(crate) struct MethodDispatch {
     /// `None` for a required parameter. The name is what a later default
     /// naming this parameter (`fn f(w, h = w)`) is keyed by.
     pub(crate) param_defaults: Vec<(String, Option<Expr>)>,
+    /// The parameter types with this call's type arguments substituted in.
+    /// A default is reified against the type of the parameter it fills, which
+    /// is the only place a settled variadic pack is written down.
+    pub(crate) param_types: Vec<TypeId>,
     /// The module that wrote `param_defaults`, which is where they resolve.
     /// Reify stands in it while reifying one, as the free-function path does
     /// in `reify_pad_args_with_defaults`: a default naming its own module's

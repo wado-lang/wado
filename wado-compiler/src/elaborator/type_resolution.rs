@@ -11,7 +11,7 @@ use super::scope::BinderInScope;
 use super::types::TypeError;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, StoresEntry, TraitBound};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
@@ -441,6 +441,97 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: namespaced.span,
             });
             TypeTable::ERROR
+        }
+    }
+
+    /// What a type position's name denotes where it denotes no type: `an
+    /// interface` or `a trait`. Both share the type namespace — one name, one
+    /// declaration, wherever it is written — and each names a set of
+    /// operations rather than anything a value can be.
+    fn non_type_decl_kind(&self, site: AstId, name: &str) -> Option<&'static str> {
+        if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            return None;
+        }
+        if let Some(def) = self.type_decl_at(Some(site), name) {
+            return match self.tysys.resolutions.defs().kind(def) {
+                DefKind::Effect => Some("an interface"),
+                DefKind::Trait => Some("a trait"),
+                _ => None,
+            };
+        }
+        // The module being walked is not in the environment yet, so its own
+        // symbol table is what answers for what it declares itself.
+        match self.symbol_named(&self.current_module_source, name)?.kind {
+            SymbolKind::Effect(_) => Some("an interface"),
+            SymbolKind::Trait(_) => Some("a trait"),
+            _ => None,
+        }
+    }
+
+    /// Report a type position naming an `interface` or a `trait`, and say
+    /// whether it did.
+    pub(super) fn reject_non_type_decl(&mut self, site: AstId, name: &str, span: Span) -> bool {
+        let Some(kind) = self.non_type_decl_kind(site, name) else {
+            return false;
+        };
+        let _ = self.emit(TypeError::NotAType {
+            name: name.to_string(),
+            kind,
+            span,
+        });
+        true
+    }
+
+    /// The types a turbofish supplies. A type argument naming an `interface`
+    /// or a `trait` is rejected here: left to resolve it comes out `unknown`,
+    /// which satisfies every bound, and the call then fails somewhere with
+    /// nothing pointing back at what was written.
+    pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
+        args.iter()
+            .map(|ty| {
+                self.reject_non_type_in_type(ty);
+                self.resolve_type(ty)
+            })
+            .collect()
+    }
+
+    /// Report every `interface` and `trait` a written type reaches. Unlike an
+    /// annotation, nothing here reports a name no declaration answers — the
+    /// position's own resolution does that.
+    fn reject_non_type_in_type(&mut self, ty: &Type) {
+        match ty {
+            Type::Named(named) => {
+                self.reject_non_type_decl(named.id, &named.name, named.span);
+            }
+            Type::Generic(generic) => {
+                // With the head rejected the arguments are noise.
+                if self.reject_non_type_decl(generic.id, &generic.name, generic.span) {
+                    return;
+                }
+                for arg in &generic.args {
+                    self.reject_non_type_in_type(arg);
+                }
+            }
+            Type::NamespacedGeneric(namespaced) => {
+                for arg in &namespaced.args {
+                    self.reject_non_type_in_type(arg);
+                }
+            }
+            Type::Function(func_ty) => {
+                for param in &func_ty.params {
+                    self.reject_non_type_in_type(param);
+                }
+                self.reject_non_type_in_type(&func_ty.return_type);
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                self.reject_non_type_in_type(inner);
+            }
+            Type::Tuple(elements) => {
+                for element in elements {
+                    self.reject_non_type_in_type(element);
+                }
+            }
+            Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 
