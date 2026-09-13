@@ -40,7 +40,7 @@ that diagnostic:
 #[unavailable("argument order is a known trap; write `map(f).unwrap_or(v)`")]
 fn map_or();
 
-#[unavailable(removed, since = "0.5.0", "use `Option::ok_or`")]
+#[unavailable(removed_since = "0.5.0", "use `Option::ok_or`")]
 fn into_result();
 ```
 
@@ -53,13 +53,14 @@ error: `Option::into_result` was removed in 0.5.0: use `Option::ok_or`
 
 Both states answer the same call the same way — the name resolves, the call is
 an error, and the reason is what the caller reads. What separates them is
-whether the name existed before, which is one word and a version rather than a
-second attribute. Swift reaches the same conclusion from the other direction,
-folding its three states into `@available`.
+whether the name existed before, which is a version rather than a second
+attribute. Swift reaches the same conclusion from the other direction, folding
+its three states into `@available`.
 
-`removed` names the state that existed, and requires `since`. Bare
-`#[unavailable("...")]` is the state that never existed, where a `since` would
-have nothing to date; writing one there is an error.
+`removed_since` carries that version, and naming the state in the key is what
+lets one argument do the work of two: a bare `since` would not say which state
+it dates, since the attribute's own name covers both. Without the key the name
+never existed, and there is nothing to date.
 
 ### The reason is mandatory
 
@@ -69,7 +70,7 @@ The reason is the last argument, a positional string, as
 error: an attribute that omits the sentence is worse than no attribute, since
 it asserts a decision was made while hiding it.
 
-`since` takes the `#[param(from_env = "PORT")]` key-value form.
+`removed_since` takes the `#[param(from_env = "PORT")]` key-value form.
 
 ### The declaration reserves a name, not a signature
 
@@ -80,8 +81,8 @@ surface that rots, and it sits badly with the policy the attribute exists to
 record. Wado does not offer a Rust name under different parameters, so writing
 those parameters out writes down the thing being refused.
 
-A `removed` declaration may keep the signature the method had, as a record,
-under the same rule.
+A `removed_since` declaration may keep the signature the method had, as a
+record, under the same rule.
 
 ### Name resolution
 
@@ -111,9 +112,9 @@ method declaration (issue #2035). `#[unavailable]` joins that list.
 ## Roadmap
 
 1. Parse `#[unavailable]` on a bodyless `fn` at module level, in an `impl`, and
-   in a `trait`, rejecting a missing or empty reason, a `removed` with no
-   `since`, and a `since` without `removed`. Done when a declaration carrying
-   it parses and a malformed one is diagnosed.
+   in a `trait`, rejecting a missing or empty reason and an empty
+   `removed_since`. Done when a declaration carrying it parses and a malformed
+   one is diagnosed.
 2. Carry it through name resolution so a call reaches the declaration and
    reports the reason, and so nothing else sees the name: no trait
    requirement satisfied, nothing emitted. Done when a call to an
@@ -135,5 +136,5 @@ method declaration (issue #2035). `#[unavailable]` joins that list.
   above for leaving absences out does not carry to it.
 - Types, traits, and globals cannot carry the attribute. Extending to them
   looks mechanical, and no use has asked for it.
-- Whether a `removed` declaration is ever pruned, and on what schedule, is
-  undecided. Left alone, they accumulate.
+- Whether a `removed_since` declaration is ever pruned, and on what schedule,
+  is undecided. Left alone, they accumulate.
