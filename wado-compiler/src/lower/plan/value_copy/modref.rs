@@ -93,9 +93,9 @@ enum WholeOf {
 /// A known callee's own writes are still unsettled while its body is being
 /// scanned, so a field this body's argument projects through — `outer.inner`
 /// in `callee(&mut outer.inner)` — is added to this function's own `Writes`
-/// only once the fixpoint shows `callee` writes something inside `handed`
-/// (`Inner` here). Recording it unconditionally would claim a write neither
-/// this function nor its callee makes, and reject a share that is safe.
+/// only once the fixpoint shows `callee` writes anything at all. Recording it
+/// unconditionally would claim a write neither this function nor its callee
+/// makes, and reject a share that is safe.
 struct PendingProjection {
     /// The `(owner, field)` pairs the argument's path projects through, added
     /// together once the condition below is met.
@@ -103,8 +103,6 @@ struct PendingProjection {
     /// A whole-root write to add instead, for a path with no field-typed key
     /// of its own — reached only through an `Index` or `Variant` step.
     whole: Option<TypeId>,
-    /// The type handed to `callee`; its writes are asked about this type.
-    handed: TypeId,
     callee: (ModuleSource, String),
 }
 
@@ -316,7 +314,6 @@ impl Walker<'_> {
                 self.pending.push(PendingProjection {
                     fields: Vec::new(),
                     whole: Some(lent),
-                    handed,
                     callee,
                 });
             }
@@ -335,7 +332,6 @@ impl Walker<'_> {
                 self.pending.push(PendingProjection {
                     fields,
                     whole: None,
-                    handed,
                     callee,
                 });
             }
