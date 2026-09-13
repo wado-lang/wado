@@ -8,6 +8,11 @@ The Wado compiler crate.
   are denied at the crate root. A user-facing message goes through `Logger` and
   a developer trace through `compiler_trace!`. An `assert!` is for what only a
   broken stdlib can reach.
+- A phase error words itself once, in its `Diagnostic`. It carries no `Display`:
+  nothing in the crate can print one, and a second wording drifts from the one
+  the user reads. `Display` is for an error the CLI prints itself
+  (`CompileError`, `WitEmitError`), or one whose text a `Diagnostic` builder
+  reads (`LexError`, `LoadError`).
 - `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go

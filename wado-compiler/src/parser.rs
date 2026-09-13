@@ -90,14 +90,22 @@ pub struct ParseError {
     pub span: Span,
 }
 
-impl From<ParseError> for Diagnostic {
-    fn from(e: ParseError) -> Self {
-        Self {
+impl ParseError {
+    /// The diagnostic for this error, attributed to `file` when the caller
+    /// knows one.
+    pub fn diagnostic(&self, file: Option<&str>) -> Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
-            message: format!("parse error: {}", e.message),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            message: format!("parse error: {}", self.message),
+            span: Some(DiagnosticSpan::from_span(&self.span, file)),
         }
+    }
+}
+
+impl From<ParseError> for Diagnostic {
+    fn from(e: ParseError) -> Self {
+        e.diagnostic(None)
     }
 }
 

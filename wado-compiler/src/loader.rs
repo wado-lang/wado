@@ -11,7 +11,7 @@ use crate::hashmap::IndexMap;
 use rustc_hash::FxBuildHasher;
 
 use crate::ast::{AstIdSpace, ImportAttributes, Item, Module, UseDecl};
-use crate::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
 use crate::component_model::SourceInterfaceBatch;
 use crate::kiln::InvocationIndex;
 use crate::lexer::{LexError, lex};
@@ -192,9 +192,20 @@ fn stdlib_identity_message(path: Option<&str>) -> String {
 
 impl std::error::Error for LoadError {}
 
+impl LoadError {
+    /// The code for a variant whose diagnostic message is its `Display` text.
+    fn code(&self) -> Code {
+        match self {
+            LoadError::BindError { .. } => Code::DuplicateDefinition,
+            LoadError::WasmImport { .. } => Code::InvalidSyntax,
+            _ => Code::ModuleNotFound,
+        }
+    }
+}
+
 impl From<LoadError> for Diagnostic {
     fn from(e: LoadError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        use crate::compiler_host::{DiagnosticSpan, Severity};
         match e {
             LoadError::LexError {
                 module_source,
@@ -232,24 +243,6 @@ impl From<LoadError> for Diagnostic {
                     space: AstIdSpace::FRESH,
                 }),
             },
-            LoadError::BindError {
-                module_source,
-                message,
-            } => Self {
-                severity: Severity::Error,
-                code: Code::DuplicateDefinition,
-                message: format!("bind error in {module_source}: {message}"),
-                span: None,
-            },
-            LoadError::WasmImport {
-                ref module_source,
-                ref message,
-            } => Self {
-                severity: Severity::Error,
-                code: Code::InvalidSyntax,
-                message: format!("wasm import error in {module_source}: {message}"),
-                span: None,
-            },
             LoadError::StdlibIdentity {
                 ref path,
                 ref file,
@@ -270,7 +263,7 @@ impl From<LoadError> for Diagnostic {
             },
             ref other => Self {
                 severity: Severity::Error,
-                code: Code::ModuleNotFound,
+                code: other.code(),
                 message: other.to_string(),
                 span: None,
             },

@@ -1133,15 +1133,6 @@ pub(super) fn format_operator_not_applicable(
     }
 }
 
-impl std::fmt::Display for TypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (_, message, span) = self.render();
-        write!(f, "{}:{}: {}", span.line, span.column, message)
-    }
-}
-
-impl std::error::Error for TypeError {}
-
 impl TypeError {
     /// Render this error into its `(code, message, span)` triple — the single
     /// source of truth shared by [`std::fmt::Display`] and the
@@ -3154,19 +3145,16 @@ mod tests {
     }
 
     #[test]
-    fn display_prefixes_span_and_matches_diagnostic_message() {
+    fn diagnostic_carries_message_and_span() {
         let err = TypeError::UnknownType {
             name: "Frobnicate".to_string(),
             span: span(),
         };
 
-        // `Display` prefixes `line:column:` and reuses the canonical message.
-        assert_eq!(err.to_string(), "7:3: unknown type 'Frobnicate'");
-
-        // `Display` and the `Diagnostic` conversion are a single source of
-        // truth: the rendered message body is byte-for-byte identical.
         let diag: Diagnostic = err.into();
         assert_eq!(diag.message, "unknown type 'Frobnicate'");
+        let diag_span = diag.span.expect("span");
+        assert_eq!((diag_span.line, diag_span.column), (7, 3));
     }
 
     #[test]

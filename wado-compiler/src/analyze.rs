@@ -139,9 +139,8 @@ pub enum AnalyzeError {
 }
 
 impl AnalyzeError {
-    /// The code, message, and location this error reports. Both the `Display`
-    /// text and the [`Diagnostic`] are built from it, so they cannot drift.
-    fn report(&self) -> (Code, String, Span) {
+    /// The code, message, and location this error reports.
+    fn render(&self) -> (Code, String, Span) {
         match self {
             AnalyzeError::ModuleNotFound {
                 module_source,
@@ -234,13 +233,6 @@ impl AnalyzeError {
     }
 }
 
-impl std::fmt::Display for AnalyzeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (_, message, span) = self.report();
-        write!(f, "{}:{}: {message}", span.line, span.column)
-    }
-}
-
 fn reexport_widens_message(
     name: &str,
     module_source: &ModuleSource,
@@ -278,11 +270,9 @@ pub(crate) fn symbol_not_visible_message(
     }
 }
 
-impl std::error::Error for AnalyzeError {}
-
 impl From<AnalyzeError> for Diagnostic {
     fn from(e: AnalyzeError) -> Self {
-        let (code, message, span) = e.report();
+        let (code, message, span) = e.render();
         Diagnostic {
             severity: Severity::Error,
             code,
