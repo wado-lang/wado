@@ -1,5 +1,7 @@
 //! Function call resolution.
 
+use std::cell::RefCell;
+
 use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Expr, Type};
@@ -15,7 +17,7 @@ use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope};
+use super::scope::{BinderInScope, Scope, TraitContext};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
@@ -90,6 +92,87 @@ pub(super) enum SigChoice {
     /// None, unless exactly one declares it. The caller has no pick to read, so
     /// answering with one of several names a declaration it may not mean.
     Unique,
+}
+
+/// A type parameter of the declaration that wrote a default, paired with the
+/// type argument the site taking the default settled on.
+#[derive(Debug, Clone)]
+pub(super) struct DefaultTypeBinding {
+    pub(super) name: String,
+    /// What a default dispatching on the parameter has to go on where the
+    /// argument is itself a parameter.
+    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) settled: SettledAs,
+}
+
+/// What a site settled one type parameter to. A pack carries no type here:
+/// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
+#[derive(Debug, Clone)]
+pub(super) enum SettledAs {
+    /// The type argument that filled a scalar slot.
+    Type(TypeId),
+    /// A variadic pack (`..T`).
+    Pack,
+}
+
+impl SettledAs {
+    /// The type the name stands for, where it stands for one.
+    pub(super) fn type_id(&self) -> Option<TypeId> {
+        match self {
+            Self::Type(type_id) => Some(*type_id),
+            Self::Pack => None,
+        }
+    }
+
+    pub(super) fn is_pack(&self) -> bool {
+        matches!(self, Self::Pack)
+    }
+}
+
+/// What `enclosing` declares `type_id` is bound by, found through the name it
+/// knows the type under. Empty where it knows of no such name, which is every
+/// argument that is not one of its own parameters.
+fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::TraitBound> {
+    enclosing
+        .type_params
+        .iter()
+        .find(|(_, binder)| binder.type_id == type_id)
+        .and_then(|(name, _)| enclosing.type_param_bounds.get(name))
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Whether a call supplying `args_len` arguments leaves a defaulted parameter
+/// for a walk to fill. Annotate walks and reify pads on the same answer.
+pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]) -> bool {
+    matches!(params.get(args_len), Some((_, Some(_))))
+}
+
+/// Pair each declared slot with the type argument filling it, under the name
+/// the slot's binder carries. A slot that is no binder — a concrete
+/// instantiation an `impl` target spelled — names nothing and binds nothing.
+pub(super) fn slot_type_bindings(
+    table: &RefCell<TypeTable>,
+    declared: &[TypeId],
+    concrete: &[TypeId],
+) -> Vec<DefaultTypeBinding> {
+    let table = table.borrow();
+    declared
+        .iter()
+        .zip(concrete)
+        .filter_map(|(&slot, &type_id)| {
+            let (name, settled) = match table.get(slot) {
+                ResolvedType::TypeParam { name, .. } => (name, SettledAs::Type(type_id)),
+                ResolvedType::TypePack { name, .. } => (name, SettledAs::Pack),
+                _ => return None,
+            };
+            Some(DefaultTypeBinding {
+                name: name.clone(),
+                bounds: Vec::new(),
+                settled,
+            })
+        })
+        .collect()
 }
 
 /// View of a `ResolvedType::Function` after peeling references and
@@ -584,17 +667,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (WEP 2026-07-31). Routed before the argument walk below because the
         // dispatcher elaborates the non-receiver arguments itself, against the
         // signature it selects.
-        if let Some(pos) = ident.name.find("::")
-            && self.is_trait_instance_method(&ident.name[..pos], &ident.name[pos + 2..])
+        //
+        // The trait is the segment before the method, whatever leads up to it,
+        // so `ns::Trait::method` names the same declaration `Trait::method`
+        // does. Splitting at the path's *first* `::` instead asked whether the
+        // namespace alias declared a method spelled `Trait::method`.
+        if let [.., head, method] = ident.segments.as_slice()
+            && self.is_trait_instance_method_at(head.id, &head.name, &method.name)
         {
-            let (trait_name, method_name) = (
-                ident.name[..pos].to_string(),
-                ident.name[pos + 2..].to_string(),
-            );
-            // The path's leading segment is the trait's reference site.
-            let head_site = ident.segments.first().map(|seg| seg.id);
+            let (trait_name, method_name) = (head.name.clone(), method.name.clone());
+            let head_site = head.id;
             return self.resolve_trait_qualified_call(
-                head_site,
+                Some(head_site),
                 &trait_name,
                 &method_name,
                 call,
@@ -661,11 +745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Read before the instantiation below, which answers a named slot with
         // it. A `_` resolves to UNKNOWN.
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
 
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
@@ -850,6 +930,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
+                // The method's own parameters, in the dense space its type
+                // arguments are indexed by — an effect or `fn`-bound parameter
+                // holds no slot in one.
+                let mtype_params: Vec<ast::GenericParam> = self
+                    .lookup_static_method_type_params(prefix, suffix)
+                    .into_iter()
+                    .filter(ast::GenericParam::is_real_type_param)
+                    .collect();
+                // Before anything counts slots, since a pack's arguments are
+                // one per element until they are grouped.
+                let mut written = type_args.clone();
+                self.group_variadic_type_args_of(&mtype_params, &mut written);
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -863,16 +955,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &args,
                     expected_type,
                     call.span,
-                    type_args.clone(),
+                    written,
                 );
-                // The method's own parameters, in the dense space its type
-                // arguments are indexed by — an effect or `fn`-bound parameter
-                // holds no slot in one.
-                let mtype_params: Vec<ast::GenericParam> = self
-                    .lookup_static_method_type_params(prefix, suffix)
-                    .into_iter()
-                    .filter(ast::GenericParam::is_real_type_param)
-                    .collect();
                 // A method-level parameter bound only through another's
                 // associated type (`..V` off `Holes`) is projected once the
                 // owner is inferred, as the free-function path does; the
@@ -1216,7 +1300,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                     ) {
                         return return_type;
                     }
@@ -1227,7 +1311,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 } else {
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                     ) {
                         return return_type;
                     }
@@ -1242,7 +1326,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
                 if let Some(return_type) = self.resolve_named_type_blanket_static(
-                    prefix, suffix, call.id, &args, &call.args, call.span,
+                    prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                 ) {
                     return return_type;
                 }
@@ -1328,6 +1412,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                             return variant_type;
                         }
+                    }
+
+                    // The branch below reads the middle segment as a type, and
+                    // says so here where nothing names one — otherwise the call
+                    // types `unknown` with nothing reported, and whatever first
+                    // uses the result complains about `unknown`.
+                    //
+                    // The site is asked first: a field default carrying this
+                    // spelling is re-walked where its author's alias is not in
+                    // scope, so the spelling alone answers for nothing there.
+                    let receiver_site = ident
+                        .segments
+                        .len()
+                        .checked_sub(2)
+                        .map(|i| ident.segments[i].id);
+                    let names_a_member = receiver_site
+                        .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
+                        || self.namespace_member(prefix, type_name).is_some();
+                    if !names_a_member {
+                        let _ = self.emit(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
                     }
 
                     // Static method call on a type from the namespace module.
@@ -1541,13 +1649,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
+                    let defaults_module =
+                        defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+                    let own_slots = method_ref
+                        .method_id
+                        .and_then(|def| self.tysys.signatures.method_sig(def))
+                        .map(MethodSig::own_type_param_ids)
+                        .unwrap_or_default();
+                    let type_bindings =
+                        slot_type_bindings(&self.tysys.type_table, &own_slots, &method_type_args);
+                    self.record_default_walk(
+                        call.id,
+                        &args,
+                        &checked,
+                        &param_defaults,
+                        Some(defaults_module.clone()),
+                        &type_bindings,
+                        ctx,
+                    );
+
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         StaticMethodDispatch {
                             method_def: method_ref.method_id,
-                            defaults_module: defaults_module
-                                .unwrap_or_else(|| func_ref.module_source.clone()),
+                            defaults_module,
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -1743,11 +1869,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (param_defaults, defaults_module) =
             self.lookup_function_param_defaults(&call.callee, ctx);
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
+            let type_bindings = self.callee_type_bindings(&callee, &type_args);
             self.apply_param_defaults(
                 &mut args,
                 &check_param_types,
                 &param_defaults,
                 defaults_module.clone(),
+                &type_bindings,
+                Some(call.id),
                 ctx,
             );
         }
@@ -1848,7 +1977,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if pad_with_defaults && args.len() < fn_params.len() {
-            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, ctx);
+            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, call.id, ctx);
         }
 
         if args.len() != fn_params.len() {
@@ -2060,10 +2189,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &Expr,
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
+        site: AstId,
         ctx: &mut FunctionContext,
     ) {
         let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
-        self.apply_param_defaults(args, param_types, &defaults, callee_module, ctx);
+        self.apply_param_defaults(
+            args,
+            param_types,
+            &defaults,
+            callee_module,
+            &[],
+            Some(site),
+            ctx,
+        );
+    }
+
+    /// Put the walk of the defaults `site` left out on record, for a route that
+    /// has already settled its arguments.
+    ///
+    /// Every route resolving a call reaches this or
+    /// [`Self::apply_param_defaults`]; `reify_apply_param_defaults` asserts it.
+    pub(super) fn record_default_walk(
+        &mut self,
+        site: AstId,
+        args: &[TypeId],
+        param_types: &[TypeId],
+        defaults: &[(String, Option<Expr>)],
+        defaults_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        ctx: &mut FunctionContext,
+    ) {
+        // Whether the walk runs at all is `fill_trailing_defaults`'s question,
+        // asked where the overlay is installed. Only the second walk of one
+        // site is this route's own: two spellings may reach it for one call.
+        if self.sem.types.body.default_overlays.contains_key(&site) {
+            return;
+        }
+        let mut padded = args.to_vec();
+        self.fill_trailing_defaults(
+            &mut padded,
+            param_types,
+            defaults,
+            defaults_module,
+            type_bindings,
+            Some(site),
+            ctx,
+            |_, _, _, _| {},
+        );
     }
 
     /// Fill missing trailing arguments from `defaults`, each resolved as its
@@ -2075,17 +2247,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        site: Option<AstId>,
         ctx: &mut FunctionContext,
     ) {
         // The check below is for a default that resolved to `()` with nothing
         // reported. One that did report has already said why, so let it stand
-        // rather than replacing its diagnostic with a panic.
-        let errors_before = self.logger.error_count();
+        // rather than replacing its diagnostic with a panic — including the
+        // second call site to hit the fault, whose report the dedup swallows.
+        let errors_before = self.logger.offered_error_count();
         self.fill_trailing_defaults(
             args,
             param_types,
             defaults,
             callee_module,
+            type_bindings,
+            site,
             ctx,
             |s, i, default_expr, resolved| {
                 let expected_type = param_types[i];
@@ -2093,18 +2270,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
                     && expected_type != TypeTable::UNKNOWN
-                    && s.logger.error_count() == errors_before
+                    && s.logger.offered_error_count() == errors_before
                 {
                     let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
                     let name = &defaults[i].0;
                     panic!(
                         "compiler bug: default expression for parameter '{name}' \
-                         re-resolved to () at call site but parameter expects '{expected_name}'. \
-                         Likely cause: the default references callee-only scope \
-                         (e.g. a callee type parameter like `T::default()`) that is \
-                         invisible during call-site re-resolution. \
-                         Resolving defaults per-monomorphization is deferred work; \
-                         see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
+                         re-resolved to () at call site but parameter expects '{expected_name}', \
+                         with nothing reported to say why. \
+                         The walk resolves the default in the declaring module, with the \
+                         declaration's type parameters standing for this site's type \
+                         arguments; see WEP 2026-04-11 \
+                         `docs/wep-2026-04-11-default-arguments.md`. \
                          Default span: {:?}",
                         default_expr.span()
                     );
@@ -2126,10 +2303,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        site: Option<AstId>,
         ctx: &mut FunctionContext,
         mut filled: impl FnMut(&mut Self, usize, &Expr, TypeId),
     ) {
-        if defaults.is_empty() {
+        if args.len() >= param_types.len() || !omits_a_default(args.len(), defaults) {
             return;
         }
         let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
@@ -2138,7 +2317,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_types_so_far.insert(name.clone(), *arg_type);
             }
         }
-        self.with_resolving_home(callee_module, |s| {
+        self.resolving_defaults_at(site, callee_module, type_bindings, |s| {
             for i in args.len()..param_types.len() {
                 let Some((name, Some(default_expr))) = defaults.get(i).cloned() else {
                     break;
@@ -2154,6 +2333,141 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_types_so_far.insert(name, resolved);
             }
         });
+    }
+
+    /// Run a walk of the defaults `site` left out, in the module that wrote
+    /// them and under the type arguments `site` settled on.
+    ///
+    /// The walk's facts become `site`'s own overlay, so one site's answer is
+    /// never another's. See [`sem::types::BodyFacts::default_overlays`].
+    pub(super) fn resolving_defaults_at<R>(
+        &mut self,
+        site: Option<AstId>,
+        home: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let enclosing_facts = site.map(|_| std::mem::take(&mut self.sem.types.body));
+        let result =
+            self.with_resolving_home(home, |s| s.with_callee_type_bindings(type_bindings, body));
+        if let (Some(site), Some(enclosing)) = (site, enclosing_facts) {
+            let overlay = std::mem::replace(&mut self.sem.types.body, enclosing);
+            self.sem.types.default_overlays.insert(site, overlay);
+        }
+        result
+    }
+
+    /// The callee's real type parameters paired with the type arguments this
+    /// call settled on, for [`Self::fill_trailing_defaults`]. Empty when the
+    /// list is not dense, since a misaligned pairing would bind the wrong type.
+    pub(super) fn callee_type_bindings(
+        &self,
+        callee: &CalleeRef,
+        type_args: &[TypeId],
+    ) -> Vec<DefaultTypeBinding> {
+        let params = self.lookup_function_type_params(callee);
+        let space: Vec<ast::GenericParam> = params
+            .into_iter()
+            .filter(ast::GenericParam::is_real_type_param)
+            .collect();
+        // `group_variadic_type_args` ran first, so a pack's own argument is
+        // already the one tuple it took and the two lists pair one for one.
+        if space.len() != type_args.len() {
+            return Vec::new();
+        }
+        space
+            .into_iter()
+            .zip(type_args.iter().copied())
+            .map(|(param, type_id)| DefaultTypeBinding {
+                settled: if param.is_pack {
+                    SettledAs::Pack
+                } else {
+                    SettledAs::Type(type_id)
+                },
+                name: param.name,
+                bounds: param.bounds,
+            })
+            .collect()
+    }
+
+    /// Run `body` with `bindings` as the only type parameters in scope: the
+    /// declaration's, each standing for the type argument the site settled on.
+    /// A default naming one (`fields: T = T::default()`) then resolves against
+    /// that type, and a caller's same-named parameter cannot shadow it.
+    fn with_callee_type_bindings<R>(
+        &mut self,
+        bindings: &[DefaultTypeBinding],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if bindings.is_empty() {
+            return body(self);
+        }
+        let mut scope = self.enter_inherited_type_param_scope();
+        // Resolved against the enclosing scope, which the loop below clears.
+        //
+        // A type argument nothing pinned is still an inference variable;
+        // standing for one spells the variable into the diagnostic (`unknown
+        // function '?2::default'`) over the call site's real complaint that the
+        // parameter could not be inferred, so it binds nothing.
+        //
+        // Dispatch on the parameter (`T::default()`) reads its bounds by name,
+        // so the name has to carry them. Where the binding brought none and
+        // stands for a parameter of the enclosing scope, that parameter's are
+        // the ones in force: `T` *is* the caller's `X` here, so it is bound by
+        // whatever `X` is bound by.
+        let installed: Vec<Option<Vec<ast::TraitBound>>> = {
+            let table = scope.tysys.type_table.borrow();
+            bindings
+                .iter()
+                .map(|b| {
+                    let type_id = b.settled.type_id();
+                    if type_id.is_some_and(|id| matches!(table.get(id), ResolvedType::InferVar(_)))
+                    {
+                        return None;
+                    }
+                    if !b.bounds.is_empty() {
+                        return Some(b.bounds.clone());
+                    }
+                    // A pack is no parameter of the enclosing scope, whatever
+                    // a same-named one there is bound by.
+                    Some(type_id.map_or_else(Vec::new, |id| enclosing_bounds_of(scope.saved(), id)))
+                })
+                .collect()
+        };
+        // The one place a pack's own type is minted, from the name and the
+        // position it enters at — so the spread in `[..T::default()]` has a
+        // pack to expand, and no producer of a binding can spell it wrong.
+        let in_scope: Vec<TypeId> = bindings
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                b.settled.type_id().unwrap_or_else(|| {
+                    scope
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(b.name.clone(), i as u32)
+                })
+            })
+            .collect();
+        let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
+        trait_ctx.type_params.clear();
+        trait_ctx.type_param_bounds.clear();
+        for (i, binding) in bindings.iter().enumerate() {
+            let Some(bounds) = &installed[i] else {
+                continue;
+            };
+            trait_ctx.type_params.insert(
+                binding.name.clone(),
+                BinderInScope::undeclared(i as u32, in_scope[i]),
+            );
+            if !bounds.is_empty() {
+                trait_ctx
+                    .type_param_bounds
+                    .insert(binding.name.clone(), bounds.clone());
+            }
+        }
+        body(&mut scope)
     }
 
     /// Look up the default-value AST and parameter name for each parameter of a
@@ -2790,11 +3104,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the call has no pack or the args are already in per-param form (arg count
     /// ≤ param count), so inference results and single-arg packs pass through.
     fn group_variadic_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
-        let real: Vec<ast::GenericParam> = self
-            .lookup_function_type_params(callee)
-            .into_iter()
-            .filter(|p| !p.is_effect)
-            .collect();
+        let declared = self.lookup_function_type_params(callee);
+        self.group_variadic_type_args_of(&declared, type_args);
+    }
+
+    /// [`Self::group_variadic_type_args`] against a declaration already at
+    /// hand — a method's own parameters, which no callee lookup answers for.
+    pub(super) fn group_variadic_type_args_of(
+        &mut self,
+        declared: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
+        let real: Vec<&ast::GenericParam> = declared.iter().filter(|p| !p.is_effect).collect();
         let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
@@ -3127,6 +3448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         raw_args: &[Expr],
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
         // rewriting, which no source segment names.
@@ -3170,6 +3492,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args,
             &arg_spans,
             span,
+            ctx,
         )
     }
 }
@@ -3283,7 +3606,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_type_id: TypeId,
         args: &[TypeId],
         call: &ast::CallExpr,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TypeId {
         let bounds = self
             .annotate_ctx
@@ -3306,11 +3629,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let return_type = method_info_result.return_type;
 
             // Resolve method-level type args (e.g., T::deserialize::<JsonDeserializer>)
-            let mut method_type_args: Vec<TypeId> = call
-                .type_args
-                .iter()
-                .map(|ty| self.resolve_type(ty))
-                .collect();
+            let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
 
             // If no explicit type args, infer method-level type params from argument
             // types via the shared `InferCtx` solver. `find_method_in_trait_bounds`
@@ -3375,6 +3694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let mangled_name = method_info.to_mangled_name();
+            let method_type_args_for_defaults = method_type_args.clone();
 
             // Build monomorph_info for method-level type args so the
             // monomorphizer can substitute TypeParam type args and
@@ -3412,12 +3732,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .zip(method_info_result.param_defaults.iter().cloned())
                 .collect();
+            let defaults_module = trait_module.unwrap_or_else(|| func_ref.module_source.clone());
+            // The method's own slots, as the turbofish spelled them or the
+            // solve above settled them. The receiver is the bound's own
+            // parameter, which the monomorphizer binds.
+            let type_bindings = slot_type_bindings(
+                &self.tysys.type_table,
+                &method_info_result.method_type_param_ids,
+                &method_type_args_for_defaults,
+            );
+            self.record_default_walk(
+                call.id,
+                args,
+                &method_info_result.param_types,
+                &param_defaults,
+                Some(defaults_module.clone()),
+                &type_bindings,
+                ctx,
+            );
             let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
                 StaticMethodDispatch {
                     method_def: method_info_result.method_def,
-                    defaults_module: trait_module.unwrap_or_else(|| func_ref.module_source.clone()),
+                    defaults_module,
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

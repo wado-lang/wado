@@ -9,6 +9,7 @@ use crate::ast::{self, AstId, Expr, Visibility};
 use crate::compiler_host::{Code, Diagnostic};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
+use crate::elaborator::call::DefaultTypeBinding;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
@@ -77,12 +78,12 @@ pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option
 
 impl StructFieldInfo {
     /// Whether `Default` derives from the field defaults alone: every field
-    /// declares one, and there is a field. A generic struct does not: a default
-    /// is elaborated against the declaration, not an instance.
+    /// declares one. A fieldless struct qualifies vacuously — it has exactly
+    /// one value — which is what makes the `NoFields` marker a usable default
+    /// for a type parameter. A generic struct does not: a default is
+    /// elaborated against the declaration, not an instance.
     pub(super) fn auto_derives_default(&self) -> bool {
-        !self.fields.is_empty()
-            && self.type_param_type_ids.is_empty()
-            && self.field_defaults.iter().all(Option::is_some)
+        self.type_param_type_ids.is_empty() && self.field_defaults.iter().all(Option::is_some)
     }
 
     /// Whether a reflection written in `module` can enumerate every field
@@ -282,6 +283,16 @@ pub enum TypeError {
     /// Unknown type name
     UnknownType {
         name: String,
+        span: Span,
+    },
+
+    /// A type position names an `interface` or a `trait`. Both share the type
+    /// namespace, and neither denotes a type.
+    NotAType {
+        name: String,
+        /// What the declaration is, with its article: `an interface` or
+        /// `a trait`.
+        kind: &'static str,
         span: Span,
     },
 
@@ -1162,6 +1173,14 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::NotAType { name, kind, span } => (
+                Code::UnknownType,
+                format!(
+                    "`{name}` is {kind}, not a type: it names a set of operations, \
+                     and no value has it as its type"
+                ),
+                *span,
+            ),
             TypeError::UndeclaredImplTypeParam { name, span } => (
                 Code::UnknownType,
                 format!(
@@ -2280,6 +2299,11 @@ pub(super) struct MethodInfo {
     /// selected method's own module: the trait it implements declares them
     /// (WEP 2026-04-11), and a default resolves in the scope that wrote it.
     pub(super) defaults_module: Option<ModuleSource>,
+    /// The matched `impl` block's type parameters, standing for the receiver's
+    /// type arguments. A default naming one (`v: T = T::default()`) resolves
+    /// against them. Empty where the block declares none, or where the lookup
+    /// answers from no block at all.
+    pub(super) impl_type_bindings: Vec<DefaultTypeBinding>,
 }
 
 /// Labeled block expression target for tracking break types

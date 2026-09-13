@@ -86,6 +86,109 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
     }
 }
 
+/// Expand every `TypePackExpansion` whose own site settled the pack, in every
+/// body of the module: a function's and a global initializer's alike.
+///
+/// Such a node sits in a caller that may declare no type parameter, which
+/// `instantiate_function` never visits. Runs before instantiation sites are
+/// collected, so the calls it produces are monomorphized like any other.
+pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
+    mono.current_param_substitution_key = IndexMap::default();
+    mono.current_impl_type_param_count = 0;
+    mono.current_impl_struct_name = None;
+
+    let type_table_rc = module.type_table.clone();
+
+    struct SettledPackExpander<'a> {
+        mono: &'a Monomorphizer,
+        type_table: &'a Rc<RefCell<TypeTable>>,
+        local_count: &'a mut u32,
+        locals: &'a mut Vec<TirLocal>,
+    }
+
+    impl TirMutVisitor for SettledPackExpander<'_> {
+        fn visit_expr(&mut self, expr: &mut TirExpr) {
+            if let TirExprKind::TupleLiteral { elements } = &expr.kind
+                && let Some(substitution) = elements.iter().find_map(|e| match e.kind {
+                    TirExprKind::TypePackExpansion {
+                        pack_type_id,
+                        settled_pack: Some(settled),
+                        ..
+                    } => {
+                        let index = match self.type_table.borrow().get(pack_type_id) {
+                            ResolvedType::TypePack { index, .. } => *index,
+                            _ => return None,
+                        };
+                        Some(IndexMap::from_iter([(index, settled)]))
+                    }
+                    _ => None,
+                })
+            {
+                // Everything the subtree names belongs to the callee whose
+                // default this is, and the call settled all of it — so the one
+                // pack entry is the whole substitution, and the ordinary
+                // expansion below it needs nothing else. Recurses itself.
+                self.mono.substitute_types_in_expr(
+                    expr,
+                    &substitution,
+                    &mut self.type_table.borrow_mut(),
+                    self.local_count,
+                    self.locals,
+                );
+                return;
+            }
+            self.walk_expr(expr);
+        }
+    }
+
+    for func_rc in &module.functions {
+        let mut func = func_rc.borrow_mut();
+        let Some(mut body) = func.body.take() else {
+            continue;
+        };
+        let mut local_count = func.local_count;
+        let mut locals = std::mem::take(&mut func.locals);
+        SettledPackExpander {
+            mono,
+            type_table: &type_table_rc,
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_block(&mut body);
+        // Each expanded element needs its own slot for whatever the template
+        // body declared, exactly as an instantiated generic does.
+        PackExpansionLocalSplitter {
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_block(&mut body);
+        func.local_count = local_count;
+        func.locals = locals;
+        func.body = Some(body);
+    }
+
+    for global in &mut module.globals {
+        let mut locals = std::mem::take(&mut global.locals);
+        // A global carries no count beside its locals, so the vec is the count.
+        let mut local_count = locals.len() as u32;
+        let init = global.init.slot_expr_mut();
+        SettledPackExpander {
+            mono,
+            type_table: &type_table_rc,
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_expr(init);
+        PackExpansionLocalSplitter {
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_expr(init);
+        assert_eq!(locals.len() as u32, local_count);
+        global.locals = locals;
+    }
+}
+
 /// The receivers a trait-method lookup may try, in order: the method info's
 /// own receiver identity, then that receiver instantiated with its type
 /// arguments, then any further mangled spelling the call site holds.
@@ -2767,6 +2870,7 @@ impl Monomorphizer {
                         } else if let TirExprKind::TypePackExpansion {
                             ref call_expr,
                             pack_type_id,
+                            ..
                         } = elem.kind
                         {
                             // Expand type pack: for each concrete type in the pack,
@@ -2933,6 +3037,7 @@ impl Monomorphizer {
             TirExprKind::TypePackExpansion {
                 call_expr,
                 pack_type_id,
+                ..
             } => {
                 // Don't substitute inside call_expr here — it's expanded in TupleLiteral.
                 // But do substitute the pack_type_id so we can look it up later.

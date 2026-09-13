@@ -1,0 +1,25 @@
+// A default naming the callee's own type parameter, at a call that pins that
+// parameter to nothing. Two calls, because one is not enough: the default is
+// one AST node re-walked per site, so both sites raise the same
+// `unknown function 'T::default'` at the same place and the logger prints it
+// once. A tripwire asking "did this walk report?" as an error-count delta read
+// the second site as silent and panicked.
+//
+// Each site still reports what it could not infer, which is the diagnostic to
+// act on.
+
+struct NoFields {}
+
+impl Default for NoFields;
+
+fn info<T: Default>(msg: String, fields: T = T::default()) -> String {
+    return `${msg}${fields:?}`;
+}
+
+export fn run() {
+    assert info("a") == "aNoFields {}";
+    assert info("b") == "bNoFields {}";
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `T` of function `info`"}

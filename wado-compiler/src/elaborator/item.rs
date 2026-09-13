@@ -1170,6 +1170,29 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .substitute_type_params(ty, &subst)
     }
 
+    /// Resolve a parameter's default and check it against the parameter type,
+    /// with the signature's own type-parameter defaults applied:
+    /// `fn event<T = NoFields>(fields: T = NoFields {})` promises that value
+    /// only for the `T` a caller gets by default. A default naming the
+    /// parameter itself (`fields: T = T::default()`) answers for every `T`, so
+    /// it is checked against the bare one.
+    fn check_param_default(
+        &mut self,
+        default_ast: &ast::Expr,
+        type_id: TypeId,
+        type_params: &[ast::GenericParam],
+        ctx: &mut FunctionContext,
+    ) {
+        let defaulted = self.apply_type_param_defaults(type_params, type_id);
+        let resolved = self.resolve_expr(default_ast, ctx, Some(defaulted));
+        let expected = if resolved == type_id {
+            type_id
+        } else {
+            defaulted
+        };
+        self.typecheck(resolved, expected, default_ast.span());
+    }
+
     /// Resolve one method parameter's type. A receiver comes from the impl
     /// target — the parser desugars `self` / `&self` / `&mut self` into
     /// `Self`-based annotations — and anything else from its annotation.
@@ -2054,9 +2077,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let type_id = self.resolve_type(&param.ty);
             if let Some(default_ast) = &param.default {
-                let expected = self.apply_type_param_defaults(type_params, type_id);
-                let resolved = self.resolve_expr(default_ast, &mut ctx, Some(expected));
-                self.typecheck(resolved, expected, default_ast.span());
+                self.check_param_default(default_ast, type_id, type_params, &mut ctx);
             }
             ctx.add_local_at(param.name.clone(), type_id, param.is_mut, None, param.span);
         }
@@ -2449,15 +2470,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         span: default_ast.span(),
                     });
                 }
-                // A default is checked against the parameter type with the
-                // signature's own type-parameter defaults applied. `fn
-                // event<T = NoFields>(fields: T = NoFields {})` promises the
-                // value only for the `T` the caller gets by default; against a
-                // bare `T` — opaque, standing for whatever a caller picks —
-                // nothing concrete could ever satisfy it.
-                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
-                scope.typecheck(resolved, expected, default_ast.span());
+                scope.check_param_default(default_ast, type_id, &func.type_params, &mut ctx);
             }
             let index = ctx.add_local_at(
                 param.name.clone(),
@@ -2812,14 +2825,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if param.self_kind == ast::SelfKind::Value {
                 scope.check_self_by_value(type_id, param.span);
             }
-            // Walk the default for its side-effect fact recording; the
-            // resolved TIR is discarded (reify re-emits it from the AST).
-            // Checked against the parameter type with the method's own
-            // type-parameter defaults applied, as the free-function path does.
+            // Walked for its side-effect fact recording; the resolved TIR is
+            // discarded (reify re-emits it from the AST).
             if let Some(default_ast) = &param.default {
-                let expected = scope.apply_type_param_defaults(&func.type_params, type_id);
-                let resolved = scope.resolve_expr(default_ast, &mut ctx, Some(expected));
-                scope.typecheck(resolved, expected, default_ast.span());
+                scope.check_param_default(default_ast, type_id, &func.type_params, &mut ctx);
             }
             let index = ctx.add_local_at(
                 param.name.clone(),

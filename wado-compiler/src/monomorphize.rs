@@ -401,6 +401,11 @@ impl Monomorphizer {
         // shared by `Rc` serves the whole run.
         self.functions.templates = Rc::new(generic_functions.clone());
 
+        // Phase 7.5: Expand the pack expansions whose own site settled the pack
+        // — a parameter default spliced into a caller. Before Phase 8, so the
+        // per-element calls it produces are collected with every other site.
+        func_inst::expand_settled_packs_in_module(self, &mut module);
+
         // Phase 8: Collect function instantiation sites from Call expressions
         self.collect_function_instantiation_sites(&module, &generic_functions, scanned_functions);
 

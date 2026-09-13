@@ -11,7 +11,7 @@ use super::scope::BinderInScope;
 use super::types::TypeError;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, StoresEntry, TraitBound};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
@@ -441,6 +441,120 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: namespaced.span,
             });
             TypeTable::ERROR
+        }
+    }
+
+    /// What a type position's name denotes where it denotes no type: `an
+    /// interface` or `a trait`, both of which share the type namespace.
+    fn non_type_decl_kind(&self, site: AstId, name: &str) -> Option<&'static str> {
+        if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
+            return None;
+        }
+        if let Some(def) = self.type_decl_at(Some(site), name) {
+            return match self.tysys.resolutions.defs().kind(def) {
+                DefKind::Effect => Some("an interface"),
+                DefKind::Trait => Some("a trait"),
+                _ => None,
+            };
+        }
+        // The module being walked is not in the environment yet, so its own
+        // symbol table is what answers for what it declares itself.
+        match self.symbol_named(&self.current_module_source, name)?.kind {
+            SymbolKind::Effect(_) => Some("an interface"),
+            SymbolKind::Trait(_) => Some("a trait"),
+            _ => None,
+        }
+    }
+
+    /// Report a type position naming an `interface` or a `trait`, and say
+    /// whether it did.
+    pub(super) fn reject_non_type_decl(&mut self, site: AstId, name: &str, span: Span) -> bool {
+        let Some(kind) = self.non_type_decl_kind(site, name) else {
+            return false;
+        };
+        let _ = self.emit(TypeError::NotAType {
+            name: name.to_string(),
+            kind,
+            span,
+        });
+        true
+    }
+
+    /// The types a turbofish supplies. One naming an `interface` or a `trait`
+    /// is rejected here, since `unknown` would satisfy every bound in silence.
+    pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
+        args.iter()
+            .map(|ty| {
+                // A name no declaration answers is left to the position's own
+                // resolution, which reports it where an annotation would not.
+                self.walk_type_heads(ty, &mut |scope, id, name, span, _| {
+                    scope.reject_non_type_decl(id, name, span)
+                });
+                self.resolve_type(ty)
+            })
+            .collect()
+    }
+
+    /// Walk the named heads a written type reaches, outermost first. `head`
+    /// takes a head's site, name, span and whether it carries arguments, and
+    /// answers whether the walk stops there.
+    pub(super) fn walk_type_heads(
+        &mut self,
+        ty: &Type,
+        head: &mut impl FnMut(&mut Self, AstId, &str, Span, bool) -> bool,
+    ) {
+        match ty {
+            Type::Named(named) => {
+                head(self, named.id, &named.name, named.span, false);
+            }
+            Type::Generic(generic) => {
+                if head(self, generic.id, &generic.name, generic.span, true) {
+                    return;
+                }
+                for arg in &generic.args {
+                    self.walk_type_heads(arg, head);
+                }
+            }
+            Type::NamespacedGeneric(namespaced) => {
+                // `Self::Assoc` and `T::Assoc` project through a type rather
+                // than naming a declaration, and the projection is what
+                // answers for them.
+                let projects = namespaced.namespace == "Self"
+                    || self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&namespaced.namespace);
+                if !projects
+                    && head(
+                        self,
+                        namespaced.id,
+                        &namespaced.name,
+                        namespaced.name_span,
+                        !namespaced.args.is_empty(),
+                    )
+                {
+                    return;
+                }
+                for arg in &namespaced.args {
+                    self.walk_type_heads(arg, head);
+                }
+            }
+            Type::Function(func_ty) => {
+                for param in &func_ty.params {
+                    self.walk_type_heads(param, head);
+                }
+                self.walk_type_heads(&func_ty.return_type, head);
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                self.walk_type_heads(inner, head);
+            }
+            Type::Tuple(elements) => {
+                for element in elements {
+                    self.walk_type_heads(element, head);
+                }
+            }
+            Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
         }
     }
 

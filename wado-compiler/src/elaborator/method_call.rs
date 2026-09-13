@@ -27,6 +27,7 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
+use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -71,6 +72,12 @@ pub(super) struct MethodCallInput<'a> {
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
+    /// The node reify will pad this call's omitted arguments under, where that
+    /// is not `call_id`. A qualified `Trait::m(&x)` files its decision as a
+    /// static dispatch under the `CallExpr`, so the walk of its defaults has to
+    /// be keyed there too or reify finds none — see
+    /// [`Elaborator::record_default_walk`].
+    pub defaults_site: Option<AstId>,
     pub type_args: Vec<TypeId>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
@@ -183,11 +190,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
         // A `_` resolves to UNKNOWN, so these are their own hole mask.
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
 
         let outcome = self.resolve_method_call_with(
             MethodCallInput {
@@ -196,6 +199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name: &method_call.method,
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
+                defaults_site: None,
                 type_args,
                 args: &method_call.args,
                 expected_type,
@@ -236,6 +240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             method_id,
             call_id,
+            defaults_site,
             type_args,
             args: args_ast,
             expected_type,
@@ -577,6 +582,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self,
             inherent_visibility,
             defaults_module,
+            impl_type_bindings,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -589,6 +595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Default to Unknown type for error recovery
             MethodInfo {
+                impl_type_bindings: Vec::new(),
                 method_def: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
@@ -608,6 +615,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 defaults_module: None,
             }
         };
+
+        // Before anything counts slots, since a pack's arguments are one per
+        // element until they are grouped.
+        let mut type_args = type_args;
+        self.group_variadic_type_args_of(&method_own_params, &mut type_args);
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -699,11 +711,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .zip(param_defaults.iter().cloned())
             .collect();
+        // Runs only where a value default names one of the method's own slots.
+        // `Iterator::collect` would otherwise resolve `= List<Self::Item>` here,
+        // before the receiver's associated types are registered.
+        let mut default_type_bindings = impl_type_bindings;
+        if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
+            let known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
+                let mut infer =
+                    InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+                for (i, (&param_type, &arg)) in
+                    expected_param_types.iter().zip(args.iter()).enumerate()
+                {
+                    if is_numeric_literal_arg(args_ast.get(i)) {
+                        infer.add_deferred(param_type, arg);
+                    } else {
+                        infer.add(param_type, arg);
+                    }
+                }
+                infer.solve()
+            } else {
+                type_args.clone()
+            };
+            default_type_bindings.extend(self.value_default_slot_bindings(
+                &method_own_params,
+                &method_type_param_ids,
+                base_type_id,
+                known,
+                defaults_module.clone(),
+            ));
+        }
         self.fill_trailing_defaults(
             &mut args,
             &expected_param_types,
             &defaults,
             Some(callee_module.clone()),
+            &default_type_bindings,
+            defaults_site.or(call_id),
             ctx,
             |_, _, _, _| {},
         );
@@ -1094,6 +1137,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 is_ref_impl,
                 param_is_mut,
                 defaults,
+                substituted_param_types.clone(),
                 callee_module,
                 return_type,
                 method_type_args,
@@ -1123,23 +1167,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(trait_name, method_name, |kind| kind != ast::SelfKind::None)
+        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
+            kind != ast::SelfKind::None
+        })
+    }
+
+    /// [`Self::is_trait_instance_method`] asked of the site that wrote the
+    /// trait's name. A namespaced spelling (`ns::Trait::method`) reaches its
+    /// declaration through the `ns$Trait` alias the resolve walk recorded,
+    /// where the importing module can name no `Trait` of its own.
+    pub(super) fn is_trait_instance_method_at(
+        &self,
+        head_site: AstId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> bool {
+        self.trait_declares_method(
+            self.decl_key_at(head_site, trait_name),
+            method_name,
+            |kind| kind != ast::SelfKind::None,
+        )
     }
 
     /// [`Self::is_trait_instance_method`] for the receiver-less kind — what
     /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
     pub(super) fn is_trait_static_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(trait_name, method_name, |kind| kind == ast::SelfKind::None)
+        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
+            kind == ast::SelfKind::None
+        })
     }
 
     fn trait_declares_method(
         &self,
-        trait_name: &str,
+        trait_key: Option<DefId>,
         method_name: &str,
         of_kind: impl Fn(ast::SelfKind) -> bool,
     ) -> bool {
-        self.decl_key_or_local(trait_name).is_some_and(|key| {
+        trait_key.is_some_and(|key| {
             self.tysys.trait_env.declares_trait(&key)
                 && self
                     .trait_sig_of(&key)
@@ -1170,14 +1235,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args: None,
             display: self.declared_trait_name(trait_name),
         };
-        let type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-        // The edge for jump-to-definition is recorded against the method name.
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
+        // The edge for jump-to-definition is recorded against the method name,
+        // which is the path's last segment however many lead up to it.
         let method_id = match &call.callee {
-            ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
+            ast::Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
             _ => None,
         };
         self.resolve_trait_qualified_call_parts(
@@ -1235,6 +1297,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 method_id,
                 call_id: None,
+                // Reify pads this call under the `CallExpr`, where the static
+                // dispatch below is filed, so the walk is keyed there.
+                defaults_site: Some(call_id),
                 type_args,
                 args: rest,
                 expected_type,
@@ -1393,11 +1458,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };
-                let method_type_args: Vec<TypeId> = static_call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect();
+                let method_type_args: Vec<TypeId> =
+                    self.resolve_turbofish_args(&static_call.type_args);
                 return self.resolve_trait_qualified_call_parts(
                     required,
                     &static_call.method.clone(),
@@ -1593,11 +1655,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Resolve method-level type arguments
-        let mut method_type_args: Vec<TypeId> = static_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&static_call.type_args);
+        // Before anything counts slots, since a pack's arguments are one per
+        // element until they are grouped.
+        if let Some(sig) = callee_sig.as_ref() {
+            let own_params = sig.own_params.clone();
+            self.group_variadic_type_args_of(&own_params, &mut method_type_args);
+        }
 
         // Not folded into `lookup_static_method_param_types`: variant
         // constructors need its answer to stay empty.
@@ -1655,15 +1719,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
 
-        // A static's own slots, where the spelling wrote none. With no slots of
-        // its own the block leaves the method's numbered from zero and the
-        // receiver's substitution reaches them anyway; with slots of its own it
-        // does not, so they are solved here from the arguments — as instance
-        // dispatch solves them — and an unsolved one is reported rather than
-        // left to reach codegen unsubstituted.
+        let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        let own_type_param_ids = callee_sig
+            .as_ref()
+            .map(MethodSig::own_type_param_ids)
+            .unwrap_or_default();
+        let own_params = callee_sig
+            .as_ref()
+            .map(|sig| sig.own_params.clone())
+            .unwrap_or_default();
+
+        // A static's own slots, where the spelling wrote none: solved here from
+        // the arguments, as instance dispatch solves them, so that what binds
+        // them reaches reify rather than leaving an abstract `U::default()` to
+        // be rejected at the trait-bound check over WIR.
+        //
+        // Only a block declaring slots of its own answers for an unsolved one.
+        // A block declaring none leaves the method's numbered from zero, where
+        // the receiver's substitution reaches them, and a slot this solve
+        // leaves open is that substitution's to fill.
+        let strict = callee_sig
+            .as_ref()
+            .is_some_and(|sig| sig.declaring_slot_count > 0);
         if let Some(sig) = callee_sig
             && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
-            && sig.declaring_slot_count > 0
             && !sig.own_params.is_empty()
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
@@ -1683,7 +1762,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declaration accepts on a receiver that declares none.
             let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
             // A slot the turbofish names was substituted into `param_types`
-            // above, so inference has nothing left to bind for it.
+            // above, so inference has nothing left to bind for it. A block
+            // declaring no slot of its own leaves the method's to its type
+            // default, which is not the arguments' to answer.
             let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
                 !bindings.contains_key(id)
                     && method_type_args
@@ -1692,6 +1773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             if let Some((i, _)) = unanswered
                 && !defaulted
+                && strict
             {
                 let _ = self.emit(TypeError::UninferredStaticTypeArg {
                     receiver,
@@ -1722,11 +1804,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pad omitted trailing arguments with declared parameter defaults.
         // Variant / flags constructors carry no defaults, so the arg-count
         // checks below are unaffected.
+        //
+        // The declaring block's type parameters stand for the receiver's type
+        // arguments, so a default naming one (`v: T = T::default()`) resolves
+        // against what `Type::<i32>::method()` spelled.
+        let declaring_impl_sig = declaring_impl
+            .and_then(|id| self.tysys.signatures.impl_sig(id))
+            .cloned();
+        let mut static_type_bindings = declaring_impl_sig
+            .map(|impl_sig| {
+                let args = self
+                    .receiver_declaring_args(Some(target_type_id), &[])
+                    .unwrap_or_default();
+                slot_type_bindings(&self.tysys.type_table, &impl_sig.target_type_args, &args)
+            })
+            .unwrap_or_default();
+        // The static's own slots, as the turbofish spelled them, as the block
+        // above solved them, or as their own type defaults settle them. That
+        // last source is the one the block above cannot reach: it runs only
+        // where the declaring block has slots of its own, and a block with none
+        // leaves the method's unbound rather than wrong.
+        if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
+            static_type_bindings.extend(self.value_default_slot_bindings(
+                &own_params,
+                &own_type_param_ids,
+                target_type_id,
+                method_type_args.clone(),
+                static_method_module.clone(),
+            ));
+        } else {
+            static_type_bindings.extend(slot_type_bindings(
+                &self.tysys.type_table,
+                &own_type_param_ids,
+                &method_type_args,
+            ));
+        }
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
             &static_method_defaults,
             static_method_module.clone(),
+            &static_type_bindings,
+            Some(static_call.id),
             ctx,
             |_, _, default_expr, _| arg_spans.push(default_expr.span()),
         );
@@ -2216,6 +2335,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &args,
                 &arg_spans,
                 static_call.span,
+                ctx,
             )
         {
             return resolved;
@@ -2316,6 +2436,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Result::<…>::Ok`), yielding an empty struct name. Keyed on the
         // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
         // shapes are handled by reify before this fact is consulted.
+        //
+        // Every path out of this function reaches the walk, not only the one
+        // that filled the arguments above: reify pads from what it leaves.
+        let defaults_module =
+            static_method_module.unwrap_or_else(|| func_ref.module_source.clone());
+        self.record_default_walk(
+            static_call.id,
+            &args,
+            &param_types,
+            &static_method_defaults,
+            Some(defaults_module.clone()),
+            &static_type_bindings,
+            ctx,
+        );
         let key = static_call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
@@ -2323,8 +2457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_def: selected.as_ref().and_then(|r| r.method_id),
                 // The scope annotate resolved these defaults in, so reify
                 // resolves them in the same one.
-                defaults_module: static_method_module
-                    .unwrap_or_else(|| func_ref.module_source.clone()),
+                defaults_module,
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
@@ -2352,6 +2485,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         arg_spans: &[Span],
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let BlanketStatic {
             trait_name,
@@ -2439,12 +2573,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
             method_info: Some(method_info),
         };
+        // The template is written against the blanket parameter, which the
+        // monomorphizer binds to the receiver; nothing here names one of the
+        // method's own slots, so the walk carries no binding.
+        let defaults_module =
+            template_defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+        self.record_default_walk(
+            call_id,
+            args,
+            &param_types,
+            &static_method_defaults,
+            Some(defaults_module.clone()),
+            &[],
+            ctx,
+        );
         self.sem.types.static_method_dispatch.insert(
             call_id,
             StaticMethodDispatch {
                 method_def,
-                defaults_module: template_defaults_module
-                    .unwrap_or_else(|| func_ref.module_source.clone()),
+                defaults_module,
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
@@ -3315,7 +3462,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         call_id: AstId,
         span: Span,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TypeId {
         // The call site may refer to the receiver type through a
         // `use { Counter as CounterA }` alias. Resolve the alias to its
@@ -3488,19 +3635,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // index answers for one kind of method, and an instance one reached
         // qualified then lost its binding and left reify emitting a call to a
         // name nothing declares.
-        let cm_name = self
-            .static_call_sig(
-                &actual_struct_name,
-                method_name,
-                receiver_key.as_ref(),
-                SigChoice::Any,
-            )
-            .and_then(|sig| sig.cm_name);
+        let callee_sig = self.static_call_sig(
+            &actual_struct_name,
+            method_name,
+            receiver_key.as_ref(),
+            SigChoice::Any,
+        );
+        let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
         // From the resolution that named the callee. Asking again by the base's
         // bare name asks the *caller's* frame, which an alias leaves without
         // that name at all.
         let callee_params = resolution.params;
+
+        // Walk the defaults this spelling left out, so a default naming the
+        // method's own type parameter (`u: U = U::default()`) resolves against
+        // what the call settled that parameter to. Reify pads from this walk's
+        // overlay; without one it replays the declaration's, where the
+        // parameter is still abstract and the trait-bound check over WIR
+        // rejects it.
+        // A signature answers for the method's own slots; a spelling no index
+        // has one for — a trait's default body, reached on a type whose `impl`
+        // restates nothing — binds no name, and the walk still has to happen.
+        let type_bindings = match &callee_sig {
+            Some(sig) => {
+                let own_ids = sig.own_type_param_ids();
+                let own_params = sig.own_params.clone();
+                let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
+                self.value_default_slot_bindings(
+                    &own_params,
+                    &own_ids,
+                    receiver,
+                    method_type_args.to_vec(),
+                    callee_params.defaults_module.clone(),
+                )
+            }
+            None => Vec::new(),
+        };
+        self.record_default_walk(
+            call_id,
+            args,
+            &callee_params.param_types,
+            &callee_params.param_defaults,
+            callee_params.defaults_module.clone(),
+            &type_bindings,
+            ctx,
+        );
 
         let StaticMethodRef {
             module: struct_module,

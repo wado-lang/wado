@@ -2106,6 +2106,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((
             fq_trait_name,
             MethodInfo {
+                // A bare bound dispatches on the parameter itself, off no
+                // `impl` block.
+                impl_type_bindings: Vec::new(),
                 method_def: Some(sig.def),
                 return_type: instantiated.return_type,
                 self_kind: sig.self_kind,
@@ -2805,6 +2808,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow_mut()
             .intern(ResolvedType::Ref(base_type_id));
         let method_info = MethodInfo {
+            // Derived from the receiver's structure, off no `impl` block.
+            impl_type_bindings: Vec::new(),
             method_def: None,
             return_type,
             self_kind: ast::SelfKind::Ref,

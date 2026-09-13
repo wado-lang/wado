@@ -1,0 +1,15 @@
+// An imported `interface` in a `let` annotation. It resolves through the
+// import scope rather than the module's own declarations, which is the half
+// that reported nothing at all: the annotation walk admitted every `use`d name
+// as a type, so the annotation resolved to `unknown` and the first thing asked
+// of the binding reported about `unknown` instead.
+
+use { Stdout } from "wasi:cli";
+
+export fn run() {
+    let x: Stdout = 1;
+    assert x == 1;
+}
+
+__DATA__
+{"compile_error": "`Stdout` is an interface, not a type: it names a set of operations, and no value has it as its type"}

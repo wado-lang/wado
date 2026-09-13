@@ -206,11 +206,30 @@ impl SubstitutionContext {
                 type_table.make_mut_ref(new_inner)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                // Recursively substitute in nested generic instances
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&arg| self.substitute(arg, type_table))
-                    .collect();
+                let splices_packs = TypeTable::is_tuple_type(type_table.def_name(def));
+                let mut new_args: Vec<TypeId> = Vec::new();
+                for &arg in &type_args {
+                    // A pack in a tuple stands for the elements it took, not
+                    // for the tuple holding them: `[..T]` with `T = [i32,
+                    // bool]` is `[i32, bool]`, never `[[i32, bool]]`.
+                    let is_plain_pack = splices_packs
+                        && matches!(
+                            type_table.get(arg),
+                            ResolvedType::TypePack {
+                                mapped_elem: None,
+                                ..
+                            }
+                        );
+                    let substituted = self.substitute(arg, type_table);
+                    if is_plain_pack
+                        && substituted != arg
+                        && let Some(elements) = type_table.as_tuple(substituted)
+                    {
+                        new_args.extend(elements);
+                        continue;
+                    }
+                    new_args.push(substituted);
+                }
                 type_table.make_generic_instance(def, new_args)
             }
             ResolvedType::Function {
@@ -4988,6 +5007,10 @@ pub enum TirExprKind {
         call_expr: Box<TirExpr>,
         /// The `TypePack` type ID (index into type table, pre-substitution)
         pack_type_id: TypeId,
+        /// The tuple the pack stands for, on a node whose own site settled it:
+        /// a parameter default spliced into a caller nothing instantiates.
+        /// `None` where the enclosing function's instantiation settles it.
+        settled_pack: Option<TypeId>,
     },
 
     /// Deferred `[for let v of tuple { expr }]` over a pack-typed tuple.
