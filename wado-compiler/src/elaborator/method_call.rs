@@ -1194,23 +1194,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
     /// receiver argument to bind `Self` from.
     pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(trait_name, method_name, |kind| kind != ast::SelfKind::None)
+        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
+            kind != ast::SelfKind::None
+        })
+    }
+
+    /// [`Self::is_trait_instance_method`] asked of the site that wrote the
+    /// trait's name. A namespaced spelling (`ns::Trait::method`) reaches its
+    /// declaration through the `ns$Trait` alias the resolve walk recorded,
+    /// where the importing module can name no `Trait` of its own.
+    pub(super) fn is_trait_instance_method_at(
+        &self,
+        head_site: AstId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> bool {
+        self.trait_declares_method(
+            self.decl_key_at(head_site, trait_name),
+            method_name,
+            |kind| kind != ast::SelfKind::None,
+        )
     }
 
     /// [`Self::is_trait_instance_method`] for the receiver-less kind — what
     /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
     pub(super) fn is_trait_static_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(trait_name, method_name, |kind| kind == ast::SelfKind::None)
+        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
+            kind == ast::SelfKind::None
+        })
     }
 
     fn trait_declares_method(
         &self,
-        trait_name: &str,
+        trait_key: Option<DefId>,
         method_name: &str,
         of_kind: impl Fn(ast::SelfKind) -> bool,
     ) -> bool {
-        self.decl_key_or_local(trait_name).is_some_and(|key| {
+        trait_key.is_some_and(|key| {
             self.tysys.trait_env.declares_trait(&key)
                 && self
                     .trait_sig_of(&key)
@@ -1242,9 +1263,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             display: self.declared_trait_name(trait_name),
         };
         let type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
-        // The edge for jump-to-definition is recorded against the method name.
+        // The edge for jump-to-definition is recorded against the method name,
+        // which is the path's last segment however many lead up to it.
         let method_id = match &call.callee {
-            ast::Expr::Ident(ident) => ident.segments.get(1).map(|seg| seg.id),
+            ast::Expr::Ident(ident) => ident.segments.last().map(|seg| seg.id),
             _ => None,
         };
         self.resolve_trait_qualified_call_parts(

@@ -633,17 +633,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // (WEP 2026-07-31). Routed before the argument walk below because the
         // dispatcher elaborates the non-receiver arguments itself, against the
         // signature it selects.
-        if let Some(pos) = ident.name.find("::")
-            && self.is_trait_instance_method(&ident.name[..pos], &ident.name[pos + 2..])
+        //
+        // The trait is the segment before the method, whatever leads up to it,
+        // so `ns::Trait::method` names the same declaration `Trait::method`
+        // does. Splitting at the path's *first* `::` instead asked whether the
+        // namespace alias declared a method spelled `Trait::method`.
+        if let [.., head, method] = ident.segments.as_slice()
+            && self.is_trait_instance_method_at(head.id, &head.name, &method.name)
         {
-            let (trait_name, method_name) = (
-                ident.name[..pos].to_string(),
-                ident.name[pos + 2..].to_string(),
-            );
-            // The path's leading segment is the trait's reference site.
-            let head_site = ident.segments.first().map(|seg| seg.id);
+            let (trait_name, method_name) = (head.name.clone(), method.name.clone());
+            let head_site = head.id;
             return self.resolve_trait_qualified_call(
-                head_site,
+                Some(head_site),
                 &trait_name,
                 &method_name,
                 call,
@@ -1425,6 +1426,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                             return variant_type;
                         }
+                    }
+
+                    // The branch below reads the middle segment as a type, and
+                    // says so here where nothing names one — otherwise the call
+                    // types `unknown` with nothing reported, and whatever first
+                    // uses the result complains about `unknown`.
+                    //
+                    // The site is asked first: a field default carrying this
+                    // spelling is re-walked where its author's alias is not in
+                    // scope, so the spelling alone answers for nothing there.
+                    let receiver_site = ident
+                        .segments
+                        .len()
+                        .checked_sub(2)
+                        .map(|i| ident.segments[i].id);
+                    let names_a_member = receiver_site
+                        .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
+                        || self.namespace_member(prefix, type_name).is_some();
+                    if !names_a_member {
+                        let _ = self.emit(TypeError::UnknownFunction {
+                            name: format!("{prefix}::{suffix}"),
+                            span: call.span,
+                        });
+                        return TypeTable::ERROR;
                     }
 
                     // Static method call on a type from the namespace module.
