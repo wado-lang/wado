@@ -932,6 +932,7 @@ fn mint_scalarized_clones(
             let local_index = clone.params[*pi].local_index;
             affected.push(Scalarized {
                 local: local_index,
+                scalar_type_id: info.scalar_type_id,
                 field_index: info.field_index,
                 name: clone.params[*pi].name.clone(),
                 borrow: info.form.borrow_op(),
@@ -942,6 +943,9 @@ fn mint_scalarized_clones(
             }
         }
         if let Some(body) = clone.body.as_mut() {
+            for s in &affected {
+                body.values.retype_local(s.local, s.scalar_type_id);
+            }
             let root = body.root;
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }
@@ -1010,10 +1014,11 @@ fn copy_function_strings(
     }
 }
 
-/// A parameter this clone scalarized: the local it occupies, the field it now
-/// stands for, and whether it holds that field by reference.
+/// A parameter this clone scalarized: the local it occupies and its new type,
+/// the field it now stands for, and whether it holds that field by reference.
 struct Scalarized {
     local: u32,
+    scalar_type_id: TypeId,
     field_index: u32,
     name: String,
     /// The borrow the param's type already carries, if any.
