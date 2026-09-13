@@ -457,13 +457,15 @@ type arguments, in the declaring module and across a module boundary.
 | Instance method — `impl`'s param | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
 | Instance method — method's own   | ✅        | ✅                          | ❌ (gap below)                   | ✅                  |
 | Static method — `impl`'s param   | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
-| Static method — method's own     | ✅        | ✅                          | ✅                               | ✅                  |
-| Trait method                     | ✅        | ✅                          | ✅                               | ✅                  |
+| Static method — method's own     | ✅        | ✅                          | ✅ ᴳ                             | ✅                  |
+| Trait method — trait's own param | ✅        | ✅                          | ✅                               | ✅                  |
+| Trait method — method's own      | ✅        | ✅                          | ❌ (gap below)                   | ✅                  |
 | Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
 
 ᴿ The receiver settles the `impl` block's parameters, so the column describes
 how the receiver's own type was settled. ᴬ The literal's annotation names the
-instantiation.
+instantiation. ᴳ Only where the `impl` block declares type parameters of its
+own; on a block that declares none the gap below applies.
 
 An `interface` operation is absent by rule, not by omission: an operation
 declares neither parameter defaults nor type parameters (see
@@ -594,8 +596,8 @@ let resp = Fetch::fetch(url, init).read();
 
 ## Known gaps
 
-A value default on an **instance** method cannot name a method type parameter
-whose only source is that parameter's own type default:
+A value default on a method cannot name a method type parameter whose only
+source is that parameter's own type default:
 
 ```wado
 impl<T> B<T> {
@@ -605,9 +607,23 @@ b.tagged();   // error: unknown function `U::default`
 ```
 
 A turbofish (`b.tagged::<i32>()`) or an argument beside it settles `U` and the
-default resolves. The same declaration as a static method has no gap. Closing it
-means settling a method type parameter's own type default before the value
-defaults are filled; the step that does so today registers the receiver's
+default resolves.
+
+Three spellings reach the gap, and one escapes it:
+
+| Declaration                                     | `U` from its own type default       |
+| ----------------------------------------------- | ----------------------------------- |
+| Instance method, any `impl`                     | ❌ unknown function `U::default`    |
+| Trait method taking `&self`                     | ❌ unknown function `U::default`    |
+| Static on an `impl` declaring no type parameter | ❌ `U` does not implement `Default` |
+| Static on an `impl` declaring one               | ✅                                  |
+
+The two diagnostics are one gap: the method's slots are solved against the
+`impl` block's, so a block that declares some carries the method's own along
+with them and a block that declares none has nowhere to put them.
+
+Closing it means settling a method type parameter's own type default before the
+value defaults are filled; the step that does so today registers the receiver's
 associated types as a side effect, which is not safe to run that early. Not
 scheduled.
 

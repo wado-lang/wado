@@ -1,21 +1,18 @@
-// A value default may name a type parameter of the declaration that wrote it.
-// It stands for the type argument the site taking the default settled on, so
-// `T::default()` is a static call on a concrete type by the time it resolves.
-//
-// Two axes have to be covered together, and this file walks their product: the
-// four kinds of site that take a default (free function, instance method,
-// static method, struct field), and every way a type argument reaches one
-// (turbofish, a sibling argument or field, a type parameter's own default, a
-// caller forwarding its own binder). Each callee is read at two type arguments,
-// because they share one default expression: a walk answering for both would
-// hand one site the other's value.
-//
-// `NoFields` pins the derivation the idiom rests on — a fieldless struct
-// satisfies `Default` vacuously, having exactly one value. The marker below
-// used to be rejected outright with "not every field/case implements
-// `Default`".
+//! A value default may name a type parameter of the declaration that wrote it.
+//! It stands for the type argument the site taking the default settled on, so
+//! `T::default()` is a static call on a concrete type by the time it resolves.
+//!
+//! Two axes have to be covered together, and the blocks below walk their
+//! product: the kinds of site that take a default — one block each — and every
+//! way a type argument reaches one (turbofish, a sibling argument or field, a
+//! type parameter's own default, a caller forwarding its own binder). This is
+//! the coverage matrix in the WEP. Each callee is read at two type arguments,
+//! because they share one default expression: a walk answering for both would
+//! hand one site the other's value.
+//!
+//! The `NoFields` idiom rests on a fieldless struct satisfying `Default`
+//! vacuously, which `default_trait.wado` pins.
 
-use { println, Stdout } from "core:cli";
 use { Slot, Wrap, zero as xmod_zero } from "./sub/default_arg_callee_type_param_lib.wado";
 
 struct NoFields {}
@@ -99,9 +96,9 @@ struct Sibling<T: Default> {
     b: T = T::default(),
 }
 
-export fn run() with Stdout {
-    // Free function. Turbofish, then a sibling argument, then the type
-    // parameter's own default, then a caller forwarding its own binder.
+// Turbofish, then a sibling argument, then the type parameter's own default,
+// then a caller forwarding its own binder.
+test "a free function's default names its own type parameter" {
     assert zero::<i32>() == "0";
     assert zero::<String>() == "\"\"";
     assert pair(7) == "7/0";
@@ -110,9 +107,11 @@ export fn run() with Stdout {
     assert tagged::<i32>("count") == "count:0";
     assert forwarded(3) == "0|0|0|0";
     assert forwarded("s") == "\"\"|\"\"|\"\"|\"\"";
+}
 
-    // Instance method: the impl's parameter comes from the receiver, the
-    // method's own from a turbofish or a sibling argument.
+// The impl's parameter comes from the receiver, the method's own from a
+// turbofish or a sibling argument.
+test "an instance method's default names a type parameter in scope" {
     let bi: Box2<i32> = Box2 { v: 1 };
     let bs: Box2<String> = Box2 { v: "x" };
     assert bi.get() == "0";
@@ -120,30 +119,40 @@ export fn run() with Stdout {
     assert bi.paired(7) == "7/0";
     assert bi.paired("s") == "\"s\"/\"\"";
     assert bi.paired::<bool>(true) == "true/false";
+}
 
-    // Static method, the same two sources.
+// The same two sources, plus the static's own type-parameter default.
+test "a static method's default names a type parameter in scope" {
     assert Box2::<i32>::of().v == 0;
     assert Box2::<String>::of().v == "";
     assert Box2::<i32>::make(7) == "7/0";
     assert Box2::<i32>::make("s") == "\"s\"/\"\"";
     assert Box2::<i32>::tagged() == "NoFields {}";
     assert Box2::<i32>::tagged::<bool>() == "false";
+}
 
-    // Trait method: the default belongs to the trait declaration.
+// The default belongs to the trait declaration; the impl restates the list
+// without it.
+test "a trait method's default names a type parameter in scope" {
+    let bi: Box2<i32> = Box2 { v: 1 };
     assert bi.show() == "NoFields {}";
     assert bi.showing::<i32>() == "0";
     assert bi.showing::<bool>() == "false";
+}
 
-    // Struct field: from the annotation, then from a sibling field.
+// From the annotation, then from a sibling field.
+test "a struct field's default names the struct's own type parameter" {
     let hi: Holder<i32> = Holder {};
     let hs: Holder<String> = Holder {};
     assert hi.v == 0;
     assert hs.v == "";
     assert Sibling { a: 5 }.b == 0;
     assert Sibling { a: "x" }.b == "";
+}
 
-    // The same, across a module boundary, where `T` is a binder the caller
-    // cannot name at all.
+// Every site again across a module boundary, where `T` is a binder the caller
+// cannot name at all and the walk runs under the declaring module.
+test "a cross-module default names the declaration's type parameter" {
     assert xmod_zero::<i32>() == 0;
     assert xmod_zero::<String>() == "";
     assert xmod_zero(9) == 9;
@@ -157,14 +166,4 @@ export fn run() with Stdout {
     let ss: Slot<String> = Slot {};
     assert si.v == 0;
     assert ss.v == "";
-
-    // The derivation the `NoFields` idiom rests on.
-    assert `${NoFields::default():?}` == "NoFields {}";
-
-    println("ok");
-}
-
-__DATA__
-{
-    "stdout": "ok\n"
 }
