@@ -526,7 +526,7 @@ impl Analyzer<'_> {
             self.record_mutation(handle, live);
             return;
         };
-        if writes.is_opaque() || writes.writes_whole(owner) {
+        if writes.is_opaque() || !writes.re_rootable_at(owner) {
             self.record_mutation(handle, live);
             return;
         }

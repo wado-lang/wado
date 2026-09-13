@@ -29,10 +29,21 @@ impl Writes {
         self.opaque
     }
 
-    /// Whether a value of `owner` is written past any one field.
+    /// Whether this names any write. Which of the types named a given handle
+    /// reaches is not something this vocabulary answers, so any of them counts.
     #[must_use]
-    pub fn writes_whole(&self, owner: TypeId) -> bool {
-        self.whole.contains(&owner)
+    pub fn writes_anything(&self) -> bool {
+        self.opaque || !self.whole.is_empty() || !self.fields.is_empty()
+    }
+
+    /// Whether a caller holding a handle of `owner` can rebuild every write
+    /// named here as a path from it: each is a field of `owner` itself. A whole
+    /// value, or a field of a type the handle only *reaches* — a variant's
+    /// payload, say — names a place no re-rooting recovers, and dropping it
+    /// would hide the write from the caller.
+    #[must_use]
+    pub fn re_rootable_at(&self, owner: TypeId) -> bool {
+        self.whole.is_empty() && self.fields.iter().all(|(ty, _)| *ty == owner)
     }
 
     /// The fields of `owner` this writes, for a caller re-rooting them at the
@@ -158,11 +169,9 @@ pub fn compute_mod_ref(
                 }
             }
             for p in pending {
-                let hits = per_func.get(&p.callee.0, &p.callee.1).is_some_and(|w| {
-                    w.is_opaque()
-                        || w.writes_whole(p.handed)
-                        || w.fields_of(p.handed).next().is_some()
-                });
+                let hits = per_func
+                    .get(&p.callee.0, &p.callee.1)
+                    .is_some_and(Writes::writes_anything);
                 if hits {
                     merged.fields.extend(p.fields.iter().copied());
                     if let Some(whole) = p.whole {

@@ -659,6 +659,12 @@ Verified against the tree.
       a `String` handed to a callee that keeps it. The same fallback in the
       source-level walk changes no fixture, templates not being labeled blocks
       yet where it runs, and is fixed with it rather than left to rot.
+- [x] A caller takes the whole `&mut` handle as written when the callee names a
+      write it cannot re-root there. Re-rooting kept only the writes whose owner
+      was the handle's own type and dropped the rest, so a callee writing through
+      a variant payload reported nothing to its caller at all. Harmless only
+      while a defensive copy stood in the way; the item above removed that copy
+      and `value_copy_nested_write_through_payload` miscompiled.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp. The temp exists for `labeled_block_fusion`, and
       putting the copy on it makes which syntactic position a `match` sits in
@@ -715,12 +721,12 @@ Verified against the tree.
       every local live at every point, so the temps read as live at the write. The
       9 need re-measuring on the fixed liveness before this item is judged again.
 
-      Nothing miscompiles from this today.
-      `value_copy_nested_write_through_payload` pins the shape, and a coarser rule
-      — a `mut` local handed out as `&mut` is a mutated root — refuses the share
-      that the missing mutation would have allowed. So it is a precision asymmetry
-      that happens to be covered rather than a hole, but the rule covering it is
-      not the one that should answer.
+      Dropping the write was a hole, not a precision loss: with liveness fixed and
+      the defensive copy gone, `value_copy_nested_write_through_payload` miscompiled
+      — a value read out of a variant before the call saw the callee's write. A
+      caller now takes the whole handle as written whenever the callee names a write
+      it cannot re-root there, which is what `Writes` can say in its own vocabulary.
+      Recovering the precision is what the two pieces above are for.
 
       An or-pattern is a trap for either attempt: its alternatives bind one local
       between them but project different cases, so the local names only what they
