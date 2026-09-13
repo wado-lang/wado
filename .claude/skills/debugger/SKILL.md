@@ -1,6 +1,6 @@
 ---
 name: debugger
-description: Use rust-gdb to inspect variables and step through code without modifying it. Prefer this over print debugging when investigating compiler internals or runtime behavior (lldb is unavailable on Claude Code Web).
+description: Use rust-gdb to inspect variables and step through code without modifying it. Prefer it over print debugging for any investigation into what the compiler is actually doing (lldb is unavailable on Claude Code Web).
 ---
 
 # Debugger
