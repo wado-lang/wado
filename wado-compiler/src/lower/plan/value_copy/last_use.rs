@@ -1337,19 +1337,32 @@ impl Analyzer<'_> {
                 *live = self.continue_live();
             }
             TirStmtKind::LabeledBlock { label, block } => {
-                self.exits.push(Exit {
-                    label: Some(label.clone()),
-                    live: live.clone(),
-                    continue_live: None,
-                });
-                self.walk_block(block, live, record);
-                self.exits.pop();
+                self.walk_labeled_block(label, block, live, record);
             }
             TirStmtKind::TaskReturn { value } => {
                 self.walk_persisting(value, live, record);
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!("filtered by has_unsupported_form"),
         }
+    }
+
+    /// A labeled block, in statement or expression position. A `break LABEL`
+    /// inside resumes where the block ends, which only an entry on the stack
+    /// says; without one [`Analyzer::exit_live`] falls back to every local.
+    fn walk_labeled_block(
+        &mut self,
+        label: &str,
+        block: &TirBlock,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        self.exits.push(Exit {
+            label: Some(label.to_string()),
+            live: live.clone(),
+            continue_live: None,
+        });
+        self.walk_block(block, live, record);
+        self.exits.pop();
     }
 
     /// A loop's live-in is the least fixpoint of its body over the back-edge.
@@ -1522,8 +1535,9 @@ impl Analyzer<'_> {
                 *live = union(&then_live, &else_live);
                 self.walk_expr(condition, live, record);
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                self.walk_block(block, live, record);
+            TirExprKind::Block(block) => self.walk_block(block, live, record),
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.walk_labeled_block(label, block, live, record);
             }
             TirExprKind::Call {
                 func,

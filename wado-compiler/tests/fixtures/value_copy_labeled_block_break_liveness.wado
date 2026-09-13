@@ -1,0 +1,31 @@
+// A `break LABEL` inside a labeled block resumes where that block ends. A walk
+// that cannot say where stops every local in the function from being final, so
+// a template string — one labeled block per interpolation — used to cost every
+// later argument a defensive copy.
+
+use { println, Stdout } from "core:cli";
+
+fn unconfined(input: String) -> i32 {
+    let held = input.as_byte_slice();
+    return held.len();
+}
+
+fn make() -> Result<String, i32> {
+    return Ok(`payload`);
+}
+
+export fn run() with Stdout {
+    let produced = make();
+    if let Ok(text) = produced {
+        let n = unconfined(text);
+        println(`${n}`);
+    }
+}
+
+__DATA__
+{
+  "stdout": "7\n",
+  "wir_scope": "/run",
+  "wir_expect:O0": ["n = \"value_copy_labeled_block_break_liveness.wado/unconfined\"(text)"],
+  "wir_not_expect:O0": ["$value_copy$"]
+}

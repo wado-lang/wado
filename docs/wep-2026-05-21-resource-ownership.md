@@ -650,6 +650,15 @@ Verified against the tree.
       expressions it writes, so it predicts none of the temps pattern lowering
       mints after it. A miss left the fold no helper to call, which
       `wrap_value_copy` asserts on.
+- [x] A `break LABEL` resumes where its labeled block ends, at both levels that
+      compute last-use liveness. Each kept a stack of exit sets that only loops
+      pushed, so every such break fell back to _every_ local live. A template
+      string lowers to a labeled block, so one interpolation anywhere in a
+      function retired its whole last-use set: 756 of the corpus's 4208 copies
+      were that one fallback in the TIR walk, most of them a whole-array copy of
+      a `String` handed to a callee that keeps it. The same fallback in the
+      source-level walk changes no fixture, templates not being labeled blocks
+      yet where it runs, and is fixed with it rather than left to rot.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp. The temp exists for `labeled_block_fusion`, and
       putting the copy on it makes which syntactic position a `match` sits in
@@ -673,17 +682,45 @@ Verified against the tree.
       binding names the payload inside the value the pattern tested, as a
       `VariantPayload` read of it does; the release deepens with it, granting
       itself to every read at or inside the rebound place rather than to the
-      rebound path alone. Correct — the e2e suite is green on it — and it
-      improves nothing: every change is a loss, all of it in the `&mut`-variant
-      shapes (`mut_ref_variant_element`, `ref_field_ref_variant`), where a
-      scrutinee temp that shared its list element stops sharing once its arm
-      binding reads one selector deeper. Which rule turns the depth into a
-      refused share was not established.
+      rebound path alone. The e2e suite is green on it, and by count every site it
+      changes is a loss, all of them in the `&mut`-variant shapes
+      (`mut_ref_variant_element`, `ref_field_ref_variant`).
 
-      Both attempts moved where the decision is made without adding anything the
-      fold knows when it decides, and on every program the corpus has, the
-      answer it gives for the temp is the better one. Whatever finishes this has
-      to supply a fact, not a new place to decide.
+      Those 9 are not the deepening's own cost. Traced, the two scrutinee temps in
+      `mut_ref_variant_element::run` go from share-eligible to not, and the one
+      input that changed is the arm binding's path depth inside the callee.
+      `rename(e: &mut Element)` writes `r.name` through the payload its arm
+      matched. With the binding at the scrutinee's own path, that write resolves to
+      `[Field { owner: Named, index: name }]` rooted at `e` — a chain that leaves
+      out the `Element` → `Named` step, because the binding is standing in for the
+      value it was matched out of. `modref` files the write under `Named`, and
+      `record_call_mutation` re-roots only the steps whose owner is the handle's
+      own type, so a call site holding `&mut Element` asks `steps_of(Element)`,
+      finds nothing, and records no mutation at all. Deepen the binding and the
+      chain carries the `Element` step, the write is filed where the call site
+      looks for it, and the share is refused.
+
+      So the 9 are the bill for a write the tree does not file. What blocks this
+      item is not where the decision is made: it is that a write reached through a
+      variant payload is keyed by the payload's type while its call site keys by
+      the handle's. Two pieces would close that — `Selector::Variant` carrying its
+      owner, so a variant step is a key the way a field is, and `modref` speaking
+      addressable steps rather than fields, which is the vocabulary `disjoint`
+      already uses for these same three steps. Both were written, and they leave
+      the count at 4202: filing the write correctly is what costs the 9.
+
+      The refusal was itself too strong in `run`, where the call precedes both
+      temps and the write is live across neither. What said otherwise was the
+      labeled-block liveness defect fixed below: the asserts' template blocks made
+      every local live at every point, so the temps read as live at the write. The
+      9 need re-measuring on the fixed liveness before this item is judged again.
+
+      Nothing miscompiles from this today.
+      `value_copy_nested_write_through_payload` pins the shape, and a coarser rule
+      — a `mut` local handed out as `&mut` is a mutated root — refuses the share
+      that the missing mutation would have allowed. So it is a precision asymmetry
+      that happens to be covered rather than a hole, but the rule covering it is
+      not the one that should answer.
 
       An or-pattern is a trap for either attempt: its alternatives bind one local
       between them but project different cases, so the local names only what they

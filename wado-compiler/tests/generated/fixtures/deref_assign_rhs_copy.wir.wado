@@ -206,6 +206,7 @@ fn "deref_assign_rhs_copy.wado/$test_0_deref_assign_deep_copies_the_rhs_list"() 
 }
 
 fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_element_list"() {
+    let $v1_5: ref "core:prelude/string.wado//String";
     let $cond_6: bool;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
@@ -213,10 +214,10 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     let $fuse_at_17: i32;
     let $fuse_at_18: i32;
     let elements_19: ref "Array<core:prelude/string.wado/String>";
-    let v_33: ref "core:prelude/string.wado//String";
+    let self_44: i32;
+    let haystack: ref Array<u8>;
     let needle: ref Array<u8>;
     let j: i32;
-    let $sroa_$v1_used: i32;
     let $sroa_a_repr: ref "Array<core:prelude/string.wado/String>";
     let $sroa_b_repr: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$deref_val_12_repr: ref "Array<core:prelude/string.wado/String>";
@@ -226,39 +227,33 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     $sroa_$deref_val_12_repr = builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">($sroa_b_repr, 2);
     $sroa_a_repr = $sroa_$deref_val_12_repr;
     builtin::array_set<ref "core:prelude/string.wado//String">($sroa_b_repr, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 });
-    v_33 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_a_repr, 0);
-    let $array_clone_src_1: ref Array<u8>;
-    $array_clone_src_1 = v_33.repr;
-    let $array_clone_len_3: i32;
-    $array_clone_len_3 = v_33.used;
-    let $array_clone_dst_2: ref Array<u8>;
-    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
-    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $sroa_$v1_used = v_33.used;
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: block -> bool {
-        if $sroa_$v1_used != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: 0;
+    $v1_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_a_repr, 0);
+    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8: block -> bool {
+        self_44 = $v1_5.used;
+        if self_44 != 1 {
+            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8: 0;
         }
-        $inline_bytes_match_at_12: block -> bool {
+        $inline_bytes_match_at_11: block -> bool {
+            haystack = $v1_5.repr;
             needle = global:deref_assign_rhs_copy.wado::$const_obj_38;
             j = 0;
             b3: block {
                 l4: loop {
-                    break_if b3 j >= $sroa_$v1_used;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_12: 0;
+                    break_if b3 j >= self_44;
+                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
+                        break $inline_bytes_match_at_11: 0;
                     }
                     j = j + 1;
                     continue l4;
                 };
             };
-            break $inline_bytes_match_at_12: 1;
+            break $inline_bytes_match_at_11: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9;
+        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;
-        "core:rt/panic"($local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(140); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 108); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16, global:deref_assign_rhs_copy.wado::$const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 20, global:deref_assign_rhs_copy.wado::$const_obj_36, 57); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 77, global:deref_assign_rhs_copy.wado::$const_obj_15, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 81, global:deref_assign_rhs_copy.wado::$const_obj_14, 26); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 107, global:deref_assign_rhs_copy.wado::$const_obj_13, 1); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, $local_10); $fuse_at_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 27); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17, global:deref_assign_rhs_copy.wado::$const_obj_32, 24); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 24, global:deref_assign_rhs_copy.wado::$const_obj_11, 3); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: $sroa_a_repr, used: 2 }, $local_10); $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 7); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18, global:deref_assign_rhs_copy.wado::$const_obj_8, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18 + 1, global:deref_assign_rhs_copy.wado::$const_obj_19, 6); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2, used: $sroa_$v1_used }, $local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_9, global:deref_assign_rhs_copy.wado::$const_obj_8); $local_9);
+        "core:rt/panic"($local_9 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(140); $fuse_at_16 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 108); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16, global:deref_assign_rhs_copy.wado::$const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 20, global:deref_assign_rhs_copy.wado::$const_obj_36, 57); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 77, global:deref_assign_rhs_copy.wado::$const_obj_15, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 81, global:deref_assign_rhs_copy.wado::$const_obj_14, 26); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_16 + 107, global:deref_assign_rhs_copy.wado::$const_obj_13, 1); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 28 }, $local_10); $fuse_at_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 27); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17, global:deref_assign_rhs_copy.wado::$const_obj_32, 24); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_17 + 24, global:deref_assign_rhs_copy.wado::$const_obj_11, 3); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: $sroa_a_repr, used: 2 }, $local_10); $fuse_at_18 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_9, 7); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18, global:deref_assign_rhs_copy.wado::$const_obj_8, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_9.repr, $fuse_at_18 + 1, global:deref_assign_rhs_copy.wado::$const_obj_19, 6); $local_10 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_9); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"($v1_5, $local_10); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_9, global:deref_assign_rhs_copy.wado::$const_obj_8); $local_9);
         unreachable;
     }
 }
