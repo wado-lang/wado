@@ -23,10 +23,14 @@ The Wado compiler crate.
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver
   over the IR rather than partial walkers, which each miss a different shape.
-- Optimize as far as correctness allows. A conservatism is a claim about
-  precision: measure what it buys, and drop the ones that buy nothing.
-- Escalate the test scope as the work matures: `cargo check` while iterating,
-  `mise run test` during development, `mise run test-wado` when wrapping up.
+- Optimize to the limit correctness allows, and nothing short of it. Wrong code
+  is never a trade, and a conservatism is not caution but a defect: measure what
+  one buys, and delete it when that is nothing.
+- `cargo check` while iterating. The e2e fixtures cover the language, so
+  `cargo test -p wado-compiler --test e2e` is the signal that matters: O0 and O2
+  by default, the other levels only under `CI` or `WADO_FULL_TEST`.
+  `mise run test` and `mise run test-wado` take an hour, so they belong at the
+  end and not in the loop.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 
