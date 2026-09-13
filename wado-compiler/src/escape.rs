@@ -47,51 +47,19 @@ fn push_escaped(out: &mut String, c: char, quote: char) {
 pub(crate) fn unescape_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
-    let mut pending_high: Option<u16> = None;
+    let mut pairer = SurrogatePairer::default();
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            let escaped = unescape_one(&mut chars)?;
-            if let Some(code_unit) = as_surrogate_code_unit(escaped) {
-                if is_high_surrogate(code_unit) {
-                    if pending_high.is_some() {
-                        return Err(
-                            "invalid surrogate pair: high surrogate not followed by low surrogate"
-                                .to_string(),
-                        );
-                    }
-                    pending_high = Some(code_unit);
-                    continue;
-                } else if is_low_surrogate(code_unit)
-                    && let Some(high) = pending_high.take()
-                {
-                    let combined = decode_surrogate_pair(high, code_unit);
-                    let c = char::from_u32(combined)
-                        .ok_or_else(|| "invalid surrogate pair".to_string())?;
-                    result.push(c);
-                    continue;
-                }
+            let decoded = unescape_one(&mut chars)?;
+            if let Some(c) = pairer.push(decoded)? {
+                result.push(c);
             }
-            if pending_high.is_some() {
-                return Err(
-                    "invalid surrogate pair: high surrogate not followed by low surrogate"
-                        .to_string(),
-                );
-            }
-            result.push(escaped);
         } else {
-            if pending_high.is_some() {
-                return Err(
-                    "invalid surrogate pair: high surrogate not followed by low surrogate"
-                        .to_string(),
-                );
-            }
-            result.push(ch);
+            result.push(pairer.pass(ch)?);
         }
     }
-    if pending_high.is_some() {
-        return Err("invalid surrogate pair: high surrogate at end of string".to_string());
-    }
+    pairer.finish()?;
     Ok(result)
 }
 
@@ -119,7 +87,7 @@ pub(crate) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                         .to_string(),
                 );
             } else {
-                let decoded = unescape_one(&mut chars)? as u32;
+                let decoded = unescape_one(&mut chars)?.char()? as u32;
                 if decoded > 0x7f {
                     return Err(format!(
                         "escape resolves to U+{decoded:04X}, out of byte range; use `\\xNN`"
@@ -152,7 +120,7 @@ pub(crate) fn unescape_byte(raw: &str) -> Result<u8, String> {
 pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
     let mut chars = raw.chars().peekable();
     let result = match chars.next() {
-        Some('\\') => unescape_one(&mut chars)?,
+        Some('\\') => unescape_one(&mut chars)?.char()?,
         Some(c) => c,
         None => return Err("empty char literal".to_string()),
     };
@@ -173,7 +141,7 @@ pub(crate) fn unescape_template_segment(raw: &str) -> String {
 pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
-    let mut pending_high: Option<u16> = None;
+    let mut pairer = SurrogatePairer::default();
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
@@ -183,75 +151,101 @@ pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
             if let Some(&next) = chars.peek()
                 && (next == '{' || next == '}' || next == '$' || next == '`')
             {
-                if pending_high.is_some() {
-                    return Err(
-                        "invalid surrogate pair: high surrogate not followed by low surrogate"
-                            .to_string(),
-                    );
-                }
                 chars.next();
-                result.push(next);
+                result.push(pairer.pass(next)?);
                 continue;
             }
-            let escaped = unescape_one(&mut chars)?;
-            if let Some(code_unit) = as_surrogate_code_unit(escaped) {
-                if is_high_surrogate(code_unit) {
-                    if pending_high.is_some() {
-                        return Err(
-                            "invalid surrogate pair: high surrogate not followed by low surrogate"
-                                .to_string(),
-                        );
-                    }
-                    pending_high = Some(code_unit);
-                    continue;
-                } else if is_low_surrogate(code_unit)
-                    && let Some(high) = pending_high.take()
-                {
-                    let combined = decode_surrogate_pair(high, code_unit);
-                    let c = char::from_u32(combined)
-                        .ok_or_else(|| "invalid surrogate pair".to_string())?;
-                    result.push(c);
-                    continue;
-                }
+            let decoded = unescape_one(&mut chars)?;
+            if let Some(c) = pairer.push(decoded)? {
+                result.push(c);
             }
-            if pending_high.is_some() {
-                return Err(
-                    "invalid surrogate pair: high surrogate not followed by low surrogate"
-                        .to_string(),
-                );
-            }
-            result.push(escaped);
         } else {
-            if pending_high.is_some() {
-                return Err(
-                    "invalid surrogate pair: high surrogate not followed by low surrogate"
-                        .to_string(),
-                );
-            }
-            result.push(ch);
+            result.push(pairer.pass(ch)?);
         }
     }
-    if pending_high.is_some() {
-        return Err("invalid surrogate pair: high surrogate at end of string".to_string());
-    }
+    pairer.finish()?;
     Ok(result)
+}
+
+/// What one escape sequence denotes. A `\uHHHH` half of a surrogate pair
+/// denotes no character on its own, and says so rather than standing in as one.
+enum Decoded {
+    Char(char),
+    Surrogate(u16),
+}
+
+impl Decoded {
+    /// The character this denotes, or why it denotes none.
+    fn char(self) -> Result<char, String> {
+        match self {
+            Decoded::Char(c) => Ok(c),
+            Decoded::Surrogate(code_unit) => Err(format!(
+                "lone surrogate U+{code_unit:04X} is not a character"
+            )),
+        }
+    }
+}
+
+const UNPAIRED_HIGH: &str = "invalid surrogate pair: high surrogate not followed by low surrogate";
+
+/// Joins the `\uHHHH` halves of a surrogate pair, which denote one character
+/// together and none apart.
+#[derive(Default)]
+struct SurrogatePairer {
+    pending_high: Option<u16>,
+}
+
+impl SurrogatePairer {
+    /// The character `decoded` completes, or `None` while a high surrogate
+    /// waits for its low half.
+    fn push(&mut self, decoded: Decoded) -> Result<Option<char>, String> {
+        if let Decoded::Surrogate(code_unit) = decoded {
+            if is_high_surrogate(code_unit) {
+                if self.pending_high.replace(code_unit).is_some() {
+                    return Err(UNPAIRED_HIGH.to_string());
+                }
+                return Ok(None);
+            }
+            if let Some(high) = self.pending_high.take() {
+                return char::from_u32(decode_surrogate_pair(high, code_unit))
+                    .map(Some)
+                    .ok_or_else(|| "invalid surrogate pair".to_string());
+            }
+        }
+        self.pass(decoded.char()?).map(Some)
+    }
+
+    /// `c` itself, once no high surrogate is left waiting for a low half.
+    fn pass(&mut self, c: char) -> Result<char, String> {
+        match self.pending_high {
+            Some(_) => Err(UNPAIRED_HIGH.to_string()),
+            None => Ok(c),
+        }
+    }
+
+    fn finish(&self) -> Result<(), String> {
+        match self.pending_high {
+            Some(_) => Err("invalid surrogate pair: high surrogate at end of string".to_string()),
+            None => Ok(()),
+        }
+    }
 }
 
 /// Parse one escape sequence (after the leading `\` has been consumed).
 fn unescape_one<I: Iterator<Item = char>>(
     chars: &mut std::iter::Peekable<I>,
-) -> Result<char, String> {
+) -> Result<Decoded, String> {
     match chars.next() {
-        Some('n') => Ok('\n'),
-        Some('t') => Ok('\t'),
-        Some('r') => Ok('\r'),
-        Some('\\') => Ok('\\'),
-        Some('"') => Ok('"'),
-        Some('\'') => Ok('\''),
-        Some('/') => Ok('/'),
-        Some('b') => Ok('\x08'),
-        Some('f') => Ok('\x0C'),
-        Some('0') => Ok('\0'),
+        Some('n') => Ok(Decoded::Char('\n')),
+        Some('t') => Ok(Decoded::Char('\t')),
+        Some('r') => Ok(Decoded::Char('\r')),
+        Some('\\') => Ok(Decoded::Char('\\')),
+        Some('"') => Ok(Decoded::Char('"')),
+        Some('\'') => Ok(Decoded::Char('\'')),
+        Some('/') => Ok(Decoded::Char('/')),
+        Some('b') => Ok(Decoded::Char('\x08')),
+        Some('f') => Ok(Decoded::Char('\x0C')),
+        Some('0') => Ok(Decoded::Char('\0')),
         Some('u') => unescape_unicode(chars),
         Some(c) => Err(format!("invalid escape sequence: \\{c}")),
         None => Err("unterminated escape sequence".to_string()),
@@ -260,7 +254,7 @@ fn unescape_one<I: Iterator<Item = char>>(
 
 fn unescape_unicode<I: Iterator<Item = char>>(
     chars: &mut std::iter::Peekable<I>,
-) -> Result<char, String> {
+) -> Result<Decoded, String> {
     if chars.peek() == Some(&'{') {
         chars.next(); // consume '{'
         let mut hex = String::new();
@@ -278,6 +272,7 @@ fn unescape_unicode<I: Iterator<Item = char>>(
         let code_point = u32::from_str_radix(&hex, 16)
             .map_err(|_| format!("invalid unicode escape: \\u{{{hex}}}"))?;
         char::from_u32(code_point)
+            .map(Decoded::Char)
             .ok_or_else(|| format!("invalid unicode code point: U+{code_point:04X}"))
     } else {
         let mut hex = String::new();
@@ -290,28 +285,12 @@ fn unescape_unicode<I: Iterator<Item = char>>(
         let code_unit = u16::from_str_radix(&hex, 16)
             .map_err(|_| format!("invalid unicode escape: \\u{hex}"))?;
         if is_high_surrogate(code_unit) || is_low_surrogate(code_unit) {
-            // Encode surrogate as PUA so the caller can detect and combine pairs
-            let pua = if is_high_surrogate(code_unit) {
-                u32::from(code_unit - 0xD800) + 0xE000
-            } else {
-                u32::from(code_unit - 0xDC00) + 0xE800
-            };
-            Ok(char::from_u32(pua).unwrap())
+            Ok(Decoded::Surrogate(code_unit))
         } else {
             char::from_u32(u32::from(code_unit))
+                .map(Decoded::Char)
                 .ok_or_else(|| format!("invalid unicode code point: U+{code_unit:04X}"))
         }
-    }
-}
-
-fn as_surrogate_code_unit(c: char) -> Option<u16> {
-    let code = c as u32;
-    if (0xE000..=0xE7FF).contains(&code) {
-        Some((code - 0xE000 + 0xD800) as u16)
-    } else if (0xE800..=0xEBFF).contains(&code) {
-        Some((code - 0xE800 + 0xDC00) as u16)
-    } else {
-        None
     }
 }
 
@@ -346,6 +325,29 @@ mod tests {
         }
         assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
         assert_eq!(quoted("say \"hi\""), "\"say \\\"hi\\\"\"");
+    }
+
+    #[test]
+    fn private_use_characters_are_not_surrogate_markers() {
+        assert_eq!(unescape_string("\\u{E000}").unwrap(), "\u{E000}");
+        assert_eq!(
+            unescape_string("\\u{E000}\\u{E800}").unwrap(),
+            "\u{E000}\u{E800}"
+        );
+        assert_eq!(unescape_template_string("\\u{E000}").unwrap(), "\u{E000}");
+    }
+
+    #[test]
+    fn surrogate_halves_pair_and_do_not_stand_alone() {
+        assert_eq!(unescape_string("\\uD83D\\uDE00").unwrap(), "\u{1F600}");
+        assert_eq!(
+            unescape_template_string("\\uD83D\\uDE00").unwrap(),
+            "\u{1F600}"
+        );
+        assert!(unescape_string("\\uD83D").is_err());
+        assert!(unescape_string("\\uDE00").is_err());
+        assert!(unescape_string("\\uD83Dx").is_err());
+        assert!(unescape_char("\\uD83D").is_err());
     }
 
     #[test]

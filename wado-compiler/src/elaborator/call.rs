@@ -1690,6 +1690,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
+        // Every shape above narrows to this one callee, so asking here asks for
+        // all of them: naming an `#[unavailable]` declaration is the whole
+        // answer, and a shape that resolved one has nothing left to check.
+        if let Some(def) = callee.def()
+            && self.report_unavailable(def, call.span)
+        {
+            return TypeTable::ERROR;
+        }
+
         // Resolve explicit type arguments (`_` resolves to UNKNOWN).
         let mut type_args: Vec<TypeId> = call
             .type_args

@@ -586,8 +586,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         true
     }
 
-    /// Record a use→def edge naming `def`, reporting its unavailability.
-    /// Every call shape resolves through here, whichever shape it used.
+    /// Record a use→def edge naming `def`, reporting its unavailability so the
+    /// shape can stop before checking a signature the declaration does not have.
     pub(super) fn record_reference_to_decl(
         &mut self,
         use_id: AstId,
