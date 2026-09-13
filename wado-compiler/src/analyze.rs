@@ -5,7 +5,7 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{AstId, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
+use crate::ast::{AstId, Function, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -53,6 +53,21 @@ fn resolve_use_decl_module_source(
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
     wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
+
+/// Whether a module may declare a function with no body and no attribute
+/// naming what backs it: `core:builtin` intrinsics lower to Wasm instructions,
+/// and a binding or wasm-asset module lowers to a component import.
+fn declares_bodyless_functions(module_source: &ModuleSource) -> bool {
+    match module_source {
+        ModuleSource::Core { name } => name.as_str() == "builtin",
+        ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => true,
+        ModuleSource::Local { .. }
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::EntryPoint { .. }
+        | ModuleSource::Redirected { .. } => false,
+    }
+}
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
@@ -93,6 +108,12 @@ pub enum AnalyzeError {
         span: Span,
         declared: Span,
     },
+    /// A function declared without a body where nothing supplies one.
+    ///
+    /// Only a trait or interface method, a Component Model binding
+    /// (`#[cm]` / `#[canonical]`), or a `core:builtin` intrinsic may omit a
+    /// body. Anywhere else the call has nothing to reach.
+    MissingFunctionBody { name: String, span: Span },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
     /// Invalid module path (not a valid URI reference)
@@ -163,6 +184,13 @@ impl std::fmt::Display for AnalyzeError {
                     f,
                     "{}:{}: import of '{}' collides with the declaration at {}:{}",
                     span.line, span.column, name, declared.line, declared.column
+                )
+            }
+            AnalyzeError::MissingFunctionBody { name, span } => {
+                write!(
+                    f,
+                    "{}:{}: function '{}' has no body",
+                    span.line, span.column, name
                 )
             }
             AnalyzeError::UndefinedSymbol { name, span } => {
@@ -306,6 +334,11 @@ impl From<AnalyzeError> for Diagnostic {
                     "import of '{name}' collides with the declaration at {}:{}",
                     declared.line, declared.column
                 ),
+                *span,
+            ),
+            AnalyzeError::MissingFunctionBody { name, span } => (
+                Code::MissingFunctionBody,
+                format!("function '{name}' has no body"),
                 *span,
             ),
             AnalyzeError::UndefinedSymbol { name, span } => (
@@ -842,10 +875,48 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.check_prelude_collisions(module, source);
         }
 
-        // Fourth pass: validate imports in each module
+        // Fourth pass: every function either has a body or is backed by one
+        for (source, module) in modules {
+            self.check_function_bodies(module, source);
+        }
+
+        // Fifth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())
+    }
+
+    /// Reject a function that declares no body where nothing supplies one.
+    ///
+    /// Such a declaration used to reach WIR, where the call it could not
+    /// resolve panicked instead of reporting anything (issue #2035).
+    fn check_function_bodies(&mut self, module: &Module, module_source: &ModuleSource) {
+        if declares_bodyless_functions(module_source) {
+            return;
+        }
+        for item in &module.items {
+            if let Item::Function(func) = item {
+                self.check_function_body(func, module_source);
+            }
+            if let Item::Impl(impl_block) = item {
+                for method in &impl_block.methods {
+                    self.check_function_body(method, module_source);
+                }
+            }
+        }
+    }
+
+    fn check_function_body(&mut self, func: &Function, module_source: &ModuleSource) {
+        if func.body.is_some() || func.attrs.iter().any(|a| a.cm_boundary.is_some()) {
+            return;
+        }
+        let _ = self.logger.error_in(
+            module_source,
+            AnalyzeError::MissingFunctionBody {
+                name: func.name.clone(),
+                span: func.name_span,
+            },
+        );
     }
 
     fn validate_all_imports(

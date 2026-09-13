@@ -89,6 +89,8 @@ pub enum Code {
     ImmutableAssignment,
     /// Variable used before it was definitely initialized
     UninitializedVariable,
+    /// Function declared without a body where nothing supplies one
+    MissingFunctionBody,
 
     // Type errors
     /// Type mismatch
@@ -222,6 +224,7 @@ impl std::fmt::Display for Code {
             Code::DuplicateDefinition => "DUPLICATE_DEFINITION",
             Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
             Code::UninitializedVariable => "UNINITIALIZED_VARIABLE",
+            Code::MissingFunctionBody => "MISSING_FUNCTION_BODY",
             Code::TypeMismatch => "TYPE_MISMATCH",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",

@@ -1,0 +1,12 @@
+// A function with no body has nothing to run. Only a trait or interface
+// method, or a declaration backed by a CM binding, may omit one. The call
+// used to reach WIR and panic there with "unresolved Call".
+
+fn missing() -> i32;
+
+export fn run() {
+    let _ = missing();
+}
+
+__DATA__
+{"compile_error": "function 'missing' has no body"}

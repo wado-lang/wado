@@ -1,0 +1,10 @@
+// The declaration is the error, so it is reported whether or not anything
+// calls it. Catching it at the call site would leave the declaration standing
+// and report nothing for a module that only declares.
+
+fn missing() -> i32;
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "function 'missing' has no body"}
