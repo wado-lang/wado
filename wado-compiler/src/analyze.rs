@@ -53,11 +53,15 @@ fn resolve_use_decl_module_source(
 fn is_wasm_asset_use_decl(use_decl: &UseDecl) -> bool {
     wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()).is_some()
 }
+use crate::symbol::{
+    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
+    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
+    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
+};
+use crate::token::Span;
 
-/// Whether a module may declare a function with no body and no attribute
-/// naming what backs it: `core:builtin` intrinsics lower to Wasm instructions,
-/// and a binding or wasm-asset module lowers to a component import.
-fn declares_bodyless_functions(module_source: &ModuleSource) -> bool {
+/// Whether a module's functions may omit a body without naming what backs it.
+fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
     match module_source {
         ModuleSource::Core { name } => name.as_str() == "builtin",
         ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => true,
@@ -68,12 +72,6 @@ fn declares_bodyless_functions(module_source: &ModuleSource) -> bool {
         | ModuleSource::Redirected { .. } => false,
     }
 }
-use crate::symbol::{
-    EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
-    ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
-    WorldExportSymbol, WorldImportSymbol, WorldSymbol,
-};
-use crate::token::Span;
 
 /// Error that can occur during analysis
 #[derive(Debug, Clone)]
@@ -109,10 +107,6 @@ pub enum AnalyzeError {
         declared: Span,
     },
     /// A function declared without a body where nothing supplies one.
-    ///
-    /// Only a trait or interface method, a Component Model binding
-    /// (`#[cm]` / `#[canonical]`), or a `core:builtin` intrinsic may omit a
-    /// body. Anywhere else the call has nothing to reach.
     MissingFunctionBody { name: String, span: Span },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
@@ -886,12 +880,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         self.logger.ok_or_bail(())
     }
 
-    /// Reject a function that declares no body where nothing supplies one.
-    ///
-    /// Such a declaration used to reach WIR, where the call it could not
-    /// resolve panicked instead of reporting anything (issue #2035).
+    /// Reject a function that declares no body where nothing supplies one
+    /// (issue #2035).
     fn check_function_bodies(&mut self, module: &Module, module_source: &ModuleSource) {
-        if declares_bodyless_functions(module_source) {
+        if allows_bodyless_functions(module_source) {
             return;
         }
         for item in &module.items {
@@ -907,7 +899,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     fn check_function_body(&mut self, func: &Function, module_source: &ModuleSource) {
-        if func.body.is_some() || func.attrs.iter().any(|a| a.cm_boundary.is_some()) {
+        if func.body.is_some() || func.is_cm_import() {
             return;
         }
         let _ = self.logger.error_in(

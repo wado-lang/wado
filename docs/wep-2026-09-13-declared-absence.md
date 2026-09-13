@@ -58,7 +58,7 @@ require exactly its own fields, and the attribute name is then the verb the
 diagnostic needs.
 
 Swift unifies its three under `@available`, but that attribute's primary axis
-is the OS version, and a message is optional there — an `unavailable` with no
+is the OS version, and a message is optional there. An `unavailable` with no
 explanation is expressible. Mandatory reasons are the whole point here.
 
 ### The reason is mandatory
@@ -78,8 +78,8 @@ A `#[not_provided]` declaration may write an empty parameter list. What it
 reserves is the name; parameters and return type, if written, are parsed but
 neither resolved nor type-checked. Requiring the refused method's true Rust
 signature would be surface that rots, and it sits badly with the policy the
-attribute exists to record — Wado does not offer a Rust name under different
-parameters, so writing those parameters out is writing down the thing being
+attribute exists to record. Wado does not offer a Rust name under different
+parameters, so writing those parameters out writes down the thing being
 refused.
 
 `#[removed]` may keep the signature the method had, as a record, under the
@@ -87,10 +87,10 @@ same rule.
 
 ### Name resolution
 
-The declaration participates in name resolution, which is the whole feature:
-the call site reaches it and receives the reason rather than falling through
-to "no method named". It is excluded from everything else — it never satisfies
-a trait requirement, and it never reaches codegen.
+The declaration participates in name resolution, so the call site reaches it
+and receives the reason rather than falling through to "no method named". It
+is excluded from everything else. It never satisfies a trait requirement, and
+it never reaches codegen.
 
 ### Placement
 
@@ -105,12 +105,10 @@ the API offers, and a list of what it does not is noise there.
 ### A bodyless function is otherwise an error
 
 These attributes sanction a declaration with no body, so the unsanctioned case
-has to mean something first. It did not: a bodyless `fn` at module level or in
-an `impl` was accepted and reached WIR, where the call it could not resolve
-panicked (issue #2035). A function with no body is now rejected unless
-something supplies one — a Component Model binding (`#[cm]` / `#[canonical]`),
-a `core:builtin` intrinsic, a binding or wasm-asset module, or a
-trait/interface method declaration. The two attributes join that list.
+has to be an error first. A function with no body is rejected unless something
+supplies one: a Component Model binding (`#[cm]` / `#[canonical]`), a
+`core:builtin` intrinsic, a binding or wasm-asset module, or a trait/interface
+method declaration (issue #2035). The two attributes join that list.
 
 ## Roadmap
 
@@ -121,7 +119,7 @@ trait/interface method declaration. The two attributes join that list.
    no `since`. Done when a declaration carrying either parses and a
    malformed one is diagnosed.
 3. Carry them through name resolution so a call reaches the declaration and
-   reports the reason, and so nothing else sees the name — no trait
+   reports the reason, and so nothing else sees the name: no trait
    requirement satisfied, nothing emitted. Done when a call to a
    `#[not_provided]` method reports its reason and an `impl` carrying one does
    not count as implementing it.
@@ -137,12 +135,12 @@ trait/interface method declaration. The two attributes join that list.
   `#[unavailable(state, "...")]` carrying the state as an argument, and
   inferring "removed" from the presence of `since`. Closing this is a naming
   call, and every step of the roadmap depends on it.
-- `#[deprecated(since = "...", "...")]` — still callable, reported as a
-  warning — is the third member of the family and is not designed here. It
-  shares the mechanism; what it needs beyond that is a warning path, a
-  decision on whether to match Rust's `note = "..."` argument spelling, and
-  its own answer on `wado doc` — a deprecated item still exists, so the
-  reasoning above for leaving absences out does not carry to it.
+- `#[deprecated(since = "...", "...")]` is the third member of the family and
+  is not designed here. It stays callable and reports a warning, and it shares
+  the mechanism above. What it needs beyond that is a warning path, a decision
+  on whether to match Rust's `note = "..."` argument spelling, and its own
+  answer on `wado doc`. A deprecated item still exists, so the reasoning above
+  for leaving absences out does not carry to it.
 - Types, traits, and globals cannot carry these attributes. Extending to them
   looks mechanical, and no use has asked for it.
 - Whether a `#[removed]` declaration is ever pruned, and on what schedule, is

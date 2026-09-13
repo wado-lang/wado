@@ -1959,6 +1959,13 @@ pub struct Function {
     pub span: Span,
 }
 
+impl Function {
+    /// Whether the Component Model supplies this declaration's body.
+    pub fn is_cm_import(&self) -> bool {
+        self.body.is_none() && self.attrs.iter().any(|a| a.cm_boundary.is_some())
+    }
+}
+
 /// Self parameter kind: &self or &mut self
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SelfKind {
