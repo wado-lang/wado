@@ -15,7 +15,7 @@ use {
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
 use { diagnostic_level } from "./gir.wado";
-use { event } from "core:log";
+use { Level, event, set_log_level } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 
@@ -25,6 +25,7 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 // dropped). `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
+    log_level: Option<String> = null,
     output: Option<String> = null,
     #[wire(positional)]
     grammars: List<String> = [],
@@ -34,6 +35,7 @@ impl Deserialize for GenArgs;
 struct DumpArgs {
     atn: bool = false,
     lexer: bool = false,
+    log_level: Option<String> = null,
     #[wire(positional)]
     grammars: List<String> = [],
 }
@@ -48,11 +50,16 @@ impl Deserialize for Command;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
+    // A hand-run build reports what a Kiln build reports, so the two paths agree
+    // on what a grammar's diagnostics mean. `--log-level info` asks for more.
+    set_log_level(Level::Warn);
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
+            apply_log_level(&g.log_level);
             cmd_gen(g.grammars, &g.output, g.trace);
         },
         Ok(Command::Dump(d)) => {
+            apply_log_level(&d.log_level);
             cmd_dump(d.grammars, d.atn, d.lexer);
         },
         Err(e) => {
@@ -75,8 +82,29 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 }
 
 fn usage() with Stderr {
-    eprintln("Usage: gale gen [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]");
-    eprintln("       gale dump [--atn | --lexer] <grammar.g4> [grammar2.g4 ...]");
+    eprintln(
+        "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]",
+    );
+    eprintln("       gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       <level> is trace, debug, info, warn or error (default warn)");
+}
+
+/// Move the process-wide threshold (`core:log` tier 2) to `--log-level`.
+///
+/// Tier 1 is a ceiling this cannot raise: a build that already compiled the
+/// `info` calls away stays quiet whatever is asked for here. `wado compile -D
+/// log.level=trace` is what moves the ceiling.
+fn apply_log_level(spec: &Option<String>) with (Stderr, Exit) {
+    let Some(name) = *spec else {
+        return;
+    };
+    match Level::from_str_lenient(&name) {
+        Ok(level) => set_log_level(level),
+        Err(_) => {
+            eprintln(`gale: unknown --log-level '${name}' (trace, debug, info, warn, error)`);
+            exit(1);
+        },
+    }
 }
 
 fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdout, Stderr, Preopens, Exit) {

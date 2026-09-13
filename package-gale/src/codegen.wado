@@ -80,10 +80,11 @@ pub struct GenerateOptions {
     /// keeps generated output byte-identical to a highlight-free build.
     /// Presence of a `.scm` query input is what turns highlighting on.
     pub highlight_query: Option<List<HighlightRule>> = null,
-    /// Emit trace logging to stderr (via `log_stderr`) in the generated
-    /// parser: rule enter/ok/fail frames plus the multi-alt scan/pick/try
-    /// decisions. Off by default; enabled by `gale gen --trace` or the
-    /// `trace: true` Kiln generator option.
+    /// Emit trace logging (via `core:log` at `Trace`) in the generated parser:
+    /// rule enter/ok/fail frames plus the multi-alt scan/pick/try decisions.
+    /// Off by default; enabled by `gale gen --trace` or the `trace: true` Kiln
+    /// generator option. A trace build also exports `trace_to_stderr`, since
+    /// `Trace` is below what `core:log` admits with no sink installed.
     pub trace: bool = false,
     /// Rule names a fragment is a sequence of, for tooling; empty is
     /// byte-identical.
@@ -287,8 +288,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     }
     gen_header(&mut w, grammar);
     if options.trace {
-        // Trace logging writes to stderr via the ambient logger.
-        w.line(&"use { log_stderr } from \"core:rt\";");
+        w.line(&"use { Level, Log, TextSink, enabled, set_log_level, trace } from \"core:log\";");
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
