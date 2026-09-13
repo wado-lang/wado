@@ -475,8 +475,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Every body fact kind that can hold a `TypeId` has one substitution
-    /// below; the module's own walk and each unrolled tuple `for-of` element
-    /// hold the same kinds and sweep through the same list.
+    /// below; the module's own walk, each unrolled tuple `for-of` element and
+    /// each default-argument walk hold the same kinds and sweep through the
+    /// same list.
     fn sweep_body_facts(
         tt: &mut TypeTable,
         facts: &mut BodyFacts,
@@ -525,6 +526,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for call in facts.literal_conversions.values_mut() {
             sub_literal_from_call(tt, call, subst);
+        }
+        // A call's omitted arguments produced facts of their own, and one of
+        // those may itself be a defaulted call. Swept here rather than beside
+        // the caller's walk, so reaching a walk reaches everything under it.
+        for overlay in facts.default_overlays.values_mut() {
+            Self::sweep_body_facts(tt, overlay, subst);
         }
     }
 }

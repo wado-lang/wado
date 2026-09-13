@@ -617,8 +617,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
     /// fields all declare a default, making it eligible for auto-derived
-    /// `Default::default()`. `None` for an unknown name, a required field, no
-    /// fields at all, or a generic struct. Does not check for a user-written
+    /// `Default::default()` — a fieldless one vacuously. `None` for an unknown
+    /// name, a required field, or a generic struct. Does not check for a user-written
     /// `impl Default`, so consult it only as a fallback after the regular
     /// impl-lookup paths.
     pub(super) fn auto_derive_default_struct_type(

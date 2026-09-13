@@ -43,6 +43,11 @@ pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,
     error_count: Cell<usize>,
+    /// Faults offered, counting one the dedup below swallowed. What a walk
+    /// asking "did I report anything?" has to compare: the same fault at the
+    /// same place is printed once, so [`Self::error_count`] does not move for
+    /// the second walk that hit it, and a delta over it reads as clean.
+    offered_error_count: Cell<usize>,
     /// Nesting depth of [`Logger::quiet`] scopes. While non-zero, an error is
     /// dropped instead of emitted and does not count.
     quiet_depth: Cell<usize>,
@@ -73,6 +78,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             host,
             level,
             error_count: Cell::new(0),
+            offered_error_count: Cell::new(0),
             quiet_depth: Cell::new(0),
             reported: std::cell::RefCell::default(),
             parses: std::cell::RefCell::default(),
@@ -134,6 +140,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         if self.quiet_depth.get() > 0 {
             return Ok(());
         }
+        self.offered_error_count
+            .set(self.offered_error_count.get() + 1);
         if let Some(identity) = Self::identity(&diag)
             && !self.reported.borrow_mut().insert(identity)
         {
@@ -212,6 +220,8 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
             return Err(Bail);
         }
         self.error_count.set(self.error_count.get() + 1);
+        self.offered_error_count
+            .set(self.offered_error_count.get() + 1);
         self.emit(err.into());
         Err(Bail)
     }
@@ -236,6 +246,15 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Get the number of errors reported
     pub fn error_count(&self) -> usize {
         self.error_count.get()
+    }
+
+    /// Faults offered, one already-said among them included. Compare a delta
+    /// over this to ask whether a walk reported; a delta over
+    /// [`Self::error_count`] answers that wrongly for the second walk to reach
+    /// one place, which is every re-walked node — a default argument, a trait's
+    /// default body synthesized per implementing type.
+    pub fn offered_error_count(&self) -> usize {
+        self.offered_error_count.get()
     }
 
     /// Return `Ok(value)` if no errors have been reported, `Err(Bail)` otherwise.
@@ -549,6 +568,40 @@ mod tests {
         });
         assert!(result.is_err());
         assert_eq!(logger.error_count(), MAX_ERRORS);
+    }
+
+    /// The same fault at the same place is printed once, so `error_count` does
+    /// not move for the second report. A walk asking whether it reported
+    /// anything has to read `offered_error_count`, which does.
+    #[test]
+    fn test_dedup_moves_only_the_offered_count() {
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Error);
+        let twice = || Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message: "unknown function 'T::default'".to_string(),
+            span: Some(DiagnosticSpan {
+                file: "a.wado".to_string(),
+                line: 3,
+                column: 46,
+                end_line: None,
+                end_column: None,
+                space: AstIdSpace::FRESH,
+            }),
+        };
+
+        let _ = logger.error(twice());
+        assert_eq!(logger.error_count(), 1);
+        assert_eq!(logger.offered_error_count(), 1);
+
+        let before = logger.offered_error_count();
+        let _ = logger.error(twice());
+        assert_eq!(logger.error_count(), 1, "the dedup keeps it from printing");
+        assert!(
+            logger.offered_error_count() > before,
+            "but the second walk did report, and must be able to tell"
+        );
     }
 
     #[test]

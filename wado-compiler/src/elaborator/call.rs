@@ -2177,8 +2177,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         // The check below is for a default that resolved to `()` with nothing
         // reported. One that did report has already said why, so let it stand
-        // rather than replacing its diagnostic with a panic.
-        let errors_before = self.logger.error_count();
+        // rather than replacing its diagnostic with a panic — including the
+        // second call site to hit the fault, whose report the dedup swallows.
+        let errors_before = self.logger.offered_error_count();
         self.fill_trailing_defaults(
             args,
             param_types,
@@ -2193,18 +2194,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
                     && expected_type != TypeTable::UNKNOWN
-                    && s.logger.error_count() == errors_before
+                    && s.logger.offered_error_count() == errors_before
                 {
                     let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
                     let name = &defaults[i].0;
                     panic!(
                         "compiler bug: default expression for parameter '{name}' \
-                         re-resolved to () at call site but parameter expects '{expected_name}'. \
-                         Likely cause: the default references callee-only scope \
-                         (e.g. a callee type parameter like `T::default()`) that is \
-                         invisible during call-site re-resolution. \
-                         Resolving defaults per-monomorphization is deferred work; \
-                         see WEP 2026-04-11 `docs/wep-2026-04-11-default-arguments.md`. \
+                         re-resolved to () at call site but parameter expects '{expected_name}', \
+                         with nothing reported to say why. \
+                         The walk resolves the default in the declaring module, with the \
+                         declaration's type parameters standing for this site's type \
+                         arguments; see WEP 2026-04-11 \
+                         `docs/wep-2026-04-11-default-arguments.md`. \
                          Default span: {:?}",
                         default_expr.span()
                     );

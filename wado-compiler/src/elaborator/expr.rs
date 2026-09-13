@@ -3998,14 +3998,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
-            let (field_default_bindings, settled_params) =
-                self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields);
+            // A literal that omits no defaulted field walks no default, and
+            // the loop below then only reports the required fields it left
+            // out. Settling the struct's parameters and keeping a walk of its
+            // own is for the walk, so neither runs without one.
+            let walks_a_default = struct_field_types
+                .iter()
+                .enumerate()
+                .any(|(idx, (name, _))| {
+                    !provided_names.contains(name)
+                        && struct_field_defaults.get(idx).is_some_and(Option::is_some)
+                });
+            let (field_default_bindings, settled_params) = if walks_a_default {
+                self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields)
+            } else {
+                (Vec::new(), IndexMap::default())
+            };
             // The default is the struct module's AST, and its scope, its import
             // aliases and the vantage its visibility is judged from are all
             // that module's.
             self.resolving_defaults_at(
-                Some(struct_lit.id),
-                Some(struct_module_source.clone()),
+                walks_a_default.then_some(struct_lit.id),
+                walks_a_default.then(|| struct_module_source.clone()),
                 &field_default_bindings,
                 |s| {
                     for (idx, (expected_name, expected_type_id)) in
