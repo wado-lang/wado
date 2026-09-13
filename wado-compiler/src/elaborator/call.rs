@@ -148,13 +148,10 @@ pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]
     matches!(params.get(args_len), Some((_, Some(_))))
 }
 
-/// Where a declaration's pack sits in the dense space its type arguments are
-/// indexed by — an effect parameter holds no slot in one.
-fn real_type_param_pack_pos(declared: &[ast::GenericParam]) -> Option<usize> {
-    declared
-        .iter()
-        .filter(|p| !p.is_effect)
-        .position(|p| p.is_pack)
+/// The parameters a declaration's type arguments are indexed by. An effect
+/// parameter holds no slot in that space.
+fn real_type_params(declared: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
+    declared.iter().filter(|p| !p.is_effect).collect()
 }
 
 /// Pair each declared slot with the type argument filling it, under the name
@@ -1800,20 +1797,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // — and the explicit (non-`_`) args always win. `infer_fn_type_args`
         // returns a full param-length vec, so no slot reaches codegen
         // unsubstituted.
+        let declared = self.lookup_function_type_params(&callee);
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else {
-            let type_param_count = self
-                .lookup_function_type_params(&callee)
-                .iter()
-                .filter(|p| !p.is_effect)
-                .count();
-            if turbofish_leaves_slot(&type_args, type_param_count) {
-                let inferred =
-                    self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-                merge_turbofish_type_args(&mut type_args, &inferred);
-            }
+        } else if turbofish_leaves_slot(&type_args, real_type_params(&declared).len()) {
+            let inferred =
+                self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
+            merge_turbofish_type_args(&mut type_args, &inferred);
         }
 
         // Before the bound check and defer/report below, so the bound check
@@ -1821,8 +1812,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.fill_defaulted_fn_type_args(&callee, &mut type_args);
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
-        // one tuple — the per-param shape inference already produces.
-        self.group_variadic_type_args(&callee, &mut type_args);
+        // one tuple, the per-param shape inference already produces.
+        self.group_variadic_type_args_of(&declared, &mut type_args);
 
         if !type_args.is_empty() {
             // Resolve any type parameter that appears only inside another
@@ -1836,7 +1827,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
-        let declared = self.lookup_function_type_params(&callee);
         self.settle_empty_pack_of(&declared, &mut type_args);
 
         if !type_args.is_empty() {
@@ -3115,24 +3105,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Group flat turbofish type args into a variadic pack. `ids::<i32, bool>()`
-    /// resolves two args for a single `..T`, but the pack slot must hold one
-    /// tuple `[i32, bool]` — the per-param shape inference produces. A no-op when
-    /// the call has no pack or the args are already in per-param form (arg count
-    /// ≤ param count), so inference results and single-arg packs pass through.
-    fn group_variadic_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
-        let declared = self.lookup_function_type_params(callee);
-        self.group_variadic_type_args_of(&declared, type_args);
-    }
-
-    /// [`Self::group_variadic_type_args`] against a declaration already at
-    /// hand — a method's own parameters, which no callee lookup answers for.
+    /// Group flat turbofish type args into a variadic pack: `ids::<i32, bool>()`
+    /// writes two args for one `..T`, whose slot holds the tuple `[i32, bool]`.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        let real: Vec<&ast::GenericParam> = declared.iter().filter(|p| !p.is_effect).collect();
+        let real = real_type_params(declared);
         let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
@@ -3148,38 +3128,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args.insert(pack_pos, tuple);
     }
 
-    /// [`Self::settle_empty_pack_of`] for what a turbofish alone already says,
-    /// before inference runs. An empty list is no turbofish at all, which says
-    /// nothing about the pack.
-    pub(super) fn pad_turbofish_empty_pack(
-        &mut self,
-        declared: &[ast::GenericParam],
-        type_args: &mut Vec<TypeId>,
-    ) {
-        if type_args.is_empty() {
-            return;
-        }
-        self.settle_empty_pack_of(declared, type_args);
-    }
-
-    /// Settle a pack slot nothing else answered for to the empty pack. A pack
-    /// stands for the arguments left over, and a site leaving none over says
-    /// it is empty rather than leaving inference a parameter to report.
+    /// Settle a pack slot nothing else answered for to the empty pack: a pack
+    /// stands for the type arguments left over, and this site left none over.
     pub(super) fn settle_empty_pack_of(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        let Some(pack_pos) = real_type_param_pack_pos(declared) else {
+        let real = real_type_params(declared);
+        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
-        let real = declared.iter().filter(|p| !p.is_effect).count();
         if type_args.len() == pack_pos {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
             return;
         }
-        if type_args.len() != real {
+        if type_args.len() != real.len() {
             return;
         }
         let slot = type_args[pack_pos];

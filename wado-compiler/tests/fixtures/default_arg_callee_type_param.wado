@@ -123,6 +123,12 @@ fn packed<..T: Default>(tag: String, t: [..T] = [..T::default()]) -> String {
     return s;
 }
 
+// A caller forwarding a pack of its own. Its pack interns to the same type as
+// the callee's, so nothing here may read the slot as left over.
+fn forwarded_pack<..T: Default>(t: [..T]) -> String {
+    return packed("f:", t);
+}
+
 fn headed<A: Default, ..T: Default>(a: A = A::default(), t: [..T] = [..T::default()]) -> String {
     let mut s = `${a:?}`;
     for let v of t {
@@ -267,6 +273,7 @@ test "a pack nothing settles is empty" {
     assert bi.headed::<i32>() == "0";
     assert Box2::<i32>::spread_static() == "";
     assert EMPTY == "h:";
+    assert forwarded_pack([1, "x"]) == "f:1\"x\"";
 }
 
 // From the annotation, then from a sibling field.

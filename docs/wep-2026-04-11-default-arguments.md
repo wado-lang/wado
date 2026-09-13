@@ -484,12 +484,12 @@ A turbofish spells one type argument per pack element, so the arguments are
 grouped into slots before anything counts them. A scalar parameter ahead of the
 pack keeps the argument written for it.
 
-A pack stands for the arguments left over, so a call leaving none over settles
-it to the empty pack. Both spellings of leaving none reach that: a turbofish
-naming every parameter ahead of the pack and stopping there (`headed::<i32>()`),
-and a call whose written arguments pin nothing for it (`packed("e:")`). A
-forwarding caller is not such a call — a pack it declares itself interns to the
-same type as the callee's, so a scope holding one leaves the slot alone.
+A pack stands for the type arguments left over, so a call leaving none over
+settles it to the empty pack. A turbofish naming every parameter ahead of the
+pack and stopping there leaves none (`headed::<i32>()`), and so does a call
+whose written arguments pin nothing for it (`packed("e:")`). A caller
+forwarding a pack of its own is neither. Such a pack interns to the same type
+as the callee's, so a scope holding one leaves the slot alone.
 
 The method's own type default is settled before the value defaults are walked,
 against the same slots the call's own inference uses. It runs only where the

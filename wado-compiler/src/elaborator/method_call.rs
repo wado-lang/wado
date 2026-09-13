@@ -620,8 +620,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // element until they are grouped.
         let mut type_args = type_args;
         self.group_variadic_type_args_of(&method_own_params, &mut type_args);
-        // Ahead of the value-default walk, which resolves against these.
-        self.pad_turbofish_empty_pack(&method_own_params, &mut type_args);
+        // What the turbofish alone already says, ahead of the value-default
+        // walk that resolves against it. An empty list is no turbofish at all.
+        if !type_args.is_empty() {
+            self.settle_empty_pack_of(&method_own_params, &mut type_args);
+        }
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -1770,8 +1773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // above, so inference has nothing left to bind for it. A block
             // declaring no slot of its own leaves the method's to its type
             // default, which is not the arguments' to answer.
-            // A pack nothing answered for is the empty pack, settled below,
-            // rather than a slot the call has to spell.
+            // A pack is settled below instead, never a slot to spell.
             let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
                 !bindings.contains_key(id)
                     && !sig.own_params[i].is_pack
