@@ -13,6 +13,7 @@ use crate::elaborator::call::DefaultTypeBinding;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_query::BoundUnmet;
 use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
@@ -41,17 +42,14 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// Type parameter bounds: (`param_name`, bounds). Each bound keeps the
-    /// reference site that wrote it, so a consumer asks which trait it means
-    /// rather than comparing the spelling (WEP 2026-08-12).
-    pub(super) type_param_bounds: Vec<(String, Vec<BoundRef>)>,
+    /// The declaration's type parameters as written. Bounds, defaults and
+    /// arity are read from here, so no consumer works from a projection that
+    /// dropped what it happened not to need.
+    pub(super) type_params: Vec<ast::GenericParam>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
-    /// What each type parameter wrote after `=`, parallel to
-    /// `type_param_bounds`. See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Where a qualified prefix's members live when the prefix names a newtype,
@@ -67,13 +65,6 @@ pub(super) fn newtype_member_owner(
     let newtype_id = lookup.newtype_of(def)?;
     let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
     Some((tysys.type_def(head)?, newtype_id))
-}
-
-/// What each type parameter declares as its default, in declaration order:
-/// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
-/// argument takes it.
-pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option<ast::Type>> {
-    params.iter().map(|p| p.default.clone()).collect()
 }
 
 impl StructFieldInfo {
@@ -99,14 +90,6 @@ impl StructFieldInfo {
     }
 }
 
-/// A trait bound as a declaration digest records it: the site that wrote it,
-/// which is what says *which* trait, plus the spelling for diagnostics.
-#[derive(Clone, Debug)]
-pub(super) struct BoundRef {
-    pub(super) name: String,
-    pub(super) site: AstId,
-}
-
 /// Variant case info: case name and payload type
 #[derive(Clone)]
 pub(crate) struct VariantCaseData {
@@ -130,7 +113,9 @@ pub(crate) struct VariantInfo {
     pub(crate) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
-    pub(super) type_params: Vec<String>,
+    /// The declaration's type parameters as written, like
+    /// [`StructFieldInfo::type_params`].
+    pub(super) type_params: Vec<ast::GenericParam>,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
@@ -138,9 +123,6 @@ pub(crate) struct VariantInfo {
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
-    /// What each type parameter wrote after `=`, parallel to `type_params`.
-    /// See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Enum case info: case name and discriminant index
@@ -217,11 +199,19 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    pub(super) type_params: Vec<String>,
+    /// The declaration's type parameters as written, like
+    /// [`StructFieldInfo::type_params`].
+    pub(super) type_params: Vec<ast::GenericParam>,
     pub(super) base_type_ast: ast::Type,
-    /// What each type parameter wrote after `=`, parallel to `type_params`.
-    /// See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+impl GenericNewtypeInfo {
+    /// The base type with each declared parameter replaced by `args`. A generic
+    /// newtype names no single type, so every instantiation goes through this.
+    pub(super) fn base_instantiated(&self, args: &[ast::Type]) -> ast::Type {
+        let names: Vec<String> = self.type_params.iter().map(|p| p.name.clone()).collect();
+        substitute_type_params(&self.base_type_ast, &names, args)
+    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -439,6 +429,9 @@ pub enum TypeError {
         /// indented `note:` lines beneath the headline message.
         reason: Vec<String>,
         span: Span,
+        /// Carries the enforcement's own proof, so this cannot be raised beside
+        /// a hand-rolled bound check. See [`BoundUnmet`].
+        unmet: BoundUnmet,
     },
 
     /// An explicit `impl Eq for T;` / `impl Ord for T;` marker was written,
@@ -1333,6 +1326,7 @@ impl TypeError {
                 param_name,
                 reason,
                 span,
+                unmet: _,
             } => (
                 Code::TypeMismatch,
                 append_reason_chain(
@@ -2933,35 +2927,30 @@ impl<'a> TypeLookup<'a> {
         &self,
         def: DefId,
     ) -> Option<Vec<(String, Option<ast::Type>)>> {
-        fn zip(
-            names: impl IntoIterator<Item = String>,
-            defaults: &[Option<ast::Type>],
-        ) -> Vec<(String, Option<ast::Type>)> {
-            names.into_iter().zip(defaults.iter().cloned()).collect()
-        }
+        Some(
+            self.declared_generic_params(def)?
+                .iter()
+                .map(|p| (p.name.clone(), p.default.clone()))
+                .collect(),
+        )
+    }
+
+    /// `def`'s type parameters exactly as the declaration wrote them. The one
+    /// source for its bounds, defaults and arity, so a consumer cannot answer
+    /// from a projection that dropped a bound, a pack marker or a default.
+    pub(super) fn declared_generic_params(&self, def: DefId) -> Option<&'a [ast::GenericParam]> {
         if let Some(info) = self.struct_fields_of(def)
-            && !info.type_param_bounds.is_empty()
+            && !info.type_params.is_empty()
         {
-            let names = info.type_param_bounds.iter().map(|(n, _)| n.clone());
-            return Some(zip(names, &info.type_param_defaults));
+            return Some(&info.type_params);
         }
         if let Some(info) = self.variant_cases_of(def)
             && !info.type_params.is_empty()
         {
-            return Some(zip(
-                info.type_params.iter().cloned(),
-                &info.type_param_defaults,
-            ));
+            return Some(&info.type_params);
         }
-        if let Some(info) = self.generic_newtype_of(def)
-            && !info.type_params.is_empty()
-        {
-            return Some(zip(
-                info.type_params.iter().cloned(),
-                &info.type_param_defaults,
-            ));
-        }
-        None
+        let info = self.generic_newtype_of(def)?;
+        (!info.type_params.is_empty()).then_some(&*info.type_params)
     }
 
     /// `args` extended with the declared default of each parameter the site
@@ -3112,6 +3101,9 @@ pub(super) struct IndexingTraitInfo {
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
     /// coercion.
     pub(super) index_type: Option<TypeId>,
+    /// How to spell the receiver in the dispatched method's name — the base for
+    /// a block with parameters, the instantiation for one written at a type.
+    pub(super) receiver: FqTypeName,
 }
 
 /// Info about an operator trait implementation

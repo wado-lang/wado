@@ -1839,10 +1839,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .flatten()
                 });
-            if let Some(((trait_info, matched_type_id), index_method)) = index_trait_info {
+            if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = self.fq_index_receiver(matched_type_id);
+                let receiver = trait_info.receiver.clone();
                 let mangled_method_name =
                     MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
 
@@ -1897,10 +1897,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
                 )
             });
-            if let Some((trait_info, matched_type_id)) = index_value_info {
+            if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = self.fq_index_receiver(matched_type_id);
+                let receiver = trait_info.receiver.clone();
                 let mangled_method_name = MethodName::format_local(
                     &receiver,
                     Some(&trait_info.trait_name),
@@ -4018,7 +4018,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // two different structs when a local shadows a module-level generic.
         let is_generic_struct = self
             .struct_fields_of_written_decl(struct_decl)
-            .is_some_and(|info| !info.type_param_bounds.is_empty());
+            .is_some_and(|info| !info.type_params.is_empty());
         let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.
@@ -4106,37 +4106,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() {
-                for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
-                    if let Some(&type_arg) = type_args.get(i) {
-                        for bound in bounds {
-                            let Some(bound_def) = self.bound_trait_def(bound.site) else {
-                                continue;
-                            };
-                            if !self.tysys.type_implements_trait(
-                                &self.annotate_ctx,
-                                &self.type_lookup(),
-                                type_arg,
-                                bound_def,
-                            ) {
-                                let type_name = self.tysys.type_id_to_string(type_arg);
-                                let reason = self.tysys.trait_unimpl_reason_chain(
-                                    &self.annotate_ctx,
-                                    &self.type_lookup(),
-                                    type_arg,
-                                    &bound.name,
-                                );
-                                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                                    type_name,
-                                    trait_name: bound.name.clone(),
-                                    param_name: param_name.clone(),
-                                    reason,
-                                    span: struct_lit.span,
-                                });
-                            }
-                        }
-                    }
-                }
+            if let Some(def) = struct_decl {
+                self.check_type_decl_arg_bounds(def, &type_args, struct_lit.span);
             }
 
             // The declaration comes from the node that declares it where the
@@ -4490,9 +4461,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            type_param_bounds: Vec::new(),
+            type_params: Vec::new(),
             type_param_type_ids: Vec::new(),
-            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
@@ -5407,30 +5377,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_name(CompilerItem::Ord)
             .to_string();
         let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+        assert!(ord.is_some(), "core:prelude declares Ord");
         if element_type != TypeTable::ERROR
-            && !ord.is_some_and(|trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    element_type,
-                    trait_,
-                )
-            })
+            && !self.enforce_single_bound(element_type, &ord_trait_name, ord, "T", range.span)
         {
-            let type_name = self.tysys.type_id_to_string(element_type);
-            let reason = self.tysys.trait_unimpl_reason_chain(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                element_type,
-                &ord_trait_name,
-            );
-            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                type_name,
-                trait_name: ord_trait_name,
-                param_name: "T".to_string(),
-                reason,
-                span: range.span,
-            });
             return TypeTable::ERROR;
         }
 

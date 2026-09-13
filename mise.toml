@@ -231,14 +231,14 @@ fi
 """
 
 [tasks.test-log-levels]
-description = "Run the core:log tier tests at one optimization level, with a tier-1 level that admits trace"
+description = "Run the core:log tier tests at one optimization level, each file at the tier-1 level it needs"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# `wado test` defaults tier 1 to `warn`, which compiles a trace/debug/info call
-# away before any sink sees it. The tests that assert on one are therefore
-# excluded from discovery (`[test].exclude` in `wado-compiler/wado.toml`) and
-# named here instead, an explicit path bypassing that exclusion.
+# A test must survive any ambient WADO_LOG_LEVEL, so a test that needs a
+# particular tier-1 level names it with `-D` here rather than inheriting one.
+# Those files are excluded from discovery (`[test].exclude` in
+# `wado-compiler/wado.toml`); an explicit path bypasses that exclusion.
 #
 # Tier 1 folds in the optimizer, so which level runs decides what the assertions
 # see — hence a level argument, like `test-stdlib`.
@@ -251,6 +251,7 @@ case "${level}" in
         ;;
 esac
 cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+cargo run -p wado-cli -- test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
 """
 
 [tasks.test-hooks]

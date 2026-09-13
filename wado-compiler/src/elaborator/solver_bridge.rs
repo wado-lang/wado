@@ -947,7 +947,7 @@ impl SolverBridge {
             let param = |name: &str| -> Option<ParamKind> {
                 info.type_params
                     .iter()
-                    .position(|p| p == name)
+                    .position(|p| p.name == name)
                     .map(|i| ParamKind::Type(u32::try_from(i).expect("fewer than 2^32 params")))
             };
             if let Some(base) =

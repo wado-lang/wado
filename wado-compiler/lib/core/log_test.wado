@@ -2,10 +2,10 @@
 // assertions read the events rather than captured output; the two writing
 // sinks are exercised through `render`, which builds the line they write.
 //
-// `wado test` builds with `-D log.level=warn`, which compiles a `trace` /
-// `debug` / `info` call away before any sink sees it. So every event here is at
-// `Warn` or above, and its level is incidental to what the test asserts. The
-// tests that need a lower one live in `log_level_test.wado`.
+// Every event asserted on here is at `Error`, the level no build threshold
+// folds away, so an ambient `WADO_LOG_LEVEL` cannot change what a test sees.
+// A test that needs a particular threshold names it instead:
+// `log_level_test.wado` at `trace`, `log_warn_test.wado` at `warn`.
 
 use {
     CaptureSink,
@@ -53,50 +53,34 @@ test "captures message, level, and caller location" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
         let expected_line = #line + 1;
-        warn(`hello`);
+        error(`hello`);
         assert sink.events.len() == 1;
         let e = sink.events[0];
         assert e.message == "hello";
-        assert e.meta.level matches { Warn };
+        assert e.meta.level matches { Error };
         assert e.meta.line == expected_line;
         assert e.meta.file.contains("log_test.wado");
 
         error(`heads up`, { code: 1 });
         assert sink.events.len() == 2;
-        assert sink.events[1].meta.level matches { Error };
+        assert sink.events[1].fields matches { Object(_) };
     };
-}
-
-test "tier 1 folds a call below the build threshold away" {
-    // `-D log.level=warn`, so this holds however permissive the sink is: the
-    // gate is a constant the optimizer settles before the sink is consulted.
-    let mut sink = CaptureSink {};
-    with Log => &mut sink do {
-        assert !enabled(Level::Info);
-        assert enabled(Level::Warn);
-        info(`never built`);
-        debug(`nor this`);
-        trace(`nor this`);
-        warn(`kept`);
-    };
-    assert sink.events.len() == 1;
-    assert sink.events[0].message == "kept";
 }
 
 test "the raw event emitter takes a run-time level" {
     let mut sink = CaptureSink {};
-    let mut level = Level::Warn;
+    let mut level = Level::Error;
     with Log => &mut sink do {
         event(level, `dynamic`);
     };
     assert sink.events.len() == 1;
-    assert sink.events[0].meta.level matches { Warn };
+    assert sink.events[0].meta.level matches { Error };
 }
 
 test "generic field accepts any Serialize value, preserving the data model" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        warn(`with fields`, { user: "alice", n: 42 });
+        error(`with fields`, { user: "alice", n: 42 });
         let e = sink.events[0];
         if let Object(map) = e.fields {
             assert map.len() == 2;
@@ -112,7 +96,7 @@ test "generic field accepts any Serialize value, preserving the data model" {
 test "an event with no fields carries an empty object" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        warn(`bare`);
+        error(`bare`);
     };
     assert sink.events[0].fields matches { Object(map) && map.len() == 0 };
 }
@@ -155,9 +139,9 @@ test "span lifecycle fires and events parent to the current span" {
     with Log => &mut sink do {
         let s = span(Level::Info, `request`);
         in_span(&s, || {
-            warn(`inside`);
+            error(`inside`);
         });
-        warn(`outside`);
+        error(`outside`);
     };
     let ops: List<String> = ["new:request#1", "enter:1", "exit:1", "close:1"];
     assert sink.ops == ops;
@@ -192,12 +176,12 @@ test "nested spans parent to the innermost span" {
     with Log => &mut sink do {
         let outer = span(Level::Info, `outer`);
         in_span(&outer, || {
-            warn(`in outer`);
+            error(`in outer`);
             let inner = span(Level::Info, `inner`);
             in_span(&inner, || {
-                warn(`in inner`);
+                error(`in inner`);
             });
-            warn(`back in outer`);
+            error(`back in outer`);
         });
     };
     assert sink.events[0].parent matches { Some(1) };
@@ -250,7 +234,7 @@ test "context layer prepends fields and forwards the rest" {
     };
     with Log => &mut sink do {
         with Log => &ctx do {
-            warn(`x`, { k: "v" });
+            error(`x`, { k: "v" });
         };
     };
     assert sink.events.len() == 1;
@@ -271,7 +255,7 @@ test "an event field overrides the context layer's" {
     };
     with Log => &mut sink do {
         with Log => &ctx do {
-            warn(`x`, { k: "inner" });
+            error(`x`, { k: "inner" });
         };
     };
     if let Object(map) = sink.events[0].fields {
@@ -292,7 +276,7 @@ test "a forwarding layer passes span operations through untouched" {
             let s = span(Level::Info, `request`);
             in_span(&s, || {
                 s.record({ user: "alice" });
-                warn(`inside`);
+                error(`inside`);
             });
         };
     };
@@ -432,9 +416,8 @@ test "the writing sinks track spans like any subscriber" {
 
 test "logging with no sink installed neither traps nor is silent" {
     // No `with Log` anywhere: every call lands on a default implementation.
-    warn(`default subscriber`, { k: "v" });
+    error(`default subscriber`, { k: "v" });
     error(`still fine`);
-    assert enabled(Level::Warn);
     assert enabled(Level::Error);
 }
 
@@ -462,8 +445,8 @@ test "an explicit target replaces the caller's #function" {
     // events get grouped under a name of the application's choosing.
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        warn(`default target`);
-        warn(`grouped under db`, {}, "db");
+        error(`default target`);
+        error(`grouped under db`, {}, "db");
     };
     assert sink.events[0].meta.target.contains("explicit_target");
     assert sink.events[1].meta.target == "db";

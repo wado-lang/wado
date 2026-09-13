@@ -33,6 +33,12 @@ use crate::name::{DeclName, FqTraitName};
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{SlotProjections, TraitRef};
 
+/// Proof that a bound was asked and answered no. Its field is private to this
+/// module, so [`TypeError::TraitBoundNotSatisfied`] can only be raised from the
+/// enforcement here, never by a path that rolled its own check.
+#[derive(Clone, Debug)]
+pub struct BoundUnmet(());
+
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -451,30 +457,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             for (bound_name, bound_def) in &bounds {
-                let Some(bound_def) = *bound_def else {
-                    continue;
-                };
-                if !self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
+                self.enforce_single_bound(
                     type_id,
-                    bound_def,
-                ) {
-                    let type_name = self.tysys.type_id_to_string(type_id);
-                    let reason = self.tysys.trait_unimpl_reason_chain(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        type_id,
-                        bound_name,
-                    );
-                    let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                        type_name,
-                        trait_name: bound_name.clone(),
-                        param_name: binding.name.clone(),
-                        reason,
-                        span: binding.span,
-                    });
-                }
+                    bound_name,
+                    *bound_def,
+                    &binding.name,
+                    binding.span,
+                );
             }
         }
     }
@@ -2269,6 +2258,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_type_arg_bounds(&type_params, type_args, span);
     }
 
+    /// Check trait bounds on a generic type declaration's type arguments —
+    /// every `struct`, `variant` and generic newtype instantiation, whether an
+    /// annotation wrote the arguments or a literal inferred them.
+    pub(super) fn check_type_decl_arg_bounds(
+        &mut self,
+        def: DefId,
+        type_args: &[TypeId],
+        span: Span,
+    ) {
+        let Some(params) = self
+            .type_lookup()
+            .declared_generic_params(def)
+            .map(<[ast::GenericParam]>::to_vec)
+        else {
+            return;
+        };
+        self.enforce_type_arg_bounds(&params, type_args, span);
+    }
+
     /// The single enforcement of trait bounds on a generic decl's type args,
     /// shared by every generic-call kind so the rule cannot drift. Enforces only
     /// fully concrete args: a still-parametric arg is forwarded from the caller
@@ -2328,6 +2336,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Check one concrete type argument against one trait bound — the primitive
     /// every bound-enforcement path funnels through. On success registers the
     /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
+    /// Answers whether the bound holds.
     pub(super) fn enforce_single_bound(
         &mut self,
         type_arg: TypeId,
@@ -2335,28 +2344,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: Option<DefId>,
         param_name: &str,
         span: Span,
-    ) {
+    ) -> bool {
         // A bound whose site names no declaration cannot be enforced against an
         // identity; the unresolved name is diagnosed where it was written.
         let Some(trait_) = trait_ else {
-            return;
+            return true;
         };
-        if !self.check_and_register_bound(type_arg, trait_) {
-            let type_name = self.tysys.type_id_to_string(type_arg);
-            let reason = self.tysys.trait_unimpl_reason_chain(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                type_arg,
-                trait_name,
-            );
-            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                type_name,
-                trait_name: trait_name.to_string(),
-                param_name: param_name.to_string(),
-                reason,
-                span,
-            });
+        if self.check_and_register_bound(type_arg, trait_) {
+            return true;
         }
+        let type_name = self.tysys.type_id_to_string(type_arg);
+        let reason = self.tysys.trait_unimpl_reason_chain(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            type_arg,
+            trait_name,
+        );
+        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+            type_name,
+            trait_name: trait_name.to_string(),
+            param_name: param_name.to_string(),
+            reason,
+            span,
+            unmet: BoundUnmet(()),
+        });
+        false
+    }
+
+    /// Report that type parameter `param` carries no bound supplying
+    /// `trait_name`. An operator reaches a parameter only through a bound, so
+    /// the miss is said here rather than at WIR build.
+    pub(super) fn report_operator_bound_missing(
+        &mut self,
+        param: &str,
+        trait_name: &str,
+        span: Span,
+    ) {
+        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+            type_name: param.to_string(),
+            trait_name: trait_name.to_string(),
+            param_name: param.to_string(),
+            reason: Vec::new(),
+            span,
+            unmet: BoundUnmet(()),
+        });
     }
 
     /// What a bare bound binds `decl`'s slots to: slot 0 is `Self`, and the

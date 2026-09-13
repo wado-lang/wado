@@ -1,0 +1,26 @@
+// Tests whose assertions need a level the build threshold rejects. They hold
+// only where tier 1 is `warn`.
+//
+// A test must survive any ambient `WADO_LOG_LEVEL`, so this file names the
+// threshold it needs rather than inheriting one: it is excluded from discovery
+// (`[test].exclude` in `wado.toml`) and run by `mise run test-log-levels` with
+// `-D log.level=warn`. Its sibling `log_level_test.wado` does the same at
+// `trace`, and `log_test.wado` holds every test whose level is incidental.
+
+use { CaptureSink, Level, Log, debug, enabled, info, trace, warn } from "core:log";
+
+test "tier 1 folds a call below the build threshold away" {
+    // The gate is a constant the optimizer settles before the sink is
+    // consulted, so this holds however permissive the sink is.
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        assert !enabled(Level::Info);
+        assert enabled(Level::Warn);
+        info(`never built`);
+        debug(`nor this`);
+        trace(`nor this`);
+        warn(`kept`);
+    };
+    assert sink.events.len() == 1;
+    assert sink.events[0].message == "kept";
+}

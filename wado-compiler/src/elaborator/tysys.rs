@@ -152,22 +152,6 @@ impl TypeSystem {
         }
     }
 
-    /// Whether an `impl<...>` entry spells a concrete type instead of declaring
-    /// a parameter. A bound settles it: only a parameter can carry one.
-    ///
-    /// `impl<...>` spells both today — `impl<i32> IndexValue<i32>` instantiates
-    /// at a type, `impl<Zero: Mark> Wrapper<Zero>` declares a binder — so a bare
-    /// entry naming a visible type stays that type. Reading a bounded one that
-    /// way drops the parameter, and the target's own argument then names
-    /// nothing; reading a bare one as a binder shadows the type it meant.
-    pub(crate) fn impl_param_is_concrete_type(
-        &self,
-        module: &ModuleSource,
-        param: &GenericParam,
-    ) -> bool {
-        param.bounds.is_empty() && self.is_known_type_name_in(module, &param.name)
-    }
-
     /// The `Type::Case` spelling of the case the resolve walk names at a bare
     /// identifier site: the hint when no expected type supplies one.
     pub(crate) fn bare_case_at(&self, site: AstId) -> Option<String> {
@@ -290,6 +274,12 @@ impl TypeSystem {
     /// to be re-resolved in the current scope, which the type already did.
     pub(crate) fn fq_receiver_head(&self, type_id: TypeId) -> FqTypeName {
         self.type_table.borrow().fq_base_type_name(type_id)
+    }
+
+    /// [`Self::fq_receiver_head`] keeping the type arguments, for a receiver an
+    /// impl named as one instantiation (`impl Trait for Box<i32>`).
+    pub(crate) fn fq_receiver_instance(&self, type_id: TypeId) -> FqTypeName {
+        self.type_table.borrow().fq_type_name(type_id)
     }
 
     /// The first link at or below `type_id` — itself included — writing its own

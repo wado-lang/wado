@@ -838,17 +838,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             .iter()
             .filter(|p| p.is_real_type_param())
         {
-            // `impl<i32> IndexValue<i32> for Box` writes a concrete type where a
-            // parameter goes, and binding one shadows the type it names with a
-            // slot of the same spelling — `expected 'i32', found 'i32'`.
             if self
-                .tysys
-                .impl_param_is_concrete_type(&self.current_module_source, param)
-                || self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&param.name)
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
             {
                 continue;
             }
@@ -984,12 +978,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
         }
         for param in &impl_block.type_params {
-            if param.is_effect
-                || named.iter().any(|n| n == &param.name)
-                || self
-                    .tysys
-                    .impl_param_is_concrete_type(&self.current_module_source, param)
-            {
+            if param.is_effect || named.iter().any(|n| n == &param.name) {
                 continue;
             }
             let _ = self.emit(TypeError::UnconstrainedImplTypeParam {

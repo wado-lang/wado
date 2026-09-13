@@ -754,22 +754,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// any. The three kinds are asked of one declaration, so "is this generic"
     /// and "whose parameters are these" can never be about two of them.
     pub(super) fn bare_generic_type_arity(&self, def: DefId) -> Option<usize> {
-        if let Some(info) = self.lookup_struct_fields_of_decl(def)
-            && !info.type_param_bounds.is_empty()
-        {
-            return Some(info.type_param_bounds.len());
-        }
-        if let Some(info) = self.lookup_variant_case_of_decl(def)
-            && !info.type_params.is_empty()
-        {
-            return Some(info.type_params.len());
-        }
-        if let Some(info) = self.lookup_generic_newtype_of_decl(def)
-            && !info.type_params.is_empty()
-        {
-            return Some(info.type_params.len());
-        }
-        None
+        Some(self.type_lookup().declared_generic_params(def)?.len())
     }
 
     /// The type a generic application resolves to. `site` names the head's
@@ -882,44 +867,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
-                    .is_some_and(|info| !info.type_param_bounds.is_empty())
+                    .is_some_and(|info| !info.type_params.is_empty())
                 {
                     let type_args = self.type_args_of_application(def, args);
-
-                    // Check trait bounds for each type argument
-                    if let Some(info) = &struct_info {
-                        for (i, (param_name, bounds)) in info.type_param_bounds.iter().enumerate() {
-                            if let Some(&type_arg) = type_args.get(i) {
-                                for bound in bounds {
-                                    let Some(bound_def) = self.bound_trait_def(bound.site) else {
-                                        continue;
-                                    };
-                                    if !self.tysys.type_implements_trait(
-                                        &self.annotate_ctx,
-                                        &self.type_lookup(),
-                                        type_arg,
-                                        bound_def,
-                                    ) {
-                                        // Get the type name for the error message
-                                        let type_name = self.tysys.type_id_to_string(type_arg);
-                                        let reason = self.tysys.trait_unimpl_reason_chain(
-                                            &self.annotate_ctx,
-                                            &self.type_lookup(),
-                                            type_arg,
-                                            &bound.name,
-                                        );
-                                        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                                            type_name,
-                                            trait_name: bound.name.clone(),
-                                            param_name: param_name.clone(),
-                                            reason,
-                                            span,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    self.check_type_decl_arg_bounds(def, &type_args, span);
 
                     // The instantiation is named by the declaration its head
                     // resolved to, and keeps its arguments beside it rather
@@ -935,6 +886,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         TypeTable::UNKNOWN
                     } else {
                         let type_args = self.type_args_of_application(def, args);
+                        self.check_type_decl_arg_bounds(def, &type_args, span);
                         self.tysys
                             .type_table
                             .borrow_mut()
@@ -947,11 +899,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // resolved parameters to resolve a default against.
                     let ast_filled = self.type_lookup().type_args_with_defaults(def, args);
                     let args = ast_filled.as_deref().unwrap_or(args);
-                    let concrete_base_ast =
-                        substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);
+                    let concrete_base_ast = gn_info.base_instantiated(args);
                     let base_type_id = self.resolve_type(&concrete_base_ast);
                     let resolved_args: Vec<TypeId> =
                         args.iter().map(|t| self.resolve_type(t)).collect();
+                    self.check_type_decl_arg_bounds(def, &resolved_args, span);
                     self.tysys.type_table.borrow_mut().make_newtype_instance(
                         def,
                         resolved_args,

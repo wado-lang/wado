@@ -7,7 +7,7 @@ struct ReadOnlyBox {
     value: i32,
 }
 
-impl<i32> IndexValue<i32> for ReadOnlyBox {
+impl IndexValue<i32> for ReadOnlyBox {
     type Output = i32;
 
     fn index_value(&self, _index: i32) -> Self::Output {
@@ -19,7 +19,7 @@ struct MutableBox {
     value: i32,
 }
 
-impl<i32> IndexAssign<i32> for MutableBox {
+impl IndexAssign<i32> for MutableBox {
     type Output = i32;
 
     fn index_assign(&mut self, _index: i32, value: Self::Output) {
@@ -32,7 +32,7 @@ struct SlotPair {
     b: i32,
 }
 
-impl<i32> IndexValue<i32> for SlotPair {
+impl IndexValue<i32> for SlotPair {
     type Output = i32;
 
     fn index_value(&self, _idx: i32) -> Self::Output {
@@ -40,7 +40,7 @@ impl<i32> IndexValue<i32> for SlotPair {
     }
 }
 
-impl<i32> IndexAssign<i32> for SlotPair {
+impl IndexAssign<i32> for SlotPair {
     type Output = i32;
 
     fn index_assign(&mut self, _idx: i32, value: Self::Output) {
@@ -60,7 +60,7 @@ impl IntStore {
     }
 }
 
-impl<i32> IndexValue<i32> for IntStore {
+impl IndexValue<i32> for IntStore {
     type Output = i32;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -80,7 +80,7 @@ struct Triple<T> {
     third: T,
 }
 
-impl<i32, T> IndexValue<i32> for Triple<T> {
+impl<T> IndexValue<i32> for Triple<T> {
     type Output = T;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -98,7 +98,7 @@ struct OptBox<T> {
     value: T,
 }
 
-impl<i32> IndexValue<i32> for OptBox<i32> {
+impl IndexValue<i32> for OptBox<i32> {
     type Output = Option<i32>;
 
     fn index_value(&self, index: i32) -> Self::Output {
@@ -124,7 +124,7 @@ struct NumHolder {
     num: Number,
 }
 
-impl<i32> IndexRef<i32> for NumHolder {
+impl IndexRef<i32> for NumHolder {
     type Output = Number;
 
     fn index_ref(&self, _idx: i32) -> &Self::Output {
@@ -132,7 +132,7 @@ impl<i32> IndexRef<i32> for NumHolder {
     }
 }
 
-impl<i32> IndexRefMut<i32> for NumHolder {
+impl IndexRefMut<i32> for NumHolder {
     type Output = Number;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -158,7 +158,7 @@ struct TallyBox {
     item: Tally,
 }
 
-impl<i32> IndexRefMut<i32> for TallyBox {
+impl IndexRefMut<i32> for TallyBox {
     type Output = Tally;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -180,7 +180,7 @@ struct DataHolder {
     data: Data,
 }
 
-impl<i32> IndexRef<i32> for DataHolder {
+impl IndexRef<i32> for DataHolder {
     type Output = Data;
 
     fn index_ref(&self, _idx: i32) -> &Self::Output {
@@ -188,7 +188,7 @@ impl<i32> IndexRef<i32> for DataHolder {
     }
 }
 
-impl<i32> IndexRefMut<i32> for DataHolder {
+impl IndexRefMut<i32> for DataHolder {
     type Output = Data;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -214,7 +214,7 @@ struct AccBox {
     acc: Accumulator,
 }
 
-impl<i32> IndexRefMut<i32> for AccBox {
+impl IndexRefMut<i32> for AccBox {
     type Output = Accumulator;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -238,7 +238,7 @@ struct PointHolder {
     point: Point,
 }
 
-impl<i32> IndexRef<i32> for PointHolder {
+impl IndexRef<i32> for PointHolder {
     type Output = Point;
 
     fn index_ref(&self, _idx: i32) -> &Self::Output {
@@ -246,7 +246,7 @@ impl<i32> IndexRef<i32> for PointHolder {
     }
 }
 
-impl<i32> IndexRefMut<i32> for PointHolder {
+impl IndexRefMut<i32> for PointHolder {
     type Output = Point;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -278,7 +278,7 @@ impl ValueBox {
     }
 }
 
-impl<i32> IndexRef<i32> for ValueBox {
+impl IndexRef<i32> for ValueBox {
     type Output = Value;
 
     fn index_ref(&self, _idx: i32) -> &Self::Output {
@@ -286,7 +286,7 @@ impl<i32> IndexRef<i32> for ValueBox {
     }
 }
 
-impl<i32> IndexRefMut<i32> for ValueBox {
+impl IndexRefMut<i32> for ValueBox {
     type Output = Value;
 
     fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
@@ -294,7 +294,7 @@ impl<i32> IndexRefMut<i32> for ValueBox {
     }
 }
 
-impl<i32> IndexAssign<i32> for ValueBox {
+impl IndexAssign<i32> for ValueBox {
     type Output = Value;
 
     fn index_assign(&mut self, _idx: i32, value: Self::Output) {

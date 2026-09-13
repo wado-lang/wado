@@ -2614,13 +2614,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The fq receiver name for an indexing-trait dispatch on `matched_type_id`
-    /// — the `TypeId` [`Self::index_lookup_or_newtype_base`] reports alongside
-    /// the impl it found.
-    pub(super) fn fq_index_receiver(&self, matched_type_id: TypeId) -> FqTypeName {
-        self.tysys.fq_receiver_head(matched_type_id)
-    }
-
     /// Find an `IndexRef` impl for a type. `expected_index_type` disambiguates
     /// overloaded impls (so a `Range` subscript does not match an `IndexRef<i32>`);
     /// `None` matches by container name alone.
@@ -3021,6 +3014,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
+                // A block declaring parameters generates one function keyed on
+                // the base, specialized per instance; one whose target is a
+                // concrete instantiation generates that instance's own. Naming
+                // the base for the second reaches a function nobody emitted.
+                let receiver = if declared.is_empty() {
+                    s.tysys.fq_receiver_instance(base_type_id)
+                } else {
+                    s.tysys.fq_receiver_head(base_type_id)
+                };
+
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
                     output_type: assoc_type,
@@ -3028,6 +3031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_name,
                     impl_module_source: impl_source,
                     index_type,
+                    receiver,
                 })
             },
         )
