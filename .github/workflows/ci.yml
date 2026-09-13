@@ -88,10 +88,6 @@ jobs:
 
       - run: cargo test --locked --all -- --skip fixture_test_
 
-      # `wado test` builds tier 1 at `warn`, so the `core:log` tests asserting on
-      # a lower level run nowhere but here.
-      - run: mise run test-log-levels
-
   # One job per optimization level: the e2e fixtures, then the stdlib, both
   # compiled at that level. An optimizer bug reachable from `core:*` shows at
   # some levels and not others, so `fail-fast: false` lets every level finish —
@@ -119,6 +115,12 @@ jobs:
       # The e2e test names are lower case.
       - run: cargo test --locked -p wado-compiler --test e2e -- "fixture_test_${LEVEL,,}"
       - run: mise run test-stdlib "$LEVEL"
+
+      # `wado test` builds tier 1 at `warn`, which compiles away the events the
+      # `core:log` tier tests assert on, so they are excluded from the stdlib
+      # discovery above and named here with a level that admits them. Tier 1 is
+      # an optimizer fold, so it is run at every level like the stdlib itself.
+      - run: mise run test-log-levels "$LEVEL"
 
   test-wado:
     name: Test (Wado)

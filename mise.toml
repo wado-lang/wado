@@ -231,7 +231,7 @@ fi
 """
 
 [tasks.test-log-levels]
-description = "Run the core:log tier tests at a tier-1 level that admits trace"
+description = "Run the core:log tier tests at one optimization level, with a tier-1 level that admits trace"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -240,7 +240,19 @@ set -xe -o pipefail
 # excluded from discovery (`[test].exclude` in `wado-compiler/wado.toml`) and
 # named here instead: an explicit path bypasses that exclusion, unlike one
 # `--exclude` adds.
-cargo run -p wado-cli -- test -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+#
+# Takes a level like `test-stdlib`, and for the same reason: tier 1 folds the
+# call away in the optimizer, so which level runs decides what the assertions
+# see.
+level="${1:-O2}"
+case "${level}" in
+    O0 | O1 | O2 | O3 | Os) ;;
+    *)
+        echo "error: unknown optimization level '${level}' (expected O0, O1, O2, O3 or Os)" >&2
+        exit 1
+        ;;
+esac
+cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
 """
 
 [tasks.test-hooks]

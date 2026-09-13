@@ -64,7 +64,7 @@ Each declaration resolves independently, highest priority first:
 
 1. CLI override `-D NAME=value` (alias `--define`)
 2. The `from_env` environment variable, if declared
-3. A host default (`CompilerOptions::param_defaults`)
+3. A host default (`CompilerOptions::params.defaults`)
 4. The initializer expression
 
 A higher source short-circuits the lower ones. Overrides (1, 2, 3) are strings, converted to the declared type (see [Conversion](#conversion)); a failed conversion is handled per the [Resolution Policy](#resolution-policy), not automatically fatal. The initializer (4) is type-checked as written and takes effect whenever no override resolves or a conversion is rejected.

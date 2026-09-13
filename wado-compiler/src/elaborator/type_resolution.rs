@@ -2,6 +2,7 @@
 
 use crate::ast::{AstId, GenericType, Type};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -467,6 +468,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_named_type_at(None, name, span, false)
     }
 
+    /// The type arguments an application of `def` supplies, each slot the site
+    /// left out taken from the declaration's default.
+    ///
+    /// A written argument resolves at the use site and a default under the
+    /// declaration, which is the whole point of filling them apart.
+    pub(super) fn type_args_of_application(&mut self, def: DefId, args: &[Type]) -> Vec<TypeId> {
+        let mut resolved: Vec<TypeId> = args.iter().map(|t| self.resolve_type(t)).collect();
+        let arity = self
+            .type_lookup()
+            .declared_type_params(def)
+            .map_or(0, |params| params.len());
+        for slot in resolved.len()..arity {
+            let Some(filled) = self.declared_default_type_arg(def, slot, &resolved) else {
+                break;
+            };
+            resolved.push(filled);
+        }
+        resolved
+    }
+
+    /// The type `def`'s slot takes from the `= Default` it declared, given the
+    /// arguments `settled` ahead of it. `None` when the slot declares none, or
+    /// the default names nothing this declaration can answer.
+    ///
+    /// Resolved under `def`'s own parameters, then substituted by slot: a
+    /// default naming a parameter to its left (`struct Pair<A, B = A>`) stands
+    /// for that parameter's argument. Doing it in that order is what keeps the
+    /// use site's spellings out of a type the declaration wrote.
+    pub(super) fn declared_default_type_arg(
+        &mut self,
+        def: DefId,
+        slot: usize,
+        settled: &[TypeId],
+    ) -> Option<TypeId> {
+        let params = self.type_lookup().declared_type_params(def)?;
+        let default = params.get(slot)?.1.clone()?;
+        let own = self.type_lookup().declared_type_param_ids(def)?.to_vec();
+        let resolved = self.with_declared_type_params(def, |e| e.resolve_type(&default))?;
+        if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
+            return None;
+        }
+        let mut subst = IndexMap::default();
+        for (&param, &arg) in own.iter().zip(settled) {
+            if let ResolvedType::TypeParam { index, .. } = self.tysys.type_table.borrow().get(param)
+            {
+                subst.insert(*index, arg);
+            }
+        }
+        Some(
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .substitute_type_params(resolved, &subst),
+        )
+    }
+
     fn resolve_named_type_at(
         &mut self,
         site: Option<AstId>,
@@ -498,7 +555,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(expected) = self.bare_generic_type_arity(def) {
                 // Every parameter declaring a default makes the bare name the
                 // defaulted instantiation; otherwise the site must write them.
+                // Every argument here is one the declaration wrote, so the whole
+                // application resolves under the declaration's own parameters.
                 if let Some(args) = self.type_lookup().type_args_with_defaults(def, &[]) {
+                    let resolved = self.with_declared_type_params(def, |e| {
+                        e.resolve_generic_type_at(site, name, &args, span)
+                    });
+                    if let Some(type_id) = resolved {
+                        return type_id;
+                    }
                     return self.resolve_generic_type_at(site, name, &args, span);
                 }
                 if enforce_arity {
@@ -664,17 +729,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(def) = self.type_decl_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
-                // A trailing argument the site left out takes its default.
-                let filled = self.type_lookup().type_args_with_defaults(def, args);
-                let args = filled.as_deref().unwrap_or(args);
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
                     .is_some_and(|info| !info.type_param_bounds.is_empty())
                 {
-                    // Resolve type arguments
-                    let type_args: Vec<TypeId> =
-                        args.iter().map(|t| self.resolve_type(t)).collect();
+                    let type_args = self.type_args_of_application(def, args);
 
                     // Check trait bounds for each type argument
                     if let Some(info) = &struct_info {
@@ -724,16 +784,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if variant_info.type_params.is_empty() {
                         TypeTable::UNKNOWN
                     } else {
-                        let type_args: Vec<TypeId> =
-                            args.iter().map(|t| self.resolve_type(t)).collect();
+                        let type_args = self.type_args_of_application(def, args);
                         self.tysys
                             .type_table
                             .borrow_mut()
                             .make_generic_instance(def, type_args)
                     }
                 } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
-                    // Generic newtype instantiation: type MyArray<T> = List<T>
-                    // Substitute type params in the base type AST, then resolve
+                    // Generic newtype instantiation: type MyArray<T> = List<T>.
+                    // Its base is substituted as AST, so a trailing argument the
+                    // site left out is filled the same way — it keeps no
+                    // resolved parameters to resolve a default against.
+                    let ast_filled = self.type_lookup().type_args_with_defaults(def, args);
+                    let args = ast_filled.as_deref().unwrap_or(args);
                     let concrete_base_ast =
                         substitute_type_params(&gn_info.base_type_ast, &gn_info.type_params, args);
                     let base_type_id = self.resolve_type(&concrete_base_ast);

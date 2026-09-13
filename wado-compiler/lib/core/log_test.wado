@@ -20,6 +20,7 @@ use {
     NopSink,
     SpanId,
     TextSink,
+    WallClock,
     current,
     debug,
     enabled,
@@ -346,6 +347,22 @@ test "text sink renders one line per event" {
     assert line == "INFO 1 app: user logged in";
     // The sequence number advances per rendered line.
     assert sink.render(&text_event(Level::Warn, "again", Value::Null)) == "WARN 2 app: again";
+}
+
+test "a sink over WallClock stamps the line it renders" {
+    // The stamp is the time, so what is asserted is its shape and its position:
+    // an ISO instant ahead of everything the `NoClock` default renders.
+    let mut stamped: TextSink<WallClock> = TextSink { seq: false };
+    let line = stamped.render(&text_event(Level::Info, "hi", Value::Null));
+    let Some([stamp, rest]) = line.split_once(" ") else {
+        panic("a stamped line carries the stamp ahead of the level");
+    };
+    assert stamp.starts_with("20");
+    assert stamp.ends_with("Z");
+    assert rest == "INFO app: hi";
+
+    let mut plain = TextSink { seq: false };
+    assert plain.render(&text_event(Level::Info, "hi", Value::Null)) == "INFO app: hi";
 }
 
 test "text sink appends fields as key=value, unquoted" {

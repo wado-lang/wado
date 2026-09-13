@@ -2871,6 +2871,19 @@ impl<'a> TypeLookup<'a> {
         self.newtype_of(self.declaration(name)?)
     }
 
+    /// `def`'s own type parameters as types, in declaration order. `None` for a
+    /// generic newtype, which keeps no resolved parameters — each instantiation
+    /// substitutes its base AST instead.
+    pub(super) fn declared_type_param_ids(&self, def: DefId) -> Option<&'a [TypeId]> {
+        if let Some(info) = self.struct_fields_of(def)
+            && !info.type_param_type_ids.is_empty()
+        {
+            return Some(&info.type_param_type_ids);
+        }
+        let info = self.variant_cases_of(def)?;
+        (!info.type_param_type_ids.is_empty()).then_some(&*info.type_param_type_ids)
+    }
+
     /// `def`'s type parameters in declaration order, each with the default it
     /// declared. `None` where `def` takes no type parameters.
     ///

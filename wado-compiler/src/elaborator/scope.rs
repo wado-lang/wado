@@ -189,6 +189,37 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// additional type params on top of the parent's. A caller wanting a clean
     /// slate clears the specific fields it resets on `scope.annotate_ctx
     /// .trait_ctx` after entering; everything else stays inherited.
+    /// Run `body` with `def`'s own type parameters as the type-param scope, for
+    /// resolving a type the declaration wrote — its `= Default` — away from
+    /// where that type is used.
+    ///
+    /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
+    /// happens to declare, so the use site's parameters must not be in scope
+    /// while the default resolves. `None` when `def` keeps no resolved
+    /// parameters, which is a generic newtype.
+    pub(super) fn with_declared_type_params<R>(
+        &mut self,
+        def: DefId,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> Option<R> {
+        let params = self.type_lookup().declared_type_params(def)?;
+        let ids = self.type_lookup().declared_type_param_ids(def)?.to_vec();
+        let binders: IndexMap<String, BinderInScope> = params
+            .iter()
+            .zip(ids)
+            .enumerate()
+            .map(|(slot, ((name, _), type_id))| {
+                (
+                    name.clone(),
+                    BinderInScope::undeclared(slot as u32, type_id),
+                )
+            })
+            .collect();
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params = binders;
+        Some(body(&mut scope))
+    }
+
     pub(super) fn enter_inherited_type_param_scope(&mut self) -> TypeParamScope<'_, 'a, H> {
         let saved = self.annotate_ctx.trait_ctx.clone();
         TypeParamScope {

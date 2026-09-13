@@ -4724,25 +4724,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if inst.vars.get(slot) != inferred.get(slot) || !is_phantom {
                 continue;
             }
-            inferred[slot] = self
-                .phantom_slot_default(&struct_info, slot)
+            inferred[slot] = struct_decl
+                .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
                 .unwrap_or(decl_param);
         }
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
-    }
-
-    /// The type a phantom slot takes from the `= Default` its declaration wrote,
-    /// resolved at the literal's site as a written argument would be.
-    fn phantom_slot_default(
-        &mut self,
-        struct_info: &StructFieldInfo,
-        slot: usize,
-    ) -> Option<TypeId> {
-        let default = struct_info.type_param_defaults.get(slot)?.clone()?;
-        let resolved = self.resolve_type(&default);
-        (resolved != TypeTable::ERROR).then_some(resolved)
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).

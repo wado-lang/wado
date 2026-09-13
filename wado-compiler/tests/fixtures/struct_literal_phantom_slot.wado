@@ -5,6 +5,10 @@
 // A phantom the declaration defaults needs no annotation, and a bound on that
 // slot is checked against the default rather than against the rigid parameter —
 // `core:log`'s `TextSink<C: Clock = NoClock>`, written `TextSink {}`.
+//
+// A default resolves under the declaration's own type parameters, so a use site
+// naming one of them means nothing to it, and a default naming a parameter to
+// its left stands for that parameter's argument.
 
 use { println, Stdout } from "core:cli";
 
@@ -42,6 +46,49 @@ impl<M: Mark> Marked<M> {
     }
 }
 
+struct Pair<A, B = A> {
+    first: A,
+}
+
+impl<A, B> Pair<A, B> {
+    fn widen(&self, other: B) -> B {
+        return other;
+    }
+}
+
+variant TaggedCase<M: Mark = Zero> {
+    Present(i32),
+    Absent,
+}
+
+fn case_total<M: Mark>(t: &TaggedCase<M>) -> i32 {
+    return match *t {
+        Present(n) => n + M::tag(),
+        Absent => M::tag(),
+    };
+}
+
+struct Holder<A, B: Mark = Zero> {
+    value: A,
+}
+
+impl<A, B: Mark> Holder<A, B> {
+    fn tagged(&self) -> i32 {
+        return B::tag();
+    }
+}
+
+// `Zero` here is this function's parameter, which the defaults above cannot mean:
+// each stands for the `Zero` its own declaration names. `Holder<i32>` covers the
+// slot a partly written argument list leaves to its default.
+fn under_a_shadowing_param<Zero: Mark>(probe: Zero) -> i32 {
+    let literal = Marked { value: 1 };
+    let annotated: Marked = Marked { value: 1 };
+    let case: TaggedCase = TaggedCase::Present(1);
+    let partial: Holder<i32> = Holder { value: 1 };
+    return literal.total() + annotated.total() + case_total(&case) + partial.tagged();
+}
+
 export fn run() with Stdout {
     let t: Tagged<i32> = Tagged { value: 1 };
     println(`${t.value}`);
@@ -51,9 +98,15 @@ export fn run() with Stdout {
 
     let spelled: Marked<One> = Marked { value: 2 };
     println(`${spelled.total()}`);
+
+    // `B` takes `A`'s argument, so `widen` accepts the i32 the field settled.
+    let sibling = Pair { first: 3 };
+    println(`${sibling.widen(4)}`);
+
+    println(`${under_a_shadowing_param::<One>(One {})}`);
 }
 
 __DATA__
 {
-    "stdout": "1\n11\n22\n"
+    "stdout": "1\n11\n22\n4\n43\n"
 }

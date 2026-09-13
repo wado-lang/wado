@@ -113,10 +113,10 @@ variable must not stop a program from starting.
 
 How a sink stamps an event with a time, or declines to. `None` is no stamp.
 
-A type parameter rather than a field because only a type can remove the
-clock: a sink over [`NoClock`] monomorphizes to code that never reads one,
-so the component carries no `wasi:clocks` import. A runtime flag cannot do
-that — the call stays reachable, and at `-O0` nothing folds it away.
+A type parameter rather than a field, because only a type can remove the
+clock: a sink over [`NoClock`] monomorphizes to code that never reads one, so
+the component carries no `wasi:clocks` import. A runtime flag leaves the call
+reachable, and at `-O0` nothing folds it away.
 
 #### `fn now() -> Option<String>`
 
@@ -223,13 +223,12 @@ this is only for a span the caller opened without it.
 ### `pub struct NoClock`
 
 No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
-program that installs nothing logs in any world — including
-`core:kiln/generator`, whose linker offers no WASI at all.
+program that installs nothing logs in any world, `core:kiln/generator`
+included — its linker offers no WASI at all.
 
 This is the conservative end of the trade, not a verdict on what a default
-line should carry: giving worlds that do have a clock a stamped default is a
-compatible change, and may replace this once there is a mechanism that keeps
-the guarantee.
+line should carry. Stamping the worlds that do have a clock is a compatible
+change, and may replace this once a mechanism keeps the guarantee.
 
 #### `impl Clock for NoClock`
 
