@@ -1,0 +1,54 @@
+// A trait impl written on the base answers for the newtype, and its signature
+// substitutes the same way an inherited inherent method's does: `&Self` on the
+// receiver's side is `&Location`, not `&Point`.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+trait Score {
+    fn beats(&self, other: &Self) -> bool;
+    fn best(&self, other: &Self) -> Self;
+}
+
+impl Score for Point {
+    fn beats(&self, other: &Point) -> bool {
+        return self.x > other.x;
+    }
+
+    fn best(&self, other: &Point) -> Point {
+        if self.x > other.x {
+            return *self;
+        }
+        return *other;
+    }
+}
+
+type Location = Point;
+type Waypoint = Location;
+
+export fn run() with Stdout {
+    let a: Location = Point { x: 1, y: 10 } as Location;
+    let b: Location = Point { x: 2, y: 20 } as Location;
+    assert !a.beats(&b);
+    let winner: Location = a.best(&b);
+    println(`winner: ${winner.x}`);
+
+    // Through a two-link chain, and through an auto-derived `Ord`.
+    let p: Waypoint = Point { x: 3, y: 30 } as Waypoint;
+    let q: Waypoint = Point { x: 4, y: 40 } as Waypoint;
+    assert !p.beats(&q);
+    assert p.cmp(&q) == Ordering::Less;
+
+    // A newtype over a generic instance: `ByteList` is `List<u8>`.
+    let s: ByteList = b"abc";
+    let t: ByteList = b"abd";
+    assert s.cmp(&t) == Ordering::Less;
+    assert s.eq(&s);
+}
+
+__DATA__
+{"stdout": "winner: 2\n"}

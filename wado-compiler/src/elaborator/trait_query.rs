@@ -2787,14 +2787,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
-        if !self.tysys.auto_derive_eligible_kind(base_type_id) {
+        // A newtype has no derivation of its own: the one its representation
+        // carries answers, and is inherited the way a written impl on the base
+        // is, so the signature re-types back to the receiver.
+        let derive_id = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(base_type_id);
+        if !self.tysys.auto_derive_eligible_kind(derive_id) {
             return None;
         }
         let trait_ = self.tysys.compiler_trait_def(item)?;
         if !self.tysys.type_implements_trait(
             &self.annotate_ctx,
             &self.type_lookup(),
-            base_type_id,
+            derive_id,
             trait_,
         ) {
             return None;
@@ -2803,7 +2811,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .intern(ResolvedType::Ref(base_type_id));
+            .intern(ResolvedType::Ref(derive_id));
         let method_info = MethodInfo {
             method_def: None,
             return_type,
@@ -2812,7 +2820,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: vec![false],
             param_defaults: vec![None],
             param_names: vec!["other".to_string()],
-            owner: MethodOwner::Receiver,
+            owner: if derive_id == base_type_id {
+                MethodOwner::Receiver
+            } else {
+                MethodOwner::InheritedFrom(derive_id)
+            },
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
@@ -2829,7 +2841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .nominal_def(base_type_id)
+            .nominal_def(derive_id)
             .map_or_else(
                 || self.declaring_module_of(struct_name),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
@@ -2851,8 +2863,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            impl_struct_name: struct_name.to_string(),
-            impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
+            impl_struct_name: if derive_id == base_type_id {
+                struct_name.to_string()
+            } else {
+                self.tysys.type_table.borrow().mangle_type_name(derive_id)
+            },
+            impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
         })
     }
