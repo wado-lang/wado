@@ -351,6 +351,12 @@ impl MethodSig {
                 .flatten()
                 .chain(self.own_type_params().iter().zip(method_args));
             for ((_, slot), &arg) in pairs {
+                // A `_` resolves to UNKNOWN, which answers nothing: substituted
+                // in, it would make the parameter it types unresolvable and
+                // leave inference nothing to solve against.
+                if arg == TypeTable::UNKNOWN {
+                    continue;
+                }
                 if let ResolvedType::TypeParam { index, .. }
                 | ResolvedType::TypePack { index, .. } = table.get(*slot)
                 {

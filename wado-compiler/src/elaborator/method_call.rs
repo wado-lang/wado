@@ -12,7 +12,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::SigChoice;
+use super::call::{SigChoice, merge_turbofish_type_args, turbofish_leaves_slot};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -1669,7 +1669,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatch solves them — and an unsolved one is reported rather than
         // left to reach codegen unsubstituted.
         if let Some(sig) = callee_sig
-            && static_call.type_args.is_empty()
+            && turbofish_leaves_slot(&method_type_args)
             && sig.declaring_slot_count > 0
             && let Some(own) = sig.own_params.first()
             && let Some(receiver) = struct_name_for_lookup.clone()
@@ -1690,7 +1690,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // declaration accepts on a receiver that declares none.
             let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
             if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
-                method_type_args = inferred;
+                merge_turbofish_type_args(&mut method_type_args, &inferred);
                 let declaring_args = self
                     .receiver_declaring_args(Some(target_type_id), &[])
                     .unwrap_or_default();

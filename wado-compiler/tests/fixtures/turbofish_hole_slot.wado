@@ -8,6 +8,35 @@
 use ns from "./sub/turbofish_hole_slot_dep.wado";
 use { Take } from "./sub/turbofish_hole_slot_dep.wado";
 
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Default> Wrap<T> {
+    fn mk<U: Default>(u: U) -> i32 {
+        return 1;
+    }
+}
+
+// `Type::<A>::method::<_>(..)`: the receiver's arguments are spelled too, and
+// a `_` beside them must not substitute — the parameter it types would have no
+// resolved type, and inference nothing to solve against.
+test "a type-turbofish call fills the method's `_`" {
+    assert Wrap::<i32>::mk::<_>("s") == 1;
+}
+
+test "a type-turbofish call keeps what the method turbofish names" {
+    assert Wrap::<i32>::mk::<String>("s") == 1;
+}
+
+test "a `_` on the receiver leaves the method turbofish alone" {
+    assert Wrap::<_>::mk::<String>("s") == 1;
+}
+
+test "a type turbofish with no method turbofish infers from the argument" {
+    assert Wrap::<i32>::mk("s") == 1;
+}
+
 test "a namespaced static call fills the `_` beside an explicit argument" {
     assert ns::Cell::pair::<_, String>(1, |b| b.len()) == 0;
 }
