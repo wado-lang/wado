@@ -1,44 +1,46 @@
 # wado-compiler
 
-The Wado compiler crate. The NIR optimizer has its own guide:
-[`docs/optimizer.md`](../docs/optimizer.md).
+The Wado compiler crate.
 
 ## Rules
 
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
-  are denied at the crate root. A user-facing message goes through `Logger` to
-  the host. A developer trace goes through `compiler_trace!` to the sink the
-  host installed. What only a broken stdlib can reach is an `assert!`.
+  are denied at the crate root. A user-facing message goes through `Logger` and
+  a developer trace through `compiler_trace!`. An `assert!` is for what only a
+  broken stdlib can reach.
 - `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go
   through it.
 - Every name the compiler mints for itself starts with one `$`
-  (`name::INTERNAL_PREFIX`), which no Wado identifier can spell: a local, a label,
-  a global, a synthesized struct or function.
+  (`name::INTERNAL_PREFIX`), which no Wado identifier can spell.
   `mise run check-internal-names` gates it.
 - What makes such a name unique is a serial that advances on read
   (`FunctionContext::fresh_serial`), never a local index the site has yet to
   allocate. A step that reads one before recursing hands its own names to
   whatever nests inside it (issue #1987).
-- A declaration is identified by its `DefId`, never by its name — see
+- A declaration is identified by its `DefId`, never by its name. See
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver
   over the IR rather than partial walkers, which each miss a different shape.
-- Optimize as far as correctness allows. A conservatism is a claim about
-  precision: measure what it buys, and drop the ones that buy nothing.
-- Escalate the test scope as the work matures: `cargo check` while iterating,
-  `mise run test` during development, `mise run test-wado` when wrapping up.
+- Optimize to the limit correctness allows, and nothing short of it. Wrong code
+  is never a trade for speed. A conservatism is not caution but a defect:
+  measure what it buys, and delete it when that is nothing.
+- `cargo check` while iterating. The e2e fixtures cover the language, so run
+  `cargo test -p wado-compiler --test e2e` for anything the language touches. It
+  runs O0 and O2, and the other levels only under `CI` or `WADO_FULL_TEST`.
+  `mise run test` and `mise run test-wado` take an hour, so they belong at the
+  end and not in the loop.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
 
 ## Standard Libraries
 
-`src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
-disk, so editing one takes effect on the next `wado` run with no rebuild. A
-release build embeds them, as does any `wasm32` build, which has no filesystem.
-`lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/` from a
-WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
+`src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
+them from disk, so editing one takes effect on the next `wado` run with no
+rebuild. A release build embeds them, as does any `wasm32` build, which has no
+filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
+from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
 `builtin::select` returns one of its operands rather than a copy, so write the
 `if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`

@@ -52,8 +52,9 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 ## General Rules
 
 - Write all documentation and comments in clear, simple English.
+  - Comments: write none. That is the default, not a target to approach. The one exception is what the code cannot say: why this way, a tradeoff, a constraint, a spec or bug reference. Two lines max. If the code can say it, rename and decompose until the comment is redundant, then delete it.
+  - Doc comments (`///`, `//!`): say what the item is, not how it works. Two lines max.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
-  - Don't document implementation details, which go stale.
 - Name an item, don't spell out its path: a `crate::` or `super::` path belongs in a `use` item at the top of the module, never inline where the item is read. A `pub(in …)` is exempt: it names a scope rather than reading an item, and Rust admits no import there. `mise run check-rust-paths` gates this in CI. The corpus carries no inline path, so the baseline `scripts/rust-inline-paths.json` is empty and any file that gains one fails. The detector is Wado (`package-gale/tools/rust_inline_paths.wado`) and parses with the Gale Rust grammar, so the grammar decides what counts as a path. `scripts/check-rust-paths.sh <file.rs>…` lists what a file carries.
 - Perform red/green TDD.
 - A compiler bug is always P0 — no exceptions. The instant you suspect one, stop all other work, and as the top priority write a minimal reproducible e2e fixture and fix it.
@@ -65,9 +66,13 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## The Wado Language
 
-For the detailed specification, read `docs/spec.md`.
+Much of the syntax is Rust-compatible by design, so most Rust knowledge carries
+over. It stops short in a few places: a value never needs `.clone()`, `enum`,
+`variant` and `flags` split what Rust puts in one `enum`, and imports follow ES
+modules while tuples follow TypeScript.
 
-@docs/cheatsheet.md is the quick reference.
+@docs/cheatsheet.md is the quick reference. For the detailed specification read
+`docs/spec.md`, or the WEP for one feature at `docs/wep-*.md`.
 
 ## Repository Map
 

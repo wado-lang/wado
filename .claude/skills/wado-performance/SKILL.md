@@ -1,6 +1,6 @@
 ---
 name: wado-performance
-description: Analyze and improve the runtime speed of a Wado program's compiled guest Wasm — profile hot functions, read the generated WIR for allocations and copies, reason about the WasmGC cost model, and A/B-measure a fix. Use for guest-side speed work (serde, parsers, numeric loops, hot stdlib). For host-side native compiler profiling see profiling-wado-compiler; for wrong-code in an optimizer pass see optimizer-debug.
+description: Analyze and improve the runtime speed of a Wado program's compiled guest Wasm — profile hot functions, read the generated WIR for allocations and copies, reason about the WasmGC cost model, and A/B-measure a fix. Use for any guest-side speed question, whatever the program does. For host-side native compiler profiling see profiling-wado-compiler; for wrong code out of an optimizer pass see optimizer-debug.
 ---
 
 # Wado performance

@@ -1,6 +1,6 @@
 ---
 name: coverage-investigation
-description: Investigate and improve code coverage for the wado-compiler crate. Use when asked to analyze coverage gaps, find dead code, or plan coverage improvement.
+description: Investigate and improve code coverage for the wado-compiler crate. Use for any question about what the tests do and do not reach, dead code included.
 ---
 
 ## Coverage Investigation Methodology
