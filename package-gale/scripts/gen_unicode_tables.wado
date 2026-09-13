@@ -10,7 +10,8 @@
 //! table is generated from the UCD rather than hand-maintained.
 
 use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { encode as base64_encode } from "core:base64";
 use { CodeWriter, FnSpec, GlobalSpec, Vis, wado } from "../src/wadopoet.wado";
 
@@ -571,25 +572,13 @@ fn named_ranges(runs: &List<PropRun>, aliases: &List<NamedRanges>) -> List<Named
 }
 
 fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("gen_unicode_tables: no preopened directories available");
-        exit(1);
-    }
-    let opened = dirs[0].0.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait();
-    if let Err(_) = opened {
-        eprintln(`gen_unicode_tables: cannot open file: ${*path}`);
-        exit(1);
-    }
-    let file = opened.unwrap();
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let bytes = read_stream.read_to_end();
-    return String::from_utf8_unchecked(bytes);
+    return match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln(`gen_unicode_tables: ${e}`);
+            exit(1);
+        },
+    };
 }
 
 fn parse_runs(content: &String) -> List<CategoryRun> {

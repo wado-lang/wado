@@ -21,27 +21,17 @@
 //!   wado run package-gale/scripts/expand_action_templates_in_place.wado
 
 use { println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use { Preopens, Descriptor, DescriptorFlags, PathFlags, OpenFlags, Filesize } from "wasi:filesystem";
-use { ErrorCode } from "wasi:filesystem/types.wado";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { expand_action_templates } from "../src/g4/action_templates.wado";
 
-global DIR_READ_CHUNK: i32 = 64;
-
-fn grammars_root() -> String {
-    return "package-gale/tests/antlr4-compat/grammars";
-}
+global GRAMMARS_ROOT: String = "package-gale/tests/antlr4-compat/grammars";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("expand: no preopened directories available (run via `wado run`)");
-        exit(1);
-    }
-    let root = dirs[0].0;
-    let grammars = match open_dir(&root, &grammars_root(), false) {
-        Ok(d) => d,
-        Err(_) => {
-            eprintln(`expand: cannot open '${grammars_root()}' — run from the repository root`);
+    let categories = match list_dir(&GRAMMARS_ROOT) {
+        Ok(entries) => entries,
+        Err(e) => {
+            eprintln(`expand: ${e} — run from the repository root`);
             exit(1);
         },
     };
@@ -49,33 +39,31 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let mut total = 0;
     let mut rewritten = 0;
     let mut warned = 0;
-    for let category of list_subdirs(&grammars) {
-        let cat_dir = match open_dir(&grammars, &category, true) {
-            Ok(d) => d,
-            Err(_) => {
-                eprintln(`expand: cannot open category '${category}'`);
-                exit(1);
-            },
-        };
-        for let name of list_files_with_suffix(&cat_dir, &".g4") {
+    for let category of categories {
+        if !category.type matches { Directory } {
+            continue;
+        }
+        let dir = `${GRAMMARS_ROOT}/${category.name}`;
+        for let name of grammar_names(&dir) {
             total += 1;
-            let text = match read_file_to_string(&cat_dir, &name) {
+            let path = `${dir}/${name}`;
+            let text = match fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(_) => {
-                    eprintln(`expand: cannot read ${category}/${name}`);
+                Err(e) => {
+                    eprintln(`expand: ${e}`);
                     exit(1);
                 },
             };
             let outcome = expand_action_templates(&text);
             for let w of outcome.warnings {
-                eprintln(`expand: ${category}/${name}: ${w}`);
+                eprintln(`expand: ${category.name}/${name}: ${w}`);
                 warned += 1;
             }
             if outcome.text == text {
                 continue;
             }
-            if let Err(_) = write_file_string(&cat_dir, &name, &outcome.text) {
-                eprintln(`expand: cannot write ${category}/${name}`);
+            if let Err(e) = fs::write(&path, &outcome.text) {
+                eprintln(`expand: ${e}`);
                 exit(1);
             }
             rewritten += 1;
@@ -84,93 +72,27 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     println(`expand: ${total} grammars scanned, ${rewritten} rewritten, ${warned} warnings`);
 }
 
-fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
-    let opened = dir.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait()?;
-    let [stream, done] = opened.read_via_stream(0 as Filesize);
-    let bytes = stream.read_to_end();
-    stream.drop();
-    let read_result = done.read();
-    done.drop();
-    if let Some(Err(e)) = read_result {
-        return Result::Err(e);
-    }
-    return match String::from_utf8(bytes) {
-        Ok(s) => Result::Ok(s),
-        Err(_) => Result::Err(ErrorCode::IllegalByteSequence),
+/// The entries of `path`, sorted by name — the walk is ordered so a rewrite
+/// run reports the same way twice.
+fn list_dir(path: &String) -> Result<List<fs::DirEntry>, fs::FsError> with Preopens {
+    let mut entries = fs::read_dir(path)?;
+    entries.sort_by(|a: &fs::DirEntry, b: &fs::DirEntry| a.name.cmp(&b.name));
+    return Result::Ok(entries);
+}
+
+fn grammar_names(dir: &String) -> List<String> with (Stderr, Preopens, Exit) {
+    let entries = match list_dir(dir) {
+        Ok(list) => list,
+        Err(e) => {
+            eprintln(`expand: ${e}`);
+            exit(1);
+        },
     };
-}
-
-fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
-    let file = dir.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::Create | OpenFlags::Truncate,
-        DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait()?;
-    let bytes: List<u8> = content.bytes().collect();
-    let [rx, tx] = Stream::<u8>::new();
-    let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write_all(bytes);
-    tx.drop();
-    let write_result = sub.read();
-    sub.drop();
-    if let Some(Err(e)) = write_result {
-        return Result::Err(e);
-    }
-    return Result::Ok(());
-}
-
-fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
-    let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
-    return parent.open_at(
-        PathFlags::none(),
-        *name,
-        OpenFlags::Directory,
-        flags,
-    ).wait();
-}
-
-fn list_subdirs(dir: &Descriptor) -> List<String> {
     let mut out: List<String> = [];
-    let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(DIR_READ_CHUNK);
-        for let e of chunk.items {
-            if e.type matches { Directory } {
-                out.push(e.name);
-            }
-        }
-        if chunk.result != CopyResult::Completed {
-            break;
+    for let entry of entries {
+        if entry.type matches { File } && entry.name.ends_with(".g4") {
+            out.push(entry.name);
         }
     }
-    stream.drop();
-    done.drop();
-    out.sort();
-    return out;
-}
-
-fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
-    let mut out: List<String> = [];
-    let [stream, done] = dir.read_directory();
-    loop {
-        let chunk = stream.read(DIR_READ_CHUNK);
-        for let e of chunk.items {
-            if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
-                out.push(e.name);
-            }
-        }
-        if chunk.result != CopyResult::Completed {
-            break;
-        }
-    }
-    stream.drop();
-    done.drop();
-    out.sort();
     return out;
 }

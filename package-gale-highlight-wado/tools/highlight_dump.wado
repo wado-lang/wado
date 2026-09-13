@@ -16,7 +16,7 @@
 //!
 //! A file that cannot be read reports a diagnostic count of `-1`.
 
-use { corpus_root, collect_paths, read_file } from "./corpus.wado";
+use { collect_paths } from "lib:gale";
 use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../grammar/Wado.g4"
     with {
         generator: {
@@ -28,16 +28,11 @@ use { parse, highlight_mapping, HighlightVisitor, highlight_walk } from "../gram
         },
     };
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let root = match corpus_root() {
-        Some(dir) => dir,
-        None => {
-            return;
-        },
-    };
-    let paths = collect_paths(&root, &args());
+    let paths = collect_paths(&args(), &".wado");
 
     let mapping = highlight_mapping();
     let mut header = "V";
@@ -48,9 +43,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 
     let mut unparsable = 0;
     for let path of &paths {
-        let src = match read_file(&root, path) {
-            Some(text) => text,
-            None => {
+        let src = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(e) => {
+                eprintln(`error: ${e}`);
                 println(`F\t${*path}\t-1`);
                 continue;
             },
