@@ -1,5 +1,7 @@
 //! Function call resolution.
 
+use std::cell::RefCell;
+
 use crate::hashmap::IndexMap;
 
 use crate::ast::{self, Expr, Type};
@@ -15,7 +17,7 @@ use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope};
+use super::scope::{BinderInScope, Scope, TraitContext};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
@@ -116,6 +118,57 @@ pub(super) enum SigChoice {
     /// None, unless exactly one declares it. The caller has no pick to read, so
     /// answering with one of several names a declaration it may not mean.
     Unique,
+}
+
+/// A type parameter of the declaration that wrote a default, paired with the
+/// type argument the site taking the default settled on. Resolving the default
+/// against it is what lets `fields: T = T::default()` mean the caller's `T`.
+#[derive(Debug, Clone)]
+pub(super) struct DefaultTypeBinding {
+    pub(super) name: String,
+    /// Carried along so a default dispatching on the parameter still has them
+    /// where the argument is itself a parameter, of the caller or of an
+    /// enclosing `impl`.
+    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) type_id: TypeId,
+}
+
+/// What `enclosing` declares `type_id` is bound by, found through the name it
+/// knows the type under. Empty where it knows of no such name, which is every
+/// argument that is not one of its own parameters.
+fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::TraitBound> {
+    enclosing
+        .type_params
+        .iter()
+        .find(|(_, binder)| binder.type_id == type_id)
+        .and_then(|(name, _)| enclosing.type_param_bounds.get(name))
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Pair each declared slot with the type argument filling it, under the name
+/// the slot's binder carries. A slot that is no binder — a concrete
+/// instantiation an `impl` target spelled — names nothing and binds nothing.
+pub(super) fn slot_type_bindings(
+    table: &RefCell<TypeTable>,
+    declared: &[TypeId],
+    concrete: &[TypeId],
+) -> Vec<DefaultTypeBinding> {
+    let table = table.borrow();
+    declared
+        .iter()
+        .zip(concrete)
+        .filter_map(|(&slot, &type_id)| match table.get(slot) {
+            ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
+                Some(DefaultTypeBinding {
+                    name: name.clone(),
+                    bounds: Vec::new(),
+                    type_id,
+                })
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// View of a `ResolvedType::Function` after peeling references and
@@ -1767,11 +1820,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (param_defaults, defaults_module) =
             self.lookup_function_param_defaults(&call.callee, ctx);
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
+            let type_bindings = self.callee_type_bindings(&callee, &type_args);
             self.apply_param_defaults(
                 &mut args,
                 &check_param_types,
                 &param_defaults,
                 defaults_module.clone(),
+                &type_bindings,
+                Some(call.id),
                 ctx,
             );
         }
@@ -1879,7 +1935,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if pad_with_defaults && args.len() < fn_params.len() {
-            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, ctx);
+            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, call.id, ctx);
         }
 
         if args.len() != fn_params.len() {
@@ -2091,10 +2147,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         callee: &Expr,
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
+        site: AstId,
         ctx: &mut FunctionContext,
     ) {
         let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
-        self.apply_param_defaults(args, param_types, &defaults, callee_module, ctx);
+        self.apply_param_defaults(
+            args,
+            param_types,
+            &defaults,
+            callee_module,
+            &[],
+            Some(site),
+            ctx,
+        );
     }
 
     /// Fill missing trailing arguments from `defaults`, each resolved as its
@@ -2106,6 +2171,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        site: Option<AstId>,
         ctx: &mut FunctionContext,
     ) {
         // The check below is for a default that resolved to `()` with nothing
@@ -2117,6 +2184,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             defaults,
             callee_module,
+            type_bindings,
+            site,
             ctx,
             |s, i, default_expr, resolved| {
                 let expected_type = param_types[i];
@@ -2157,6 +2226,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        site: Option<AstId>,
         ctx: &mut FunctionContext,
         mut filled: impl FnMut(&mut Self, usize, &Expr, TypeId),
     ) {
@@ -2169,7 +2240,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_types_so_far.insert(name.clone(), *arg_type);
             }
         }
-        self.with_resolving_home(callee_module, |s| {
+        self.resolving_defaults_at(site, callee_module, type_bindings, |s| {
             for i in args.len()..param_types.len() {
                 let Some((name, Some(default_expr))) = defaults.get(i).cloned() else {
                     break;
@@ -2185,6 +2256,122 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 param_types_so_far.insert(name, resolved);
             }
         });
+    }
+
+    /// Run `body` — a walk of the defaults `site` left out — in the module that
+    /// wrote them, with `type_bindings` standing for the type arguments `site`
+    /// settled on.
+    ///
+    /// The facts the walk records are kept as `site`'s own overlay, so a second
+    /// site taking the same defaults against other type arguments does not
+    /// answer for this one. They are set aside rather than peeled off
+    /// afterwards: the declaring module's own walk already recorded these
+    /// `AstId`s, so what this walk writes would land on top of those rather
+    /// than after them. A site with no node of its own has nothing for reify to
+    /// key on and records where it always did. See
+    /// [`sem::types::BodyFacts::default_overlays`].
+    pub(super) fn resolving_defaults_at<R>(
+        &mut self,
+        site: Option<AstId>,
+        home: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let enclosing_facts = site.map(|_| std::mem::take(&mut self.sem.types.body));
+        let result =
+            self.with_resolving_home(home, |s| s.with_callee_type_bindings(type_bindings, body));
+        if let (Some(site), Some(enclosing)) = (site, enclosing_facts) {
+            let overlay = std::mem::replace(&mut self.sem.types.body, enclosing);
+            self.sem.types.default_overlays.insert(site, overlay);
+        }
+        result
+    }
+
+    /// The callee's real type parameters paired with the type arguments this
+    /// call settled on, for [`Self::fill_trailing_defaults`]. Empty when the
+    /// list is not dense, since a misaligned pairing would bind the wrong type.
+    pub(super) fn callee_type_bindings(
+        &self,
+        callee: &CalleeRef,
+        type_args: &[TypeId],
+    ) -> Vec<DefaultTypeBinding> {
+        let params = self.lookup_function_type_params(callee);
+        let space: Vec<ast::GenericParam> = params
+            .into_iter()
+            .filter(ast::GenericParam::is_real_type_param)
+            .collect();
+        if space.len() != type_args.len() {
+            return Vec::new();
+        }
+        space
+            .into_iter()
+            .zip(type_args.iter().copied())
+            .map(|(param, type_id)| DefaultTypeBinding {
+                name: param.name,
+                bounds: param.bounds,
+                type_id,
+            })
+            .collect()
+    }
+
+    /// Run `body` with `bindings` as the only type parameters in scope: the
+    /// declaration's, each standing for the type argument the site settled on.
+    /// A default naming one (`fields: T = T::default()`) then resolves against
+    /// that type, and a caller's same-named parameter cannot shadow it.
+    fn with_callee_type_bindings<R>(
+        &mut self,
+        bindings: &[DefaultTypeBinding],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        if bindings.is_empty() {
+            return body(self);
+        }
+        let mut scope = self.enter_inherited_type_param_scope();
+        // Resolved against the enclosing scope, which the loop below clears.
+        //
+        // A type argument nothing pinned is still an inference variable;
+        // standing for one spells the variable into the diagnostic (`unknown
+        // function '?2::default'`) over the call site's real complaint that the
+        // parameter could not be inferred, so it binds nothing.
+        //
+        // Dispatch on the parameter (`T::default()`) reads its bounds by name,
+        // so the name has to carry them. Where the binding brought none and
+        // stands for a parameter of the enclosing scope, that parameter's are
+        // the ones in force: `T` *is* the caller's `X` here, so it is bound by
+        // whatever `X` is bound by.
+        let installed: Vec<Option<Vec<ast::TraitBound>>> = {
+            let table = scope.tysys.type_table.borrow();
+            bindings
+                .iter()
+                .map(|b| {
+                    if matches!(table.get(b.type_id), ResolvedType::InferVar(_)) {
+                        return None;
+                    }
+                    if !b.bounds.is_empty() {
+                        return Some(b.bounds.clone());
+                    }
+                    Some(enclosing_bounds_of(scope.saved(), b.type_id))
+                })
+                .collect()
+        };
+        let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
+        trait_ctx.type_params.clear();
+        trait_ctx.type_param_bounds.clear();
+        for (i, binding) in bindings.iter().enumerate() {
+            let Some(bounds) = &installed[i] else {
+                continue;
+            };
+            trait_ctx.type_params.insert(
+                binding.name.clone(),
+                BinderInScope::undeclared(i as u32, binding.type_id),
+            );
+            if !bounds.is_empty() {
+                trait_ctx
+                    .type_param_bounds
+                    .insert(binding.name.clone(), bounds.clone());
+            }
+        }
+        body(&mut scope)
     }
 
     /// Look up the default-value AST and parameter name for each parameter of a

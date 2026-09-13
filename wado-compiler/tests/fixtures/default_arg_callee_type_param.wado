@@ -1,0 +1,170 @@
+// A value default may name a type parameter of the declaration that wrote it.
+// It stands for the type argument the site taking the default settled on, so
+// `T::default()` is a static call on a concrete type by the time it resolves.
+//
+// Two axes have to be covered together, and this file walks their product: the
+// four kinds of site that take a default (free function, instance method,
+// static method, struct field), and every way a type argument reaches one
+// (turbofish, a sibling argument or field, a type parameter's own default, a
+// caller forwarding its own binder). Each callee is read at two type arguments,
+// because they share one default expression: a walk answering for both would
+// hand one site the other's value.
+//
+// `NoFields` pins the derivation the idiom rests on — a fieldless struct
+// satisfies `Default` vacuously, having exactly one value. The marker below
+// used to be rejected outright with "not every field/case implements
+// `Default`".
+
+use { println, Stdout } from "core:cli";
+use { Slot, Wrap, zero as xmod_zero } from "./sub/default_arg_callee_type_param_lib.wado";
+
+struct NoFields {}
+
+impl Default for NoFields;
+
+fn zero<T: Default>(v: T = T::default()) -> String {
+    return `${v:?}`;
+}
+
+fn pair<T: Default>(seen: T, fallback: T = T::default()) -> String {
+    return `${seen:?}/${fallback:?}`;
+}
+
+fn tagged<T: Default = NoFields>(msg: String, fields: T = T::default()) -> String {
+    return `${msg}:${fields:?}`;
+}
+
+// A caller forwarding its own binder: `T` stands for a binder rather than a
+// type, and the default monomorphizes with the caller as any body does. Every
+// site reaches it, so every site is walked here.
+fn forwarded<X: Default>(_seen: X) -> String {
+    let b: Box2<X> = Box2 { v: X::default() };
+    let h: Holder<X> = Holder {};
+    return `${zero::<X>()}|${b.get()}|${Box2::<X>::of().v:?}|${h.v:?}`;
+}
+
+struct Box2<T> {
+    v: T,
+}
+
+impl<T: Default> Box2<T> {
+    fn get(&self, fallback: T = T::default()) -> String {
+        return `${fallback:?}`;
+    }
+
+    fn of(v: T = T::default()) -> Box2<T> {
+        return Box2 { v };
+    }
+
+    // The method's own parameter, which the impl's does not answer for.
+    fn paired<U: Default>(&self, a: U, b: U = U::default()) -> String {
+        return `${a:?}/${b:?}`;
+    }
+
+    fn make<U: Default>(a: U, b: U = U::default()) -> String {
+        return `${a:?}/${b:?}`;
+    }
+
+    // A static's own parameter, supplied by its own type default.
+    fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+}
+
+trait Show {
+    // On a trait method both the trait's parameter and the method's own reach
+    // the default, and the impl restates the list without it.
+    fn show(&self, v: NoFields = NoFields {}) -> String;
+    fn showing<U: Default>(&self, u: U = U::default()) -> String;
+}
+
+impl<T: Default> Show for Box2<T> {
+    fn show(&self, v: NoFields) -> String {
+        return `${v:?}`;
+    }
+
+    fn showing<U: Default>(&self, u: U) -> String {
+        return `${u:?}`;
+    }
+}
+
+// A field default: the parameter comes from the annotation, or from a sibling
+// field where the literal carries none.
+struct Holder<T: Default> {
+    v: T = T::default(),
+}
+
+struct Sibling<T: Default> {
+    a: T,
+    b: T = T::default(),
+}
+
+export fn run() with Stdout {
+    // Free function. Turbofish, then a sibling argument, then the type
+    // parameter's own default, then a caller forwarding its own binder.
+    assert zero::<i32>() == "0";
+    assert zero::<String>() == "\"\"";
+    assert pair(7) == "7/0";
+    assert pair(2.5) == "2.5/0.0";
+    assert tagged("started") == "started:NoFields {}";
+    assert tagged::<i32>("count") == "count:0";
+    assert forwarded(3) == "0|0|0|0";
+    assert forwarded("s") == "\"\"|\"\"|\"\"|\"\"";
+
+    // Instance method: the impl's parameter comes from the receiver, the
+    // method's own from a turbofish or a sibling argument.
+    let bi: Box2<i32> = Box2 { v: 1 };
+    let bs: Box2<String> = Box2 { v: "x" };
+    assert bi.get() == "0";
+    assert bs.get() == "\"\"";
+    assert bi.paired(7) == "7/0";
+    assert bi.paired("s") == "\"s\"/\"\"";
+    assert bi.paired::<bool>(true) == "true/false";
+
+    // Static method, the same two sources.
+    assert Box2::<i32>::of().v == 0;
+    assert Box2::<String>::of().v == "";
+    assert Box2::<i32>::make(7) == "7/0";
+    assert Box2::<i32>::make("s") == "\"s\"/\"\"";
+    assert Box2::<i32>::tagged() == "NoFields {}";
+    assert Box2::<i32>::tagged::<bool>() == "false";
+
+    // Trait method: the default belongs to the trait declaration.
+    assert bi.show() == "NoFields {}";
+    assert bi.showing::<i32>() == "0";
+    assert bi.showing::<bool>() == "false";
+
+    // Struct field: from the annotation, then from a sibling field.
+    let hi: Holder<i32> = Holder {};
+    let hs: Holder<String> = Holder {};
+    assert hi.v == 0;
+    assert hs.v == "";
+    assert Sibling { a: 5 }.b == 0;
+    assert Sibling { a: "x" }.b == "";
+
+    // The same, across a module boundary, where `T` is a binder the caller
+    // cannot name at all.
+    assert xmod_zero::<i32>() == 0;
+    assert xmod_zero::<String>() == "";
+    assert xmod_zero(9) == 9;
+    let wi: Wrap<i32> = Wrap { v: 1 };
+    let ws: Wrap<String> = Wrap { v: "x" };
+    assert wi.or_default() == 0;
+    assert ws.or_default() == "";
+    assert Wrap::<i32>::empty().v == 0;
+    assert Wrap::<String>::empty().v == "";
+    let si: Slot<i32> = Slot {};
+    let ss: Slot<String> = Slot {};
+    assert si.v == 0;
+    assert ss.v == "";
+
+    // The derivation the `NoFields` idiom rests on.
+    assert `${NoFields::default():?}` == "NoFields {}";
+
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n"
+}

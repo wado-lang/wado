@@ -15,7 +15,7 @@ use crate::tir::{FunctionRef, ResolvedType, TirField, TirStruct, TypeId, TypeTab
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::turbofish_holes;
+use super::call::{DefaultTypeBinding, slot_type_bindings, turbofish_holes};
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -3796,6 +3796,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 _ => None,
             });
+        let annotated_args = expected_args.clone();
         let resolved_struct_fields: Option<Vec<(String, TypeId)>> =
             self.struct_fields_of_written_decl(struct_decl).map(|info| {
                 let params = info.type_param_type_ids.clone();
@@ -3997,37 +3998,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // check further down).
         let provided_names: IndexSet<String> = fields.iter().map(|f| f.name.clone()).collect();
         if !struct_field_types.is_empty() && struct_lit.spreads.is_empty() {
-            for (idx, (expected_name, expected_type_id)) in struct_field_types.iter().enumerate() {
-                if provided_names.contains(expected_name) {
-                    continue;
-                }
-                let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
-                if let Some(default_expr) = default_ast {
-                    // The default is the struct module's AST, and its scope,
-                    // its import aliases and the vantage its visibility is
-                    // judged from are all that module's. Fact keying stays
-                    // local, the default's nodes carrying their own globally
-                    // unique `AstId`s.
-                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
-                        self.with_resolving_home(Some(struct_module_source.clone()), |s| {
-                            s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
-                        })
-                    });
-                    self.typecheck(resolved, *expected_type_id, struct_lit.span);
-                    fields.push(ResolvedField {
-                        name: expected_name.clone(),
-                        type_id: resolved,
-                        field_index: idx as u32,
-                        span: default_expr.span(),
-                    });
-                } else {
-                    let _ = self.emit(TypeError::MissingField {
-                        struct_name: display_name.clone(),
-                        field_name: expected_name.clone(),
-                        span: struct_lit.span,
-                    });
-                }
-            }
+            let (field_default_bindings, settled_params) =
+                self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields);
+            // The default is the struct module's AST, and its scope, its import
+            // aliases and the vantage its visibility is judged from are all
+            // that module's.
+            self.resolving_defaults_at(
+                Some(struct_lit.id),
+                Some(struct_module_source.clone()),
+                &field_default_bindings,
+                |s| {
+                    for (idx, (expected_name, expected_type_id)) in
+                        struct_field_types.iter().enumerate()
+                    {
+                        if provided_names.contains(expected_name) {
+                            continue;
+                        }
+                        let Some(default_expr) =
+                            struct_field_defaults.get(idx).and_then(Option::clone)
+                        else {
+                            let _ = s.emit(TypeError::MissingField {
+                                struct_name: display_name.clone(),
+                                field_name: expected_name.clone(),
+                                span: struct_lit.span,
+                            });
+                            continue;
+                        };
+                        // The declared type still names the struct's own
+                        // parameters where no annotation pinned them, and the
+                        // default answers in the settled ones.
+                        let expected_type_id =
+                            s.substitute_type_params_by_map(*expected_type_id, &settled_params);
+                        let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                            s.resolve_expr(&default_expr, ctx, Some(expected_type_id))
+                        });
+                        s.typecheck(resolved, expected_type_id, struct_lit.span);
+                        fields.push(ResolvedField {
+                            name: expected_name.clone(),
+                            type_id: resolved,
+                            field_index: idx as u32,
+                            span: default_expr.span(),
+                        });
+                    }
+                },
+            );
             fields.sort_by_key(|f| f.field_index);
         }
 
@@ -4585,6 +4599,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if is_union && let Some(gi) = self.sem.types.generic_instantiations.get_mut(&ast_id) {
             gi.is_union = true;
         }
+    }
+
+    /// What this literal settles the struct's own type parameters to: the
+    /// bindings a field default naming one (`b: T = T::default()`) resolves
+    /// against, and the same answer as a substitution for the declared field
+    /// types those defaults are checked against.
+    ///
+    /// Answered from the annotation and from the fields the literal wrote. Full
+    /// inference has not run yet — it reads the defaults this is for — and a
+    /// parameter neither source mentions settles to nothing rather than to
+    /// itself, which would send the default down the abstract path with no
+    /// caller to monomorphize it.
+    fn field_default_type_bindings(
+        &self,
+        struct_decl: Option<DefId>,
+        expected_args: Option<&[TypeId]>,
+        fields: &[ResolvedField],
+    ) -> (Vec<DefaultTypeBinding>, IndexMap<TypeId, TypeId>) {
+        let Some(info) = self.struct_fields_of_written_decl(struct_decl) else {
+            return (Vec::new(), IndexMap::default());
+        };
+        let mut settled: IndexMap<TypeId, TypeId> = IndexMap::default();
+        // The annotation names the whole instantiation, so it answers for every
+        // parameter — including one no field mentions.
+        if let Some(args) = expected_args.filter(|a| a.len() == info.type_param_type_ids.len()) {
+            settled.extend(
+                info.type_param_type_ids
+                    .iter()
+                    .copied()
+                    .zip(args.iter().copied()),
+            );
+        }
+        for field in fields {
+            let Some((_, declared, _)) = info.fields.iter().find(|(n, _, _)| *n == field.name)
+            else {
+                continue;
+            };
+            unify(
+                &self.tysys.type_table,
+                *declared,
+                field.type_id,
+                &mut settled,
+            );
+        }
+        let (slots, args): (Vec<TypeId>, Vec<TypeId>) = info
+            .type_param_type_ids
+            .iter()
+            .filter_map(|slot| settled.get(slot).map(|&arg| (*slot, arg)))
+            .unzip();
+        let map = slots.iter().copied().zip(args.iter().copied()).collect();
+        (
+            slot_type_bindings(&self.tysys.type_table, &slots, &args),
+            map,
+        )
     }
 
     /// Infer a generic struct's type arguments by running [`InferCtx`] over its

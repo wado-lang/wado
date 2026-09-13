@@ -17,6 +17,7 @@ use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::{DefaultTypeBinding, slot_type_bindings};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -729,6 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
+                            impl_type_bindings: Vec::new(),
                             method_def: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
@@ -773,6 +775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
+                            impl_type_bindings: Vec::new(),
                             method_def: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
@@ -1032,8 +1035,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        let impl_type_bindings = slot_type_bindings(
+            &self.tysys.type_table,
+            &impl_sig.target_type_args,
+            receiver_type_args.unwrap_or(&[]),
+        );
 
         Some(MethodInfo {
+            impl_type_bindings,
             method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -1154,6 +1163,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
+            // A generic resource is rejected, so its methods take no slots.
+            impl_type_bindings: Vec::new(),
             method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -1849,6 +1860,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .map(|b| (b.index, b.type_id))
             .collect();
+        // The same frame under the names the block wrote, which is what a
+        // parameter default naming one (`v: T = T::default()`) spells. Taken
+        // before the method's own parameters join the frame: those are still
+        // abstract here, and the call site binds them.
+        let impl_type_bindings: Vec<DefaultTypeBinding> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .map(|(name, binder)| DefaultTypeBinding {
+                name: name.clone(),
+                bounds: scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_default(),
+                type_id: binder.type_id,
+            })
+            .collect();
         // A binding naming a type private to the declaring module (`type Iter
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
         // perspective can see (issue #1416) — which is why the decl pass, not
@@ -2023,6 +2055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
+                    impl_type_bindings: impl_type_bindings.clone(),
                     method_def: Some(method_sig.def),
                     return_type,
                     self_kind,
@@ -2088,6 +2121,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
+                        impl_type_bindings: impl_type_bindings.clone(),
                         method_def: Some(default_method.sig.def),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -3015,6 +3049,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: _,
             inherent_visibility,
             defaults_module,
+            impl_type_bindings: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self

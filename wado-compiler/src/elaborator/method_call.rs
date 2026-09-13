@@ -26,7 +26,9 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
+use crate::elaborator::call::{
+    merge_turbofish_type_args, slot_type_bindings, turbofish_has_hole, turbofish_holes,
+};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -572,6 +574,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self,
             inherent_visibility,
             defaults_module,
+            impl_type_bindings,
         } = if let Some(info) = method_info {
             info
         } else {
@@ -584,6 +587,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             // Default to Unknown type for error recovery
             MethodInfo {
+                impl_type_bindings: Vec::new(),
                 method_def: None,
                 return_type: TypeTable::UNKNOWN,
                 self_kind: ast::SelfKind::Ref,
@@ -688,11 +692,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .zip(param_defaults.iter().cloned())
             .collect();
+        // A default may also name the method's *own* type parameter
+        // (`u: U = U::default()`). The turbofish spells it; otherwise the
+        // written arguments pin it, solved here against the same slots the
+        // pipeline's inference uses below. This solve mints no instantiation
+        // and reports nothing — a slot it leaves open binds no name, and the
+        // walk below then says so in its own terms.
+        let mut default_type_bindings = impl_type_bindings;
+        if !method_type_param_ids.is_empty() {
+            let known = if !type_args.is_empty() && !type_arg_holes.iter().any(|&h| h) {
+                type_args.clone()
+            } else {
+                let mut infer =
+                    InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
+                for (i, (&param_type, &arg)) in
+                    expected_param_types.iter().zip(args.iter()).enumerate()
+                {
+                    if is_numeric_literal_arg(args_ast.get(i)) {
+                        infer.add_deferred(param_type, arg);
+                    } else {
+                        infer.add(param_type, arg);
+                    }
+                }
+                infer.solve()
+            };
+            default_type_bindings.extend(slot_type_bindings(
+                &self.tysys.type_table,
+                &method_type_param_ids,
+                &known,
+            ));
+        }
         self.fill_trailing_defaults(
             &mut args,
             &expected_param_types,
             &defaults,
             Some(callee_module.clone()),
+            &default_type_bindings,
+            call_id,
             ctx,
             |_, _, _, _| {},
         );
@@ -1696,6 +1732,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
 
+        let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        let own_type_param_ids = callee_sig
+            .as_ref()
+            .map(MethodSig::own_type_param_ids)
+            .unwrap_or_default();
+
         // A static's own slots, where the spelling wrote none. With no slots of
         // its own the block leaves the method's numbered from zero and the
         // receiver's substitution reaches them anyway; with slots of its own it
@@ -1754,11 +1796,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pad omitted trailing arguments with declared parameter defaults.
         // Variant / flags constructors carry no defaults, so the arg-count
         // checks below are unaffected.
+        //
+        // The declaring block's type parameters stand for the receiver's type
+        // arguments, so a default naming one (`v: T = T::default()`) resolves
+        // against what `Type::<i32>::method()` spelled.
+        let declaring_impl_sig = declaring_impl
+            .and_then(|id| self.tysys.signatures.impl_sig(id))
+            .cloned();
+        let mut static_type_bindings = declaring_impl_sig
+            .map(|impl_sig| {
+                let args = self
+                    .receiver_declaring_args(Some(target_type_id), &[])
+                    .unwrap_or_default();
+                slot_type_bindings(&self.tysys.type_table, &impl_sig.target_type_args, &args)
+            })
+            .unwrap_or_default();
+        // The static's own slots, as the turbofish spelled them or the block
+        // above solved them.
+        static_type_bindings.extend(slot_type_bindings(
+            &self.tysys.type_table,
+            &own_type_param_ids,
+            &method_type_args,
+        ));
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
             &static_method_defaults,
             static_method_module.clone(),
+            &static_type_bindings,
+            Some(static_call.id),
             ctx,
             |_, _, default_expr, _| arg_spans.push(default_expr.span()),
         );

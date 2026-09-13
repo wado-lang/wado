@@ -160,14 +160,25 @@ The same rule governs a **type parameter's** default (`<T = Priv>`): it names a 
 
 This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site.
 
-Regression fixtures, by what each pins:
+What a default may name, and the fixture pinning each. `default_arg_scope.wado`
+and `default_field.wado` each carry one `test` block per row, named after the
+rule, and cross a module boundary in every one — the direction that can tell the
+declaration's scope from the taking site's.
 
-- Variant cases and private types across a module boundary: `default_field_xmod_variant_case.wado`, `default_arg_xmod_variant_case.wado` (issue #1486), `bug_default_arg_xmod.wado`, `default_arg_xmod_private_type.wado` (free function and method, value default and type-parameter default).
-- A field default's private items and import aliases: `field_default_private_callee.wado`, `field_default_namespaced_callee.wado`.
-- A parameter default's import aliases: `default_arg_namespaced_callee.wado`.
-- A caller's locals, which never reach a default: `default_arg_caller_local_not_in_scope.wado`.
-- A method default, resolved where declared rather than where called: `default_arg_xmod_method.wado`.
-- The file-reading literals: `default_arg_compile_time_literal.wado`.
+| What the default names                 | Fixture                                                      |
+| -------------------------------------- | ------------------------------------------------------------ |
+| A private item of the declaring module | `default_arg_scope.wado`, `default_field.wado`               |
+| A private _type_ of that module        | `default_arg_scope.wado`                                     |
+| A variant case across the boundary     | `default_arg_scope.wado`, `default_field.wado` (issue #1486) |
+| That module's import alias (`ns::x`)   | `default_arg_scope.wado`, `default_field.wado`               |
+| An earlier parameter                   | `default_arg_scope.wado`, `default_arg_sites.wado`           |
+| The declaration's own type parameter   | `default_arg_callee_type_param.wado`                         |
+| A location literal (call site)         | `default_arg_location_call_site.wado`                        |
+| A file literal (declaring file)        | `default_arg_scope.wado`                                     |
+| Nothing of the caller's                | `default_arg_scope.wado`                                     |
+
+A method's default is resolved where declared rather than where called:
+`default_arg_scope.wado`, "a method's default resolves where it is declared".
 
 Default expressions may reference earlier parameters in the same function:
 
@@ -413,6 +424,51 @@ struct Config {
 See the serde WEP's
 [Default Values for Missing Fields](./wep-2026-02-28-serde.md#default-values-for-missing-fields).
 
+### Naming the Declaration's Own Type Parameter
+
+A value default may name a type parameter of the declaration that wrote it:
+
+```wado
+fn info<T: Default>(msg: String, fields: T = T::default()) -> String { ... }
+
+info::<i32>("count");     // fields = 0
+```
+
+The default resolves once per site that takes it, with the declaration's type
+parameters standing for the type arguments that site settled on. `T` is a
+concrete type by the time `T::default()` is looked up, so the call dispatches
+statically on it. Where the argument is itself a parameter — a caller forwarding
+its own `X` — `T` stands for that binder and the default monomorphizes with the
+caller, as any body does.
+
+Each site's walk is kept apart from every other's. Two calls of one generic
+callee read the one default expression at different types, and a walk answering
+for both would hand a site the other's value.
+
+#### Coverage
+
+Rows are the kinds of site that take a default; columns are where the type
+argument comes from. `default_arg_callee_type_param.wado` walks every ✅ at two
+type arguments, in the declaring module and across a module boundary.
+
+| Site                             | Turbofish | Argument or field beside it | The parameter's own type default | Caller's own binder |
+| -------------------------------- | --------- | --------------------------- | -------------------------------- | ------------------- |
+| Free function                    | ✅        | ✅                          | ✅                               | ✅                  |
+| Instance method — `impl`'s param | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
+| Instance method — method's own   | ✅        | ✅                          | ❌ (gap below)                   | ✅                  |
+| Static method — `impl`'s param   | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
+| Static method — method's own     | ✅        | ✅                          | ✅                               | ✅                  |
+| Trait method                     | ✅        | ✅                          | ✅                               | ✅                  |
+| Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
+
+ᴿ The receiver settles the `impl` block's parameters, so the column describes
+how the receiver's own type was settled. ᴬ The literal's annotation names the
+instantiation.
+
+An `interface` operation is absent by rule, not by omission: an operation
+declares neither parameter defaults nor type parameters (see
+[Operations on an `interface` or a `resource`](#operations-on-an-interface-or-a-resource)).
+
 ### WebIDL Mapping Improvement
 
 With default arguments, WebIDL optional parameters with explicit defaults map to their actual types instead of `Option<T>`:
@@ -538,11 +594,26 @@ let resp = Fetch::fetch(url, init).read();
 
 ## Known gaps
 
-A value default cannot name the callee's own type parameter. `fn info<T: Default>(msg: String, fields: T = T::default())` is rejected with "unknown function `T::default`". A value default is re-resolved at each call site, and the callee's generic parameters are not in scope there. A _type_ parameter's default (`<T, U = T>`) does see them, so the two kinds differ here.
+A value default on an **instance** method cannot name a method type parameter
+whose only source is that parameter's own type default:
 
-Closing the gap means resolving a value default once per monomorphization instead of once per call site, which is what binds `T` to the concrete argument. Registering the callee's parameters at the call site is not enough on its own: the default would then resolve against `T` as a binder, but nothing downstream puts the call site's concrete type in its place, so the value would be wrong rather than rejected. The per-monomorphization work is not scheduled. The gap stands, and the call site gets a clear error meanwhile.
+```wado
+impl<T> B<T> {
+    fn tagged<U: Default = NoFields>(&self, u: U = U::default()) -> String { ... }
+}
+b.tagged();   // error: unknown function `U::default`
+```
 
-The interaction table says defaults are "monomorphized per call site". That describes the defaults the language accepts today, which are the ones naming no type parameter.
+A turbofish (`b.tagged::<i32>()`) or an argument beside it settles `U` and the
+default resolves. The same declaration as a static method has no gap. Closing it
+means settling a method type parameter's own type default before the value
+defaults are filled; the step that does so today registers the receiver's
+associated types as a side effect, which is not safe to run that early. Not
+scheduled.
+
+A call that pins no type argument at all reports the parameter it could not
+infer, preceded by an `unknown function 'T::default'` from the default walk that
+had nothing to resolve against. The second diagnostic is the one to read.
 
 ## See Also
 

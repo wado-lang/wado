@@ -149,6 +149,10 @@ instead requires every field to carry a default expression). On failure, the
 error reason-chains from the bound site to the offending field/case
 ([Diagnostic Reason Chains](./wep-2026-06-02-diagnostic-reason-chains.md)).
 
+A fieldless struct satisfies `Default` vacuously, having exactly one value.
+That is what lets a marker type stand as a type parameter's default:
+`fn info<T: Serialize = NoFields>(msg: String, fields: T = T::default())`.
+
 A plain `enum` and a `flags` type carry no members to recurse into, so both
 satisfy every structural obligation outright: `Eq` / `Ord` compare the
 discriminant and the bitmask respectively. Generating their bodies is what keeps

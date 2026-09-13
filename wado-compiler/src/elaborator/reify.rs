@@ -557,12 +557,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// own walk. Every read of a body fact goes through here, because annotate
     /// peeled each element's facts out of the module's own maps.
     fn ann<V: Clone>(&self, map: fn(&BodyFacts) -> &IndexMap<AstId, V>, id: AstId) -> Option<V> {
+        self.ann_ref(map, id).cloned()
+    }
+
+    /// [`Self::ann`] without the clone, for a fact reify only borrows. The
+    /// borrow outlives the call, so a walk it names can be pushed onto
+    /// [`Self::tuple_overlay_stack`].
+    fn ann_ref<V>(&self, map: fn(&BodyFacts) -> &IndexMap<AstId, V>, id: AstId) -> Option<&'a V> {
         self.tuple_overlay_stack
             .iter()
             .rev()
             .copied()
             .chain(std::iter::once(&self.sem.types.body))
-            .find_map(|facts| map(facts).get(&id).cloned())
+            .find_map(|facts| map(facts).get(&id))
     }
 
     with_body_facts!(reify_annotation_accessors);
@@ -5333,7 +5340,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
         let mut args = vec![CallArg::new(literal, false)];
-        self.reify_pad_dispatch_defaults(&tagged.tag, &mut args, &dispatch, span, ctx);
+        self.reify_pad_dispatch_defaults(&tagged.tag, &mut args, &dispatch, tagged.id, span, ctx);
         let call = TirExpr::new(
             TirExprKind::Call {
                 type_args: dispatch.type_args,
@@ -5650,6 +5657,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 });
             }
         } else {
+            // This literal's own default walk, so a second literal of the same
+            // struct at other type arguments does not answer for it.
+            let overlay = self.ann_ref(|facts| &facts.default_overlays, struct_lit.id);
+            if let Some(overlay) = overlay {
+                self.tuple_overlay_stack.push(overlay);
+            }
             for (name, field_index, raw_ty, default) in &decl_fields {
                 if provided.contains(name) {
                     continue;
@@ -5657,11 +5670,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if let Some(default_expr) = default {
                     let expected_field_ty = substitute(self, *raw_ty);
                     // Reify a foreign default under its owning module's
-                    // perspective: fact lookups key by the node's own globally-
-                    // unique `AstId` (no module qualifier), but the default's
-                    // free identifiers and decl lookups still resolve in the
-                    // struct module's scope, so the perspective swap remains for
-                    // name resolution.
+                    // perspective: the default's free identifiers and decl
+                    // lookups resolve in the struct module's scope.
                     let value = ctx.with_caller_bindings_hidden(|ctx| {
                         self.with_const_module_perspective(&struct_module, |this| {
                             this.reify_expr(default_expr, ctx, Some(expected_field_ty))
@@ -5673,6 +5683,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         field_index: *field_index,
                     });
                 }
+            }
+            if overlay.is_some() {
+                self.tuple_overlay_stack.pop();
             }
         }
         fields.sort_by_key(|f| f.field_index);
@@ -7640,6 +7653,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &dispatch.param_defaults,
                 &dispatch.param_types,
                 &callee_module,
+                static_call.id,
                 static_call.span,
                 ctx,
             );
@@ -7747,6 +7761,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         callee: &ast::Expr,
         args: &mut Vec<CallArg>,
         dispatch: &StaticMethodDispatch,
+        site: AstId,
         span: Span,
         ctx: &mut FunctionContext,
     ) {
@@ -7756,6 +7771,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &dispatch.param_types,
             &dispatch.function_ref.module_source.clone(),
             &dispatch.function_ref.name.clone(),
+            site,
             ctx,
         );
         let module = dispatch.defaults_module.clone();
@@ -7764,6 +7780,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &dispatch.param_defaults,
             &dispatch.param_types,
             &module,
+            site,
             span,
             ctx,
         );
@@ -7776,6 +7793,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         param_types: &[tir::TypeId],
         callee_module: &ModuleSource,
         callee_name: &str,
+        site: AstId,
         ctx: &mut FunctionContext,
     ) {
         // Only an ident callee names a free function with defaults. A
@@ -7792,6 +7810,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &func_params,
             param_types,
             callee_module,
+            site,
             callee.span(),
             ctx,
         );
@@ -7808,11 +7827,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         func_params: &[(String, Option<ast::Expr>)],
         param_types: &[tir::TypeId],
         callee_module: &ModuleSource,
+        site: AstId,
         call_span: Span,
         ctx: &mut FunctionContext,
     ) {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
+        }
+        // The walk annotate peeled off for *this* call. Taken before the
+        // perspective swap below, which leaves the caller's module — and its
+        // facts — behind. Pushed so `ann` answers with this call's type
+        // arguments rather than another call site's.
+        let overlay = self.ann_ref(|facts| &facts.default_overlays, site);
+        if let Some(overlay) = overlay {
+            self.tuple_overlay_stack.push(overlay);
         }
         // A default may name an earlier parameter, which means the caller's
         // argument — already reified under the caller's perspective in
@@ -7890,6 +7918,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.default_arg_overrides = saved_overrides;
         if captured_call_site {
             self.call_site_location = None;
+        }
+        if overlay.is_some() {
+            self.tuple_overlay_stack.pop();
         }
     }
 
@@ -8049,7 +8080,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
-            self.reify_pad_dispatch_defaults(&call.callee, &mut arg_exprs, &dispatch, span, ctx);
+            self.reify_pad_dispatch_defaults(
+                &call.callee,
+                &mut arg_exprs,
+                &dispatch,
+                call.id,
+                span,
+                ctx,
+            );
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic
@@ -8384,6 +8422,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 &param_types,
                 &callee_module,
                 &callee_name,
+                call.id,
                 ctx,
             );
 
@@ -8758,6 +8797,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &dispatch.param_defaults,
             &[],
             &dispatch.defaults_module,
+            method_call.id,
             method_call.span,
             ctx,
         );

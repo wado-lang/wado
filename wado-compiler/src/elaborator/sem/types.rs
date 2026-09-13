@@ -248,18 +248,30 @@ macro_rules! define_body_facts {
         #[derive(Default, Clone)]
         pub(crate) struct BodyFacts {
             $($(#[$doc])* pub(crate) $name: IndexMap<AstId, $val>,)+
+            /// The facts the arguments a call omitted produced, keyed by that
+            /// call's [`AstId`]. A default expression is one AST node the
+            /// author wrote once and every call site re-walks, so its facts
+            /// cannot sit beside the rest: two calls of a generic callee bind
+            /// its type parameters to different types, and the later walk
+            /// would answer for the earlier call. Nested, so a default that is
+            /// itself a defaulted call keeps its own.
+            pub(crate) default_overlays: IndexMap<AstId, BodyFacts>,
         }
 
-        /// The length of every [`BodyFacts`] map, snapshotted before a tuple
-        /// `for-of` unrolls its body.
+        /// The length of every [`BodyFacts`] map, snapshotted before a walk
+        /// whose entries are to be peeled off afterwards.
         #[derive(Clone, Copy)]
         pub(crate) struct BodyFactsLens {
             $($name: usize,)+
+            default_overlays: usize,
         }
 
         impl BodyFacts {
             pub(crate) fn lens(&self) -> BodyFactsLens {
-                BodyFactsLens { $($name: self.$name.len(),)+ }
+                BodyFactsLens {
+                    $($name: self.$name.len(),)+
+                    default_overlays: self.default_overlays.len(),
+                }
             }
 
             /// Peel the entries recorded since `base` off the tail of each
@@ -269,12 +281,16 @@ macro_rules! define_body_facts {
             /// conditionally-recorded entry of one element from lingering
             /// into the next.
             pub(crate) fn split_off(&mut self, base: BodyFactsLens) -> BodyFacts {
-                BodyFacts { $($name: self.$name.split_off(base.$name),)+ }
+                BodyFacts {
+                    $($name: self.$name.split_off(base.$name),)+
+                    default_overlays: self.default_overlays.split_off(base.default_overlays),
+                }
             }
 
             #[cfg(debug_assertions)]
             pub(crate) fn fact_count(&self) -> usize {
                 0 $(+ self.$name.len())+
+                    + self.default_overlays.values().map(BodyFacts::fact_count).sum::<usize>()
             }
         }
     };
@@ -401,6 +417,14 @@ pub(crate) enum AssignPlace {
 }
 
 impl BodyFacts {
+    /// Append this walk and every default-argument walk nested under it.
+    fn collect_walks<'a>(&'a self, out: &mut Vec<&'a BodyFacts>) {
+        out.push(self);
+        for nested in self.default_overlays.values() {
+            nested.collect_walks(out);
+        }
+    }
+
     /// Every callee a dispatch decision in this walk names, as
     /// `(use site, declaration)` pairs.
     ///
@@ -459,9 +483,16 @@ impl BodyFacts {
 
 impl TypeAnnotations {
     /// The module's own body facts, then every overlay a tuple `for-of`
-    /// peeled off them.
+    /// peeled off them, each followed by the default-argument walks nested
+    /// under it.
     pub(crate) fn walks(&self) -> impl Iterator<Item = &BodyFacts> {
-        std::iter::once(&self.body).chain(self.tuple_overlays.values().flatten().flatten())
+        let mut out = Vec::new();
+        for facts in
+            std::iter::once(&self.body).chain(self.tuple_overlays.values().flatten().flatten())
+        {
+            facts.collect_walks(&mut out);
+        }
+        out.into_iter()
     }
 
     /// Every value recorded for `id` in `map`: the module's own walk's first,
