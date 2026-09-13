@@ -13,10 +13,11 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1322,6 +1323,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "method",
                 name: method_name,
                 span,
+                // This is the inference pass itself, run over already-resolved
+                // arguments. Its caller merges the turbofish into the answer
+                // afterwards, so every slot is open here.
+                type_args: &[],
             },
         );
         self.record_slot_bounds(&inst, &method_type_params, span);
@@ -1353,6 +1358,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
+        // A slot answered with itself is not answered. The argument that
+        // supplied it is this call's own frame, reaching the solver through a
+        // variable the argument walk settled back onto the slot, and a rigid
+        // parameter carried past here dies in codegen as `unsubstituted
+        // TypeParam`. Putting the variable back lets the blame below report it
+        // at the call. A slot the enclosing scope declares is different: a
+        // caller is forwarding its own generics and monomorphization resolves
+        // it, so the same `scope_params` guard as
+        // `defer_or_report_uninferred_fn_type_args`.
+        let scope_params = self.scope_type_param_ids();
+        for (i, answer) in inferred.iter_mut().enumerate() {
+            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+                *answer = inst.vars[i];
+            }
+        }
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
@@ -2999,15 +3019,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
-            return_type,
+            mut return_type,
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
             owner: _,
             cm_name: _,
-            method_own_params: _,
+            method_own_params,
             is_ref_impl: method_is_ref_impl,
-            method_type_param_ids: _,
+            method_type_param_ids,
             impl_module,
             from_concrete_impl: _,
             param_defaults: method_param_defaults,
@@ -3090,16 +3110,60 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // above; the body walk only needed the dispatch fact. The
         // index was resolved above for its side effects.
 
-        for (i, a) in method_call.args.iter().enumerate() {
-            let expected = param_types.get(i).copied();
-            self.resolve_expr(a, ctx, expected);
-        }
-
-        let type_args: Vec<TypeId> = method_call
+        // A `_` resolves to UNKNOWN, and inference fills it below.
+        let mut type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
+
+        // This path answers the call, so the method's own inference is its to
+        // run — a subscript receiver does not decide whether an argument meets
+        // a rigid slot.
+        let args = self.resolve_args_through_slots(
+            ctx,
+            &method_call.args,
+            &param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: &method_call.method,
+                span: method_call.span,
+                type_args: &type_args,
+            },
+        );
+
+        if !method_type_param_ids.is_empty() {
+            if type_args.is_empty() || turbofish_has_hole(&method_call.type_args) {
+                let inferred = self.infer_method_type_args(MethodInferenceInput {
+                    receiver_type: output_type,
+                    method_name: &method_call.method,
+                    slots: &method_type_param_ids,
+                    own_params: &method_own_params,
+                    param_types: &param_types,
+                    args: &args,
+                    raw_args: &method_call.args,
+                    decl_return_type: return_type,
+                    expected_return_type: None,
+                    trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                    declaring_module: impl_module.clone(),
+                    span: method_call.span,
+                });
+                if type_args.is_empty() {
+                    type_args = inferred;
+                } else {
+                    let holes = turbofish_holes(&method_call.type_args);
+                    merge_turbofish_type_args(&mut type_args, &holes, &inferred);
+                }
+            }
+            if !type_args.is_empty() {
+                self.enforce_type_arg_bounds(&method_own_params, &type_args, method_call.span);
+                let subst = SubstitutionContext::new().bind(&method_type_param_ids, &type_args);
+                return_type =
+                    subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+            }
+        }
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
         let mangled_method_name =

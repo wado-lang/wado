@@ -259,7 +259,7 @@ for let mut i = 0; i < arr.len(); i += 1 { arr[i] = arr[i] * 2; }
 let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                               // in-place ascending sort (requires T: Ord)
 let asc = nums.sorted();                   // returns new sorted array
-nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparator
+nums.sort_by(|a, b| { ... });              // sort with custom Ordering comparator
 ```
 
 ### Strings
@@ -842,6 +842,11 @@ let get = || count;                          // captures &count; type fn() -> i3
 inc();
 inc();
 assert get() == 2;
+
+// Parameter types come from the expected fn type where the context has one:
+// an argument position, a typed binding, a struct field. Annotate only where
+// nothing supplies it (the `let`s above).
+let f: fn(i32) -> i32 = |x| x + 1;
 ```
 
 ### Generics
@@ -1184,19 +1189,20 @@ iter.next();                              // Option<i32>
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
-// Combinators
-let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
-let evens = arr.into_iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let acc = arr.into_iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+// Combinators: the closure's parameter types come from the call — the item type
+// from the receiver, an accumulator from the seed or the body
+let doubled = arr.into_iter().map(|x| x * 2).collect();            // [2, 4, 6, 8, 10]
+let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();      // [2, 4]
+let acc = arr.into_iter().fold(0, |acc, x| acc + x);               // 15
 
 // sum/product/min/max and the _by/_by_key variants work on any iterator
 let sum = arr.into_iter().sum();                                   // Some(15)
-let hi = arr.into_iter().map(|x: i32| x * 2).max();                // Some(10)
+let hi = arr.into_iter().map(|x| x * 2).max();                     // Some(10)
 
 // Chaining
 let result = arr.into_iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
     .collect();  // [30, 40, 50]
 ```
 

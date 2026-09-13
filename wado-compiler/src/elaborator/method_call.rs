@@ -17,6 +17,7 @@ use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
 use super::infer::InferCtx;
+use super::instantiate::Instantiation;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -661,15 +662,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types
         };
 
-        // Resolve arguments with coercion using method parameter types
-        let mut args: Vec<TypeId> = args_ast
-            .iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                let expected_type = expected_param_types.get(i).copied();
-                self.resolve_expr(arg, ctx, expected_type)
-            })
-            .collect();
+        // Only the method's own slots: the lookup instantiated the declaring
+        // level already, so `Self::Item` is concrete here and `Acc` is not.
+        let mut args: Vec<TypeId> = self.resolve_args_through_slots(
+            ctx,
+            args_ast,
+            &expected_param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: method_name,
+                span,
+                type_args: &type_args,
+            },
+        );
 
         // The module that declares this method: the scope its own defaults —
         // parameter values and type-parameter defaults alike — resolve in,
@@ -727,10 +734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these argument types — has run. That check happens once below,
         // against the substituted parameter types.
         for (arg, &expected_type) in args.iter_mut().zip(expected_param_types.iter()) {
-            if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected_type) {
-                self.solve_infer_holes_against(*arg, expected_type);
-                *arg = self.apply_infer_holes(*arg);
-            }
+            self.pin_arg_hole_against(arg, expected_type);
         }
 
         self.verify_arg_synthesis(&synthesized, args_ast, ctx, &args, span);

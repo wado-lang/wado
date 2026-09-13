@@ -1,0 +1,18 @@
+// An inference variable renders as the slot it stands for, so a diagnostic
+// names a parameter the reader can annotate. The id it is keyed by is only
+// unique among the variables live at once, and it restarts at 0 per module,
+// where the table of names outlives them all.
+//
+// The dependency's `Weird` takes id 0, and this module's own variable takes
+// the id over. Every mint sets or clears the name, so a variable no one named
+// renders as itself rather than as whatever the id last stood for.
+
+use { g } from "./sub/infer_var_name_leak_error_dep.wado";
+
+test "a variable no one named does not read another module's slot" {
+    let x = Option::None;
+    x.no_such_method();
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'no_such_method' found on type 'Option<?0>'"}

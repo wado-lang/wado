@@ -46,6 +46,33 @@ Closure types use a single bare form — `fn(T) -> U` or `fn mut(T) -> U` — in
 
 The compiler chooses static (specialised) vs dynamic (canonical) dispatch via escape analysis. From the user's perspective, both forms behave identically — only the runtime representation differs. There is no user-visible `impl` / `dyn` distinction. The LSP surfaces the compiler's dispatch decision as an inline hint or hover annotation when the user cares about it.
 
+### Parameter Type Inference
+
+A closure literal's parameter types come from the expected `fn(..)` type at its use site, matched by position. Every row of the table above supplies one, as does a `let` carrying a `fn(..)` annotation and a newtype over `fn(..)`. An annotation is needed only where nothing supplies one, and always wins over what would have been inferred.
+
+The expected type may be written in the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call site instantiates those slots into inference variables before it resolves an argument, so the closure body meets a variable rather than the rigid `Acc`. No expression the body could write can construct an `Acc`.
+
+A slot the turbofish names is solved at that instantiation, so `go::<String>(|a| a.len())` types the closure from what the call wrote.
+
+Resolving an argument and answering a variable with it are ordered separately: the argument that can answer a variable is not always the one that must resolve first.
+
+Arguments resolve in two passes:
+
+1. Everything but a closure whose parameter types still hold a variable, in source order.
+2. Those closures. A closure takes its parameter types off the signature, and its body applies operators and methods to them right away. An operator applied to a variable resolves against nothing, so the closure waits for the arguments that can answer it. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
+
+Each argument answers as it resolves, except a numeric literal, which answers after both passes and only where nothing else did. `i32` / `f64` is a default, not an answer: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0` is all there is.
+
+An argument answers only the variables the call itself minted. A parameter type can be built over a hole some other site deferred, such as the receiver's element type. That hole has its own sink, and nothing re-checks the sink against an answer pinned here, so an argument that merely agrees with the hole would fix it to the wrong type and be believed.
+
+Once every argument is resolved each variable is settled back onto its slot, so type-argument inference proper still sees the declaration's own frame. A slot that inference then answers with itself is not answered. It goes back to the variable, and the call reports it: a rigid parameter carried past this point dies in codegen rather than in a diagnostic.
+
+A variable renders in a diagnostic as the slot it stands for. `?0` names nothing the source wrote, where `A` is exactly what the reader would annotate. A mangled name keeps the variable's own identity, so two same-named slots cannot collapse onto one name.
+
+The receiver's type parameters are not part of that step. Method lookup has already instantiated the declaring level, so `Self::Item` is concrete before the first argument is looked at.
+
+A `&mut self` method reached through a subscript (`xs[i].m(..)`) is rewritten through `IndexMut` by a path of its own, which answers the call rather than delegating. It runs the same sequence, so the receiver's spelling does not decide whether a closure argument gets a type.
+
 ### Generic Bound Syntax
 
 `fn(...)` and `fn mut(...)` may appear as trait bounds. This is the way to name a closure type and reuse it across multiple positions in a generic function:
@@ -289,8 +316,10 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 5. Closures cannot cross Component Model boundary (MVP).
    - Mitigation: documented; resource adapter as future work.
 
-## Future Work
+## Known gaps
 
+- A closure with no expected type at all (`let f = |x| x + 1;`) still needs its parameters annotated: nothing infers them from the body, or from a later call of the binding.
+- Two closures in one call that could only answer each other (`f(|a| g(a), |b| h(b))` where each slot is written in both) are resolved in source order, so the second reads whatever the first settled and nothing revisits the first. A general fixed point over the argument list would need the body walk to be replayable, which it is not.
 - User-defined callable types (some syntax for implementing the closure trait on user structs): low priority.
 - Resource adapter for closures at the Component Model boundary.
 - `with ..` effect-polymorphism shorthand if `<effect E>` verbosity proves painful.

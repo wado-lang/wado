@@ -1,0 +1,54 @@
+// A turbofish is an answer the call site wrote down, so it reaches the
+// arguments: a closure passed alongside it sees the named type, not a variable.
+//
+// The call instantiates the callee's slots before it walks the arguments
+// (`closure_param_from_callee_type_param.wado`), and a slot the turbofish names
+// is solved as it is minted. Applied any later, the closure body would already
+// have been resolved against a hole nothing had answered.
+//
+// Four spellings reach that instantiation, and each is here: a free function, an
+// instance method, a static method, and a partial `::<_, T>` whose explicit
+// position must be seeded while its `_` stays open.
+
+struct Counter {
+    v: i32,
+}
+
+impl Counter {
+    fn go<A: Default>(&self, f: fn(A) -> i32) -> i32 {
+        return f(A::default());
+    }
+
+    fn pair<A: Default, B: Default>(&self, f: fn(B) -> i32, seed: A) -> i32 {
+        return f(B::default());
+    }
+
+    fn mk<A: Default>(f: fn(A) -> i32) -> i32 {
+        return f(A::default());
+    }
+}
+
+fn free<A: Default>(f: fn(A) -> i32) -> i32 {
+    return f(A::default());
+}
+
+test "a free function's turbofish types the closure parameter" {
+    assert free::<String>(|a| a.len()) == 0;
+}
+
+test "an instance method's turbofish types the closure parameter" {
+    let c = Counter { v: 1 };
+    assert c.go::<String>(|a| a.len()) == 0;
+}
+
+test "a static method's turbofish types the closure parameter" {
+    assert Counter::mk::<String>(|a| a.len()) == 0;
+}
+
+test "a partial turbofish types the closure from its explicit position" {
+    let c = Counter { v: 1 };
+    assert c.pair::<_, String>(|b| b.len(), 1) == 0;
+}
+
+__DATA__
+{"test": {}}

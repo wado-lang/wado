@@ -1,0 +1,21 @@
+// A closure body that reaches for a method on a parameter no argument has
+// answered yet. The type is still an inference variable, and the message names
+// the slot it stands for (`A`) rather than the variable's own identity.
+
+struct Counter {
+    v: i32,
+}
+
+impl Counter {
+    fn go<A>(&self, f: fn(A) -> i32, seed: A) -> i32 {
+        return f(seed);
+    }
+}
+
+test "an unanswered parameter is named by its slot" {
+    let c = Counter { v: 1 };
+    assert c.go(|a| a.len(), 1) == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'len' found on type 'A'"}

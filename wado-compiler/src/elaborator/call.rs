@@ -13,7 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::is_numeric_literal_arg;
 use super::expr::BareCase;
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -292,6 +292,102 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             name: root.name.clone(),
             span: root.span,
         });
+    }
+
+    /// Resolve a call's arguments against parameter types that may still hold
+    /// this call's inference variables, each pinning what it answers.
+    ///
+    /// `inst` is this call's instantiation of its callee's own slots. Its
+    /// variables are the only ones an argument may answer here
+    /// ([`Self::solve_own_infer_holes_against`]). A callee that declares no
+    /// slots has none, and the walk is then a plain in-order resolve.
+    ///
+    /// Resolving and answering are ordered apart, since the argument that can
+    /// answer is not always the one that has to resolve first. Two passes
+    /// resolve:
+    ///
+    /// 1. Everything but a closure whose parameter types still hold a
+    ///    variable, in source order.
+    /// 2. Those closures. A closure takes its parameter types off the
+    ///    signature and cannot defer what its body does with them: an operator
+    ///    applied to a variable dispatches against nothing and reaches WIR
+    ///    with no lowering. Waiting is what lets `late(|a, b| a + b, seed)`
+    ///    read `seed`'s type.
+    ///
+    /// An argument answers as it resolves, except a numeric literal, which
+    /// answers after both passes and only where nothing else did — `i32` /
+    /// `f64` is a default, not an answer. The solver orders its own sinks the
+    /// same way ([`InferCtx::add`], [`InferCtx::add_expected_return`],
+    /// [`InferCtx::add_deferred`]).
+    pub(super) fn resolve_args_against_params(
+        &mut self,
+        args: &[ast::Expr],
+        ctx: &mut FunctionContext,
+        param_types: &[TypeId],
+        inst: Option<&Instantiated>,
+    ) -> Vec<TypeId> {
+        let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
+        let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
+        let mut deferred: Vec<usize> = Vec::new();
+        for (i, arg) in args.iter().enumerate() {
+            let param = param_types.get(i).copied();
+            if matches!(arg, ast::Expr::Closure(_)) && self.param_still_open(param) {
+                deferred.push(i);
+                continue;
+            }
+            resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param, own_vars));
+        }
+        for i in deferred {
+            let param = param_types.get(i).copied();
+            resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param, own_vars));
+        }
+        let resolved: Vec<TypeId> = resolved
+            .into_iter()
+            .map(|r| r.expect("every argument is resolved in one of the two passes"))
+            .collect();
+        for (i, arg) in args.iter().enumerate() {
+            if is_numeric_literal_arg(Some(arg))
+                && let Some(param) = param_types.get(i).copied()
+            {
+                let expected = self.apply_infer_holes(param);
+                self.solve_own_infer_holes_against(expected, resolved[i], own_vars);
+            }
+        }
+        resolved
+    }
+
+    /// Whether a parameter type still holds a variable nothing has answered.
+    /// Whose variable it is does not matter: a type built over one cannot say
+    /// what a closure's parameters are, so the closure waits either way.
+    fn param_still_open(&mut self, param_type: Option<TypeId>) -> bool {
+        let Some(param_type) = param_type else {
+            return false;
+        };
+        let settled = self.apply_infer_holes(param_type);
+        self.type_has_infer_hole(settled)
+    }
+
+    /// Resolve one call argument against a parameter type that may still hold
+    /// this call's inference variables, and pin what the argument answers about
+    /// them. See [`Self::resolve_args_against_params`] for the order the
+    /// arguments are walked in, which variables `own_vars` holds, and why a
+    /// numeric literal does not pin here.
+    fn resolve_arg_against_param(
+        &mut self,
+        arg: &ast::Expr,
+        ctx: &mut FunctionContext,
+        param_type: Option<TypeId>,
+        own_vars: &[TypeId],
+    ) -> TypeId {
+        let Some(param_type) = param_type else {
+            return self.resolve_expr(arg, ctx, None);
+        };
+        let expected = self.apply_infer_holes(param_type);
+        let resolved = self.resolve_expr(arg, ctx, Some(expected));
+        if !is_numeric_literal_arg(Some(arg)) {
+            self.solve_own_infer_holes_against(expected, resolved, own_vars);
+        }
+        resolved
     }
 }
 
@@ -616,6 +712,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // these, not into the variables.
         let declared_param_types = param_types.clone();
 
+        // Resolve explicit type arguments (`_` resolves to UNKNOWN). Read here
+        // rather than where inference merges them below, since the
+        // instantiation answers a named slot with what the source wrote.
+        let mut type_args: Vec<TypeId> = call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+
         // Instantiate the callee's slots before an argument is resolved
         // against one of its parameter types. A rigid slot is the callee's
         // own and opaque here, so a literal checked against `List<T>` reports
@@ -628,6 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: "function",
                     name: effective_name,
                     span: call.span,
+                    type_args: &type_args,
                 },
             )
         });
@@ -726,34 +832,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
-            None => call
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, arg)| {
-                    let expected_type = param_types.get(i).copied();
-                    self.resolve_expr(arg, ctx, expected_type)
-                })
-                .collect(),
+            None => {
+                self.resolve_args_against_params(&call.args, ctx, &param_types, arg_inst.as_ref())
+            }
         };
 
-        // Settle this resolution's variables. `solve_infer_var` keeps the
-        // first answer, so a slot the arguments pinned stays pinned and one
-        // they left open goes back to the declaration's parameter — leaving
-        // inference exactly what it saw before this step existed.
         if let Some(inst) = &arg_inst {
-            let pairs: Vec<(TypeId, TypeId)> = inst
-                .vars
-                .iter()
-                .copied()
-                .zip(callee_slots.iter().copied())
-                .collect();
-            for (var, slot) in pairs {
-                self.solve_infer_var(var, slot);
-            }
-            for arg in &mut args {
-                *arg = self.apply_infer_holes(*arg);
-            }
+            self.settle_onto_slots(inst, &callee_slots, &mut args);
         }
 
         // Pin a deferred hole carried into a variant payload (`Result::Ok(v)`,
@@ -762,12 +847,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // scoped to variant payloads to avoid touching them.
         if is_variant_payload {
             for (i, arg) in args.iter_mut().enumerate() {
-                if let Some(&expected) = param_types.get(i)
-                    && self.type_has_infer_hole(*arg)
-                    && self.hole_pinnable_against(expected)
-                {
-                    self.solve_infer_holes_against(*arg, expected);
-                    *arg = self.apply_infer_holes(*arg);
+                if let Some(&expected) = param_types.get(i) {
+                    self.pin_arg_hole_against(arg, expected);
                 }
             }
         }
@@ -1676,12 +1757,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
         // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)
@@ -1791,12 +1866,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for (i, arg) in args.iter_mut().enumerate() {
             if let Some(&expected) = check_param_types.get(i) {
-                // Pin a deferred hole carried into this argument
-                // (`let v = gen()?; foo(v)`) against the parameter type.
-                if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
-                    self.solve_infer_holes_against(*arg, expected);
-                    *arg = self.apply_infer_holes(*arg);
-                }
+                self.pin_arg_hole_against(arg, expected);
                 self.typecheck(
                     *arg,
                     expected,
@@ -2297,6 +2367,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     kind: "builtin",
                     name: func_name,
                     span,
+                    // A builtin's signature is looked up by name, with no
+                    // turbofish to read.
+                    type_args: &[],
                 },
             );
             let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
@@ -2375,6 +2448,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "function",
                 name: func_name,
                 span,
+                // This is the inference pass itself, run over already-resolved
+                // arguments. Its caller merges the turbofish into the answer
+                // afterwards, so every slot is open here.
+                type_args: &[],
             },
         );
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);

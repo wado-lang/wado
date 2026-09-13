@@ -6,11 +6,12 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use crate::ast::GenericParam;
+use super::types::FunctionContext;
+use crate::ast::{self, GenericParam};
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
 /// slot is never solved.
@@ -21,6 +22,14 @@ pub(super) struct Instantiation<'a> {
     pub(super) name: &'a str,
     /// Where the use site is.
     pub(super) span: Span,
+    /// What the use site's turbofish names, in slot order:
+    /// [`TypeTable::UNKNOWN`] where it wrote `_` or stopped short, empty where
+    /// it wrote none.
+    ///
+    /// A field, so a site cannot instantiate without saying what it already
+    /// knows. Applied after the argument walk instead, it would reach a
+    /// closure body only once that body had been resolved against a hole.
+    pub(super) type_args: &'a [TypeId],
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -37,6 +46,11 @@ pub(super) struct Instantiated {
     /// the use site commits. Held rather than attached at mint time because a
     /// site may instantiate speculatively — inference runs twice for a partial
     /// turbofish — and a discarded instantiation must report nothing.
+    ///
+    /// `None` marks a slot this instantiation will never have to solve: one
+    /// left rigid, or one the turbofish already named. Neither can go
+    /// unanswered, so neither carries a blame or a bound to re-check — the
+    /// turbofish's own types are bounds-checked where they are read.
     diags: Vec<Option<(Span, String, String)>>,
 }
 
@@ -50,11 +64,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `[?0]` would hide the shape that arm matches on and the pack would
     /// never bind. Instantiating a pack needs a pack-shaped variable, which
     /// does not exist yet.
+    ///
+    /// A slot [`Instantiation::type_args`] names is solved to that type as it
+    /// is minted, so the variable is a hole only where the site has no answer
+    /// yet.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
         let mut subst = IndexMap::default();
-        for &slot in slots {
+        for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
@@ -67,9 +85,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 diags.push(None);
                 continue;
             };
-            let var = self.mint_infer_var();
+            let var = self.mint_infer_var_named(&name);
             subst.insert(index, var);
             vars.push(var);
+            // A slot the turbofish names is answered before the first argument
+            // is checked against it, so what the source wrote is what an
+            // argument — a closure body above all — meets.
+            if let Some(&named) = of.type_args.get(i)
+                && named != TypeTable::UNKNOWN
+            {
+                self.solve_infer_var(var, named);
+                diags.push(None);
+                continue;
+            }
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
@@ -119,6 +147,55 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if var != answer {
                 self.solve_infer_var(var, answer);
             }
+        }
+    }
+
+    /// Resolve a call's arguments against `slots` rather than against the
+    /// declaration's own parameters: instantiate, carry the bounds, walk, and
+    /// settle what the arguments answered back onto the slots.
+    ///
+    /// The whole sequence is one call, so a path that answers a call gets all
+    /// of it or none. Resolving against a rigid slot instead hands a closure a
+    /// type no expression can construct.
+    pub(super) fn resolve_args_through_slots(
+        &mut self,
+        ctx: &mut FunctionContext,
+        args_ast: &[ast::Expr],
+        param_types: &[TypeId],
+        slots: &[TypeId],
+        own_params: &[GenericParam],
+        of: &Instantiation<'_>,
+    ) -> Vec<TypeId> {
+        if slots.is_empty() {
+            return self.resolve_args_against_params(args_ast, ctx, param_types, None);
+        }
+        let inst = self.instantiate(slots, of);
+        self.record_slot_bounds(&inst, own_params, of.span);
+        let param_types = self.instantiate_types(param_types, &inst);
+        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
+        self.settle_onto_slots(&inst, slots, &mut args);
+        args
+    }
+
+    /// Settle the variables an argument walk used back onto the slots they
+    /// stand for, substituting the answers through `args`.
+    ///
+    /// [`Self::solve_infer_var`] keeps the first answer, so a slot the
+    /// arguments pinned stays pinned and one they left open returns to the
+    /// declaration's parameter. Type-argument inference then sees the rigid
+    /// signature it would have seen had the arguments never been instantiated
+    /// against.
+    pub(super) fn settle_onto_slots(
+        &mut self,
+        inst: &Instantiated,
+        slots: &[TypeId],
+        args: &mut [TypeId],
+    ) {
+        for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
+            self.solve_infer_var(var, slot);
+        }
+        for arg in args {
+            *arg = self.apply_infer_holes(*arg);
         }
     }
 

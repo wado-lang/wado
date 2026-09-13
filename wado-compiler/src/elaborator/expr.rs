@@ -4617,6 +4617,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "struct",
                 name: &struct_info.name,
                 span,
+                // A struct literal names its type parameters through its
+                // fields; there is no turbofish position to read.
+                type_args: &[],
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();

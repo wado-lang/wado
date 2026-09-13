@@ -1,0 +1,126 @@
+// A closure argument takes its parameter types from the parameter it is passed
+// to, even when that parameter is written in the callee's *own* type parameter
+// (`fold`'s `Acc`) rather than in the receiver's.
+//
+// Two steps make that work, and each has a case here the other does not cover:
+//
+//   1. The call instantiates the callee's slots into inference variables before
+//      it resolves an argument, so the closure body meets a variable rather
+//      than a rigid `Acc` no expression can construct.
+//   2. Arguments resolve in two passes — everything but a closure still holding
+//      a variable, then those closures — and each answers as it resolves. A
+//      `String` seed answers `acc` in the first pass; a closure written ahead of
+//      the deciding argument is answered in the second.
+//
+// A numeric literal answers after both passes, and only where nothing else did,
+// because `i32` is a default rather than an answer. In the `List<i64>` case
+// below the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0`
+// is all there is.
+
+struct Counter {
+    v: i32,
+}
+
+struct Cents {
+    v: i32,
+}
+
+impl Add for Cents {
+    type Output = Cents;
+
+    fn add(&self, rhs: &Cents) -> Cents {
+        return Cents { v: self.v + rhs.v };
+    }
+}
+
+impl Counter {
+    // `A` is fixed by the argument before the closure.
+    fn seeded<A>(&self, seed: A, f: fn(A, i32) -> A) -> A {
+        return f(seed, self.v);
+    }
+
+    // `A` is fixed by the argument after the closure.
+    fn late<A>(&self, f: fn(A, i32) -> A, seed: A) -> A {
+        return f(seed, self.v);
+    }
+
+    // `U` is fixed by the closure's own body.
+    fn to<U>(&self, f: fn(i32) -> U) -> U {
+        return f(self.v);
+    }
+
+    // `A` is fixed by the argument after the closure, and the closure applies
+    // an operator to it.
+    fn pair<A>(&self, f: fn(A, A) -> A, seed: A) -> A {
+        return f(seed, seed);
+    }
+}
+
+fn apply_seeded<A>(seed: A, f: fn(A, i32) -> A) -> A {
+    return f(seed, 1);
+}
+
+fn apply_pair<A>(f: fn(A, A) -> A, a: A, b: A) -> A {
+    return f(a, b);
+}
+
+test "fold infers its accumulator parameter" {
+    let arr: List<i32> = [1, 2, 3, 4];
+    assert arr.into_iter().fold(0, |acc, x| acc + x) == 10;
+}
+
+test "fold infers an accumulator that is not the item type" {
+    let arr: List<i32> = [1, 2, 3];
+    assert arr.into_iter().fold("", |acc, x| `${acc}${x}`) == "123";
+}
+
+test "a literal seed does not pin the accumulator against the body" {
+    let arr: List<i64> = [1, 2, 3];
+    assert arr.into_iter().fold(0, |acc, x| acc + x) == 6 as i64;
+}
+
+test "an own type param fixed by an earlier argument" {
+    let c = Counter { v: 2 };
+    assert c.seeded(10, |a, x| a + x) == 12;
+}
+
+test "an own type param fixed by a later argument" {
+    let c = Counter { v: 2 };
+    assert c.late(|a, x| a + x, 10) == 12;
+}
+
+// A closure ahead of the deciding argument, over a type whose operator
+// dispatches through a trait. The operator has to see `Cents` to find the impl:
+// resolved against an unanswered variable it dispatches through nothing and
+// reaches WIR with no lowering.
+test "a later argument decides a parameter the closure applies an operator to" {
+    let sum = apply_pair(|a, b| a + b, Cents { v: 3 }, Cents { v: 4 });
+    assert sum.v == 7;
+}
+
+test "the same, on a method" {
+    let c = Counter { v: 2 };
+    assert c.pair(|a, b| a + b, Cents { v: 3 }).v == 6;
+}
+
+test "the body may ignore the accumulator the literal seed types" {
+    let arr: List<i32> = [1, 2, 3];
+    assert arr.into_iter().fold(0, |acc, x| x) == 3;
+}
+
+test "an own type param the closure body decides" {
+    let c = Counter { v: 2 };
+    assert c.to(|x| x * 3) == 6;
+}
+
+test "the same rule on a free function" {
+    assert apply_seeded("", |acc, x| `${acc}${x}`) == "1";
+}
+
+test "an explicit annotation still wins" {
+    let arr: List<i64> = [1, 2, 3];
+    assert arr.into_iter().fold(0 as i64, |acc: i64, x: i64| acc + x) == 6 as i64;
+}
+
+__DATA__
+{"test": {}}
