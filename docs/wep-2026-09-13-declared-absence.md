@@ -99,11 +99,10 @@ it never reaches codegen.
 
 ### Placement
 
-Module-level `fn`, `impl` method, and trait method. Anywhere the attribute is
-not yet read, writing it is an error rather than a line nobody acts on. Known
-gaps names the placements still to come. `export` is refused with it: the keyword
-lowers a function at the component boundary, and this declaration has none to
-lower.
+Module-level `fn`, `impl` method, and trait method. Writing it anywhere else is
+an error, rather than a line the compiler ignores. Known gaps lists the
+placements still to come. `export` is refused with it: the keyword lowers a
+function at the component boundary, and this declaration has none to lower.
 
 ### Not rendered by `wado doc`
 
