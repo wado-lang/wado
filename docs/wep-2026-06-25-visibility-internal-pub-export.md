@@ -146,7 +146,7 @@ describing its own reach.
       `core:prelude` exports: its own `pub` declarations and its `pub use`
       re-exports. Both are read from modules outside `core:`, so
       `Visibility::reachable_from` gates each against a caller in another
-      package. The builtin types join them on other grounds — `i32` is
+      package. The builtin types join them on other grounds: `i32` is
       universal by nature rather than by export. A symbol an implementation
       module declares for its siblings is not a prelude symbol:
       `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which

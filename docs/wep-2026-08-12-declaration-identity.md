@@ -138,8 +138,8 @@ incidental fallbacks:
    item (`ReflectStruct`, `Member`, `Ref`) is among them, so it resolves for a
    module that never `use`d it and can then be diagnosed as sealed. The builtin
    types join on other grounds: `i32` and `f64` are `internal type`
-   declarations in `core:prelude/primitive.wado`, and a type the language names
-   everywhere cannot turn on where it was declared. This layer is
+   declarations in `core:prelude/primitive.wado`, and a type every module can
+   write must not depend on where it was declared. This layer is
    unconditional, including for a module carrying `#![no_prelude]`, which is
    what lets `core:prelude/int128.wado` write `i64::MAX`. The attribute
    exempts a module from the prelude _collision check_ — it is the prelude, so

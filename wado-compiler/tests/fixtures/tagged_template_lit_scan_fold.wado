@@ -11,7 +11,7 @@
 // Splitting the per-character transition out of the loop closes that, at any
 // state count: `scan` is two statements and `step` is a `match` over constants,
 // so both inline and the whole walk folds. `step` recognizes the same language
-// as `big` — each pending flag is a state of its own — so only the shape decides
+// as `big`, each pending flag a state of its own, so only the shape decides
 // whether the answer is a constant. A tag wanting a scan bigger than the budget
 // writes it this way rather than reaching for `--optimize-inline-threshold`.
 use { println, Stdout } from "core:cli";
@@ -28,7 +28,6 @@ enum Big {
     Comment,
 }
 
-// `Big` with each pending flag promoted to a state.
 enum Lex {
     Code,
     CodeSlash,
@@ -171,9 +170,8 @@ export fn run() with Stdout {
     let text = builtin::black_box("t");
     println(marked`let ${name} = "${text}";`);
     println(marked`let ${name} = '${text}';`);
-    // An escaped quote closes nothing, so the segment ends inside the char
-    // literal it opened. A split that dropped the pending escape would end in
-    // code and print no `#`.
+    // An escaped quote closes nothing: the segment ends inside the char literal
+    // it opened, so a scanner without the escape state would print no `#`.
     println(marked`let ${name} = '\\'' + '${text}';`);
 }
 

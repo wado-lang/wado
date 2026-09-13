@@ -128,10 +128,8 @@ impl Scopes {
         defs: &DefTable,
     ) -> Self {
         let mut out = Self::default();
-        // The prelude scope is what `core:prelude` exports: its own
-        // declarations and its re-exports. Both are read from modules outside
-        // `core:`, so each must reach that far on its own — which is what
-        // `reachable_from` answers for a caller in another package.
+        // A prelude name is read from modules outside `core:`, so a declaration
+        // and a re-export alike must reach that far on their own.
         let prelude = ModuleSource::prelude();
         let in_another_package = false;
         let mut surface: IndexMap<String, DefId> = IndexMap::default();
@@ -155,7 +153,7 @@ impl Scopes {
         }
         // A builtin type is universal by nature rather than by export: `i32`
         // names the same thing in a module that imports nothing, `#![no_prelude]`
-        // included, so where it was declared says nothing about who may write it.
+        // included.
         for (id, sym) in symbols.iter() {
             if matches!(sym.kind, SymbolKind::BuiltinType)
                 && is_prelude_module(sym.module_source())

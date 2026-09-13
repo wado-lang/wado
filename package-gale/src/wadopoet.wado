@@ -1,13 +1,8 @@
 use { ReflectTemplate } from "core:prelude";
 
-/// WadoPoet — KotlinPoet-style code generation for Wado.
-///
-/// Hybrid design: `CodeWriter` handles indentation and blocks;
-/// builder specs (`StructSpec`, `VariantSpec`, `FnSpec`, etc.)
-/// provide type-safe declaration construction.
-///
-/// Function bodies remain string-based via `CodeWriter` — the same
-/// pragmatic split as JavaPoet/KotlinPoet's `CodeBlock`.
+/// Indentation and blocks for generated Wado source. The builder specs
+/// (`StructSpec`, `VariantSpec`, `FnSpec`, …) construct declarations around it;
+/// function bodies stay string-based.
 pub struct CodeWriter {
     buf: String,
     indent_level: i32,
@@ -139,11 +134,9 @@ impl CodeWriter {
     }
 }
 
-/// The lexical state the template text of a `wado` tag is in at a hole — the
-/// contexts the compiler's own lexer has, which this must agree with. A pending
-/// backslash, `/` or `*` is a state of its own, so `step` carries no other
-/// memory. `Tpl` needs no nesting count either: the tag's own holes are the
-/// interpolations, so a `${` never reaches the literal text.
+/// The lexical state the template text of a `wado` tag is in at a hole: the
+/// contexts the compiler's own lexer has, which this must agree with. `Tpl`
+/// needs no nesting count, since the tag's own holes are the interpolations.
 enum Ctx {
     Code,
     CodeSlash,
@@ -235,16 +228,14 @@ fn hole_quote(ctx: Ctx) -> Option<u8> {
 }
 
 /// Whether `b` may not stand as itself inside a Wado literal delimited by
-/// `quote`. Every other byte passes through, so printable non-ASCII survives —
-/// but a `$` in a template would open a hole of the generated code's own.
+/// `quote`. Every other byte passes through, so printable non-ASCII survives.
 fn needs_escape(b: u8, quote: u8) -> bool {
     return b < 0x20 || b == 0x7f || b == quote || b == b'\\' || quote == b'`' && b == b'$';
 }
 
 /// Append `b` in the form a Wado literal delimited by `quote` reads back. The
 /// control-char policy mirrors `Inspect for String` in core's `format.wado`;
-/// keep the two in lockstep (see WEP: Inspect). Which delimiter is escaped, and
-/// the `$` a template needs, are this tag's own.
+/// keep the two in lockstep (see WEP: Inspect).
 fn write_escaped(out: &mut String, b: u8, quote: u8) {
     assert needs_escape(b, quote);
     if b == quote || b == b'\\' || b == b'$' {
@@ -260,8 +251,9 @@ fn write_escaped(out: &mut String, b: u8, quote: u8) {
     }
 }
 
-/// Escape in place the text `out` grew past `at` — one hole's rendering — for a
-/// literal delimited by `quote`. Nothing to escape costs one scan and no copy.
+/// Escape in place the text `out` grew past `at`, which is one hole's
+/// rendering, for a literal delimited by `quote`. Nothing to escape costs one
+/// scan and no copy.
 fn escape_in_place(out: &mut String, at: i32, quote: u8) {
     let n = out.len();
     let mut i = at;
