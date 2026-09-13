@@ -193,7 +193,7 @@ fn declared_members<'a>(
     tt: &TypeTable,
     struct_fields: &'a MemberTable,
     variant_payloads: &'a MemberTable,
-) -> impl Iterator<Item = &'a TypeId> {
+) -> impl Iterator<Item = TypeId> {
     let key = tt
         .nominal_head(type_id)
         .map(|(name, module)| (module, name));
@@ -203,6 +203,7 @@ fn declared_members<'a>(
         .into_iter()
         .flatten()
         .chain(payloads.into_iter().flatten())
+        .copied()
 }
 
 /// Walk a type recursively, collecting every resource (`Resource` or
@@ -244,7 +245,7 @@ fn collect_resource_refs(
                 collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
             }
             for member in declared_members(type_id, tt, struct_fields, variant_payloads) {
-                collect_resource_refs(*member, tt, struct_fields, variant_payloads, out, visited);
+                collect_resource_refs(member, tt, struct_fields, variant_payloads, out, visited);
             }
         }
         ResolvedType::Ref(t)
@@ -282,7 +283,7 @@ fn collect_resource_refs(
         }
         ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
             for member in declared_members(type_id, tt, struct_fields, variant_payloads) {
-                collect_resource_refs(*member, tt, struct_fields, variant_payloads, out, visited);
+                collect_resource_refs(member, tt, struct_fields, variant_payloads, out, visited);
             }
         }
         // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
@@ -1808,7 +1809,7 @@ impl TypeRefCtx {
     /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
     fn members_hold_ref(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
         declared_members(type_id, tt, &self.struct_fields, &self.variant_payloads)
-            .any(|t| self.walk(tt, *t, visited))
+            .any(|t| self.walk(tt, t, visited))
     }
 }
 
