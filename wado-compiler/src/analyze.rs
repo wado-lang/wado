@@ -841,7 +841,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
         // Fourth pass: every function either has a body or is backed by one
         for (source, module) in modules {
-            self.check_function_bodies(module, source);
+            self.check_function_declarations(module, source);
         }
 
         // Fifth pass: validate imports in each module
@@ -850,17 +850,12 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         self.logger.ok_or_bail(())
     }
 
-    /// Check every function declaration: that it has a body where nothing else
-    /// supplies one (issue #2035), and that an `#[unavailable]` it carries is
-    /// well formed.
-    fn check_function_bodies(&mut self, module: &Module, module_source: &ModuleSource) {
-        let mut errors = Vec::new();
+    fn check_function_declarations(&self, module: &Module, module_source: &ModuleSource) {
         for_each_function(module, |site, func| {
-            errors.extend(declaration_fault(site, func, module_source));
+            if let Some(error) = declaration_fault(site, func, module_source) {
+                let _ = self.logger.error_in(module_source, error);
+            }
         });
-        for error in errors {
-            let _ = self.logger.error_in(module_source, error);
-        }
     }
 
     fn validate_all_imports(

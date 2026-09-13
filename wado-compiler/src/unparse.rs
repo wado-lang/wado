@@ -18,7 +18,7 @@ use crate::ast::{
     WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
-use crate::escape::{escape_char, quoted};
+use crate::escape::{quoted, quoted_char};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::semantics::member_visible;
@@ -4977,9 +4977,7 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str(if *b { "true" } else { "false" });
             }
             TirExprKind::CharLiteral(c) => {
-                self.output.push('\'');
-                self.output.push_str(&escape_char(*c));
-                self.output.push('\'');
+                self.output.push_str(&quoted_char(*c));
             }
             TirExprKind::StringLiteral(s) => self.output.push_str(&quoted(s)),
             TirExprKind::BytesLiteral(bytes) => {
@@ -5380,16 +5378,8 @@ fn emit_tir_literal_pattern(lit: &TirLiteralPattern, output: &mut String) {
         TirLiteralPattern::I128(v) => output.push_str(&v.to_string()),
         TirLiteralPattern::U128(v) => output.push_str(&v.to_string()),
         TirLiteralPattern::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
-        TirLiteralPattern::Char(c) => {
-            output.push('\'');
-            output.push(*c);
-            output.push('\'');
-        }
-        TirLiteralPattern::String(s) => {
-            output.push('"');
-            output.push_str(s);
-            output.push('"');
-        }
+        TirLiteralPattern::Char(c) => output.push_str(&quoted_char(*c)),
+        TirLiteralPattern::String(s) => output.push_str(&quoted(s)),
         TirLiteralPattern::Null => output.push_str("null"),
     }
 }

@@ -4,7 +4,7 @@
 //! `docs/wep-2026-05-11-nir.md`.
 
 use crate::const_eval::Value;
-use crate::escape::escape_string;
+use crate::escape::{escape_string, quoted, quoted_char};
 use crate::lexer::is_valid_ident;
 use crate::nir::{
     FuncId, NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule,
@@ -465,7 +465,7 @@ impl<'a> NirUnparser<'a> {
         match &body.pats[pat].kind {
             PatKind::Wildcard => self.output.push('_'),
             PatKind::Binding { name, .. } => self.output.push_str(name),
-            PatKind::Literal(lit) => emit_tir_literal_pattern(lit, &mut self.output),
+            PatKind::Literal(lit) => emit_nir_literal_pattern(lit, &mut self.output),
             PatKind::Tuple(patterns, has_rest) => {
                 let patterns = patterns.clone();
                 let has_rest = *has_rest;
@@ -925,21 +925,13 @@ impl<'a> NirUnparser<'a> {
     }
 }
 
-fn emit_tir_literal_pattern(lit: &NirLiteralPattern, output: &mut String) {
+fn emit_nir_literal_pattern(lit: &NirLiteralPattern, output: &mut String) {
     match lit {
         NirLiteralPattern::I128(v) => output.push_str(&v.to_string()),
         NirLiteralPattern::U128(v) => output.push_str(&v.to_string()),
         NirLiteralPattern::Bool(b) => output.push_str(if *b { "true" } else { "false" }),
-        NirLiteralPattern::Char(c) => {
-            output.push('\'');
-            output.push(*c);
-            output.push('\'');
-        }
-        NirLiteralPattern::String(s) => {
-            output.push('"');
-            output.push_str(s);
-            output.push('"');
-        }
+        NirLiteralPattern::Char(c) => output.push_str(&quoted_char(*c)),
+        NirLiteralPattern::String(s) => output.push_str(&quoted(s)),
         NirLiteralPattern::Null => output.push_str("null"),
     }
 }

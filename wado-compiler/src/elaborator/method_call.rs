@@ -604,13 +604,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // The name resolved, and the declaration answers with its reason. The
-        // call goes no further: an `#[unavailable]` reserves a name, not a
-        // signature, so checking the arguments against its parameters would
-        // report on a shape that means nothing. A synthetic call names no
-        // method and so reaches no such declaration.
-        if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def)
-            && self.record_reference_to_decl(method_id, def, span)
+        // An `#[unavailable]` reserves a name, not a signature, so checking the
+        // arguments against its parameters would report on a shape that means
+        // nothing.
+        if let Some(def) = dispatched_method_def
+            && self.report_unavailable(def, span)
         {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }

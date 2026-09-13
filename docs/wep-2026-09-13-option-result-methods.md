@@ -92,10 +92,9 @@ not offered. No Wado site wants them, and idiomatic Rust barely does.
 A `??` operator is not adopted. The case for it was real: one infix operator
 covers `unwrap_or`'s 64 sites with a right-hand side lazy by construction, and
 Zig, Swift, Kotlin, and C# all settled on that shape. It is refused because an
-operator is a large addition for a small return — grammar, precedence,
-formatter, and language service all grow, and what they buy is laziness at one
-call shape. It also stops at `Result`, where it would drop `E` without saying
-so.
+operator is a large addition for a small return. Grammar, precedence, formatter,
+and language service all grow, and what they buy is laziness at one call shape.
+It also stops at `Result`, where it would drop `E` without saying so.
 
 `unwrap_or_else` and `ok_or_else` are not offered either, and neither is
 `Result::unwrap_or_else`. A fallback that must not be evaluated is what they
@@ -108,9 +107,9 @@ cannot reach — a `match` reaches it.
 
 This leaves `unwrap_or` and `ok_or` evaluating their argument. Sinking a pure,
 non-trapping one into the branch that reads it costs the caller nothing and
-changes no rule, since the effect system already decides what may move; the
-pass is tracked in [the optimizer guide](./optimizer.md). What such a pass
-cannot move is exactly what `match` is for.
+changes no rule, since the effect system already decides what may move. That
+pass is tracked in [the optimizer guide](./optimizer.md). What it cannot move is
+exactly what `match` is for.
 
 `map_or`, `map_or_else`, `unwrap_or_else`, and `ok_or_else` carry
 `#[unavailable]`, so calling one reports the reason above; see

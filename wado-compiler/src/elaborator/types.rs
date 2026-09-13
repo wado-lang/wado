@@ -329,8 +329,7 @@ pub enum TypeError {
     },
 
     /// A site named a declaration that reports a reason in place of a body.
-    /// The sentence is the declaration's own, rendered once by
-    /// [`super::collect_unavailable`].
+    /// [`super::collect_unavailable`] renders the sentence.
     Unavailable {
         message: String,
         span: Span,
@@ -1142,10 +1141,8 @@ pub(super) fn format_operator_not_applicable(
 }
 
 impl TypeError {
-    /// Render this error into its `(code, message, span)` triple — the single
-    /// source of truth shared by [`std::fmt::Display`] and the
-    /// `From<TypeError> for Diagnostic` conversion, so both surfaces phrase
-    /// every variant identically.
+    /// This error as its `(code, message, span)` triple, which is what
+    /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {
         use crate::compiler_host::Code;
         match self {

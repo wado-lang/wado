@@ -183,7 +183,7 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       build a fallback the taken path never reads. The prelude offers no lazy
       form on purpose ([WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)),
       so this pass is what makes the eager one free wherever the argument is
-      pure and cannot trap — which the effect system already decides, so no
+      pure and cannot trap. The effect system already decides that, so no
       language rule has to change for it.
 - [ ] Forwarding a local bound to a global read. The graph names no global read,
       so `let s = G` reaches the use only when copy propagation removes the

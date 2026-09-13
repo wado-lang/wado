@@ -20,10 +20,15 @@ pub(crate) fn quoted(s: &str) -> String {
 
 /// The source text a char literal needs between its quotes to denote `c`.
 /// The inverse of [`unescape_char`].
-pub(crate) fn escape_char(c: char) -> String {
+fn escape_char(c: char) -> String {
     let mut out = String::new();
     push_escaped(&mut out, c, '\'');
     out
+}
+
+/// The source text of a char literal denoting `c`, its quotes included.
+pub(crate) fn quoted_char(c: char) -> String {
+    format!("'{}'", escape_char(c))
 }
 
 fn push_escaped(out: &mut String, c: char, quote: char) {
@@ -45,22 +50,7 @@ fn push_escaped(out: &mut String, c: char, quote: char) {
 /// The `String` the raw content of a string literal denotes, or why it denotes
 /// none. Resolves every escape, surrogate pairs included.
 pub(crate) fn unescape_string(raw: &str) -> Result<String, String> {
-    let mut result = String::new();
-    let mut chars = raw.chars().peekable();
-    let mut pairer = SurrogatePairer::default();
-
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            let decoded = unescape_one(&mut chars)?;
-            if let Some(c) = pairer.push(decoded)? {
-                result.push(c);
-            }
-        } else {
-            result.push(pairer.pass(ch)?);
-        }
-    }
-    pairer.finish()?;
-    Ok(result)
+    unescape_body(raw, |_| false)
 }
 
 /// The bytes the raw content of a `b"..."` literal denotes, or why it denotes
@@ -78,9 +68,11 @@ pub(crate) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
                 let lo = chars
                     .next()
                     .ok_or_else(|| "unterminated `\\x` escape".to_string())?;
-                let byte = u8::from_str_radix(&format!("{hi}{lo}"), 16)
-                    .map_err(|_| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
-                out.push(byte);
+                let digits = hi
+                    .to_digit(16)
+                    .zip(lo.to_digit(16))
+                    .ok_or_else(|| format!("invalid `\\x` escape: \\x{hi}{lo}"))?;
+                out.push((digits.0 * 16 + digits.1) as u8);
             } else if chars.peek() == Some(&'u') {
                 return Err(
                     "unicode escape `\\u` is not allowed in a byte literal; use `\\xNN`"
@@ -139,17 +131,20 @@ pub(crate) fn unescape_template_segment(raw: &str) -> String {
 /// [`unescape_string`] for a template's raw text, which also escapes the
 /// interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
 pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
+    unescape_body(raw, |c| matches!(c, '{' | '}' | '$' | '`'))
+}
+
+/// The text a literal's raw content denotes. `stands_for_itself` names the
+/// characters this literal kind escapes to themselves, beyond the common set.
+fn unescape_body(raw: &str, stands_for_itself: fn(char) -> bool) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
     let mut pairer = SurrogatePairer::default();
 
     while let Some(ch) = chars.next() {
         if ch == '\\' {
-            // Handle template-specific escapes first — the interpolation
-            // syntax and the delimiter itself, none of which a plain string
-            // literal has to escape.
             if let Some(&next) = chars.peek()
-                && (next == '{' || next == '}' || next == '$' || next == '`')
+                && stands_for_itself(next)
             {
                 chars.next();
                 result.push(pairer.pass(next)?);

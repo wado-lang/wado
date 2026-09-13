@@ -86,10 +86,8 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
-/// What every `#[unavailable]` declaration in the program reports, by the
-/// declaration. Rendered here rather than at the site that reports it: only the
-/// declaring `impl` or `trait` can qualify the name, and the sentence is the
-/// same wherever it is read.
+/// The sentence every `#[unavailable]` declaration in the program reports,
+/// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
 pub(crate) fn collect_unavailable(
     modules: &IndexMap<ModuleSource, Module>,
     defs: &DefTable,

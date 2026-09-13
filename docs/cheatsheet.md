@@ -450,14 +450,14 @@ let res = Result::<i32, String>::Ok(42);
 let none = Option::<i32>::None;
 ```
 
-`Option` and `Result` carry a deliberately small method set. The extracting
-ones are `unwrap` and `expect`, and on `Result` also `is_ok` / `is_err` /
-`unwrap_err` / `expect_err`. The value-carrying ones are below.
+`Option` and `Result` carry a deliberately small method set. `unwrap` and
+`expect` take the value out, and `Result` adds `is_ok` / `is_err` /
+`unwrap_err` / `expect_err`. These six transform it instead:
 
 ```wado
 opt.unwrap_or(0)                  // the value, or the fallback
 opt.map(|v: i32| v * 2)           // Option<U>; None passes through
-opt.ok_or("missing")              // Result<T, E>; `?` will not bridge these
+opt.ok_or("missing")              // Result<T, E>; `?` cannot turn an Option into one
 
 res.unwrap_or(0)                  // the Ok value, or the fallback
 res.map(|v: i32| v * 2)           // Result<U, E>; an Err passes through
@@ -465,25 +465,6 @@ res.map_err(|e: String| e.len())  // Result<T, F>; an Ok passes through
 ```
 
 See Control Flow for pattern matching with `match`, `if let`, and `matches`.
-
-### Declared Absence
-
-A name Wado deliberately does not offer is declared, not simply missing, so a
-call to it reports why instead of "no method named". See
-[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
-
-```wado
-#[unavailable("write `connect_with(Config::default())` instead")]
-pub fn connect(&self);                      // a name that never existed
-
-#[unavailable("removed in 0.5.0; use `connect_with`")]
-pub fn connect_timeout(&self);              // a name that was taken out
-```
-
-The reason is required, and it is the whole attribute: a removal dates itself in
-the sentence. The declaration reserves a name rather than a signature, so a call
-to it is never checked against the parameters it writes. Write `self` to reserve
-the instance name and leave it out to reserve the static one.
 
 ### Flags
 
@@ -804,6 +785,26 @@ info("started");                // → info::<NoFields>("started", NoFields {})
 ```
 
 A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults. On a trait method both kinds of default belong to the trait: the `impl` restates the parameters without them, and the call site fills them from the declaration.
+
+### Declared Absence
+
+A name Wado deliberately does not offer is declared, not simply missing, so a
+call to it reports why instead of "no method named". See
+[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+
+```wado
+#[unavailable("write `open_with(Options::default())` instead")]
+pub fn open(&self);                         // a name that never existed
+
+#[unavailable("removed in 0.5.0; use `open_with`")]
+pub fn open_timeout(&self);                 // a name that was taken out
+```
+
+The reason is required, and it is the attribute's only argument: a removal
+writes its own version into the sentence. The declaration reserves a name rather
+than a signature, so the parameters it lists are never checked against a call.
+Write `self` to reserve the instance name and leave it out to reserve the static
+one. It goes on a module function, an `impl` method, or a trait method.
 
 ### Local Items
 

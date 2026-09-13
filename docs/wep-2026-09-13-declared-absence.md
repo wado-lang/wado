@@ -50,7 +50,7 @@ error: `Option::into_result` is unavailable: removed in 0.5.0; use `Option::ok_o
 
 ### One attribute, and the states live in the sentence
 
-Both states answer the same call the same way — the name resolves, the call is
+Both states answer the same call the same way: the name resolves, the call is
 an error, and the reason is what the caller reads. What separates them is a
 fact about the past, and the caller is the only one who reads it. Nothing
 machine-processes a removal version, so a field for it buys a validation rule
@@ -72,10 +72,10 @@ worse than no attribute, since it asserts a decision was made while hiding it.
 
 The declaration may write an empty parameter list. What it reserves is the
 name; parameters and return type, if written, are parsed but neither resolved
-nor type-checked. Requiring the refused method's true Rust signature would be
-surface that rots, and it sits badly with the policy the attribute exists to
-record. Wado does not offer a Rust name under different parameters, so writing
-those parameters out writes down the thing being refused.
+nor type-checked. Requiring the refused method's true Rust signature would add
+surface that goes stale, and it sits badly with the policy the attribute exists
+to record. Wado does not offer a Rust name under different parameters, so
+writing those parameters out writes down the thing being refused.
 
 `self` is the exception, because it is not part of the signature but of which
 name is reserved: an instance method and a static one are different names on

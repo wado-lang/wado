@@ -1749,6 +1749,8 @@ impl Parser {
     }
 
     /// Consume a string literal and return its raw text (escape sequences not interpreted).
+    /// The raw text of the string literal at the cursor, escapes unresolved.
+    /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {
         match &self.peek().kind {
             TokenKind::StringLit(raw) => {

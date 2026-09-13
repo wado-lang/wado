@@ -2075,9 +2075,8 @@ impl Function {
         self.attrs.iter().find(|a| a.name == UNAVAILABLE)
     }
 
-    /// Why a site naming this declaration cannot call it. `None` for a
-    /// declaration carrying no `#[unavailable]`, and for one `analyze` rejects
-    /// as saying nothing.
+    /// Why a site naming this declaration cannot call it. `None` where there is
+    /// no `#[unavailable]`, and where `analyze` rejects one as saying nothing.
     pub fn unavailable(&self) -> Option<&str> {
         self.unavailable_attr()?
             .unavailable_reason()
