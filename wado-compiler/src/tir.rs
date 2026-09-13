@@ -3475,7 +3475,10 @@ impl TypeTable {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
-                ResolvedType::Newtype { .. } => Some(self.representation_head(id)),
+                ResolvedType::Newtype { .. } => {
+                    let head = self.representation_head(id);
+                    Some(self.monomorphized_struct(head).unwrap_or(head))
+                }
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
             };
@@ -3483,6 +3486,33 @@ impl TypeTable {
                 self.redirects.set_growing(id, target);
             }
         }
+    }
+
+    /// The rendered spelling of an instantiation of `def`: the sibling of
+    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
+    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
+        let args: Vec<String> = type_args
+            .iter()
+            .map(|&a| self.mangle_type_arg_for_generic(a))
+            .collect();
+        mangle_generic_name(self.def_name(def), &args)
+    }
+
+    /// The monomorphized `Struct` an instantiation of `def` became, when the run
+    /// made one. Monomorphization registers each one under this spelling.
+    pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+        let name = self.generic_rendered_name(def, type_args);
+        self.find_struct_by_name(&name, self.def_module(def))
+    }
+
+    /// The monomorphized `Struct` a `GenericInstance` became. Monomorphization
+    /// rewrites the sites its walk reaches; a newtype base it never reached
+    /// still spells the instance, and a value of the newtype carries the struct.
+    pub fn monomorphized_struct(&self, id: TypeId) -> Option<TypeId> {
+        let ResolvedType::GenericInstance { def, type_args } = self.types.get(id)? else {
+            return None;
+        };
+        self.monomorphized_struct_of(*def, type_args)
     }
 
     /// Get the base type if this is a newtype, or None otherwise
