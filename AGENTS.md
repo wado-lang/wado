@@ -66,9 +66,14 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## The Wado Language
 
-For the detailed specification, read `docs/spec.md`.
+Wado is not Rust, and guessing its syntax from Rust will be wrong. It has value
+semantics and GC, so there are no lifetimes, no borrow checker, and no
+`.clone()`. Where Rust has one `enum`, Wado has three types: `enum` without a
+payload, `variant` with one, and `flags`. Imports follow ES modules and tuples
+follow TypeScript.
 
-@docs/cheatsheet.md is the quick reference.
+@docs/cheatsheet.md is the quick reference. For the detailed specification read
+`docs/spec.md`, or the WEP for one feature at `docs/wep-*.md`.
 
 ## Repository Map
 
