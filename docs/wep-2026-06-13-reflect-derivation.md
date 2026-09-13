@@ -31,9 +31,11 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: SomeTrait> SomeTrait for T {
 
 ## Reflection traits
 
-One sealed, `internal`, compiler-synthesized root — `Reflect`, carrying a type's
-identity — and one sub-trait per type kind under it, carrying that kind's
-structure. All are reached through the trait-qualified form
+One sealed, compiler-synthesized root — `Reflect`, carrying a type's identity —
+and one sub-trait per type kind under it, carrying that kind's structure. All
+are `pub`: a derivation names its bound, and derivations are the point, so a
+library outside `core:` must be able to write one. All are reached through the
+trait-qualified form
 (`ReflectStruct::<T>::…`, never `T::…`) so a type's own method namespace stays
 the author's. A user `impl` is a compile error, and the traits are callable only
 in monomorphized contexts (`T` a concrete type). Structure stays split by kind: a
@@ -71,13 +73,13 @@ that uses it. Its `as Name` tag is a blanket over this kind, instantiated once
 per chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 
 ```wado
-internal trait Reflect {                         // identity — every nameable type
+pub trait Reflect {                              // identity — every nameable type
     fn type_name() -> String;                    // the declaration's name
     fn type_info() -> TypeInfo;                  // + module + this instantiation's args
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
 
-internal trait ReflectStruct: Reflect {          // struct
+pub trait ReflectStruct: Reflect {               // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
     type FieldSlots;                             // [Option<F_0>, …]
     type Members;                                // [StructField<Self, F_0>, …]
@@ -86,28 +88,28 @@ internal trait ReflectStruct: Reflect {          // struct
     fn defaults() -> Self::FieldSlots;           // declared `f: T = expr` per field
 }
 
-internal trait ReflectVariant: Reflect {         // variant
+pub trait ReflectVariant: Reflect {              // variant
     type CasePayloads;                           // payload pack [P_0, …]; unit cases are ()
     type Members;                                // [VariantCase<Self, P_0>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
 }
 
-internal trait ReflectEnum: Reflect {            // enum
+pub trait ReflectEnum: Reflect {                 // enum
     type Members;                                // [EnumCase<Self>, …]
     fn members() -> Self::Members;
     fn discriminant(&self) -> i32;
     fn from_discriminant(disc: i32) -> Option<Self>;
 }
 
-internal trait ReflectFlags: Reflect {           // flags
+pub trait ReflectFlags: Reflect {                // flags
     type Members;                                // [FlagsBit<Self>, …]
     fn members() -> Self::Members;
     fn bits(&self) -> u64;                        // u64-normalized regardless of width
     fn from_bits(raw: u64) -> Option<Self>;
 }
 
-internal trait ReflectNewtype: Reflect {         // newtype
+pub trait ReflectNewtype: Reflect {              // newtype
     type Base;                                   // `type UserName = String` → String
 }
 ```
@@ -173,7 +175,7 @@ shared attr-reading face, so wire-naming and doc logic is written once and
 reused across kinds.
 
 ```wado
-internal trait Member {
+pub trait Member {
     fn name(&self) -> String;                        // source name
     fn wire_name_override(&self) -> Option<String>;  // #[wire(name)], casing not applied
     fn doc(&self) -> Option<String>;                 // /// doc comment
@@ -309,6 +311,17 @@ charges every format for what one derivation needs, and the single streaming
 pass is what the protocol is for.
 
 ## Visibility
+
+`pub` lets a module name a bound. Whether a subject satisfies that bound is
+decided by the subject's own members, below. The two are separate, and only the
+second withholds anything.
+
+The traits are in `core:prelude`'s re-export, so a derivation names its bound
+with no import. The member handles are `pub` but stay out of it: `StructField`,
+`VariantCase`, `EnumCase`, `FlagsBit` and `Hole` are names a package wants for
+itself, and a derivation gets its handles from `members()` without naming the
+type. A signature that does name one imports it from
+`core:prelude/traits.wado`.
 
 A type satisfies a `T: Reflect*` bound only where every one of its members is
 visible. A declaration carries a single synthesized impl, so `members()` is

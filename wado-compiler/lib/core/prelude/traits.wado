@@ -53,7 +53,7 @@ pub trait Ord: Eq {
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
-internal trait Default {
+pub trait Default {
     /// Returns the default value for this type.
     fn default() -> Self;
 }
@@ -61,7 +61,7 @@ internal trait Default {
 /// A type's identity: the root every reflected kind sits under. Sealed and
 /// compiler-synthesized like the kinds. See WEP 2026-06-13.
 #[compiler_item("reflect")]
-internal trait Reflect {
+pub trait Reflect {
     /// Returns the declaration's name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
@@ -78,7 +78,7 @@ internal trait Reflect {
 /// monomorphized contexts (`T` a concrete struct).
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct: Reflect {
+pub trait ReflectStruct: Reflect {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type FieldTypes;
 
@@ -125,7 +125,7 @@ pub enum CaseStyle {
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
-internal trait Member {
+pub trait Member {
     /// The source field name.
     #[compiler_item("member_name")]
     fn name(&self) -> String;
@@ -140,7 +140,7 @@ internal trait Member {
 /// in monomorphized contexts (`T` a concrete variant).
 /// See WEP 2026-06-13 §3.
 #[compiler_item("reflect_variant")]
-internal trait ReflectVariant: Reflect {
+pub trait ReflectVariant: Reflect {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type CasePayloads;
 
@@ -161,7 +161,7 @@ internal trait ReflectVariant: Reflect {
 /// in monomorphized contexts (`T` a concrete enum).
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
-internal trait ReflectEnum: Reflect {
+pub trait ReflectEnum: Reflect {
     /// The per-case member tuple `[EnumCase<Self>, ...]`.
     type Members;
 
@@ -183,7 +183,7 @@ internal trait ReflectEnum: Reflect {
 /// only in monomorphized contexts (`T` a concrete flags type).
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
-internal trait ReflectFlags: Reflect {
+pub trait ReflectFlags: Reflect {
     /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
     type Members;
 
@@ -211,7 +211,7 @@ internal trait ReflectFlags: Reflect {
 /// struct walks the struct's fields — so only the base is stated here.
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_newtype")]
-internal trait ReflectNewtype: Reflect {
+pub trait ReflectNewtype: Reflect {
     /// The type this newtype wraps: `type UserName = String` → `String`.
     type Base;
 }
@@ -221,7 +221,7 @@ internal trait ReflectNewtype: Reflect {
 /// code and is callable only in monomorphized contexts (`T` the anonymous
 /// type a template literal denotes). See WEP 2026-01-10.
 #[compiler_item("reflect_template")]
-internal trait ReflectTemplate: Reflect {
+pub trait ReflectTemplate: Reflect {
     /// The hole types as a tuple `[V_0, V_1, ...]`.
     type Holes;
 
@@ -617,7 +617,7 @@ impl<T: Inspect> Inspect for FlagsBit<T> {
 /// reference. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
 #[compiler_item("ref")]
-internal trait Ref {
+pub trait Ref {
 }
 
 /// Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
@@ -625,7 +625,7 @@ internal trait Ref {
 /// value. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
 #[compiler_item("ref_mut")]
-internal trait RefMut {
+pub trait RefMut {
 }
 
 /// Immutable reference indexing: `&container[i]` reads through this.
@@ -801,7 +801,7 @@ pub trait Display {
 /// - Structs show field names: `Point { x: 10, y: 20 }`
 /// - Enums/Variants show type-qualified names: `Color::Red`
 #[compiler_item("inspect")]
-internal trait Inspect {
+pub trait Inspect {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
 }
@@ -1487,14 +1487,14 @@ impl<I: Iterator> IntoIterator for I {
 ///
 /// The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 #[compiler_item("from")]
-internal trait From<T> {
+pub trait From<T> {
     /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
 /// Fallible conversion trait.
 /// Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
-internal trait TryFrom<T> {
+pub trait TryFrom<T> {
     type Error;
 
     /// Attempts to convert a value of type `T` into `Self`.
@@ -1571,7 +1571,7 @@ pub trait FromIterator {
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write
 /// wins. A target without this impl rejects `..base` where it is written.
 #[compiler_item("literal_spread")]
-internal trait LiteralSpread {
+pub trait LiteralSpread {
     fn spread_literal(&mut self, base: Self);
 }
 
@@ -1581,7 +1581,7 @@ internal trait LiteralSpread {
 /// without allocating a substring. Implementors must provide it. The
 /// `from_str` convenience method is a thin wrapper that parses the entire
 /// string and is provided as a default.
-internal trait FromStr {
+pub trait FromStr {
     type Err;
 
     /// Parse the byte range `s[start..end)` as `Self`. Takes `s` by
@@ -1623,7 +1623,7 @@ impl LenientParseError {
 /// spellings only — an undenotable value still yields `Err`, and whitespace
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
-internal trait LenientFromStr {
+pub trait LenientFromStr {
     type Err;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.

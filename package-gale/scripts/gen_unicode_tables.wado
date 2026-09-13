@@ -13,7 +13,7 @@ use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "cor
 use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 use { encode as base64_encode } from "core:base64";
-use { CodeWriter, FnSpec, GlobalSpec, Vis, str_lit } from "../src/wadopoet.wado";
+use { CodeWriter, FnSpec, GlobalSpec, Vis, wado } from "../src/wadopoet.wado";
 
 global CODE_POINT_MAX: i32 = 0x10FFFF;
 
@@ -687,7 +687,7 @@ fn emit_module(
 ) -> String {
     let mut w = CodeWriter::with_capacity(1024 * 1024);
     emit_module_doc(&mut w, version);
-    GlobalSpec::new(&"UNICODE_VERSION", &"String", &`${str_lit(*version)}`, Vis::Pub).emit(&mut w);
+    GlobalSpec::new(&"UNICODE_VERSION", &"String", &wado`"${*version}"`, Vis::Pub).emit(&mut w);
     w.blank();
     emit_category_ranges(&mut w, runs);
     w.blank();
@@ -746,11 +746,11 @@ fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) 
                 keys.push_str(&" | ");
             }
             first = false;
-            keys.push_str(&`${str_lit(*key)}`);
+            keys.push_str(&wado`"${*key}"`);
         }
-        w.line(&`${keys} => ${table.fn_name}(value),`);
+        w.line(&wado`${keys} => ${table.fn_name}(value),`);
     }
-    w.line(&`_ => ${str_lit("")},`);
+    w.line(&wado`_ => "",`);
     w.end_with(&";");
     w.end();
 }
@@ -780,7 +780,7 @@ fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &L
                 keys.push_str(&" | ");
             }
             first = false;
-            keys.push_str(&`${str_lit(key)}`);
+            keys.push_str(&wado`"${key}"`);
         }
         if first {
             // Every name this entry answers to is already an arm, so the entry
@@ -789,15 +789,15 @@ fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &L
             // resolution rule, not a silent drop.
             panic(`unicode table ${*name}: ${entry.names[0]} has no unclaimed key`);
         }
-        w.line(&`${keys} => ${str_lit(encode(&entry.ranges))},`);
+        w.line(&wado`${keys} => "${encode(&entry.ranges)}",`);
     }
-    w.line(&`_ => ${str_lit("")},`);
+    w.line(&wado`_ => "",`);
     w.end_with(&";");
     w.end();
 }
 
 fn emit_module_doc(w: &mut CodeWriter, version: &String) {
-    w.line(&`#![generated(by = ${str_lit("scripts/regen-unicode-tables.sh")}, sources = [])]`);
+    w.line(&wado`#![generated(by = "scripts/regen-unicode-tables.sh", sources = [])]`);
     w.line(&"//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
     w.line(&"//! categories, scripts, blocks, binary properties, and the enumerated");
     w.line(&"//! `Property=Value` names ANTLR4 answers.");
@@ -824,10 +824,10 @@ fn emit_category_ranges(w: &mut CodeWriter, runs: &List<CategoryRun>) {
     for let cat of &CATEGORIES {
         let ranges = if cat.0 == "Cn" { unassigned_ranges(runs) } else { ranges_of(runs, &cat.0) };
         w.line(
-            &`${str_lit(normalize_name(&cat.0))} | ${str_lit(normalize_name(&cat.1))} => ${str_lit(encode(&ranges))},`,
+            &wado`"${normalize_name(&cat.0)}" | "${normalize_name(&cat.1)}" => "${encode(&ranges)}",`,
         );
     }
-    w.line(&`_ => ${str_lit("")},`);
+    w.line(&wado`_ => "",`);
     w.end_with(&";");
     w.end();
 }
@@ -850,9 +850,9 @@ fn emit_category_groups(w: &mut CodeWriter) {
                 subs.push_str(&", ");
             }
             first = false;
-            subs.push_str(&`${str_lit(normalize_name(&cat.0))}`);
+            subs.push_str(&wado`"${normalize_name(&cat.0)}"`);
         }
-        w.line(&`${str_lit(normalize_name(&group.0))} | ${str_lit(normalize_name(&group.1))} => [${subs}],`);
+        w.line(&wado`"${normalize_name(&group.0)}" | "${normalize_name(&group.1)}" => [${subs}],`);
     }
     w.line(&"_ => [],");
     w.end_with(&";");

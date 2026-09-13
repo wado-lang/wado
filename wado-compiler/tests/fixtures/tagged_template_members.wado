@@ -2,14 +2,26 @@
 // the tail both ways, the hole's source text, its index, and whether it wrote
 // a specifier. `fmt` renders through the specifier as the untagged template
 // would, and a tag needs no bound to call it (WEP 2026-01-10).
+//
+// `ReflectTemplate` and `Hole` are `pub`, so a module that spells the import
+// out — as one under `#![no_prelude]` must — names the same trait the
+// auto-import gives. The handle is not in the prelude's own re-export: names
+// like `Hole` and `VariantCase` are ones a package wants for itself, and a tag
+// gets its handles from `members()` without naming the type.
 use { println, Stdout } from "core:cli";
+use { ReflectTemplate } from "core:prelude";
+use { Hole } from "core:prelude/traits.wado";
+
+fn show<T, V>(h: &Hole<T, V>, t: &T, out: &mut String) {
+    out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);
+    h.fmt(t, &mut Formatter::new(out));
+    out.push_str(&"]");
+}
 
 fn describe<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&`[${h.index()} lit=${h.lit():?} raw=${h.raw():?} src=${h.source()} spec=${h.has_spec()} value=`);
-        h.fmt(&t, &mut Formatter::new(&mut out));
-        out.push_str(&"]");
+        show(&h, &t, &mut out);
     }
     out.push_str(&`[tail=${ReflectTemplate::<T>::tail():?} raw=${ReflectTemplate::<T>::raw_tail():?}]`);
     return out;
