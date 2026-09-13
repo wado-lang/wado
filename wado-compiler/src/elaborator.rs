@@ -286,14 +286,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .resolving_home
             .as_ref()
             .unwrap_or(&self.current_module_source);
-        let namespace_imports = if frame == &self.current_module_source {
-            &self.sem.imports.namespace_imports
-        } else {
-            self.tysys
-                .trait_env
-                .namespace_imports(frame)
-                .expect("a module the walk resolves in is one `TraitEnv` indexed")
-        };
+        let namespace_imports = self
+            .namespace_imports_in(frame)
+            .expect("a module the walk resolves in is one `TraitEnv` indexed");
         TypeLookup {
             current_module_source: frame,
             resolutions: &self.tysys.resolutions,
@@ -403,17 +398,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .unwrap_or_else(|| self.current_module_source.clone())
     }
 
+    /// The namespace aliases `module` declares. The walk's own are on `sem`,
+    /// being built; every other module's are pre-computed on `TraitEnv`.
+    pub(super) fn namespace_imports_in<'s>(
+        &'s self,
+        module: &ModuleSource,
+    ) -> Option<&'s trait_env::NamespaceImports> {
+        if *module == self.current_module_source {
+            return Some(&self.sem.imports.namespace_imports);
+        }
+        self.tysys.trait_env.namespace_imports(module)
+    }
+
     /// The namespace aliases in scope for `node`: the ones its own module's
     /// author wrote, not the ones in scope where the walk happens to stand.
     pub(super) fn namespace_imports_at(
         &self,
         node: ast::AstId,
     ) -> Option<&trait_env::NamespaceImports> {
-        let home = self.home_module(node);
-        if home == self.current_module_source {
-            return Some(&self.sem.imports.namespace_imports);
-        }
-        self.tysys.trait_env.namespace_imports(&home)
+        let home = self
+            .tysys
+            .trait_env
+            .module_of_space(node.space())
+            .unwrap_or(&self.current_module_source);
+        self.namespace_imports_in(home)
     }
 
     /// Which module the alias `ns` names, as written at `node`.

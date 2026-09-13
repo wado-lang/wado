@@ -8,7 +8,7 @@ description: "How to answer code review feedback — a human reviewer, CodeRabbi
 A finding is a claim, not an instruction. The goal is a better codebase, never a
 cleared comment list.
 
-## First, the classes — and report them
+## Start with the classes, and report them
 
 Answer the review as a whole before touching any single finding.
 
@@ -19,9 +19,8 @@ Answer the review as a whole before touching any single finding.
    whose other instances the reviewer never reached.
 3. Report the classes to the user before writing any fix: what each class is,
    which findings fall out of it as instances, and what closing it would take.
-   This is a report, not a request — state it and keep going. Do not wait for
-   approval. Only a design decision blocks, and it blocks under its own heading
-   below.
+   This is a report, not a request. State it and keep going; do not wait for
+   approval. Only a design decision blocks, under its own heading below.
 
 Then fix the class, not the finding. Raise the altitude and fix what admits the
 class — the missing invariant, the type that allows the state, the call site

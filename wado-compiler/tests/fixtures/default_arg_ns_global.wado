@@ -1,8 +1,8 @@
 // Regression: a default naming a namespaced global (`nsb::SOME`) resolves the
-// alias in the module that wrote it. Annotate canonicalized `ns::member` to the
-// `ns$member` key using the alias map of whichever module took the default, so
-// a caller without that alias left the name uncanonicalized and the global
-// lookup missed: "unknown identifier 'nsb::SOME'" on a valid program.
+// alias in the module that wrote it. The alias used to be looked up in the
+// module that took the default instead, so a caller declaring no `nsb` left
+// the name unresolved and a valid program was rejected with
+// "unknown identifier 'nsb::SOME'".
 //
 // This file deliberately declares no `nsb` alias. A namespaced *function* call
 // in a default already had coverage; a namespaced *global* did not.
