@@ -187,23 +187,33 @@ fn collect_member_tables(sem: &Semantics, state: &AnnotateState) -> (MemberTable
 }
 
 /// The members a nominal type declares: a struct's fields, a variant's case
-/// payloads. A generic instance declares the same ones its head does.
+/// payloads, an instance's answered from its own type arguments.
+///
+/// Only a member the head spells as a bare slot is answered. One that buries a
+/// slot (`&Array<T>`) would have to be substituted into, which interns a type,
+/// and this phase holds the table shared.
 fn declared_members<'a>(
     type_id: TypeId,
-    tt: &TypeTable,
+    tt: &'a TypeTable,
     struct_fields: &'a MemberTable,
     variant_payloads: &'a MemberTable,
-) -> impl Iterator<Item = TypeId> {
+) -> impl Iterator<Item = TypeId> + 'a {
     let key = tt
         .nominal_head(type_id)
         .map(|(name, module)| (module, name));
     let fields = key.as_ref().and_then(|k| struct_fields.get(k));
     let payloads = key.as_ref().and_then(|k| variant_payloads.get(k));
+    let type_args = tt.nominal_type_args(type_id).unwrap_or_default();
     fields
         .into_iter()
         .flatten()
         .chain(payloads.into_iter().flatten())
-        .copied()
+        .map(move |&member| match tt.get(member) {
+            ResolvedType::TypeParam { index, .. } => {
+                type_args.get(*index as usize).copied().unwrap_or(member)
+            }
+            _ => member,
+        })
 }
 
 /// Walk a type recursively, collecting every resource (`Resource` or
