@@ -238,12 +238,10 @@ set -xe -o pipefail
 # `wado test` defaults tier 1 to `warn`, which compiles a trace/debug/info call
 # away before any sink sees it. The tests that assert on one are therefore
 # excluded from discovery (`[test].exclude` in `wado-compiler/wado.toml`) and
-# named here instead: an explicit path bypasses that exclusion, unlike one
-# `--exclude` adds.
+# named here instead, an explicit path bypassing that exclusion.
 #
-# Takes a level like `test-stdlib`, and for the same reason: tier 1 folds the
-# call away in the optimizer, so which level runs decides what the assertions
-# see.
+# Tier 1 folds in the optimizer, so which level runs decides what the assertions
+# see — hence a level argument, like `test-stdlib`.
 level="${1:-O2}"
 case "${level}" in
     O0 | O1 | O2 | O3 | Os) ;;

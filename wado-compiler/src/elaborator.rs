@@ -159,10 +159,7 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
         let mut actual_idx = 0u32;
         for param in &impl_block.type_params {
-            if self
-                .tysys
-                .is_known_type_name_in(&self.current_module_source, &param.name)
-            {
+            if self.tysys.impl_param_is_concrete_type(&param.name) {
                 // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
                 if !param.bounds.is_empty() {
                     self.annotate_ctx

@@ -841,9 +841,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             // `impl<i32> IndexValue<i32> for Box` writes a concrete type where a
             // parameter goes, and binding one shadows the type it names with a
             // slot of the same spelling — `expected 'i32', found 'i32'`.
-            if self
-                .tysys
-                .is_known_type_name_in(&self.current_module_source, &param.name)
+            if self.tysys.impl_param_is_concrete_type(&param.name)
                 || self
                     .annotate_ctx
                     .trait_ctx
@@ -986,9 +984,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         for param in &impl_block.type_params {
             if param.is_effect
                 || named.iter().any(|n| n == &param.name)
-                || self
-                    .tysys
-                    .is_known_type_name_in(&self.current_module_source, &param.name)
+                || self.tysys.impl_param_is_concrete_type(&param.name)
             {
                 continue;
             }

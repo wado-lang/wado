@@ -558,13 +558,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Every argument here is one the declaration wrote, so the whole
                 // application resolves under the declaration's own parameters.
                 if let Some(args) = self.type_lookup().type_args_with_defaults(def, &[]) {
-                    let resolved = self.with_declared_type_params(def, |e| {
-                        e.resolve_generic_type_at(site, name, &args, span)
-                    });
-                    if let Some(type_id) = resolved {
-                        return type_id;
-                    }
-                    return self.resolve_generic_type_at(site, name, &args, span);
+                    return self
+                        .with_declared_type_params(def, |e| {
+                            e.resolve_generic_type_at(site, name, &args, span)
+                        })
+                        .unwrap_or_else(|| self.resolve_generic_type_at(site, name, &args, span));
                 }
                 if enforce_arity {
                     let _ = self.emit(TypeError::MissingTypeArguments {

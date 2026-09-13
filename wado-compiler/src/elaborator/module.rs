@@ -376,10 +376,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
                 let mut actual_idx = 0u32;
                 for param in &impl_block.type_params {
-                    if scope
-                        .tysys
-                        .is_known_type_name_in(&scope.current_module_source, &param.name)
-                    {
+                    if scope.tysys.impl_param_is_concrete_type(&param.name) {
                         continue;
                     }
                     let type_id = if param.is_pack {

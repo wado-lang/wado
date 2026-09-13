@@ -152,6 +152,17 @@ impl TypeSystem {
         }
     }
 
+    /// Whether an `impl<...>` entry spells a concrete type instead of declaring
+    /// a parameter. Only a primitive does, as `impl<i32> IndexValue<i32>` writes.
+    ///
+    /// Every other spelling is a binder, free to shadow a type the module
+    /// declares the way a function's or a struct's parameter is. Reading it as
+    /// concrete drops the parameter, and the target's own argument then names
+    /// nothing at all.
+    pub(crate) fn impl_param_is_concrete_type(&self, name: &str) -> bool {
+        TypeTable::primitive_by_name(name).is_some()
+    }
+
     /// The `Type::Case` spelling of the case the resolve walk names at a bare
     /// identifier site: the hint when no expected type supplies one.
     pub(crate) fn bare_case_at(&self, site: AstId) -> Option<String> {

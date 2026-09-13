@@ -1,0 +1,65 @@
+// An `impl<...>` parameter is a binder, so it may share a spelling with a type
+// the module declares — the same as a function's or a struct's parameter. Only a
+// primitive spelling stays the concrete type, which is what `impl<i32>
+// IndexValue<i32>` writes.
+
+use { println, Stdout } from "core:cli";
+
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Zero {}
+
+impl Mark for Zero {
+    fn tag() -> i32 {
+        return 10;
+    }
+}
+
+struct One {}
+
+impl Mark for One {
+    fn tag() -> i32 {
+        return 20;
+    }
+}
+
+struct Wrapper<M: Mark> {
+    probe: M,
+}
+
+// `Zero` here is this block's parameter, not the struct of that name.
+impl<Zero: Mark> Wrapper<Zero> {
+    fn tagged(&self) -> i32 {
+        return Zero::tag();
+    }
+}
+
+trait Named {
+    fn label(&self) -> i32;
+}
+
+// The same on a trait impl, where the parameter is the target's argument.
+impl<One: Mark> Named for Wrapper<One> {
+    fn label(&self) -> i32 {
+        return One::tag() + 1;
+    }
+}
+
+export fn run() with Stdout {
+    let w: Wrapper<One> = Wrapper { probe: One {} };
+    println(`${w.tagged()}`);
+    println(`${w.label()}`);
+
+    // `One` in `label` is the block's parameter, so this reads `Zero::tag()`;
+    // the struct of that name would answer 20 whatever the receiver is.
+    let z: Wrapper<Zero> = Wrapper { probe: Zero {} };
+    println(`${z.tagged()}`);
+    println(`${z.label()}`);
+}
+
+__DATA__
+{
+    "stdout": "20\n21\n10\n11\n"
+}
