@@ -1284,8 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// A method call's type arguments: what its turbofish names, plus inference
-    /// for every slot it wrote `_` at. A `_` is [`TypeTable::UNKNOWN`] in
-    /// `explicit`, so no caller has to carry a mask alongside it.
+    /// for each `_`, which reaches here as [`TypeTable::UNKNOWN`] in `explicit`.
     fn resolve_method_type_args(
         &mut self,
         explicit: Vec<TypeId>,
@@ -1394,11 +1393,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
-        // A slot answered with itself is not answered: carried past here a rigid
-        // parameter dies in codegen, so put the variable back and let the blame
-        // below report it at the call. A slot the enclosing scope declares is a
-        // caller forwarding its own generics, which monomorphization resolves —
-        // hence the same guard as `defer_or_report_uninferred_fn_type_args`.
+        // A slot answered with itself is not answered: a rigid parameter carried
+        // past here dies in codegen, so put the variable back and let the blame
+        // below report it at the call. A slot the enclosing scope declares is
+        // the caller forwarding its own generics, which monomorphization
+        // resolves. `defer_or_report_uninferred_fn_type_args` guards it too.
         let scope_params = self.scope_type_param_ids();
         for (i, answer) in inferred.iter_mut().enumerate() {
             if slots.get(i) == Some(answer) && !scope_params.contains(answer) {

@@ -132,10 +132,8 @@ pub(super) struct MethodSignatureFacts {
 
 impl MethodSignatureFacts {
     /// What the qualified spelling files: this call's type arguments, and the
-    /// callee's parameters with the receiver leading every list — never
-    /// omitted, hence no default, and `mut` exactly when the method takes
-    /// `&mut self`. The counterpart of [`CalleeParams::of_signature`], which
-    /// the ordinary spelling reaches.
+    /// callee's parameters with the receiver leading each list. The counterpart
+    /// of [`CalleeParams::of_signature`], which the ordinary spelling reaches.
     fn into_dispatch_parts(self, receiver_type: TypeId) -> (Vec<TypeId>, CalleeParams) {
         let mut param_is_mut = vec![self.self_kind == ast::SelfKind::MutRef];
         param_is_mut.extend(self.param_is_mut);
@@ -766,8 +764,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         receiver = adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table);
 
-        // The lookup already instantiated the declaring level, so only the
-        // method's own parameters remain.
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {

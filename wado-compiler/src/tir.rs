@@ -2663,8 +2663,8 @@ impl TypeTable {
     }
 
     /// Record the slot `id` stands for, for diagnostics. Called on every mint,
-    /// `None` included: ids restart per module while this table outlives them,
-    /// so a reused id must not read its last holder's name.
+    /// `None` included: ids restart per module, so a reused id must not read
+    /// its last holder's name.
     pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
         match name {
             Some(name) => self.infer_var_names.insert(id, name),

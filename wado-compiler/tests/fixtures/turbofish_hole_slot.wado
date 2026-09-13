@@ -2,8 +2,8 @@
 // carry `unknown` where the source wrote `_`, and every spelling fills exactly
 // those.
 //
-// A call that files its own dispatch record files what inference settled: the
-// raw turbofish names the callee `take<unknown>`, whose parameter has no type.
+// Left unfilled, `unknown` reaches the callee's name (`take<unknown>`) and the
+// parameter it types has no resolved type.
 
 use ns from "./sub/turbofish_hole_slot_dep.wado";
 use { Take } from "./sub/turbofish_hole_slot_dep.wado";
@@ -18,9 +18,8 @@ impl<T: Default> Wrap<T> {
     }
 }
 
-// `Type::<A>::method::<_>(..)`: the receiver's arguments are spelled too, and
-// a `_` beside them must not substitute — the parameter it types would have no
-// resolved type, and inference nothing to solve against.
+// `Type::<A>::method::<_>(..)` spells the receiver's arguments too. The `_`
+// beside them must not substitute, or inference has nothing to solve against.
 test "a type-turbofish call fills the method's `_`" {
     assert Wrap::<i32>::mk::<_>("s") == 1;
 }

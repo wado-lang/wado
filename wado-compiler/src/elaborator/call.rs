@@ -64,8 +64,8 @@ pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) 
 }
 
 /// Whether resolved type args leave anything for inference: none written, or a
-/// `_` among them. A `_` resolves to [`TypeTable::UNKNOWN`], so the resolved
-/// args are their own hole mask.
+/// `_` among them. A `_` resolves to [`TypeTable::UNKNOWN`], so they are their
+/// own hole mask.
 pub(super) fn turbofish_leaves_slot(type_args: &[TypeId]) -> bool {
     type_args.is_empty() || type_args.contains(&TypeTable::UNKNOWN)
 }
@@ -2834,8 +2834,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type arguments a `Type::method(..)` call dispatches with, as
     /// `(impl_args, method_args)`: the impl level inferred from the receiver,
-    /// and `explicit` with inference filling every slot it wrote `_` at. One
-    /// function, so the bare and namespaced spellings cannot drift apart.
+    /// and `explicit` with inference filling each `_`. One function, so the
+    /// bare and namespaced spellings cannot drift apart.
     fn static_call_type_args(
         &mut self,
         callee: StaticCallee<'_>,

@@ -2259,11 +2259,10 @@ let parse = |s: String| -> Result<i32, String> {
 };
 ```
 
-A parameter type is inferred from the expected `fn(..)` type wherever the
-context supplies one — a typed binding, a function or method parameter, a
-struct field, a newtype over a `fn(..)` — matched by position. An annotation is
-needed only where no such type reaches the closure, and always wins where it is
-written:
+A parameter type is inferred from the expected `fn(..)` type, matched by
+position. Any context that supplies such a type counts: a typed binding, a
+function or method parameter, a struct field, a newtype over a `fn(..)`.
+Annotate only where nothing supplies one; an annotation always wins:
 
 ```wado
 let arr: List<i32> = [1, 2, 3];
@@ -2272,11 +2271,11 @@ arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from the body
 let add_one = |x: i32| x + 1;               // no expected type: annotate
 ```
 
-The expected type may be one of the callee's own type parameters, and a sibling
+The expected type may be one of the callee's own type parameters. A sibling
 argument then supplies it, whichever side of the closure it is written on. A
-numeric literal does not: `fold(0, |acc, x| acc + x)` over a `List<i64>` takes
-`i64` from the body. A parameter nothing supplies is reported at the call, not
-inside the closure.
+numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
+takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
+is reported at the call, not inside the closure.
 
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.

@@ -40,11 +40,9 @@ pub(super) struct Instantiated {
     subst: IndexMap<u32, TypeId>,
     /// Per-slot "cannot infer" diagnostic, attached by
     /// [`Elaborator::record_instantiation`] to the slots still unsolved when
-    /// the use site commits. Held rather than attached at mint time because a
-    /// site may instantiate speculatively — inference runs twice for a partial
-    /// turbofish — and a discarded instantiation must report nothing. `None`
-    /// marks a slot that cannot go unanswered: one left rigid, or one the
-    /// turbofish named.
+    /// the use site commits. A site may instantiate speculatively, and a
+    /// discarded instantiation must report nothing. `None` marks a slot that
+    /// cannot go unanswered: one left rigid, or one the turbofish named.
     diags: Vec<Option<(Span, String, String)>>,
 }
 
@@ -142,8 +140,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Instantiate `slots`, carry their bounds, resolve the arguments against
     /// them, and settle the answers back. One call, so no path can take part of
-    /// the sequence: against a rigid slot a closure gets a type nothing can
-    /// construct.
+    /// the sequence and hand a closure a rigid slot nothing can construct.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
