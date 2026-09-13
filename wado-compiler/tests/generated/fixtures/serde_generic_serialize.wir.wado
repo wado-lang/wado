@@ -329,10 +329,11 @@ fn "serde_generic_serialize.wado/$test_0_bound_only_generic_struct_serialize__no
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_13: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
@@ -342,28 +343,26 @@ fn "serde_generic_serialize.wado/$test_0_bound_only_generic_struct_serialize__no
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_38) {
             global:serde_generic_serialize.wado::$const_obj_38 = array.new_data<u8>("{\"value\":7}");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_13 = s.used;
-            if self_13 != 11 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:serde_generic_serialize.wado::$const_obj_38;
+            len = a_end - 0;
+            if len != 11 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack = s.repr;
-                needle = global:serde_generic_serialize.wado::$const_obj_38;
-                j = 0;
-                b3: block {
-                    l4: loop {
-                        break_if b3 j >= self_13;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j = j + 1;
-                        continue l4;
-                    };
+            i = 0;
+            b3: block {
+                l4: loop {
+                    break_if b3 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i = i + 1;
+                    continue l4;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -392,14 +391,16 @@ fn "serde_generic_serialize.wado/$test_1_two_instantiations_of_the_same_generic"
     let $fuse_at_17: i32;
     let $fuse_at_18: i32;
     let $fuse_at_19: i32;
-    let self_23: i32;
-    let haystack_25: ref Array<u8>;
-    let needle_27: ref Array<u8>;
-    let j_29: i32;
-    let self_33: i32;
-    let haystack_35: ref Array<u8>;
-    let needle_37: ref Array<u8>;
-    let j_39: i32;
+    let a_22: ref Array<u8>;
+    let a_end_24: i32;
+    let b_25: ref Array<u8>;
+    let len_28: i32;
+    let i_29: i32;
+    let a_32: ref Array<u8>;
+    let a_end_34: i32;
+    let b_35: ref Array<u8>;
+    let len_38: i32;
+    let i_39: i32;
     let ra_mv_0: i32;
     let ra_mv_1: ref null "core:prelude/string.wado//String";
     let ra_mv_2: ref null "core:serde//SerializeError";
@@ -413,28 +414,26 @@ fn "serde_generic_serialize.wado/$test_1_two_instantiations_of_the_same_generic"
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_64) {
             global:serde_generic_serialize.wado::$const_obj_64 = array.new_data<u8>("{\"value\":\"hi\"}");
         }
-        $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_23 = sa.used;
-            if self_23 != 14 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a_22 = sa.repr;
+            a_end_24 = sa.used;
+            b_25 = global:serde_generic_serialize.wado::$const_obj_64;
+            len_28 = a_end_24 - 0;
+            if len_28 != 14 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack_25 = sa.repr;
-                needle_27 = global:serde_generic_serialize.wado::$const_obj_64;
-                j_29 = 0;
-                b10: block {
-                    l11: loop {
-                        break_if b10 j_29 >= self_23;
-                        if builtin::array_get_value<u8>(haystack_25, 0 + j_29) != builtin::array_get_value<u8>(needle_27, j_29) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j_29 = j_29 + 1;
-                        continue l11;
-                    };
+            i_29 = 0;
+            b10: block {
+                l11: loop {
+                    break_if b10 i_29 >= len_28;
+                    if builtin::array_get_value<u8>(a_22, 0 + i_29) != builtin::array_get_value<u8>(b_25, 0 + i_29) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i_29 = i_29 + 1;
+                    continue l11;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond_6 == 0) {
             cold_path;
@@ -451,28 +450,26 @@ fn "serde_generic_serialize.wado/$test_1_two_instantiations_of_the_same_generic"
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_51) {
             global:serde_generic_serialize.wado::$const_obj_51 = array.new_data<u8>("{\"value\":true}");
         }
-        $cond_9 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-            self_33 = sb.used;
-            if self_33 != 14 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+        $cond_9 = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+            a_32 = sb.repr;
+            a_end_34 = sb.used;
+            b_35 = global:serde_generic_serialize.wado::$const_obj_51;
+            len_38 = a_end_34 - 0;
+            if len_38 != 14 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
-            $inline_bytes_match_at_7: block -> bool {
-                haystack_35 = sb.repr;
-                needle_37 = global:serde_generic_serialize.wado::$const_obj_51;
-                j_39 = 0;
-                b17: block {
-                    l18: loop {
-                        break_if b17 j_39 >= self_33;
-                        if builtin::array_get_value<u8>(haystack_35, 0 + j_39) != builtin::array_get_value<u8>(needle_37, j_39) {
-                            break $inline_bytes_match_at_7: 0;
-                        }
-                        j_39 = j_39 + 1;
-                        continue l18;
-                    };
+            i_39 = 0;
+            b17: block {
+                l18: loop {
+                    break_if b17 i_39 >= len_38;
+                    if builtin::array_get_value<u8>(a_32, 0 + i_39) != builtin::array_get_value<u8>(b_35, 0 + i_39) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                    }
+                    i_39 = i_39 + 1;
+                    continue l18;
                 };
-                break $inline_bytes_match_at_7: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
         };
         if @unlikely($cond_9 == 0) {
             cold_path;
@@ -494,10 +491,11 @@ fn "serde_generic_serialize.wado/$test_2_nested_generic_instantiation"() {
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_13: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
@@ -507,28 +505,26 @@ fn "serde_generic_serialize.wado/$test_2_nested_generic_instantiation"() {
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_78) {
             global:serde_generic_serialize.wado::$const_obj_78 = array.new_data<u8>("{\"value\":{\"value\":1}}");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_13 = s.used;
-            if self_13 != 21 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:serde_generic_serialize.wado::$const_obj_78;
+            len = a_end - 0;
+            if len != 21 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack = s.repr;
-                needle = global:serde_generic_serialize.wado::$const_obj_78;
-                j = 0;
-                b24: block {
-                    l25: loop {
-                        break_if b24 j >= self_13;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j = j + 1;
-                        continue l25;
-                    };
+            i = 0;
+            b24: block {
+                l25: loop {
+                    break_if b24 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i = i + 1;
+                    continue l25;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -550,10 +546,11 @@ fn "serde_generic_serialize.wado/$test_3_multi_param_generic_struct"() {
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_13: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
@@ -563,28 +560,26 @@ fn "serde_generic_serialize.wado/$test_3_multi_param_generic_struct"() {
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_92) {
             global:serde_generic_serialize.wado::$const_obj_92 = array.new_data<u8>("{\"first\":1,\"second\":\"x\"}");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_13 = s.used;
-            if self_13 != 24 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:serde_generic_serialize.wado::$const_obj_92;
+            len = a_end - 0;
+            if len != 24 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack = s.repr;
-                needle = global:serde_generic_serialize.wado::$const_obj_92;
-                j = 0;
-                b31: block {
-                    l32: loop {
-                        break_if b31 j >= self_13;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j = j + 1;
-                        continue l32;
-                    };
+            i = 0;
+            b31: block {
+                l32: loop {
+                    break_if b31 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i = i + 1;
+                    continue l32;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -615,14 +610,16 @@ fn "serde_generic_serialize.wado/$test_4_generic_variant_serialize_via_explicit_
     let $fuse_at_17: i32;
     let $fuse_at_18: i32;
     let $fuse_at_19: i32;
-    let self_23: i32;
-    let haystack_25: ref Array<u8>;
-    let needle_27: ref Array<u8>;
-    let j_29: i32;
-    let self_33: i32;
-    let haystack_35: ref Array<u8>;
-    let needle_37: ref Array<u8>;
-    let j_39: i32;
+    let a_22: ref Array<u8>;
+    let a_end_24: i32;
+    let b_25: ref Array<u8>;
+    let len_28: i32;
+    let i_29: i32;
+    let a_32: ref Array<u8>;
+    let a_end_34: i32;
+    let b_35: ref Array<u8>;
+    let len_38: i32;
+    let i_39: i32;
     m = struct.new "core:prelude/types.wado//Box<serde_generic_serialize.wado/Maybe<i32>>" { value: struct.new "serde_generic_serialize.wado//Maybe<i32>::Just" { discriminant: 0, payload_0: 42 } };
     n = struct.new "core:prelude/types.wado//Box<serde_generic_serialize.wado/Maybe<i32>>" { value: struct.new "serde_generic_serialize.wado//Maybe<i32>" { 1 } };
     let rm_mv_0: i32;
@@ -638,28 +635,26 @@ fn "serde_generic_serialize.wado/$test_4_generic_variant_serialize_via_explicit_
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_119) {
             global:serde_generic_serialize.wado::$const_obj_119 = array.new_data<u8>("{\"Just\":42}");
         }
-        $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_23 = s_4.used;
-            if self_23 != 11 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a_22 = s_4.repr;
+            a_end_24 = s_4.used;
+            b_25 = global:serde_generic_serialize.wado::$const_obj_119;
+            len_28 = a_end_24 - 0;
+            if len_28 != 11 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack_25 = s_4.repr;
-                needle_27 = global:serde_generic_serialize.wado::$const_obj_119;
-                j_29 = 0;
-                b38: block {
-                    l39: loop {
-                        break_if b38 j_29 >= self_23;
-                        if builtin::array_get_value<u8>(haystack_25, 0 + j_29) != builtin::array_get_value<u8>(needle_27, j_29) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j_29 = j_29 + 1;
-                        continue l39;
-                    };
+            i_29 = 0;
+            b38: block {
+                l39: loop {
+                    break_if b38 i_29 >= len_28;
+                    if builtin::array_get_value<u8>(a_22, 0 + i_29) != builtin::array_get_value<u8>(b_25, 0 + i_29) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i_29 = i_29 + 1;
+                    continue l39;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond_6 == 0) {
             cold_path;
@@ -676,28 +671,26 @@ fn "serde_generic_serialize.wado/$test_4_generic_variant_serialize_via_explicit_
         if ref.is_null(global:serde_generic_serialize.wado::$const_obj_106) {
             global:serde_generic_serialize.wado::$const_obj_106 = array.new_data<u8>("\"Nothing\"");
         }
-        $cond_9 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-            self_33 = s_7.used;
-            if self_33 != 9 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+        $cond_9 = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+            a_32 = s_7.repr;
+            a_end_34 = s_7.used;
+            b_35 = global:serde_generic_serialize.wado::$const_obj_106;
+            len_38 = a_end_34 - 0;
+            if len_38 != 9 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
-            $inline_bytes_match_at_7: block -> bool {
-                haystack_35 = s_7.repr;
-                needle_37 = global:serde_generic_serialize.wado::$const_obj_106;
-                j_39 = 0;
-                b45: block {
-                    l46: loop {
-                        break_if b45 j_39 >= self_33;
-                        if builtin::array_get_value<u8>(haystack_35, 0 + j_39) != builtin::array_get_value<u8>(needle_37, j_39) {
-                            break $inline_bytes_match_at_7: 0;
-                        }
-                        j_39 = j_39 + 1;
-                        continue l46;
-                    };
+            i_39 = 0;
+            b45: block {
+                l46: loop {
+                    break_if b45 i_39 >= len_38;
+                    if builtin::array_get_value<u8>(a_32, 0 + i_39) != builtin::array_get_value<u8>(b_35, 0 + i_39) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                    }
+                    i_39 = i_39 + 1;
+                    continue l46;
                 };
-                break $inline_bytes_match_at_7: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
         };
         if @unlikely($cond_9 == 0) {
             cold_path;

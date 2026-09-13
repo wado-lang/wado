@@ -264,8 +264,9 @@ fn "serde_generic_struct_mixed_fields.wado/$test_0_a_generic_struct_mixing_a_con
     let $fuse_at_10: i32;
     let $fuse_at_11: i32;
     let v: ref "core:prelude/string.wado//String";
-    let needle: ref Array<u8>;
-    let j: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let $sroa_$v1_used: i32;
     let encoded_mv_0: i32;
     let encoded_mv_1: ref null "core:prelude/string.wado//String";
@@ -290,26 +291,24 @@ fn "serde_generic_struct_mixed_fields.wado/$test_0_a_generic_struct_mixing_a_con
     if ref.is_null(global:serde_generic_struct_mixed_fields.wado::$const_obj_33) {
         global:serde_generic_struct_mixed_fields.wado::$const_obj_33 = array.new_data<u8>("{\"id\":7,\"body\":\"hi\"}");
     }
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-        if $sroa_$v1_used != 20 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        b = global:serde_generic_struct_mixed_fields.wado::$const_obj_33;
+        len = $sroa_$v1_used - 0;
+        if len != 20 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        $inline_bytes_match_at_4: block -> bool {
-            needle = global:serde_generic_struct_mixed_fields.wado::$const_obj_33;
-            j = 0;
-            b4: block {
-                l5: loop {
-                    break_if b4 j >= $sroa_$v1_used;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_4: 0;
-                    }
-                    j = j + 1;
-                    continue l5;
-                };
+        i = 0;
+        b4: block {
+            l5: loop {
+                break_if b4 i >= len;
+                if builtin::array_get_value<u8>($array_clone_dst_2, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                }
+                i = i + 1;
+                continue l5;
             };
-            break $inline_bytes_match_at_4: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

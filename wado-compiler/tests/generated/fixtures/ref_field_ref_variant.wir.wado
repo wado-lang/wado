@@ -177,24 +177,26 @@ fn "ref_field_ref_variant.wado/run"() with Stdout {
     let $fuse_at_12: i32;
     let $fuse_at_13: i32;
     let r_15: ref "ref_field_ref_variant.wado//Named";
-    let elem_19: ref null "ref_field_ref_variant.wado//Named";
-    let r_20: ref "ref_field_ref_variant.wado//Named";
-    let v_21: ref null "ref_field_ref_variant.wado//Named";
+    let elem_18: ref null "ref_field_ref_variant.wado//Named";
+    let r_19: ref "ref_field_ref_variant.wado//Named";
+    let v_20: ref null "ref_field_ref_variant.wado//Named";
     let $vc_payload_0: ref "ref_field_ref_variant.wado//Named";
     let handle: i32;
     let packed: i64;
-    let rx_33: i32;
-    let tx_34: i32;
+    let rx_31: i32;
+    let tx_32: i32;
     let $sroa_lab_element: ref null "ref_field_ref_variant.wado//Named";
-    let self_42: i32;
-    let haystack_43: ref Array<u8>;
-    let needle_45: ref Array<u8>;
-    let j_47: i32;
-    let v_52: ref "core:prelude/string.wado//String";
-    let self_53: i32;
-    let haystack_54: ref Array<u8>;
-    let needle_56: ref Array<u8>;
-    let j_58: i32;
+    let a_40: ref Array<u8>;
+    let a_end_42: i32;
+    let b_43: ref Array<u8>;
+    let len_46: i32;
+    let i_47: i32;
+    let v_48: ref "core:prelude/string.wado//String";
+    let a_49: ref Array<u8>;
+    let a_end_51: i32;
+    let b_52: ref Array<u8>;
+    let len_55: i32;
+    let i_56: i32;
     $sroa_lab_element = struct.new "ref_field_ref_variant.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } };
     if @likely(ref.is_null($sroa_lab_element) == 0) {
         r_15 = ref.as_non_null($sroa_lab_element);
@@ -203,28 +205,26 @@ fn "ref_field_ref_variant.wado/run"() with Stdout {
         unreachable;
     }
     r_1 = ref.as_non_null($sroa_lab_element);
-    $cond_2 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_42 = r_1.name.used;
-        if self_42 != 7 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        a_40 = r_1.name.repr;
+        a_end_42 = r_1.name.used;
+        b_43 = global:ref_field_ref_variant.wado::$const_obj_18;
+        len_46 = a_end_42 - 0;
+        if len_46 != 7 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
         }
-        $inline_bytes_match_at_1: block -> bool {
-            haystack_43 = r_1.name.repr;
-            needle_45 = global:ref_field_ref_variant.wado::$const_obj_18;
-            j_47 = 0;
-            b2: block {
-                l3: loop {
-                    break_if b2 j_47 >= self_42;
-                    if builtin::array_get_value<u8>(haystack_43, 0 + j_47) != builtin::array_get_value<u8>(needle_45, j_47) {
-                        break $inline_bytes_match_at_1: 0;
-                    }
-                    j_47 = j_47 + 1;
-                    continue l3;
-                };
+        i_47 = 0;
+        b2: block {
+            l3: loop {
+                break_if b2 i_47 >= len_46;
+                if builtin::array_get_value<u8>(a_40, 0 + i_47) != builtin::array_get_value<u8>(b_43, 0 + i_47) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                }
+                i_47 = i_47 + 1;
+                continue l3;
             };
-            break $inline_bytes_match_at_1: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;
@@ -232,43 +232,41 @@ fn "ref_field_ref_variant.wado/run"() with Stdout {
         unreachable;
     }
     local = struct.new "core:prelude/types.wado//Box<ref_field_ref_variant.wado/Element>" { value: struct.new "ref_field_ref_variant.wado//Named" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("original"), used: 8 } } };
-    elem_19 = local.value;
-    if ref.is_null(elem_19) == 0 {
-        r_20 = ref.as_non_null(elem_19);
-        r_20.name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("renamed"), used: 7 };
+    elem_18 = local.value;
+    if ref.is_null(elem_18) == 0 {
+        r_19 = ref.as_non_null(elem_18);
+        r_19.name = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("renamed"), used: 7 };
     } else {
     }
-    v_21 = local.value;
-    $match_11 = (if ref.is_null(v_21) == 0 -> ref null "ref_field_ref_variant.wado//Named" {
-        $vc_payload_0 = ref.as_non_null(v_21);
-        struct.new "ref_field_ref_variant.wado//Named" { name: ref.as_non_null(v_52 = $vc_payload_0.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_52.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_52.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_52.used }) };
+    v_20 = local.value;
+    $match_11 = (if ref.is_null(v_20) == 0 -> ref null "ref_field_ref_variant.wado//Named" {
+        $vc_payload_0 = ref.as_non_null(v_20);
+        struct.new "ref_field_ref_variant.wado//Named" { name: ref.as_non_null(v_48 = $vc_payload_0.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_48.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_48.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_48.used }) };
     } else {
-        v_21;
+        v_20;
     });
     $cond_5 = (if ref.is_null($match_11) == 0 -> bool {
         r_4 = ref.as_non_null($match_11);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: block -> bool {
-            self_53 = r_4.name.used;
-            if self_53 != 7 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a_49 = r_4.name.repr;
+            a_end_51 = r_4.name.used;
+            b_52 = global:ref_field_ref_variant.wado::$const_obj_18;
+            len_55 = a_end_51 - 0;
+            if len_55 != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack_54 = r_4.name.repr;
-                needle_56 = global:ref_field_ref_variant.wado::$const_obj_18;
-                j_58 = 0;
-                b10: block {
-                    l11: loop {
-                        break_if b10 j_58 >= self_53;
-                        if builtin::array_get_value<u8>(haystack_54, 0 + j_58) != builtin::array_get_value<u8>(needle_56, j_58) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j_58 = j_58 + 1;
-                        continue l11;
-                    };
+            i_56 = 0;
+            b10: block {
+                l11: loop {
+                    break_if b10 i_56 >= len_55;
+                    if builtin::array_get_value<u8>(a_49, 0 + i_56) != builtin::array_get_value<u8>(b_52, 0 + i_56) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i_56 = i_56 + 1;
+                    continue l11;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
     } else {
         0;
@@ -278,10 +276,10 @@ fn "ref_field_ref_variant.wado/run"() with Stdout {
         "core:rt/panic"($local_8 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(157); $fuse_at_12 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 54); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_12, global:ref_field_ref_variant.wado::$const_obj_17, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_12 + 20, global:ref_field_ref_variant.wado::$const_obj_16, 3); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_12 + 23, global:ref_field_ref_variant.wado::$const_obj_15, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_12 + 27, global:ref_field_ref_variant.wado::$const_obj_14, 26); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_12 + 53, global:ref_field_ref_variant.wado::$const_obj_13, 1); $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 36 }, $local_9); $fuse_at_13 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 67); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_13, global:ref_field_ref_variant.wado::$const_obj_12, 60); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_13 + 60, global:ref_field_ref_variant.wado::$const_obj_11, 7); $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8); "core:prelude/traits.wado/ref_field_ref_variant.wado/Element^core:prelude/traits.wado/Inspect::inspect"(local, $local_9); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_8, global:ref_field_ref_variant.wado::$const_obj_10); $local_8);
         unreachable;
     }
-    rx_33 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_34 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "ref_field_ref_variant.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
-    "core:rt/write_string_to_stream"(tx_34, global:ref_field_ref_variant.wado::$const_obj_9);
+    rx_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_32 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "ref_field_ref_variant.wado/$cm_binding__Stdout_write_via_stream"(rx_31);
+    "core:rt/write_string_to_stream"(tx_32, global:ref_field_ref_variant.wado::$const_obj_9);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

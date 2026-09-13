@@ -161,31 +161,32 @@ fn "opt_hfs_field_ref_arg.wado/both"(b) {
 }
 
 fn "opt_hfs_field_ref_arg.wado/run"() {
-    let b: ref "opt_hfs_field_ref_arg.wado//Buf";
+    let b_0: ref "opt_hfs_field_ref_arg.wado//Buf";
     let total: i32;
-    let i: i32;
+    let i_2: i32;
     let $cond_5: bool;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_10: i32;
     let $fuse_at_11: i32;
     let v: ref "core:prelude/string.wado//String";
-    let needle: ref Array<u8>;
-    let j: i32;
+    let b_20: ref Array<u8>;
+    let len: i32;
+    let i_24: i32;
     let $sroa_$v0_used: i32;
-    let $hfs_s_31: ref "core:prelude/string.wado//String";
-    b = struct.new "opt_hfs_field_ref_arg.wado//Buf" { s: ref.as_non_null(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 })), n: black_box(0) };
+    let $hfs_s_27: ref "core:prelude/string.wado//String";
+    b_0 = struct.new "opt_hfs_field_ref_arg.wado//Buf" { s: ref.as_non_null(black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 })), n: black_box(0) };
     total = 0;
-    i = 0;
-    $hfs_s_31 = b.s;
+    i_2 = 0;
+    $hfs_s_27 = b_0.s;
     b0: block {
         l1: loop {
-            break_if b0 i >= 2;
-            "opt_hfs_field_ref_arg.wado/swap_out"($hfs_s_31);
-            total = local.tee total(local.tee total(local.tee total(total + "opt_hfs_field_ref_arg.wado/field_len$scalar"($hfs_s_31)) + "opt_hfs_field_ref_arg.wado/both"(b)) + $hfs_s_31 = b.s; $hfs_s_31.used) + $hfs_s_31.used;
-            $hfs_s_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
-            i = i + 1;
-            b.s = $hfs_s_31;
+            break_if b0 i_2 >= 2;
+            "opt_hfs_field_ref_arg.wado/swap_out"($hfs_s_27);
+            total = local.tee total(local.tee total(local.tee total(total + "opt_hfs_field_ref_arg.wado/field_len$scalar"($hfs_s_27)) + "opt_hfs_field_ref_arg.wado/both"(b_0)) + $hfs_s_27 = b_0.s; $hfs_s_27.used) + $hfs_s_27.used;
+            $hfs_s_27 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
+            i_2 = i_2 + 1;
+            b_0.s = $hfs_s_27;
             continue l1;
         };
     };
@@ -194,7 +195,7 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
         "opt_hfs_field_ref_arg.wado/run$cold0"(total);
         unreachable;
     }
-    v = b.s;
+    v = b_0.s;
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v.repr;
     let $array_clone_len_3: i32;
@@ -203,26 +204,24 @@ fn "opt_hfs_field_ref_arg.wado/run"() {
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     $sroa_$v0_used = v.used;
-    $cond_5 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-        if $sroa_$v0_used != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+    $cond_5 = $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+        b_20 = global:opt_hfs_field_ref_arg.wado::$const_obj_15;
+        len = $sroa_$v0_used - 0;
+        if len != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
         }
-        $inline_bytes_match_at_7: block -> bool {
-            needle = global:opt_hfs_field_ref_arg.wado::$const_obj_15;
-            j = 0;
-            b4: block {
-                l5: loop {
-                    break_if b4 j >= $sroa_$v0_used;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_7: 0;
-                    }
-                    j = j + 1;
-                    continue l5;
-                };
+        i_24 = 0;
+        b4: block {
+            l5: loop {
+                break_if b4 i_24 >= len;
+                if builtin::array_get_value<u8>($array_clone_dst_2, 0 + i_24) != builtin::array_get_value<u8>(b_20, 0 + i_24) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                }
+                i_24 = i_24 + 1;
+                continue l5;
             };
-            break $inline_bytes_match_at_7: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+        break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
     };
     if @unlikely($cond_5 == 0) {
         cold_path;

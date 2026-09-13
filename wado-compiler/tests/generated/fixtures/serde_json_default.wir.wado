@@ -424,10 +424,11 @@ fn "serde_json_default.wado/$test_0_missing_default_fields_use_zero_values"() {
     let $local_11: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_18: i32;
     let $fuse_at_19: i32;
-    let self_25: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "serde_json_default.wado//Config";
     let r_mv_2: ref null "core:serde//DeserializeError";
@@ -435,28 +436,26 @@ fn "serde_json_default.wado/$test_0_missing_default_fields_use_zero_values"() {
     if @likely(r_mv_0 == 0) {
         c = ref.as_non_null(r_mv_1);
         $v0_2 = c.host;
-        $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_25 = $v0_2.used;
-            if self_25 != 9 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = $v0_2.repr;
+            a_end = $v0_2.used;
+            b = global:serde_json_default.wado::$const_obj_32;
+            len = a_end - 0;
+            if len != 9 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0_2.repr;
-                needle = global:serde_json_default.wado::$const_obj_32;
-                j = 0;
-                b2: block {
-                    l3: loop {
-                        break_if b2 j >= self_25;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l3;
-                    };
+            i = 0;
+            b2: block {
+                l3: loop {
+                    break_if b2 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l3;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond_3 == 0) {
             cold_path;
@@ -513,14 +512,16 @@ fn "serde_json_default.wado/$test_1_provided_fields_override_defaults"() {
     let $fuse_at_23: i32;
     let $fuse_at_24: i32;
     let $fuse_at_25: i32;
-    let self_31: i32;
-    let haystack_33: ref Array<u8>;
-    let needle_35: ref Array<u8>;
-    let j_37: i32;
-    let self_42: i32;
-    let haystack_44: ref Array<u8>;
-    let needle_46: ref Array<u8>;
-    let j_48: i32;
+    let a_30: ref Array<u8>;
+    let a_end_32: i32;
+    let b_33: ref Array<u8>;
+    let len_36: i32;
+    let i_37: i32;
+    let a_41: ref Array<u8>;
+    let a_end_43: i32;
+    let b_44: ref Array<u8>;
+    let len_47: i32;
+    let i_48: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "serde_json_default.wado//Config";
     let r_mv_2: ref null "core:serde//DeserializeError";
@@ -528,28 +529,26 @@ fn "serde_json_default.wado/$test_1_provided_fields_override_defaults"() {
     if @likely(r_mv_0 == 0) {
         c = ref.as_non_null(r_mv_1);
         $v0_2 = c.host;
-        $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_31 = $v0_2.used;
-            if self_31 != 11 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a_30 = $v0_2.repr;
+            a_end_32 = $v0_2.used;
+            b_33 = global:serde_json_default.wado::$const_obj_52;
+            len_36 = a_end_32 - 0;
+            if len_36 != 11 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack_33 = $v0_2.repr;
-                needle_35 = global:serde_json_default.wado::$const_obj_52;
-                j_37 = 0;
-                b12: block {
-                    l13: loop {
-                        break_if b12 j_37 >= self_31;
-                        if builtin::array_get_value<u8>(haystack_33, 0 + j_37) != builtin::array_get_value<u8>(needle_35, j_37) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j_37 = j_37 + 1;
-                        continue l13;
-                    };
+            i_37 = 0;
+            b12: block {
+                l13: loop {
+                    break_if b12 i_37 >= len_36;
+                    if builtin::array_get_value<u8>(a_30, 0 + i_37) != builtin::array_get_value<u8>(b_33, 0 + i_37) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i_37 = i_37 + 1;
+                    continue l13;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond_3 == 0) {
             cold_path;
@@ -578,28 +577,26 @@ fn "serde_json_default.wado/$test_1_provided_fields_override_defaults"() {
         $match_scrut_1 = c.description;
         if @likely(ref.is_null($match_scrut_1) == 0) {
             d = ref.as_non_null($match_scrut_1);
-            $cond_11 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: block -> bool {
-                self_42 = d.used;
-                if self_42 != 4 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: 0;
+            $cond_11 = $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+                a_41 = d.repr;
+                a_end_43 = d.used;
+                b_44 = global:serde_json_default.wado::$const_obj_43;
+                len_47 = a_end_43 - 0;
+                if len_47 != 4 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
-                $inline_bytes_match_at_9: block -> bool {
-                    haystack_44 = d.repr;
-                    needle_46 = global:serde_json_default.wado::$const_obj_43;
-                    j_48 = 0;
-                    b21: block {
-                        l22: loop {
-                            break_if b21 j_48 >= self_42;
-                            if builtin::array_get_value<u8>(haystack_44, 0 + j_48) != builtin::array_get_value<u8>(needle_46, j_48) {
-                                break $inline_bytes_match_at_9: 0;
-                            }
-                            j_48 = j_48 + 1;
-                            continue l22;
-                        };
+                i_48 = 0;
+                b21: block {
+                    l22: loop {
+                        break_if b21 i_48 >= len_47;
+                        if builtin::array_get_value<u8>(a_41, 0 + i_48) != builtin::array_get_value<u8>(b_44, 0 + i_48) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                        }
+                        i_48 = i_48 + 1;
+                        continue l22;
                     };
-                    break $inline_bytes_match_at_9: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6;
+                break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
             };
             if @unlikely($cond_11 == 0) {
                 cold_path;

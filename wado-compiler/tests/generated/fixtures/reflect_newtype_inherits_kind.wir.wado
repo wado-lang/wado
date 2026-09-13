@@ -241,10 +241,11 @@ fn "reflect_newtype_inherits_kind.wado/$test_2_the_kind_s_members_are_reachable_
     let result_12: ref "core:prelude/string.wado//String";
     let self_14: ref "core:prelude/string.wado//String";
     let result_16: ref "core:prelude/string.wado//String";
-    let self_20: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     self_10 = names;
     result_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(1), used: 0 };
@@ -256,28 +257,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_2_the_kind_s_members_are_reachable_
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, self_14);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, global:reflect_newtype_inherits_kind.wado::$const_obj_42);
     names = result_16;
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-        self_20 = names.used;
-        if self_20 != 2 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
+        a = names.repr;
+        a_end = names.used;
+        b = global:reflect_newtype_inherits_kind.wado::$const_obj_41;
+        len = a_end - 0;
+        if len != 2 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
-        $inline_bytes_match_at_8: block -> bool {
-            haystack = names.repr;
-            needle = global:reflect_newtype_inherits_kind.wado::$const_obj_41;
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_20;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_8: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_8: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+        break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -299,10 +298,11 @@ fn "reflect_newtype_inherits_kind.wado/$test_3_an_enum_newtype_reflects_the_base
     let result_23: ref "core:prelude/string.wado//String";
     let self_25: ref "core:prelude/string.wado//String";
     let result_27: ref "core:prelude/string.wado//String";
-    let self_31: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if ref.is_null(global:reflect_newtype_inherits_kind.wado::$const_obj_53) {
         global:reflect_newtype_inherits_kind.wado::$const_obj_53 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Green"), used: 5 };
@@ -317,28 +317,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_3_an_enum_newtype_reflects_the_base
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_27, self_25);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_27, global:reflect_newtype_inherits_kind.wado::$const_obj_53);
     names = result_27;
-    $cond_4 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-        self_31 = names.used;
-        if self_31 != 8 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+    $cond_4 = $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
+        a = names.repr;
+        a_end = names.used;
+        b = global:reflect_newtype_inherits_kind.wado::$const_obj_52;
+        len = a_end - 0;
+        if len != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
-        $inline_bytes_match_at_8: block -> bool {
-            haystack = names.repr;
-            needle = global:reflect_newtype_inherits_kind.wado::$const_obj_52;
-            j = 0;
-            b8: block {
-                l9: loop {
-                    break_if b8 j >= self_31;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_8: 0;
-                    }
-                    j = j + 1;
-                    continue l9;
-                };
+        i = 0;
+        b8: block {
+            l9: loop {
+                break_if b8 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                }
+                i = i + 1;
+                continue l9;
             };
-            break $inline_bytes_match_at_8: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+        break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
     };
     if @unlikely($cond_4 == 0) {
         cold_path;
@@ -358,10 +356,11 @@ fn "reflect_newtype_inherits_kind.wado/$test_4_a_flags_newtype_reflects_the_base
     let result_12: ref "core:prelude/string.wado//String";
     let self_14: ref "core:prelude/string.wado//String";
     let result_16: ref "core:prelude/string.wado//String";
-    let self_20: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b_22: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if ref.is_null(global:reflect_newtype_inherits_kind.wado::$const_obj_64) {
         global:reflect_newtype_inherits_kind.wado::$const_obj_64 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("write"), used: 5 };
@@ -376,28 +375,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_4_a_flags_newtype_reflects_the_base
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, self_14);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, global:reflect_newtype_inherits_kind.wado::$const_obj_64);
     names = result_16;
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-        self_20 = names.used;
-        if self_20 != 9 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
+        a = names.repr;
+        a_end = names.used;
+        b_22 = global:reflect_newtype_inherits_kind.wado::$const_obj_63;
+        len = a_end - 0;
+        if len != 9 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
-        $inline_bytes_match_at_8: block -> bool {
-            haystack = names.repr;
-            needle = global:reflect_newtype_inherits_kind.wado::$const_obj_63;
-            j = 0;
-            b14: block {
-                l15: loop {
-                    break_if b14 j >= self_20;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_8: 0;
-                    }
-                    j = j + 1;
-                    continue l15;
-                };
+        i = 0;
+        b14: block {
+            l15: loop {
+                break_if b14 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b_22, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                }
+                i = i + 1;
+                continue l15;
             };
-            break $inline_bytes_match_at_8: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+        break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -417,10 +414,11 @@ fn "reflect_newtype_inherits_kind.wado/$test_5_a_variant_newtype_reflects_the_ba
     let result_12: ref "core:prelude/string.wado//String";
     let self_14: ref "core:prelude/string.wado//String";
     let result_16: ref "core:prelude/string.wado//String";
-    let self_20: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     self_10 = names;
     result_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(3), used: 0 };
@@ -432,28 +430,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_5_a_variant_newtype_reflects_the_ba
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, self_14);
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result_16, global:reflect_newtype_inherits_kind.wado::$const_obj_75);
     names = result_16;
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-        self_20 = names.used;
-        if self_20 != 7 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
+        a = names.repr;
+        a_end = names.used;
+        b = global:reflect_newtype_inherits_kind.wado::$const_obj_74;
+        len = a_end - 0;
+        if len != 7 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
-        $inline_bytes_match_at_8: block -> bool {
-            haystack = names.repr;
-            needle = global:reflect_newtype_inherits_kind.wado::$const_obj_74;
-            j = 0;
-            b19: block {
-                l20: loop {
-                    break_if b19 j >= self_20;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_8: 0;
-                    }
-                    j = j + 1;
-                    continue l20;
-                };
+        i = 0;
+        b19: block {
+            l20: loop {
+                break_if b19 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
+                }
+                i = i + 1;
+                continue l20;
             };
-            break $inline_bytes_match_at_8: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+        break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -477,10 +473,11 @@ fn "reflect_newtype_inherits_kind.wado/$test_6_a_chained_newtype_names_its_own_l
     let $fuse_at_17: i32;
     let $fuse_at_20: i32;
     let $fuse_at_21: i32;
-    let self_25: i32;
-    let haystack_27: ref Array<u8>;
-    let needle_29: ref Array<u8>;
-    let j_31: i32;
+    let a_24: ref Array<u8>;
+    let a_end_26: i32;
+    let b_27: ref Array<u8>;
+    let len_30: i32;
+    let i_31: i32;
     let self_50: ref "core:prelude/string.wado//String";
     let new_used_59: i32;
     let start_60: i32;
@@ -493,36 +490,35 @@ fn "reflect_newtype_inherits_kind.wado/$test_6_a_chained_newtype_names_its_own_l
     let self_88: ref "core:prelude/string.wado//String";
     let new_used_95: i32;
     let start_96: i32;
-    let self_101: i32;
-    let haystack_103: ref Array<u8>;
-    let needle_105: ref Array<u8>;
-    let j_107: i32;
+    let a_100: ref Array<u8>;
+    let a_end_102: i32;
+    let b_103: ref Array<u8>;
+    let len_106: i32;
+    let i_107: i32;
     pp = struct.new "reflect_newtype_inherits_kind.wado//Point" { x: 1, y: 2 };
     if ref.is_null(global:reflect_newtype_inherits_kind.wado::$const_obj_101) {
         global:reflect_newtype_inherits_kind.wado::$const_obj_101 = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/PP^reflect_newtype_inherits_kind.wado/Describe::describe"();
     }
-    $cond_2 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-        self_25 = global:reflect_newtype_inherits_kind.wado::$const_obj_101.used;
-        if self_25 != 6 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        a_24 = global:reflect_newtype_inherits_kind.wado::$const_obj_101.repr;
+        a_end_26 = global:reflect_newtype_inherits_kind.wado::$const_obj_101.used;
+        b_27 = global:reflect_newtype_inherits_kind.wado::$const_obj_100;
+        len_30 = a_end_26 - 0;
+        if len_30 != 6 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
-        $inline_bytes_match_at_3: block -> bool {
-            haystack_27 = global:reflect_newtype_inherits_kind.wado::$const_obj_101.repr;
-            needle_29 = global:reflect_newtype_inherits_kind.wado::$const_obj_100;
-            j_31 = 0;
-            b25: block {
-                l26: loop {
-                    break_if b25 j_31 >= self_25;
-                    if builtin::array_get_value<u8>(haystack_27, 0 + j_31) != builtin::array_get_value<u8>(needle_29, j_31) {
-                        break $inline_bytes_match_at_3: 0;
-                    }
-                    j_31 = j_31 + 1;
-                    continue l26;
-                };
+        i_31 = 0;
+        b25: block {
+            l26: loop {
+                break_if b25 i_31 >= len_30;
+                if builtin::array_get_value<u8>(a_24, 0 + i_31) != builtin::array_get_value<u8>(b_27, 0 + i_31) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i_31 = i_31 + 1;
+                continue l26;
             };
-            break $inline_bytes_match_at_3: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;
@@ -570,28 +566,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_6_a_chained_newtype_names_its_own_l
     start_96 = self_88.used;
     self_88.used = new_used_95;
     builtin::array_copy<u8>(self_88.repr, start_96, global:reflect_newtype_inherits_kind.wado::$const_obj_86, 0, 2);
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_35: block -> bool {
-        self_101 = $local_11.used;
-        if self_101 != 31 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_35: 0;
+    $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__32: block -> bool {
+        a_100 = $local_11.repr;
+        a_end_102 = $local_11.used;
+        b_103 = global:reflect_newtype_inherits_kind.wado::$const_obj_85;
+        len_106 = a_end_102 - 0;
+        if len_106 != 31 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__32: 0;
         }
-        $inline_bytes_match_at_38: block -> bool {
-            haystack_103 = $local_11.repr;
-            needle_105 = global:reflect_newtype_inherits_kind.wado::$const_obj_85;
-            j_107 = 0;
-            b35: block {
-                l36: loop {
-                    break_if b35 j_107 >= self_101;
-                    if builtin::array_get_value<u8>(haystack_103, 0 + j_107) != builtin::array_get_value<u8>(needle_105, j_107) {
-                        break $inline_bytes_match_at_38: 0;
-                    }
-                    j_107 = j_107 + 1;
-                    continue l36;
-                };
+        i_107 = 0;
+        b35: block {
+            l36: loop {
+                break_if b35 i_107 >= len_106;
+                if builtin::array_get_value<u8>(a_100, 0 + i_107) != builtin::array_get_value<u8>(b_103, 0 + i_107) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__32: 0;
+                }
+                i_107 = i_107 + 1;
+                continue l36;
             };
-            break $inline_bytes_match_at_38: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_35;
+        break $inline_core_prelude_array_wado_seq_eq_u8__32: 1;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;
@@ -617,46 +611,46 @@ fn "reflect_newtype_inherits_kind.wado/$test_7_a_generic_newtype_names_itself_an
     let $fuse_at_17: i32;
     let $fuse_at_20: i32;
     let $fuse_at_21: i32;
-    let self_25: i32;
-    let haystack_27: ref Array<u8>;
-    let needle_29: ref Array<u8>;
-    let j_31: i32;
+    let a_24: ref Array<u8>;
+    let a_end_26: i32;
+    let b_27: ref Array<u8>;
+    let len_30: i32;
+    let i_31: i32;
     let self_47: ref "core:prelude/string.wado//String";
     let new_used_56: i32;
     let start_57: i32;
     let self_61: ref "core:prelude/string.wado//String";
     let new_used_68: i32;
     let start_69: i32;
-    let self_74: i32;
-    let haystack_76: ref Array<u8>;
-    let needle_78: ref Array<u8>;
-    let j_80: i32;
+    let a_73: ref Array<u8>;
+    let a_end_75: i32;
+    let b_76: ref Array<u8>;
+    let len_79: i32;
+    let i_80: i32;
     w = struct.new "reflect_newtype_inherits_kind.wado//Point" { x: 1, y: 2 };
     if ref.is_null(global:reflect_newtype_inherits_kind.wado::$const_obj_124) {
         global:reflect_newtype_inherits_kind.wado::$const_obj_124 = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/Wrapped<i32>^reflect_newtype_inherits_kind.wado/Describe::describe"();
     }
-    $cond_2 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-        self_25 = global:reflect_newtype_inherits_kind.wado::$const_obj_124.used;
-        if self_25 != 11 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        a_24 = global:reflect_newtype_inherits_kind.wado::$const_obj_124.repr;
+        a_end_26 = global:reflect_newtype_inherits_kind.wado::$const_obj_124.used;
+        b_27 = global:reflect_newtype_inherits_kind.wado::$const_obj_123;
+        len_30 = a_end_26 - 0;
+        if len_30 != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
-        $inline_bytes_match_at_3: block -> bool {
-            haystack_27 = global:reflect_newtype_inherits_kind.wado::$const_obj_124.repr;
-            needle_29 = global:reflect_newtype_inherits_kind.wado::$const_obj_123;
-            j_31 = 0;
-            b42: block {
-                l43: loop {
-                    break_if b42 j_31 >= self_25;
-                    if builtin::array_get_value<u8>(haystack_27, 0 + j_31) != builtin::array_get_value<u8>(needle_29, j_31) {
-                        break $inline_bytes_match_at_3: 0;
-                    }
-                    j_31 = j_31 + 1;
-                    continue l43;
-                };
+        i_31 = 0;
+        b42: block {
+            l43: loop {
+                break_if b42 i_31 >= len_30;
+                if builtin::array_get_value<u8>(a_24, 0 + i_31) != builtin::array_get_value<u8>(b_27, 0 + i_31) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i_31 = i_31 + 1;
+                continue l43;
             };
-            break $inline_bytes_match_at_3: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;
@@ -686,28 +680,26 @@ fn "reflect_newtype_inherits_kind.wado/$test_7_a_generic_newtype_names_itself_an
     start_69 = self_61.used;
     self_61.used = new_used_68;
     builtin::array_copy<u8>(self_61.repr, start_69, global:reflect_newtype_inherits_kind.wado::$const_obj_111, 0, 7);
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_23: block -> bool {
-        self_74 = $local_11.used;
-        if self_74 != 31 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_23: 0;
+    $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__20: block -> bool {
+        a_73 = $local_11.repr;
+        a_end_75 = $local_11.used;
+        b_76 = global:reflect_newtype_inherits_kind.wado::$const_obj_110;
+        len_79 = a_end_75 - 0;
+        if len_79 != 31 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__20: 0;
         }
-        $inline_bytes_match_at_26: block -> bool {
-            haystack_76 = $local_11.repr;
-            needle_78 = global:reflect_newtype_inherits_kind.wado::$const_obj_110;
-            j_80 = 0;
-            b50: block {
-                l51: loop {
-                    break_if b50 j_80 >= self_74;
-                    if builtin::array_get_value<u8>(haystack_76, 0 + j_80) != builtin::array_get_value<u8>(needle_78, j_80) {
-                        break $inline_bytes_match_at_26: 0;
-                    }
-                    j_80 = j_80 + 1;
-                    continue l51;
-                };
+        i_80 = 0;
+        b50: block {
+            l51: loop {
+                break_if b50 i_80 >= len_79;
+                if builtin::array_get_value<u8>(a_73, 0 + i_80) != builtin::array_get_value<u8>(b_76, 0 + i_80) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__20: 0;
+                }
+                i_80 = i_80 + 1;
+                continue l51;
             };
-            break $inline_bytes_match_at_26: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_23;
+        break $inline_core_prelude_array_wado_seq_eq_u8__20: 1;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;
@@ -727,34 +719,33 @@ fn "reflect_newtype_inherits_kind.wado/$cm_export__$test_0_a_struct_blanket_walk
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_11: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     p = struct.new "reflect_newtype_inherits_kind.wado//Point" { x: 1, y: 2 };
     $v1 = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/P^reflect_newtype_inherits_kind.wado/Describe::describe"();
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_11 = $v1.used;
-        if self_11 != 5 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = $v1.repr;
+        a_end = $v1.used;
+        b = array.new_data<u8>("P.x.y");
+        len = a_end - 0;
+        if len != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = $v1.repr;
-            needle = array.new_data<u8>("P.x.y");
-            j = 0;
-            b56: block {
-                l57: loop {
-                    break_if b56 j >= self_11;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l57;
-                };
+        i = 0;
+        b56: block {
+            l57: loop {
+                break_if b56 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l57;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -775,34 +766,33 @@ fn "reflect_newtype_inherits_kind.wado/$cm_export__$test_1_the_base_still_walks_
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_11: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     q = struct.new "reflect_newtype_inherits_kind.wado//Point" { x: 1, y: 2 };
     $v1 = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/Point^reflect_newtype_inherits_kind.wado/Describe::describe"();
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_11 = $v1.used;
-        if self_11 != 9 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = $v1.repr;
+        a_end = $v1.used;
+        b = array.new_data<u8>("Point.x.y");
+        len = a_end - 0;
+        if len != 9 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = $v1.repr;
-            needle = array.new_data<u8>("Point.x.y");
-            j = 0;
-            b61: block {
-                l62: loop {
-                    break_if b61 j >= self_11;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l62;
-                };
+        i = 0;
+        b61: block {
+            l62: loop {
+                break_if b61 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l62;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

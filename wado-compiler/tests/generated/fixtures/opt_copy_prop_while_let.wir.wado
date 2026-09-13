@@ -205,10 +205,11 @@ fn "opt_copy_prop_while_let.wado/count_positive"(items) {
     let it: ref "opt_copy_prop_while_let.wado//Iterator";
     let count: i32;
     let label: ref "core:prelude/string.wado//String";
-    let self_10: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     it = struct.new "opt_copy_prop_while_let.wado//Iterator" { items: items, pos: 0 };
     count = 0;
     b4: block {
@@ -222,28 +223,26 @@ fn "opt_copy_prop_while_let.wado/count_positive"(items) {
                 multivalue_bind [result_mv_0, result_mv_1] = "opt_copy_prop_while_let.wado/classify"($match_6_mv_1);
                 if result_mv_0 == 0 {
                     label = ref.as_non_null(result_mv_1);
-                    if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-                        self_10 = label.used;
-                        if self_10 != 8 {
-                            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+                    if $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+                        a = label.repr;
+                        a_end = label.used;
+                        b = global:opt_copy_prop_while_let.wado::$const_obj_4;
+                        len = a_end - 0;
+                        if len != 8 {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                         }
-                        $inline_bytes_match_at_1: block -> bool {
-                            haystack = label.repr;
-                            needle = global:opt_copy_prop_while_let.wado::$const_obj_4;
-                            j = 0;
-                            b10: block {
-                                l11: loop {
-                                    break_if b10 j >= self_10;
-                                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                                        break $inline_bytes_match_at_1: 0;
-                                    }
-                                    j = j + 1;
-                                    continue l11;
-                                };
+                        i = 0;
+                        b10: block {
+                            l11: loop {
+                                break_if b10 i >= len;
+                                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                                }
+                                i = i + 1;
+                                continue l11;
                             };
-                            break $inline_bytes_match_at_1: 1;
                         };
-                        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+                        break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
                     } {
                         count = count + 1;
                     }

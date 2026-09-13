@@ -136,9 +136,9 @@ fn "wir_optimize_labeled_block_copy_prop_safety.wado/run"() with Stdout {
     let $fuse_at_18: i32;
     let s: ref "core:prelude/string.wado//String";
     let start_31: i32;
-    let haystack_38: ref Array<u8>;
-    let needle_40: ref Array<u8>;
-    let j_42: i32;
+    let a_35: ref Array<u8>;
+    let b_38: ref Array<u8>;
+    let i_42: i32;
     if ref.is_null(global:wir_optimize_labeled_block_copy_prop_safety.wado::$const_obj_18) {
         global:wir_optimize_labeled_block_copy_prop_safety.wado::$const_obj_18 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     }
@@ -150,21 +150,21 @@ fn "wir_optimize_labeled_block_copy_prop_safety.wado/run"() with Stdout {
     start_31 = s.used;
     s.used = 6;
     builtin::array_copy<u8>(s.repr, start_31, global:wir_optimize_labeled_block_copy_prop_safety.wado::$const_obj_17, 0, 1);
-    $cond_2 = $inline_bytes_match_at_10: block -> bool {
-        haystack_38 = s.repr;
-        needle_40 = global:wir_optimize_labeled_block_copy_prop_safety.wado::$const_obj_16;
-        j_42 = 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        a_35 = s.repr;
+        b_38 = global:wir_optimize_labeled_block_copy_prop_safety.wado::$const_obj_16;
+        i_42 = 0;
         b2: block {
             l3: loop {
-                break_if b2 j_42 >= 6;
-                if builtin::array_get_value<u8>(haystack_38, 0 + j_42) != builtin::array_get_value<u8>(needle_40, j_42) {
-                    break $inline_bytes_match_at_10: 0;
+                break_if b2 i_42 >= 6;
+                if builtin::array_get_value<u8>(a_35, 0 + i_42) != builtin::array_get_value<u8>(b_38, 0 + i_42) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
                 }
-                j_42 = j_42 + 1;
+                i_42 = i_42 + 1;
                 continue l3;
             };
         };
-        break $inline_bytes_match_at_10: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;

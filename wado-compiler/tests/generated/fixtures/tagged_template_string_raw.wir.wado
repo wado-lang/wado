@@ -164,9 +164,9 @@ fn "tagged_template_string_raw.wado/run"() with Stdout {
     let tx_44: i32;
     let out_50: ref "core:prelude/string.wado//String";
     let start_61: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let b: ref Array<u8>;
+    let i: i32;
     name = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 102, 103), used: 3 });
     message_11 = "core:prelude/string.wado/core:prelude/string.wado/String::raw<tagged_template_string_raw.wado/$tmpl$6ffbd233c551be84,[core:prelude/string.wado/String]>"(struct.new "tagged_template_string_raw.wado//$tmpl$6ffbd233c551be84" { h0: name });
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
@@ -195,21 +195,21 @@ fn "tagged_template_string_raw.wado/run"() with Stdout {
     start_61 = out_50.used;
     out_50.used = 4;
     builtin::array_copy<u8>(out_50.repr, start_61, global:tagged_template_string_raw.wado::$const_obj_13, 0, 4);
-    $cond_2 = $inline_bytes_match_at_24: block -> bool {
-        haystack = out_50.repr;
-        needle = global:tagged_template_string_raw.wado::$const_obj_13;
-        j = 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__22: block -> bool {
+        a = out_50.repr;
+        b = global:tagged_template_string_raw.wado::$const_obj_13;
+        i = 0;
         b2: block {
             l3: loop {
-                break_if b2 j >= 4;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break $inline_bytes_match_at_24: 0;
+                break_if b2 i >= 4;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
                 }
-                j = j + 1;
+                i = i + 1;
                 continue l3;
             };
         };
-        break $inline_bytes_match_at_24: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__22: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;

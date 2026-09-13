@@ -308,10 +308,11 @@ fn "serde_json_array_string.wado/$test_0_serialize_list_string_"() {
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_14: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     if ref.is_null(global:serde_json_array_string.wado::$const_obj_27) {
         global:serde_json_array_string.wado::$const_obj_27 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
     }
@@ -324,28 +325,26 @@ fn "serde_json_array_string.wado/$test_0_serialize_list_string_"() {
         if ref.is_null(global:serde_json_array_string.wado::$const_obj_26) {
             global:serde_json_array_string.wado::$const_obj_26 = array.new_data<u8>("[\"hello\",\"world\"]");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_14 = s.used;
-            if self_14 != 17 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:serde_json_array_string.wado::$const_obj_26;
+            len = a_end - 0;
+            if len != 17 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = s.repr;
-                needle = global:serde_json_array_string.wado::$const_obj_26;
-                j = 0;
-                b4: block {
-                    l5: loop {
-                        break_if b4 j >= self_14;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l5;
-                    };
+            i = 0;
+            b4: block {
+                l5: loop {
+                    break_if b4 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l5;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -366,38 +365,37 @@ fn "serde_json_array_string.wado/$test_1_serialize_list_i32_"() {
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_12: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
     multivalue_bind [r_mv_0, r_mv_1, r_mv_2] = "core:json/core/json/to_string<core:prelude/list.wado/List<i32>>"(global:serde_json_array_string.wado::$const_obj_38, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(r_mv_0 == 0) {
         s = ref.as_non_null(r_mv_1);
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_12 = s.used;
-            if self_12 != 7 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:serde_json_array_string.wado::$const_obj_37;
+            len = a_end - 0;
+            if len != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = s.repr;
-                needle = global:serde_json_array_string.wado::$const_obj_37;
-                j = 0;
-                b10: block {
-                    l11: loop {
-                        break_if b10 j >= self_12;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l11;
-                    };
+            i = 0;
+            b10: block {
+                l11: loop {
+                    break_if b10 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l11;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;

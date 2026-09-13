@@ -150,33 +150,32 @@ fn "trait_projection_receiver_assoc_bound_direct.wado/$cm_export__$test_0_a_proj
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_11: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $v1 = "trait_projection_receiver_assoc_bound_direct.wado/trait_projection_receiver_assoc_bound_direct.wado/shown<trait_projection_receiver_assoc_bound_direct.wado/H>$scalar"($v0 = struct.new "trait_projection_receiver_assoc_bound_direct.wado//H" { v: 3 }; $v0.v);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_11 = $v1.used;
-        if self_11 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = $v1.repr;
+        a_end = $v1.used;
+        b = array.new_fixed<u8>(60, 51, 62);
+        len = a_end - 0;
+        if len != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = $v1.repr;
-            needle = array.new_fixed<u8>(60, 51, 62);
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_11;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

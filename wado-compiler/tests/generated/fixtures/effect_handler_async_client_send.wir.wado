@@ -2889,37 +2889,36 @@ fn "effect_handler_async_client_send.wado/effect_handler_async_client_send.wado/
     let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let packed: i64;
     let $sroa_$pattern_temp_0_0: i32;
-    let self_21: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     self.calls = self.calls + 1;
     let $match_scrut_0: ref null "core:prelude/string.wado//String";
     $match_scrut_0 = "effect_handler_async_client_send.wado/$cm_binding__Request_get_path_with_query"(request);
     $cond = (if ref.is_null($match_scrut_0) == 0 -> i32 {
         $local_10 = ref.as_non_null($match_scrut_0);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_21 = $local_10.used;
-            if self_21 != 9 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+            a = $local_10.repr;
+            a_end = $local_10.used;
+            b = global:effect_handler_async_client_send.wado::$const_obj_1;
+            len = a_end - 0;
+            if len != 9 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
             }
-            $inline_bytes_match_at_1: block -> bool {
-                haystack = $local_10.repr;
-                needle = global:effect_handler_async_client_send.wado::$const_obj_1;
-                j = 0;
-                b393: block {
-                    l394: loop {
-                        break_if b393 j >= self_21;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_1: 0;
-                        }
-                        j = j + 1;
-                        continue l394;
-                    };
+            i = 0;
+            b393: block {
+                l394: loop {
+                    break_if b393 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                    }
+                    i = i + 1;
+                    continue l394;
                 };
-                break $inline_bytes_match_at_1: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
         };
     } else {
         0;

@@ -10,7 +10,7 @@ use { ReflectTemplate } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
-use { Array, seq_cmp } from "core:prelude/array.wado";
+use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 
@@ -1352,11 +1352,14 @@ impl Add for String {
 
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool {
-        let len = self.len();
-        if len != other.len() {
-            return false;
-        }
-        return bytes_match_at(&self.repr as &Array<u8>, 0, &other.repr as &Array<u8>, len);
+        return seq_eq(
+            &self.repr as &Array<u8>,
+            0,
+            self.used,
+            &other.repr as &Array<u8>,
+            0,
+            other.used,
+        );
     }
 }
 
@@ -1496,7 +1499,7 @@ impl AsStrSlice for StrSlice {
 
 impl Eq for StrSlice {
     pub fn eq(&self, other: &Self) -> bool {
-        return self.len() == other.len() && self.cmp(other) == Ordering::Equal;
+        return seq_eq(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }
 

@@ -170,7 +170,7 @@ global global:core:prelude/primitive.wado::$const_obj_61: ref null "core:prelude
 
 fn "opt_promote_early_context_free.wado/run"() with Stdout {
     let out: ref "core:prelude/string.wado//String";
-    let i: i32;
+    let i_2: i32;
     let $cond: bool;
     let $local_4_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
@@ -179,54 +179,53 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
     let self_11: ref "core:prelude/string.wado//String";
     let other_12: ref "core:prelude/string.wado//String";
     let result: ref "core:prelude/string.wado//String";
-    let self_17: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len_22: i32;
+    let i_23: i32;
     let handle: i32;
     let packed: i64;
     let rx_30: i32;
     let tx_31: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    i = 0;
+    i_2 = 0;
     b0: block {
         l1: loop {
-            break_if b0 i >= 4;
+            break_if b0 i_2 >= 4;
             self_11 = out;
             if ref.is_null(global:opt_promote_early_context_free.wado::$const_obj_14) {
                 global:opt_promote_early_context_free.wado::$const_obj_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("abcdefghij"), used: 10 };
             }
-            other_12 = "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(global:opt_promote_early_context_free.wado::$const_obj_14, i, i + 2);
+            other_12 = "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(global:opt_promote_early_context_free.wado::$const_obj_14, i_2, i_2 + 2);
             result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_11.used + other_12.used), used: 0 };
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result, self_11);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_str"(result, other_12);
             out = result;
-            i = i + 1;
+            i_2 = i_2 + 1;
             continue l1;
         };
     };
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3: block -> bool {
-        self_17 = out.used;
-        if self_17 != 8 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+        a = out.repr;
+        a_end = out.used;
+        b = global:opt_promote_early_context_free.wado::$const_obj_13;
+        len_22 = a_end - 0;
+        if len_22 != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        $inline_bytes_match_at_6: block -> bool {
-            haystack = out.repr;
-            needle = global:opt_promote_early_context_free.wado::$const_obj_13;
-            j = 0;
-            b4: block {
-                l5: loop {
-                    break_if b4 j >= self_17;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_6: 0;
-                    }
-                    j = j + 1;
-                    continue l5;
-                };
+        i_23 = 0;
+        b4: block {
+            l5: loop {
+                break_if b4 i_23 >= len_22;
+                if builtin::array_get_value<u8>(a, 0 + i_23) != builtin::array_get_value<u8>(b, 0 + i_23) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                }
+                i_23 = i_23 + 1;
+                continue l5;
             };
-            break $inline_bytes_match_at_6: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

@@ -560,111 +560,109 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado
 }
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::set$scalar"(self, key, value) {
-    let i: i32;
+    let i_3: i32;
     let self_11: ref "core:prelude/string.wado//String";
-    let value_16: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
-    let value_25: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
+    let value_15: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
+    let value_24: ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]";
     let used: i32;
-    let $licm_used_31: i32;
-    let $licm_repr_32: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let $licm_used_33: i32;
-    let $licm_repr_34: ref Array<u8>;
-    let self_37: i32;
-    let haystack: ref Array<u8>;
-    let j: i32;
-    i = 0;
-    $licm_used_31 = self.used;
-    $licm_repr_32 = self.repr;
-    $licm_used_33 = key.used;
-    $licm_repr_34 = key.repr;
+    let $licm_used_30: i32;
+    let $licm_repr_31: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let $licm_repr_32: ref Array<u8>;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let len: i32;
+    let i_43: i32;
+    let $licm_arith_44: i32;
+    i_3 = 0;
+    $licm_used_30 = self.used;
+    $licm_repr_31 = self.repr;
+    $licm_repr_32 = key.repr;
+    $licm_arith_44 = key.used - 0;
     b46: block {
         l47: loop {
-            break_if b46 i >= $licm_used_31;
-            if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-                self_11 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_32, i).0;
-                self_37 = self_11.used;
-                if self_37 != $licm_used_33 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+            break_if b46 i_3 >= $licm_used_30;
+            self_11 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_31, i_3).0;
+            if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+                a = self_11.repr;
+                len = local.tee a_end(self_11.used) - 0;
+                if len != $licm_arith_44 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
-                $inline_bytes_match_at_3: block -> bool {
-                    haystack = self_11.repr;
-                    j = 0;
-                    b50: block {
-                        l51: loop {
-                            break_if b50 j >= self_37;
-                            if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>($licm_repr_34, j) {
-                                break $inline_bytes_match_at_3: 0;
-                            }
-                            j = j + 1;
-                            continue l51;
-                        };
+                i_43 = 0;
+                b50: block {
+                    l51: loop {
+                        break_if b50 i_43 >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i_43) != builtin::array_get_value<u8>($licm_repr_32, 0 + i_43) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                        }
+                        i_43 = i_43 + 1;
+                        continue l51;
                     };
-                    break $inline_bytes_match_at_3: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
-                value_16 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_32, i, value_16);
+                value_15 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_31, i_3, value_15);
                 return;
             }
-            i = i + 1;
+            i_3 = i_3 + 1;
             continue l47;
         };
     };
-    value_25 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
+    value_24 = struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: key, 1: value };
     used = self.used;
     if @unlikely(used >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>::grow"(self);
     }
-    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(self.repr, used, value_25);
+    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(self.repr, used, value_24);
     self.used = used + 1;
 }
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::get$scalar"(self, key) {
-    let i: i32;
+    let i_2: i32;
     let self_10: ref "core:prelude/string.wado//String";
+    let $licm_repr_19: ref Array<u8>;
     let $licm_used_20: i32;
-    let $licm_repr_21: ref Array<u8>;
-    let $licm_used_22: i32;
-    let $licm_repr_23: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let self_26: i32;
-    let haystack: ref Array<u8>;
-    let j: i32;
-    i = 0;
+    let $licm_used_21: i32;
+    let $licm_repr_22: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let len: i32;
+    let i_32: i32;
+    let $licm_arith_35: i32;
+    i_2 = 0;
+    $licm_repr_19 = key.repr;
     $licm_used_20 = key.used;
-    $licm_repr_21 = key.repr;
-    $licm_used_22 = self.used;
-    $licm_repr_23 = self.repr;
+    $licm_used_21 = self.used;
+    $licm_repr_22 = self.repr;
+    $licm_arith_35 = $licm_used_20 - 0;
     b54: block {
         l55: loop {
-            break_if b54 i >= $licm_used_22;
-            if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-                self_10 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_23, i).0;
-                self_26 = self_10.used;
-                if self_26 != $licm_used_20 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+            break_if b54 i_2 >= $licm_used_21;
+            self_10 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_22, i_2).0;
+            if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+                a = self_10.repr;
+                len = local.tee a_end(self_10.used) - 0;
+                if len != $licm_arith_35 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
-                $inline_bytes_match_at_3: block -> bool {
-                    haystack = self_10.repr;
-                    j = 0;
-                    b58: block {
-                        l59: loop {
-                            break_if b58 j >= self_26;
-                            if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>($licm_repr_21, j) {
-                                break $inline_bytes_match_at_3: 0;
-                            }
-                            j = j + 1;
-                            continue l59;
-                        };
+                i_32 = 0;
+                b58: block {
+                    l59: loop {
+                        break_if b58 i_32 >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i_32) != builtin::array_get_value<u8>($licm_repr_19, 0 + i_32) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                        }
+                        i_32 = i_32 + 1;
+                        continue l59;
                     };
-                    break $inline_bytes_match_at_3: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
-                return builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_23, i).1;
+                return builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_22, i_2).1;
             }
-            i = i + 1;
+            i_2 = i_2 + 1;
             continue l55;
         };
     };
@@ -672,49 +670,49 @@ fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:
 }
 
 fn "dict_mini.wado/dict_mini.wado/MiniDict<core:prelude/string.wado/String,core:prelude/string.wado/String>::has$scalar"(self, key) {
-    let i: i32;
+    let i_2: i32;
     let self_10: ref "core:prelude/string.wado//String";
+    let $licm_repr_13: ref Array<u8>;
     let $licm_used_14: i32;
-    let $licm_repr_15: ref Array<u8>;
-    let $licm_used_16: i32;
-    let $licm_repr_17: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
-    let self_20: i32;
-    let haystack: ref Array<u8>;
-    let j: i32;
-    i = 0;
+    let $licm_used_15: i32;
+    let $licm_repr_16: ref "Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let len: i32;
+    let i_26: i32;
+    let $licm_arith_27: i32;
+    i_2 = 0;
+    $licm_repr_13 = key.repr;
     $licm_used_14 = key.used;
-    $licm_repr_15 = key.repr;
-    $licm_used_16 = self.used;
-    $licm_repr_17 = self.repr;
+    $licm_used_15 = self.used;
+    $licm_repr_16 = self.repr;
+    $licm_arith_27 = $licm_used_14 - 0;
     b61: block {
         l62: loop {
-            break_if b61 i >= $licm_used_16;
-            if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-                self_10 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_17, i).0;
-                self_20 = self_10.used;
-                if self_20 != $licm_used_14 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+            break_if b61 i_2 >= $licm_used_15;
+            self_10 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($licm_repr_16, i_2).0;
+            if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+                a = self_10.repr;
+                len = local.tee a_end(self_10.used) - 0;
+                if len != $licm_arith_27 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
-                $inline_bytes_match_at_3: block -> bool {
-                    haystack = self_10.repr;
-                    j = 0;
-                    b65: block {
-                        l66: loop {
-                            break_if b65 j >= self_20;
-                            if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>($licm_repr_15, j) {
-                                break $inline_bytes_match_at_3: 0;
-                            }
-                            j = j + 1;
-                            continue l66;
-                        };
+                i_26 = 0;
+                b65: block {
+                    l66: loop {
+                        break_if b65 i_26 >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i_26) != builtin::array_get_value<u8>($licm_repr_13, 0 + i_26) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                        }
+                        i_26 = i_26 + 1;
+                        continue l66;
                     };
-                    break $inline_bytes_match_at_3: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
                 return 1;
             }
-            i = i + 1;
+            i_2 = i_2 + 1;
             continue l62;
         };
     };

@@ -221,10 +221,11 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     let $local_29: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_32: i32;
     let $fuse_at_33: i32;
-    let self_39: i32;
-    let haystack_41: ref Array<u8>;
-    let needle_43: ref Array<u8>;
-    let j_45: i32;
+    let a_38: ref Array<u8>;
+    let a_end_40: i32;
+    let b_41: ref Array<u8>;
+    let len_44: i32;
+    let i_45: i32;
     $v0_0 = "opt_sroa_variant_per_case.wado/try_divide"(10, 2);
     if @unlikely($v0_0 != 5) {
         cold_path;
@@ -252,28 +253,26 @@ fn "opt_sroa_variant_per_case.wado/run"() {
     if ref.is_null(global:opt_sroa_variant_per_case.wado::$const_obj_14) {
         global:opt_sroa_variant_per_case.wado::$const_obj_14 = "opt_sroa_variant_per_case.wado/use_err_branch"();
     }
-    $cond_13 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-        self_39 = global:opt_sroa_variant_per_case.wado::$const_obj_14.used;
-        if self_39 != 8 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+    $cond_13 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        a_38 = global:opt_sroa_variant_per_case.wado::$const_obj_14.repr;
+        a_end_40 = global:opt_sroa_variant_per_case.wado::$const_obj_14.used;
+        b_41 = global:opt_sroa_variant_per_case.wado::$const_obj_13;
+        len_44 = a_end_40 - 0;
+        if len_44 != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        $inline_bytes_match_at_4: block -> bool {
-            haystack_41 = global:opt_sroa_variant_per_case.wado::$const_obj_14.repr;
-            needle_43 = global:opt_sroa_variant_per_case.wado::$const_obj_13;
-            j_45 = 0;
-            b10: block {
-                l11: loop {
-                    break_if b10 j_45 >= self_39;
-                    if builtin::array_get_value<u8>(haystack_41, 0 + j_45) != builtin::array_get_value<u8>(needle_43, j_45) {
-                        break $inline_bytes_match_at_4: 0;
-                    }
-                    j_45 = j_45 + 1;
-                    continue l11;
-                };
+        i_45 = 0;
+        b10: block {
+            l11: loop {
+                break_if b10 i_45 >= len_44;
+                if builtin::array_get_value<u8>(a_38, 0 + i_45) != builtin::array_get_value<u8>(b_41, 0 + i_45) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                }
+                i_45 = i_45 + 1;
+                continue l11;
             };
-            break $inline_bytes_match_at_4: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     };
     if @unlikely($cond_13 == 0) {
         cold_path;

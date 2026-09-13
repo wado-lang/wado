@@ -185,10 +185,11 @@ fn "assert_fail_template.wado/run"() with Stdout {
     let start_22: i32;
     let new_used_31: i32;
     let start_32: i32;
-    let self_37: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:assert_fail_template.wado::$modules_initialized);
         cold_path;
@@ -213,28 +214,26 @@ fn "assert_fail_template.wado/run"() with Stdout {
     start_32 = $local_4.used;
     $local_4.used = new_used_31;
     builtin::array_copy<u8>($local_4.repr, start_32, global:assert_fail_template.wado::$const_obj_10, 0, 4);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12: block -> bool {
-        self_37 = $local_4.used;
-        if self_37 != 4 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__13: block -> bool {
+        a = $local_4.repr;
+        a_end = $local_4.used;
+        b = global:assert_fail_template.wado::$const_obj_8;
+        len = a_end - 0;
+        if len != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
         }
-        $inline_bytes_match_at_15: block -> bool {
-            haystack = $local_4.repr;
-            needle = global:assert_fail_template.wado::$const_obj_8;
-            j = 0;
-            b3: block {
-                l4: loop {
-                    break_if b3 j >= self_37;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_15: 0;
-                    }
-                    j = j + 1;
-                    continue l4;
-                };
+        i = 0;
+        b3: block {
+            l4: loop {
+                break_if b3 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
+                }
+                i = i + 1;
+                continue l4;
             };
-            break $inline_bytes_match_at_15: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12;
+        break $inline_core_prelude_array_wado_seq_eq_u8__13: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

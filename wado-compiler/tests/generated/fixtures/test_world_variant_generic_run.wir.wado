@@ -181,10 +181,11 @@ fn "test_world_variant_generic_run.wado/$cm_export__run"() {
     let children: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     let elements_12: ref "Array<./sub/test_world_variant_generic_helper.wado/TokenData>";
     let elements_13: ref "Array<./sub/test_world_variant_generic_helper.wado/CstChild>";
-    let self_17: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     tok = struct.new "./sub/test_world_variant_generic_helper.wado//TokenData" { kind: 1, text: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, leading: ref.as_non_null(elements_12 = array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//TokenData">(); struct.new "core:prelude//List<./sub/test_world_variant_generic_helper.wado/TokenData>" { repr: elements_12, used: 0 }) };
     leaf = struct.new "./sub/test_world_variant_generic_helper.wado//CstChild::TokenChild" { discriminant: 0, payload_0: tok };
     elements_13 = array.new_fixed<ref "./sub/test_world_variant_generic_helper.wado//CstChild">(leaf);
@@ -193,28 +194,26 @@ fn "test_world_variant_generic_run.wado/$cm_export__run"() {
     let result_mv_name: ref "core:prelude/string.wado//String";
     let result_mv_children: ref "core:prelude//List<./sub/test_world_variant_generic_helper.wado/CstChild>";
     multivalue_bind [result_mv_name, result_mv_children] = "./sub/test_world_variant_generic_helper.wado/to_tree"(node);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: block -> bool {
-        self_17 = result_mv_name.used;
-        if self_17 != 9 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+        a = result_mv_name.repr;
+        a_end = result_mv_name.used;
+        b = array.new_data<u8>("counted:2");
+        len = a_end - 0;
+        if len != 9 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
         }
-        $inline_bytes_match_at_9: block -> bool {
-            haystack = result_mv_name.repr;
-            needle = array.new_data<u8>("counted:2");
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_17;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_9: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_9: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6;
+        break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

@@ -590,10 +590,11 @@ fn "literal_null_element.wado/run"() with Stdout {
     let $v1_57: i32;
     let value_61: ref "core:prelude/string.wado//String";
     let entries: ref "Array<[core:prelude/string.wado/String,core:value/Value]>";
-    let self_67: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let handle: i32;
     let packed: i64;
     let rx_80: i32;
@@ -655,28 +656,26 @@ condition: v matches { List(items) && items[1] matches { Null } }
     multivalue_bind [$vr_33_mv_0, $vr_33_mv_1, $vr_33_mv_2] = "core:json/core/json/to_string<core:value/Value>"(doc, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     $cond_13 = (if $vr_33_mv_0 == 0 -> bool {
         s = ref.as_non_null($vr_33_mv_1);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16: block -> bool {
-            self_67 = s.used;
-            if self_67 != 32 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__17: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:literal_null_element.wado::$const_obj_76;
+            len = a_end - 0;
+            if len != 32 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
             }
-            $inline_bytes_match_at_19: block -> bool {
-                haystack = s.repr;
-                needle = global:literal_null_element.wado::$const_obj_76;
-                j = 0;
-                b8: block {
-                    l9: loop {
-                        break_if b8 j >= self_67;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_19: 0;
-                        }
-                        j = j + 1;
-                        continue l9;
-                    };
+            i = 0;
+            b8: block {
+                l9: loop {
+                    break_if b8 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
+                    }
+                    i = i + 1;
+                    continue l9;
                 };
-                break $inline_bytes_match_at_19: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16;
+            break $inline_core_prelude_array_wado_seq_eq_u8__17: 1;
         };
     } else {
         0;

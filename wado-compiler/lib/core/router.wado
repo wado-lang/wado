@@ -395,6 +395,7 @@ impl<H> Router<H> {
     /// makes returning a ref derived from `&self` and `path` legal here.
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
         let plen = path.len();
+        let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         let mut ranges: List<i32> = [];
@@ -406,10 +407,8 @@ impl<H> Router<H> {
             if end == pos {
                 return null;
             }
-            let target = bsearch_target_by_bytes(&self.states[state].literals, &path.as_str_slice().sub_unchecked(
-                pos,
-                end,
-            ));
+            let segment = view.sub_unchecked(pos, end);
+            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
@@ -514,6 +513,7 @@ impl<H> Router<H> {
 
     fn allowed_methods_dynamic(&self, path: &String) -> List<Method> {
         let plen = path.len();
+        let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
@@ -524,10 +524,8 @@ impl<H> Router<H> {
             if end == pos {
                 return [];
             }
-            let target = bsearch_target_by_bytes(&self.states[state].literals, &path.as_str_slice().sub_unchecked(
-                pos,
-                end,
-            ));
+            let segment = view.sub_unchecked(pos, end);
+            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {

@@ -182,11 +182,13 @@ fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_refer
     let $fuse_at_21: i32;
     let elements_26: ref "Array<core:prelude/string.wado/String>";
     let v_28: ref "core:prelude/string.wado//String";
-    let needle_44: ref Array<u8>;
-    let j_46: i32;
+    let b_42: ref Array<u8>;
+    let len_45: i32;
+    let i_46: i32;
     let v_47: ref "core:prelude/string.wado//String";
-    let needle_63: ref Array<u8>;
-    let j_65: i32;
+    let b_61: ref Array<u8>;
+    let len_64: i32;
+    let i_65: i32;
     let $sroa_$v1_used_69: i32;
     let $sroa_$v1_used_71: i32;
     let $sroa_xs_repr: ref "Array<core:prelude/string.wado/String>";
@@ -202,26 +204,24 @@ fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_refer
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     $sroa_$v1_used_69 = v_28.used;
-    $cond_4 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_7: block -> bool {
-        if $sroa_$v1_used_69 != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_7: 0;
+    $cond_4 = $inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        b_42 = global:deref_assign_list_writeback.wado::$const_obj_49;
+        len_45 = $sroa_$v1_used_69 - 0;
+        if len_45 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
-        $inline_bytes_match_at_10: block -> bool {
-            needle_44 = global:deref_assign_list_writeback.wado::$const_obj_49;
-            j_46 = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j_46 >= $sroa_$v1_used_69;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j_46) != builtin::array_get_value<u8>(needle_44, j_46) {
-                        break $inline_bytes_match_at_10: 0;
-                    }
-                    j_46 = j_46 + 1;
-                    continue l2;
-                };
+        i_46 = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i_46 >= len_45;
+                if builtin::array_get_value<u8>($array_clone_dst_2, 0 + i_46) != builtin::array_get_value<u8>(b_42, 0 + i_46) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
+                }
+                i_46 = i_46 + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_10: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_7;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     };
     if @unlikely($cond_4 == 0) {
         cold_path;
@@ -239,26 +239,24 @@ fn "deref_assign_list_writeback.wado/$test_2_deref_assign_of_a_list_with_a_refer
     $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
     builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
     $sroa_$v1_used_71 = v_47.used;
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: block -> bool {
-        if $sroa_$v1_used_71 != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: 0;
+    $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__13: block -> bool {
+        b_61 = global:deref_assign_list_writeback.wado::$const_obj_38;
+        len_64 = $sroa_$v1_used_71 - 0;
+        if len_64 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
         }
-        $inline_bytes_match_at_17: block -> bool {
-            needle_63 = global:deref_assign_list_writeback.wado::$const_obj_38;
-            j_65 = 0;
-            b7: block {
-                l8: loop {
-                    break_if b7 j_65 >= $sroa_$v1_used_71;
-                    if builtin::array_get_value<u8>($array_clone_dst_5, 0 + j_65) != builtin::array_get_value<u8>(needle_63, j_65) {
-                        break $inline_bytes_match_at_17: 0;
-                    }
-                    j_65 = j_65 + 1;
-                    continue l8;
-                };
+        i_65 = 0;
+        b7: block {
+            l8: loop {
+                break_if b7 i_65 >= len_64;
+                if builtin::array_get_value<u8>($array_clone_dst_5, 0 + i_65) != builtin::array_get_value<u8>(b_61, 0 + i_65) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
+                }
+                i_65 = i_65 + 1;
+                continue l8;
             };
-            break $inline_bytes_match_at_17: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14;
+        break $inline_core_prelude_array_wado_seq_eq_u8__13: 1;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;

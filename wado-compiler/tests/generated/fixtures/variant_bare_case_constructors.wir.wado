@@ -291,10 +291,11 @@ fn "variant_bare_case_constructors.wado/run"() {
     let $fuse_at_76: i32;
     let $fuse_at_79: i32;
     let $fuse_at_80: i32;
-    let self_112: i32;
-    let haystack_114: ref Array<u8>;
-    let needle_116: ref Array<u8>;
-    let j_118: i32;
+    let a_111: ref Array<u8>;
+    let a_end_113: i32;
+    let b_114: ref Array<u8>;
+    let len_117: i32;
+    let i_118: i32;
     let $sroa_slot_146: ref null "core:prelude/string.wado//String";
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:variant_bare_case_constructors.wado::$modules_initialized);
@@ -330,28 +331,26 @@ fn "variant_bare_case_constructors.wado/run"() {
     $sroa_slot_146 = ref.null none;
     $sroa_slot_146 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 97, 100), used: 3 };
     e = ref.as_non_null($sroa_slot_146);
-    $cond_16 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8: block -> bool {
-        self_112 = e.used;
-        if self_112 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8: 0;
+    $cond_16 = $inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
+        a_111 = e.repr;
+        a_end_113 = e.used;
+        b_114 = global:variant_bare_case_constructors.wado::$const_obj_34;
+        len_117 = a_end_113 - 0;
+        if len_117 != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
         }
-        $inline_bytes_match_at_11: block -> bool {
-            haystack_114 = e.repr;
-            needle_116 = global:variant_bare_case_constructors.wado::$const_obj_34;
-            j_118 = 0;
-            b5: block {
-                l6: loop {
-                    break_if b5 j_118 >= self_112;
-                    if builtin::array_get_value<u8>(haystack_114, 0 + j_118) != builtin::array_get_value<u8>(needle_116, j_118) {
-                        break $inline_bytes_match_at_11: 0;
-                    }
-                    j_118 = j_118 + 1;
-                    continue l6;
-                };
+        i_118 = 0;
+        b5: block {
+            l6: loop {
+                break_if b5 i_118 >= len_117;
+                if builtin::array_get_value<u8>(a_111, 0 + i_118) != builtin::array_get_value<u8>(b_114, 0 + i_118) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__9: 0;
+                }
+                i_118 = i_118 + 1;
+                continue l6;
             };
-            break $inline_bytes_match_at_11: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_8;
+        break $inline_core_prelude_array_wado_seq_eq_u8__9: 1;
     };
     if @unlikely($cond_16 == 0) {
         cold_path;

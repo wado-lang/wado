@@ -583,67 +583,65 @@ fn "match_or_pattern.wado/$test_4_or_pattern_over_string_literals"() {
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_48: i32;
-    let haystack_49: ref Array<u8>;
-    let needle_51: ref Array<u8>;
-    let j_53: i32;
-    let self_58: i32;
-    let haystack_59: ref Array<u8>;
-    let needle_61: ref Array<u8>;
-    let j_63: i32;
+    let a_46: ref Array<u8>;
+    let a_end_48: i32;
+    let b_49: ref Array<u8>;
+    let len_52: i32;
+    let i_53: i32;
+    let a_54: ref Array<u8>;
+    let a_end_56: i32;
+    let b_57: ref Array<u8>;
+    let len_60: i32;
+    let i_61: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 };
     s.used = 4;
     builtin::array_set_u8(s.repr, 0, 98);
     builtin::array_set_u8(s.repr, 0 + 1, 101);
     builtin::array_set_u8(s.repr, 0 + 2, 116);
     builtin::array_set_u8(s.repr, 0 + 3, 97);
-    $v1 = (if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12: block -> bool {
-        self_48 = s.used;
-        if self_48 != 5 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12: 0;
+    $v1 = (if $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        a_46 = s.repr;
+        a_end_48 = s.used;
+        b_49 = global:match_or_pattern.wado::$const_obj_129;
+        len_52 = a_end_48 - 0;
+        if len_52 != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
         }
-        $inline_bytes_match_at_1: block -> bool {
-            haystack_49 = s.repr;
-            needle_51 = global:match_or_pattern.wado::$const_obj_129;
-            j_53 = 0;
-            b30: block {
-                l31: loop {
-                    break_if b30 j_53 >= self_48;
-                    if builtin::array_get_value<u8>(haystack_49, 0 + j_53) != builtin::array_get_value<u8>(needle_51, j_53) {
-                        break $inline_bytes_match_at_1: 0;
-                    }
-                    j_53 = j_53 + 1;
-                    continue l31;
-                };
+        i_53 = 0;
+        b30: block {
+            l31: loop {
+                break_if b30 i_53 >= len_52;
+                if builtin::array_get_value<u8>(a_46, 0 + i_53) != builtin::array_get_value<u8>(b_49, 0 + i_53) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                }
+                i_53 = i_53 + 1;
+                continue l31;
             };
-            break $inline_bytes_match_at_1: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_12;
+        break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
     } -> bool {
         1;
     } else {
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_13: block -> bool {
-            self_58 = s.used;
-            if self_58 != 4 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_13: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a_54 = s.repr;
+            a_end_56 = s.used;
+            b_57 = global:match_or_pattern.wado::$const_obj_128;
+            len_60 = a_end_56 - 0;
+            if len_60 != 4 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack_59 = s.repr;
-                needle_61 = global:match_or_pattern.wado::$const_obj_128;
-                j_63 = 0;
-                b34: block {
-                    l35: loop {
-                        break_if b34 j_63 >= self_58;
-                        if builtin::array_get_value<u8>(haystack_59, 0 + j_63) != builtin::array_get_value<u8>(needle_61, j_63) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j_63 = j_63 + 1;
-                        continue l35;
-                    };
+            i_61 = 0;
+            b34: block {
+                l35: loop {
+                    break_if b34 i_61 >= len_60;
+                    if builtin::array_get_value<u8>(a_54, 0 + i_61) != builtin::array_get_value<u8>(b_57, 0 + i_61) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i_61 = i_61 + 1;
+                    continue l35;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_13;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
     });
     if @unlikely($v1 == 0) {

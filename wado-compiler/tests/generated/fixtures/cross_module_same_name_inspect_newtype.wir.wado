@@ -179,10 +179,11 @@ fn "cross_module_same_name_inspect_newtype.wado/$test_0_a_blanket_derived_inspec
     let $fuse_at_15: i32;
     let $fuse_at_16: i32;
     let s_18: i64;
-    let self_24: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a_23: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $v1 = local.tee s_18($v0_1 = global:cross_module_same_name_inspect_newtype.wado::$const_obj_28; $v0_1.hours) == 0_i64;
     if @unlikely($v1 == 0) {
         cold_path;
@@ -194,28 +195,26 @@ fn "cross_module_same_name_inspect_newtype.wado/$test_0_a_blanket_derived_inspec
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
     "core:prelude/traits.wado/./sub/cross_module_same_name_inspect_newtype_b.wado/Span^core:prelude/traits.wado/Inspect::inspect$spec0"($local_9);
-    $cond_5 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-        self_24 = $local_8.used;
-        if self_24 != 17 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+    $cond_5 = $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+        a_23 = $local_8.repr;
+        a_end = $local_8.used;
+        b = global:cross_module_same_name_inspect_newtype.wado::$const_obj_17;
+        len = a_end - 0;
+        if len != 17 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
         }
-        $inline_bytes_match_at_7: block -> bool {
-            haystack = $local_8.repr;
-            needle = global:cross_module_same_name_inspect_newtype.wado::$const_obj_17;
-            j = 0;
-            b3: block {
-                l4: loop {
-                    break_if b3 j >= self_24;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_7: 0;
-                    }
-                    j = j + 1;
-                    continue l4;
-                };
+        i = 0;
+        b3: block {
+            l4: loop {
+                break_if b3 i >= len;
+                if builtin::array_get_value<u8>(a_23, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
+                }
+                i = i + 1;
+                continue l4;
             };
-            break $inline_bytes_match_at_7: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+        break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
     };
     if @unlikely($cond_5 == 0) {
         cold_path;

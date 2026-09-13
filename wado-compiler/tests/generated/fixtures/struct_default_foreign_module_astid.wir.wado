@@ -462,152 +462,151 @@ fn "core:benchmark/format_rate"(total_work, elapsed_ns, unit) {
     let $local_15: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/string.wado//String";
     let $local_19: ref "core:prelude/string.wado//String";
-    let new_used_42: i32;
-    let start_43: i32;
-    let new_used_55: i32;
-    let start_56: i32;
-    let new_used_68: i32;
-    let start_69: i32;
-    let new_used_81: i32;
-    let start_82: i32;
-    let new_used_94: i32;
-    let start_95: i32;
-    let self_97: i32;
-    let new_used_100: i32;
-    let start_101: i32;
-    let self_103: ref Array<u8>;
-    let self_107: ref Array<u8>;
-    let new_used_121: i32;
-    let start_122: i32;
-    let self_124: i32;
-    let new_used_127: i32;
-    let start_128: i32;
-    let self_130: ref Array<u8>;
-    let self_134: ref Array<u8>;
-    let new_used_148: i32;
-    let start_149: i32;
-    let self_151: i32;
-    let new_used_154: i32;
-    let start_155: i32;
-    let self_157: ref Array<u8>;
-    let self_161: ref Array<u8>;
-    let new_used_175: i32;
-    let start_176: i32;
-    let self_178: i32;
-    let new_used_181: i32;
-    let start_182: i32;
-    let self_184: ref Array<u8>;
-    let self_188: ref Array<u8>;
-    let self_192: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let new_used_41: i32;
+    let start_42: i32;
+    let new_used_54: i32;
+    let start_55: i32;
+    let new_used_67: i32;
+    let start_68: i32;
+    let new_used_80: i32;
+    let start_81: i32;
+    let new_used_93: i32;
+    let start_94: i32;
+    let self_96: i32;
+    let new_used_99: i32;
+    let start_100: i32;
+    let self_102: ref Array<u8>;
+    let self_106: ref Array<u8>;
+    let new_used_120: i32;
+    let start_121: i32;
+    let self_123: i32;
+    let new_used_126: i32;
+    let start_127: i32;
+    let self_129: ref Array<u8>;
+    let self_133: ref Array<u8>;
+    let new_used_147: i32;
+    let start_148: i32;
+    let self_150: i32;
+    let new_used_153: i32;
+    let start_154: i32;
+    let self_156: ref Array<u8>;
+    let self_160: ref Array<u8>;
+    let new_used_174: i32;
+    let start_175: i32;
+    let self_177: i32;
+    let new_used_180: i32;
+    let start_181: i32;
+    let self_183: ref Array<u8>;
+    let self_187: ref Array<u8>;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     secs = builtin::f64_convert_i64_u(elapsed_ns) / 1000000000;
     rate = select f64(secs > 0, total_work / secs, 0);
-    if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-        self_192 = unit.used;
-        if self_192 != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+    if $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        a = unit.repr;
+        a_end = unit.used;
+        b = global:core:benchmark::$const_obj_31;
+        len = a_end - 0;
+        if len != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
         }
-        $inline_bytes_match_at_1: block -> bool {
-            haystack = unit.repr;
-            needle = global:core:benchmark::$const_obj_31;
-            j = 0;
-            b15: block {
-                l16: loop {
-                    break_if b15 j >= self_192;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_1: 0;
-                    }
-                    j = j + 1;
-                    continue l16;
-                };
+        i = 0;
+        b15: block {
+            l16: loop {
+                break_if b15 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                }
+                i = i + 1;
+                continue l16;
             };
-            break $inline_bytes_match_at_1: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+        break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
     } {
         if rate >= 1000000000 {
-            return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_2: block {
+            return $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_1: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000000000, 2, $local_5);
-                break $inline_f64__fmt_into_scalar_spec0_2;
-            }, new_used_42 = $local_5.used + 5, if @unlikely(new_used_42 > builtin::array_len($local_5.repr)) {
+                break $inline_f64__fmt_into_scalar_spec0_1;
+            }, new_used_41 = $local_5.used + 5, if @unlikely(new_used_41 > builtin::array_len($local_5.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_42);
-            }, start_43 = $local_5.used, $local_5.used = new_used_42, builtin::array_copy<u8>($local_5.repr, start_43, global:core:benchmark::$const_obj_30, 0, 5), $local_5;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_41);
+            }, start_42 = $local_5.used, $local_5.used = new_used_41, builtin::array_copy<u8>($local_5.repr, start_42, global:core:benchmark::$const_obj_30, 0, 5), $local_5;
         }
         if rate >= 1000000 {
-            return $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_3: block {
+            return $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_2: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000000, 2, $local_7);
-                break $inline_f64__fmt_into_scalar_spec0_3;
-            }, new_used_55 = $local_7.used + 5, if @unlikely(new_used_55 > builtin::array_len($local_7.repr)) {
+                break $inline_f64__fmt_into_scalar_spec0_2;
+            }, new_used_54 = $local_7.used + 5, if @unlikely(new_used_54 > builtin::array_len($local_7.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_55);
-            }, start_56 = $local_7.used, $local_7.used = new_used_55, builtin::array_copy<u8>($local_7.repr, start_56, global:core:benchmark::$const_obj_29, 0, 5), $local_7;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, new_used_54);
+            }, start_55 = $local_7.used, $local_7.used = new_used_54, builtin::array_copy<u8>($local_7.repr, start_55, global:core:benchmark::$const_obj_29, 0, 5), $local_7;
         }
         if rate >= 1000 {
-            return $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_4: block {
+            return $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }, $inline_f64__fmt_into_scalar_spec0_3: block {
                 "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000, 2, $local_9);
-                break $inline_f64__fmt_into_scalar_spec0_4;
-            }, new_used_68 = $local_9.used + 5, if @unlikely(new_used_68 > builtin::array_len($local_9.repr)) {
+                break $inline_f64__fmt_into_scalar_spec0_3;
+            }, new_used_67 = $local_9.used + 5, if @unlikely(new_used_67 > builtin::array_len($local_9.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, new_used_68);
-            }, start_69 = $local_9.used, $local_9.used = new_used_68, builtin::array_copy<u8>($local_9.repr, start_69, global:core:benchmark::$const_obj_28, 0, 5), $local_9;
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, new_used_67);
+            }, start_68 = $local_9.used, $local_9.used = new_used_67, builtin::array_copy<u8>($local_9.repr, start_68, global:core:benchmark::$const_obj_28, 0, 5), $local_9;
         }
-        return $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, $inline_f64__fmt_into_scalar_spec0_5: block {
+        return $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, $inline_f64__fmt_into_scalar_spec0_4: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate, 2, $local_11);
-            break $inline_f64__fmt_into_scalar_spec0_5;
-        }, new_used_81 = $local_11.used + 4, if @unlikely(new_used_81 > builtin::array_len($local_11.repr)) {
+            break $inline_f64__fmt_into_scalar_spec0_4;
+        }, new_used_80 = $local_11.used + 4, if @unlikely(new_used_80 > builtin::array_len($local_11.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_81);
-        }, start_82 = $local_11.used, $local_11.used = new_used_81, builtin::array_copy<u8>($local_11.repr, start_82, global:core:benchmark::$const_obj_27, 0, 4), $local_11;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_80);
+        }, start_81 = $local_11.used, $local_11.used = new_used_80, builtin::array_copy<u8>($local_11.repr, start_81, global:core:benchmark::$const_obj_27, 0, 4), $local_11;
     }
     if rate >= 1000000000 {
-        return $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_6: block {
+        return $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_5: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000000000, 2, $local_13);
-            break $inline_f64__fmt_into_scalar_spec0_6;
-        }, new_used_94 = $local_13.used + 3, if @unlikely(new_used_94 > builtin::array_len($local_13.repr)) {
+            break $inline_f64__fmt_into_scalar_spec0_5;
+        }, new_used_93 = $local_13.used + 3, if @unlikely(new_used_93 > builtin::array_len($local_13.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_94);
-        }, start_95 = $local_13.used, $local_13.used = new_used_94, builtin::array_copy<u8>($local_13.repr, start_95, global:core:benchmark::$const_obj_26, 0, 3), self_97 = unit.used, new_used_100 = $local_13.used + (2 + self_97), if @unlikely(new_used_100 > builtin::array_len($local_13.repr)) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_93);
+        }, start_94 = $local_13.used, $local_13.used = new_used_93, builtin::array_copy<u8>($local_13.repr, start_94, global:core:benchmark::$const_obj_26, 0, 3), self_96 = unit.used, new_used_99 = $local_13.used + (2 + self_96), if @unlikely(new_used_99 > builtin::array_len($local_13.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_100);
-        }, start_101 = $local_13.used, $local_13.used = new_used_100, self_103 = $local_13.repr, builtin::array_copy<u8>(self_103, start_101, unit.repr, 0, self_97), self_107 = $local_13.repr, builtin::array_copy<u8>(self_107, start_101 + self_97, global:core:benchmark::$const_obj_19, 0, 2), $local_13;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, new_used_99);
+        }, start_100 = $local_13.used, $local_13.used = new_used_99, self_102 = $local_13.repr, builtin::array_copy<u8>(self_102, start_100, unit.repr, 0, self_96), self_106 = $local_13.repr, builtin::array_copy<u8>(self_106, start_100 + self_96, global:core:benchmark::$const_obj_19, 0, 2), $local_13;
     }
     if rate >= 1000000 {
-        return $local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_7: block {
+        return $local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_6: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000000, 2, $local_15);
-            break $inline_f64__fmt_into_scalar_spec0_7;
-        }, new_used_121 = $local_15.used + 3, if @unlikely(new_used_121 > builtin::array_len($local_15.repr)) {
+            break $inline_f64__fmt_into_scalar_spec0_6;
+        }, new_used_120 = $local_15.used + 3, if @unlikely(new_used_120 > builtin::array_len($local_15.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_121);
-        }, start_122 = $local_15.used, $local_15.used = new_used_121, builtin::array_copy<u8>($local_15.repr, start_122, global:core:benchmark::$const_obj_24, 0, 3), self_124 = unit.used, new_used_127 = $local_15.used + (2 + self_124), if @unlikely(new_used_127 > builtin::array_len($local_15.repr)) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_120);
+        }, start_121 = $local_15.used, $local_15.used = new_used_120, builtin::array_copy<u8>($local_15.repr, start_121, global:core:benchmark::$const_obj_24, 0, 3), self_123 = unit.used, new_used_126 = $local_15.used + (2 + self_123), if @unlikely(new_used_126 > builtin::array_len($local_15.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_127);
-        }, start_128 = $local_15.used, $local_15.used = new_used_127, self_130 = $local_15.repr, builtin::array_copy<u8>(self_130, start_128, unit.repr, 0, self_124), self_134 = $local_15.repr, builtin::array_copy<u8>(self_134, start_128 + self_124, global:core:benchmark::$const_obj_19, 0, 2), $local_15;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_126);
+        }, start_127 = $local_15.used, $local_15.used = new_used_126, self_129 = $local_15.repr, builtin::array_copy<u8>(self_129, start_127, unit.repr, 0, self_123), self_133 = $local_15.repr, builtin::array_copy<u8>(self_133, start_127 + self_123, global:core:benchmark::$const_obj_19, 0, 2), $local_15;
     }
     if rate >= 1000 {
-        return $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_8: block {
+        return $local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 }, $inline_f64__fmt_into_scalar_spec0_7: block {
             "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate / 1000, 2, $local_17);
-            break $inline_f64__fmt_into_scalar_spec0_8;
-        }, new_used_148 = $local_17.used + 3, if @unlikely(new_used_148 > builtin::array_len($local_17.repr)) {
+            break $inline_f64__fmt_into_scalar_spec0_7;
+        }, new_used_147 = $local_17.used + 3, if @unlikely(new_used_147 > builtin::array_len($local_17.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_148);
-        }, start_149 = $local_17.used, $local_17.used = new_used_148, builtin::array_copy<u8>($local_17.repr, start_149, global:core:benchmark::$const_obj_22, 0, 3), self_151 = unit.used, new_used_154 = $local_17.used + (2 + self_151), if @unlikely(new_used_154 > builtin::array_len($local_17.repr)) {
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_147);
+        }, start_148 = $local_17.used, $local_17.used = new_used_147, builtin::array_copy<u8>($local_17.repr, start_148, global:core:benchmark::$const_obj_22, 0, 3), self_150 = unit.used, new_used_153 = $local_17.used + (2 + self_150), if @unlikely(new_used_153 > builtin::array_len($local_17.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_154);
-        }, start_155 = $local_17.used, $local_17.used = new_used_154, self_157 = $local_17.repr, builtin::array_copy<u8>(self_157, start_155, unit.repr, 0, self_151), self_161 = $local_17.repr, builtin::array_copy<u8>(self_161, start_155 + self_151, global:core:benchmark::$const_obj_19, 0, 2), $local_17;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_153);
+        }, start_154 = $local_17.used, $local_17.used = new_used_153, self_156 = $local_17.repr, builtin::array_copy<u8>(self_156, start_154, unit.repr, 0, self_150), self_160 = $local_17.repr, builtin::array_copy<u8>(self_160, start_154 + self_150, global:core:benchmark::$const_obj_19, 0, 2), $local_17;
     }
-    return $local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, $inline_f64__fmt_into_scalar_spec0_9: block {
+    return $local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 }, $inline_f64__fmt_into_scalar_spec0_8: block {
         "core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar"(rate, 2, $local_19);
-        break $inline_f64__fmt_into_scalar_spec0_9;
-    }, new_used_175 = $local_19.used + 1, if @unlikely(new_used_175 > builtin::array_len($local_19.repr)) {
+        break $inline_f64__fmt_into_scalar_spec0_8;
+    }, new_used_174 = $local_19.used + 1, if @unlikely(new_used_174 > builtin::array_len($local_19.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_175);
-    }, start_176 = $local_19.used, $local_19.used = new_used_175, builtin::array_copy<u8>($local_19.repr, start_176, global:core:benchmark::$const_obj_20, 0, 1), self_178 = unit.used, new_used_181 = $local_19.used + (2 + self_178), if @unlikely(new_used_181 > builtin::array_len($local_19.repr)) {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_174);
+    }, start_175 = $local_19.used, $local_19.used = new_used_174, builtin::array_copy<u8>($local_19.repr, start_175, global:core:benchmark::$const_obj_20, 0, 1), self_177 = unit.used, new_used_180 = $local_19.used + (2 + self_177), if @unlikely(new_used_180 > builtin::array_len($local_19.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_181);
-    }, start_182 = $local_19.used, $local_19.used = new_used_181, self_184 = $local_19.repr, builtin::array_copy<u8>(self_184, start_182, unit.repr, 0, self_178), self_188 = $local_19.repr, builtin::array_copy<u8>(self_188, start_182 + self_178, global:core:benchmark::$const_obj_19, 0, 2), $local_19;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_180);
+    }, start_181 = $local_19.used, $local_19.used = new_used_180, self_183 = $local_19.repr, builtin::array_copy<u8>(self_183, start_181, unit.repr, 0, self_177), self_187 = $local_19.repr, builtin::array_copy<u8>(self_187, start_181 + self_177, global:core:benchmark::$const_obj_19, 0, 2), $local_19;
 }
 
 fn "core:benchmark/format_ms"(ns) {

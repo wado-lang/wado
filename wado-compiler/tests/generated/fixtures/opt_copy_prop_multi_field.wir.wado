@@ -213,15 +213,17 @@ fn "opt_copy_prop_multi_field.wado/run"() {
     let base_58: i32;
     let p_67: ref "opt_copy_prop_multi_field.wado//Point";
     let c_75: ref "opt_copy_prop_multi_field.wado//Config";
-    let self_80: i32;
-    let haystack_82: ref Array<u8>;
-    let needle_84: ref Array<u8>;
-    let j_86: i32;
+    let a_79: ref Array<u8>;
+    let a_end_81: i32;
+    let b_82: ref Array<u8>;
+    let len_85: i32;
+    let i_86: i32;
     let msg_90: ref "core:prelude/string.wado//String";
-    let self_94: i32;
-    let haystack_96: ref Array<u8>;
-    let needle_98: ref Array<u8>;
-    let j_100: i32;
+    let a_93: ref Array<u8>;
+    let a_end_95: i32;
+    let b_96: ref Array<u8>;
+    let len_99: i32;
+    let i_100: i32;
     let result_41_mv_0: i32;
     let result_41_mv_1: ref null "opt_copy_prop_multi_field.wado//Point";
     let result_41_mv_2: ref null "core:prelude/string.wado//String";
@@ -295,28 +297,26 @@ fn "opt_copy_prop_multi_field.wado/run"() {
     multivalue_bind [result_74_mv_0, result_74_mv_1, result_74_mv_2] = "opt_copy_prop_multi_field.wado/make_config"(1);
     c_75 = ref.as_non_null(result_74_mv_1);
     $v0_14 = c_75.name;
-    $cond_15 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: block -> bool {
-        self_80 = $v0_14.used;
-        if self_80 != 4 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: 0;
+    $cond_15 = $inline_core_prelude_array_wado_seq_eq_u8__15: block -> bool {
+        a_79 = $v0_14.repr;
+        a_end_81 = $v0_14.used;
+        b_82 = global:opt_copy_prop_multi_field.wado::$const_obj_22;
+        len_85 = a_end_81 - 0;
+        if len_85 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
         }
-        $inline_bytes_match_at_17: block -> bool {
-            haystack_82 = $v0_14.repr;
-            needle_84 = global:opt_copy_prop_multi_field.wado::$const_obj_22;
-            j_86 = 0;
-            b10: block {
-                l11: loop {
-                    break_if b10 j_86 >= self_80;
-                    if builtin::array_get_value<u8>(haystack_82, 0 + j_86) != builtin::array_get_value<u8>(needle_84, j_86) {
-                        break $inline_bytes_match_at_17: 0;
-                    }
-                    j_86 = j_86 + 1;
-                    continue l11;
-                };
+        i_86 = 0;
+        b10: block {
+            l11: loop {
+                break_if b10 i_86 >= len_85;
+                if builtin::array_get_value<u8>(a_79, 0 + i_86) != builtin::array_get_value<u8>(b_82, 0 + i_86) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
+                }
+                i_86 = i_86 + 1;
+                continue l11;
             };
-            break $inline_bytes_match_at_17: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14;
+        break $inline_core_prelude_array_wado_seq_eq_u8__15: 1;
     };
     if @unlikely($cond_15 == 0) {
         cold_path;
@@ -328,28 +328,26 @@ fn "opt_copy_prop_multi_field.wado/run"() {
     let result_88_mv_2: ref null "core:prelude/string.wado//String";
     multivalue_bind [result_88_mv_0, result_88_mv_1, result_88_mv_2] = "opt_copy_prop_multi_field.wado/make_config"(0);
     msg_90 = ref.as_non_null(result_88_mv_2);
-    $cond_17 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_19: block -> bool {
-        self_94 = msg_90.used;
-        if self_94 != 4 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_19: 0;
+    $cond_17 = $inline_core_prelude_array_wado_seq_eq_u8__18: block -> bool {
+        a_93 = msg_90.repr;
+        a_end_95 = msg_90.used;
+        b_96 = global:opt_copy_prop_multi_field.wado::$const_obj_13;
+        len_99 = a_end_95 - 0;
+        if len_99 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
         }
-        $inline_bytes_match_at_22: block -> bool {
-            haystack_96 = msg_90.repr;
-            needle_98 = global:opt_copy_prop_multi_field.wado::$const_obj_13;
-            j_100 = 0;
-            b15: block {
-                l16: loop {
-                    break_if b15 j_100 >= self_94;
-                    if builtin::array_get_value<u8>(haystack_96, 0 + j_100) != builtin::array_get_value<u8>(needle_98, j_100) {
-                        break $inline_bytes_match_at_22: 0;
-                    }
-                    j_100 = j_100 + 1;
-                    continue l16;
-                };
+        i_100 = 0;
+        b15: block {
+            l16: loop {
+                break_if b15 i_100 >= len_99;
+                if builtin::array_get_value<u8>(a_93, 0 + i_100) != builtin::array_get_value<u8>(b_96, 0 + i_100) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__18: 0;
+                }
+                i_100 = i_100 + 1;
+                continue l16;
             };
-            break $inline_bytes_match_at_22: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_19;
+        break $inline_core_prelude_array_wado_seq_eq_u8__18: 1;
     };
     if @unlikely($cond_17 == 0) {
         cold_path;

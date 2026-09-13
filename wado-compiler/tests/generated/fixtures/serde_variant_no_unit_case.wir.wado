@@ -486,10 +486,11 @@ fn "serde_variant_no_unit_case.wado/run"() {
     let v_13: ref "serde_variant_no_unit_case.wado//NoUnit";
     let e_14: ref "core:serde//DeserializeError";
     let $eq_self_B_4: ref "core:prelude/string.wado//String";
-    let self_30: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:serde_variant_no_unit_case.wado::$modules_initialized);
         cold_path;
@@ -532,28 +533,26 @@ fn "serde_variant_no_unit_case.wado/run"() {
             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_prelude_traits_wado_Eq__eq_scalar_4: 0;
         } else {
             $eq_self_B_4 = ref.cast "serde_variant_no_unit_case.wado//NoUnit::B"(back).payload_0;
-            $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: block -> bool {
-                self_30 = $eq_self_B_4.used;
-                if self_30 != 1 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6: 0;
+            $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+                a = $eq_self_B_4.repr;
+                a_end = $eq_self_B_4.used;
+                b = global:serde_variant_no_unit_case.wado::$const_obj_39;
+                len = a_end - 0;
+                if len != 1 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                 }
-                $inline_bytes_match_at_1: block -> bool {
-                    haystack = $eq_self_B_4.repr;
-                    needle = global:serde_variant_no_unit_case.wado::$const_obj_39;
-                    j = 0;
-                    b6: block {
-                        l7: loop {
-                            break_if b6 j >= self_30;
-                            if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                                break $inline_bytes_match_at_1: 0;
-                            }
-                            j = j + 1;
-                            continue l7;
-                        };
+                i = 0;
+                b6: block {
+                    l7: loop {
+                        break_if b6 i >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                        }
+                        i = i + 1;
+                        continue l7;
                     };
-                    break $inline_bytes_match_at_1: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_6;
+                break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
             };
             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_prelude_traits_wado_Eq__eq_scalar_4;
         }
@@ -1285,26 +1284,26 @@ fn "core:json/core/json/from_bytes<serde_variant_no_unit_case.wado/NoUnit,core:p
     let $local_32: ref "core:serde//DeserializeError";
     let $match_34: ref null "core:serde//DeserializeError";
     let $match_36: ref null "core:serde//DeserializeError";
-    let self_67: ref "core:json//JsonDeserializer";
-    let self_86: ref "core:json//JsonDeserializer";
-    let va_92: ref "core:prelude/string.wado//String";
+    let self_66: ref "core:json//JsonDeserializer";
+    let self_84: ref "core:json//JsonDeserializer";
+    let va_90: ref "core:prelude/string.wado//String";
     let name: ref "core:prelude/string.wado//String";
-    let haystack_188: ref Array<u8>;
-    let needle_190: ref Array<u8>;
-    let j_192: i32;
-    let self_197: ref "core:json//JsonDeserializer";
-    let haystack_284: ref Array<u8>;
-    let needle_286: ref Array<u8>;
-    let j_288: i32;
-    let self_293: ref "core:json//JsonDeserializer";
-    let $sroa_slot_286: ref null "core:serde//CaseKey";
-    let $sroa_slot_304: i32;
-    let $sroa_slot_305: ref null "serde_variant_no_unit_case.wado//NoUnit";
-    let $sroa_slot_306: ref null "core:serde//DeserializeError";
+    let a_184: ref Array<u8>;
+    let b_187: ref Array<u8>;
+    let i_191: i32;
+    let self_192: ref "core:json//JsonDeserializer";
+    let a_277: ref Array<u8>;
+    let b_280: ref Array<u8>;
+    let i_284: i32;
+    let self_285: ref "core:json//JsonDeserializer";
+    let $sroa_slot_278: ref null "core:serde//CaseKey";
+    let $sroa_slot_296: i32;
+    let $sroa_slot_297: ref null "serde_variant_no_unit_case.wado//NoUnit";
+    let $sroa_slot_298: ref null "core:serde//DeserializeError";
     de = struct.new "core:json//JsonDeserializer" { input: ref.as_non_null(repr = input.repr; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr, start: 0, end: input.used }), pos: 0, depth: 0, max_depth: 100, scratch: struct.new "core:json//ScannedNumber" { neg: 0, digits: 0_i64, int_digits: 0, frac_digits: 0, frac_lead_zeros: 0, exp: 0, has_frac_or_exp: 0 } };
-    $sroa_slot_304 = 0;
-    $sroa_slot_305 = ref.null none;
-    $sroa_slot_306 = ref.null none;
+    $sroa_slot_296 = 0;
+    $sroa_slot_297 = ref.null none;
+    $sroa_slot_298 = ref.null none;
     $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: block {
         let $vr_37_mv_0: i32;
         let $vr_37_mv_1: ref null "core:json//JsonVariantAccess";
@@ -1316,73 +1315,70 @@ fn "core:json/core/json/from_bytes<serde_variant_no_unit_case.wado/NoUnit,core:p
         } else if @unlikely($vr_37_mv_0 == 1) -> ref "core:json//JsonVariantAccess" {
             $qm_e_14 = ref.as_non_null($vr_37_mv_2);
             cold_path;
-            $sroa_slot_304 = 1;
-            $sroa_slot_305 = ref.null none;
-            break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_306 = $qm_e_14;
+            $sroa_slot_296 = 1;
+            $sroa_slot_297 = ref.null none;
+            break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_298 = $qm_e_14;
         } else {
             unreachable;
         });
-        $sroa_slot_286 = ref.null none;
-        va_92 = va_15.variant;
+        $sroa_slot_278 = ref.null none;
+        va_90 = va_15.variant;
         cold_path;
-        name = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = va_92.repr; let $array_clone_len_3: i32; $array_clone_len_3 = va_92.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: va_92.used };
-        $sroa_slot_286 = struct.new "core:serde//CaseKey::Name" { discriminant: 1, payload_0: name };
-        $qm_v_17 = ref.as_non_null($sroa_slot_286);
+        name = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = va_90.repr; let $array_clone_len_3: i32; $array_clone_len_3 = va_90.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: va_90.used };
+        $sroa_slot_278 = struct.new "core:serde//CaseKey::Name" { discriminant: 1, payload_0: name };
+        $qm_v_17 = ref.as_non_null($sroa_slot_278);
         matched_23 = (if ref.test "core:serde//CaseKey::Disc"($qm_v_17) -> bool {
             ref.cast "core:serde//CaseKey::Disc"($qm_v_17).payload_0 == 0;
         } else {
             n_22 = ref.cast "core:serde//CaseKey::Name"($qm_v_17).payload_0;
-            $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-                if 1 != n_22.used {
-                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+            $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+                a_184 = global:core:prelude/traits.wado::$const_obj_47;
+                b_187 = n_22.repr;
+                if 1 != (n_22.used - 0) {
+                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                 }
-                $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_6: block -> bool {
-                    haystack_188 = global:core:prelude/traits.wado::$const_obj_47;
-                    needle_190 = n_22.repr;
-                    j_192 = 0;
-                    b113: block {
-                        l114: loop {
-                            break_if b113 j_192 >= 1;
-                            if builtin::array_get_value<u8>(haystack_188, 0 + j_192) != builtin::array_get_value<u8>(needle_190, j_192) {
-                                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_6: 0;
-                            }
-                            j_192 = j_192 + 1;
-                            continue l114;
-                        };
+                i_191 = 0;
+                b113: block {
+                    l114: loop {
+                        break_if b113 i_191 >= 1;
+                        if builtin::array_get_value<u8>(a_184, 0 + i_191) != builtin::array_get_value<u8>(b_187, 0 + i_191) {
+                            break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                        }
+                        i_191 = i_191 + 1;
+                        continue l114;
                     };
-                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_6: 1;
                 };
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__4: 1;
             };
         });
         if matched_23 {
             va_15.de.depth = va_15.depth;
-            self_197 = va_15.de;
+            self_192 = va_15.de;
             let $vr_39_mv_0: i32;
             let $vr_39_mv_1: i32;
             let $vr_39_mv_2: ref null "core:serde//DeserializeError";
-            multivalue_bind [$vr_39_mv_0, $vr_39_mv_1, $vr_39_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self_197, "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_197));
+            multivalue_bind [$vr_39_mv_0, $vr_39_mv_1, $vr_39_mv_2] = "core:json/core:json/JsonDeserializer::parse_i32_with_lead"(self_192, "core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_192));
             payload_28 = (if $vr_39_mv_0 == 0 -> i32 {
                 $vr_39_mv_1;
             } else if @unlikely($vr_39_mv_0 == 1) -> i32 {
                 $qm_e_27 = ref.as_non_null($vr_39_mv_2);
                 cold_path;
-                $sroa_slot_304 = 1;
-                $sroa_slot_305 = ref.null none;
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_306 = $qm_e_27;
+                $sroa_slot_296 = 1;
+                $sroa_slot_297 = ref.null none;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_298 = $qm_e_27;
             } else {
                 unreachable;
             });
             $match_34 = $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonVariantAccess_core_serde_DeserializeVariant__end_11: block -> ref null "core:serde//DeserializeError" {
                 if @unlikely(va_15.is_object) {
                     $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_12: block -> ref null "core:serde//DeserializeError" {
-                        self_67 = va_15.de;
-                        if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_67) == 125) {
-                            self_67.pos = self_67.pos + 1;
+                        self_66 = va_15.de;
+                        if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_66) == 125) {
+                            self_66.pos = self_66.pos + 1;
                             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_12: ref.null none;
                         }
                         cold_path;
-                        break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_12: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_67, 125));
+                        break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_12: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_66, 125));
                     };
                     break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonVariantAccess_core_serde_DeserializeVariant__end_11;
                 }
@@ -1392,71 +1388,68 @@ fn "core:json/core/json/from_bytes<serde_variant_no_unit_case.wado/NoUnit,core:p
             } else {
                 $qm_e_30 = ref.as_non_null($match_34);
                 cold_path;
-                $sroa_slot_304 = 1;
-                $sroa_slot_305 = ref.null none;
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_306 = $qm_e_30;
+                $sroa_slot_296 = 1;
+                $sroa_slot_297 = ref.null none;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_298 = $qm_e_30;
             }
-            $sroa_slot_304 = 0;
-            $sroa_slot_305 = struct.new "serde_variant_no_unit_case.wado//NoUnit::A" { discriminant: 0, payload_0: payload_28 };
-            $sroa_slot_306 = ref.null none;
+            $sroa_slot_296 = 0;
+            $sroa_slot_297 = struct.new "serde_variant_no_unit_case.wado//NoUnit::A" { discriminant: 0, payload_0: payload_28 };
+            $sroa_slot_298 = ref.null none;
             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0;
         }
         matched_36 = (if ref.test "core:serde//CaseKey::Disc"($qm_v_17) -> bool {
             ref.cast "core:serde//CaseKey::Disc"($qm_v_17).payload_0 == 1;
         } else {
             $local_24 = ref.cast "core:serde//CaseKey::Name"($qm_v_17).payload_0;
-            $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16: block -> bool {
-                if 1 != $local_24.used {
-                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16: 0;
+            $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
+                a_277 = global:core:prelude/traits.wado::$const_obj_46;
+                b_280 = $local_24.repr;
+                if 1 != ($local_24.used - 0) {
+                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__10: 0;
                 }
-                $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_14: block -> bool {
-                    haystack_284 = global:core:prelude/traits.wado::$const_obj_46;
-                    needle_286 = $local_24.repr;
-                    j_288 = 0;
-                    b124: block {
-                        l125: loop {
-                            break_if b124 j_288 >= 1;
-                            if builtin::array_get_value<u8>(haystack_284, 0 + j_288) != builtin::array_get_value<u8>(needle_286, j_288) {
-                                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_14: 0;
-                            }
-                            j_288 = j_288 + 1;
-                            continue l125;
-                        };
+                i_284 = 0;
+                b124: block {
+                    l125: loop {
+                        break_if b124 i_284 >= 1;
+                        if builtin::array_get_value<u8>(a_277, 0 + i_284) != builtin::array_get_value<u8>(b_280, 0 + i_284) {
+                            break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                        }
+                        i_284 = i_284 + 1;
+                        continue l125;
                     };
-                    break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_bytes_match_at_14: 1;
                 };
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_16;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_prelude_array_wado_seq_eq_u8__10: 1;
             };
         });
         if matched_36 {
             va_15.de.depth = va_15.depth;
-            self_293 = va_15.de;
+            self_285 = va_15.de;
             let $vr_40_mv_0: i32;
             let $vr_40_mv_1: ref null "core:prelude/string.wado//String";
             let $vr_40_mv_2: ref null "core:serde//DeserializeError";
-            multivalue_bind [$vr_40_mv_0, $vr_40_mv_1, $vr_40_mv_2] = "core:json/core:json/JsonDeserializer::read_json_string"(self_293);
+            multivalue_bind [$vr_40_mv_0, $vr_40_mv_1, $vr_40_mv_2] = "core:json/core:json/JsonDeserializer::read_json_string"(self_285);
             payload_41 = (if $vr_40_mv_0 == 0 -> ref "core:prelude/string.wado//String" {
                 $local_28 = ref.as_non_null($vr_40_mv_1);
                 $local_28;
             } else if @unlikely($vr_40_mv_0 == 1) -> ref "core:prelude/string.wado//String" {
                 $local_29 = ref.as_non_null($vr_40_mv_2);
                 cold_path;
-                $sroa_slot_304 = 1;
-                $sroa_slot_305 = ref.null none;
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_306 = $local_29;
+                $sroa_slot_296 = 1;
+                $sroa_slot_297 = ref.null none;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_298 = $local_29;
             } else {
                 unreachable;
             });
             $match_36 = $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonVariantAccess_core_serde_DeserializeVariant__end_23: block -> ref null "core:serde//DeserializeError" {
                 if @unlikely(va_15.is_object) {
                     $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_24: block -> ref null "core:serde//DeserializeError" {
-                        self_86 = va_15.de;
-                        if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_86) == 125) {
-                            self_86.pos = self_86.pos + 1;
+                        self_84 = va_15.de;
+                        if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_84) == 125) {
+                            self_84.pos = self_84.pos + 1;
                             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_24: ref.null none;
                         }
                         cold_path;
-                        break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_24: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_86, 125));
+                        break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonDeserializer__expect_char_24: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_84, 125));
                     };
                     break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0__$inline_core_json_JsonVariantAccess_core_serde_DeserializeVariant__end_23;
                 }
@@ -1466,18 +1459,18 @@ fn "core:json/core/json/from_bytes<serde_variant_no_unit_case.wado/NoUnit,core:p
             } else {
                 $local_32 = ref.as_non_null($match_36);
                 cold_path;
-                $sroa_slot_304 = 1;
-                $sroa_slot_305 = ref.null none;
-                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_306 = $local_32;
+                $sroa_slot_296 = 1;
+                $sroa_slot_297 = ref.null none;
+                break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0: $sroa_slot_298 = $local_32;
             }
-            $sroa_slot_304 = 0;
-            $sroa_slot_305 = struct.new "serde_variant_no_unit_case.wado//NoUnit::B" { discriminant: 1, payload_0: payload_41 };
-            $sroa_slot_306 = ref.null none;
+            $sroa_slot_296 = 0;
+            $sroa_slot_297 = struct.new "serde_variant_no_unit_case.wado//NoUnit::B" { discriminant: 1, payload_0: payload_41 };
+            $sroa_slot_298 = ref.null none;
             break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0;
         }
-        $sroa_slot_304 = 1;
-        $sroa_slot_305 = ref.null none;
-        $sroa_slot_306 = struct.new "core:serde//DeserializeError" { kind: 2, message: ref.as_non_null((if ref.test "core:serde//CaseKey::Disc"($qm_v_17) -> ref "core:prelude/string.wado//String" {
+        $sroa_slot_296 = 1;
+        $sroa_slot_297 = ref.null none;
+        $sroa_slot_298 = struct.new "core:serde//DeserializeError" { kind: 2, message: ref.as_non_null((if ref.test "core:serde//CaseKey::Disc"($qm_v_17) -> ref "core:prelude/string.wado//String" {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown variant discriminant"), used: 28 };
         } else {
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("unknown variant"), used: 15 };
@@ -1485,12 +1478,12 @@ fn "core:json/core/json/from_bytes<serde_variant_no_unit_case.wado/NoUnit,core:p
         break $inline_serde_variant_no_unit_case_wado_NoUnit_core_serde_Deserialize__deserialize_core_json_JsonDeserializer__0;
     };
     let $match_scrut_8: i32;
-    $match_scrut_8 = $sroa_slot_304;
+    $match_scrut_8 = $sroa_slot_296;
     v_4 = (if $match_scrut_8 == 0 -> ref "serde_variant_no_unit_case.wado//NoUnit" {
-        $qm_v_2 = ref.as_non_null($sroa_slot_305);
+        $qm_v_2 = ref.as_non_null($sroa_slot_297);
         $qm_v_2;
     } else if @unlikely($match_scrut_8 == 1) -> ref "serde_variant_no_unit_case.wado//NoUnit" {
-        $qm_e_3 = ref.as_non_null($sroa_slot_306);
+        $qm_e_3 = ref.as_non_null($sroa_slot_298);
         cold_path;
         return 1, ref.null none, $qm_e_3;
     } else {

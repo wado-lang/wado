@@ -210,34 +210,33 @@ fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
-    let self_12: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     "variant_deref_cross_module.wado/process_all$scalar"(struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 }, out);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_12 = out.used;
-        if self_12 != 11 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = out.repr;
+        a_end = out.used;
+        b = global:variant_deref_cross_module.wado::$const_obj_13;
+        len = a_end - 0;
+        if len != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = out.repr;
-            needle = global:variant_deref_cross_module.wado::$const_obj_13;
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_12;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

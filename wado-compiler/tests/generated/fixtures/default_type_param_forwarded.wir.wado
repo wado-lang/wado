@@ -523,10 +523,11 @@ fn "default_type_param_forwarded.wado/$test_0_forwarding_an_omitted_default_thro
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_14: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     v = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null("default_type_param_forwarded.wado/default_type_param_forwarded.wado/box_fields<default_type_param_forwarded.wado/NoFields>"(global:default_type_param_forwarded.wado::$const_obj_55)) };
     let $match_6_mv_0: i32;
     let $match_6_mv_1: ref null "core:prelude/string.wado//String";
@@ -534,28 +535,26 @@ fn "default_type_param_forwarded.wado/$test_0_forwarding_an_omitted_default_thro
     multivalue_bind [$match_6_mv_0, $match_6_mv_1, $match_6_mv_2] = "core:json/core/json/to_string<core:value/Value>"(v, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely($match_6_mv_0 == 0) {
         s = ref.as_non_null($match_6_mv_1);
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_14 = s.used;
-            if self_14 != 2 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:default_type_param_forwarded.wado::$const_obj_54;
+            len = a_end - 0;
+            if len != 2 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = s.repr;
-                needle = global:default_type_param_forwarded.wado::$const_obj_54;
-                j = 0;
-                b2: block {
-                    l3: loop {
-                        break_if b2 j >= self_14;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l3;
-                    };
+            i = 0;
+            b2: block {
+                l3: loop {
+                    break_if b2 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l3;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -578,10 +577,11 @@ fn "default_type_param_forwarded.wado/$test_1_forwarding_a_concrete_anonymous_st
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
-    let self_14: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     v = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null("default_type_param_forwarded.wado/default_type_param_forwarded.wado/box_fields<default_type_param_forwarded.wado/$anon_{a:i32}>"(global:default_type_param_forwarded.wado::$const_obj_69)) };
     let $match_6_mv_0: i32;
     let $match_6_mv_1: ref null "core:prelude/string.wado//String";
@@ -592,28 +592,26 @@ fn "default_type_param_forwarded.wado/$test_1_forwarding_a_concrete_anonymous_st
         if ref.is_null(global:default_type_param_forwarded.wado::$const_obj_68) {
             global:default_type_param_forwarded.wado::$const_obj_68 = array.new_data<u8>("{\"a\":1}");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_14 = s.used;
-            if self_14 != 7 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = s.repr;
+            a_end = s.used;
+            b = global:default_type_param_forwarded.wado::$const_obj_68;
+            len = a_end - 0;
+            if len != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = s.repr;
-                needle = global:default_type_param_forwarded.wado::$const_obj_68;
-                j = 0;
-                b9: block {
-                    l10: loop {
-                        break_if b9 j >= self_14;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l10;
-                    };
+            i = 0;
+            b9: block {
+                l10: loop {
+                    break_if b9 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l10;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;

@@ -2016,78 +2016,79 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
 }
 
 fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, node, key) {
-    let i: i32;
+    let i_3: i32;
     let other_12: ref "core:prelude/string.wado//String";
     let $v1_16: i32;
     let other_21: ref "core:prelude/string.wado//String";
-    let $v1_25: i32;
-    let $v1_41: i32;
-    let $licm_keys_45: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_used_46: i32;
-    let $licm_repr_47: ref "Array<core:prelude/string.wado/String>";
-    let self_52: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
-    i = 0;
-    $licm_keys_45 = node.keys;
-    $licm_used_46 = $licm_keys_45.used;
-    $licm_repr_47 = $licm_keys_45.repr;
+    let $v1_24: i32;
+    let $v1_40: i32;
+    let $licm_keys_44: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_used_45: i32;
+    let $licm_repr_46: ref "Array<core:prelude/string.wado/String>";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let b_end: i32;
+    let len: i32;
+    let i_58: i32;
+    i_3 = 0;
+    $licm_keys_44 = node.keys;
+    $licm_used_45 = $licm_keys_44.used;
+    $licm_repr_46 = $licm_keys_44.repr;
     b184: block {
         l185: loop {
-            break_if b184 (if i < $licm_used_46 -> i32 {
-                if @unlikely(i >= $licm_used_46) {
+            break_if b184 (if i_3 < $licm_used_45 -> i32 {
+                if @unlikely(i_3 >= $licm_used_45) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $licm_used_46);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $licm_used_45);
                     unreachable;
-                }; other_12 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_47, i); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_12.repr, other_12.used) == 2;
+                }; other_12 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_46, i_3); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_12.repr, other_12.used) == 2;
             } else {
                 0;
             }) == 0;
-            i = i + 1;
+            i_3 = i_3 + 1;
             continue l185;
         };
     };
-    if (if i < node.keys.used -> i32 {
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-            $v1_16 = node.keys.used;
-            if @unlikely(i >= $v1_16) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_16);
-                unreachable;
+    if (if i_3 < node.keys.used -> i32 {
+        $v1_16 = node.keys.used;
+        if @unlikely(i_3 >= $v1_16) {
+            cold_path;
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_16);
+            unreachable;
+        }
+        other_21 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, i_3);
+        $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = key.repr;
+            a_end = key.used;
+            b = other_21.repr;
+            b_end = other_21.used;
+            len = a_end - 0;
+            if len != (b_end - 0) {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            other_21 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, i);
-            self_52 = key.used;
-            if self_52 != other_21.used {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
-            }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = key.repr;
-                needle = other_21.repr;
-                j = 0;
-                b192: block {
-                    l193: loop {
-                        break_if b192 j >= self_52;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l193;
-                    };
+            i_58 = 0;
+            b192: block {
+                l193: loop {
+                    break_if b192 i_58 >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i_58) != builtin::array_get_value<u8>(b, 0 + i_58) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i_58 = i_58 + 1;
+                    continue l193;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
     } else {
         0;
     }) {
-        if $v1_25 = node.deleted.used; if @unlikely(i >= $v1_25) {
+        if $v1_24 = node.deleted.used; if @unlikely(i_3 >= $v1_24) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_25);
+            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_24);
             unreachable;
-        }; builtin::array_get_value<bool>(node.deleted.repr, i) == 0 {
-            builtin::array_set<bool>(node.deleted.repr, i, 1);
+        }; builtin::array_get_value<bool>(node.deleted.repr, i_3) == 0 {
+            builtin::array_set<bool>(node.deleted.repr, i_3, 1);
             self.deleted_count = self.deleted_count + 1;
             self.size = self.size - 1;
             return 1;
@@ -2097,11 +2098,11 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
     if node.is_leaf {
         return 0;
     }
-    return "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, $v1_41 = node.children.used; if @unlikely(i >= $v1_41) {
+    return "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::delete_in_node"(self, $v1_40 = node.children.used; if @unlikely(i_3 >= $v1_40) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_41);
+        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_40);
         unreachable;
-    }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), key);
+    }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i_3), key);
 }
 
 fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::collect_entries"(self, node, result) {
@@ -2291,89 +2292,90 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 }
 
 fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::search_in_node"(self, node, key) {
-    let i: i32;
+    let i_3: i32;
     let other_12: ref "core:prelude/string.wado//String";
     let $v1_16: i32;
     let other_21: ref "core:prelude/string.wado//String";
-    let $v1_25: i32;
-    let $v1_37: i32;
-    let $licm_keys_41: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_used_42: i32;
-    let $licm_repr_43: ref "Array<core:prelude/string.wado/String>";
-    let self_48: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
-    i = 0;
-    $licm_keys_41 = node.keys;
-    $licm_used_42 = $licm_keys_41.used;
-    $licm_repr_43 = $licm_keys_41.repr;
+    let $v1_24: i32;
+    let $v1_36: i32;
+    let $licm_keys_40: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_used_41: i32;
+    let $licm_repr_42: ref "Array<core:prelude/string.wado/String>";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let b_end: i32;
+    let len: i32;
+    let i_54: i32;
+    i_3 = 0;
+    $licm_keys_40 = node.keys;
+    $licm_used_41 = $licm_keys_40.used;
+    $licm_repr_42 = $licm_keys_40.repr;
     b223: block {
         l224: loop {
-            break_if b223 (if i < $licm_used_42 -> i32 {
-                if @unlikely(i >= $licm_used_42) {
+            break_if b223 (if i_3 < $licm_used_41 -> i32 {
+                if @unlikely(i_3 >= $licm_used_41) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $licm_used_42);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $licm_used_41);
                     unreachable;
-                }; other_12 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_43, i); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_12.repr, other_12.used) == 2;
+                }; other_12 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_42, i_3); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_12.repr, other_12.used) == 2;
             } else {
                 0;
             }) == 0;
-            i = i + 1;
+            i_3 = i_3 + 1;
             continue l224;
         };
     };
-    if (if i < node.keys.used -> i32 {
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-            $v1_16 = node.keys.used;
-            if @unlikely(i >= $v1_16) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_16);
-                unreachable;
+    if (if i_3 < node.keys.used -> i32 {
+        $v1_16 = node.keys.used;
+        if @unlikely(i_3 >= $v1_16) {
+            cold_path;
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_16);
+            unreachable;
+        }
+        other_21 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, i_3);
+        $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = key.repr;
+            a_end = key.used;
+            b = other_21.repr;
+            b_end = other_21.used;
+            len = a_end - 0;
+            if len != (b_end - 0) {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            other_21 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, i);
-            self_48 = key.used;
-            if self_48 != other_21.used {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
-            }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = key.repr;
-                needle = other_21.repr;
-                j = 0;
-                b231: block {
-                    l232: loop {
-                        break_if b231 j >= self_48;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l232;
-                    };
+            i_54 = 0;
+            b231: block {
+                l232: loop {
+                    break_if b231 i_54 >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i_54) != builtin::array_get_value<u8>(b, 0 + i_54) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i_54 = i_54 + 1;
+                    continue l232;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
     } else {
         0;
     }) {
-        if $v1_25 = node.deleted.used; if @unlikely(i >= $v1_25) {
+        if $v1_24 = node.deleted.used; if @unlikely(i_3 >= $v1_24) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_25);
+            "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_24);
             unreachable;
-        }; builtin::array_get_value<bool>(node.deleted.repr, i) == 0 {
-            return struct.new "tuple//[i32, i32]" { 0: 0, 1: builtin::array_get_value<i32>(node.values.repr, i) };
+        }; builtin::array_get_value<bool>(node.deleted.repr, i_3) == 0 {
+            return struct.new "tuple//[i32, i32]" { 0: 0, 1: builtin::array_get_value<i32>(node.values.repr, i_3) };
         }
         return struct.new "tuple//[i32, i32]" { 0: 1, 1: 0 };
     }
     if node.is_leaf {
         return struct.new "tuple//[i32, i32]" { 0: 1, 1: 0 };
     }
-    return "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::search_in_node"(self, $v1_37 = node.children.used; if @unlikely(i >= $v1_37) {
+    return "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::search_in_node"(self, $v1_36 = node.children.used; if @unlikely(i_3 >= $v1_36) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, $v1_37);
+        "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_3, $v1_36);
         unreachable;
-    }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i), key);
+    }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, i_3), key);
 }
 
 fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, node, key, value) {
@@ -2382,47 +2384,49 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
     let self_13: ref "core:prelude/string.wado//String";
     let $v1_18: i32;
     let self_22: ref "core:prelude/string.wado//String";
-    let $v1_28: i32;
-    let $v1_37: i32;
-    let self_51: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let used_53: i32;
-    let self_58: ref "core:prelude//List<i32>";
-    let used_60: i32;
-    let self_65: ref "core:prelude//List<bool>";
-    let used_67: i32;
-    let other_80: ref "core:prelude/string.wado//String";
-    let $v1_83: i32;
-    let other_95: ref "core:prelude/string.wado//String";
-    let $v1_98: i32;
-    let $licm_keys_102: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_repr_103: ref Array<u8>;
+    let $v1_27: i32;
+    let $v1_36: i32;
+    let self_50: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let used_52: i32;
+    let self_57: ref "core:prelude//List<i32>";
+    let used_59: i32;
+    let self_64: ref "core:prelude//List<bool>";
+    let used_66: i32;
+    let other_79: ref "core:prelude/string.wado//String";
+    let $v1_82: i32;
+    let other_94: ref "core:prelude/string.wado//String";
+    let $v1_97: i32;
+    let $licm_keys_101: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_repr_102: ref Array<u8>;
+    let $licm_used_103: i32;
     let $licm_used_104: i32;
-    let $licm_used_105: i32;
-    let $licm_repr_106: ref "Array<core:prelude/string.wado/String>";
-    let $licm_keys_107: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $licm_repr_108: ref Array<u8>;
+    let $licm_repr_105: ref "Array<core:prelude/string.wado/String>";
+    let $licm_keys_106: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $licm_repr_107: ref Array<u8>;
+    let $licm_used_108: i32;
     let $licm_used_109: i32;
-    let $licm_used_110: i32;
-    let $licm_repr_111: ref "Array<core:prelude/string.wado/String>";
-    let self_116: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let $licm_repr_110: ref "Array<core:prelude/string.wado/String>";
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let b_end: i32;
+    let len: i32;
+    let i: i32;
     if node.is_leaf {
         pos_4 = 0;
-        $licm_keys_102 = node.keys;
-        $licm_repr_103 = key.repr;
-        $licm_used_104 = key.used;
-        $licm_used_105 = $licm_keys_102.used;
-        $licm_repr_106 = $licm_keys_102.repr;
+        $licm_keys_101 = node.keys;
+        $licm_repr_102 = key.repr;
+        $licm_used_103 = key.used;
+        $licm_used_104 = $licm_keys_101.used;
+        $licm_repr_105 = $licm_keys_101.repr;
         b239: block {
             l240: loop {
-                break_if b239 (if pos_4 < $licm_used_105 -> i32 {
-                    if @unlikely(pos_4 >= $licm_used_105) {
+                break_if b239 (if pos_4 < $licm_used_104 -> i32 {
+                    if @unlikely(pos_4 >= $licm_used_104) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $licm_used_105);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $licm_used_104);
                         unreachable;
-                    }; self_13 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_106, pos_4); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(self_13.repr, self_13.used, $licm_repr_103, $licm_used_104) == 0;
+                    }; self_13 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_105, pos_4); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(self_13.repr, self_13.used, $licm_repr_102, $licm_used_103) == 0;
                 } else {
                     0;
                 }) == 0;
@@ -2431,50 +2435,49 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
             };
         };
         if (if pos_4 < node.keys.used -> i32 {
-            $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-                $v1_18 = node.keys.used;
-                if @unlikely(pos_4 >= $v1_18) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $v1_18);
-                    unreachable;
+            $v1_18 = node.keys.used;
+            if @unlikely(pos_4 >= $v1_18) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $v1_18);
+                unreachable;
+            }
+            self_22 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, pos_4);
+            $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+                a = self_22.repr;
+                a_end = self_22.used;
+                b = key.repr;
+                b_end = key.used;
+                len = a_end - 0;
+                if len != (b_end - 0) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                self_22 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, pos_4);
-                self_116 = self_22.used;
-                if self_116 != key.used {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
-                }
-                $inline_bytes_match_at_4: block -> bool {
-                    haystack = self_22.repr;
-                    needle = key.repr;
-                    j = 0;
-                    b247: block {
-                        l248: loop {
-                            break_if b247 j >= self_116;
-                            if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                                break $inline_bytes_match_at_4: 0;
-                            }
-                            j = j + 1;
-                            continue l248;
-                        };
+                i = 0;
+                b247: block {
+                    l248: loop {
+                        break_if b247 i >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                        }
+                        i = i + 1;
+                        continue l248;
                     };
-                    break $inline_bytes_match_at_4: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
             };
         } else {
             0;
         }) {
-            $v1_28 = node.values.used;
-            if @unlikely(pos_4 >= $v1_28) {
+            $v1_27 = node.values.used;
+            if @unlikely(pos_4 >= $v1_27) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(pos_4, value, $v1_28);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0"(pos_4, value, $v1_27);
                 unreachable;
             }
             builtin::array_set<i32>(node.values.repr, pos_4, value);
-            $v1_37 = node.deleted.used;
-            if @unlikely(pos_4 >= $v1_37) {
+            $v1_36 = node.deleted.used;
+            if @unlikely(pos_4 >= $v1_36) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $v1_37);
+                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_4, $v1_36);
                 unreachable;
             }
             if builtin::array_get_value<bool>(node.deleted.repr, pos_4) {
@@ -2483,47 +2486,47 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
             }
             return;
         }
-        self_51 = node.keys;
-        used_53 = self_51.used;
-        if @unlikely(used_53 >= builtin::array_len(self_51.repr)) {
+        self_50 = node.keys;
+        used_52 = self_50.used;
+        if @unlikely(used_52 >= builtin::array_len(self_50.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_51);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_50);
         }
-        builtin::array_set<ref "core:prelude/string.wado//String">(self_51.repr, used_53, key);
-        self_51.used = used_53 + 1;
-        self_58 = node.values;
-        used_60 = self_58.used;
-        if @unlikely(used_60 >= builtin::array_len(self_58.repr)) {
+        builtin::array_set<ref "core:prelude/string.wado//String">(self_50.repr, used_52, key);
+        self_50.used = used_52 + 1;
+        self_57 = node.values;
+        used_59 = self_57.used;
+        if @unlikely(used_59 >= builtin::array_len(self_57.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_58);
+            "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_57);
         }
-        builtin::array_set<i32>(self_58.repr, used_60, value);
-        self_58.used = used_60 + 1;
-        self_65 = node.deleted;
-        used_67 = self_65.used;
-        if @unlikely(used_67 >= builtin::array_len(self_65.repr)) {
+        builtin::array_set<i32>(self_57.repr, used_59, value);
+        self_57.used = used_59 + 1;
+        self_64 = node.deleted;
+        used_66 = self_64.used;
+        if @unlikely(used_66 >= builtin::array_len(self_64.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(self_65);
+            "core:prelude/list.wado/core:prelude/list.wado/List<bool>::grow"(self_64);
         }
-        builtin::array_set<bool>(self_65.repr, used_67, 0);
-        self_65.used = used_67 + 1;
+        builtin::array_set<bool>(self_64.repr, used_66, 0);
+        self_64.used = used_66 + 1;
         "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::sort_node_entries"(node);
         self.size = self.size + 1;
     } else {
         pos_5 = 0;
-        $licm_keys_107 = node.keys;
-        $licm_repr_108 = key.repr;
-        $licm_used_109 = key.used;
-        $licm_used_110 = $licm_keys_107.used;
-        $licm_repr_111 = $licm_keys_107.repr;
+        $licm_keys_106 = node.keys;
+        $licm_repr_107 = key.repr;
+        $licm_used_108 = key.used;
+        $licm_used_109 = $licm_keys_106.used;
+        $licm_repr_110 = $licm_keys_106.repr;
         b256: block {
             l257: loop {
-                break_if b256 (if pos_5 < $licm_used_110 -> i32 {
-                    if @unlikely(pos_5 >= $licm_used_110) {
+                break_if b256 (if pos_5 < $licm_used_109 -> i32 {
+                    if @unlikely(pos_5 >= $licm_used_109) {
                         cold_path;
-                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $licm_used_110);
+                        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $licm_used_109);
                         unreachable;
-                    }; other_80 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_111, pos_5); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"($licm_repr_108, $licm_used_109, other_80.repr, other_80.used) == 2;
+                    }; other_79 = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_110, pos_5); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"($licm_repr_107, $licm_used_108, other_79.repr, other_79.used) == 2;
                 } else {
                     0;
                 }) == 0;
@@ -2531,17 +2534,17 @@ fn "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/Str
                 continue l257;
             };
         };
-        if "treemap_btree2.wado/treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"($v1_83 = node.children.used; if @unlikely(pos_5 >= $v1_83) {
+        if "treemap_btree2.wado/treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>::is_full"($v1_82 = node.children.used; if @unlikely(pos_5 >= $v1_82) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $v1_83);
+            "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $v1_82);
             unreachable;
         }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, pos_5), (2 * self.t) - 1) {
             "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::split_child$scalar"(self.t, node, pos_5);
-            pos_5 = pos_5 + (other_95 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, pos_5); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_95.repr, other_95.used) == 2);
+            pos_5 = pos_5 + (other_94 = builtin::array_get_value<ref "core:prelude/string.wado//String">(node.keys.repr, pos_5); "core:prelude/array.wado/core/prelude/array.wado/seq_cmp<u8>"(key.repr, key.used, other_94.repr, other_94.used) == 2);
         }
-        "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, $v1_98 = node.children.used; if @unlikely(pos_5 >= $v1_98) {
+        "treemap_btree2.wado/treemap_btree2.wado/TreeMap<core:prelude/string.wado/String,i32>::insert_non_full"(self, $v1_97 = node.children.used; if @unlikely(pos_5 >= $v1_97) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $v1_98);
+            "core:prelude/list.wado/core:prelude/list.wado/List<&mut treemap_btree2.wado/BTreeNode<core:prelude/string.wado/String,i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(pos_5, $v1_97);
             unreachable;
         }; builtin::array_get_value<ref "treemap_btree2.wado//BTreeNode<core:prelude/string.wado/String,i32>">(node.children.repr, pos_5), key, value);
     }

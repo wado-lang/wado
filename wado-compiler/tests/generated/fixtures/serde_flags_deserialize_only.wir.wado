@@ -2241,16 +2241,16 @@ fn "core:serde/serde_flags_deserialize_only.wado/Perms^core:serde/Deserialize::d
     let found: bool;
     let $local_15: ref "core:prelude/string.wado//String";
     let $local_20: ref null "core:serde//DeserializeError";
-    let self_53: i32;
-    let new_used_56: i32;
-    let start_57: i32;
-    let self_60: ref "core:json//JsonDeserializer";
-    let haystack_172: ref Array<u8>;
-    let needle_174: ref Array<u8>;
-    let j_176: i32;
-    let haystack_264: ref Array<u8>;
-    let needle_266: ref Array<u8>;
-    let j_268: i32;
+    let self_51: i32;
+    let new_used_54: i32;
+    let start_55: i32;
+    let self_58: ref "core:json//JsonDeserializer";
+    let a_168: ref Array<u8>;
+    let b_171: ref Array<u8>;
+    let i_175: i32;
+    let a_257: ref Array<u8>;
+    let b_260: ref Array<u8>;
+    let i_264: i32;
     let $vr_22_mv_0: i32;
     let $vr_22_mv_1: ref null "core:json//JsonSeqAccess";
     let $vr_22_mv_2: ref null "core:serde//DeserializeError";
@@ -2284,79 +2284,73 @@ fn "core:serde/serde_flags_deserialize_only.wado/Perms^core:serde/Deserialize::d
             if ref.is_null(opt) == 0 {
                 name = ref.as_non_null(opt);
                 found = 0;
-                if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-                    if 4 != name.used {
-                        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+                if $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+                    a_168 = global:core:serde::$const_obj_15;
+                    b_171 = name.repr;
+                    if 4 != (name.used - 0) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                     }
-                    $inline_bytes_match_at_5: block -> bool {
-                        haystack_172 = global:core:serde::$const_obj_15;
-                        needle_174 = name.repr;
-                        j_176 = 0;
-                        b272: block {
-                            l273: loop {
-                                break_if b272 j_176 >= 4;
-                                if builtin::array_get_value<u8>(haystack_172, 0 + j_176) != builtin::array_get_value<u8>(needle_174, j_176) {
-                                    break $inline_bytes_match_at_5: 0;
-                                }
-                                j_176 = j_176 + 1;
-                                continue l273;
-                            };
+                    i_175 = 0;
+                    b272: block {
+                        l273: loop {
+                            break_if b272 i_175 >= 4;
+                            if builtin::array_get_value<u8>(a_168, 0 + i_175) != builtin::array_get_value<u8>(b_171, 0 + i_175) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                            }
+                            i_175 = i_175 + 1;
+                            continue l273;
                         };
-                        break $inline_bytes_match_at_5: 1;
                     };
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
                 } {
                     raw_5 = raw_5 | 1_i64;
                     found = 1;
                 }
-                if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-                    if 5 != name.used {
-                        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+                if $inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
+                    a_257 = global:core:serde::$const_obj_14;
+                    b_260 = name.repr;
+                    if 5 != (name.used - 0) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
                     }
-                    $inline_bytes_match_at_11: block -> bool {
-                        haystack_264 = global:core:serde::$const_obj_14;
-                        needle_266 = name.repr;
-                        j_268 = 0;
-                        b277: block {
-                            l278: loop {
-                                break_if b277 j_268 >= 5;
-                                if builtin::array_get_value<u8>(haystack_264, 0 + j_268) != builtin::array_get_value<u8>(needle_266, j_268) {
-                                    break $inline_bytes_match_at_11: 0;
-                                }
-                                j_268 = j_268 + 1;
-                                continue l278;
-                            };
+                    i_264 = 0;
+                    b277: block {
+                        l278: loop {
+                            break_if b277 i_264 >= 5;
+                            if builtin::array_get_value<u8>(a_257, 0 + i_264) != builtin::array_get_value<u8>(b_260, 0 + i_264) {
+                                break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
+                            }
+                            i_264 = i_264 + 1;
+                            continue l278;
                         };
-                        break $inline_bytes_match_at_11: 1;
                     };
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__7: 1;
                 } {
                     raw_5 = raw_5 | 2_i64;
                     found = 1;
                 }
                 if found == 0 {
                     return 1, 0, struct.new "core:serde//DeserializeError" { kind: 2, message: ref.as_non_null($local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 }; $local_15.used = 14; builtin::array_copy<u8>($local_15.repr, 0, global:core:serde::$const_obj_13, 0, 14); $inline_core_prelude_string_wado_String__push_str_12: block {
-                        self_53 = name.used;
-                        break_if $inline_core_prelude_string_wado_String__push_str_12 self_53 == 0;
-                        new_used_56 = 14 + self_53;
-                        if @unlikely(new_used_56 > 30) {
+                        self_51 = name.used;
+                        break_if $inline_core_prelude_string_wado_String__push_str_12 self_51 == 0;
+                        new_used_54 = 14 + self_51;
+                        if @unlikely(new_used_54 > 30) {
                             cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_56);
+                            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_54);
                         }
-                        start_57 = $local_15.used;
-                        $local_15.used = new_used_56;
-                        builtin::array_copy<u8>($local_15.repr, start_57, name.repr, 0, self_53);
+                        start_55 = $local_15.used;
+                        $local_15.used = new_used_54;
+                        builtin::array_copy<u8>($local_15.repr, start_55, name.repr, 0, self_51);
                     }; $local_15), offset: -1_i64 };
                 }
             } else {
                 $local_20 = $inline_core_json_JsonDeserializer__expect_char_17: block -> ref null "core:serde//DeserializeError" {
-                    self_60 = seq.de;
-                    if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_60) == 93) {
-                        self_60.pos = self_60.pos + 1;
+                    self_58 = seq.de;
+                    if @likely("core:json/core:json/JsonDeserializer::peek_after_whitespace"(self_58) == 93) {
+                        self_58.pos = self_58.pos + 1;
                         break $inline_core_json_JsonDeserializer__expect_char_17: ref.null none;
                     }
                     cold_path;
-                    break $inline_core_json_JsonDeserializer__expect_char_17: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_60, 93));
+                    break $inline_core_json_JsonDeserializer__expect_char_17: ref.as_non_null("core:json/core:json/JsonDeserializer::expect_char_error"(self_58, 93));
                 };
                 if @likely(ref.is_null($local_20)) {
                 } else {

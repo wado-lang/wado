@@ -754,70 +754,74 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
     let $fuse_at_276: i32;
     let $fuse_len_277: i32;
     let $fuse_at_278: i32;
-    let self_282: i32;
-    let haystack_284: ref Array<u8>;
-    let needle_286: ref Array<u8>;
-    let j_288: i32;
-    let self_332: i32;
-    let haystack_334: ref Array<u8>;
-    let needle_336: ref Array<u8>;
-    let j_338: i32;
+    let a_281: ref Array<u8>;
+    let a_end_283: i32;
+    let b_284: ref Array<u8>;
+    let len_287: i32;
+    let i_288: i32;
+    let a_331: ref Array<u8>;
+    let a_end_333: i32;
+    let b_334: ref Array<u8>;
+    let len_337: i32;
+    let i_338: i32;
     let s_363: ref "wasi:http/types.wado//Scheme";
     let s_364: ref "core:prelude/string.wado//String";
     let $vc_payload_2_366: ref "core:prelude/string.wado//String";
-    let self_371: i32;
-    let haystack_373: ref Array<u8>;
-    let needle_375: ref Array<u8>;
-    let j_377: i32;
+    let a_370: ref Array<u8>;
+    let a_end_372: i32;
+    let b_373: ref Array<u8>;
+    let len_376: i32;
+    let i_377: i32;
     let s_378: ref "wasi:http/types.wado//Scheme";
     let s_379: ref "core:prelude/string.wado//String";
     let $vc_payload_2_381: ref "core:prelude/string.wado//String";
-    let self_386: i32;
-    let haystack_388: ref Array<u8>;
-    let needle_390: ref Array<u8>;
-    let j_392: i32;
+    let a_385: ref Array<u8>;
+    let a_end_387: i32;
+    let b_388: ref Array<u8>;
+    let len_391: i32;
+    let i_392: i32;
     let s_393: ref "wasi:http/types.wado//Scheme";
     let s_394: ref "core:prelude/string.wado//String";
     let $vc_payload_2_396: ref "core:prelude/string.wado//String";
-    let self_401: i32;
-    let haystack_403: ref Array<u8>;
-    let needle_405: ref Array<u8>;
-    let j_407: i32;
-    let packed_411: i64;
-    let rx_412: i32;
-    let tx_413: i32;
-    let packed_414: i64;
-    let rx_415: i32;
-    let tx_416: i32;
-    let self_418: ref "core:prelude/string.wado//StrUtf8ByteIter";
-    let self_447: i32;
-    let haystack_448: ref Array<u8>;
-    let needle_450: ref Array<u8>;
-    let j_452: i32;
+    let a_400: ref Array<u8>;
+    let a_end_402: i32;
+    let b_403: ref Array<u8>;
+    let len_406: i32;
+    let i_407: i32;
+    let packed_410: i64;
+    let rx_411: i32;
+    let tx_412: i32;
+    let packed_413: i64;
+    let rx_414: i32;
+    let tx_415: i32;
+    let self_417: ref "core:prelude/string.wado//StrUtf8ByteIter";
+    let a_426: ref Array<u8>;
+    let a_end_428: i32;
+    let b_429: ref Array<u8>;
+    let len_432: i32;
+    let i_433: i32;
     custom = struct.new "wasi:http/types.wado//Method::Other" { discriminant: 9, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("PURGE"), used: 5 } };
     $v1_2 = "http_method_and_scheme_variants.wado/method_name"(custom);
-    $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-        self_282 = $v1_2.used;
-        if self_282 != 5 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+    $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+        a_281 = $v1_2.repr;
+        a_end_283 = $v1_2.used;
+        b_284 = global:http_method_and_scheme_variants.wado::$const_obj_69;
+        len_287 = a_end_283 - 0;
+        if len_287 != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
-        $inline_bytes_match_at_3: block -> bool {
-            haystack_284 = $v1_2.repr;
-            needle_286 = global:http_method_and_scheme_variants.wado::$const_obj_69;
-            j_288 = 0;
-            b27: block {
-                l28: loop {
-                    break_if b27 j_288 >= self_282;
-                    if builtin::array_get_value<u8>(haystack_284, 0 + j_288) != builtin::array_get_value<u8>(needle_286, j_288) {
-                        break $inline_bytes_match_at_3: 0;
-                    }
-                    j_288 = j_288 + 1;
-                    continue l28;
-                };
+        i_288 = 0;
+        b27: block {
+            l28: loop {
+                break_if b27 i_288 >= len_287;
+                if builtin::array_get_value<u8>(a_281, 0 + i_288) != builtin::array_get_value<u8>(b_284, 0 + i_288) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                }
+                i_288 = i_288 + 1;
+                continue l28;
             };
-            break $inline_bytes_match_at_3: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+        break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
     };
     if @unlikely($cond_3 == 0) {
         cold_path;
@@ -826,28 +830,26 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
     }
     m = "http_method_and_scheme_variants.wado/$cm_binding__Request_get_method"(request);
     $v1_13 = "http_method_and_scheme_variants.wado/method_name"(m);
-    $cond_14 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_20: block -> bool {
-        self_332 = $v1_13.used;
-        if self_332 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_20: 0;
+    $cond_14 = $inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
+        a_331 = $v1_13.repr;
+        a_end_333 = $v1_13.used;
+        b_334 = global:http_method_and_scheme_variants.wado::$const_obj_58;
+        len_337 = a_end_333 - 0;
+        if len_337 != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
         }
-        $inline_bytes_match_at_23: block -> bool {
-            haystack_334 = $v1_13.repr;
-            needle_336 = global:http_method_and_scheme_variants.wado::$const_obj_58;
-            j_338 = 0;
-            b32: block {
-                l33: loop {
-                    break_if b32 j_338 >= self_332;
-                    if builtin::array_get_value<u8>(haystack_334, 0 + j_338) != builtin::array_get_value<u8>(needle_336, j_338) {
-                        break $inline_bytes_match_at_23: 0;
-                    }
-                    j_338 = j_338 + 1;
-                    continue l33;
-                };
+        i_338 = 0;
+        b32: block {
+            l33: loop {
+                break_if b32 i_338 >= len_337;
+                if builtin::array_get_value<u8>(a_331, 0 + i_338) != builtin::array_get_value<u8>(b_334, 0 + i_338) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__11: 0;
+                }
+                i_338 = i_338 + 1;
+                continue l33;
             };
-            break $inline_bytes_match_at_23: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_20;
+        break $inline_core_prelude_array_wado_seq_eq_u8__11: 1;
     };
     if @unlikely($cond_14 == 0) {
         cold_path;
@@ -869,28 +871,26 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
         s_364 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_363).payload_0;
         s_364;
     });
-    $cond_21 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_37: block -> bool {
-        self_371 = $v1_20.used;
-        if self_371 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_37: 0;
+    $cond_21 = $inline_core_prelude_array_wado_seq_eq_u8__22: block -> bool {
+        a_370 = $v1_20.repr;
+        a_end_372 = $v1_20.used;
+        b_373 = global:http_method_and_scheme_variants.wado::$const_obj_47;
+        len_376 = a_end_372 - 0;
+        if len_376 != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
         }
-        $inline_bytes_match_at_40: block -> bool {
-            haystack_373 = $v1_20.repr;
-            needle_375 = global:http_method_and_scheme_variants.wado::$const_obj_47;
-            j_377 = 0;
-            b41: block {
-                l42: loop {
-                    break_if b41 j_377 >= self_371;
-                    if builtin::array_get_value<u8>(haystack_373, 0 + j_377) != builtin::array_get_value<u8>(needle_375, j_377) {
-                        break $inline_bytes_match_at_40: 0;
-                    }
-                    j_377 = j_377 + 1;
-                    continue l42;
-                };
+        i_377 = 0;
+        b41: block {
+            l42: loop {
+                break_if b41 i_377 >= len_376;
+                if builtin::array_get_value<u8>(a_370, 0 + i_377) != builtin::array_get_value<u8>(b_373, 0 + i_377) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__22: 0;
+                }
+                i_377 = i_377 + 1;
+                continue l42;
             };
-            break $inline_bytes_match_at_40: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_37;
+        break $inline_core_prelude_array_wado_seq_eq_u8__22: 1;
     };
     if @unlikely($cond_21 == 0) {
         cold_path;
@@ -912,28 +912,26 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
         s_379 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_378).payload_0;
         s_379;
     });
-    $cond_24 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_44: block -> bool {
-        self_386 = $v1_23.used;
-        if self_386 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_44: 0;
+    $cond_24 = $inline_core_prelude_array_wado_seq_eq_u8__27: block -> bool {
+        a_385 = $v1_23.repr;
+        a_end_387 = $v1_23.used;
+        b_388 = global:http_method_and_scheme_variants.wado::$const_obj_36;
+        len_391 = a_end_387 - 0;
+        if len_391 != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__27: 0;
         }
-        $inline_bytes_match_at_47: block -> bool {
-            haystack_388 = $v1_23.repr;
-            needle_390 = global:http_method_and_scheme_variants.wado::$const_obj_36;
-            j_392 = 0;
-            b50: block {
-                l51: loop {
-                    break_if b50 j_392 >= self_386;
-                    if builtin::array_get_value<u8>(haystack_388, 0 + j_392) != builtin::array_get_value<u8>(needle_390, j_392) {
-                        break $inline_bytes_match_at_47: 0;
-                    }
-                    j_392 = j_392 + 1;
-                    continue l51;
-                };
+        i_392 = 0;
+        b50: block {
+            l51: loop {
+                break_if b50 i_392 >= len_391;
+                if builtin::array_get_value<u8>(a_385, 0 + i_392) != builtin::array_get_value<u8>(b_388, 0 + i_392) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__27: 0;
+                }
+                i_392 = i_392 + 1;
+                continue l51;
             };
-            break $inline_bytes_match_at_47: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_44;
+        break $inline_core_prelude_array_wado_seq_eq_u8__27: 1;
     };
     if @unlikely($cond_24 == 0) {
         cold_path;
@@ -959,58 +957,54 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
             s_394 = ref.cast "wasi:http/types.wado//Scheme::Other"(s_393).payload_0;
             s_394;
         });
-        $v1_28 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_51: block -> bool {
-            self_401 = name.used;
-            if self_401 != 4 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_51: 0;
+        $v1_28 = $inline_core_prelude_array_wado_seq_eq_u8__32: block -> bool {
+            a_400 = name.repr;
+            a_end_402 = name.used;
+            b_403 = global:http_method_and_scheme_variants.wado::$const_obj_25;
+            len_406 = a_end_402 - 0;
+            if len_406 != 4 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__32: 0;
             }
-            $inline_bytes_match_at_54: block -> bool {
-                haystack_403 = name.repr;
-                needle_405 = global:http_method_and_scheme_variants.wado::$const_obj_25;
-                j_407 = 0;
-                b60: block {
-                    l61: loop {
-                        break_if b60 j_407 >= self_401;
-                        if builtin::array_get_value<u8>(haystack_403, 0 + j_407) != builtin::array_get_value<u8>(needle_405, j_407) {
-                            break $inline_bytes_match_at_54: 0;
-                        }
-                        j_407 = j_407 + 1;
-                        continue l61;
-                    };
+            i_407 = 0;
+            b60: block {
+                l61: loop {
+                    break_if b60 i_407 >= len_406;
+                    if builtin::array_get_value<u8>(a_400, 0 + i_407) != builtin::array_get_value<u8>(b_403, 0 + i_407) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__32: 0;
+                    }
+                    i_407 = i_407 + 1;
+                    continue l61;
                 };
-                break $inline_bytes_match_at_54: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_51;
+            break $inline_core_prelude_array_wado_seq_eq_u8__32: 1;
         };
         $v2_seen = 0;
         $v3_seen = 0;
         $cond_33 = (if $v1_28 -> i32 {
             1;
         } else {
-            $v3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_55: block -> bool {
-                $v2 = name;
-                $v2_seen = 1;
-                self_447 = $v2.used;
-                if self_447 != 5 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_55: 0;
+            $v2 = name;
+            $v2_seen = 1;
+            $v3 = $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+                a_426 = $v2.repr;
+                a_end_428 = $v2.used;
+                b_429 = global:http_method_and_scheme_variants.wado::$const_obj_24;
+                len_432 = a_end_428 - 0;
+                if len_432 != 5 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
                 }
-                $inline_bytes_match_at_11: block -> bool {
-                    haystack_448 = $v2.repr;
-                    needle_450 = global:http_method_and_scheme_variants.wado::$const_obj_24;
-                    j_452 = 0;
-                    b65: block {
-                        l66: loop {
-                            break_if b65 j_452 >= self_447;
-                            if builtin::array_get_value<u8>(haystack_448, 0 + j_452) != builtin::array_get_value<u8>(needle_450, j_452) {
-                                break $inline_bytes_match_at_11: 0;
-                            }
-                            j_452 = j_452 + 1;
-                            continue l66;
-                        };
+                i_433 = 0;
+                b65: block {
+                    l66: loop {
+                        break_if b65 i_433 >= len_432;
+                        if builtin::array_get_value<u8>(a_426, 0 + i_433) != builtin::array_get_value<u8>(b_429, 0 + i_433) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                        }
+                        i_433 = i_433 + 1;
+                        continue l66;
                     };
-                    break $inline_bytes_match_at_11: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_55;
+                break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
             };
             $v3_seen = 1;
             $v3;
@@ -1038,19 +1032,19 @@ fn "http_method_and_scheme_variants.wado/$cm_task_entry__handle"(request) {
         }
     } else {
     }
-    rx_412 = builtin::i32_wrap_i64(local.tee packed_411("wasi/future-new"()));
-    tx_413 = builtin::i32_wrap_i64(packed_411 >> 32_i64);
-    rx_415 = builtin::i32_wrap_i64(local.tee packed_414("wasi/stream-new"()));
-    tx_416 = builtin::i32_wrap_i64(packed_414 >> 32_i64);
-    $pattern_temp_2 = "http_method_and_scheme_variants.wado/$cm_binding__Response_new"(local.tee resp_headers("http_method_and_scheme_variants.wado/$cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_415 }, rx_412);
+    rx_411 = builtin::i32_wrap_i64(local.tee packed_410("wasi/future-new"()));
+    tx_412 = builtin::i32_wrap_i64(packed_410 >> 32_i64);
+    rx_414 = builtin::i32_wrap_i64(local.tee packed_413("wasi/stream-new"()));
+    tx_415 = builtin::i32_wrap_i64(packed_413 >> 32_i64);
+    $pattern_temp_2 = "http_method_and_scheme_variants.wado/$cm_binding__Response_new"(local.tee resp_headers("http_method_and_scheme_variants.wado/$cm_binding__Fields_new"()), struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>::Some" { discriminant: 0, payload_0: rx_414 }, rx_411);
     response = $pattern_temp_2.0;
     $task_ret = struct.new "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: response };
     $tv_1 = 0;
     $tv_1 = local.tee $ok_val_78(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($task_ret).payload_0);
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_416, self_418 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_method_and_scheme_variants.wado::$const_obj_9), used: 2, index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_418));
-    "wasi/stream-drop-writable"(tx_416);
-    "http_method_and_scheme_variants.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_413, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_415, self_417 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_method_and_scheme_variants.wado::$const_obj_9), used: 2, index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_417));
+    "wasi/stream-drop-writable"(tx_415);
+    "http_method_and_scheme_variants.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx_412, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
     "wasi/resource-drop:request"(request);
 }
 

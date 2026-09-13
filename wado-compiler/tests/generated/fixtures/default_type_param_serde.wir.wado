@@ -514,10 +514,11 @@ fn "default_type_param_serde.wado/$test_0_omitted_payload_serializes_the_default
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
     let v_11: ref "core:value//Value";
-    let self_16: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     v_0 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null(let $vr_2_mv_0: i32; let $vr_2_mv_1: ref null "core:value//Value"; let $vr_2_mv_2: ref null "core:serde//SerializeError"; multivalue_bind [$vr_2_mv_0, $vr_2_mv_1, $vr_2_mv_2] = "core:value/core/value/to_value<default_type_param_serde.wado/NoFields>"(); (if $vr_2_mv_0 == 0 -> ref "core:value//Value" {
         v_11 = ref.as_non_null($vr_2_mv_1);
         v_11;
@@ -532,28 +533,26 @@ fn "default_type_param_serde.wado/$test_0_omitted_payload_serializes_the_default
     multivalue_bind [s_mv_0, s_mv_1, s_mv_2] = "core:json/core/json/to_string<core:value/Value>"(v_0, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely(s_mv_0 == 0) {
         json = ref.as_non_null(s_mv_1);
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_16 = json.used;
-            if self_16 != 2 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = json.repr;
+            a_end = json.used;
+            b = global:default_type_param_serde.wado::$const_obj_54;
+            len = a_end - 0;
+            if len != 2 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = json.repr;
-                needle = global:default_type_param_serde.wado::$const_obj_54;
-                j = 0;
-                b4: block {
-                    l5: loop {
-                        break_if b4 j >= self_16;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l5;
-                    };
+            i = 0;
+            b4: block {
+                l5: loop {
+                    break_if b4 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l5;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -577,29 +576,30 @@ fn "default_type_param_serde.wado/$test_1_an_explicit_anonymous_struct_payload_o
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
     let v_11: ref "core:value//Value";
-    let self_16: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let out: ref "core:prelude/types.wado//Box<core:value/Value>";
     let $local_5_30: ref null "core:serde//SerializeError";
-    let $sroa_slot_35: i32;
-    let $sroa_slot_36: ref null "core:value//Value";
-    v_0 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null($sroa_slot_35 = 0; $sroa_slot_36 = ref.null none; $inline_core_value_to_value_default_type_param_serde_wado__anon__a_i32___spec0_0: block {
+    let $sroa_slot_31: i32;
+    let $sroa_slot_32: ref null "core:value//Value";
+    v_0 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: ref.as_non_null($sroa_slot_31 = 0; $sroa_slot_32 = ref.null none; $inline_core_value_to_value_default_type_param_serde_wado__anon__a_i32___spec0_0: block {
         out = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
         $local_5_30 = "core:serde/default_type_param_serde.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0"(out);
         if @likely(ref.is_null($local_5_30)) {
         } else {
             drop(ref.as_non_null($local_5_30));
             cold_path;
-            $sroa_slot_35 = 1;
-            break $inline_core_value_to_value_default_type_param_serde_wado__anon__a_i32___spec0_0: $sroa_slot_36 = ref.null none;
+            $sroa_slot_31 = 1;
+            break $inline_core_value_to_value_default_type_param_serde_wado__anon__a_i32___spec0_0: $sroa_slot_32 = ref.null none;
         }
-        $sroa_slot_35 = 0;
-        $sroa_slot_36 = ref.as_non_null("default_type_param_serde.wado/$value_copy$core:value/Value"(out.value));
+        $sroa_slot_31 = 0;
+        $sroa_slot_32 = ref.as_non_null("default_type_param_serde.wado/$value_copy$core:value/Value"(out.value));
         break $inline_core_value_to_value_default_type_param_serde_wado__anon__a_i32___spec0_0;
-    }; let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_35; (if $match_scrut_1 == 0 -> ref "core:value//Value" {
-        v_11 = ref.as_non_null($sroa_slot_36);
+    }; let $match_scrut_1: i32; $match_scrut_1 = $sroa_slot_31; (if $match_scrut_1 == 0 -> ref "core:value//Value" {
+        v_11 = ref.as_non_null($sroa_slot_32);
         v_11;
     } else if @likely($match_scrut_1 == 1) -> ref "core:value//Value" {
         struct.new "core:value//Value" { 0 };
@@ -615,28 +615,26 @@ fn "default_type_param_serde.wado/$test_1_an_explicit_anonymous_struct_payload_o
         if ref.is_null(global:default_type_param_serde.wado::$const_obj_67) {
             global:default_type_param_serde.wado::$const_obj_67 = array.new_data<u8>("{\"a\":1}");
         }
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_16 = json.used;
-            if self_16 != 7 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = json.repr;
+            a_end = json.used;
+            b = global:default_type_param_serde.wado::$const_obj_67;
+            len = a_end - 0;
+            if len != 7 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = json.repr;
-                needle = global:default_type_param_serde.wado::$const_obj_67;
-                j = 0;
-                b14: block {
-                    l15: loop {
-                        break_if b14 j >= self_16;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l15;
-                    };
+            i = 0;
+            b14: block {
+                l15: loop {
+                    break_if b14 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l15;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;

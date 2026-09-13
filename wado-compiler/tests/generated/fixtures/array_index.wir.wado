@@ -424,10 +424,11 @@ fn "array_index.wado/$test_0_read_and_write_through_the_index_operators"() {
     let start_67: i32;
     let f_71: ref "core:prelude/format.wado//Formatter";
     let self_78: i32;
-    let self_83: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let $sroa_arr_repr: ref Array<i32>;
     $sroa_arr_repr = array.new_fixed<i32>(10, 20, 30);
     first = builtin::array_get_value<i32>($sroa_arr_repr, 0);
@@ -459,28 +460,26 @@ fn "array_index.wado/$test_0_read_and_write_through_the_index_operators"() {
     $local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5_5 };
     f_71 = $local_6_6;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(local.tee self_78(builtin::array_get_value<i32>($sroa_arr_repr, 2)), f_71);
-    $cond_4 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_26: block -> bool {
-        self_83 = $local_5_5.used;
-        if self_83 != 11 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_26: 0;
+    $cond_4 = $inline_core_prelude_array_wado_seq_eq_u8__27: block -> bool {
+        a = $local_5_5.repr;
+        a_end = $local_5_5.used;
+        b = global:array_index.wado::$const_obj_8;
+        len = a_end - 0;
+        if len != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__27: 0;
         }
-        $inline_bytes_match_at_29: block -> bool {
-            haystack = $local_5_5.repr;
-            needle = global:array_index.wado::$const_obj_8;
-            j = 0;
-            b3: block {
-                l4: loop {
-                    break_if b3 j >= self_83;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_29: 0;
-                    }
-                    j = j + 1;
-                    continue l4;
-                };
+        i = 0;
+        b3: block {
+            l4: loop {
+                break_if b3 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__27: 0;
+                }
+                i = i + 1;
+                continue l4;
             };
-            break $inline_bytes_match_at_29: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_26;
+        break $inline_core_prelude_array_wado_seq_eq_u8__27: 1;
     };
     if @unlikely($cond_4 == 0) {
         cold_path;
@@ -574,10 +573,11 @@ fn "array_index.wado/$test_2_index_a_list_held_in_a_generic_struct_field"() {
     let new_used_50: i32;
     let start_51: i32;
     let f_55: ref "core:prelude/format.wado//Formatter";
-    let self_67: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     f_13 = $local_4_4;
@@ -604,28 +604,26 @@ fn "array_index.wado/$test_2_index_a_list_held_in_a_generic_struct_field"() {
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     f_55 = $local_4_4;
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(30, f_55);
-    $cond_2 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_22: block -> bool {
-        self_67 = $local_3.used;
-        if self_67 != 10 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_22: 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__23: block -> bool {
+        a = $local_3.repr;
+        a_end = $local_3.used;
+        b = global:array_index.wado::$const_obj_29;
+        len = a_end - 0;
+        if len != 10 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
         }
-        $inline_bytes_match_at_25: block -> bool {
-            haystack = $local_3.repr;
-            needle = global:array_index.wado::$const_obj_29;
-            j = 0;
-            b21: block {
-                l22: loop {
-                    break_if b21 j >= self_67;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_25: 0;
-                    }
-                    j = j + 1;
-                    continue l22;
-                };
+        i = 0;
+        b21: block {
+            l22: loop {
+                break_if b21 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__23: 0;
+                }
+                i = i + 1;
+                continue l22;
             };
-            break $inline_bytes_match_at_25: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_22;
+        break $inline_core_prelude_array_wado_seq_eq_u8__23: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;
@@ -681,7 +679,7 @@ fn "array_index.wado/$test_3_index_by_comparison_against_a_string_key"() {
 
 fn "array_index.wado/$test_5_index_several_lists_held_in_one_struct"() {
     let sum: i32;
-    let i: i32;
+    let i_2: i32;
     let $v1_6: ref "core:prelude/string.wado//String";
     let $v2: i32;
     let $local_15: ref "core:prelude/string.wado//String";
@@ -699,24 +697,24 @@ fn "array_index.wado/$test_5_index_several_lists_held_in_one_struct"() {
     $sroa_node_values = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     $sroa_node_deleted = struct.new "core:prelude//List<bool>" { repr: array.new_fixed<bool>(0, 1, 0), used: 3 };
     sum = 0;
-    i = 0;
+    i_2 = 0;
     $licm_repr_65 = $sroa_node_deleted.repr;
     $licm_repr_66 = $sroa_node_values.repr;
     b32: block {
         l33: loop {
-            break_if b32 i >= 3;
-            if if @unlikely(i >= 3) {
+            break_if b32 i_2 >= 3;
+            if if @unlikely(i_2 >= 3) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, 3);
+                "core:prelude/list.wado/core:prelude/list.wado/List<bool>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_2, 3);
                 unreachable;
-            }; builtin::array_get_value<bool>($licm_repr_65, i) == 0 {
-                sum = sum + if @unlikely(i >= 3) {
+            }; builtin::array_get_value<bool>($licm_repr_65, i_2) == 0 {
+                sum = sum + if @unlikely(i_2 >= 3) {
                     cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i, 3);
+                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(i_2, 3);
                     unreachable;
-                }; builtin::array_get_value<i32>($licm_repr_66, i);
+                }; builtin::array_get_value<i32>($licm_repr_66, i_2);
             }
-            i = i + 1;
+            i_2 = i_2 + 1;
             continue l33;
         };
     };

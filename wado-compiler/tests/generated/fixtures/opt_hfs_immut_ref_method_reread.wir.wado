@@ -179,39 +179,39 @@ fn "opt_hfs_immut_ref_method_reread.wado/run"() {
     let $fuse_at_14: i32;
     let $fuse_at_15: i32;
     let self_17: ref "core:prelude/string.wado//StrCharIter";
-    let self_21: i32;
-    let haystack_23: ref Array<u8>;
-    let needle_25: ref Array<u8>;
-    let j_27: i32;
+    let a_20: ref Array<u8>;
+    let a_end_22: i32;
+    let b_23: ref Array<u8>;
+    let len_26: i32;
+    let i_27: i32;
     let self_29: ref "core:prelude/string.wado//StrCharIter";
-    let self_33: i32;
-    let haystack_35: ref Array<u8>;
-    let needle_37: ref Array<u8>;
-    let j_39: i32;
+    let a_32: ref Array<u8>;
+    let a_end_34: i32;
+    let b_35: ref Array<u8>;
+    let len_38: i32;
+    let i_39: i32;
     lx = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null(self_17 = struct.new "core:prelude/string.wado//StrCharIter" { repr: ref.as_non_null(global:opt_hfs_immut_ref_method_reread.wado::$const_obj_27), used: 6, byte_index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(self_17)), pos: 0 };
     tok = "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(lx);
-    $cond_2 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3: block -> bool {
-        self_21 = tok.used;
-        if self_21 != 6 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3: 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+        a_20 = tok.repr;
+        a_end_22 = tok.used;
+        b_23 = global:opt_hfs_immut_ref_method_reread.wado::$const_obj_27;
+        len_26 = a_end_22 - 0;
+        if len_26 != 6 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        $inline_bytes_match_at_6: block -> bool {
-            haystack_23 = tok.repr;
-            needle_25 = global:opt_hfs_immut_ref_method_reread.wado::$const_obj_27;
-            j_27 = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j_27 >= self_21;
-                    if builtin::array_get_value<u8>(haystack_23, 0 + j_27) != builtin::array_get_value<u8>(needle_25, j_27) {
-                        break $inline_bytes_match_at_6: 0;
-                    }
-                    j_27 = j_27 + 1;
-                    continue l2;
-                };
+        i_27 = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i_27 >= len_26;
+                if builtin::array_get_value<u8>(a_20, 0 + i_27) != builtin::array_get_value<u8>(b_23, 0 + i_27) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                }
+                i_27 = i_27 + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_6: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_3;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;
@@ -220,28 +220,26 @@ fn "opt_hfs_immut_ref_method_reread.wado/run"() {
     }
     lx2 = struct.new "opt_hfs_immut_ref_method_reread.wado//Lexer" { chars: ref.as_non_null(self_29 = struct.new "core:prelude/string.wado//StrCharIter" { repr: ref.as_non_null(global:opt_hfs_immut_ref_method_reread.wado::$const_obj_15), used: 6, byte_index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<char>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrCharIter>"(self_29)), pos: 0 };
     tok2 = "opt_hfs_immut_ref_method_reread.wado/opt_hfs_immut_ref_method_reread.wado/Lexer::read_char_class"(lx2);
-    $cond_5 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: block -> bool {
-        self_33 = tok2.used;
-        if self_33 != 6 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: 0;
+    $cond_5 = $inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
+        a_32 = tok2.repr;
+        a_end_34 = tok2.used;
+        b_35 = global:opt_hfs_immut_ref_method_reread.wado::$const_obj_15;
+        len_38 = a_end_34 - 0;
+        if len_38 != 6 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
         }
-        $inline_bytes_match_at_12: block -> bool {
-            haystack_35 = tok2.repr;
-            needle_37 = global:opt_hfs_immut_ref_method_reread.wado::$const_obj_15;
-            j_39 = 0;
-            b6: block {
-                l7: loop {
-                    break_if b6 j_39 >= self_33;
-                    if builtin::array_get_value<u8>(haystack_35, 0 + j_39) != builtin::array_get_value<u8>(needle_37, j_39) {
-                        break $inline_bytes_match_at_12: 0;
-                    }
-                    j_39 = j_39 + 1;
-                    continue l7;
-                };
+        i_39 = 0;
+        b6: block {
+            l7: loop {
+                break_if b6 i_39 >= len_38;
+                if builtin::array_get_value<u8>(a_32, 0 + i_39) != builtin::array_get_value<u8>(b_35, 0 + i_39) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__8: 0;
+                }
+                i_39 = i_39 + 1;
+                continue l7;
             };
-            break $inline_bytes_match_at_12: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9;
+        break $inline_core_prelude_array_wado_seq_eq_u8__8: 1;
     };
     if @unlikely($cond_5 == 0) {
         cold_path;

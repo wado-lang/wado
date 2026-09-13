@@ -375,12 +375,14 @@ fn "treeset_mut_ref_deep.wado/run"() with Stdout {
     let elements_30: ref "Array<treeset_mut_ref_deep.wado/LitToken>";
     let v_32: ref "core:prelude/string.wado//String";
     let $v1_35: i32;
-    let needle_46: ref Array<u8>;
-    let j_48: i32;
+    let b_44: ref Array<u8>;
+    let len_47: i32;
+    let i_48: i32;
     let v_49: ref "core:prelude/string.wado//String";
     let $v1_52: i32;
-    let needle_63: ref Array<u8>;
-    let j_65: i32;
+    let b_61: ref Array<u8>;
+    let len_64: i32;
+    let i_65: i32;
     let handle: i32;
     let packed: i64;
     let rx_72: i32;
@@ -413,26 +415,24 @@ fn "treeset_mut_ref_deep.wado/run"() with Stdout {
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     $sroa_$v0_used_79 = v_32.used;
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_11: block -> bool {
-        if $sroa_$v0_used_79 != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_11: 0;
+    $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__12: block -> bool {
+        b_44 = global:treeset_mut_ref_deep.wado::$const_obj_31;
+        len_47 = $sroa_$v0_used_79 - 0;
+        if len_47 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
         }
-        $inline_bytes_match_at_14: block -> bool {
-            needle_46 = global:treeset_mut_ref_deep.wado::$const_obj_31;
-            j_48 = 0;
-            b5: block {
-                l6: loop {
-                    break_if b5 j_48 >= $sroa_$v0_used_79;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j_48) != builtin::array_get_value<u8>(needle_46, j_48) {
-                        break $inline_bytes_match_at_14: 0;
-                    }
-                    j_48 = j_48 + 1;
-                    continue l6;
-                };
+        i_48 = 0;
+        b5: block {
+            l6: loop {
+                break_if b5 i_48 >= len_47;
+                if builtin::array_get_value<u8>($array_clone_dst_2, 0 + i_48) != builtin::array_get_value<u8>(b_44, 0 + i_48) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__12: 0;
+                }
+                i_48 = i_48 + 1;
+                continue l6;
             };
-            break $inline_bytes_match_at_14: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_11;
+        break $inline_core_prelude_array_wado_seq_eq_u8__12: 1;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;
@@ -452,26 +452,24 @@ fn "treeset_mut_ref_deep.wado/run"() with Stdout {
     $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
     builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
     $sroa_$v0_used_81 = v_49.used;
-    $cond_8 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_17: block -> bool {
-        if $sroa_$v0_used_81 != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_17: 0;
+    $cond_8 = $inline_core_prelude_array_wado_seq_eq_u8__16: block -> bool {
+        b_61 = global:treeset_mut_ref_deep.wado::$const_obj_20;
+        len_64 = $sroa_$v0_used_81 - 0;
+        if len_64 != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__16: 0;
         }
-        $inline_bytes_match_at_20: block -> bool {
-            needle_63 = global:treeset_mut_ref_deep.wado::$const_obj_20;
-            j_65 = 0;
-            b11: block {
-                l12: loop {
-                    break_if b11 j_65 >= $sroa_$v0_used_81;
-                    if builtin::array_get_value<u8>($array_clone_dst_5, 0 + j_65) != builtin::array_get_value<u8>(needle_63, j_65) {
-                        break $inline_bytes_match_at_20: 0;
-                    }
-                    j_65 = j_65 + 1;
-                    continue l12;
-                };
+        i_65 = 0;
+        b11: block {
+            l12: loop {
+                break_if b11 i_65 >= len_64;
+                if builtin::array_get_value<u8>($array_clone_dst_5, 0 + i_65) != builtin::array_get_value<u8>(b_61, 0 + i_65) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__16: 0;
+                }
+                i_65 = i_65 + 1;
+                continue l12;
             };
-            break $inline_bytes_match_at_20: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_17;
+        break $inline_core_prelude_array_wado_seq_eq_u8__16: 1;
     };
     if @unlikely($cond_8 == 0) {
         cold_path;

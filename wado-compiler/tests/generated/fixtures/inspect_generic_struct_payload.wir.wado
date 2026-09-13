@@ -180,10 +180,11 @@ fn "inspect_generic_struct_payload.wado/$test_0_a_variant_with_a_generic_struct_
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_7: i32;
     let $fuse_at_8: i32;
-    let self_14: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let self_31: ref "core:prelude/string.wado//String";
     let self_41: ref "core:prelude/string.wado//String";
     let self_56: ref "core:prelude/string.wado//String";
@@ -200,28 +201,26 @@ fn "inspect_generic_struct_payload.wado/$test_0_a_variant_with_a_generic_struct_
     self_56.used = 11;
     builtin::array_copy<u8>(self_56.repr, 8, global:inspect_generic_struct_payload.wado::$const_obj_20, 0, 3);
     "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<inspect_generic_struct_payload.wado/Pair<i32>>"(ref.as_non_null(h), $local_4);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_14 = $local_3.used;
-        if self_14 != 32 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = $local_3.repr;
+        a_end = $local_3.used;
+        b = global:inspect_generic_struct_payload.wado::$const_obj_17;
+        len = a_end - 0;
+        if len != 32 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = $local_3.repr;
-            needle = global:inspect_generic_struct_payload.wado::$const_obj_17;
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_14;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -238,37 +237,36 @@ fn "inspect_generic_struct_payload.wado/$test_1_a_bare_generic_struct_inspects"(
     let $fuse_at_8: i32;
     let $fuse_at_9: i32;
     let $fuse_at_10: i32;
-    let self_16: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/inspect_generic_struct_payload.wado/Pair<core:prelude/string.wado/String>^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(global:inspect_generic_struct_payload.wado::$const_obj_33, $local_4);
     if ref.is_null(global:inspect_generic_struct_payload.wado::$const_obj_32) {
         global:inspect_generic_struct_payload.wado::$const_obj_32 = array.new_data<u8>("Pair { l: \"a\", r: \"b\" }");
     }
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_16 = $local_4.used;
-        if self_16 != 23 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = $local_4.repr;
+        a_end = $local_4.used;
+        b = global:inspect_generic_struct_payload.wado::$const_obj_32;
+        len = a_end - 0;
+        if len != 23 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = $local_4.repr;
-            needle = global:inspect_generic_struct_payload.wado::$const_obj_32;
-            j = 0;
-            b7: block {
-                l8: loop {
-                    break_if b7 j >= self_16;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l8;
-                };
+        i = 0;
+        b7: block {
+            l8: loop {
+                break_if b7 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l8;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;

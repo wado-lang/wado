@@ -311,10 +311,11 @@ fn "variadic_deserialize.wado/$test_0_tuple_deserialize_via_variadic_impl"() {
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
-    let self_19: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let parsed_mv_0: i32;
     let parsed_mv_1: ref null "tuple//[i32, core:prelude/string.wado/String]";
     let parsed_mv_2: ref null "core:serde//DeserializeError";
@@ -328,28 +329,26 @@ fn "variadic_deserialize.wado/$test_0_tuple_deserialize_via_variadic_impl"() {
             unreachable;
         }
         $v0_5 = t.1;
-        $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-            self_19 = $v0_5.used;
-            if self_19 != 5 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+        $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+            a = $v0_5.repr;
+            a_end = $v0_5.used;
+            b = global:variadic_deserialize.wado::$const_obj_26;
+            len = a_end - 0;
+            if len != 5 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
-            $inline_bytes_match_at_5: block -> bool {
-                haystack = $v0_5.repr;
-                needle = global:variadic_deserialize.wado::$const_obj_26;
-                j = 0;
-                b3: block {
-                    l4: loop {
-                        break_if b3 j >= self_19;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_5: 0;
-                        }
-                        j = j + 1;
-                        continue l4;
-                    };
+            i = 0;
+            b3: block {
+                l4: loop {
+                    break_if b3 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                    }
+                    i = i + 1;
+                    continue l4;
                 };
-                break $inline_bytes_match_at_5: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
         };
         if @unlikely($cond_6 == 0) {
             cold_path;

@@ -463,48 +463,49 @@ fn "opt_multi_value_option_null_field.wado/run"() {
     let $fuse_at_24: i32;
     let $fuse_at_25: i32;
     let $fuse_at_26: i32;
-    let self_30: i32;
-    let haystack_32: ref Array<u8>;
-    let needle_34: ref Array<u8>;
-    let j_36: i32;
-    let self_40: i32;
-    let haystack_42: ref Array<u8>;
-    let needle_44: ref Array<u8>;
-    let j_46: i32;
-    let a: ref "core:prelude/string.wado//String";
-    let b: ref "core:prelude/string.wado//String";
-    let self_64: i32;
-    let haystack_65: ref Array<u8>;
-    let needle_67: ref Array<u8>;
-    let j_69: i32;
+    let a_29: ref Array<u8>;
+    let a_end_31: i32;
+    let b_32: ref Array<u8>;
+    let len_35: i32;
+    let i_36: i32;
+    let a_39: ref Array<u8>;
+    let a_end_41: i32;
+    let b_42: ref Array<u8>;
+    let len_45: i32;
+    let i_46: i32;
+    let a_49: ref "core:prelude/string.wado//String";
+    let b_50: ref "core:prelude/string.wado//String";
+    let a_55: ref Array<u8>;
+    let a_end_57: i32;
+    let b_58: ref Array<u8>;
+    let len_61: i32;
+    let i_62: i32;
     if ref.is_null(global:opt_multi_value_option_null_field.wado::$const_obj_39) {
         global:opt_multi_value_option_null_field.wado::$const_obj_39 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("--flag"), used: 6 };
     }
     let lo_mv_raw: ref "core:prelude/string.wado//String";
     let lo_mv_inline: ref null "core:prelude/string.wado//String";
     multivalue_bind [lo_mv_raw, lo_mv_inline] = "opt_multi_value_option_null_field.wado/split"(global:opt_multi_value_option_null_field.wado::$const_obj_39);
-    $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-        self_30 = lo_mv_raw.used;
-        if self_30 != 4 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+    $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        a_29 = lo_mv_raw.repr;
+        a_end_31 = lo_mv_raw.used;
+        b_32 = global:opt_multi_value_option_null_field.wado::$const_obj_38;
+        len_35 = a_end_31 - 0;
+        if len_35 != 4 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        $inline_bytes_match_at_4: block -> bool {
-            haystack_32 = lo_mv_raw.repr;
-            needle_34 = global:opt_multi_value_option_null_field.wado::$const_obj_38;
-            j_36 = 0;
-            b28: block {
-                l29: loop {
-                    break_if b28 j_36 >= self_30;
-                    if builtin::array_get_value<u8>(haystack_32, 0 + j_36) != builtin::array_get_value<u8>(needle_34, j_36) {
-                        break $inline_bytes_match_at_4: 0;
-                    }
-                    j_36 = j_36 + 1;
-                    continue l29;
-                };
+        i_36 = 0;
+        b28: block {
+            l29: loop {
+                break_if b28 i_36 >= len_35;
+                if builtin::array_get_value<u8>(a_29, 0 + i_36) != builtin::array_get_value<u8>(b_32, 0 + i_36) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                }
+                i_36 = i_36 + 1;
+                continue l29;
             };
-            break $inline_bytes_match_at_4: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     };
     if @unlikely($cond_3 == 0) {
         cold_path;
@@ -523,28 +524,26 @@ fn "opt_multi_value_option_null_field.wado/run"() {
     let hi_mv_raw: ref "core:prelude/string.wado//String";
     let hi_mv_inline: ref null "core:prelude/string.wado//String";
     multivalue_bind [hi_mv_raw, hi_mv_inline] = "opt_multi_value_option_null_field.wado/split"(global:opt_multi_value_option_null_field.wado::$const_obj_29);
-    $cond_8 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-        self_40 = hi_mv_raw.used;
-        if self_40 != 3 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+    $cond_8 = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+        a_39 = hi_mv_raw.repr;
+        a_end_41 = hi_mv_raw.used;
+        b_42 = global:opt_multi_value_option_null_field.wado::$const_obj_28;
+        len_45 = a_end_41 - 0;
+        if len_45 != 3 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
         }
-        $inline_bytes_match_at_8: block -> bool {
-            haystack_42 = hi_mv_raw.repr;
-            needle_44 = global:opt_multi_value_option_null_field.wado::$const_obj_28;
-            j_46 = 0;
-            b35: block {
-                l36: loop {
-                    break_if b35 j_46 >= self_40;
-                    if builtin::array_get_value<u8>(haystack_42, 0 + j_46) != builtin::array_get_value<u8>(needle_44, j_46) {
-                        break $inline_bytes_match_at_8: 0;
-                    }
-                    j_46 = j_46 + 1;
-                    continue l36;
-                };
+        i_46 = 0;
+        b35: block {
+            l36: loop {
+                break_if b35 i_46 >= len_45;
+                if builtin::array_get_value<u8>(a_39, 0 + i_46) != builtin::array_get_value<u8>(b_42, 0 + i_46) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                }
+                i_46 = i_46 + 1;
+                continue l36;
             };
-            break $inline_bytes_match_at_8: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
     };
     if @unlikely($cond_8 == 0) {
         cold_path;
@@ -553,30 +552,28 @@ fn "opt_multi_value_option_null_field.wado/run"() {
     }
     $v1 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 97, 108), used: 3 };
     $cond_11 = (if ref.is_null(hi_mv_inline) == 0 -> bool {
-        a = ref.as_non_null(hi_mv_inline);
-        b = ref.as_non_null($v1);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_10: block -> bool {
-            self_64 = a.used;
-            if self_64 != 3 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_10: 0;
+        a_49 = ref.as_non_null(hi_mv_inline);
+        b_50 = ref.as_non_null($v1);
+        $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+            a_55 = a_49.repr;
+            a_end_57 = a_49.used;
+            b_58 = b_50.repr;
+            len_61 = a_end_57 - 0;
+            if len_61 != 3 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
             }
-            $inline_bytes_match_at_5: block -> bool {
-                haystack_65 = a.repr;
-                needle_67 = b.repr;
-                j_69 = 0;
-                b41: block {
-                    l42: loop {
-                        break_if b41 j_69 >= self_64;
-                        if builtin::array_get_value<u8>(haystack_65, 0 + j_69) != builtin::array_get_value<u8>(needle_67, j_69) {
-                            break $inline_bytes_match_at_5: 0;
-                        }
-                        j_69 = j_69 + 1;
-                        continue l42;
-                    };
+            i_62 = 0;
+            b41: block {
+                l42: loop {
+                    break_if b41 i_62 >= len_61;
+                    if builtin::array_get_value<u8>(a_55, 0 + i_62) != builtin::array_get_value<u8>(b_58, 0 + i_62) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                    }
+                    i_62 = i_62 + 1;
+                    continue l42;
                 };
-                break $inline_bytes_match_at_5: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_10;
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
         };
     } else {
         0;

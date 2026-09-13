@@ -449,10 +449,11 @@ fn "serde_synth_propagates_begin_struct_error.wado/$test_1_auto_derived_deserial
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_13: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "serde_synth_propagates_begin_struct_error.wado//Foo";
     let r_mv_2: ref null "core:serde//DeserializeError";
@@ -460,28 +461,26 @@ fn "serde_synth_propagates_begin_struct_error.wado/$test_1_auto_derived_deserial
     if @likely(r_mv_0 == 1) {
         e = ref.as_non_null(r_mv_2);
         $v0 = e.message;
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_13 = $v0.used;
-            if self_13 != 23 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a = $v0.repr;
+            a_end = $v0.used;
+            b = global:serde_synth_propagates_begin_struct_error.wado::$const_obj_42;
+            len = a_end - 0;
+            if len != 23 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0.repr;
-                needle = global:serde_synth_propagates_begin_struct_error.wado::$const_obj_42;
-                j = 0;
-                b2: block {
-                    l3: loop {
-                        break_if b2 j >= self_13;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l3;
-                    };
+            i = 0;
+            b2: block {
+                l3: loop {
+                    break_if b2 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i = i + 1;
+                    continue l3;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;

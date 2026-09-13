@@ -133,28 +133,28 @@ fn "deref_assign_tuple_writeback.wado/$test_1_deref_assign_of_a_tuple_with_a_str
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_9: i32;
     let $fuse_at_10: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let b: ref Array<u8>;
+    let i: i32;
     let $sroa_p_0: ref "core:prelude/string.wado//String";
     $sroa_p_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 108, 100), used: 3 };
     $sroa_p_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 101, 119), used: 3 };
     $v0_1 = $sroa_p_0;
-    $cond_2 = $inline_bytes_match_at_4: block -> bool {
-        haystack = $v0_1.repr;
-        needle = global:deref_assign_tuple_writeback.wado::$const_obj_14;
-        j = 0;
+    $cond_2 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        a = $v0_1.repr;
+        b = global:deref_assign_tuple_writeback.wado::$const_obj_14;
+        i = 0;
         b0: block {
             l1: loop {
-                break_if b0 j >= 3;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break $inline_bytes_match_at_4: 0;
+                break_if b0 i >= 3;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                j = j + 1;
+                i = i + 1;
                 continue l1;
             };
         };
-        break $inline_bytes_match_at_4: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     };
     if @unlikely($cond_2 == 0) {
         cold_path;

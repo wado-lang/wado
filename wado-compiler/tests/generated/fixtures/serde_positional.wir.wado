@@ -416,14 +416,16 @@ fn "serde_positional.wado/$test_0_positional_fields_are_not_matched_by_json_key_
     let $fuse_at_19: i32;
     let $fuse_at_20: i32;
     let $fuse_at_21: i32;
-    let self_27: i32;
-    let haystack_29: ref Array<u8>;
-    let needle_31: ref Array<u8>;
-    let j_33: i32;
-    let self_37: i32;
-    let haystack_39: ref Array<u8>;
-    let needle_41: ref Array<u8>;
-    let j_43: i32;
+    let a_26: ref Array<u8>;
+    let a_end_28: i32;
+    let b_29: ref Array<u8>;
+    let len_32: i32;
+    let i_33: i32;
+    let a_36: ref Array<u8>;
+    let a_end_38: i32;
+    let b_39: ref Array<u8>;
+    let len_42: i32;
+    let i_43: i32;
     let r_mv_0: i32;
     let r_mv_1: ref null "serde_positional.wado//WithDefaults";
     let r_mv_2: ref null "core:serde//DeserializeError";
@@ -431,28 +433,26 @@ fn "serde_positional.wado/$test_0_positional_fields_are_not_matched_by_json_key_
     if @likely(r_mv_0 == 0) {
         c = ref.as_non_null(r_mv_1);
         $v0_2 = c.input;
-        $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-            self_27 = $v0_2.used;
-            if self_27 != 10 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+        $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+            a_26 = $v0_2.repr;
+            a_end_28 = $v0_2.used;
+            b_29 = global:serde_positional.wado::$const_obj_39;
+            len_32 = a_end_28 - 0;
+            if len_32 != 10 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-            $inline_bytes_match_at_4: block -> bool {
-                haystack_29 = $v0_2.repr;
-                needle_31 = global:serde_positional.wado::$const_obj_39;
-                j_33 = 0;
-                b2: block {
-                    l3: loop {
-                        break_if b2 j_33 >= self_27;
-                        if builtin::array_get_value<u8>(haystack_29, 0 + j_33) != builtin::array_get_value<u8>(needle_31, j_33) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j_33 = j_33 + 1;
-                        continue l3;
-                    };
+            i_33 = 0;
+            b2: block {
+                l3: loop {
+                    break_if b2 i_33 >= len_32;
+                    if builtin::array_get_value<u8>(a_26, 0 + i_33) != builtin::array_get_value<u8>(b_29, 0 + i_33) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                    }
+                    i_33 = i_33 + 1;
+                    continue l3;
                 };
-                break $inline_bytes_match_at_4: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
         };
         if @unlikely($cond_3 == 0) {
             cold_path;
@@ -462,28 +462,26 @@ fn "serde_positional.wado/$test_0_positional_fields_are_not_matched_by_json_key_
             unreachable;
         }
         $v0_4 = c.out;
-        $cond_5 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: block -> bool {
-            self_37 = $v0_4.used;
-            if self_37 != 11 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5: 0;
+        $cond_5 = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+            a_36 = $v0_4.repr;
+            a_end_38 = $v0_4.used;
+            b_39 = global:serde_positional.wado::$const_obj_30;
+            len_42 = a_end_38 - 0;
+            if len_42 != 11 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
             }
-            $inline_bytes_match_at_8: block -> bool {
-                haystack_39 = $v0_4.repr;
-                needle_41 = global:serde_positional.wado::$const_obj_30;
-                j_43 = 0;
-                b8: block {
-                    l9: loop {
-                        break_if b8 j_43 >= self_37;
-                        if builtin::array_get_value<u8>(haystack_39, 0 + j_43) != builtin::array_get_value<u8>(needle_41, j_43) {
-                            break $inline_bytes_match_at_8: 0;
-                        }
-                        j_43 = j_43 + 1;
-                        continue l9;
-                    };
+            i_43 = 0;
+            b8: block {
+                l9: loop {
+                    break_if b8 i_43 >= len_42;
+                    if builtin::array_get_value<u8>(a_36, 0 + i_43) != builtin::array_get_value<u8>(b_39, 0 + i_43) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                    }
+                    i_43 = i_43 + 1;
+                    continue l9;
                 };
-                break $inline_bytes_match_at_8: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_5;
+            break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
         };
         if @unlikely($cond_5 == 0) {
             cold_path;

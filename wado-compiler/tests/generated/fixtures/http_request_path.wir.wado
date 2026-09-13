@@ -448,38 +448,37 @@ fn "http_request_path.wado/$cm_task_entry__handle"(request) {
     let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $fuse_at_182: i32;
     let $fuse_at_183: i32;
-    let self_187: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let packed: i64;
     let rx: i32;
     let tx: i32;
     path = "http_request_path.wado/$cm_binding__Request_get_path_with_query"(request);
     if @likely(ref.is_null(path) == 0) {
         p = ref.as_non_null(path);
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_187 = p.used;
-            if self_187 != 6 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a = p.repr;
+            a_end = p.used;
+            b = global:http_request_path.wado::$const_obj_14;
+            len = a_end - 0;
+            if len != 6 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack = p.repr;
-                needle = global:http_request_path.wado::$const_obj_14;
-                j = 0;
-                b6: block {
-                    l7: loop {
-                        break_if b6 j >= self_187;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j = j + 1;
-                        continue l7;
-                    };
+            i = 0;
+            b6: block {
+                l7: loop {
+                    break_if b6 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i = i + 1;
+                    continue l7;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;

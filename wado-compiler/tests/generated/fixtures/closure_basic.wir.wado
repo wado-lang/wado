@@ -723,35 +723,34 @@ fn "closure_basic.wado/$test_19_capture_multiple"() {
     let $local_26: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_33: i32;
     let $fuse_at_34: i32;
-    let self_39: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a_38: ref Array<u8>;
+    let a_end: i32;
+    let b_41: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     if ref.is_null(global:closure_basic.wado::$const_obj_9) {
         global:closure_basic.wado::$const_obj_9 = "closure_basic.wado/closure_basic.wado/$Closure_27::$call$spec0"();
     }
-    $cond_11 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-        self_39 = global:closure_basic.wado::$const_obj_9.used;
-        if self_39 != 5 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+    $cond_11 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+        a_38 = global:closure_basic.wado::$const_obj_9.repr;
+        a_end = global:closure_basic.wado::$const_obj_9.used;
+        b_41 = global:closure_basic.wado::$const_obj_8;
+        len = a_end - 0;
+        if len != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
         }
-        $inline_bytes_match_at_4: block -> bool {
-            haystack = global:closure_basic.wado::$const_obj_9.repr;
-            needle = global:closure_basic.wado::$const_obj_8;
-            j = 0;
-            b9: block {
-                l10: loop {
-                    break_if b9 j >= self_39;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_4: 0;
-                    }
-                    j = j + 1;
-                    continue l10;
-                };
+        i = 0;
+        b9: block {
+            l10: loop {
+                break_if b9 i >= len;
+                if builtin::array_get_value<u8>(a_38, 0 + i) != builtin::array_get_value<u8>(b_41, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                }
+                i = i + 1;
+                continue l10;
             };
-            break $inline_bytes_match_at_4: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
     };
     if @unlikely($cond_11 == 0) {
         cold_path;

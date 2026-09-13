@@ -214,8 +214,9 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     let $fuse_at_18: i32;
     let elements_19: ref "Array<core:prelude/string.wado/String>";
     let v_33: ref "core:prelude/string.wado//String";
-    let needle: ref Array<u8>;
-    let j: i32;
+    let b_47: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let $sroa_$v1_used: i32;
     let $sroa_a_repr: ref "Array<core:prelude/string.wado/String>";
     let $sroa_b_repr: ref "Array<core:prelude/string.wado/String>";
@@ -235,26 +236,24 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     $sroa_$v1_used = v_33.used;
-    $cond_6 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: block -> bool {
-        if $sroa_$v1_used != 1 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9: 0;
+    $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__10: block -> bool {
+        b_47 = global:deref_assign_rhs_copy.wado::$const_obj_38;
+        len = $sroa_$v1_used - 0;
+        if len != 1 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
         }
-        $inline_bytes_match_at_12: block -> bool {
-            needle = global:deref_assign_rhs_copy.wado::$const_obj_38;
-            j = 0;
-            b3: block {
-                l4: loop {
-                    break_if b3 j >= $sroa_$v1_used;
-                    if builtin::array_get_value<u8>($array_clone_dst_2, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_12: 0;
-                    }
-                    j = j + 1;
-                    continue l4;
-                };
+        i = 0;
+        b3: block {
+            l4: loop {
+                break_if b3 i >= len;
+                if builtin::array_get_value<u8>($array_clone_dst_2, 0 + i) != builtin::array_get_value<u8>(b_47, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__10: 0;
+                }
+                i = i + 1;
+                continue l4;
             };
-            break $inline_bytes_match_at_12: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_9;
+        break $inline_core_prelude_array_wado_seq_eq_u8__10: 1;
     };
     if @unlikely($cond_6 == 0) {
         cold_path;
