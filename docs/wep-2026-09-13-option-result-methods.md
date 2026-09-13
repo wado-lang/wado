@@ -89,6 +89,14 @@ followed by `unwrap_or(v)`, which risks no ordering at all.
 `and`, `or`, `xor`, `filter`, `zip`, `flatten`, and `unwrap_or_default` are
 not offered. No Wado site wants them, and idiomatic Rust barely does.
 
+A `??` operator is not adopted. The case for it was real: one infix operator
+covers `unwrap_or`'s 64 sites with a right-hand side lazy by construction, and
+Zig, Swift, Kotlin, and C# all settled on that shape. It is refused because an
+operator is a large addition for a small return — grammar, precedence,
+formatter, and language service all grow, and what they buy is laziness at one
+call shape. It also stops at `Result`, where it would drop `E` without saying
+so. Whatever answers the eager fallback answers it as a method.
+
 `map_or` and `map_or_else` carry `#[unavailable]`, so calling either reports
 the reason above; see
 [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md). The rest are
@@ -104,16 +112,18 @@ Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 
-- A `??` operator is unexamined. One infix operator would cover `unwrap_or`'s
-  64 sites with a right-hand side that is lazy by construction, taking the
-  eager-evaluation trap out of the language rather than teaching each caller
-  to dodge it. Zig, Swift, Kotlin, and C# all settled on that shape. Settling
-  it needs an answer for `Result`, where `??` would silently drop `E`. Until
-  then, `unwrap_or_else` and `ok_or_else` stay absent, since the operator
-  would make the first unnecessary.
+- `unwrap_or_else` and `ok_or_else` are absent. Each is the lazy form of a
+  method that is offered, and with `??` refused nothing else keeps a fallback
+  from being evaluated where it goes unused. The corpus splits them. Thirteen
+  sites build an error the success path never reads — `DeserializeError`, a
+  formatted message — which `ok_or` would evaluate and `ok_or_else` would not.
+  About five want `unwrap_or_else`, and most of those are a `String::new()` or
+  a `TreeMap::new()` that costs nothing to evaluate early. Idiomatic Rust
+  keeps that ratio: `ok_or_else` 354 calls to `unwrap_or_else`'s 74. Adopting
+  one is adopting both, since the argument for each is the same.
 - A fallback that reads the `Err` payload without diverging has no
-  non-`match` form. `let ... else` cannot bind the payload, and
-  `unwrap_or_else` is held by the gap above. There are 15 such sites.
+  non-`match` form, since `let ... else` cannot bind the payload. There are 15
+  such sites, and `Result::unwrap_or_else` is what would cover them.
 - `and_then` is absent. `?` covers it, including propagating an `Option` in an
   `Option`-returning function, and no Wado site wants it. Idiomatic Rust calls
   it 242 times in the measured corpus, so this is the kind of gap that shows
