@@ -1,6 +1,6 @@
 #![generated(by = "gale", sources = ["tests/grammars/ll_multi_alt_overlap.g4"])]
 
-use { Level, Log, TextSink, enabled, set_log_level, trace } from "core:log";
+use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from "core:log";
 
 pub struct Span {
     pub start: i32,
@@ -1538,8 +1538,11 @@ global TRACE_TARGET: String = "gale.trace";
 
 pub fn trace_to_stderr<T, effect E>(mut body: fn mut() -> T with E) -> T with E {
     let mut sink = TextSink { seq: false };
+    let prev = log_level();
     set_log_level(Level::Trace);
-    return with Log => &mut sink do { body() };
+    let out = with Log => &mut sink do { body() };
+    set_log_level(prev);
+    return out;
 }
 
 fn trace_enter(p: &Parser, rule: &String) {

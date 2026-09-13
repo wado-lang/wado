@@ -347,8 +347,7 @@ pub struct CompilerOptions {
     /// entry matching no declaration is reported per `param_policy.unknown`.
     pub param_overrides: hashmap::IndexMap<String, String>,
     /// The host's own parameter fallbacks, below `-D` and `from_env` and above
-    /// the declaration's initializer. An entry matching no declaration is
-    /// silent, since the host aims it at a library rather than this program.
+    /// the declaration's initializer. See [`param_resolution::resolve_params`].
     pub param_defaults: hashmap::IndexMap<String, String>,
     /// Severity policy for the three param-resolution diagnostic classes
     /// (`--param-unknown` / `--param-invalid` / `--param-missing`).

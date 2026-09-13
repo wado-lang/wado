@@ -111,11 +111,10 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         fragment_entries: req.options.fragment_entries,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
-    // Surface Gale's prediction-strategy diagnostics through the Kiln host so
-    // they appear as normal compile warnings. The Kiln surface is the
-    // production entry (the `gale gen` CLI prints the same warnings on
-    // stderr), so a grammar built either way gets identical visibility. Gale
-    // diagnostics carry no source span yet, so the rule label leads the text.
+    // Surface Gale's prediction-strategy diagnostics through the Kiln host, at
+    // the level `gir::diagnostic_level` gives each kind — the same level the
+    // `gale gen` CLI emits it at, so a grammar built either way is read the same
+    // way. Gale diagnostics carry no source span yet, so the label leads the text.
     for let d of &generated.diagnostics {
         if let Some(level) = diagnostic_level(&d.kind) {
             KilnHost::emit_diagnostic(KilnDiagnostic {

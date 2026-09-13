@@ -661,7 +661,10 @@ b : 'y' ;
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
     // The `core:log` import, the trace helpers, the opt-in sink installer, the
     // depth field, and the per-rule calls are all present.
-    assert str_contains(&traced, &"use { Level, Log, TextSink, enabled, set_log_level, trace } from \"core:log\";");
+    assert str_contains(
+        &traced,
+        &"use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";",
+    );
     assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
     assert str_contains(&traced, &"pub fn trace_to_stderr<T, effect E>");
     assert str_contains(&traced, &"trace_depth: i32,");

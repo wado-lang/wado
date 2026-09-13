@@ -63,15 +63,15 @@ build says what it strips rather than what it keeps. `#[param]` accepts only
 built-in types today, hence the conversion through `level_from_str` — see
 [Language and optimizer requirements](#language-and-optimizer-requirements).
 
-`wado test` is the one caller that moves the threshold on its own, to `warn`: a
-passing test prints nothing, so the `trace` default would bury a run in the
-diagnostics a library emits while working. It supplies it as a host default
-rather than a `-D`, so it sits under both `-D log.level=` and
-`WADO_LOG_LEVEL`, and naming no `#[param]` in a program that never imports
-`core:log` is silent rather than `--param-unknown`. A test that asserts on an
-event below `warn` therefore needs the level raised — in-tree,
-`wado-compiler/lib/core/log_level_test.wado` is excluded from discovery and run
-by `mise run test-log-levels`.
+`wado test` moves the threshold to `warn`. A passing test prints nothing, so the
+`trace` default buries a run in the events a library emits while working. It
+supplies that as a host default, the resolution source below `-D log.level=` and
+`WADO_LOG_LEVEL` — see
+[WEP: Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md#resolution-sources).
+
+A test that asserts on an event below `warn` therefore needs the level raised. In
+this repository `wado-compiler/lib/core/log_level_test.wado` holds those, kept
+out of discovery and run by `mise run test-log-levels`.
 
 Tier 2 — process-wide runtime threshold: a global read and a comparison, no call
 and no allocation. The threshold belongs to `core:log`, not to the installed
@@ -203,15 +203,17 @@ needing a capability, and reaches it the same way: `Log`'s operations declare no
 effects, so a sink cannot declare the clock read on them either, and it goes
 through an `#[ambient]` helper.
 
-Which world a sink installs in is therefore settled by its type, not by a field.
-A sink is generic over a `Clock`, and the clock a sink never reads is one its
-monomorphization does not contain, so the component carries no `wasi:clocks`
-import: `TextSink<WallClock>` stamps, and the default `TextSink` over `NoClock`
-does not. A runtime `timestamp: false` cannot say this — the call stays
-reachable, the import lands, and at `-O0` nothing folds it away. The distinction
-matters because an import decides instantiation: `core:kiln/generator` links only
-`core:kiln/kiln-host`, so a generator reaching a stamped sink fails to
-instantiate rather than logging without a clock.
+A sink is generic over a `Clock`, so whether it reads one is part of its type:
+`TextSink<WallClock>` stamps, and the default `TextSink` over `NoClock` does not.
+Monomorphization drops the instantiation nobody asks for, so a program over
+`NoClock` carries no `wasi:clocks` import. A runtime `timestamp: false` cannot
+promise that. The call stays reachable, the import lands, and at `-O0` nothing
+folds it away.
+
+The import is what makes this worth a type parameter, because an import decides
+instantiation. `core:kiln/generator` links only `core:kiln/kiln-host`, so a
+generator reaching a stamped sink fails to instantiate rather than logging
+without a clock.
 
 ### Runtime filter directives
 
@@ -237,15 +239,14 @@ call site — there is no `#module` literal to derive one from.
 
 The timestamp is owned by the sink, not `Event`: container and collector stamps
 record ingestion time, drift under buffering, and not every target has a
-collector. A sink that stamps is a sink over `WallClock`, so the choice is a type
-parameter — the only form of it that keeps a clock-free world clock-free, since
-an import follows reachability rather than a field's value.
+collector. A sink that stamps is a sink over `WallClock`, which is why the choice
+is a type parameter rather than a field — see [Sinks](#sinks).
 
 The default is `NoClock`, so a program that installs nothing logs in every world,
 `core:kiln/generator` included. That is the conservative end of the trade rather
-than a claim about what a default line should carry: a monotonic `seq` counter
+than a claim about what a default line should carry. A monotonic `seq` counter
 (default on) preserves intra-process order without a clock, and stamping the
-default in worlds that do have one is a compatible change, open as a gap below.
+default in worlds that have one is a compatible change, left as open work.
 
 ### Default sink and scoped overrides
 
@@ -377,6 +378,9 @@ only.
 
 - [ ] Seeding the default threshold from `WADO_LOG` — see
       [Default sink and scoped overrides](#default-sink-and-scoped-overrides).
+- [ ] Stamping the default sink in worlds that have a clock, without costing a
+      clock-free world its guarantee — see
+      [Timestamp and sequence](#timestamp-and-sequence).
 - [ ] Forwarding a local bound to a constant global read.
 - [ ] Sinking pure definitions into the branch that uses them.
 - [ ] Optional: native `with <span> do { … }` sugar.

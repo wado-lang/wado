@@ -4,10 +4,10 @@
 //! any `wasi:*` CM import as depth.
 //!
 //! Two checks, because a source `use` and an emitted import are not the same
-//! set. [`check_loaded`] runs after loading and before analysis, so a WASI `use`
-//! the author wrote points at that `use` like any other import error;
-//! [`check_cm_imports`] runs on the import plan, where a `core:*` module that
-//! reaches WASI transitively is finally visible.
+//! set. [`check_loaded`] reads the `use` the author wrote, so it blames that
+//! span; [`check_cm_imports`] reads the import plan, the first place a `core:*`
+//! module reaching WASI on the generator's behalf is visible (`core:jwt` and
+//! `core:uuid` do, through `SystemClock`).
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
@@ -51,6 +51,41 @@ pub fn check_loaded<H: CompilerHost>(
             continue;
         }
         count += check_module(module, entry_module, source, logger);
+    }
+    count
+}
+
+/// Reject the WASI interfaces a generator's component would ask the Kiln linker
+/// to provide. Returns the count; zero means the generator links.
+pub fn check_cm_imports<H: CompilerHost>(
+    is_generator_world: bool,
+    import_plan: &[ImportEntry],
+    logger: &Logger<'_, H>,
+) -> usize {
+    if !is_generator_world {
+        return 0;
+    }
+
+    let mut count = 0;
+    for entry in import_plan {
+        // A shared-types instance bears no function, so it asks the linker for
+        // nothing: every generator already instantiates with `wasi:cli/types`.
+        if !entry.fq.starts_with("wasi:") || matches!(entry.kind, ImportKind::SharedTypes) {
+            continue;
+        }
+        let _ = logger.error(Diagnostic {
+            severity: Severity::Error,
+            code: Code::KilnGeneratorForbiddenImport,
+            message: format!(
+                "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
+                 reaches WASI on its behalf. The generator linker offers only \
+                 `core:kiln/kiln-host`, so this component cannot instantiate. \
+                 See WEP 2026-04-12 §\"Design principles\".",
+                fq = entry.fq,
+            ),
+            span: None,
+        });
+        count += 1;
     }
     count
 }
@@ -403,46 +438,4 @@ mod tests {
         assert!(forbid_reason("./options.wado").is_none());
         assert!(forbid_reason("../shared.wado").is_none());
     }
-}
-
-/// Reject the WASI interfaces a generator's component would ask the Kiln linker
-/// to provide. Runs on the import plan rather than on `use` declarations:
-/// [`check_loaded`] reads what the source imports, so a `core:*` module that
-/// reaches WASI on the generator's behalf is invisible to it — `core:log` did,
-/// through `core:temporal`'s `SystemClock`, and `core:jwt` and `core:uuid` still
-/// do. Returns the count of rejected interfaces; zero means the generator links.
-///
-/// [`ImportKind::SharedTypes`] is not a violation: `wasi:cli/types` exports an
-/// `error-code` enum and no function, so it asks the linker for nothing, and
-/// every generator already instantiates with it. Every other kind bears
-/// functions.
-pub fn check_cm_imports<H: CompilerHost>(
-    is_generator_world: bool,
-    import_plan: &[ImportEntry],
-    logger: &Logger<'_, H>,
-) -> usize {
-    if !is_generator_world {
-        return 0;
-    }
-
-    let mut count = 0;
-    for entry in import_plan {
-        if !entry.fq.starts_with("wasi:") || matches!(entry.kind, ImportKind::SharedTypes) {
-            continue;
-        }
-        let _ = logger.error(Diagnostic {
-            severity: Severity::Error,
-            code: Code::KilnGeneratorForbiddenImport,
-            message: format!(
-                "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
-                 reaches WASI on its behalf. The generator linker offers only \
-                 `core:kiln/kiln-host`, so this component cannot instantiate. \
-                 See WEP 2026-04-12 §\"Design principles\".",
-                fq = entry.fq,
-            ),
-            span: None,
-        });
-        count += 1;
-    }
-    count
 }

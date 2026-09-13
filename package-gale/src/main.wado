@@ -50,9 +50,6 @@ impl Deserialize for Command;
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
-    // A hand-run build reports what a Kiln build reports, so the two paths agree
-    // on what a grammar's diagnostics mean. `--log-level info` asks for more.
-    set_log_level(Level::Warn);
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
             apply_log_level(&g.log_level);
@@ -89,13 +86,15 @@ fn usage() with Stderr {
     eprintln("       <level> is trace, debug, info, warn or error (default warn)");
 }
 
-/// Move the process-wide threshold (`core:log` tier 2) to `--log-level`.
+/// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,
+/// defaulting to `Warn` so a hand-run build reports what a Kiln build reports.
 ///
 /// Tier 1 is a ceiling this cannot raise: a build that already compiled the
 /// `info` calls away stays quiet whatever is asked for here. `wado compile -D
 /// log.level=trace` is what moves the ceiling.
 fn apply_log_level(spec: &Option<String>) with (Stderr, Exit) {
     let Some(name) = *spec else {
+        set_log_level(Level::Warn);
         return;
     };
     match Level::from_str_lenient(&name) {

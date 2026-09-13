@@ -507,17 +507,9 @@ test "rule_header reaches every Rule variant" {
 }
 
 test "a diagnostic's level says what a default build shows" {
-    // Only a kind that changes the parser an author gets warns. The overlap
-    // tournament is sound and fires on most real grammars, so it is advisory:
-    // that is what keeps a default build quiet without hiding it.
     assert diagnostic_level(&DiagnosticKind::UnsupportedAction) matches { Some(Warn) };
     assert diagnostic_level(&DiagnosticKind::HighlightQuery) matches { Some(Warn) };
     assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(Warn) };
     assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(Info) };
-
-    // The scan-guard fallback fires on any `e?` whose body leads with a rule
-    // reference — five times as often as the kinds that name something to fix
-    // on a real grammar, which is enough to bury them. It stays in the dump
-    // report and off a build's stream entirely, at any level.
     assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { None };
 }
