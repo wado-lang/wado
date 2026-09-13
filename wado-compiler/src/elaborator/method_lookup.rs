@@ -1979,6 +1979,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(name)
                     .cloned()
                     .unwrap_or_default(),
+                // The frame already holds a pack as the pack it was declared
+                // as, so this carries it over as it stands.
+                is_pack: false,
                 type_id: binder.type_id,
             })
             .collect();

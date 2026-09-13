@@ -131,6 +131,11 @@ pub(super) struct DefaultTypeBinding {
     /// enclosing `impl`.
     pub(super) bounds: Vec<ast::TraitBound>,
     pub(super) type_id: TypeId,
+    /// Whether the name is a variadic pack (`..T`). One name against every
+    /// type argument the scalars ahead of it left, so `type_id` is the tuple
+    /// of those — while the name itself enters scope as a pack, since
+    /// `[..T::default()]` means the pack's elements rather than that tuple.
+    pub(super) is_pack: bool,
 }
 
 /// What `enclosing` declares `type_id` is bound by, found through the name it
@@ -159,13 +164,18 @@ pub(super) fn slot_type_bindings(
         .iter()
         .zip(concrete)
         .filter_map(|(&slot, &type_id)| match table.get(slot) {
-            ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
-                Some(DefaultTypeBinding {
-                    name: name.clone(),
-                    bounds: Vec::new(),
-                    type_id,
-                })
-            }
+            ResolvedType::TypeParam { name, .. } => Some(DefaultTypeBinding {
+                name: name.clone(),
+                bounds: Vec::new(),
+                type_id,
+                is_pack: false,
+            }),
+            ResolvedType::TypePack { name, .. } => Some(DefaultTypeBinding {
+                name: name.clone(),
+                bounds: Vec::new(),
+                type_id: slot,
+                is_pack: true,
+            }),
             _ => None,
         })
         .collect()
@@ -2358,16 +2368,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        if space.len() != type_args.len() {
+        // A trailing pack takes every argument the scalars ahead of it left,
+        // so its own count is one name against many arguments. Only that shape
+        // is dense enough to pair; anything else would bind the wrong type.
+        let trailing_pack = space.last().is_some_and(|p| p.is_pack);
+        let scalars = space.len() - usize::from(trailing_pack);
+        if space.iter().filter(|p| p.is_pack).count() > usize::from(trailing_pack)
+            || (trailing_pack && type_args.len() < scalars)
+            || (!trailing_pack && space.len() != type_args.len())
+        {
             return Vec::new();
         }
         space
             .into_iter()
-            .zip(type_args.iter().copied())
-            .map(|(param, type_id)| DefaultTypeBinding {
+            .enumerate()
+            .map(|(i, param)| DefaultTypeBinding {
+                // A pack's own type is the tuple of what it took. The name
+                // still enters scope as a pack — see
+                // [`DefaultTypeBinding::is_pack`] — so this only answers the
+                // "was anything pinned" and bounds-fallback questions.
+                type_id: if param.is_pack {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_tuple(type_args[i..].to_vec())
+                } else {
+                    type_args[i]
+                },
                 name: param.name,
                 bounds: param.bounds,
-                type_id,
+                is_pack: param.is_pack,
             })
             .collect()
     }
@@ -2402,7 +2432,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             bindings
                 .iter()
                 .map(|b| {
-                    if matches!(table.get(b.type_id), ResolvedType::InferVar(_)) {
+                    if !b.is_pack && matches!(table.get(b.type_id), ResolvedType::InferVar(_)) {
                         return None;
                     }
                     if !b.bounds.is_empty() {
@@ -2412,6 +2442,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
                 .collect()
         };
+        // A pack goes in as the pack it was declared as, so the spread in
+        // `[..T::default()]` has one to expand. See
+        // [`DefaultTypeBinding::is_pack`].
+        let pack_ids: Vec<Option<TypeId>> = bindings
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                b.is_pack.then(|| {
+                    scope
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_type_pack(b.name.clone(), i as u32)
+                })
+            })
+            .collect();
         let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
         trait_ctx.type_params.clear();
         trait_ctx.type_param_bounds.clear();
@@ -2421,7 +2467,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             trait_ctx.type_params.insert(
                 binding.name.clone(),
-                BinderInScope::undeclared(i as u32, binding.type_id),
+                BinderInScope::undeclared(i as u32, pack_ids[i].unwrap_or(binding.type_id)),
             );
             if !bounds.is_empty() {
                 trait_ctx

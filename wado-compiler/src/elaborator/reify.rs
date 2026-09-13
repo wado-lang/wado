@@ -6863,6 +6863,52 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
+    /// Record on the `TypePackExpansion` of a parameter default the tuple the
+    /// call settled the pack to, read off the parameter's own concrete type.
+    /// The default is spliced into the caller, which may be a function nothing
+    /// instantiates, so the pack has no later chance to be substituted.
+    fn settle_packs_in_default(&mut self, expr: &mut TirExpr, expected: TypeId) {
+        use crate::tir::{ResolvedType, TirExprKind, TypeTable};
+
+        let TirExprKind::TupleLiteral { elements } = &mut expr.kind else {
+            return;
+        };
+        // One expansion and no spread: every other element is one tuple slot,
+        // so the expansion covers exactly the slots between the two runs.
+        let is_expansion = |e: &TirExpr| matches!(e.kind, TirExprKind::TypePackExpansion { .. });
+        let Some(at) = elements.iter().position(is_expansion) else {
+            return;
+        };
+        if elements.iter().skip(at + 1).any(is_expansion)
+            || elements
+                .iter()
+                .any(|e| matches!(e.kind, TirExprKind::TupleSpread { .. }))
+        {
+            return;
+        }
+        let ResolvedType::GenericInstance { def, type_args } =
+            self.tysys.type_table.borrow().get(expected).clone()
+        else {
+            return;
+        };
+        if !TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) {
+            return;
+        }
+        let after = elements.len() - at - 1;
+        if type_args.len() < at + after {
+            return;
+        }
+        let settled: Vec<TypeId> = type_args[at..type_args.len() - after].to_vec();
+        if settled.iter().any(|t| self.type_contains_pack(*t)) {
+            return;
+        }
+        let settled = self.tysys.type_table.borrow_mut().make_tuple(settled);
+        let TirExprKind::TypePackExpansion { settled_pack, .. } = &mut elements[at].kind else {
+            unreachable!("the element at `at` is what `is_expansion` matched")
+        };
+        *settled_pack = Some(settled);
+    }
+
     /// Reify a tuple literal, handling spread elements. The tuple `TypeId` is
     /// built bottom-up via `make_tuple` so a nested tuple's element type is the
     /// same interned id as the inner literal's, which `nir/sroa` relies on. A
@@ -6905,6 +6951,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             TirExprKind::TypePackExpansion {
                                 call_expr: Box::new(spread_expr),
                                 pack_type_id,
+                                settled_pack: None,
                             },
                             *elem_types.last().unwrap(),
                             elem.span(),
@@ -6941,6 +6988,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         TirExprKind::TypePackExpansion {
                             call_expr: Box::new(spread_expr),
                             pack_type_id: plain_pack,
+                            settled_pack: None,
                         },
                         mapped,
                         elem.span(),
@@ -7909,8 +7957,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // A default declared on a trait method has no body for annotate to
             // walk, so without the parameter's type here it reifies untyped.
             let expected = param_types.get(i).copied();
-            let resolved =
+            let mut resolved =
                 ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
+            if let Some(expected) = expected {
+                self.settle_packs_in_default(&mut resolved, expected);
+            }
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
             // `CallArg::is_mut` says the callee may write the caller's storage

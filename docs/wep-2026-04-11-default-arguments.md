@@ -461,10 +461,20 @@ type arguments, in the declaring module and across a module boundary.
 | Trait method — trait's own param | ✅        | ✅                          | ✅                               | ✅                  |
 | Trait method — method's own      | ✅        | ✅                          | ✅                               | ✅                  |
 | Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
+| Free function — variadic pack    | ✅        | ✅                          | —                                | ✅                  |
 
 ᴿ The receiver settles the `impl` block's parameters, so the column describes
 how the receiver's own type was settled. ᴬ The literal's annotation names the
 instantiation.
+
+A variadic pack is a type parameter like any other, so `[..T::default()]` is a
+default the same way `T::default()` is. What it settles to is a tuple rather
+than a type, and the parameter it fills is the only place that tuple is written
+down — so the reified default records it on the expansion node, and a
+monomorphizer pass ahead of instantiation expands the node from it. Without
+that the spliced default waits for a substitution that only a generic caller
+would ever perform. A pack declares no type default of its own, which is why
+that column is empty.
 
 The method's own type default is settled before the value defaults are walked,
 against the same slots the call's own inference uses. It runs only where the
@@ -605,6 +615,12 @@ let resp = Fetch::fetch(url, init).read();
 A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that
 had nothing to resolve against. The second diagnostic is the one to read.
+
+A method declaring its own variadic pack (`impl Box<T> { fn m<..U>(u: [..U]) }`)
+binds the pack to the whole tuple instead of splicing it, with or without a
+turbofish, so the call reports a type mismatch. That is the pack machinery
+rather than defaults — no method-level pack works today, defaulted or not — and
+the row above covers free functions for that reason.
 
 ## See Also
 

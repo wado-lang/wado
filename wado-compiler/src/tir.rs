@@ -4964,6 +4964,10 @@ pub enum TirExprKind {
         call_expr: Box<TirExpr>,
         /// The `TypePack` type ID (index into type table, pre-substitution)
         pack_type_id: TypeId,
+        /// The tuple the pack stands for, on a node whose own site settled it:
+        /// a parameter default spliced into a caller nothing instantiates.
+        /// `None` where the enclosing function's instantiation settles it.
+        settled_pack: Option<TypeId>,
     },
 
     /// Deferred `[for let v of tuple { expr }]` over a pack-typed tuple.

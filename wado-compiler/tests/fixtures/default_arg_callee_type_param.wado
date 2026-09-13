@@ -113,6 +113,24 @@ impl<T: Default> Show for Box2<T> {
     }
 }
 
+// A variadic pack is a type parameter like any other: the default names it,
+// and the site settles it to the tuple of type arguments the call supplied.
+fn packed<..T: Default>(tag: String, t: [..T] = [..T::default()]) -> String {
+    let mut s = tag;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
+fn headed<A: Default, ..T: Default>(a: A = A::default(), t: [..T] = [..T::default()]) -> String {
+    let mut s = `${a:?}`;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
 // A field default: the parameter comes from the annotation, or from a sibling
 // field where the literal carries none.
 struct Holder<T: Default> {
@@ -181,6 +199,17 @@ test "a trait method's default names a type parameter in scope" {
     // spelling uses.
     assert Show::shown(&bi) == "NoFields {}";
     assert Show::shown::<i32>(&bi) == "0";
+}
+
+// The pack the turbofish settles, at two arities and two element sets, then a
+// call that supplies the tuple itself and takes no default at all.
+test "a variadic pack's default names the pack it stands for" {
+    assert packed::<i32>("a:") == "a:0";
+    assert packed::<i32, String, bool>("b:") == "b:0\"\"false";
+    assert packed::<String>("c:") == "c:\"\"";
+    assert packed::<i32, String>("d:", [7, "x"]) == "d:7\"x\"";
+    assert headed::<i32, String, bool>() == "0\"\"false";
+    assert headed::<String, i32>() == "\"\"0";
 }
 
 // From the annotation, then from a sibling field.
