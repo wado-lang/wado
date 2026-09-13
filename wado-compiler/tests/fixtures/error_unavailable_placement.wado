@@ -1,0 +1,25 @@
+// The attribute is placed on a module function, an `impl` method, and a trait
+// method. Anywhere else it would be read by nothing, so it is rejected rather
+// than dropped.
+
+interface Log {
+    #[unavailable("removed in 0.5.0; use `emit`")]
+    fn old_emit(message: String);
+
+    fn level() -> i32;
+}
+
+pub resource Counter {
+    #[unavailable("removed in 0.5.0; use `bump`")]
+    fn increment(&self);
+
+    fn bump(&self);
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "`#[unavailable]` belongs on a module function, an `impl` method, or a trait method",
+    "compile_error_count": 2
+}

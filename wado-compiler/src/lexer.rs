@@ -282,14 +282,22 @@ impl std::fmt::Display for LexError {
     }
 }
 
-impl From<LexError> for Diagnostic {
-    fn from(e: LexError) -> Self {
-        Self {
+impl LexError {
+    /// The diagnostic for this error, attributed to `file` when the caller
+    /// knows one.
+    pub fn diagnostic(&self, file: Option<&str>) -> Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
-            message: format!("lexer error: {e}"),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            message: format!("lexer error: {self}"),
+            span: Some(DiagnosticSpan::from_span(&self.span, file)),
         }
+    }
+}
+
+impl From<LexError> for Diagnostic {
+    fn from(e: LexError) -> Self {
+        e.diagnostic(None)
     }
 }
 

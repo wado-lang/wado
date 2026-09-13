@@ -18,7 +18,6 @@ use crate::elaborator::sem::{Fact, FactKind, ModuleSemantics};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
-use crate::lexer::LexError;
 use crate::logger::Logger;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
@@ -30,7 +29,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 use crate::wit_emit::{WitContract, WitEmitInput};
 use crate::world_registry::WorldRegistry;
-use crate::{Diagnostic, ParseError, ast, load, loader, parse, symbol_notation};
+use crate::{ast, load, loader, parse, symbol_notation};
 
 /// A ready-to-query analysis result.
 ///
@@ -116,17 +115,6 @@ pub enum SymbolResolveError {
     /// The module is loaded but defines no matching symbol or member.
     SymbolNotFound,
 }
-
-impl std::fmt::Display for SymbolResolveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ModuleNotLoaded => f.write_str("module not found or not loaded"),
-            Self::SymbolNotFound => f.write_str("no such symbol in module"),
-        }
-    }
-}
-
-impl std::error::Error for SymbolResolveError {}
 
 impl Semantics {
     /// Power-assert capture plans across every module that annotate reached,
@@ -989,10 +977,10 @@ pub async fn semantics_for_world<H: CompilerHost>(
     // which holds for the common cases (missing brace, garbage item) where
     // scopes stay separate.
     for e in &parsed.lex_errors {
-        host.emit_diagnostic(lex_error_diagnostic(e, filename));
+        host.emit_diagnostic(e.diagnostic(filename));
     }
     for e in &parsed.errors {
-        host.emit_diagnostic(parse_error_diagnostic(e, filename));
+        host.emit_diagnostic(e.diagnostic(filename));
     }
     match load(parsed, filename, host, invocations, LogLevel::default()).await {
         // General entry: build TIR so consumers that read `tir_modules`
@@ -1019,50 +1007,6 @@ pub async fn semantics_for_world<H: CompilerHost>(
             }
             Semantics::empty()
         }
-    }
-}
-
-/// Convert a single recovered [`crate::ParseError`] into a `parse error: …`
-/// [`crate::Diagnostic`], attributing the span to `filename`. The
-/// error-recovering parser surfaces one of these per syntax error, so the
-/// LSP can report them all while still analyzing the partial AST.
-#[must_use]
-pub fn parse_error_diagnostic(err: &ParseError, filename: Option<&str>) -> Diagnostic {
-    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
-    Diagnostic {
-        severity: Severity::Error,
-        code: Code::InvalidSyntax,
-        message: format!("parse error: {}", err.message),
-        span: filename.map(|f| DiagnosticSpan {
-            file: f.to_string(),
-            line: err.span.line,
-            column: err.span.column,
-            end_line: Some(err.span.end_line),
-            end_column: Some(err.span.end_column),
-            space: err.span.space,
-        }),
-    }
-}
-
-/// Convert a single recovered [`crate::lexer::LexError`] into a
-/// `lexer error: …` [`crate::Diagnostic`], attributing the span to
-/// `filename`. The resilient lexer surfaces one of these per recovered
-/// problem; LSP and batch report them alongside parser diagnostics.
-#[must_use]
-pub fn lex_error_diagnostic(err: &LexError, filename: Option<&str>) -> Diagnostic {
-    use crate::{Code, Diagnostic, DiagnosticSpan, Severity};
-    Diagnostic {
-        severity: Severity::Error,
-        code: Code::InvalidSyntax,
-        message: format!("lexer error: {err}"),
-        span: filename.map(|f| DiagnosticSpan {
-            file: f.to_string(),
-            line: err.span.line,
-            column: err.span.column,
-            end_line: Some(err.span.end_line),
-            end_column: Some(err.span.end_column),
-            space: err.span.space,
-        }),
     }
 }
 

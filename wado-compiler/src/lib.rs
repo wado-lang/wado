@@ -23,6 +23,7 @@ pub mod defs;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
+pub(crate) mod escape;
 pub mod flat_package;
 pub mod format_spec;
 pub mod hashmap;
@@ -99,8 +100,7 @@ pub use remarks::{
     Remark, collect_const_region_remarks, collect_param_gate_remarks, collect_value_copy_remarks,
 };
 pub use semantics::{
-    Cursor, Definition, Semantics, SymbolResolveError, lex_error_diagnostic,
-    parse_error_diagnostic, semantics, semantics_for_world, semantics_of,
+    Cursor, Definition, Semantics, SymbolResolveError, semantics, semantics_for_world, semantics_of,
 };
 
 #[cfg(test)]

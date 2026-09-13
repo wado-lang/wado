@@ -1,0 +1,18 @@
+// A static method carries no `self`, so it is a different reserved name than
+// the instance one, and a call on the type reaches it the same way.
+
+struct Box<T> {
+    v: T,
+}
+
+impl<T> Box<T> {
+    #[unavailable("use `Box::wrap`")]
+    fn build();
+}
+
+export fn run() {
+    Box::<i32>::build();
+}
+
+__DATA__
+{"compile_error": "`Box::build` is unavailable: use `Box::wrap`"}

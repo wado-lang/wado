@@ -656,6 +656,17 @@ fn push_hex_byte(out: &mut String, b: u8) {
     out.push_str(&`\\x${b:02x}`);
 }
 
+/// Append `s` as an attribute string literal's content: the reader unescapes
+/// what it reads, so a quote or a backslash goes back escaped.
+fn push_attr_escaped(out: &mut String, s: &String) {
+    for let c of s.chars() {
+        if c == '"' || c == '\\' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+}
+
 fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
     // Emit `#![generated(by = "gale", sources = ["a.g4", "b.g4"])]`. If the
     // grammar has no recorded source files (e.g. constructed directly in a
@@ -677,7 +688,7 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
             parts.push_str(&", ");
         }
         parts.push('"');
-        parts.push_str(&sources[i]);
+        push_attr_escaped(&mut parts, &sources[i]);
         parts.push('"');
     }
     parts.push_str(&"])]");

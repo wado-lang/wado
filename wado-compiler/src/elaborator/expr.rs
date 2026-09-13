@@ -38,7 +38,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::trait_env::written_type_arg;
 use crate::elaborator::types::{ImplMemberKind, StructFieldInfo, newtype_member_owner};
-use crate::elaborator::util::{unescape_byte, unescape_char};
+use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::tir::{AnonStructId, PrimitiveType, StructDef};
 
@@ -563,7 +563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::Bool(_) => TypeTable::BOOL,
             Literal::Char(raw) => {
-                if let Err(message) = util::unescape_char(raw) {
+                if let Err(message) = escape::unescape_char(raw) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -573,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::String(raw) => {
                 let string_type = self.get_string_struct_type();
-                if let Err(message) = util::unescape_string(raw) {
+                if let Err(message) = escape::unescape_string(raw) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -583,7 +583,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::Bytes(raw) => {
                 let byte_list_type = self.tysys.type_table.borrow_mut().make_byte_list();
-                if let Err(message) = util::unescape_bytes(raw) {
+                if let Err(message) = escape::unescape_bytes(raw) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -592,7 +592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 byte_list_type
             }
             Literal::Byte(raw) => {
-                if let Err(message) = util::unescape_byte(raw) {
+                if let Err(message) = escape::unescape_byte(raw) {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,
                         span: lit.span,
@@ -1170,6 +1170,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
+
+        // Naming the function without calling it resolves the same declaration
+        // a call does, so it gets the same answer: a reason instead of a value.
+        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id)
+            && self.report_unavailable(def, ident.span)
+        {
+            return TypeTable::ERROR;
+        }
 
         let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
             // Fallback: known function but its signature is unreachable
@@ -2926,10 +2934,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Literal::Bool(b) => ExhPattern::BoolLit(*b),
             Literal::Char(raw) => {
-                ExhPattern::IntLit(util::unescape_char(raw).unwrap_or('\0') as i128)
+                ExhPattern::IntLit(escape::unescape_char(raw).unwrap_or('\0') as i128)
             }
             Literal::Byte(raw) => {
-                ExhPattern::IntLit(i128::from(util::unescape_byte(raw).unwrap_or(0)))
+                ExhPattern::IntLit(i128::from(escape::unescape_byte(raw).unwrap_or(0)))
             }
             Literal::Null => {
                 // `null` coerces to a `None` variant pattern when the scrutinee
@@ -3002,12 +3010,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         Literal::Bool(v) => return ExhPattern::BoolLit(*v),
                         Literal::Char(raw) => {
-                            let c = util::unescape_char(raw).unwrap_or('\0');
+                            let c = escape::unescape_char(raw).unwrap_or('\0');
                             return ExhPattern::IntLit(c as i128);
                         }
                         Literal::Byte(raw) => {
                             return ExhPattern::IntLit(i128::from(
-                                util::unescape_byte(raw).unwrap_or(0),
+                                escape::unescape_byte(raw).unwrap_or(0),
                             ));
                         }
                         _ => {}

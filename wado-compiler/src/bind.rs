@@ -66,47 +66,6 @@ pub enum BindError {
     UseBeforeInit { name: String, span: Span },
 }
 
-impl std::fmt::Display for BindError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BindError::UseBeforeDefine { name, used_at } => {
-                write!(
-                    f,
-                    "{}:{}: error: '{}' is not in scope",
-                    used_at.line, used_at.column, name
-                )
-            }
-            BindError::DuplicateInScope {
-                name,
-                first,
-                second,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: error: cannot redeclare '{}' in the same scope (first defined at {}:{})",
-                    second.line, second.column, name, first.line, first.column
-                )
-            }
-            BindError::AssignToImmutable { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: error: cannot assign to immutable variable '{}'",
-                    span.line, span.column, name
-                )
-            }
-            BindError::UseBeforeInit { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: error: '{}' is used before initialization",
-                    span.line, span.column, name
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for BindError {}
-
 impl From<BindError> for Diagnostic {
     fn from(e: BindError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};

@@ -829,10 +829,10 @@ async fn build_semantics<H: CompilerHost>(
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
     for e in &parsed.lex_errors {
-        host.emit_diagnostic(wado_compiler::lex_error_diagnostic(e, Some(filename)));
+        host.emit_diagnostic(e.diagnostic(Some(filename)));
     }
     for e in &parsed.errors {
-        host.emit_diagnostic(wado_compiler::parse_error_diagnostic(e, Some(filename)));
+        host.emit_diagnostic(e.diagnostic(Some(filename)));
     }
     let invocations =
         kiln::prepare_invocations(filename, &parsed.ast, override_invocations, host).await;

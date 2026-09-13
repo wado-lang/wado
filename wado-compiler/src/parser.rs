@@ -23,6 +23,7 @@ use crate::ast::{
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, lex_interpolation};
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -90,14 +91,22 @@ pub struct ParseError {
     pub span: Span,
 }
 
-impl From<ParseError> for Diagnostic {
-    fn from(e: ParseError) -> Self {
-        Self {
+impl ParseError {
+    /// The diagnostic for this error, attributed to `file` when the caller
+    /// knows one.
+    pub fn diagnostic(&self, file: Option<&str>) -> Diagnostic {
+        Diagnostic {
             severity: Severity::Error,
             code: Code::InvalidSyntax,
-            message: format!("parse error: {}", e.message),
-            span: Some(DiagnosticSpan::from_span(&e.span, None)),
+            message: format!("parse error: {}", self.message),
+            span: Some(DiagnosticSpan::from_span(&self.span, file)),
         }
+    }
+}
+
+impl From<ParseError> for Diagnostic {
+    fn from(e: ParseError) -> Self {
+        e.diagnostic(None)
     }
 }
 
@@ -1263,6 +1272,14 @@ impl Parser {
         })
     }
 
+    /// Consume the attribute string the cursor is on, with its escapes resolved
+    /// the way an expression's string literal has them resolved.
+    fn take_attr_string(&mut self, raw: &str) -> ParseResult<String> {
+        let span = self.peek().span;
+        self.advance();
+        unescape_string(raw).map_err(|message| self.error_at_span(span, &message))
+    }
+
     /// Parse a comma-separated list of attribute arguments up to the closing
     /// delimiter. Shared between inner attributes (`#![...]`) and outer
     /// attributes (`#[...]`). Does not consume the closing `)`.
@@ -1272,10 +1289,7 @@ impl Parser {
             // `as_ident_name`, so a contextual keyword can be a key.
             let key = self.peek_kind().as_ident_name().map(str::to_string);
             let arg = match (key, self.peek_kind().clone()) {
-                (_, TokenKind::StringLit(raw)) => {
-                    self.advance();
-                    AttrArg::Str(raw)
-                }
+                (_, TokenKind::StringLit(raw)) => AttrArg::Str(self.take_attr_string(&raw)?),
                 (Some(value), _) => {
                     self.mark_keyword_name();
                     self.advance();
@@ -1284,8 +1298,7 @@ impl Parser {
                         self.advance();
                         match self.peek_kind().clone() {
                             TokenKind::StringLit(val) => {
-                                self.advance();
-                                AttrArg::KeyValue(value, val)
+                                AttrArg::KeyValue(value, self.take_attr_string(&val)?)
                             }
                             TokenKind::LBracket => {
                                 self.advance();
@@ -1294,8 +1307,7 @@ impl Parser {
                                     loop {
                                         if let TokenKind::StringLit(item) = self.peek_kind().clone()
                                         {
-                                            self.advance();
-                                            items.push(item);
+                                            items.push(self.take_attr_string(&item)?);
                                         } else {
                                             let span = self.peek().span;
                                             return Err(self.error_at_span(
@@ -1737,6 +1749,8 @@ impl Parser {
     }
 
     /// Consume a string literal and return its raw text (escape sequences not interpreted).
+    /// The raw text of the string literal at the cursor, escapes unresolved.
+    /// [`Self::take_attr_string`] is the one that resolves them.
     fn consume_string(&mut self) -> ParseResult<String> {
         match &self.peek().kind {
             TokenKind::StringLit(raw) => {
@@ -6502,13 +6516,13 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                     "rename" => "name",
                     other => other,
                 };
-                format!("{key} = \"{value}\"")
+                format!("{key} = {}", quoted(value))
             }
             AttrArg::Ident(name) => name.clone(),
-            AttrArg::Str(value) => format!("\"{value}\""),
+            AttrArg::Str(value) => quoted(value),
             AttrArg::Number(value) => value.clone(),
             AttrArg::KeyArray(key, values) => {
-                let items: Vec<String> = values.iter().map(|v| format!("\"{v}\"")).collect();
+                let items: Vec<String> = values.iter().map(|v| quoted(v)).collect();
                 format!("{key} = [{}]", items.join(", "))
             }
             AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),

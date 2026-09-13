@@ -1,0 +1,12 @@
+// A namespace import resolves the callee through the module rather than the
+// written name, and that shape has to reach the same answer as the others. It
+// used to reach codegen with no function behind the name.
+
+use m from "./sub/error_unavailable_namespace_call_mod.wado";
+
+export fn run() {
+    let _ = m::map_or(2);
+}
+
+__DATA__
+{"compile_error": "`map_or` is unavailable: write `map(f).unwrap_or(v)`"}

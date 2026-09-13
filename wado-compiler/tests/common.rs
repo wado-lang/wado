@@ -1072,7 +1072,7 @@ pub fn check_diagnostics(source: &str) -> Vec<String> {
     out.extend(
         wado_compiler::check_effects_semantic(&sem)
             .into_iter()
-            .map(|e| format!("Effect: {e}")),
+            .map(|e| format!("Effect: {}", Diagnostic::from(e).message)),
     );
     out
 }

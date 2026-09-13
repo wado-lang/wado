@@ -1,0 +1,29 @@
+// A call that reaches an `#[unavailable]` declaration stops there: its
+// arguments are never counted or typed, so the reason is the only diagnostic.
+
+#[unavailable("write `map(f).unwrap_or(v)`")]
+fn map_or(x: i32) -> i32;
+
+struct S {
+    x: i32,
+}
+
+impl S {
+    #[unavailable("read `x`")]
+    fn make(a: i32) -> S;
+}
+
+export fn run() {
+    let bad: String = map_or(1);
+    let s = S::make(1, 2);
+}
+
+__DATA__
+{
+    "compile_error": "`map_or` is unavailable: write `map(f).unwrap_or(v)`",
+    "compile_errors_contains": [
+        "`map_or` is unavailable: write `map(f).unwrap_or(v)`",
+        "`S::make` is unavailable: read `x`"
+    ],
+    "compile_errors_not_contains": ["arguments, found", "type mismatch"]
+}

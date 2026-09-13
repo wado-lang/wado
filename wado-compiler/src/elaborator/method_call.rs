@@ -616,6 +616,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
+        // An `#[unavailable]` reserves a name, not a signature, so checking the
+        // arguments against its parameters would report on a shape that means
+        // nothing.
+        if let Some(def) = dispatched_method_def
+            && self.report_unavailable(def, span)
+        {
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
+
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
@@ -1106,7 +1115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // signature. A name scan cannot stand in: two impls on one type can
         // declare the same method, and only dispatch knows which answered.
         if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
-            self.record_reference_to_decl(method_id, def);
+            self.record_reference_to_decl(method_id, def, span);
         }
 
         let func = FunctionRef {
@@ -2411,8 +2420,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
             self.qualified_method_decl_id(&receiver, &static_call.method)
                 .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
-        }) {
-            self.record_reference_to_decl(static_call.method_id, method_def);
+        }) && self.record_reference_to_decl(static_call.method_id, method_def, static_call.span)
+        {
+            return TypeTable::ERROR;
         }
 
         // A concrete block hosts its own function; a generic one's instance is

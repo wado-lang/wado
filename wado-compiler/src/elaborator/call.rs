@@ -580,6 +580,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     );
                 }
 
+                // A binding whose initializer already reported keeps the one
+                // diagnostic its fault earned; calling it says nothing new.
+                if value_ty == TypeTable::ERROR {
+                    for arg in &call.args {
+                        self.resolve_expr(arg, ctx, None);
+                    }
+                    return TypeTable::ERROR;
+                }
+
                 // Names a binding that is not a function — a clear
                 // not-callable diagnostic, not the misleading "unknown
                 // function 'x'" from the named-function lookup below.
@@ -926,8 +935,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .and_then(|callee| callee.method_ref.method_id);
                     let method_def = selected
                         .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
-                    if let Some(method_def) = method_def {
-                        self.record_reference_to_decl(suffix_seg.id, method_def);
+                    if let Some(method_def) = method_def
+                        && self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span)
+                    {
+                        return TypeTable::ERROR;
                     }
                 }
                 // The method's own parameters, in the dense space its type
@@ -1544,8 +1555,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             );
                             self.qualified_method_decl_id(&receiver, method_name)
                         })
+                        && self.record_reference_to_decl(method_seg.id, method_def, method_seg.span)
                     {
-                        self.record_reference_to_decl(method_seg.id, method_def);
+                        return TypeTable::ERROR;
                     }
 
                     // Qualify by the module the impl was located in:
@@ -1757,7 +1769,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .declared_if_walked(ident.id)
             .filter(|def| self.tysys.resolutions.defs().kind(*def) == DefKind::Function)
         {
-            self.record_reference_to_decl(ident.id, callee);
+            if self.record_reference_to_decl(ident.id, callee, ident.span) {
+                return TypeTable::ERROR;
+            }
             (Some(self.callee_of(callee)), effective_name.to_string())
         }
         // `panic` / `unreachable` where no site answered — a synthesised call.
@@ -1784,6 +1798,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
+
+        // Every shape above narrows to this one callee, so asking here asks for
+        // all of them: naming an `#[unavailable]` declaration is the whole
+        // answer, and a shape that resolved one has nothing left to check.
+        if let Some(def) = callee.def()
+            && self.report_unavailable(def, call.span)
+        {
+            return TypeTable::ERROR;
+        }
 
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args

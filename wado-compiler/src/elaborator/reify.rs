@@ -56,8 +56,10 @@ use crate::elaborator::trait_query::{
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128, unescape_byte, unescape_bytes, unescape_char, unescape_string,
-    unescape_template_segment, unpack_i128,
+    range_endpoint_to_i128, unpack_i128,
+};
+use crate::escape::{
+    unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
@@ -9465,7 +9467,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let negated = literal.neg.is_some();
         let repr = match literal.kind {
             NumericLiteralKind::Number(repr) => repr.to_string(),
-            NumericLiteralKind::Byte(raw) => util::unescape_byte(raw).ok()?.to_string(),
+            NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.to_string(),
         };
 
         let parse_result = if name.decl_name() == "u128" {
@@ -9817,7 +9819,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // b'A'` and `let x: i128 = b'A'` reach the float and wide-integer
             // readings a decimal literal does. `u8` is its type on its own.
             ast::Literal::Byte(raw) => {
-                let byte = util::unescape_byte(raw).unwrap_or(0);
+                let byte = unescape_byte(raw).unwrap_or(0);
                 let byte_type = if recorded_type == TypeTable::UNKNOWN {
                     TypeTable::U8
                 } else {
