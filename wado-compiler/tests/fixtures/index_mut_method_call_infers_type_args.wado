@@ -1,0 +1,39 @@
+// `xs[i].m(..)` on a `&mut self` method is rewritten through `IndexMut` by a
+// path that answers the call, so it runs the method's inference too. Without
+// that the arguments meet the declaration's own rigid parameters.
+
+struct Bag {
+    v: i32,
+}
+
+impl Bag {
+    fn set<A>(&mut self, x: A) -> A {
+        self.v += 1;
+        return x;
+    }
+
+    fn bump<A>(&mut self, f: fn(A) -> i32, seed: A) {
+        self.v += f(seed);
+    }
+}
+
+test "an argument decides the type parameter" {
+    let mut xs: List<Bag> = [Bag { v: 1 }];
+    assert xs[0].set(5) == 5;
+    assert xs[0].v == 2;
+}
+
+test "a sibling argument types the closure parameter" {
+    let mut xs: List<Bag> = [Bag { v: 1 }];
+    xs[0].bump(|a| a + 1, 5);
+    assert xs[0].v == 7;
+}
+
+test "the return type follows the answer" {
+    let mut xs: List<Bag> = [Bag { v: 0 }];
+    let s: String = xs[0].set("hi");
+    assert s.len() == 2;
+}
+
+__DATA__
+{"test": {}}

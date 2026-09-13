@@ -15,7 +15,6 @@ use crate::tir::{FunctionRef, ResolvedType, TirField, TirStruct, TypeId, TypeTab
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::turbofish_holes;
 use super::coercion::{is_numeric_literal_expr, range_endpoint_order};
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1019,18 +1018,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // payload-less case has no payload to infer from, so
                         // the turbofish is the only source besides the
                         // expected type.
-                        let holes = turbofish_holes(&ident.type_args);
                         let explicit_args: Vec<TypeId> = ident
                             .type_args
                             .iter()
-                            .enumerate()
-                            .map(|(i, t)| {
-                                if holes[i] {
-                                    TypeTable::UNKNOWN
-                                } else {
-                                    self.resolve_type(t)
-                                }
-                            })
+                            .map(|t| self.resolve_type(t))
                             .collect();
                         let inferred = self.tysys.infer_variant_type_args(
                             &self.annotate_ctx,
@@ -1039,7 +1030,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             None,
                             expected_type,
                             &explicit_args,
-                            &holes,
                         );
                         self.defer_uninferable_variant(inferred, prefix, &variant_info, ident.span)
                     }
@@ -4617,6 +4607,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "struct",
                 name: &struct_info.name,
                 span,
+                // A struct literal has no turbofish; its fields name the slots.
+                type_args: &[],
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();

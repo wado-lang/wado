@@ -753,6 +753,9 @@ pub struct TypeTable {
     /// essentially every type query, so it is a hash-free `Vec` index.
     types: TypeMap<ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
+    /// The slot each inference variable stands for, read only by diagnostics.
+    /// Beside the variant, not inside it, so the interning key stays the id.
+    infer_var_names: IndexMap<InferVarId, String>,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the
     /// annotate pass from `#[compiler_item("...")]` attributes; see
@@ -955,6 +958,7 @@ impl TypeTable {
         let mut table = Self {
             types: TypeMap::default(),
             intern_map: IndexMap::default(),
+            infer_var_names: IndexMap::default(),
             compiler_items: CompilerItems::new(),
             assoc_type_resolutions: IndexMap::default(),
             generic_assoc_type_defs: IndexMap::default(),
@@ -2658,6 +2662,24 @@ impl TypeTable {
         self.intern(ResolvedType::InferVar(id))
     }
 
+    /// Record the slot `id` stands for, for diagnostics. Called on every mint,
+    /// `None` included: ids restart per module, so a reused id must not read
+    /// its last holder's name.
+    pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
+        match name {
+            Some(name) => self.infer_var_names.insert(id, name),
+            None => self.infer_var_names.swap_remove(&id),
+        };
+    }
+
+    /// How `id` reads in a message: its slot's name, else its own.
+    fn infer_var_name(&self, id: InferVarId) -> String {
+        self.infer_var_names
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| id.to_string())
+    }
+
     /// Create a type pack parameter (e.g., `..T` in `fn foo<..T>(x: [..T])`)
     pub fn make_type_pack(&mut self, name: String, index: u32) -> TypeId {
         self.intern(ResolvedType::TypePack {
@@ -4075,7 +4097,7 @@ impl TypeTable {
             }
             ResolvedType::Reactive(inner) => format!("Reactive<{}>", type_name(*inner)),
             ResolvedType::TypeParam { name, .. } => name.clone(),
-            ResolvedType::InferVar(var) => var.to_string(),
+            ResolvedType::InferVar(var) => self.infer_var_name(*var),
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
@@ -4557,6 +4579,8 @@ impl TypeTable {
             }
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
+            // A mangled name is an identity, so two unsolved slots sharing a
+            // spelling must not collapse. The slot's name is for reading.
             ResolvedType::InferVar(var) => TypeNameInfo::Named(var.to_string()),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args
