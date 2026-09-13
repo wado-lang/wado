@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.0.28](https://github.com/wado-lang/wado/compare/v0.0.27...v0.0.28) - 2026-09-13
+
+- perf(liveness): a trait's default body is an edge, not a root (e2e −8.7%) by @gfx in https://github.com/wado-lang/wado/pull/2017
+- docs(research): survey Hike against the language rubric by @gfx in https://github.com/wado-lang/wado/pull/2019
+- fix(variant): three wrong-code defects in variant mutation, and a dispatch fold worth 5% of the fixture corpus' WIR by @gfx in https://github.com/wado-lang/wado/pull/2020
+- perf(compiler): shrink Hello World Wasm by 7.3% by @gfx in https://github.com/wado-lang/wado/pull/2021
+- perf(serve): +45% throughput per worker, and no wait that outlives --timeout by @gfx in https://github.com/wado-lang/wado/pull/2022
+- fix(serve): stop a burst of client disconnects from trapping a worker by @gfx in https://github.com/wado-lang/wado/pull/2023
+- ci: fold the static gates into Test (Core) by @gfx in https://github.com/wado-lang/wado/pull/2025
+- chore: cleanup the root AGENTS.md by @gfx in https://github.com/wado-lang/wado/pull/2024
+- docs(skill): how to build against a locally patched wasmtime by @gfx in https://github.com/wado-lang/wado/pull/2026
+- chore(deps): bump the cargo group with 4 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/2028
+- chore(deps): bump the github-actions group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/wado-lang/wado/pull/2027
+- docs: refine README.md by @gfx in https://github.com/wado-lang/wado/pull/2029
+- fix(cli): silence run and serve, and deny stream writes in the compiler by @gfx in https://github.com/wado-lang/wado/pull/2031
+- perf(json): 20% faster json-catalog deserialize, 9% faster serialize by @gfx in https://github.com/wado-lang/wado/pull/2030
+- fix(compiler): internal names that cannot collide, with source or with each other by @gfx in https://github.com/wado-lang/wado/pull/2033
+- refactor(cm): declare a resource's linearity, and specify narrowing as a pattern by @gfx in https://github.com/wado-lang/wado/pull/2032
+- refactor(rust): every path named through a `use`, with a grammar-based detector by @gfx in https://github.com/wado-lang/wado/pull/2034
+- fix(wir): hold black_box opaque through the WIR, extending EMI past NIR by @gfx in https://github.com/wado-lang/wado/pull/2039
+- feat(core:fs): whole-file I/O in one call, and a read that fails instead of truncating by @gfx in https://github.com/wado-lang/wado/pull/2041
+- perf(core:json): 12% faster canada deserialize, and resolve defaults in their author's module by @gfx in https://github.com/wado-lang/wado/pull/2040
+- docs: make the agent rules state defaults, not enumerate cases by @gfx in https://github.com/wado-lang/wado/pull/2043
+- feat!: a `wado` tag that escapes each hole by its template context, and a prelude scope limited to `core:prelude`'s exports by @gfx in https://github.com/wado-lang/wado/pull/2042
+
 ## [v0.0.27](https://github.com/wado-lang/wado/compare/v0.0.26...v0.0.27) - 2026-09-10
 
 - feat(wado-from-idl): generate web:dom from a WebIDL snapshot (Tide M5) by @gfx in https://github.com/wado-lang/wado/pull/1971
