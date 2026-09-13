@@ -723,9 +723,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let known = if !turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
-                type_args.clone()
-            } else {
+            let known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
                     InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
                 for (i, (&param_type, &arg)) in
@@ -738,6 +736,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                 }
                 infer.solve()
+            } else {
+                type_args.clone()
             };
             default_type_bindings.extend(self.value_default_slot_bindings(
                 &method_own_params,
