@@ -17,7 +17,7 @@ use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{DefaultTypeBinding, slot_type_bindings};
+use super::call::{DefaultTypeBinding, SettledAs, slot_type_bindings};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1351,7 +1351,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // rather than on a receiver. The declaration wrote that bound, and
         // nothing at the call site carries it.
         for binding in &mut bindings {
-            if binding.is_pack
+            if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
             {
                 binding.bounds = param.bounds.clone();
@@ -1991,10 +1991,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(name)
                     .cloned()
                     .unwrap_or_default(),
-                // The frame already holds a pack as the pack it was declared
-                // as, so this carries it over as it stands.
-                is_pack: false,
-                type_id: binder.type_id,
+                // The frame holds a pack as the pack it was declared as, so
+                // there is nothing left to mint: it carries over as it stands.
+                settled: SettledAs::Type(binder.type_id),
             })
             .collect();
         // A binding naming a type private to the declaring module (`type Iter

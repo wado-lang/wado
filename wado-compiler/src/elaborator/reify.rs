@@ -35,6 +35,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
+use crate::elaborator::call::omits_a_default;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
@@ -7879,7 +7880,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         call_span: Span,
         ctx: &mut FunctionContext,
     ) {
-        if func_params.is_empty() || args.len() >= func_params.len() {
+        if !omits_a_default(args.len(), func_params) {
             return;
         }
         // The walk annotate peeled off for *this* call. Taken before the
