@@ -3,8 +3,9 @@
 // `+` is reported at the operator, against the type the sibling supplied.
 //
 // An operator applied to an unanswered variable finds no impl and records no
-// dispatch, and the variable is substituted only afterwards. Before the
-// argument tiers that reached WIR build, which panicked.
+// dispatch, and the variable is substituted only afterwards. Such a call
+// reaches WIR with nothing lowered for the `+`, so the closure has to wait for
+// the arguments that answer it.
 
 struct Plain {
     v: i32,
