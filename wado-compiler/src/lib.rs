@@ -1666,6 +1666,18 @@ fn compile_after_load<H: CompilerHost>(
             .map(|v| (v.span, v.message())),
     )?;
 
+    // The Kiln guarantee on the imports actually planned, which is the first
+    // point a transitive `core:*` dependency on WASI is visible. Before
+    // codegen, so a generator that cannot instantiate never reaches bytes.
+    if kiln::import_check::check_cm_imports(
+        is_kiln_generator,
+        &wir_package.import_plan,
+        logger,
+    ) > 0
+    {
+        return Err(Bail);
+    }
+
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");

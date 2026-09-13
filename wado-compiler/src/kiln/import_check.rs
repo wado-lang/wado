@@ -1,8 +1,13 @@
 //! Kiln generator import-refusal check: under `core:kiln/generator` the package
 //! must import no WASI interface, the sandbox guarantee (WEP 2026-04-12) resting
 //! on the generator being deterministic. `run_generator`'s runtime link refuses
-//! any `wasi:*` CM import as depth. Runs after loading and before analysis, so
-//! the diagnostic points at the user's `use` like any other import error.
+//! any `wasi:*` CM import as depth.
+//!
+//! Two checks, because a source `use` and an emitted import are not the same
+//! set. [`check_loaded`] runs after loading and before analysis, so a WASI `use`
+//! the author wrote points at that `use` like any other import error;
+//! [`check_cm_imports`] runs on the import plan, where a `core:*` module that
+//! reaches WASI transitively is finally visible.
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
@@ -14,6 +19,7 @@ use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
+use crate::wir::{ImportEntry, ImportKind};
 
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
@@ -397,4 +403,46 @@ mod tests {
         assert!(forbid_reason("./options.wado").is_none());
         assert!(forbid_reason("../shared.wado").is_none());
     }
+}
+
+/// Reject the WASI interfaces a generator's component would ask the Kiln linker
+/// to provide. Runs on the import plan rather than on `use` declarations:
+/// [`check_loaded`] reads what the source imports, so a `core:*` module that
+/// reaches WASI on the generator's behalf is invisible to it — `core:log` did,
+/// through `core:temporal`'s `SystemClock`, and `core:jwt` and `core:uuid` still
+/// do. Returns the count of rejected interfaces; zero means the generator links.
+///
+/// [`ImportKind::SharedTypes`] is not a violation: `wasi:cli/types` exports an
+/// `error-code` enum and no function, so it asks the linker for nothing, and
+/// every generator already instantiates with it. Every other kind bears
+/// functions.
+pub fn check_cm_imports<H: CompilerHost>(
+    is_generator_world: bool,
+    import_plan: &[ImportEntry],
+    logger: &Logger<'_, H>,
+) -> usize {
+    if !is_generator_world {
+        return 0;
+    }
+
+    let mut count = 0;
+    for entry in import_plan {
+        if !entry.fq.starts_with("wasi:") || matches!(entry.kind, ImportKind::SharedTypes) {
+            continue;
+        }
+        let _ = logger.error(Diagnostic {
+            severity: Severity::Error,
+            code: Code::KilnGeneratorForbiddenImport,
+            message: format!(
+                "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
+                 reaches WASI on its behalf. The generator linker offers only \
+                 `core:kiln/kiln-host`, so this component cannot instantiate. \
+                 See WEP 2026-04-12 §\"Design principles\".",
+                fq = entry.fq,
+            ),
+            span: None,
+        });
+        count += 1;
+    }
+    count
 }

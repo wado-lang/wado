@@ -321,3 +321,51 @@ fn generator_using_core_log_adds_no_wasi_import() {
         "core:log added a WASI import the Kiln linker never provides"
     );
 }
+
+/// Opting into a stamped sink is how a generator picks up WASI without writing a
+/// `wasi:` import: `WallClock::now()` is `#[ambient]`, so nothing in the
+/// generator's own source names the clock, and `check_loaded` sees nothing to
+/// refuse. The import plan does.
+const WALL_CLOCK_SINK_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { Log, TextSink, WallClock, info } from "core:log";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let mut sink: TextSink<WallClock> = TextSink {};
+    with Log => &mut sink do {
+        info(`generating`, { path: req.primary.path });
+    }
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn generator_installing_a_stamped_sink_is_rejected() {
+    let host = MapHost::new(&[]);
+    let result = block_on(compile_with_options(
+        WALL_CLOCK_SINK_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(
+        result.is_err(),
+        "a generator importing wasi:clocks through a sink should fail"
+    );
+
+    let diags = host.diagnostics();
+    let found = diags.iter().any(|d| {
+        d.severity == Severity::Error
+            && d.code == Code::KilnGeneratorForbiddenImport
+            && d.message.contains("wasi:clocks")
+    });
+    assert!(
+        found,
+        "expected KilnGeneratorForbiddenImport naming wasi:clocks, got: {}",
+        diags
+            .iter()
+            .map(|d| format!("  {d}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
