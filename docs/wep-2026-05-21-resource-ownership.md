@@ -665,12 +665,19 @@ Verified against the tree.
       out of cannot share — so `xs` copies, and `ys` copies again because
       nothing tells the second decision that the first made `xs` private.
 
-      Finishing it means the fold reading an arm binding's own path — the
-      scrutinee's, one selector deeper — off `match_sources`, and answering
-      move, share and release there, with the binding left in the pattern. The
-      release is the rule that needs the depth: it tests the rebound path for
-      equality, so `self.f = null` releases a binding read out of `self.f` and
-      not one read out of `self.f`'s payload.
+      Finishing it means deepening the path the binding already has rather than
+      giving it a name. `place::bind_pattern` runs over a match arm as it does
+      over a `let` destructure, but its variant, tuple and or arms pass the base
+      through unchanged, so today an arm binding's path _is_ the scrutinee's. The
+      selector each of those arms drops is what the fold needs to answer move,
+      share and release for the binding itself, with the binding left in the
+      pattern and the temp no longer standing in for it.
+
+      The release must deepen with it, and this is why that pairing is not
+      optional: it tests the rebound path for equality, and the equality holds
+      today only because the binding's path stops short. Deepen the path and
+      `self.f = null` stops releasing a binding read out of `self.f`'s payload
+      unless the release covers every read at or inside the rebound place.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the
@@ -729,19 +736,21 @@ Verified against the tree.
       exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
       called with a fresh `Holder` — is byte-identical at `-O0` too.
 
-- [ ] Read the wrap the fold has just decided as the freshness it creates. A copy
-      hands its target storage nothing else reaches, so the next read of that
-      target may move out of it; today it copies again, since ownedness is
-      computed from a local's source before any wrap site is chosen.
-      `let xs = value_copy(p); let ys = value_copy(xs);` is the shape, and it is
-      what makes an added wrap site cost two copies rather than move the one it
-      already had. The verdicts are a fixpoint over sources, so the wrap a local
-      receives cannot feed the same pass that chose it without a second round.
+Measured and not worth closing:
 
-- [ ] Answer a pattern-destructured field's path without the conservatism its
-      missing type forces. The resolver marks such a path as crossing a borrow,
-      because the pattern carries no type to say whether the field it names
-      borrows, and a path that crosses one is refused a share outright.
+- The borrow a pattern-destructured field's path is marked with, for want of a
+  type saying whether that field borrows. It refuses those paths a share
+  outright, and answering it honestly buys nothing: every one of the 1768 WIR
+  goldens is byte-identical with the mark removed.
+
+- Reading the wrap the fold has just decided as the freshness it creates. A copy
+  hands its target storage nothing else reaches, and ownedness is computed from a
+  local's source before any wrap site is chosen, so the fold never learns it. No
+  program reaches the imprecision: for a second read to pay a copy its move must
+  be refused, and a copied local aliases nothing, so only a read that is not the
+  last one refuses — and there the second copy is a second live object, which is
+  needed. It is what makes an _added_ wrap site cost two copies, which is why the
+  roadmap item above deepens a path instead of naming one.
 
 ## Deferred: the `move` and `unique` keywords
 
