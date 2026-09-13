@@ -123,6 +123,16 @@ fn packed<..T: Default>(tag: String, t: [..T] = [..T::default()]) -> String {
     return s;
 }
 
+// An `fn`-bound parameter ahead of the pack. Its bound fixes it to one function
+// type, so it holds no slot and the pack is the first the arguments index.
+fn applied<F: fn(i32) -> i32, ..T: Default>(f: F, t: [..T] = [..T::default()]) -> String {
+    let mut s = `${f(1)}`;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
 // A caller forwarding a pack of its own. Its pack interns to the same type as
 // the callee's, so nothing here may read the slot as left over.
 fn forwarded_pack<..T: Default>(t: [..T]) -> String {
@@ -274,6 +284,8 @@ test "a pack nothing settles is empty" {
     assert Box2::<i32>::spread_static() == "";
     assert EMPTY == "h:";
     assert forwarded_pack([1, "x"]) == "f:1\"x\"";
+    assert applied(|x| x + 1) == "2";
+    assert applied::<i32, bool>(|x| x + 1) == "20false";
 }
 
 // From the annotation, then from a sibling field.

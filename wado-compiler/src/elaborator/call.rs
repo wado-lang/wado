@@ -148,10 +148,10 @@ pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]
     matches!(params.get(args_len), Some((_, Some(_))))
 }
 
-/// The parameters a declaration's type arguments are indexed by. An effect
-/// parameter holds no slot in that space.
+/// The parameters a declaration's type arguments are indexed by, per
+/// [`ast::GenericParam::is_real_type_param`].
 fn real_type_params(declared: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
-    declared.iter().filter(|p| !p.is_effect).collect()
+    declared.iter().filter(|p| p.is_real_type_param()).collect()
 }
 
 /// Pair each declared slot with the type argument filling it, under the name
