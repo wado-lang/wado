@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789261856205,
+  "lastUpdate": 1789264540903,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55453,6 +55453,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/96199eef487a9ed52056e90e76a431a7cc54bab1"
         },
         "date": 1789261855525,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "015a274d4299911ca368c91e492222db0d5c35a7",
+          "message": "Merge pull request #2040 from wado-lang/gfx/json-canada-de\n\nperf(core:json): 12% faster canada deserialize, and resolve defaults in their author's module",
+          "timestamp": "2026-09-13T10:33:19+09:00",
+          "tree_id": "0c0854e3d4ba1ee52d64f6813de7e2dae9d30e19",
+          "url": "https://github.com/wado-lang/wado/commit/015a274d4299911ca368c91e492222db0d5c35a7"
+        },
+        "date": 1789264539957,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
