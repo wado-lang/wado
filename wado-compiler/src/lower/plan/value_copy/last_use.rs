@@ -238,6 +238,23 @@ struct Mutation {
     live: IndexSet<u32>,
 }
 
+/// What every share decision in one body reads, computed once.
+struct ShareInputs<'a> {
+    /// The storage each mutation's live set can still read, in `mutations` order.
+    at_write: Vec<IndexSet<u32>>,
+    capacity_observed: IndexSet<u32>,
+    consumed_reach: IndexMap<u32, IndexSet<u32>>,
+    place_move_bases: &'a IndexSet<u32>,
+}
+
+/// One binding's share decision. `released` travels down a chain of bindings;
+/// `eligible` is what the fold reads.
+#[derive(Clone, Copy, Default)]
+struct ShareVerdict {
+    eligible: bool,
+    released: bool,
+}
+
 /// Whether `m` can never change the value read at `read`. Establishes the
 /// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
@@ -375,65 +392,106 @@ impl Analyzer<'_> {
     /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
     fn share_eligible(&self, body: &TirBlock, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
         let parents = self.alias_parents();
-        let at_write: Vec<IndexSet<u32>> = self
-            .mutations
-            .iter()
-            .map(|m| readable_storage(&parents, &m.live))
-            .collect();
-        let capacity_observed = capacity_observed_locals(body, self.type_table);
-        // What each consumed root's storage reaches, computed once per root
-        // rather than once per `share_sources` entry rooted there.
-        let consumed_reach: IndexMap<u32, IndexSet<u32>> = self
-            .consumed
-            .iter()
-            .map(|(&root, at)| (root, readable_storage(&parents, at)))
-            .collect();
-        self.share_sources
-            .iter()
-            .filter_map(|(&local, path)| {
-                if path.root == local {
-                    return None;
-                }
-                // A borrowed source is written through whoever lent it, at a
-                // root the scan below never looks at.
-                if path.through_borrow {
-                    return None;
-                }
-                // A `List` / `String` copy right-sizes its backing storage to
-                // the current length (WEP 2026-05-21, capacity is not part of
-                // the value but is still observable): sharing skips that only
-                // where this binding's own capacity is actually read — a copy
-                // this binding never observes need not right-size at all.
-                if capacity_observed.contains(&local) {
-                    return None;
-                }
-                // `let r = p; p = x;` leaves `r` holding what `p` gave up: a
-                // rebind repoints `p`'s slot rather than writing the old
-                // storage in place, so it is never itself a conflict — only
-                // every OTHER mutation, live where `local` could read it, must
-                // be unreachable from `local`'s path.
-                let mut released = false;
-                let mut share_safe = true;
-                for (m, r) in self.mutations.iter().zip(&at_write) {
-                    let is_release = m.rebinds_place && m.path == *path;
-                    if is_release && r.contains(&local) {
-                        released = true;
-                    }
-                    if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
-                        share_safe = false;
-                    }
-                }
-                let root_given_away = consumed_reach
-                    .get(&path.root)
-                    .is_some_and(|reach| reach.contains(&local));
-                let moved_out = !released
-                    && (self.consumed.contains_key(&local) || place_move_bases.contains(&local));
-                if moved_out || self.is_mutated_root(local) || root_given_away || !share_safe {
-                    return None;
-                }
-                Some(local)
-            })
+        let inputs = ShareInputs {
+            at_write: self
+                .mutations
+                .iter()
+                .map(|m| readable_storage(&parents, &m.live))
+                .collect(),
+            capacity_observed: capacity_observed_locals(body, self.type_table),
+            // What each consumed root's storage reaches, computed once per root
+            // rather than once per `share_sources` entry rooted there.
+            consumed_reach: self
+                .consumed
+                .iter()
+                .map(|(&root, at)| (root, readable_storage(&parents, at)))
+                .collect(),
+            place_move_bases,
+        };
+        let mut decided: IndexMap<u32, ShareVerdict> = IndexMap::default();
+        let mut deciding: IndexSet<u32> = IndexSet::default();
+        for &local in self.share_sources.keys() {
+            self.decide_share(local, &inputs, &mut decided, &mut deciding);
+        }
+        decided
+            .into_iter()
+            .filter(|(_, v)| v.eligible)
+            .map(|(local, _)| local)
             .collect()
+    }
+
+    /// One binding's verdict, memoized. A binding's root may itself be a
+    /// binding, so the decision is taken in that order; a chain the walk cannot
+    /// order abstains.
+    fn decide_share(
+        &self,
+        local: u32,
+        inputs: &ShareInputs<'_>,
+        decided: &mut IndexMap<u32, ShareVerdict>,
+        deciding: &mut IndexSet<u32>,
+    ) -> ShareVerdict {
+        if let Some(&known) = decided.get(&local) {
+            return known;
+        }
+        if !deciding.insert(local) {
+            return ShareVerdict::default();
+        }
+        let verdict = self.share_verdict(local, inputs, decided, deciding);
+        deciding.swap_remove(&local);
+        decided.insert(local, verdict);
+        verdict
+    }
+
+    fn share_verdict(
+        &self,
+        local: u32,
+        inputs: &ShareInputs<'_>,
+        decided: &mut IndexMap<u32, ShareVerdict>,
+        deciding: &mut IndexSet<u32>,
+    ) -> ShareVerdict {
+        let Some(path) = self.share_sources.get(&local) else {
+            return ShareVerdict::default();
+        };
+        // `let r = p; p = x;` leaves `r` holding what `p` gave up: a rebind
+        // repoints `p`'s slot rather than writing the old storage in place, so
+        // it is never itself a conflict — only every OTHER mutation, live where
+        // `local` could read it, must be unreachable from `local`'s path.
+        let mut released = false;
+        let mut share_safe = true;
+        for (m, r) in self.mutations.iter().zip(&inputs.at_write) {
+            let is_release = m.rebinds_place && m.path == *path;
+            if is_release && r.contains(&local) {
+                released = true;
+            }
+            if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
+                share_safe = false;
+            }
+        }
+        // A root that shares its own source owns nothing, so the rebind that
+        // freed the root freed this binding too. Pattern lowering hoists a
+        // scrutinee into a temp before this walk runs, and an arm binding reads
+        // that temp rather than the place the temp was read out of.
+        let root = self.decide_share(path.root, inputs, decided, deciding);
+        let released = released || (root.eligible && root.released);
+        let root_given_away = inputs
+            .consumed_reach
+            .get(&path.root)
+            .is_some_and(|reach| reach.contains(&local));
+        let moved_out = !released
+            && (self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local));
+        // A borrowed source is written through whoever lent it, at a root the
+        // scan above never looks at. A `List` / `String` copy right-sizes its
+        // backing storage to the current length (WEP 2026-05-21, capacity is
+        // not part of the value but is still observable), which a share skips,
+        // so a binding whose own capacity is read keeps its copy.
+        let eligible = path.root != local
+            && !path.through_borrow
+            && !inputs.capacity_observed.contains(&local)
+            && !moved_out
+            && !self.is_mutated_root(local)
+            && !root_given_away
+            && share_safe;
+        ShareVerdict { eligible, released }
     }
 
     /// The locals whose storage each local's value was read out of, so a write
@@ -1350,6 +1408,13 @@ impl Analyzer<'_> {
                 analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
                 for b in &binds {
                     self.match_sources.push((*b, scrut.clone()));
+                    // An arm binding is its scrutinee's storage under a second
+                    // name, so the share rule reads its path where the `let`
+                    // form reads `source_path`. The resolver already projects
+                    // the pattern onto the scrutinee's place.
+                    if let Some(Names::Place(path)) = self.resolver.binding(*b) {
+                        self.share_sources.insert(*b, path);
+                    }
                     if scrut_aliases_live {
                         self.aliases_live.insert(*b);
                     }

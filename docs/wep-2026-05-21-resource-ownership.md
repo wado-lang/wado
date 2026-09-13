@@ -387,7 +387,10 @@ a reference already taken out of `p.f` keeps what it has, and only a write
 _inside_ that storage disturbs it. And a place repointed after a binding read it
 hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
-read out of a place the caller still owns.
+read out of a place the caller still owns. The release travels down a chain of
+bindings: a binding read out of one that shares its own source owns nothing
+either, and pattern lowering leaves exactly that chain behind, hoisting a
+scrutinee into a temp the arm bindings then read.
 
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read out
@@ -619,7 +622,11 @@ Verified against the tree.
       source's later writes.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
-- [x] A place repointed after a binding read it releases that binding.
+- [x] A place repointed after a binding read it releases that binding, and the
+      release travels down a chain of bindings. Pattern lowering runs ahead of
+      this walk and hoists a scrutinee into a temp, so an arm binding reads the
+      temp rather than the place: without the chain, `if let Some(v) = self.f {
+      self.f = null; return Ok(v); }` deep-copies what it just took.
 - [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
       counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
 - [x] A closure costs its captures their move, their share and their

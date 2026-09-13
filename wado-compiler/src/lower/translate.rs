@@ -714,6 +714,9 @@ impl FunctionTranslator<'_, '_> {
         if self.is_last_use_move(value) {
             return false;
         }
+        if self.reads_shared_storage(value) {
+            return false;
+        }
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
             &self.base.value_copy.returns_self_projection,
@@ -748,6 +751,18 @@ impl FunctionTranslator<'_, '_> {
         }
         value_copy::analyze::source_root(value, &type_table, &self.ref_targets)
             .is_some_and(|root| !self.moved_roots.contains(&root))
+    }
+
+    /// Whether `value` reads a binding the share analysis cleared: its storage
+    /// is written nowhere the binding is still read, so a materialization out of
+    /// it aliases. Asked at every wrap site, not only at the `let` that bound
+    /// it — a match arm's binding has no `let` of its own.
+    fn reads_shared_storage(&self, value: &TirExpr) -> bool {
+        let value = value_copy::last_use::strip_casts(value);
+        matches!(
+            &value.kind,
+            TirExprKind::Local { index, .. } if self.share_eligible_locals.contains(index)
+        )
     }
 
     fn is_last_use_move(&self, value: &TirExpr) -> bool {

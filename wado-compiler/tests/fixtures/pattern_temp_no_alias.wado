@@ -195,6 +195,51 @@ test "a take-and-replace binding owns what the place gave up" {
     assert src.items.len() == 1;
 }
 
+// The release travels down a chain of bindings, so an arm binding gets it too.
+// It must not reach past a write that lands on the same storage first.
+
+struct Slot {
+    held: Option<List<i32>>,
+}
+
+impl Slot {
+    fn grow(&mut self) {
+        if let Some(ys) = &mut self.held {
+            ys.push(7);
+        }
+    }
+
+    fn take(&mut self) -> Option<List<i32>> {
+        if let Some(xs) = self.held {
+            self.held = null;
+            return Option::Some(xs);
+        }
+        return null;
+    }
+
+    fn take_after_call(&mut self) -> Option<List<i32>> {
+        if let Some(xs) = self.held {
+            self.grow();
+            self.held = null;
+            return Option::Some(xs);
+        }
+        return null;
+    }
+}
+
+test "an arm binding owns what the place gave up" {
+    let mut s = Slot { held: Option::Some([1]) };
+    let Some(xs) = s.take() else { unreachable(); };
+    assert xs.len() == 1;
+    assert s.held matches { None };
+}
+
+test "an arm binding keeps its copy past a write to the same storage" {
+    let mut s = Slot { held: Option::Some([1]) };
+    let Some(xs) = s.take_after_call() else { unreachable(); };
+    assert xs.len() == 1;
+}
+
 // A `&mut` to a variant or a primitive is a `Box<T>` by the time these lower, so
 // the rows below add the spelling the ones above never take.
 

@@ -1,0 +1,45 @@
+// WEP 2026-05-21 (Sharing): a place repointed after a binding read it hands that
+// binding the only reference to what the place held, so the binding needs no
+// defensive copy. The rule is about the storage, not about how the binding was
+// spelled, so a `match` arm's binding reads it exactly as a `let` does.
+
+struct Slot {
+    held: Option<String>,
+    name: String,
+}
+
+impl Slot {
+    fn take_name(&mut self) -> Result<String, i32> {
+        let v = self.name;
+        self.name = "";
+        return Result::Ok(v);
+    }
+
+    fn take_held(&mut self) -> Result<String, i32> {
+        if let Some(v) = self.held {
+            self.held = null;
+            return Result::Ok(v);
+        }
+        return Result::Err(1);
+    }
+}
+
+export fn run() {
+    let mut s = Slot { held: Option::Some("abc"), name: "xy" };
+
+    let Ok(held) = s.take_held() else { unreachable(); };
+    assert held.len() == 3;
+    assert s.held matches { None };
+    assert s.take_held() matches { Err(_) };
+
+    let Ok(name) = s.take_name() else { unreachable(); };
+    assert name.len() == 2;
+    assert s.name.len() == 0;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/string.wado/String\"("],
+    "wir_not_expect:O2": ["array_clone"]
+}
