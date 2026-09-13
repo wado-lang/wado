@@ -40,20 +40,17 @@ does not use.
 
 ## Decision
 
-Nine methods, each with the name, parameters, and meaning Rust gives it:
+Six methods, each with the name, parameters, and meaning Rust gives it:
 
 ```wado
 impl<T> Option<T> {
     pub fn unwrap_or(self, default: T) -> T;
-    pub fn unwrap_or_else(self, mut f: fn mut() -> T) -> T;
     pub fn map<U>(self, mut f: fn mut(T) -> U) -> Option<U>;
     pub fn ok_or<E>(self, err: E) -> Result<T, E>;
-    pub fn ok_or_else<E>(self, mut f: fn mut() -> E) -> Result<T, E>;
 }
 
 impl<T, E> Result<T, E> {
     pub fn unwrap_or(self, default: T) -> T;
-    pub fn unwrap_or_else(self, mut f: fn mut(E) -> T) -> T;
     pub fn map<U>(self, mut f: fn mut(T) -> U) -> Result<U, E>;
     pub fn map_err<F>(self, mut f: fn mut(E) -> F) -> Result<T, F>;
 }
@@ -67,20 +64,6 @@ in a function returning `Option`, and rejects one in a function returning
 sites that want it add call-site context, as in
 `Err(e) => Err(failure(path, e))`, which a type-directed `From` impl cannot
 supply.
-
-### The lazy forms
-
-With `??` refused, a method is the only thing that keeps a fallback from being
-evaluated where it goes unused, so `unwrap_or_else` and `ok_or_else` are
-offered beside the eager pair. The corpus asks for them unevenly: thirteen
-sites build an error the success path never reads, against about five whose
-fallback is a `String::new()` that costs nothing early. They are adopted
-together anyway, since the argument for each is the same one and a caller who
-learns it on `Option` should find it on `Result`.
-
-`Result::unwrap_or_else` takes the `Err` payload, as Rust's does. That is what
-makes it the only non-`match` form that reads the error while recovering from
-it, which `let ... else` cannot do — it binds nothing on the failing side.
 
 ### A Rust name keeps its Rust meaning
 
@@ -112,10 +95,25 @@ Zig, Swift, Kotlin, and C# all settled on that shape. It is refused because an
 operator is a large addition for a small return — grammar, precedence,
 formatter, and language service all grow, and what they buy is laziness at one
 call shape. It also stops at `Result`, where it would drop `E` without saying
-so. Whatever answers the eager fallback answers it as a method.
+so.
 
-`map_or` and `map_or_else` carry `#[unavailable]`, so calling either reports
-the reason above; see
+`unwrap_or_else` and `ok_or_else` are not offered either, and neither is
+`Result::unwrap_or_else`. A fallback that must not be evaluated is what they
+are for, but a closure is a poor way to ask for it: what it costs to build and
+to call is not visible where it is written, and a caller reaching for one is a
+caller who was thinking about cost. `match` says the same thing with nothing
+hidden, and it is what the corpus already writes at every one of those sites.
+`Result`'s form also binds the `Err` value, which is the case `let ... else`
+cannot reach — a `match` reaches it.
+
+This leaves `unwrap_or` and `ok_or` evaluating their argument. Sinking a pure,
+non-trapping one into the branch that reads it costs the caller nothing and
+changes no rule, since the effect system already decides what may move; the
+pass is tracked in [the optimizer guide](./optimizer.md). What such a pass
+cannot move is exactly what `match` is for.
+
+`map_or`, `map_or_else`, `unwrap_or_else`, and `ok_or_else` carry
+`#[unavailable]`, so calling one reports the reason above; see
 [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md). The rest are
 carried in prose, since no caller reaching for them writes a Rust name Wado
 answers differently.
@@ -129,15 +127,11 @@ Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 
-- Whether the eager pair keeps its evaluation is open. Sinking `unwrap_or`'s
-  and `ok_or`'s argument into the branch that uses it would make the caller's
-  choice between the two forms a matter of reading rather than of cost. Where
-  the argument is pure and cannot trap, the effect system already proves that
-  sinking invisible and no rule has to change — the pass is simply not written
-  (`licm` hoists; nothing sinks). Past that, eliding an argument that prints,
-  mutates, or traps makes the observable behavior depend on a runtime value,
-  and leaves `unwrap_or_else` with no purpose it does not already serve.
-  Nothing decides how far to go.
+- A fallback that is expensive and not pure pays for itself at every call, and
+  `match` is the whole answer. That is the right answer where the fallback is
+  also long, and a thin one where it is a single call the reader now has to
+  spell across four lines. Whether a lighter form exists that does not hide a
+  closure is unexamined.
 - `and_then` is absent. `?` covers it, including propagating an `Option` in an
   `Option`-returning function, and no Wado site wants it. Idiomatic Rust calls
   it 242 times in the measured corpus, so this is the kind of gap that shows

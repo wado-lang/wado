@@ -458,13 +458,10 @@ for what is not provided and why.
 
 ```wado
 opt.unwrap_or(0)                  // the value, or the fallback
-opt.unwrap_or_else(|| slow())     // same, but the fallback runs only for None
 opt.map(|v: i32| v * 2)           // Option<U>; None passes through
 opt.ok_or("missing")              // Result<T, E>; `?` will not bridge these
-opt.ok_or_else(|| costly())       // same, but the error is built only for None
 
 res.unwrap_or(0)                  // the Ok value, or the fallback
-res.unwrap_or_else(|e: E| use(e)) // same, and the fallback reads the Err
 res.map(|v: i32| v * 2)           // Result<U, E>; an Err passes through
 res.map_err(|e: String| e.len())  // Result<T, F>; an Ok passes through
 ```
@@ -478,11 +475,11 @@ call to it reports why instead of "no method named". See
 [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
 
 ```wado
-#[unavailable("write `map(f).unwrap_or(v)`")]
-pub fn map_or(&self);                       // a name that never existed
+#[unavailable("write `connect_with(Config::default())` instead")]
+pub fn connect(&self);                      // a name that never existed
 
-#[unavailable("removed in 0.5.0; use `Option::ok_or`")]
-pub fn into_result(&self);                  // a name that was taken out
+#[unavailable("removed in 0.5.0; use `connect_with`")]
+pub fn connect_timeout(&self);              // a name that was taken out
 ```
 
 The reason is required, and it is the whole attribute: a removal dates itself in

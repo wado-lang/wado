@@ -179,7 +179,12 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 - [ ] Sinking pure definitions into the branch that uses them (partial DCE). The
       mirror of LICM, reusing its motion-safety predicates; past effectful code
       it is sound where hoisting is not. `core:log`'s disabled path pays two
-      allocations for arguments its gate discards.
+      allocations for arguments its gate discards, and `unwrap_or` / `ok_or`
+      build a fallback the taken path never reads. The prelude offers no lazy
+      form on purpose ([WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)),
+      so this pass is what makes the eager one free wherever the argument is
+      pure and cannot trap — which the effect system already decides, so no
+      language rule has to change for it.
 - [ ] Forwarding a local bound to a global read. The graph names no global read,
       so `let s = G` reaches the use only when copy propagation removes the
       binding — never for a `String`. Naming it needs a generation check at the
