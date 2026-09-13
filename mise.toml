@@ -273,8 +273,8 @@ description = """\
 Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard, \
 as a branch and as a loop, at every statement boundary of every e2e fixture, \
 stdlib test module and example, and keep the ones whose output is unmoved. \
-Writes \
-target/emi/{corpus,calibration}.txt. Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
+Writes target/emi/{corpus,calibration}.txt. \
+Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
 WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
@@ -284,8 +284,8 @@ run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate
 description = """\
 Mutate the calibrated EMI corpus: behind an undecidable guard, in each shape \
 the source calibrated for, write to and read every binding in scope at every \
-statement boundary, and report any \
-source whose output moves. Reads target/emi/corpus.txt, so run emi-calibrate \
+statement boundary, and report any source whose output moves. \
+Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """

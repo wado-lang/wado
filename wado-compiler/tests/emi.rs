@@ -29,11 +29,9 @@ use wado_compiler::ast::{
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::{CompilerOptions, OptLevel};
 
-/// The levels both stages compare a mutant against its own baseline at.
-///
-/// Each is its own oracle: a level answers only for the pipeline it runs, and
-/// `O2` — what `wado test` and a release build use — is not the `O3` the
-/// campaign started with.
+/// The levels both stages compare a mutant against its own baseline at. Each
+/// answers only for the pipeline it runs, and `O2` is what a release build and
+/// `wado test` run.
 const OPT_LEVELS: [OptLevel; 5] = [
     OptLevel::O0,
     OptLevel::O1,
@@ -43,40 +41,53 @@ const OPT_LEVELS: [OptLevel; 5] = [
 ];
 
 /// What a selection knob was set to, or `None` if it says nothing. A workflow
-/// input that was left blank arrives as an empty string, which selects
-/// everything rather than nothing.
+/// input left blank arrives as an empty string, which selects everything.
 fn selection(variable: &str) -> Option<String> {
     std::env::var(variable)
         .ok()
         .filter(|spec| !spec.trim().is_empty())
 }
 
+/// The entries of `table` a comma-separated `spec` names, in the order it names
+/// them. A name no entry answers to is a typo, and stops the run.
+fn selected<T: Copy>(
+    spec: &str,
+    table: &[T],
+    named: impl Fn(T) -> &'static str,
+    kind: &str,
+) -> Vec<T> {
+    spec.split(',')
+        .map(|wanted| {
+            let wanted = wanted.trim();
+            table
+                .iter()
+                .copied()
+                .find(|entry| named(*entry) == wanted)
+                .unwrap_or_else(|| panic!("`{wanted}` is no {kind}"))
+        })
+        .collect()
+}
+
 /// The levels `WADO_EMI_LEVELS` selects by name, all of them by default. A run
-/// that has to fit an hour trades levels for corpus here.
+/// with a time budget trades levels for corpus.
 fn levels() -> Vec<OptLevel> {
     let Some(spec) = selection("WADO_EMI_LEVELS") else {
         return OPT_LEVELS.to_vec();
     };
-    spec.split(',')
-        .map(|name| {
-            let name = name.trim();
-            OPT_LEVELS
-                .into_iter()
-                .find(|level| common::opt_level_name(*level) == name)
-                .unwrap_or_else(|| panic!("WADO_EMI_LEVELS names no level `{name}`"))
-        })
-        .collect()
+    selected(
+        &spec,
+        &OPT_LEVELS,
+        common::opt_level_name,
+        "optimization level",
+    )
 }
 
 // ---------------------------------------------------------------------------
 // Guard
 // ---------------------------------------------------------------------------
 
-/// The control flow a guard wraps its payload in.
-///
-/// Both are unreachable at run time and compiled all the same; they differ in
-/// which analysis family sees the dead region, the loop passes reaching only
-/// the second.
+/// The control flow a guard wraps its payload in. Both are unreachable at run
+/// time and compiled all the same, and only the loop reaches the loop passes.
 struct Shape {
     /// The keyword that opens the guard, and the shape's name in a report.
     keyword: &'static str,
@@ -192,9 +203,8 @@ impl Root {
 struct Source {
     path: PathBuf,
     root: Root,
-    /// The guard shapes this source is an oracle for. Calibration decides them
-    /// and `corpus.txt` carries them; before it has run, every shape is a
-    /// candidate.
+    /// The guard shapes this source is an oracle for, as `corpus.txt` records
+    /// them. Before calibration has ruled, every shape is a candidate.
     shapes: Vec<&'static Shape>,
 }
 
@@ -230,15 +240,8 @@ impl Source {
 
     /// The shapes named in a `corpus.txt` column, `if,while`.
     fn with_shapes(mut self, spec: &str) -> Self {
-        self.shapes = spec
-            .split(',')
-            .map(|name| {
-                SHAPES
-                    .iter()
-                    .find(|shape| shape.keyword == name)
-                    .unwrap_or_else(|| panic!("`{name}` is no guard shape"))
-            })
-            .collect();
+        let table: Vec<&'static Shape> = SHAPES.iter().collect();
+        self.shapes = selected(spec, &table, |shape| shape.keyword, "guard shape");
         self
     }
 }
@@ -778,8 +781,8 @@ fn injection_sites(source: &str) -> Vec<Site> {
         .collect()
 }
 
-/// A site has to hold every shape: they stand in the same statement position,
-/// and a site only one of them parses at would be a shape-shaped false finding.
+/// Every shape must parse at every site, so all of them inject at the same set.
+/// A site only one shape parses at would cost the others their whole mutant.
 fn guards_parse(source: &str, sites: &[Site]) -> bool {
     SHAPES
         .iter()
@@ -1211,12 +1214,11 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
                 .any(|(_, payload)| !(payload.render)(site).is_empty())
         })
         .count();
-    let mut shapes: Vec<&'static str> = alive.iter().map(|(shape, _)| shape.keyword).collect();
-    shapes.dedup();
+    let shapes: IndexSet<&'static str> = alive.iter().map(|(shape, _)| shape.keyword).collect();
     Ok(Eligible {
         name,
         sites: covered,
-        shapes,
+        shapes: shapes.into_iter().collect(),
     })
 }
 
@@ -1470,15 +1472,7 @@ fn selected_roots() -> Vec<Root> {
     let Some(spec) = selection("WADO_EMI_ROOTS") else {
         return ROOTS.to_vec();
     };
-    spec.split(',')
-        .map(|name| {
-            let name = name.trim();
-            ROOTS
-                .into_iter()
-                .find(|root| root.name() == name)
-                .unwrap_or_else(|| panic!("WADO_EMI_ROOTS names no root `{name}`"))
-        })
-        .collect()
+    selected(&spec, &ROOTS, Root::name, "corpus root")
 }
 
 fn corpus_sources() -> Vec<Source> {
@@ -1513,11 +1507,12 @@ fn corpus_subjects() -> Vec<Source> {
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {} — calibrate first: {e}", path.display()));
     text.lines()
-        .filter_map(|line| {
-            let mut columns = line.split_whitespace();
-            let name = columns.next()?;
-            let shapes = columns.nth(1).expect("a corpus line names its shapes");
-            Some(Source::from_name(name).with_shapes(shapes))
+        .map(|line| {
+            let columns: Vec<&str> = line.split_whitespace().collect();
+            let [name, _sites, shapes] = columns[..] else {
+                panic!("a corpus line reads `name sites shapes`, got `{line}`")
+            };
+            Source::from_name(name).with_shapes(shapes)
         })
         .collect()
 }

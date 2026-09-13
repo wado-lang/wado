@@ -126,8 +126,8 @@ each payload reached.
       read payload.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
-- [x] `while builtin::black_box(false) { … }` as a second guard shape. Every
-      A shape is calibrated for and dropped on its own, as a payload is, and
+- [x] `while builtin::black_box(false) { … }` as a second guard shape. A shape
+      is calibrated for and dropped on its own, as a payload is, and
       `corpus.txt` carries the shapes each source answers for.
 - [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
       `O2` is what a release build and `wado test` run, and it was not covered.

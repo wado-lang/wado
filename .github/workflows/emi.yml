@@ -54,6 +54,10 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+    # Both stages must run the same levels, or the mutation stage takes a
+    # corpus calibrated for levels it does not run.
+    env:
+      WADO_EMI_LEVELS: ${{ inputs.levels }}
     strategy:
       # A finding in one shard says nothing about the others; the report needs all.
       fail-fast: false
@@ -69,14 +73,11 @@ jobs:
         env:
           WADO_EMI_SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.count }}
           WADO_EMI_FILTER: ${{ inputs.filter }}
-          WADO_EMI_LEVELS: ${{ inputs.levels }}
         run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus
       # Same job as the calibration it consumes: the corpus this shard wrote is
       # already its slice, and the mutation stage takes that file whole.
       - name: Mutate
         if: always()
-        env:
-          WADO_EMI_LEVELS: ${{ inputs.levels }}
         run: cargo test --locked -p wado-compiler --test emi -- --ignored --nocapture mutate_corpus
       - uses: actions/upload-artifact@v7
         if: always()
