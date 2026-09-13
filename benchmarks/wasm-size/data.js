@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789294277885,
+  "lastUpdate": 1789306600481,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55629,6 +55629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/51be942e77042433d31ccf839bbf8c2f61501908"
         },
         "date": 1789294277342,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "129707e1da4c391887ce2079d57b23ff4d69792e",
+          "message": "Merge pull request #2045 from wado-lang/gfx/default-arg-callee-type-param\n\nfeat(elaborator): a default argument may name its callee's own type parameter",
+          "timestamp": "2026-09-13T22:22:03+09:00",
+          "tree_id": "5f3a4d078110856663bcca027b0582c5680cfa80",
+          "url": "https://github.com/wado-lang/wado/commit/129707e1da4c391887ce2079d57b23ff4d69792e"
+        },
+        "date": 1789306600201,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
