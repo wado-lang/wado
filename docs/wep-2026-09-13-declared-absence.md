@@ -99,11 +99,11 @@ it never reaches codegen.
 
 ### Placement
 
-Module-level `fn`, `impl` method, and trait method. An `interface` operation or
-a `resource` method may not carry it. Writing it there is an error, since an
-attribute nobody reads says nothing. `export` is refused with it too: the
-keyword lowers a function at the component boundary, and this declaration has
-none to lower.
+Module-level `fn`, `impl` method, and trait method. Anywhere the attribute is
+not yet read, writing it is an error rather than a line nobody acts on; Known
+gaps has the reach still to come. `export` is refused with it: the keyword
+lowers a function at the component boundary, and this declaration has none to
+lower.
 
 ### Not rendered by `wado doc`
 
@@ -131,9 +131,10 @@ Nothing is queued. The gaps below are unowned.
   A deprecated item still exists, which is why it is a separate attribute
   rather than a third `#[unavailable]` state, and why the reasoning above for
   leaving absences out does not carry to it.
-- Types, traits, and globals cannot carry the attribute, and neither can an
-  `interface` operation or a `resource` method. Extending to any of them looks
-  mechanical, and no use has asked for it.
+- Every item should carry the attribute eventually. Today only a module `fn`,
+  an `impl` method, and a trait method do; a type, a trait, a global, an
+  `interface` operation, and a `resource` method reject it. Each extension
+  looks mechanical, and none is owned.
 - A trait may declare a name `#[unavailable]` and an `impl` may still supply a
   body for it, which the receiver's own type then dispatches to. Closing it
   needs a rule Wado does not have today for any member: that an
