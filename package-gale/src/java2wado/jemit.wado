@@ -23,7 +23,7 @@ use {
 } from "../action_translate.wado";
 use { to_snake_case, escape_ident } from "../ident.wado";
 use { AltBinding } from "../attr_resolve.wado";
-use { str_lit } from "../wadopoet.wado";
+use { wado } from "../wadopoet.wado";
 use { JExpr, JMember, JCall, JStmt, JLocal, JAssign, JBinary } from "./jparser.wado";
 use { tokenize_java } from "./jlexer.wado";
 use { parse_java_expr, parse_java_stmts } from "./jparser.wado";
@@ -296,7 +296,7 @@ fn emit_stmt(
         Assert(a) => {
             let cond = emit_expr(rule, rules, &a.cond, vals_in_scope, bindings, env)?;
             match &a.message {
-                Some(m) => Result::Ok(`assert ${cond}, ${str_lit(*m)};`),
+                Some(m) => Result::Ok(wado`assert ${cond}, "${*m}";`),
                 None => Result::Ok(`assert ${cond};`),
             }
         },
@@ -494,7 +494,7 @@ fn emit_call(
                     "java2wado: getExpectedTokens() is only available in a rule's @init / @after, where codegen knows the set",
                 );
             }
-            return Result::Ok(`${str_lit(env.expected)}`);
+            return Result::Ok(wado`"${env.expected}"`);
         }
     }
     // `$ctx.toStringTree(this)`: the `$`-attr lexer captures the whole

@@ -1,6 +1,6 @@
 ---
 name: jco
-description: Transpile Wado Wasm components to JS with jco and run/benchmark them on Node. Use when running Wado on Node or browsers via jco, debugging jco-transpiled runtime failures, or benchmarking Wado on Node.
+description: Transpile Wado Wasm components to JS with jco, then run, debug, and benchmark them on Node. Use for anything that involves jco, Node, or a browser as the host.
 ---
 
 # Running Wado on Node via jco

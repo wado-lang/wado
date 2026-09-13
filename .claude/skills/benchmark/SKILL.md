@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: Run Wado performance benchmarks (count-prime, mandelbrot, zlib, json, http-routing, …) and wasm-size reports, then update the benchmark/ and wasm-size/ README files. Use when asked to benchmark Wado, measure performance, or refresh the benchmark/wasm-size results.
+description: Measure Wado's performance or the size of the Wasm it generates, and refresh the benchmark/ and wasm-size/ README files. Use for any benchmarking or size-measurement request, whichever benchmark it names.
 ---
 
 # Benchmark

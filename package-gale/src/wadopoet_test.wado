@@ -9,8 +9,7 @@ use {
     GlobalSpec,
     ImplSpec,
     Vis,
-    str_lit,
-    char_lit,
+    wado,
     lit_name,
     char_range_pat,
 } from "./wadopoet.wado";
@@ -400,15 +399,23 @@ test "chaining builder methods" {
 }
 
 
-test "str_lit wraps and quotes" {
-    assert `${str_lit("foo")}` == "\"foo\"";
+test "wado writes a code hole verbatim" {
+    let name = "expr_list";
+    let index = 3;
+    assert wado`pos = ${name}(tokens, pos, ${index});` == "pos = expr_list(tokens, pos, 3);";
 }
 
-test "str_lit empty" {
-    assert `${str_lit("")}` == "\"\"";
+test "wado quotes a hole inside a string literal" {
+    let text = "foo";
+    assert wado`let s = "${text}";` == "let s = \"foo\";";
 }
 
-test "str_lit escapes quote and backslash" {
+test "wado quotes an empty hole" {
+    let text = "";
+    assert wado`let s = "${text}";` == "let s = \"\";";
+}
+
+test "wado escapes quote and backslash inside a string literal" {
     // input: a " \ b
     let mut input = String::new();
     input.push('a');
@@ -425,15 +432,17 @@ test "str_lit escapes quote and backslash" {
     expected.push('\\');
     expected.push('b');
     expected.push('"');
-    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "str_lit keeps printable non-ASCII verbatim" {
+test "wado keeps printable non-ASCII verbatim" {
     // The key contract: Japanese text is NOT \u-escaped.
-    assert `${str_lit("あ")}` == "\"あ\"";
+    let text = "あ";
+    assert wado`"${text}"` == "\"あ\"";
 }
 
-test "str_lit escapes control chars" {
+test "wado escapes control chars" {
     // input: newline, then U+0001 (no named escape)
     let mut input = String::new();
     input.push('\n');
@@ -449,35 +458,88 @@ test "str_lit escapes control chars" {
     expected.push('1');
     expected.push('}');
     expected.push('"');
-    assert `${str_lit(input)}` == expected, `got: ${str_lit(input)}`;
+    let got = wado`"${input}"`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit basic" {
-    assert `${char_lit('a')}` == "'a'";
+test "wado writes a hole inside a char literal" {
+    let c = 'a';
+    assert wado`if ch == '${c}' { return; }` == "if ch == 'a' { return; }";
 }
 
-test "char_lit escapes single quote" {
+test "wado escapes a single quote inside a char literal" {
     // expected literal text: '\''
     let mut expected = String::new();
     expected.push('\'');
     expected.push('\\');
     expected.push('\'');
     expected.push('\'');
-    assert `${char_lit('\'')}` == expected, `got: ${char_lit('\'')}`;
+    let c = '\'';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit named control" {
+test "wado escapes a named control char inside a char literal" {
     // expected literal text: '\n'
     let mut expected = String::new();
     expected.push('\'');
     expected.push('\\');
     expected.push('n');
     expected.push('\'');
-    assert `${char_lit('\n')}` == expected, `got: ${char_lit('\n')}`;
+    let c = '\n';
+    let got = wado`'${c}'`;
+    assert got == expected, `got: ${got}`;
 }
 
-test "char_lit keeps printable non-ASCII verbatim" {
-    assert `${char_lit('あ')}` == "'あ'";
+test "wado keeps a printable non-ASCII char verbatim" {
+    let c = 'あ';
+    assert wado`'${c}'` == "'あ'";
+}
+
+test "wado carries the context across an empty segment" {
+    let a = "a\"";
+    let b = "b";
+    assert wado`let s = "${a}${b}";` == "let s = \"a\\\"b\";";
+}
+
+test "a hole's value does not shift the context of the next hole" {
+    // The first hole renders an unbalanced quote; the second is still code.
+    let opener = "f(\"";
+    let text = "x";
+    assert wado`${opener}${text}");` == "f(\"x\");";
+}
+
+test "wado reads a quote in a line comment as text" {
+    let comment = "don't";
+    let text = "x\"y";
+    let got = wado`// ${comment}
+let s = "${text}";`;
+    assert got == "// don't\nlet s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads a lone slash as division, not a comment" {
+    let text = "x\"y";
+    let got = wado`let n = a / b; let s = "${text}";`;
+    assert got == "let n = a / b; let s = \"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado reads an escaped quote as text inside a string literal" {
+    // The template writes `\\"` because it emits `\"`; the scan sees the
+    // backslash and the string stays open.
+    let text = "x\"y";
+    let got = wado`let s = "a\\"${text}";`;
+    assert got == "let s = \"a\\\"x\\\"y\";", `got: ${got}`;
+}
+
+test "wado applies a format specifier" {
+    let bits = 255;
+    assert wado`let mask = 0x${bits:x};` == "let mask = 0xff;";
+}
+
+test "wado nests generated code" {
+    let text = "a\"b";
+    let inner = wado`f("${text}")`;
+    assert wado`let x = ${inner};` == "let x = f(\"a\\\"b\");";
 }
 
 test "char_range_pat renders an inclusive range" {
@@ -551,7 +613,7 @@ test "struct + impl trait composition" {
 test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     assert `${lit_name("+")}` == "'+'";
     assert `${lit_name("and")}` == "'and'";
-    // Printable non-ASCII stays verbatim, same as `str_lit`.
+    // Printable non-ASCII stays verbatim, as in any Wado literal Gale emits.
     assert `${lit_name("あ")}` == "'あ'";
     // `LitToken.text` has its escapes resolved, so a real newline goes back to
     // `\n` — a readable rendering, not a round-trip.
@@ -567,4 +629,46 @@ test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
     let mut quote = String::new();
     quote.push('"');
     assert `${lit_name(quote)}` == "'\"'";
+}
+
+test "wado runs a block comment to its close, not to the first quote inside" {
+    // `/*` opens a state of its own: an unbalanced quote inside is comment
+    // text, so the hole after the close is still in a string.
+    let x = "a\"b";
+    assert wado`/* he said "hi */ let s = "${x}";` == "/* he said \"hi */ let s = \"a\\\"b\";";
+}
+
+test "wado leaves a block comment only on the star that precedes the slash" {
+    let x = "q\"r";
+    assert wado`/** doc **/ let s = "${x}";` == "/** doc **/ let s = \"q\\\"r\";";
+}
+
+test "wado reads an apostrophe inside a template as text, not as a char literal" {
+    // Without a template state the apostrophe would open `Ctx::Chr` and the
+    // hole would be escaped for `'`.
+    let x = "a`b";
+    assert wado`let m = \`don't ${x}\`;` == "let m = `don't a\\`b`;";
+}
+
+test "wado escapes a dollar in a template hole so it cannot open an interpolation" {
+    let x = "${evil}";
+    assert wado`let m = \`${x}\`;` == "let m = `\\${evil}`;";
+    // Outside a template a `$` is ordinary text.
+    assert wado`let s = "${x}";` == "let s = \"${evil}\";";
+}
+
+test "wado carries the state past a hole that completes an escape" {
+    // The `\n` is finished before the hole, so the hole sits in the string and
+    // the one after the closing quote sits in code.
+    let x = "q";
+    let y = "\"str\"";
+    assert wado`let s = "a\\n${x}"; let t = ${y};` == "let s = \"a\\nq\"; let t = \"str\";";
+}
+
+#[expect_trap]
+test "wado refuses a hole whose backslash is still pending" {
+    // The backslash would bind the hole's first byte, and which state that
+    // lands in depends on the value, so the scan cannot answer for what follows.
+    let x = "q";
+    let _ = wado`let s = "a\\${x}";`;
 }

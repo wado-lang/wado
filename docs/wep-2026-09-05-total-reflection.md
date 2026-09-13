@@ -62,7 +62,7 @@ spelling of it would be the parallel classification
 [Reflect Derivation](./wep-2026-06-13-reflect-derivation.md) refuses elsewhere.
 
 ```wado
-internal trait Reflect {
+pub trait Reflect {
     fn type_info() -> TypeInfo;
     fn type_name() -> String;
     fn wire_name_policy() -> CaseStyle;

@@ -1,6 +1,6 @@
 ---
 name: vendor-submodules
-description: Locate and sync the vendored reference specs and runtimes under vendor/ (Wasm, WASI P3, and Component Model specs; wasm-tools, wasmtime sources). Use when you need to read a Wasm/WASI/CM spec or wasmtime/wasm-tools source, when vendor/ submodules are missing and need initializing, or when building against a locally patched wasmtime.
+description: Locate and sync the reference specs and runtimes vendored under vendor/ — the Wasm, WASI P3, and Component Model specs, and the wasm-tools and wasmtime sources. Use whenever an answer should come from one of those sources rather than memory, and whenever vendor/ is missing or stale.
 ---
 
 ## What is under `vendor/`

@@ -13,11 +13,16 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+<<<<<<< HEAD
 use super::call::{DefaultTypeBinding, SettledAs, slot_type_bindings};
+||||||| 015a274d429
+=======
+use super::call::{merge_turbofish_type_args, turbofish_leaves_slot};
+>>>>>>> origin/main
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1283,6 +1288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         filled
     }
 
+<<<<<<< HEAD
     /// Resolve each method type parameter's declared type default, with `Self`
     /// set to the concrete receiver and `resolving_home` pointed at the
     /// declaring module — a default may name a type private to that module
@@ -1404,6 +1410,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 known[i] = default_ty;
             }
         }
+||||||| 015a274d429
+=======
+    /// A method call's type arguments: what its turbofish names, plus inference
+    /// for each `_`, which reaches here as [`TypeTable::UNKNOWN`] in `explicit`.
+    fn resolve_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        input: MethodInferenceInput<'_>,
+    ) -> Vec<TypeId> {
+        if !turbofish_leaves_slot(&explicit, input.slots.len()) {
+            return explicit;
+        }
+        let inferred = self.infer_method_type_args(input);
+        if explicit.is_empty() {
+            return inferred;
+        }
+        let mut merged = explicit;
+        merge_turbofish_type_args(&mut merged, &inferred);
+        merged
+    }
+
+    /// [`Self::resolve_method_type_args`], then what every caller does with the
+    /// answer: check the declared bounds, and bind the slots for substitution.
+    pub(super) fn bind_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        input: MethodInferenceInput<'_>,
+    ) -> (Vec<TypeId>, SubstitutionContext) {
+        let (slots, own_params, span) = (input.slots, input.own_params, input.span);
+        let type_args = self.resolve_method_type_args(explicit, input);
+        let mut subst = SubstitutionContext::new();
+        if !type_args.is_empty() {
+            subst = subst.bind(slots, &type_args);
+            self.enforce_type_arg_bounds(own_params, &type_args, span);
+        }
+        (type_args, subst)
+>>>>>>> origin/main
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -1446,6 +1489,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "method",
                 name: method_name,
                 span,
+                // The inference pass itself: its caller merges the turbofish in
+                // afterwards, so every slot is open here.
+                type_args: &[],
             },
         );
         self.record_slot_bounds(&inst, &method_type_params, span);
@@ -1477,6 +1523,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
+        // A slot answered with itself is not answered: a rigid parameter carried
+        // past here dies in codegen, so put the variable back and let the blame
+        // below report it at the call. A slot the enclosing scope declares is
+        // the caller forwarding its own generics, which monomorphization
+        // resolves. `defer_or_report_uninferred_fn_type_args` guards it too.
+        let scope_params = self.scope_type_param_ids();
+        for (i, answer) in inferred.iter_mut().enumerate() {
+            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+                *answer = inst.vars[i];
+            }
+        }
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
@@ -3056,6 +3113,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index_expr: &ast::IndexExpr,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
         let (struct_name, base_type_id) = self.index_container_head(index_expr, ctx)?;
 
@@ -3148,15 +3206,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
-            return_type,
+            mut return_type,
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
             owner: _,
             cm_name: _,
-            method_own_params: _,
+            method_own_params,
             is_ref_impl: method_is_ref_impl,
-            method_type_param_ids: _,
+            method_type_param_ids,
             impl_module,
             from_concrete_impl: _,
             param_defaults: method_param_defaults,
@@ -3235,17 +3293,74 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify (`reify_index_mut_method_call`) rebuilds the
-        // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
-        // above; the body walk only needed the dispatch fact. The
-        // index was resolved above for its side effects.
+        // `reify_index_mut_method_call` rebuilds the inner `*expr.index_mut(idx)`
+        // from the `operator_dispatch` recorded above; the index was resolved
+        // there for its side effects.
 
+<<<<<<< HEAD
         for (i, a) in method_call.args.iter().enumerate() {
             let expected = param_types.get(i).copied();
             self.resolve_expr(a, ctx, expected);
         }
 
         let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
+||||||| 015a274d429
+        for (i, a) in method_call.args.iter().enumerate() {
+            let expected = param_types.get(i).copied();
+            self.resolve_expr(a, ctx, expected);
+        }
+
+        let type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+=======
+        // A `_` resolves to UNKNOWN, and inference fills it below.
+        let mut type_args: Vec<TypeId> = method_call
+            .type_args
+            .iter()
+            .map(|ty| self.resolve_type(ty))
+            .collect();
+>>>>>>> origin/main
+
+        // This path answers the call, so it runs the method's own inference too:
+        // a subscript receiver does not decide whether an argument gets a type.
+        let args = self.resolve_args_through_slots(
+            ctx,
+            &method_call.args,
+            &param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: &method_call.method,
+                span: method_call.span,
+                type_args: &type_args,
+            },
+        );
+
+        let subst;
+        (type_args, subst) = self.bind_method_type_args(
+            type_args,
+            MethodInferenceInput {
+                receiver_type: output_type,
+                method_name: &method_call.method,
+                slots: &method_type_param_ids,
+                own_params: &method_own_params,
+                param_types: &param_types,
+                args: &args,
+                raw_args: &method_call.args,
+                decl_return_type: return_type,
+                expected_return_type: expected_type,
+                trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                declaring_module: impl_module.clone(),
+                span: method_call.span,
+            },
+        );
+        if !subst.is_empty() {
+            return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
+        }
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
         let mangled_method_name =

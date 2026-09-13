@@ -6,11 +6,12 @@
 
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use crate::ast::GenericParam;
+use super::types::FunctionContext;
+use crate::ast::{self, GenericParam};
 
 /// What is being instantiated, for the "cannot infer" diagnostic raised if a
 /// slot is never solved.
@@ -21,6 +22,9 @@ pub(super) struct Instantiation<'a> {
     pub(super) name: &'a str,
     /// Where the use site is.
     pub(super) span: Span,
+    /// What the use site's turbofish names, in slot order: [`TypeTable::UNKNOWN`]
+    /// where it wrote `_` or stopped short, empty where it wrote none.
+    pub(super) type_args: &'a [TypeId],
 }
 
 /// A declaration's slots rewritten into one use site's variables.
@@ -33,10 +37,9 @@ pub(super) struct Instantiated {
     /// variables. Apply with `TypeTable::substitute_type_params`.
     subst: IndexMap<u32, TypeId>,
     /// Per-slot "cannot infer" diagnostic, attached by
-    /// [`Elaborator::record_instantiation`] to the slots still unsolved when
-    /// the use site commits. Held rather than attached at mint time because a
-    /// site may instantiate speculatively — inference runs twice for a partial
-    /// turbofish — and a discarded instantiation must report nothing.
+    /// [`Elaborator::record_instantiation`] to the slots still unsolved when the
+    /// use site commits. `None` marks a slot that cannot go unanswered: one left
+    /// rigid, or one the turbofish named.
     diags: Vec<Option<(Span, String, String)>>,
 }
 
@@ -50,11 +53,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `[?0]` would hide the shape that arm matches on and the pack would
     /// never bind. Instantiating a pack needs a pack-shaped variable, which
     /// does not exist yet.
+    ///
+    /// A slot [`Instantiation::type_args`] names is solved as it is minted.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
         let mut subst = IndexMap::default();
-        for &slot in slots {
+        for (i, &slot) in slots.iter().enumerate() {
             let named_slot = {
                 let tt = self.tysys.type_table.borrow();
                 match tt.get(slot) {
@@ -67,9 +72,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 diags.push(None);
                 continue;
             };
-            let var = self.mint_infer_var();
+            let var = self.mint_infer_var_named(&name);
             subst.insert(index, var);
             vars.push(var);
+            // Answered here, so an argument meets what the source wrote.
+            if let Some(&named) = of.type_args.get(i)
+                && named != TypeTable::UNKNOWN
+            {
+                self.solve_infer_var(var, named);
+                diags.push(None);
+                continue;
+            }
             // The parameter and the rest of the sentence stay apart so
             // `finalize_infer_holes` can name every unsolved slot of this use
             // site in one message.
@@ -119,6 +132,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if var != answer {
                 self.solve_infer_var(var, answer);
             }
+        }
+    }
+
+    /// Instantiate `slots`, carry their bounds, resolve the arguments against
+    /// them, and settle the answers back. One call, so no path can take part of
+    /// the sequence and hand a closure a rigid slot nothing can construct.
+    pub(super) fn resolve_args_through_slots(
+        &mut self,
+        ctx: &mut FunctionContext,
+        args_ast: &[ast::Expr],
+        param_types: &[TypeId],
+        slots: &[TypeId],
+        own_params: &[GenericParam],
+        of: &Instantiation<'_>,
+    ) -> Vec<TypeId> {
+        if slots.is_empty() {
+            return self.resolve_args_against_params(args_ast, ctx, param_types, None);
+        }
+        let inst = self.instantiate(slots, of);
+        self.record_slot_bounds(&inst, own_params, of.span);
+        let param_types = self.instantiate_types(param_types, &inst);
+        let mut args = self.resolve_args_against_params(args_ast, ctx, &param_types, Some(&inst));
+        self.settle_onto_slots(&inst, slots, &mut args);
+        args
+    }
+
+    /// Settle the walk's variables back onto their slots, substituting through
+    /// `args`. [`Self::solve_infer_var`] keeps the first answer, so a slot the
+    /// arguments pinned stays pinned and one they left open goes back rigid.
+    pub(super) fn settle_onto_slots(
+        &mut self,
+        inst: &Instantiated,
+        slots: &[TypeId],
+        args: &mut [TypeId],
+    ) {
+        for (&var, &slot) in inst.vars.iter().zip(slots.iter()) {
+            self.solve_infer_var(var, slot);
+        }
+        for arg in args {
+            *arg = self.apply_infer_holes(*arg);
         }
     }
 

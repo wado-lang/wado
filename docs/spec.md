@@ -1832,25 +1832,27 @@ literal `'…'` for a Unicode scalar.
 
 #### Escape Sequences
 
-Escape sequences are shared between character and string literals:
+Escape sequences are shared between character, string and template literals,
+except where the table names one:
 
-| Escape   | Character                  |
-| -------- | -------------------------- |
-| `\'`     | Single quote (char only)   |
-| `\"`     | Double quote (string only) |
-| `\\`     | Backslash                  |
-| `\/`     | Forward slash              |
-| `\b`     | Backspace                  |
-| `\f`     | Form feed                  |
-| `\n`     | Newline                    |
-| `\r`     | Carriage return            |
-| `\t`     | Tab                        |
-| `\0`     | Null                       |
-| `\$`     | Dollar sign (literal `$`)  |
-| `\{`     | Left brace (literal `{`)   |
-| `\}`     | Right brace (literal `}`)  |
-| `\uHHHH` | Unicode BMP (4 hex digits) |
-| `\u{H+}` | Unicode full range         |
+| Escape   | Character                   |
+| -------- | --------------------------- |
+| `\'`     | Single quote (char only)    |
+| `\"`     | Double quote (string only)  |
+| `` \` `` | Backtick (template only)    |
+| `\\`     | Backslash                   |
+| `\/`     | Forward slash               |
+| `\b`     | Backspace                   |
+| `\f`     | Form feed                   |
+| `\n`     | Newline                     |
+| `\r`     | Carriage return             |
+| `\t`     | Tab                         |
+| `\0`     | Null                        |
+| `\$`     | Dollar sign (template only) |
+| `\{`     | Left brace (literal `{`)    |
+| `\}`     | Right brace (literal `}`)   |
+| `\uHHHH` | Unicode BMP (4 hex digits)  |
+| `\u{H+}` | Unicode full range          |
 
 In a template string only `${` opens an interpolation, so `{` and `}` are already
 literal and need no escaping. Use `\$` to write a literal `$` before a `{`
@@ -2259,8 +2261,26 @@ let parse = |s: String| -> Result<i32, String> {
 };
 ```
 
-Parameter types are always required (never inferred). A `?` in the body needs
-the return type known — via `-> Type` or an expected `fn(..) -> R`.
+A parameter type is inferred from the expected `fn(..)` type, matched by
+position. Any context that supplies such a type counts: a typed binding, a
+function or method parameter, a struct field, a newtype over a `fn(..)`.
+Annotate only where nothing supplies one; an annotation always wins:
+
+```wado
+let arr: List<i32> = [1, 2, 3];
+arr.into_iter().map(|x| x * 2);             // `x: i32`, from `Iterator::Item`
+arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from the body
+let add_one = |x: i32| x + 1;               // no expected type: annotate
+```
+
+The expected type may be one of the callee's own type parameters. A sibling
+argument then supplies it, whichever side of the closure it is written on. A
+numeric-literal sibling does not: `fold(0, |acc, x| acc + x)` over a `List<i64>`
+takes `i64` from the body, not `i32` from the `0`. A parameter nothing supplies
+is reported at the call, not inside the closure.
+
+A `?` in the body needs the return type known — via `-> Type` or an expected
+`fn(..) -> R`.
 
 A closure declares neither effects nor stores; both are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
@@ -2716,9 +2736,13 @@ explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
 an omitted turbofish on an uninferable parameter. It is scoped to turbofish
 arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
 
+A turbofish may also stop short of the declared parameters. The ones it does not
+name are inferred, as a `_` in their place would be.
+
 ```wado
 let r = Result::<_, MyErr>::Ok(42);    // infers Ok payload type, pins the error type
 let a = pick::<_, bool>(1, true);      // infers the first type argument
+let b = pick::<i32>(1, true);          // stops short: infers the second
 ```
 
 ### Traits
@@ -3309,7 +3333,7 @@ rest_iter.next();  // skip first
 let rest = rest_iter.collect();  // [2, 3, 4, 5]
 
 // Terminals compose with the adapters
-let total = arr.iter_value().filter(|x: i32| x % 2 == 1).sum();  // Some(9)
+let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 ```
 
 #### Value Semantics
@@ -3367,21 +3391,21 @@ Iterators support `map`, `filter`, and `fold` for functional-style data processi
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
-let doubled = arr.iter().map(|x: i32| x * 2).collect();
+let doubled = arr.iter().map(|x| x * 2).collect();
 // [2, 4, 6, 8, 10]
 
 // filter - keep elements matching predicate
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+let evens = arr.iter().filter(|x| x % 2 == 0).collect();
 // [2, 4]
 
 // fold - reduce to single value
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+let sum = arr.iter().fold(0, |acc, x| acc + x);
 // 15
 
 // Chaining combinators
 let result = arr.iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
     .collect();
 // [30, 40, 50]
 ```

@@ -12,7 +12,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::SymbolTable;
+use crate::symbol::{SymbolKind, SymbolTable};
 
 /// What a reference site refers to.
 ///
@@ -56,10 +56,10 @@ struct Scopes {
     /// Each module's own declarations, including what its own `pub use`
     /// re-exports reach.
     own: IndexMap<ModuleSource, IndexMap<String, DefId>>,
-    /// The prelude's public surface, then its implementation modules' own
-    /// declarations. In scope in every module without a `use`, which is what
-    /// makes `i32` and `List` universal and lets a sealed compiler item
-    /// (`ReflectStruct`, `Member`) resolve for a module that never named it.
+    /// The prelude's public surface — what `core:prelude` declares and
+    /// re-exports — plus the builtin types. In scope in every module without a
+    /// `use`, which is what makes `i32` and `List` universal. What an
+    /// implementation module declares for its siblings is not in it.
     prelude: IndexMap<String, DefId>,
     /// The cases the types above bring with them — `Some`, `Ok`, an `enum`
     /// case written bare. Their own tier, under every type tier, because a type
@@ -128,26 +128,39 @@ impl Scopes {
         defs: &DefTable,
     ) -> Self {
         let mut out = Self::default();
-        for (name, sym) in symbols.iter() {
-            if is_prelude_module(sym.module_source())
-                && let Some(def) = defs.of_ast_id(*name)
-            {
-                out.prelude.entry(sym.name.clone()).or_insert(def);
-            }
-        }
-        // The prelude's own surface — its declarations and what it re-exports —
-        // ranks above its implementation modules' internals.
+        // A prelude name is read from modules outside `core:`, so a declaration
+        // and a re-export alike must reach that far on their own.
         let prelude = ModuleSource::prelude();
+        let in_another_package = false;
         let mut surface: IndexMap<String, DefId> = IndexMap::default();
         for name in symbols.reexport_names(&prelude) {
-            if let Some(sym) = symbols.lookup_in_module(&prelude, &name)
+            let reexport_reaches = symbols
+                .get_reexport(&prelude, &name)
+                .is_some_and(|r| r.visibility.reachable_from(in_another_package));
+            if reexport_reaches
+                && let Some(sym) = symbols.lookup_in_module(&prelude, &name)
                 && let Some(def) = defs.of_ast_id(sym.defined_at)
             {
                 surface.insert(name, def);
             }
         }
-        for (name, def) in out.prelude.drain(..) {
-            surface.entry(name).or_insert(def);
+        for sym in symbols.get_module_symbols(&prelude) {
+            if sym.visibility.reachable_from(in_another_package)
+                && let Some(def) = defs.of_ast_id(sym.defined_at)
+            {
+                surface.entry(sym.name.clone()).or_insert(def);
+            }
+        }
+        // A builtin type is universal by nature rather than by export: `i32`
+        // names the same thing in a module that imports nothing, `#![no_prelude]`
+        // included.
+        for (id, sym) in symbols.iter() {
+            if matches!(sym.kind, SymbolKind::BuiltinType)
+                && is_prelude_module(sym.module_source())
+                && let Some(def) = defs.of_ast_id(*id)
+            {
+                surface.entry(sym.name.clone()).or_insert(def);
+            }
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
@@ -369,8 +382,8 @@ impl Resolver<'_> {
     /// The declaration a name written in this module refers to. The layers are
     /// ordered, and the order is the rule: the enclosing item's binders, the
     /// module's explicit imports keyed by local name, its own declarations, then
-    /// the prelude and its implementation modules. Own declarations outranking
-    /// the prelude is what makes a local `trait Left` mean itself (#1298).
+    /// the prelude. Own declarations outranking the prelude is what makes a
+    /// local `trait Left` mean itself (#1298).
     fn resolve_value_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
@@ -661,21 +674,32 @@ mod tests {
         (r, e, o)
     }
 
-    fn resolve_with_ast(
-        entry: &str,
-        other: &str,
-    ) -> (
+    /// The table, both module sources, and the ASTs a test walks for reference
+    /// sites.
+    type Resolved = (
         Resolutions,
         ModuleSource,
         ModuleSource,
         IndexMap<ModuleSource, Module>,
-    ) {
+    );
+
+    fn resolve_with_ast(entry: &str, other: &str) -> Resolved {
+        resolve_sources(entry, other, |i| i.local("./other.wado"))
+    }
+
+    /// Resolve `entry` against a second module whose source the caller mints —
+    /// `core:prelude` for a test about the prelude tier.
+    fn resolve_sources(
+        entry: &str,
+        other: &str,
+        mint_other: impl FnOnce(&mut ModuleSourceInterner) -> ModuleSource,
+    ) -> Resolved {
         // One interner: `ModuleSource` equality is pointer identity, so two
         // interners would mint values that never compare equal and every import
         // would resolve to a module the map does not hold.
         let interner = std::rc::Rc::new(std::cell::RefCell::new(ModuleSourceInterner::new()));
         let entry_source = interner.borrow_mut().local("./main.wado");
-        let other_source = interner.borrow_mut().local("./other.wado");
+        let other_source = mint_other(&mut interner.borrow_mut());
         let mut modules: IndexMap<ModuleSource, Module> = IndexMap::default();
         for (source, text) in [(&entry_source, entry), (&other_source, other)] {
             let lexed = lex(text);
@@ -703,6 +727,24 @@ mod tests {
             other_source,
             modules,
         )
+    }
+
+    /// The prelude tier is in scope in every module, so only a name that reaches
+    /// outside `core:` belongs in it. A prelude-private helper is nobody's to
+    /// name, however freely `core:prelude` itself calls it.
+    #[test]
+    fn prelude_tier_holds_only_what_reaches_every_module() {
+        let (r, _, _, _) = resolve_sources(
+            "fn main() -> i32 { return shared(); }",
+            "#![no_prelude]
+             fn hidden() -> i32 { return 1; }
+             internal fn sibling_only() -> i32 { return 2; }
+             pub fn shared() -> i32 { return hidden() + sibling_only(); }",
+            |i| i.core("prelude"),
+        );
+        assert!(r.prelude_decl("shared").is_some());
+        assert!(r.prelude_decl("hidden").is_none());
+        assert!(r.prelude_decl("sibling_only").is_none());
     }
 
     /// Every shape a reference can take, so a walk that stops short of one is

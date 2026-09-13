@@ -5,6 +5,7 @@ This is the documentation directory of Wado.
 ## Rules for Markdown
 
 - Keep documentation simple and MECE.
+- Don't document implementation details. They go stale, and a reader this far from the code has no way to notice.
 - Do not use `**...**` (bold) for sub-sections. Use markdown sections instead.
 - Use markdown checklist for TODOs (`- [ ] ...`) and what's done (`- [x] ...`).
 - After updating any docs, run `mise run format`.

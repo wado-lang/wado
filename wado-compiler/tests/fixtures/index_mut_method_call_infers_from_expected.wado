@@ -1,0 +1,27 @@
+// `xs[i].m()` goes through `IndexMut` by a path that answers the call itself.
+// No argument mentions `A`, so only the expected type can answer it.
+
+struct Bag {
+    n: i32,
+}
+
+impl Bag {
+    fn take<A: Default>(&mut self) -> A {
+        return A::default();
+    }
+}
+
+test "a subscript receiver infers from the expected type" {
+    let mut xs: List<Bag> = [Bag { n: 1 }];
+    let v: i32 = xs[0].take();
+    assert v == 0;
+}
+
+test "a plain receiver infers from the expected type" {
+    let mut b = Bag { n: 1 };
+    let v: i32 = b.take();
+    assert v == 0;
+}
+
+__DATA__
+{"test": {}}

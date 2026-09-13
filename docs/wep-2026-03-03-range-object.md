@@ -324,9 +324,9 @@ for let c of 'a'..='z' {
 // Output: abcdefghijklmnopqrstuvwxyz
 
 // With iterator combinators
-let sum = (1..=100).fold(0, |acc: i32, x: i32| acc + x);  // 5050
+let sum = (1..=100).fold(0, |acc, x| acc + x);  // 5050
 
-let evens = (0..<20).filter(|x: i32| x % 2 == 0).collect();
+let evens = (0..<20).filter(|x| x % 2 == 0).collect();
 // [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
 ```
 

@@ -73,6 +73,168 @@ Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operator
 
 Compares self with other and returns an Ordering.
 
+### `pub trait Default`
+
+Trait for providing a default value for a type.
+Types implementing this trait can produce a sensible "zero" or "empty" value.
+
+#### `fn default() -> Self`
+
+Returns the default value for this type.
+
+### `pub trait Reflect`
+
+A type's identity: the root every reflected kind sits under. Sealed and
+compiler-synthesized like the kinds. See WEP 2026-06-13.
+
+#### `fn type_name() -> String`
+
+Returns the declaration's name.
+
+#### `fn wire_name_policy() -> CaseStyle`
+
+The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
+kind carries the attribute, and it says the same thing on each: the
+root answers so a caller need not know which kind it holds.
+
+### `pub trait ReflectStruct: Reflect`
+
+Compile-time struct introspection. The compiler synthesizes an impl for
+every struct; it cannot be implemented in user code and is callable only in
+monomorphized contexts (`T` a concrete struct).
+See WEP 2026-06-13.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-field members.
+
+#### `fn from_fields(fields: Self::FieldTypes) -> Self`
+
+Assembles the struct from its field values.
+
+#### `fn defaults() -> Self::FieldSlots`
+
+The declared field defaults (`f: T = expr`), `None` where a field
+declares none. Read per field, so only a slot the wire left empty
+evaluates its default.
+
+#### `fn empty_slots() -> Self::FieldSlots`
+
+All slots empty. Starting here is what makes a filled slot mean "the
+wire wrote this", so a repeat is visible without a second record.
+
+### `pub trait Member`
+
+The attr-reading face of a reflected member. Sealed and
+compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
+
+#### `fn name(&self) -> String`
+
+The source field name.
+
+#### `fn wire_name_override(&self) -> Option<String>`
+
+The raw `#[wire(name)]` value (casing not applied), or `None`.
+
+### `pub trait ReflectVariant: Reflect`
+
+Compile-time variant introspection. The compiler synthesizes an impl for
+every variant; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete variant).
+See WEP 2026-06-13 §3.
+
+#### `fn discriminant(&self) -> i32`
+
+Returns the live case's tag.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-case members.
+
+### `pub trait ReflectEnum: Reflect`
+
+Compile-time enum introspection. The compiler synthesizes an impl for
+every enum; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete enum).
+See WEP 2026-06-13 §3b.
+
+#### `fn discriminant(&self) -> i32`
+
+Returns the value's tag.
+
+#### `fn from_discriminant(disc: i32) -> Option<Self>`
+
+Returns the case with the given tag; `None` for an unknown tag.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-case members.
+
+### `pub trait ReflectFlags: Reflect`
+
+Compile-time flags introspection. The compiler synthesizes an impl for
+every flags type; it cannot be implemented in user code and is callable
+only in monomorphized contexts (`T` a concrete flags type).
+See WEP 2026-06-13 §3c.
+
+#### `fn bits(&self) -> u64`
+
+Returns the value's bits, u64-normalized.
+
+#### `fn from_bits(raw: u64) -> Option<Self>`
+
+Returns the value with the given bits; `None` when unknown bits
+are set.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-bit members.
+
+### `pub trait ReflectNewtype: Reflect`
+
+Compile-time newtype introspection. The compiler synthesizes an impl for
+every newtype; it cannot be implemented in user code and is callable only
+in monomorphized contexts (`T` a concrete newtype).
+
+The one kind with no members: a newtype has a base, and the value bridges
+both ways are the `From` the compiler already generates for it. Structure
+it inherits from that base — `ReflectStruct::<T>` on a newtype over a
+struct walks the struct's fields — so only the base is stated here.
+See WEP 2026-06-13.
+
+### `pub trait ReflectTemplate: Reflect`
+
+Compile-time introspection of a tagged template literal's shape. The
+compiler synthesizes an impl per shape; it cannot be implemented in user
+code and is callable only in monomorphized contexts (`T` the anonymous
+type a template literal denotes). See WEP 2026-01-10.
+
+#### `fn members() -> Self::Members`
+
+Returns the per-hole members.
+
+#### `fn tail() -> String`
+
+The literal text after the last hole — the whole template when it has
+none — with escapes processed.
+
+#### `fn raw_tail() -> String`
+
+`tail()` with escapes preserved.
+
+### `pub trait Ref`
+
+Marker for reference-identity types: those whose value is a Wasm GC
+reference. Sealed and compiler-synthesized; user impls are rejected.
+See WEP 2026-01-20.
+
+### `pub trait RefMut`
+
+Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
+ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
+value. Sealed and compiler-synthesized; user impls are rejected.
+See WEP 2026-01-20.
+
 ### `pub trait IndexRef<IndexType>`
 
 Immutable reference indexing: `&container[i]` reads through this.
@@ -224,6 +386,21 @@ All format traits write to a `Formatter` that wraps `&mut String`.
 #### `fn fmt(&self, f: &mut Formatter)`
 
 Formats the value and writes to the given formatter.
+
+### `pub trait Inspect`
+
+Trait for debug/inspect formatting.
+Types implementing this trait can be formatted with `${x:?}` in template strings.
+Unlike Display, Inspect always shows the "raw" debug representation:
+
+- Strings are quoted: `"hello"`
+- Chars are quoted: `'A'`
+- Structs show field names: `Point { x: 10, y: 20 }`
+- Enums/Variants show type-qualified names: `Color::Red`
+
+#### `fn inspect(&self, f: &mut Formatter)`
+
+Formats the value as a debug representation and writes to the given formatter.
 
 ### `pub trait Binary`
 
@@ -408,6 +585,27 @@ Types implementing this trait can be used in `for-of` loops directly.
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
+### `pub trait From<T>`
+
+Infallible conversion trait.
+Implement this to define how to convert from type `T` into `Self`.
+Usage: `TargetType::from(value)` — the target type is always explicit.
+
+The compiler provides a reflexive blanket impl `From<T> for T` for all types.
+
+#### `fn from(value: T) -> Self`
+
+Converts a value of type `T` into `Self`.
+
+### `pub trait TryFrom<T>`
+
+Fallible conversion trait.
+Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
+
+#### `fn try_from(value: T) -> Result<Self, Self::Error>`
+
+Attempts to convert a value of type `T` into `Self`.
+
 ### `pub trait Sum`
 
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
@@ -437,6 +635,49 @@ Trait for creating a collection from any iterator of `Elem`.
 
 #### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 
+### `pub trait LiteralSpread`
+
+`..base` inside a `{ … }` literal: merge `base` into `self`, last write
+wins. A target without this impl rejects `..base` where it is written.
+
+#### `fn spread_literal(&mut self, base: Self)`
+
+### `pub trait FromStr`
+
+Parse a value from a string.
+
+`from_str_range` is the fundamental operation: it parses `s[start..end)`
+without allocating a substring. Implementors must provide it. The
+`from_str` convenience method is a thin wrapper that parses the entire
+string and is provided as a default.
+
+#### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>`
+
+Parse the byte range `s[start..end)` as `Self`. Takes `s` by
+reference because the function only reads and the call site
+(often the router's per-request path) is a hot path where a
+`String` value copy would dominate the work.
+
+#### `fn from_str(s: &String) -> Result<Self, Self::Err>`
+
+Parse the entire string as `Self`. Delegates to `from_str_range`.
+Takes `&String` for the same reason `from_str_range` does — callers
+already holding a `&String` (e.g. the JSON deserializer threading
+the input buffer through) should not have to dereference and copy.
+
+### `pub trait LenientFromStr`
+
+Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
+the common spelling variations for the type (casing, radix prefixes,
+digit separators, alternate boolean words). Leniency widens accepted
+spellings only — an undenotable value still yields `Err`, and whitespace
+is never trimmed (that is the caller's concern). See
+`docs/wep-2026-06-22-lenient-from-str.md`.
+
+#### `fn from_str_lenient(s: &String) -> Result<Self, Self::Err>`
+
+Parse the entire string as `Self`, accepting forgiving spellings.
+
 ### `pub trait PushDisplay`
 
 Writes a `Display` value into a `String` in place, skipping the temporary
@@ -449,6 +690,58 @@ foreign type) and placed here, not in string.wado, so `String` stays a leaf
 that `Formatter` depends on — mirroring `impl Display for String` above.
 
 #### `fn push_display<T: Display>(&mut self, value: &T)`
+
+### `pub trait Sequence`
+
+Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
+
+Implementors supply `len` and `get_unchecked`; everything else is a default
+body over those two, so no default constructs a `Slice`. Methods needing an
+`Elem` bound (`contains`, `binary_search`, …) cannot live here — an
+associated type carries no bound — and stay bounded inherent impls.
+
+#### `fn len(&self) -> i32`
+
+#### `fn get_unchecked(&self, index: i32) -> Self::Elem`
+
+The caller must guarantee `0 <= index < len()`. Violating it yields an
+unspecified `Elem` or traps; it is never undefined behaviour.
+
+#### `fn is_empty(&self) -> bool`
+
+#### `fn get(&self, index: i32) -> Option<Self::Elem>`
+
+#### `fn first(&self) -> Option<Self::Elem>`
+
+#### `fn last(&self) -> Option<Self::Elem>`
+
+#### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32>`
+
+### `pub trait AsSlice: Sequence`
+
+Reference view over a contiguous sequence. Implemented by `Array<T>`,
+`List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
+carries the real bodies.
+
+#### `fn as_slice(&self) -> Slice<Self::Elem> with stores[self]`
+
+#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self]`
+
+Sub-view over `[start, end)`, clamped to this sequence.
+
+#### `fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self]`
+
+#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self]`
+
+#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem> with stores[self]`
+
+Overlapping windows of `size` consecutive elements. Panics if `size` is
+not positive.
+
+#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> with stores[self]`
+
+Non-overlapping chunks of up to `size` elements; the last may be
+shorter. Panics if `size` is not positive.
 
 ### `pub trait AsByteSlice`
 

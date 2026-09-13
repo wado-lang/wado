@@ -1,6 +1,6 @@
 ---
 name: optimizer-debug
-description: "Debug Wado optimizer (NIR/WIR pass) bugs using WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, WADO_LIST_PASSES, and WADO_SKIP_PASS env vars. Use when an optimization pass produces wrong code, ICEs the WIR pipeline (\"invalid core Wasm module: type mismatch ...\"), or when you need to see how a specific pass transforms the IR."
+description: "Debug the Wado optimizer with the WADO_TRACE, WADO_DUMP_PASS_BEFORE/AFTER, WADO_LIST_PASSES, and WADO_SKIP_PASS env vars. Use whenever a NIR/WIR pass is in question — wrong code, a WIR pipeline ICE, or just to see what a pass did to the IR. For guest-side slowness see wado-performance."
 ---
 
 # Optimizer pass debugging
