@@ -98,8 +98,8 @@ declined, so nothing marks them. Known gaps says what each waits on.
 
 ## Roadmap
 
-1. Mark `map_or` and `map_or_else` as not provided, once
-   [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md) lands its
+1. Mark `map_or` and `map_or_else` `#[unavailable]`, once
+   [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md) lands that
    attribute. Done when calling either reports why rather than "no method
    named".
 
