@@ -96,11 +96,11 @@ a trait requirement, and it never reaches codegen.
 
 Module-level `fn`, `impl` method, and trait method.
 
-### Documentation
+### Not rendered by `wado doc`
 
-`wado doc` renders a "Not provided" and a "Removed" section from these
-declarations, so the decision reaches the reader browsing the API as well as
-the caller who tries the name.
+These declarations reach the caller who writes the name from muscle memory,
+which is the one reader who needs them. A browsing reader is looking for what
+the API offers, and a list of what it does not is noise there.
 
 ### A bodyless function is otherwise an error
 
@@ -129,8 +129,6 @@ trait/interface method declaration. The two attributes join that list.
    `Option::map_or` and `Option::map_or_else` (see
    [WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)).
    Done when calling either reports the reason rather than "no method named".
-5. Render the two `wado doc` sections. Done when a module declaring either
-   attribute shows it in generated documentation.
 
 ## Known gaps
 
@@ -141,9 +139,10 @@ trait/interface method declaration. The two attributes join that list.
   call, and every step of the roadmap depends on it.
 - `#[deprecated(since = "...", "...")]` — still callable, reported as a
   warning — is the third member of the family and is not designed here. It
-  shares the mechanism and the `wado doc` placement; what it needs beyond them
-  is a warning path and a decision on whether to match Rust's `note = "..."`
-  argument spelling.
+  shares the mechanism; what it needs beyond that is a warning path, a
+  decision on whether to match Rust's `note = "..."` argument spelling, and
+  its own answer on `wado doc` — a deprecated item still exists, so the
+  reasoning above for leaving absences out does not carry to it.
 - Types, traits, and globals cannot carry these attributes. Extending to them
   looks mechanical, and no use has asked for it.
 - Whether a `#[removed]` declaration is ever pruned, and on what schedule, is
