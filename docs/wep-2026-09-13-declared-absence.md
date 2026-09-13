@@ -17,11 +17,11 @@ reader has nowhere to learn what replaced it.
 Three states want distinct answers, and only the first is a name the language
 has:
 
-| State         | Callable   | Existed before | Required information |
-| ------------- | ---------- | -------------- | -------------------- |
-| deprecated    | yes (warn) | yes            | replacement          |
-| removed       | no (error) | yes            | version, replacement |
-| not provided  | no (error) | no             | reason               |
+| State        | Callable   | Existed before | Required information |
+| ------------ | ---------- | -------------- | -------------------- |
+| deprecated   | yes (warn) | yes            | replacement          |
+| removed      | no (error) | yes            | version, replacement |
+| not provided | no (error) | no             | reason               |
 
 The field-tested precedents all attach the explanation to the declaration
 rather than to prose: Swift's `@available(*, unavailable, message:)` and
