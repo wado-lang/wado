@@ -1,7 +1,6 @@
-// A generic view struct holds a reference in a field, not in a type argument:
-// `Slice<u8>` keeps `&Array<u8>` whatever `u8` is. A call handing one back
-// therefore defers to the carries analysis — a view that stays local needs no
-// `stores`, and one that escapes is still caught at the place it escapes.
+// `Slice<u8>` holds its reference in a field, not in a type argument, so a call
+// handing one back is a borrow into the result rather than an external store.
+// A view that stays local needs no `stores`.
 use { println, Stdout } from "core:cli";
 
 fn count_bytes(s: &String, needle: u8) -> i32 {

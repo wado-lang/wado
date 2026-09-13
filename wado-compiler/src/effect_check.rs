@@ -6,7 +6,6 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::is_test_function;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
@@ -157,6 +156,55 @@ impl From<DefaultPurityError> for Diagnostic {
     }
 }
 
+/// The members of a nominal type, by the declaration's module and name.
+type MemberTable = IndexMap<(ModuleSource, String), Vec<TypeId>>;
+
+/// Every declaration's members: struct fields by struct, case payloads by
+/// variant.
+fn collect_member_tables(sem: &Semantics, state: &AnnotateState) -> (MemberTable, MemberTable) {
+    let mut struct_fields = MemberTable::default();
+    for (src, module) in &sem.modules {
+        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        for item in &module.items {
+            if let Item::Struct(struct_decl) = item
+                && let Some(field_types) =
+                    annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
+            {
+                struct_fields.insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+            }
+        }
+    }
+
+    let mut variant_payloads = MemberTable::default();
+    for info in state.tysys.all_variant_cases.values() {
+        variant_payloads.insert(
+            (info.module_source.clone(), info.name.clone()),
+            info.cases.iter().map(|case| case.payload).collect(),
+        );
+    }
+
+    (struct_fields, variant_payloads)
+}
+
+/// The members a nominal type declares: a struct's fields, a variant's case
+/// payloads. A generic instance declares the same ones its head does.
+fn declared_members<'a>(
+    type_id: TypeId,
+    tt: &TypeTable,
+    struct_fields: &'a MemberTable,
+    variant_payloads: &'a MemberTable,
+) -> impl Iterator<Item = &'a TypeId> {
+    let key = tt
+        .nominal_head(type_id)
+        .map(|(name, module)| (module, name));
+    let fields = key.as_ref().and_then(|k| struct_fields.get(k));
+    let payloads = key.as_ref().and_then(|k| variant_payloads.get(k));
+    fields
+        .into_iter()
+        .flatten()
+        .chain(payloads.into_iter().flatten())
+}
+
 /// Walk a type recursively, collecting every resource (`Resource` or
 /// `GenericResource`) reference as an `EffectRef::Concrete`.
 ///
@@ -166,8 +214,8 @@ impl From<DefaultPurityError> for Diagnostic {
 fn collect_resource_refs(
     type_id: TypeId,
     tt: &TypeTable,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: &MemberTable,
+    variant_payloads: &MemberTable,
     out: &mut IndexSet<EffectRef>,
     visited: &mut TypeSet,
 ) {
@@ -194,6 +242,9 @@ fn collect_resource_refs(
         ResolvedType::GenericInstance { type_args, .. } => {
             for ta in type_args {
                 collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
+            }
+            for member in declared_members(type_id, tt, struct_fields, variant_payloads) {
+                collect_resource_refs(*member, tt, struct_fields, variant_payloads, out, visited);
             }
         }
         ResolvedType::Ref(t)
@@ -229,24 +280,9 @@ fn collect_resource_refs(
                 visited,
             );
         }
-        ResolvedType::Struct { def, .. } => {
-            let (name, module_source) = tt
-                .nominal_head(type_id)
-                .expect("a struct names a declaration");
-            let _ = def;
-            if let Some(fields) = struct_fields.get(&(module_source, name)) {
-                for ft in fields {
-                    collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
-                }
-            }
-        }
-        ResolvedType::Variant { def } => {
-            if let Some(payloads) =
-                variant_payloads.get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
-            {
-                for pt in payloads {
-                    collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
-                }
+        ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+            for member in declared_members(type_id, tt, struct_fields, variant_payloads) {
+                collect_resource_refs(*member, tt, struct_fields, variant_payloads, out, visited);
             }
         }
         // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
@@ -356,8 +392,8 @@ struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     resource_names: IndexSet<(ModuleSource, String)>,
-    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: MemberTable,
+    variant_payloads: MemberTable,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
@@ -402,41 +438,15 @@ impl OwnedEffectData {
         }
 
         let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
-        // `(module, struct name)` → field type ids, so resource detection
-        // follows resources nested in struct fields of a signature / op type.
-        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         for (src, module) in &sem.modules {
-            let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
-                match item {
-                    Item::Resource(resource) => {
-                        resource_names.insert((src.clone(), resource.name.clone()));
-                    }
-                    Item::Struct(struct_decl) => {
-                        if let Some(field_types) =
-                            annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
-                        {
-                            struct_fields.insert(
-                                (src.clone(), struct_decl.name.clone()),
-                                field_types.clone(),
-                            );
-                        }
-                    }
-                    _ => {}
+                if let Item::Resource(resource) = item {
+                    resource_names.insert((src.clone(), resource.name.clone()));
                 }
             }
         }
 
-        // `(module, variant name)` → case payload type ids, so resource
-        // detection descends into variant case payloads.
-        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
-            IndexMap::default();
-        for info in state.tysys.all_variant_cases.values() {
-            variant_payloads.insert(
-                (info.module_source.clone(), info.name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
-        }
+        let (struct_fields, variant_payloads) = collect_member_tables(sem, state);
 
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
@@ -529,9 +539,9 @@ struct EffectIndex<'a> {
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// `(module, struct name)` → field type ids, for nested-resource detection.
-    struct_fields: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: &'a MemberTable,
     /// `(module, variant name)` → case payload type ids.
-    variant_payloads: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    variant_payloads: &'a MemberTable,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
@@ -674,8 +684,8 @@ fn check_function_effects_sem(
 fn build_propagation_closure_sem(
     sem: &Semantics,
     state: &AnnotateState,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: &MemberTable,
+    variant_payloads: &MemberTable,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let type_table = &sem.types;
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
@@ -842,8 +852,8 @@ fn add_signature_resources(
     annotations: &TypeAnnotations,
     fn_key: AstId,
     type_table: &TypeTable,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: &MemberTable,
+    variant_payloads: &MemberTable,
     out: &mut IndexSet<EffectRef>,
 ) {
     let mut visited = TypeSet::default();
@@ -1737,34 +1747,14 @@ impl AstVisitor for ReturnFlow<'_> {
 /// (`i32`, `String`, `Unit`) never carries a parameter, so a storing call that
 /// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
 struct TypeRefCtx {
-    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    struct_fields: MemberTable,
+    variant_payloads: MemberTable,
     memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
 }
 
 impl TypeRefCtx {
     fn build(sem: &Semantics, state: &AnnotateState) -> Self {
-        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-        for (src, module) in &sem.modules {
-            let annotations = state.module_semantics.get(src).map(|m| &m.types);
-            for item in &module.items {
-                if let Item::Struct(struct_decl) = item
-                    && let Some(field_types) =
-                        annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
-                {
-                    struct_fields
-                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
-                }
-            }
-        }
-        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
-            IndexMap::default();
-        for info in state.tysys.all_variant_cases.values() {
-            variant_payloads.insert(
-                (info.module_source.clone(), info.name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
-        }
+        let (struct_fields, variant_payloads) = collect_member_tables(sem, state);
         Self {
             struct_fields,
             variant_payloads,
@@ -1789,23 +1779,15 @@ impl TypeRefCtx {
         match tt.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
-            ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::GenericResource { def, type_args } => {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
                 type_args.iter().any(|t| self.walk(tt, *t, visited))
-                    || self.declaration_holds_ref(tt, *def, visited)
+                    || self.members_hold_ref(tt, type_id, visited)
             }
             ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
-            ResolvedType::Struct { def, .. } => self
-                .struct_fields
-                .get(&(
-                    tt.struct_head_module(*def).clone(),
-                    tt.struct_head_name(*def),
-                ))
-                .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
-            ResolvedType::Variant { def } => self
-                .variant_payloads
-                .get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
-                .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+                self.members_hold_ref(tt, type_id, visited)
+            }
             ResolvedType::Function { .. } => false,
             ResolvedType::TypeParam { .. }
             | ResolvedType::TypePack { .. }
@@ -1822,14 +1804,11 @@ impl TypeRefCtx {
         }
     }
 
-    /// Whether the members `def` declares hold a reference, asked of a generic
-    /// instance whose type arguments hold none: `Slice<T>` keeps `&Array<T>` in
-    /// a field for every `T`.
-    fn declaration_holds_ref(&self, tt: &TypeTable, def: DefId, visited: &mut TypeSet) -> bool {
-        let key = (tt.def_module(def).clone(), tt.def_name(def).to_string());
-        let fields = self.struct_fields.get(&key).into_iter().flatten();
-        let payloads = self.variant_payloads.get(&key).into_iter().flatten();
-        fields.chain(payloads).any(|t| self.walk(tt, *t, visited))
+    /// Whether a declared member holds a reference. A generic instance is asked
+    /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
+    fn members_hold_ref(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+        declared_members(type_id, tt, &self.struct_fields, &self.variant_payloads)
+            .any(|t| self.walk(tt, *t, visited))
     }
 }
 
