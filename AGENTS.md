@@ -66,9 +66,10 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 
 ## The Wado Language
 
-Wado is not Rust, and Rust habits produce wrong code here. A value never needs
-`.clone()`, and `enum`, `variant` and `flags` split what Rust puts in one
-`enum`. Imports follow ES modules and tuples follow TypeScript.
+Much of the syntax is Rust-compatible by design, so most Rust knowledge carries
+over. It stops short in a few places: a value never needs `.clone()`, `enum`,
+`variant` and `flags` split what Rust puts in one `enum`, and imports follow ES
+modules while tuples follow TypeScript.
 
 @docs/cheatsheet.md is the quick reference. For the detailed specification read
 `docs/spec.md`, or the WEP for one feature at `docs/wep-*.md`.
