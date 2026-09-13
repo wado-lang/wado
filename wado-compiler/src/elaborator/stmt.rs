@@ -863,6 +863,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
+    /// offers. A newtype's cases are its base's, so this asks the structure the
+    /// scrutinee wraps, as pattern resolution does.
     pub(super) fn is_known_case_of_type(
         &mut self,
         type_id: TypeId,
@@ -872,6 +875,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.pattern_qualifier_matches_scrutinee(type_id, qualifier) {
             return false;
         }
+        let type_id = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(type_id);
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => self
@@ -884,6 +892,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether a written pattern qualifier names the type the scrutinee takes
+    /// its cases from. An import alias, a namespace prefix and a newtype's own
+    /// name are other names for the same declaration, so this compares
+    /// declarations; a qualifier need not restate the scrutinee's type
+    /// arguments, but any it writes must agree.
     pub(super) fn pattern_qualifier_matches_scrutinee(
         &mut self,
         scrutinee_type: TypeId,
@@ -892,61 +905,72 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return true;
         };
-        let scrutinee_resolved = self.tysys.type_table.borrow().get(scrutinee_type).clone();
-        let (scrutinee_name, scrutinee_module, scrutinee_arg_len) = match &scrutinee_resolved {
-            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => {
-                let (n, m) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("a nominal type names a declaration");
-                (n, m, None)
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let (n, m) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .nominal_head(scrutinee_type)
-                    .expect("a generic instance names a declaration");
-                (n, m, Some(type_args.len()))
-            }
-            _ => {
-                return false;
-            }
+        // A newtype's cases are its base's, so both names qualify a pattern on
+        // one: `C::Green` and `Color::Green` where `type C = Color`.
+        let base_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(scrutinee_type);
+        let (base_def, base_module, scrutinee_arg_len) = {
+            let table = self.tysys.type_table.borrow();
+            let arg_len = match table.get(base_type) {
+                ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
+                ResolvedType::GenericInstance { type_args, .. } => Some(type_args.len()),
+                _ => return false,
+            };
+            let def = table
+                .nominal_def(base_type)
+                .expect("a nominal type names a declaration");
+            (def, table.def_module(def).clone(), arg_len)
         };
-        match qualifier {
-            Type::Named(t) => {
-                // `h::Case` parses as a `Named("h")` qualifier plus the bare
-                // `Case`. When `h` is a namespace import alias (not a type),
-                // the prefix only names the case's source module: accept it
-                // iff the namespace resolves to the scrutinee's defining
-                // module, so the bare case lookup below validates the rest —
-                // mirroring an unqualified `Case` pattern.
-                t.name == *scrutinee_name
-                    || self
-                        .namespace_alias_source(&t.name, t.id)
-                        .is_some_and(|m| m == scrutinee_module)
-            }
-            Type::Generic(g) => {
-                g.name == *scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
-            }
-            Type::NamespacedGeneric(ns) => {
-                ns.name == *scrutinee_name
-                    && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
-                    && self
-                        .namespace_alias_source(&ns.namespace, ns.id)
-                        .is_some_and(|m| m == scrutinee_module)
-            }
+        let (site, head, written_args) = match qualifier {
+            Type::Named(t) => (t.id, t.name.as_str(), None),
+            Type::Generic(g) => (g.id, g.name.as_str(), Some(g.args.len())),
+            Type::NamespacedGeneric(ns) => (
+                ns.id,
+                ns.name.as_str(),
+                (!ns.args.is_empty()).then(|| ns.args.len()),
+            ),
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
             | Type::Infer(_)
-            | Type::Error(_) => false,
+            | Type::Error(_) => return false,
+        };
+        if let Some(written) = written_args
+            && scrutinee_arg_len.is_some_and(|n| n != written)
+        {
+            return false;
         }
+        let newtype_def = self.tysys.type_table.borrow().nominal_def(scrutinee_type);
+        if let Some(qualifier_def) = self.type_decl_at(Some(site), head)
+            && (qualifier_def == base_def || Some(qualifier_def) == newtype_def)
+        {
+            return true;
+        }
+        // A prefix that resolves to no type names the case's source module
+        // instead: `h::Case` parses as a `Named("h")` qualifier plus the bare
+        // `Case`, and `h::Type::Case` as a namespaced qualifier. Accept it iff
+        // the namespace resolves to the scrutinee's defining module, leaving
+        // the case lookup to validate the rest.
+        let namespace = match qualifier {
+            Type::Named(t) => Some(t.name.as_str()),
+            Type::NamespacedGeneric(ns) => self
+                .tysys
+                .type_table
+                .borrow()
+                .nominal_head(base_type)
+                .is_some_and(|(name, _)| name == head)
+                .then_some(ns.namespace.as_str()),
+            _ => None,
+        };
+        namespace.is_some_and(|alias| {
+            self.namespace_alias_source(alias, site)
+                .is_some_and(|m| m == base_module)
+        })
     }
 
     fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
@@ -1649,6 +1673,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
+                    // Only a bare identifier falls back to a binding. A qualified
+                    // path is a case or an associated constant and nothing else —
+                    // no Wado variable is spelled `V::Nope` — so naming neither is
+                    // an error here rather than a binding WIR later trips over.
+                    if variant_qualifier.is_some() || normalized_variant_name.contains("::") {
+                        let _ = self.emit(TypeError::PatternTypeMismatch {
+                            expected: format!(
+                                "valid case of {}",
+                                self.tysys.type_table.borrow().type_name(scrutinee_type)
+                            ),
+                            found: qualified_variant_name,
+                            span: *span,
+                        });
+                        return Vec::new();
+                    }
                     let binding_type = self.pattern_binding_type(
                         &qualified_variant_name,
                         scrutinee_type,
@@ -1660,14 +1699,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return vec![(qualified_variant_name, index, binding_type)];
                 }
 
-                // A newtype's cases are its base's, so classify by the
-                // structure the scrutinee wraps rather than by its identity.
-                let scrutinee_type = self
+                // A newtype's cases are its base's, so classify by the structure
+                // the scrutinee wraps rather than by its identity. The qualifier
+                // is asked of the written type, which a newtype's own name also
+                // qualifies.
+                let base_type = self
                     .tysys
                     .type_table
                     .borrow()
                     .reflect_structure_head(scrutinee_type);
-                let resolved_type = self.tysys.type_table.borrow().get(scrutinee_type).clone();
+                let resolved_type = self.tysys.type_table.borrow().get(base_type).clone();
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
@@ -1694,6 +1735,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                     return Vec::new();
                 }
+                let scrutinee_type = base_type;
 
                 // Handle enum types (no payload, just discriminant matching)
                 if let ResolvedType::Enum { .. } = &resolved_type {

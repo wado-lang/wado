@@ -10062,7 +10062,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirPattern::Variant {
             enum_type: peeled,
             variant_name: case_name.to_string(),
-            case_index: case_index.unwrap_or_default(),
+            case_index: resolved_case_index(case_index, case_name),
             bindings: vec![],
             payload_type,
         }
@@ -10347,10 +10347,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .iter()
                     .map(|p| self.reify_pattern(p, binding_scrutinee, ctx))
                     .collect();
+                let case_index = resolved_case_index(case_index, &case_name);
                 TirPattern::Variant {
                     enum_type: peeled_scrutinee,
                     variant_name: case_name,
-                    case_index: case_index.unwrap_or_default(),
+                    case_index,
                     bindings: sub_patterns,
                     payload_type,
                 }
@@ -11090,6 +11091,14 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
         } else {
             None
         }
+    })
+}
+
+/// The discriminant a variant pattern matches. Pattern resolution rejects a case
+/// the scrutinee does not declare, so reify only ever sees one it resolved.
+fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
+    case_index.unwrap_or_else(|| {
+        unreachable!("reify does not run on a pattern naming no case: `{case_name}`")
     })
 }
 

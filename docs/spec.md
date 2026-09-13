@@ -889,6 +889,16 @@ match customer {
 }
 ```
 
+#### Qualified Patterns
+
+A case may be written under the type that declares it: `Color::Green`. The
+qualifier names a declaration rather than a spelling, so an import alias, a
+namespace prefix and a newtype's own name all qualify the cases they reach
+(`M::Nothing` under `use { Maybe as M }`, `dep::Maybe::Nothing`, `C::Green` where
+`type C = Color`). Only a bare identifier can bind: a qualified path that names
+neither a case nor an associated constant is an error, never a variable of that
+name.
+
 #### Constant Patterns
 
 A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
