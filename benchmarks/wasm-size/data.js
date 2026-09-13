@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789268953502,
+  "lastUpdate": 1789294277885,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55585,6 +55585,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/67772ea9055bad2e3b599f0ae613287c77062733"
         },
         "date": 1789268953179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51be942e77042433d31ccf839bbf8c2f61501908",
+          "message": "Merge pull request #2044 from wado-lang/claude/closure-arg-type-inference-5lerzc\n\nfeat(elaborator): infer closure parameter types from the expected fn type",
+          "timestamp": "2026-09-13T18:54:39+09:00",
+          "tree_id": "1ecbd3577db84f35cfd87a34517a9fd3a9546693",
+          "url": "https://github.com/wado-lang/wado/commit/51be942e77042433d31ccf839bbf8c2f61501908"
+        },
+        "date": 1789294277342,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
