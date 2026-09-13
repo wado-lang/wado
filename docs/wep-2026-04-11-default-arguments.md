@@ -485,9 +485,10 @@ grouped into slots before anything counts them. A scalar parameter ahead of the
 pack keeps the argument written for it.
 
 A pack stands for the type arguments left over, so a call leaving none over
-settles it to the empty pack. A turbofish naming every parameter ahead of the
-pack and stopping there leaves none (`headed::<i32>()`), and so does a call
-whose written arguments pin nothing for it (`packed("e:")`). A caller
+settles it to the empty pack. A turbofish naming every slot ahead of the pack
+and stopping there leaves none (`headed::<i32>()`), and so does a call whose
+written arguments pin nothing for it (`packed("e:")`). An effect parameter and
+an `fn`-bound one hold no slot, so neither is a turbofish's to name. A caller
 forwarding a pack of its own is neither. Such a pack interns to the same type
 as the callee's, so a scope holding one leaves the slot alone.
 

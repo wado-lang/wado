@@ -2951,10 +2951,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
-        // Dense type-argument index space (matches `populate_generic_function_cache`):
-        // non-effect, non-`fn`-bound params in declaration order.
-        let space: Vec<&ast::GenericParam> =
-            params.iter().filter(|p| p.is_real_type_param()).collect();
+        let space = real_type_params(&params);
         let n = space.len();
         if n == 0 {
             return;
