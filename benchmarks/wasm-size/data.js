@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789306600481,
+  "lastUpdate": 1789337101004,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55673,6 +55673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/129707e1da4c391887ce2079d57b23ff4d69792e"
         },
         "date": 1789306600201,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "77fc2ec788842e86cf372501fb8365ea0974291a",
+          "message": "Merge pull request #2046 from wado-lang/claude/option-result-methods-wx029s\n\nfeat(prelude): six value methods on Option and Result, and a reason when a name is refused",
+          "timestamp": "2026-09-14T06:47:51+09:00",
+          "tree_id": "3313a4f2c5df29f85ba5475a2a51756c754d72d5",
+          "url": "https://github.com/wado-lang/wado/commit/77fc2ec788842e86cf372501fb8365ea0974291a"
+        },
+        "date": 1789337100396,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
