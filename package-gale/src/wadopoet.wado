@@ -292,6 +292,11 @@ pub fn wado<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> String {
         let lit = h.lit();
         out.push_str(&lit);
         ctx = advance(ctx, &lit);
+        // A backslash left pending at a hole binds the hole's first byte, and
+        // which state that lands in depends on the value: `z` stays in the
+        // string, an escaped `"` closes it. The scan reads literals only, so it
+        // cannot answer for the rest of the template. The template is malformed.
+        assert !ctx matches { Ctx::StrEscape | Ctx::ChrEscape | Ctx::TplEscape }, "a `wado` hole cannot follow a dangling backslash";
         let at = out.len();
         h.fmt(&t, &mut Formatter::new(&mut out));
         if let Some(quote) = hole_quote(ctx) {

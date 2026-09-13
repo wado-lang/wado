@@ -656,3 +656,19 @@ test "wado escapes a dollar in a template hole so it cannot open an interpolatio
     // Outside a template a `$` is ordinary text.
     assert wado`let s = "${x}";` == "let s = \"${evil}\";";
 }
+
+test "wado carries the state past a hole that completes an escape" {
+    // The `\n` is finished before the hole, so the hole sits in the string and
+    // the one after the closing quote sits in code.
+    let x = "q";
+    let y = "\"str\"";
+    assert wado`let s = "a\\n${x}"; let t = ${y};` == "let s = \"a\\nq\"; let t = \"str\";";
+}
+
+#[expect_trap]
+test "wado refuses a hole whose backslash is still pending" {
+    // The backslash would bind the hole's first byte, and which state that
+    // lands in depends on the value, so the scan cannot answer for what follows.
+    let x = "q";
+    let _ = wado`let s = "a\\${x}";`;
+}
