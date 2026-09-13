@@ -2725,9 +2725,13 @@ explicit (non-`_`) arguments always win; an uninferable `_` is the same error as
 an omitted turbofish on an uninferable parameter. It is scoped to turbofish
 arguments — a `_` in a plain type annotation (`let xs: Array<_>`) is rejected.
 
+A turbofish may also stop short of the declared parameters. The ones it does not
+name are inferred, as a `_` in their place would be.
+
 ```wado
 let r = Result::<_, MyErr>::Ok(42);    // infers Ok payload type, pins the error type
 let a = pick::<_, bool>(1, true);      // infers the first type argument
+let b = pick::<i32>(1, true);          // stops short: infers the second
 ```
 
 ### Traits

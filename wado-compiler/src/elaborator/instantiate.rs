@@ -22,10 +22,8 @@ pub(super) struct Instantiation<'a> {
     pub(super) name: &'a str,
     /// Where the use site is.
     pub(super) span: Span,
-    /// What the use site's turbofish names, in slot order:
-    /// [`TypeTable::UNKNOWN`] where it wrote `_` or stopped short, empty where
-    /// it wrote none. Required, so no site can instantiate without saying what
-    /// it already knows.
+    /// What the use site's turbofish names, in slot order: [`TypeTable::UNKNOWN`]
+    /// where it wrote `_` or stopped short, empty where it wrote none.
     pub(super) type_args: &'a [TypeId],
 }
 
@@ -39,10 +37,9 @@ pub(super) struct Instantiated {
     /// variables. Apply with `TypeTable::substitute_type_params`.
     subst: IndexMap<u32, TypeId>,
     /// Per-slot "cannot infer" diagnostic, attached by
-    /// [`Elaborator::record_instantiation`] to the slots still unsolved when
-    /// the use site commits. A site may instantiate speculatively, and a
-    /// discarded instantiation must report nothing. `None` marks a slot that
-    /// cannot go unanswered: one left rigid, or one the turbofish named.
+    /// [`Elaborator::record_instantiation`] to the slots still unsolved when the
+    /// use site commits. `None` marks a slot that cannot go unanswered: one left
+    /// rigid, or one the turbofish named.
     diags: Vec<Option<(Span, String, String)>>,
 }
 

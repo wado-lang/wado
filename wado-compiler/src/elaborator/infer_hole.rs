@@ -313,9 +313,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.solve_holes_against(holey, expected, None);
     }
 
-    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables
-    /// the asking site minted. Someone else's hole has its own sink, which
-    /// nothing re-checks against an answer pinned here, so a wrong one stands.
+    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables the
+    /// asking site minted. Someone else's hole has its own sink, so a wrong
+    /// answer pinned here would stand.
     pub(super) fn solve_own_infer_holes_against(
         &mut self,
         holey: TypeId,

@@ -90,9 +90,8 @@ pub(super) struct MethodCallOutcome {
     pub signature: Option<MethodSignatureFacts>,
 }
 
-/// What dispatch selected, for a caller that suppressed
-/// [`Elaborator::record_method_dispatch`] with `call_id: None` and files its
-/// own record — the for-of iterator path and the trait-qualified static path.
+/// What dispatch selected. Read by the for-of iterator path and the
+/// trait-qualified static path, which file their own record.
 pub(super) struct DispatchedMethod {
     pub self_kind: ast::SelfKind,
     pub is_ref_impl: bool,
@@ -113,8 +112,8 @@ pub(super) struct BlanketStatic {
     pub def: DefId,
 }
 
-/// What one call resolved to, after inference. A caller filing its own record
-/// takes these, so its record says the same thing the ordinary path's would.
+/// What one call resolved to, after inference, so a caller's own record says
+/// what the ordinary path's would.
 pub(super) struct MethodSignatureFacts {
     pub param_is_mut: Vec<bool>,
     pub param_names: Vec<String>,
@@ -1255,8 +1254,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
             let (type_args, params) = sig.into_dispatch_parts(receiver_type);
-            // An unannotated closure argument infers its parameter types from
-            // this.
             self.record_call_param_types(call_id, params.param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
@@ -1685,8 +1682,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a block declaring slots of its own rejected the call the same
             // declaration accepts on a receiver that declares none.
             let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
-            // A slot the turbofish names is answered, and was substituted into
-            // `param_types` above, so inference sees nothing left to bind for it.
+            // A slot the turbofish names was substituted into `param_types`
+            // above, so inference has nothing left to bind for it.
             let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
                 !bindings.contains_key(id)
                     && method_type_args

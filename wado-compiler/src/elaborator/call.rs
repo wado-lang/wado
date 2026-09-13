@@ -64,8 +64,7 @@ pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) 
 }
 
 /// Whether `slot_count` slots leave anything for inference: a `_` among the
-/// written args, or fewer written than there are slots. `slot_count` is asked
-/// for rather than derived, since a short list looks complete on its own.
+/// written args, or fewer written than there are slots.
 pub(super) fn turbofish_leaves_slot(type_args: &[TypeId], slot_count: usize) -> bool {
     type_args.len() < slot_count || type_args.contains(&TypeTable::UNKNOWN)
 }
@@ -1776,8 +1775,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
         }
-        // Record the resolved param types so reify can replay per-argument
-        // expected types (closure-literal coercion to a fn-typed param).
         if !check_param_types.is_empty() {
             self.record_call_param_types(call.id, check_param_types.clone());
         }

@@ -57,7 +57,7 @@ Arguments then resolve in two passes, each answering the variables it resolved a
 1. Everything but a closure whose parameter types still hold a variable, in source order.
 2. Those closures. A closure applies operators and methods to its parameters as it resolves, so it must wait for the arguments that type them. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
 
-A numeric literal resolves in the first pass but answers after the second, and only where nothing else did: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body decides. An argument answers only variables the call itself minted; a hole deferred elsewhere has its own sink, which nothing re-checks.
+A numeric literal resolves in the first pass but answers after the second, and only where nothing else did: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body decides. An argument answers only variables the call itself minted. A hole deferred elsewhere has its own sink, and nothing re-checks it.
 
 Each variable then settles back onto its slot. A slot that inference answers with itself is not answered: the call reports it, naming the slot (`A`, not `?0`).
 
