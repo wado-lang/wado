@@ -1286,12 +1286,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// A method call's type arguments: what its turbofish names, plus inference
     /// for every slot it wrote `_` at. A `_` is [`TypeTable::UNKNOWN`] in
     /// `explicit`, so no caller has to carry a mask alongside it.
-    pub(super) fn resolve_method_type_args(
+    fn resolve_method_type_args(
         &mut self,
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> Vec<TypeId> {
-        if !turbofish_leaves_slot(&explicit) {
+        if input.slots.is_empty() || !turbofish_leaves_slot(&explicit) {
             return explicit;
         }
         let inferred = self.infer_method_type_args(input);
@@ -1301,6 +1301,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut merged = explicit;
         merge_turbofish_type_args(&mut merged, &inferred);
         merged
+    }
+
+    /// [`Self::resolve_method_type_args`], then what every caller does with the
+    /// answer: check the declared bounds, and bind the slots for substitution.
+    pub(super) fn bind_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        input: MethodInferenceInput<'_>,
+    ) -> (Vec<TypeId>, SubstitutionContext) {
+        let (slots, own_params, span) = (input.slots, input.own_params, input.span);
+        let type_args = self.resolve_method_type_args(explicit, input);
+        let mut subst = SubstitutionContext::new();
+        if !type_args.is_empty() {
+            subst = subst.bind(slots, &type_args);
+            self.enforce_type_arg_bounds(own_params, &type_args, span);
+        }
+        (type_args, subst)
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -3147,30 +3164,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        if !method_type_param_ids.is_empty() {
-            type_args = self.resolve_method_type_args(
-                type_args,
-                MethodInferenceInput {
-                    receiver_type: output_type,
-                    method_name: &method_call.method,
-                    slots: &method_type_param_ids,
-                    own_params: &method_own_params,
-                    param_types: &param_types,
-                    args: &args,
-                    raw_args: &method_call.args,
-                    decl_return_type: return_type,
-                    expected_return_type: None,
-                    trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
-                    declaring_module: impl_module.clone(),
-                    span: method_call.span,
-                },
-            );
-            if !type_args.is_empty() {
-                self.enforce_type_arg_bounds(&method_own_params, &type_args, method_call.span);
-                let subst = SubstitutionContext::new().bind(&method_type_param_ids, &type_args);
-                return_type =
-                    subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
-            }
+        let subst;
+        (type_args, subst) = self.bind_method_type_args(
+            type_args,
+            MethodInferenceInput {
+                receiver_type: output_type,
+                method_name: &method_call.method,
+                slots: &method_type_param_ids,
+                own_params: &method_own_params,
+                param_types: &param_types,
+                args: &args,
+                raw_args: &method_call.args,
+                decl_return_type: return_type,
+                expected_return_type: None,
+                trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                declaring_module: impl_module.clone(),
+                span: method_call.span,
+            },
+        );
+        if !subst.is_empty() {
+            return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);

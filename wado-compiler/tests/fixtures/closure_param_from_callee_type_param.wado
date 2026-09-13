@@ -1,21 +1,10 @@
 // A closure argument takes its parameter types from the parameter it is passed
-// to, even when that parameter is written in the callee's *own* type parameter
+// to, even when that parameter is written in the callee's own type parameter
 // (`fold`'s `Acc`) rather than in the receiver's.
 //
-// Two steps make that work, and each has a case here the other does not cover:
-//
-//   1. The call instantiates the callee's slots into inference variables before
-//      it resolves an argument, so the closure body meets a variable rather
-//      than a rigid `Acc` no expression can construct.
-//   2. Arguments resolve in two passes — everything but a closure still holding
-//      a variable, then those closures — and each answers as it resolves. A
-//      `String` seed answers `acc` in the first pass; a closure written ahead of
-//      the deciding argument is answered in the second.
-//
-// A numeric literal answers after both passes, and only where nothing else did,
-// because `i32` is a default rather than an answer. In the `List<i64>` case
-// below the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0`
-// is all there is.
+// The cases differ in what answers the slot: an argument before the closure,
+// one after it, the closure's own body, or nothing but a numeric literal, which
+// answers last and only where nothing else did.
 
 struct Counter {
     v: i32,
@@ -89,10 +78,8 @@ test "an own type param fixed by a later argument" {
     assert c.late(|a, x| a + x, 10) == 12;
 }
 
-// A closure ahead of the deciding argument, over a type whose operator
-// dispatches through a trait. The operator has to see `Cents` to find the impl:
-// resolved against an unanswered variable it dispatches through nothing and
-// reaches WIR with no lowering.
+// The operator has to see `Cents` to find the impl: dispatched against an
+// unanswered variable it reaches WIR with nothing lowered.
 test "a later argument decides a parameter the closure applies an operator to" {
     let sum = apply_pair(|a, b| a + b, Cents { v: 3 }, Cents { v: 4 });
     assert sum.v == 7;

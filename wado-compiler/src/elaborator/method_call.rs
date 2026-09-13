@@ -740,9 +740,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         receiver = adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table);
 
-        let mut subst_ctx = SubstitutionContext::new();
-
-        let method_type_args = self.resolve_method_type_args(
+        // The lookup already instantiated the declaring level, so only the
+        // method's own parameters remain.
+        let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
                 receiver_type: receiver,
@@ -760,19 +760,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        if !method_type_args.is_empty() {
-            // The lookup already instantiated the declaring level, so only the
-            // method's own parameters remain — and it reports them.
-            subst_ctx = subst_ctx.bind(&method_type_param_ids, &method_type_args);
-            // Enforce the method's type-arg bounds (shared rule); a violating
-            // concrete arg would otherwise trap WIR build. Hole args are
-            // skipped and re-checked in `finalize_infer_holes`. The parameters
-            // come from the signature dispatch chose, so the explicit-turbofish
-            // path checks against the same declaration inference would have.
-            self.enforce_type_arg_bounds(&method_own_params, &method_type_args, span);
-        }
-
-        // Apply unified substitution
         if !subst_ctx.is_empty() {
             return_type =
                 subst_ctx.substitute(return_type, &mut self.tysys.type_table.borrow_mut());

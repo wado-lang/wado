@@ -47,6 +47,14 @@ fn assoc_bound_target_param(ty: &Type) -> Option<&str> {
     }
 }
 
+/// Which static method a call names: the two segments, and the namespace's
+/// receiver key where the spelling has one.
+pub(super) struct StaticCallee<'a> {
+    pub type_name: &'a str,
+    pub method_name: &'a str,
+    pub receiver_key: Option<&'a ImplTargetKey>,
+}
+
 /// One span per resolved argument. An argument the source does not spell — a
 /// tagged template's, which is the template itself — reports at the call.
 pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) -> Vec<Span> {
@@ -843,28 +851,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
-                // A copy, so inference below fills it without disturbing the
-                // call's own.
-                let mut method_type_args = type_args.clone();
-                // Impl-level type args inferred from the LHS / receiver type.
-                // Only populated by `infer_static_method_type_args`; the
-                // explicit `call.type_args` only carries method-level args.
-                let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
                 // An omitted turbofish infers both levels; a partial one keeps
-                // what it named and infers only its `_` slots.
-                if turbofish_leaves_slot(&method_type_args) {
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    impl_type_args_inferred = impl_args;
-                    merge_turbofish_type_args(&mut method_type_args, &method_args);
-                }
+                // what it named and infers only its `_` slots. The call's own
+                // `type_args` stay as written.
+                let (impl_type_args_inferred, mut method_type_args) = self.static_call_type_args(
+                    StaticCallee {
+                        type_name: prefix,
+                        method_name: suffix,
+                        receiver_key: None,
+                    },
+                    &call.args,
+                    &args,
+                    expected_type,
+                    call.span,
+                    type_args.clone(),
+                );
                 // The method's own parameters, in the dense space its type
                 // arguments are indexed by — an effect or `fn`-bound parameter
                 // holds no slot in one.
@@ -1331,7 +1332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    let mut method_type_args = type_args.clone();
+                    let method_type_args = type_args.clone();
 
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at
@@ -1372,20 +1373,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // written turbofish mangled `ns::Cell::wrap(7)` with no
                     // arguments at all, and reported nothing where none could
                     // be inferred.
-                    let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                    if turbofish_leaves_slot(&method_type_args) {
-                        let (impl_args, method_args) = self.infer_static_call_type_args(
+                    let (impl_type_args_inferred, method_type_args) = self.static_call_type_args(
+                        StaticCallee {
                             type_name,
                             method_name,
-                            &call.args,
-                            &args,
-                            expected_type,
-                            call.span,
-                            ns_key.as_ref(),
-                        );
-                        impl_type_args_inferred = impl_args;
-                        merge_turbofish_type_args(&mut method_type_args, &method_args);
-                    }
+                            receiver_key: ns_key.as_ref(),
+                        },
+                        &call.args,
+                        &args,
+                        expected_type,
+                        call.span,
+                        method_type_args,
+                    );
                     self.report_uninferred_static_method_type_args(
                         type_name,
                         method_name,
@@ -2831,6 +2830,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             sig.decl.param_types.clone(),
             sig.decl.return_type,
         ))
+    }
+
+    /// The type arguments a `Type::method(..)` call dispatches with, as
+    /// `(impl_args, method_args)`: the impl level inferred from the receiver,
+    /// and `explicit` with inference filling every slot it wrote `_` at. One
+    /// function, so the bare and namespaced spellings cannot drift apart.
+    fn static_call_type_args(
+        &mut self,
+        callee: StaticCallee<'_>,
+        raw_args: &[Expr],
+        args: &[TypeId],
+        expected_type: Option<TypeId>,
+        span: token::Span,
+        explicit: Vec<TypeId>,
+    ) -> (Vec<TypeId>, Vec<TypeId>) {
+        if !turbofish_leaves_slot(&explicit) {
+            return (Vec::new(), explicit);
+        }
+        let (impl_args, method_args) = self.infer_static_call_type_args(
+            callee.type_name,
+            callee.method_name,
+            raw_args,
+            args,
+            expected_type,
+            span,
+            callee.receiver_key,
+        );
+        let mut method_type_args = explicit;
+        merge_turbofish_type_args(&mut method_type_args, &method_args);
+        (impl_args, method_type_args)
     }
 
     /// Infer the type args of a `Type::method(...)` static call whose

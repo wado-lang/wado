@@ -1,12 +1,6 @@
-// A `&mut self` method reached through a subscript is resolved by its own path,
-// which rewrites `xs[i].m(..)` through `IndexMut`. That path answers the call,
-// so it owns the method's inference too: the arguments are walked against
-// instantiated slots and what they answer settles back onto them, as an
-// ordinary `x.m(..)` does.
-//
-// Without it the arguments meet the declaration's own rigid parameters. A plain
-// argument then fails to type against the slot it should decide, and a closure
-// applies its operators to a type nothing can satisfy.
+// `xs[i].m(..)` on a `&mut self` method is rewritten through `IndexMut` by a
+// path that answers the call, so it runs the method's inference too. Without
+// that the arguments meet the declaration's own rigid parameters.
 
 struct Bag {
     v: i32,

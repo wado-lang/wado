@@ -1,11 +1,9 @@
-// A `_` in a turbofish is a slot the call site left to inference, and every
-// spelling that reaches a generic method has to say so: the resolved type
-// arguments carry `unknown` where the source wrote `_`, and inference fills
-// exactly those.
+// A `_` in a turbofish is a slot left to inference. The resolved type arguments
+// carry `unknown` where the source wrote `_`, and every spelling fills exactly
+// those.
 //
-// A call that files its own dispatch record — the trait-qualified form — files
-// what inference settled on, not what the source wrote. Filing the raw
-// turbofish names the callee `take<unknown>` and its parameter has no type.
+// A call that files its own dispatch record files what inference settled: the
+// raw turbofish names the callee `take<unknown>`, whose parameter has no type.
 
 use ns from "./sub/turbofish_hole_slot_dep.wado";
 use { Take } from "./sub/turbofish_hole_slot_dep.wado";
