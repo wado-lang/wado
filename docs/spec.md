@@ -2260,27 +2260,23 @@ let parse = |s: String| -> Result<i32, String> {
 ```
 
 A parameter type is inferred from the expected `fn(..)` type wherever the
-context supplies one: a typed binding, a function or method parameter, a struct
-field, a newtype over a `fn(..)`. The match is positional, so each parameter
-takes the expected type's parameter at its own index. An annotation is needed
-only where no such type reaches the closure, and always wins where it is
+context supplies one — a typed binding, a function or method parameter, a
+struct field, a newtype over a `fn(..)` — matched by position. An annotation is
+needed only where no such type reaches the closure, and always wins where it is
 written:
 
 ```wado
 let arr: List<i32> = [1, 2, 3];
-arr.into_iter().map(|x| x * 2);          // `x: i32`, from `Iterator::Item`
-arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from `init`
-let add_one = |x: i32| x + 1;            // no expected type: annotate
+arr.into_iter().map(|x| x * 2);             // `x: i32`, from `Iterator::Item`
+arr.into_iter().fold(0, |acc, x| acc + x);  // `acc: i32`, from the body
+let add_one = |x: i32| x + 1;               // no expected type: annotate
 ```
 
-The expected type may be written in the callee's own type parameters, as in
-`fold`'s `fn mut(Acc, Self::Item) -> Acc`. A closure is then checked after the
-arguments that do not need it, so a sibling argument fixes its parameter types
-whether written before or after it. A turbofish settles the slots it names
-first; a numeric literal settles last, answering only what nothing else did, so
-`fold(0, |acc, x| acc + x)` over a `List<i64>` takes `i64` from the body rather
-than `i32` from the `0`. A parameter nothing settles is reported as uninferred
-at the call, not as an error inside the closure.
+The expected type may be one of the callee's own type parameters, and a sibling
+argument then supplies it, whichever side of the closure it is written on. A
+numeric literal does not: `fold(0, |acc, x| acc + x)` over a `List<i64>` takes
+`i64` from the body. A parameter nothing supplies is reported at the call, not
+inside the closure.
 
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.
