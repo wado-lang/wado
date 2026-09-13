@@ -420,9 +420,8 @@ impl Analyzer<'_> {
             .collect()
     }
 
-    /// One binding's verdict, memoized. A binding's root may itself be a
-    /// binding, so the decision is taken in that order; a chain the walk cannot
-    /// order abstains.
+    /// One binding's verdict, memoized. Its root may itself be a binding, so a
+    /// chain is decided root first and a cyclic one abstains.
     fn decide_share(
         &self,
         local: u32,
@@ -452,10 +451,8 @@ impl Analyzer<'_> {
         let Some(path) = self.share_sources.get(&local) else {
             return ShareVerdict::default();
         };
-        // `let r = p; p = x;` leaves `r` holding what `p` gave up: a rebind
-        // repoints `p`'s slot rather than writing the old storage in place, so
-        // it is never itself a conflict — only every OTHER mutation, live where
-        // `local` could read it, must be unreachable from `local`'s path.
+        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind
+        // is never itself a conflict. Every other mutation must be unreachable.
         let mut released = false;
         let mut share_safe = true;
         for (m, r) in self.mutations.iter().zip(&inputs.at_write) {
@@ -468,9 +465,7 @@ impl Analyzer<'_> {
             }
         }
         // A root that shares its own source owns nothing, so the rebind that
-        // freed the root freed this binding too. Pattern lowering hoists a
-        // scrutinee into a temp before this walk runs, and an arm binding reads
-        // that temp rather than the place the temp was read out of.
+        // freed the root freed this binding too.
         let root = self.decide_share(path.root, inputs, decided, deciding);
         let released = released || (root.eligible && root.released);
         let root_given_away = inputs
@@ -480,9 +475,7 @@ impl Analyzer<'_> {
         let moved_out = !released
             && (self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local));
         // A borrowed source is written through whoever lent it, at a root the
-        // scan above never looks at. A `List` / `String` copy right-sizes its
-        // backing storage to the current length (WEP 2026-05-21, capacity is
-        // not part of the value but is still observable), which a share skips,
+        // scan above never looks at. A share skips the right-sizing a copy does,
         // so a binding whose own capacity is read keeps its copy.
         let eligible = path.root != local
             && !path.through_borrow
@@ -1409,9 +1402,7 @@ impl Analyzer<'_> {
                 for b in &binds {
                     self.match_sources.push((*b, scrut.clone()));
                     // An arm binding is its scrutinee's storage under a second
-                    // name, so the share rule reads its path where the `let`
-                    // form reads `source_path`. The resolver already projects
-                    // the pattern onto the scrutinee's place.
+                    // name, so the share rule reads the path the resolver gives.
                     if let Some(Names::Place(path)) = self.resolver.binding(*b) {
                         self.share_sources.insert(*b, path);
                     }

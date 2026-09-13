@@ -1,18 +1,13 @@
-//! Read-only seed walker for the fold's value-copy decision.
-//!
-//! The fold (`lower::translate`) emits a `$value_copy$T(...)` wrap
-//! directly at each wrap site, using the shared predicates exported
-//! here ([`should_wrap`], [`is_fresh_value`], [`is_source_immutable`]).
-//! [`collect_seed_types`] harvests the types those wraps can land on, to feed
-//! [`super::synthesize::synthesize_helpers`].
+//! The predicates the fold consults at each `$value_copy$T(...)` wrap site, and
+//! [`collect_seed_types`], which names the types those wraps can land on.
 
 use super::needs_value_copy;
 use super::ownership::OwnedCalls;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::lower::plan::value_copy;
-use crate::lower::plan::value_copy::array_clone_element_type_arg;
 use crate::lower::plan::value_copy::last_use::RefTargets;
+use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir;
 use crate::tir::{
     ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
@@ -23,12 +18,8 @@ use crate::tir_visitor::TirRefVisitor;
 /// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, plus element types
 /// of `array_clone::<T>(...)` calls that codegen routes through the same helper.
 ///
-/// Driven by the types the program names, not by the expressions it writes:
-/// pattern lowering runs at the top of `translate` and mints the temps some of
-/// those wraps land on, so a seed that predicted expression shapes left the fold
-/// no helper to call (WEP 2026-05-11). No later rewrite introduces a type the
-/// program did not already name, so a type harvest cannot miss one, and
-/// over-synthesis is free — `dce` drops a helper nothing calls.
+/// Driven by the types the program names, never by the expressions it writes: a
+/// later pass mints temps but no new type, and `dce` drops an unused helper.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {
@@ -60,9 +51,8 @@ struct SeedWalker<'a> {
 }
 
 impl SeedWalker<'_> {
-    /// Record `type_id` and the type a pattern temp lands on, which is
-    /// `type_id` with its references peeled: `let { x, y } = &p` writes a
-    /// `Point` temp out of a `&Point`.
+    /// Record `type_id` and its references peeled, the type a pattern temp lands
+    /// on: `let { x, y } = &p` writes a `Point` temp out of a `&Point`.
     fn record(&mut self, type_id: TypeId) {
         for candidate in [type_id, self.type_table.peel_refs(type_id)] {
             if value_copy::needs_value_copy(candidate, self.type_table) {
@@ -81,28 +71,15 @@ impl TirRefVisitor for SeedWalker<'_> {
             self.record(element);
         }
         // A `copy_value::<T>` the source wrote is rewritten into the helper for
-        // `T` whatever `T` is, a scalar included, so it is not the copy rules
-        // that decide whether this one exists.
-        if let Some(marked) = copy_value_type_arg(expr) {
+        // `T` whatever `T` is, a scalar included, so the copy rules do not
+        // decide whether this one exists.
+        if let TirExprKind::Call { func, .. } = &expr.kind
+            && let Some(marked) = copy_value_type_arg(func)
+        {
             self.out.insert(marked);
         }
         self.walk_expr(expr);
     }
-}
-
-/// The `T` of a `builtin::copy_value::<T>(x)` marker.
-fn copy_value_type_arg(expr: &TirExpr) -> Option<TypeId> {
-    if !is_copy_value_call(expr) {
-        return None;
-    }
-    let TirExprKind::Call { func, .. } = &expr.kind else {
-        return None;
-    };
-    let mono = func.monomorph_info.as_ref()?;
-    mono.impl_type_args
-        .first()
-        .or(mono.method_type_args.first())
-        .copied()
 }
 
 /// Shape predicate shared with the fold. Site-specific gating

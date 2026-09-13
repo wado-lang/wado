@@ -388,9 +388,8 @@ _inside_ that storage disturbs it. And a place repointed after a binding read it
 hands that binding the only reference to what the place held — the `take` /
 `drain` / `snapshot` idiom — so the binding may leave the function though it was
 read out of a place the caller still owns. The release travels down a chain of
-bindings: a binding read out of one that shares its own source owns nothing
-either, and pattern lowering leaves exactly that chain behind, hoisting a
-scrutinee into a temp the arm bindings then read.
+bindings. A binding read out of one that shares its own source owns nothing
+either, so the rebind that freed the first freed both.
 
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read out
@@ -657,14 +656,14 @@ Verified against the tree.
       changes whether the binding is defended.
 
       Finishing it means the temp is gone for a place scrutinee and the lowerer
-      keeps none of `place_is_writable` / `binds_by_value` / `owned_temps`. The
-      binding's own `Let` is not enough on its own: written that way, the
-      scrutinee is read once by the pattern test and again by each binding, and
-      two rules that answer for the temp's single read do not answer for the
-      second:
+      keeps none of `place_is_writable` / `binds_by_value` / `owned_temps`.
+      Giving each binding a `Let` is not enough by itself. The temp is read once;
+      a projection is read twice, because the pattern tests the scrutinee and
+      then each binding reads it again. Two rules answer for the single read
+      only:
 
-      - The release tests the rebound path for equality, so `p = x` releases a
-        binding read out of `p` — the temp's path exactly — and not one read out
+      - The release tests the rebound path for equality. `p = x` releases a
+        binding read out of `p`, which is the temp's path, and not one read out
         of `p.f`, which is what an arm projects.
       - A path through a `&mut` receiver is refused a share outright, so a
         projection of a receiver's field earns none.

@@ -1,9 +1,9 @@
-// WEP 2026-05-21: repointing a place gives up everything it held, so a binding
-// read out of any depth under it owns what it gave up — `s = fresh` releases one
+// WEP 2026-05-21: repointing a place gives up everything it held. A binding read
+// out of any depth under it owns what it gave up, so `s = fresh` releases one
 // taken from `s.inner.tags` as it releases one taken from `s` itself. The
 // release does not reach past a write landing inside that same storage first.
 //
-// Two levels deep, which the one-level rows elsewhere leave open.
+// The rows elsewhere all read one level down. These read two.
 
 struct Inner {
     tags: List<String>,

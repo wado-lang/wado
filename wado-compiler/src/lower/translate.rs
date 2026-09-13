@@ -753,10 +753,9 @@ impl FunctionTranslator<'_, '_> {
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
-    /// Whether `value` reads a binding the share analysis cleared: its storage
-    /// is written nowhere the binding is still read, so a materialization out of
-    /// it aliases. Asked at every wrap site, not only at the `let` that bound
-    /// it — a match arm's binding has no `let` of its own.
+    /// Whether `value` reads a binding the share analysis cleared, so a
+    /// materialization out of it aliases. Asked at every wrap site, since a
+    /// match arm's binding has no `let` of its own.
     fn reads_shared_storage(&self, value: &TirExpr) -> bool {
         let value = value_copy::last_use::strip_casts(value);
         matches!(
@@ -1888,15 +1887,8 @@ impl FunctionTranslator<'_, '_> {
         args: &[CallArg],
         has_receiver: bool,
     ) -> ExprKind {
-        if func.module_source.is_core_builtin()
-            && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
-            && args.len() == 1
-            && let Some(type_id) = func.monomorph_info.as_ref().and_then(|mi| {
-                mi.impl_type_args
-                    .first()
-                    .or(mi.method_type_args.first())
-                    .copied()
-            })
+        if args.len() == 1
+            && let Some(type_id) = value_copy::copy_value_type_arg(func)
             && let Some((helper_module, helper_name)) = self
                 .base
                 .value_copy
