@@ -11,21 +11,9 @@
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
 use { zlib_compress, inflate_zlib } from "core:zlib";
-use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
-
-fn read_file_bytes(path: String) -> ByteList with Preopens {
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
-    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
-        Ok(f) => f,
-        Err(_) => panic(`failed to open ${path}`),
-    };
-    let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let buf = stream.read_to_end() as ByteList;
-    stream.drop();
-    return buf;
-}
 
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
@@ -42,7 +30,7 @@ test "smoke" {
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
-    let data = read_file_bytes("json_twitter/twitter.json");
+    let data = fs::read(&"json_twitter/twitter.json").unwrap();
     let mut b = Benchmark {
         name: "zlib",
         input_size: Option::Some(data.len()),

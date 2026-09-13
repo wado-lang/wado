@@ -1,0 +1,62 @@
+// Regression: a default expression is written at a declaration and resolved
+// wherever the default is taken, so a local of the function taking it is not in
+// scope for it, however the two spell the same name. Before the fix a caller's
+// `let SECRET = 99` answered for the `SECRET` its author wrote, in the same
+// module and across one, in parameter and field defaults alike.
+//
+// A name on the *value* path — a function-typed global, called indirectly —
+// reaches its binding through a second lookup, which `called` pins. That one
+// also used to panic the compiler when no caller local shadowed the global:
+// the callee's own global was invisible from the call site.
+//
+// Naming an earlier parameter (`fn f(a, b = a)`) means the value the call
+// supplied for it, which the caller may have built from its own locals — that
+// is `pair`.
+//
+// Both modules spell `SECRET` as 7 here, so this file cannot tell which end a
+// default resolved at; `default_arg_xmod_method.wado` is the one that can.
+
+use { Conf, Box, called, take } from "./sub/default_arg_caller_local_not_in_scope_lib.wado";
+
+global SECRET: i32 = 7;
+
+struct Local {
+    v: i32 = SECRET,
+}
+
+fn here(v: i32 = SECRET) -> i32 {
+    return v;
+}
+
+fn pair(a: i32, b: i32 = a) -> i32 {
+    return a * 1000 + b;
+}
+
+fn ninety_nine() -> i32 {
+    return 99;
+}
+
+export fn run() {
+    let SECRET = 99;
+    let MAKE: fn() -> i32 = ninety_nine;
+
+    // Same module.
+    assert here() == 7;
+    assert here(SECRET) == 99;
+    assert Local {}.v == 7;
+
+    // Across modules.
+    assert take() == 7;
+    assert take(SECRET) == 99;
+    assert Conf {}.v == 7;
+    assert Box::new(1).plus() == 8;
+    assert Box::of().base == 7;
+    assert called() == 7;
+    assert MAKE() == 99;
+
+    // Naming an earlier parameter takes the value the call supplied for it.
+    assert pair(SECRET) == 99099;
+}
+
+__DATA__
+{"stdout": ""}

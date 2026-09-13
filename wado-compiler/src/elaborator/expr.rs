@@ -278,6 +278,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
     ) -> TypeId {
         let ast_id = expr.id();
+        // A travelled walk covers one module's nodes, so the ambient reads
+        // under it and the node's own home agree. Splicing a caller's AST into
+        // a default would break that, and this is where it would show.
+        debug_assert!(
+            self.annotate_ctx
+                .resolving_home
+                .as_ref()
+                .is_none_or(|home| *home == self.home_module(ast_id)),
+            "a node written in another module reached a travelled walk"
+        );
         let type_id = self.resolve_expr_inner(expr, ctx, expected_type);
         self.record_expression_type(ast_id, type_id);
         type_id
@@ -610,11 +620,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.get_string_struct_type()
             }
             Literal::DataSection => {
-                // #data - returns the __DATA__ section content as a String
+                // `#data` is the section of the file that wrote it, which is
+                // also the only file the loader read one from. Reify agrees by
+                // standing in that module. The same holds for the includes
+                // below, whose table is keyed by the writing module.
                 let data = self
                     .tysys
                     .signatures
-                    .data_section(&self.current_module_source)
+                    .data_section(&self.home_module(lit.id))
                     .map(str::to_owned);
                 let string_type = self.get_string_struct_type();
                 if data.is_none() {
@@ -627,7 +640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 string_type
             }
             Literal::IncludeStr(raw_path) => {
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
                 let string_type = self.get_string_struct_type();
                 if let Some(bytes) = self.tysys.included_files.get(&key) {
                     if std::str::from_utf8(bytes).is_err() {
@@ -645,7 +658,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 string_type
             }
             Literal::IncludeBytes(raw_path) => {
-                let key = [self.current_module_source.to_string(), raw_path.clone()];
+                let key = [self.home_module(lit.id).to_string(), raw_path.clone()];
                 let array_u8_type = self.tysys.type_table.borrow_mut().make_byte_list();
                 if !self.tysys.included_files.contains_key(&key) {
                     let _ = self.emit(TypeError::InvalidLiteral {
@@ -669,7 +682,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // below are keyed by these aliases. The rewritten ident keeps the
         // original `id` so use→def edges still resolve back to the user's text.
         let canonical_ident;
-        let ident = if let Some(canon) = self.sem.imports.canonical_ns_ref(&ident.name) {
+        let ident = if let Some(canon) = self.canonical_ns_ref_at(&ident.name, ident.id) {
             canonical_ident = ast::IdentExpr {
                 id: ident.id,
                 name: canon,
@@ -733,6 +746,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // A parameter this default may name. Below the binder tiers, so a
+        // binder the default opens itself shadows the parameter, matching the
+        // scope a reader sees at the declaration.
+        if let Some(&param_type) = self.annotate_ctx.default_arg_types.get(&ident.name) {
+            return param_type;
+        }
+
         // Check for associated constants (e.g., f64::PI, i32::MAX). The
         // constant's body is *foreign* AST owned by `const_module`; we
         // re-resolve it here only for the consumer's inference side effects.
@@ -751,11 +771,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(ident.id),
                 ident.span,
             );
-            // Not an l-value.
-            let vantage = (assoc.module.clone(), assoc.value.id().space());
+            // Not an l-value. The value is its declaring module's AST, walked
+            // again here, so it travels exactly as a default does and names
+            // none of this function's binders.
             let const_module = assoc.module.clone();
-            self.with_default_scope_module(Some(const_module), |s| {
-                s.with_foreign_vantage(Some(vantage), |s| {
+            ctx.with_caller_bindings_hidden(|ctx| {
+                self.with_resolving_home(Some(const_module), |s| {
                     s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                 })
             });
@@ -764,6 +785,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // A case name without parentheses: `Color::Red`, or a bare `Red`.
         if let Some(result) = self.resolve_qualified_case(ident, expected_type) {
+            return result;
+        }
+
+        // A module-level name belongs to the module that wrote this node. A
+        // default expression is resolved wherever the default is taken, so
+        // asking here first would let a same-named item of the taking module
+        // answer for a name its author never wrote.
+        let home = self.home_module(ident.id);
+        if home != self.current_module_source
+            && let Some(result) = self.resolve_ident_in_module(ident, &home)
+        {
             return result;
         }
 
@@ -823,16 +855,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::UNKNOWN;
         }
 
-        // A default expression looks its identifier up in the callee's lexical
-        // scope, which is what gives it the definition module's private globals
-        // and functions (issue #1486).
-        if let Some(fallback) = self.annotate_ctx.default_scope_module.clone()
-            && fallback != self.current_module_source
-            && let Some(result) = self.resolve_ident_in_fallback_module(ident, &fallback)
-        {
-            return result;
-        }
-
         // Unknown variable - report error
         let _ = self.emit(TypeError::UnknownIdentifier {
             name: ident.name.clone(),
@@ -841,18 +863,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         TypeTable::ERROR
     }
 
-    /// Look up an identifier in the callee module's global scope during
-    /// default-expression resolution. Supports globals and function refs.
-    fn resolve_ident_in_fallback_module(
+    /// Look up an identifier in the global scope of the module that wrote it,
+    /// which is what gives a travelled expression its author's module-private
+    /// globals and functions. Supports globals and function refs.
+    fn resolve_ident_in_module(
         &mut self,
         ident: &ast::IdentExpr,
-        fallback: &ModuleSource,
+        home: &ModuleSource,
     ) -> Option<TypeId> {
-        // Reify resolves the fallback-module global / `FuncRef` its own
-        // way; project the type only. This default-expr path is never an
-        // assignment target, so no place is recorded.
-        let (owner, name) = self.declaring_module_of_ident(&ident.name, fallback);
-        if let Some((ty, _)) = self.tysys.signatures.global(&owner, &name) {
+        // Reify resolves the global / `FuncRef` its own way; project the type
+        // only. A travelled expression is never an assignment target, so no
+        // place is recorded.
+        if let Some(ty) = self.global_type_in(&ident.name, home) {
             return Some(ty);
         }
         let sig = self.free_function_sig_at(ident.id)?.clone();
@@ -862,29 +884,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Where `name` is *declared*, as seen from `fallback`. The signature
-    /// tables are keyed by declaring module, so a name `fallback` merely
-    /// imported or re-exported is not found under `fallback` itself.
-    fn declaring_module_of_ident(
-        &self,
-        name: &str,
-        fallback: &ModuleSource,
-    ) -> (ModuleSource, String) {
-        if self.tysys.signatures.global(fallback, name).is_some()
+    /// The declared type of the global `name` names as written in `home`. Reads
+    /// the signature tables, which answer for any module, rather than
+    /// `sem.decls`, which answers only for the one the walk stands in.
+    pub(super) fn global_type_in(&self, name: &str, home: &ModuleSource) -> Option<TypeId> {
+        let (owner, name) = self.declaring_module_of_ident(name, home);
+        self.tysys
+            .signatures
+            .global(&owner, &name)
+            .map(|(ty, _)| ty)
+    }
+
+    /// Where `name` is *declared*, as seen from `home`. The signature tables
+    /// are keyed by declaring module, so a name `home` merely imported or
+    /// re-exported is not found under `home` itself.
+    fn declaring_module_of_ident(&self, name: &str, home: &ModuleSource) -> (ModuleSource, String) {
+        if self.tysys.signatures.global(home, name).is_some()
             || self
-                .decl_in_module(fallback, name)
+                .decl_in_module(home, name)
                 .is_some_and(|def| self.tysys.signatures.function_sig(def).is_some())
         {
-            return (fallback.clone(), name.to_string());
+            return (home.clone(), name.to_string());
         }
         // Imports and re-exports are different maps; a default may name either.
         let resolved = self
             .symbols
-            .imported(fallback, name)
-            .or_else(|| self.symbols.lookup_in_module(fallback, name));
+            .imported(home, name)
+            .or_else(|| self.symbols.lookup_in_module(home, name));
         match resolved {
             Some(symbol) => (symbol.module.clone(), symbol.name.clone()),
-            None => (fallback.clone(), name.to_string()),
+            None => (home.clone(), name.to_string()),
         }
     }
 
@@ -1520,12 +1549,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         (0, TypeTable::UNKNOWN)
     }
 
-    /// The module that wrote `node`, per [`super::scope::Scope::foreign_vantage`].
-    /// `None` judges here, for a site carrying no id.
+    /// The module a visibility question is asked from: the one that wrote
+    /// `node`. `None` judges here, for a site carrying no id.
     pub(super) fn visibility_vantage(&self, node: Option<ast::AstId>) -> ModuleSource {
-        match (&self.annotate_ctx.foreign_vantage, node) {
-            (Some((module, space)), Some(id)) if id.space() == *space => module.clone(),
-            _ => self.current_module_source.clone(),
+        match node {
+            Some(id) => self.home_module(id),
+            None => self.current_module_source.clone(),
         }
     }
 
@@ -3974,22 +4003,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let default_ast = struct_field_defaults.get(idx).and_then(Option::clone);
                 if let Some(default_expr) = default_ast {
-                    // The default is *foreign* AST owned by the struct's
-                    // declaring module. Its free identifiers (e.g. a private
-                    // `global` of that module) resolve in its scope via
-                    // `default_scope_module` (the same callee-scope fallback
-                    // `pad_args_with_defaults` uses for function defaults).
-                    // Only scope is redirected, not fact keying: the default's
-                    // nodes carry their own globally-unique `AstId`s, so its
-                    // facts can't collide with a local node. `expected_type_id`
-                    // still drives literal / `null → None` coercion.
-                    let resolved = if struct_module_source == self.current_module_source {
-                        self.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
-                    } else {
-                        self.with_default_scope_module(Some(struct_module_source.clone()), |s| {
+                    // The default is the struct module's AST, and its scope,
+                    // its import aliases and the vantage its visibility is
+                    // judged from are all that module's. Fact keying stays
+                    // local, the default's nodes carrying their own globally
+                    // unique `AstId`s.
+                    let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                        self.with_resolving_home(Some(struct_module_source.clone()), |s| {
                             s.resolve_expr(&default_expr, ctx, Some(*expected_type_id))
                         })
-                    };
+                    });
                     self.typecheck(resolved, *expected_type_id, struct_lit.span);
                     fields.push(ResolvedField {
                         name: expected_name.clone(),

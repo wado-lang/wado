@@ -420,11 +420,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
         }
 
+        // The alias belongs to whichever module wrote this node, so a type a
+        // travelled expression spells `ns::Type` reads its author's `use ns`.
         if self
-            .sem
-            .imports
-            .namespace_imports
-            .contains_key(namespaced.namespace.as_str())
+            .namespace_alias_source(&namespaced.namespace, namespaced.id)
+            .is_some()
         {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the
@@ -531,17 +531,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return self.tysys.type_table.borrow().type_id_of_decl(defined_at);
             }
-        }
-        if let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone()
-            && scope_mod != self.current_module_source
-        {
-            // A default re-resolved at the caller may name a type
-            // private to the callee's module (`fn f<T = Priv>()` called
-            // cross-module); the caller can't name it, so retry in the
-            // callee's perspective. Mirrors the ident / call fallback.
-            return self.with_module_perspective_for(&scope_mod, |s| {
-                s.resolve_named_type_at(site, name, span, enforce_arity)
-            });
         }
         TypeTable::UNKNOWN
     }
@@ -762,10 +751,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The retry a generic application gets when its head names nothing here:
-    /// a default re-resolved at the caller may spell a type only the callee's
-    /// module imports (`entries: TreeMap<K, V> = TreeMap::new()` called
-    /// cross-module). Mirrors the [`Self::resolve_named_type`] fallback.
+    /// The retry a generic application gets when its head names nothing here.
+    /// A travelled expression may spell a type only its own module imports
+    /// (`entries: TreeMap<K, V> = TreeMap::new()` taken cross-module), and the
+    /// aliases that spelling needs are that module's.
     fn resolve_generic_type_out_of_scope(
         &mut self,
         site: Option<AstId>,
@@ -773,13 +762,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[Type],
         span: Span,
     ) -> TypeId {
-        let Some(scope_mod) = self.annotate_ctx.default_scope_module.clone() else {
+        let Some(home) = self.annotate_ctx.resolving_home.clone() else {
             return TypeTable::UNKNOWN;
         };
-        if scope_mod == self.current_module_source {
+        if home == self.current_module_source {
             return TypeTable::UNKNOWN;
         }
-        self.with_module_perspective_for(&scope_mod, |s| {
+        self.with_module_perspective_for(&home, |s| {
             s.resolve_generic_type_at(site, name, args, span)
         })
     }

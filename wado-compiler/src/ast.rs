@@ -1,7 +1,6 @@
 // AST definitions for Wado
 
 use crate::defs::DefId;
-use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
 
@@ -2582,109 +2581,6 @@ impl Expr {
             Expr::Error(mut e) => {
                 e.span = new_span;
                 Expr::Error(e)
-            }
-        }
-    }
-
-    /// Replace each [`Expr::Ident`] whose name is a key in `subs` with a clone of
-    /// the mapped expression — how default-argument expansion rewrites a
-    /// reference to an earlier parameter (`fn make_rect(w, h = w)`) into the
-    /// caller's value. Traverses only the forms a simple, pure default may
-    /// contain; blocks, closures and match/if cannot appear in one.
-    pub fn substitute_idents(&mut self, subs: &hashmap::IndexMap<String, Expr>) {
-        match self {
-            Expr::Ident(ident) => {
-                if let Some(replacement) = subs.get(&ident.name) {
-                    *self = replacement.clone();
-                }
-            }
-            Expr::Literal(_) => {}
-            Expr::Binary(b) => {
-                b.left.substitute_idents(subs);
-                b.right.substitute_idents(subs);
-            }
-            Expr::Unary(u) => {
-                u.expr.substitute_idents(subs);
-            }
-            Expr::ComparisonChain(c) => {
-                c.first.substitute_idents(subs);
-                for cmp in &mut c.comparisons {
-                    cmp.right.substitute_idents(subs);
-                }
-            }
-            Expr::Call(c) => {
-                c.callee.substitute_idents(subs);
-                for a in &mut c.args {
-                    a.substitute_idents(subs);
-                }
-            }
-            Expr::MethodCall(m) => {
-                m.receiver.substitute_idents(subs);
-                for a in &mut m.args {
-                    a.substitute_idents(subs);
-                }
-            }
-            Expr::StaticMethodCall(s) => {
-                for a in &mut s.args {
-                    a.substitute_idents(subs);
-                }
-            }
-            Expr::FieldAccess(f) => {
-                f.expr.substitute_idents(subs);
-            }
-            Expr::Index(i) => {
-                i.expr.substitute_idents(subs);
-                i.index.substitute_idents(subs);
-            }
-            Expr::Cast(c) => {
-                c.expr.substitute_idents(subs);
-            }
-            Expr::TemplateString(t) => {
-                for expr in t.interpolations_mut() {
-                    expr.substitute_idents(subs);
-                }
-            }
-            Expr::TaggedTemplate(t) => {
-                for expr in t.template.interpolations_mut() {
-                    expr.substitute_idents(subs);
-                }
-            }
-            Expr::TupleLiteral(t) => {
-                for e in &mut t.elements {
-                    e.substitute_idents(subs);
-                }
-            }
-            Expr::StructLiteral(sl) => {
-                for f in &mut sl.fields {
-                    f.value.substitute_idents(subs);
-                }
-                for spread in &mut sl.spreads {
-                    spread.expr.substitute_idents(subs);
-                }
-            }
-            Expr::Range(r) => {
-                r.start.substitute_idents(subs);
-                r.end.substitute_idents(subs);
-            }
-            Expr::Spread(inner, _) => {
-                inner.substitute_idents(subs);
-            }
-            Expr::TryOp(t) => {
-                t.expr.substitute_idents(subs);
-            }
-            Expr::Assign(_)
-            | Expr::CompoundAssign(_)
-            | Expr::Block(_)
-            | Expr::If(_)
-            | Expr::Match(_)
-            | Expr::Matches(_)
-            | Expr::Closure(_)
-            | Expr::LabeledBlock(_)
-            | Expr::TupleComprehension(_)
-            | Expr::WithHandler(_)
-            | Expr::Resume(_)
-            | Expr::Error(_) => {
-                // Not expected inside pure default expressions; leave as-is.
             }
         }
     }

@@ -1581,7 +1581,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             let module = modules.get(module_source).expect("module should exist");
 
-            let namespace_imports = state.tysys.trait_env.namespace_imports(module_source);
+            let namespace_imports = state
+                .tysys
+                .trait_env
+                .namespace_imports(module_source)
+                .cloned()
+                .unwrap_or_default();
             // Imported function names (namespace type members already in scope).
             let mut imported_functions = IndexSet::default();
             for item in &module.items {

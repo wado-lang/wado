@@ -6,8 +6,15 @@ internal fn scale() -> i32 { return 10 }
 
 internal global FACTOR: i32 = 7;
 
+/// Private, and read only from the constant body below. A walk that let the
+/// use site's same-named local answer would leave this reaching nothing and
+/// warn that it is unused.
+global ONLY_FROM_CONST: i32 = 5;
+
 impl Box {
   pub const FROM_GLOBAL: i32 = FACTOR;
 
   pub const FROM_CALL: i32 = scale();
+
+  pub const FROM_PRIVATE: i32 = ONLY_FROM_CONST;
 }

@@ -12,25 +12,9 @@ use { Stdout } from "core:cli";
 use { to_bytes, from_bytes } from "core:json";
 use { CitmCatalog, event_count, performance_count } from "./catalog_schema.wado";
 use { MonotonicClock } from "wasi:clocks";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
-
-fn read_file_bytes(path: String) -> ByteList with Preopens {
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
-    let open_result = root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait();
-    if let Err(_) = open_result {
-        panic(`failed to open ${path}`);
-    }
-    let file = match open_result {
-        Ok(f) => f,
-        Err(_) => unreachable(),
-    };
-    let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let buf = stream.read_to_end();
-    stream.drop();
-    return buf as ByteList;
-}
 
 test "smoke" {
     // Minimal valid CitmCatalog with empty maps and no events / performances.
@@ -43,7 +27,7 @@ test "smoke" {
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
-    let json_data = read_file_bytes("json_catalog/citm_catalog.json");
+    let json_data = fs::read(&"json_catalog/citm_catalog.json").unwrap();
     let json_size = json_data.len();
     let catalog = from_bytes::<CitmCatalog, _>(json_data).unwrap();
 

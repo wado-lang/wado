@@ -1,0 +1,56 @@
+//! What a corpus tool needs either side of its parser: the paths to process,
+//! and where in a file a byte offset falls.
+
+use { eprintln, Stderr } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
+
+/// The paths to process: every `--paths-from <file>` list, one path per line,
+/// plus any bare argument ending in `extension`. A list that cannot be read
+/// yields its own path, so the run reports it rather than looking clean.
+pub fn collect_paths(argv: &List<String>, extension: &String) -> List<String> with (Stderr, Preopens) {
+    let mut paths: List<String> = [];
+    for let mut i = 0; i < argv.len(); i += 1 {
+        if argv[i] == "--paths-from" {
+            assert i + 1 < argv.len(), "--paths-from needs a file";
+            i += 1;
+            match fs::read_to_string(&argv[i]) {
+                Ok(list) => {
+                    for let line of list.lines() {
+                        if !line.is_empty() {
+                            paths.push(line);
+                        }
+                    }
+                },
+                Err(e) => {
+                    eprintln(`error: ${e}`);
+                    paths.push(argv[i]);
+                },
+            }
+        } else if argv[i].ends_with(*extension) {
+            paths.push(argv[i]);
+        }
+    }
+    return paths;
+}
+
+/// The 1-based line holding byte offset `at`.
+pub fn line_of(source: &String, at: i32) -> i32 {
+    let mut line = 1;
+    let mut i = 0;
+    while i < at && i < source.len() {
+        if source.get_byte_unchecked(i) == b'\n' {
+            line += 1;
+        }
+        i += 1;
+    }
+    return line;
+}
+
+test "line_of counts the newlines before the offset" {
+    let source = "a\nbb\nccc";
+    assert line_of(&source, 0) == 1;
+    assert line_of(&source, 2) == 2;
+    assert line_of(&source, 5) == 3;
+    assert line_of(&source, source.len()) == 3;
+}

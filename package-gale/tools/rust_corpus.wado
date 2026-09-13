@@ -1,5 +1,5 @@
 //! What both Rust tools here need: the recognizer with its base ports
-//! installed, and the WASI plumbing from a command line to file contents.
+//! installed.
 
 use rust from "../tests/grammars/RustLexer.g4"
     with {
@@ -10,8 +10,6 @@ use rust from "../tests/grammars/RustLexer.g4"
         },
     };
 use { RustLexerBase, RustParserBase, LexerView, Parser } from "../tests/grammars/RustLexer.g4";
-use { eprintln, Stderr } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
 
 // The Wado twin of `grammars/java/RustLexerBase.java`, which the ANTLR4 oracle
 // runs; `tests/driver_cst_rust_test.wado` holds the copy that pins the pair.
@@ -58,66 +56,4 @@ pub fn parse_rust(source: &String) -> rust::ParseResult {
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
         return rust::parse(source);
     };
-}
-
-/// The directory every path opens relative to, so a tool runs from the
-/// repository root.
-pub fn corpus_root() -> Option<Descriptor> with (Stderr, Preopens) {
-    let dirs = Preopens::get_directories();
-    if dirs.len() == 0 {
-        eprintln("error: no preopened directories available");
-        return null;
-    }
-    return Option::Some(dirs[0].0);
-}
-
-pub fn read_file(root: &Descriptor, path: &String) -> Option<String> with Stderr {
-    let file = match root.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::none(),
-        DescriptorFlags::Read,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln(`error: ${*path}: cannot open: ${e:?}`);
-            return null;
-        },
-    };
-    let [read_stream, _done] = file.read_via_stream(0 as Filesize);
-    let bytes = read_stream.read_to_end();
-    read_stream.drop();
-    return match String::from_utf8(bytes) {
-        Ok(s) => Option::Some(s),
-        Err(e) => {
-            eprintln(`error: ${*path}: not UTF-8: ${e}`);
-            return null;
-        },
-    };
-}
-
-/// The `.rs` files an argument list names, directly or through
-/// `--paths-from <file>`, which reads one path per line.
-pub fn collect_paths(root: &Descriptor, argv: &List<String>) -> List<String> with Stderr {
-    let mut paths: List<String> = [];
-    for let mut i = 0; i < argv.len(); i += 1 {
-        if argv[i] == "--paths-from" {
-            assert i + 1 < argv.len(), "--paths-from needs a file";
-            i += 1;
-            // An unreadable list yields no paths, which would otherwise read as
-            // a clean run. Keep it as the one path that reports itself.
-            let Some(list) = read_file(root, &argv[i]) else {
-                paths.push(argv[i]);
-                continue;
-            };
-            for let line of list.lines() {
-                if !line.is_empty() {
-                    paths.push(line);
-                }
-            }
-        } else if argv[i].ends_with(".rs") {
-            paths.push(argv[i]);
-        }
-    }
-    return paths;
 }

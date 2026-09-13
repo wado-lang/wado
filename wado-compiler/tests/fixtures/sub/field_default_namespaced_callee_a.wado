@@ -1,0 +1,23 @@
+// `nsb` is this file's own import alias. A construction site elsewhere has no
+// such alias, so resolving the default there cannot find it.
+
+use nsb from "./field_default_namespaced_callee_b.wado";
+
+pub struct Cfg {
+    pub x: i32,
+    via_ns: i32 = nsb::make(),
+    // The alias also has to spell a *type*, in every position that resolves
+    // one: a cast's target, a turbofish, and a struct literal's head.
+    listed: List<nsb::Thing> = [nsb::Thing { n: 33 }] as List<nsb::Thing>,
+    opt: Option<nsb::Thing> = Option::<nsb::Thing>::None,
+    made: nsb::Thing = nsb::Thing::make(),
+}
+
+pub fn via_ns_of(c: &Cfg) -> i32 {
+    return c.via_ns;
+}
+
+pub fn typed_of(c: &Cfg) -> i32 {
+    let none = if c.opt matches { Some(_) } { 1 } else { 0 };
+    return c.listed[0].n + c.made.n + none;
+}

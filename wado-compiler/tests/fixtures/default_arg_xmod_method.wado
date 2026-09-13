@@ -1,0 +1,31 @@
+// Regression: a method's default expression resolves where it is declared, the
+// same as a free function's. A method default naming its own module's global
+// used to be answered in the caller's module instead — the caller's value when
+// it spelled the name, a compiler panic when it spelled nothing.
+//
+// The two modules give `BASE` different values on purpose, so answering at the
+// wrong end is a wrong number rather than a tie. `without_base` is the caller
+// that spells it nowhere.
+
+use { Box3 } from "./sub/default_arg_xmod_method_lib.wado";
+use { without_base } from "./sub/default_arg_xmod_method_no_base.wado";
+
+global BASE: i32 = 500;
+
+export fn run() {
+    // Instance method, plain global default and an expression over it.
+    assert Box3::new(1).plus() == 8;
+    assert Box3::new(1).scaled() == 22;
+
+    // Static method on the same type.
+    assert Box3::of().k == 7;
+
+    // An explicit argument still wins, and it is the caller's value.
+    assert Box3::new(1).plus(BASE) == 501;
+
+    // A caller that declares no `BASE` at all.
+    assert without_base() == 8;
+}
+
+__DATA__
+{"stdout": ""}

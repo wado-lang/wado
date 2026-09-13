@@ -1,0 +1,281 @@
+#![stdlib("core:fs")]
+//! Whole-file I/O against the preopened directory tree.
+//!
+//! Every path resolves against the first directory the host preopened, which
+//! `wado run` grants as the current one. The empty path and `"."` name that
+//! directory itself, so a walk has a root case.
+//!
+//! ```wado
+//! use fs from "core:fs";
+//!
+//! let source = match fs::read_to_string(&"docs/spec.md") {
+//!     Ok(s) => s,
+//!     Err(e) => {
+//!         eprintln(`error: ${e}`);
+//!         return;
+//!     },
+//! };
+//! fs::write(&"build/spec.txt", &source).unwrap();
+//!
+//! for let entry of fs::read_dir(&"src")? {
+//!     if entry.type matches { Directory } {
+//!         continue;
+//!     }
+//! }
+//! ```
+//!
+//! A file is read into memory and written in one call. Streaming a file
+//! without holding it stays on `wasi:filesystem`, and so do the operations
+//! this module leaves out: append, rename, symlink, times, and metadata.
+//! [`root`] hands over the descriptor for them. `example/cat.wado` connects a
+//! file's read stream to stdout that way.
+
+use {
+    Preopens,
+    Descriptor,
+    DescriptorFlags,
+    DescriptorType,
+    ErrorCode,
+    Filesize,
+    OpenFlags,
+    PathFlags,
+} from "wasi:filesystem";
+
+/// Why a filesystem operation failed, and the path it failed on.
+///
+/// Every caller reports the path, so it is carried here rather than added at
+/// each site. `Display` renders the pair:
+/// `"build/out.json: no such file or directory"`.
+pub struct FsError {
+    pub path: String,
+    pub kind: FsErrorKind,
+}
+
+/// What went wrong. `Io` carries whatever WASI answered that this module does
+/// not name.
+pub variant FsErrorKind {
+    /// The host granted no directory, so no path can be resolved.
+    NoPreopen,
+    /// The path names nothing.
+    NotFound,
+    /// The bytes read are not UTF-8 (`read_to_string` only).
+    NotUtf8,
+    Io(ErrorCode),
+}
+
+impl Display for FsError {
+    fn fmt(&self, f: &mut Formatter) {
+        if self.path.is_empty() {
+            f.write_str(&self.kind.message());
+            return;
+        }
+        f.write_str(&`${self.path}: ${self.kind.message()}`);
+    }
+}
+
+impl FsErrorKind {
+    fn message(&self) -> String {
+        return match *self {
+            NoPreopen => "no preopened directory available",
+            NotFound => "no such file or directory",
+            NotUtf8 => "not valid UTF-8",
+            Io(code) => `${code:?}`,
+        };
+    }
+}
+
+/// One entry of a directory.
+pub struct DirEntry {
+    pub name: String,
+    pub type: FileType,
+}
+
+/// What a directory entry refers to. Anything that is neither a file nor a
+/// directory — a socket, a device, a symlink — is `Other`; a program that has
+/// to tell those apart wants `wasi:filesystem`.
+pub variant FileType {
+    File,
+    Directory,
+    Other,
+}
+
+/// The directory every path resolves against: the first the host preopened.
+///
+/// The escape hatch for everything this module does not do. The descriptor is
+/// owned by the caller, which may pass it to any `wasi:filesystem` method.
+pub fn root() -> Result<Descriptor, FsError> with Preopens {
+    let dirs = Preopens::get_directories();
+    if dirs.is_empty() {
+        return Result::Err(FsError { path: "", kind: FsErrorKind::NoPreopen });
+    }
+    return Result::Ok(dirs[0].0);
+}
+
+/// The whole content of `path`. A path that names anything but a regular file
+/// — a directory, a device, a pipe — fails rather than reading.
+pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens {
+    let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
+    // No open flag says "a regular file", and `read_via_stream` traps rather
+    // than failing on anything else, so the kind is checked here instead.
+    match file.get_type().wait() {
+        Ok(RegularFile) => (),
+        Ok(Directory) => {
+            return Result::Err(failure(path, ErrorCode::IsDirectory));
+        },
+        Ok(_) => {
+            return Result::Err(failure(path, ErrorCode::Invalid));
+        },
+        Err(e) => {
+            return Result::Err(failure(path, e));
+        },
+    }
+    let [stream, done] = file.read_via_stream(0 as Filesize);
+    let bytes = stream.read_to_end();
+    stream.drop();
+    finish(path, done)?;
+    return Result::Ok(bytes as ByteList);
+}
+
+/// The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
+pub fn read_to_string(path: &String) -> Result<String, FsError> with Preopens {
+    let bytes = read(path)?;
+    return match String::from_utf8(bytes) {
+        Ok(s) => Result::Ok(s),
+        Err(_) => Result::Err(FsError { path: *path, kind: FsErrorKind::NotUtf8 }),
+    };
+}
+
+/// Write `data` to `path`, creating it or truncating what is there.
+///
+/// `data` is anything that views as bytes — a `String`, a `ByteList`, a
+/// `ByteSlice` — and is written through without a copy.
+pub fn write<T: AsByteSlice>(path: &String, data: &T) -> Result<(), FsError> with Preopens {
+    let file = open(path, OpenFlags::Create | OpenFlags::Truncate, DescriptorFlags::Write)?;
+    let [rx, tx] = Stream::<u8>::new();
+    let done = file.write_via_stream(rx, 0 as Filesize);
+    tx.write_raw_all(data.as_byte_slice() as Slice<u8>);
+    tx.drop();
+    return finish(path, done);
+}
+
+/// Remove the file `path` names. A directory is not a file: `remove_file` on
+/// one fails rather than removing it.
+pub fn remove_file(path: &String) -> Result<(), FsError> with Preopens {
+    let dir = root()?;
+    return match dir.unlink_file_at(*path).wait() {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(failure(path, e)),
+    };
+}
+
+/// Every entry of the directory `path` names, in the order the host lists
+/// them. `""` and `"."` name the preopened directory itself.
+pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens {
+    let dir = open_dir(path)?;
+    let [stream, done] = dir.read_directory();
+    let raw = stream.read_to_end();
+    stream.drop();
+    finish(path, done)?;
+    let mut out: List<DirEntry> = List::with_capacity(raw.len());
+    for let entry of raw {
+        out.push(DirEntry { name: entry.name, type: file_type(entry.type) });
+    }
+    return Result::Ok(out);
+}
+
+/// Create the directory `path` names. The parent has to exist and the path
+/// itself has to be free, so an occupied path is `Io(Exist)`.
+pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens {
+    let dir = root()?;
+    return match dir.create_directory_at(*path).wait() {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(failure(path, e)),
+    };
+}
+
+/// Create the directory `path` names, and every parent it needs. A directory
+/// that already exists is not a failure.
+pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens {
+    // The loop below skips an empty component, so a leading `/` would build
+    // the tree inside the preopen rather than failing as it does elsewhere.
+    if path.starts_with("/") {
+        return Result::Err(failure(path, ErrorCode::NotPermitted));
+    }
+    let dir = root()?;
+    let mut prefix = String::new();
+    for let component of path.split("/") {
+        if component.is_empty() || component == "." {
+            continue;
+        }
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(&component);
+        ensure_dir(&dir, &prefix)?;
+    }
+    return Result::Ok(());
+}
+
+/// Create the directory `path` names under `dir`. One already there is not a
+/// failure, and anything else there is `NotDirectory`.
+fn ensure_dir(dir: &Descriptor, path: &String) -> Result<(), FsError> {
+    let Err(e) = dir.create_directory_at(*path).wait() else {
+        return Result::Ok(());
+    };
+    if !e matches { Exist } {
+        return Result::Err(failure(path, e));
+    }
+    // `Exist` says something is at the path, not that it is a directory.
+    let found = match dir.stat_at(PathFlags::none(), *path).wait() {
+        Ok(stat) => stat.type,
+        Err(e) => {
+            return Result::Err(failure(path, e));
+        },
+    };
+    if found matches { Directory } {
+        return Result::Ok(());
+    }
+    return Result::Err(failure(path, ErrorCode::NotDirectory));
+}
+
+fn open_dir(path: &String) -> Result<Descriptor, FsError> with Preopens {
+    if path.is_empty() || *path == "." {
+        return root();
+    }
+    return open(path, OpenFlags::Directory, DescriptorFlags::Read);
+}
+
+fn open(path: &String, open_flags: OpenFlags, flags: DescriptorFlags) -> Result<Descriptor, FsError> with Preopens {
+    let dir = root()?;
+    return match dir.open_at(PathFlags::none(), *path, open_flags, flags).wait() {
+        Ok(opened) => Result::Ok(opened),
+        Err(e) => Result::Err(failure(path, e)),
+    };
+}
+
+/// A stream ends on an I/O error the same way it ends on the last byte, so a
+/// transfer that skips this future reports a truncated file as a whole one.
+fn finish(path: &String, done: Future<Result<(), ErrorCode>>) -> Result<(), FsError> {
+    let finished = done.read();
+    done.drop();
+    if let Some(Err(e)) = finished {
+        return Result::Err(failure(path, e));
+    }
+    return Result::Ok(());
+}
+
+fn failure(path: &String, code: ErrorCode) -> FsError {
+    let kind = match code {
+        NoEntry => FsErrorKind::NotFound,
+        _ => FsErrorKind::Io(code),
+    };
+    return FsError { path: *path, kind };
+}
+
+fn file_type(type: DescriptorType) -> FileType {
+    return match type {
+        RegularFile => FileType::File,
+        Directory => FileType::Directory,
+        _ => FileType::Other,
+    };
+}

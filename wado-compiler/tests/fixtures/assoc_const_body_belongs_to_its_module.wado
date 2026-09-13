@@ -11,3 +11,22 @@ test "the body reads its own module's global, not a same-named local here" {
 test "a callee reached only from a constant body survives liveness" {
     assert Box::FROM_CALL == 10;
 }
+
+// The global below is private and read only from a constant body. Codegen folds
+// the constant either way, so the local shadowing it is visible only in what
+// the walk resolved: a hijacked name leaves the global reaching nothing, and
+// the unused-global pass says so.
+test "the body's own global is marked used, whatever the frame binds" {
+    let ONLY_FROM_CONST = 999;
+    assert Box::FROM_PRIVATE == 5;
+    assert ONLY_FROM_CONST == 999;
+}
+
+__DATA__
+{
+    "test": {},
+    "warnings_not_contains": [
+        "global `FACTOR` is never used",
+        "global `ONLY_FROM_CONST` is never used"
+    ]
+}

@@ -52,6 +52,7 @@ use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
+use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
@@ -276,10 +277,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// context and shared `all_*` tables. Use this for any type-name
     /// resolution; never reach into `all_*` directly.
     pub(crate) fn type_lookup(&self) -> TypeLookup<'_> {
+        // The frame is where the AST under resolution was written, so a
+        // travelled expression reads names as its author did — and its aliases
+        // too, since `nsb::Thing` is one name that only the author's `use ns`
+        // table can spell out.
+        let frame = self
+            .annotate_ctx
+            .resolving_home
+            .as_ref()
+            .unwrap_or(&self.current_module_source);
+        let namespace_imports = self
+            .namespace_imports_in(frame)
+            .expect("a module the walk resolves in is one `TraitEnv` indexed");
         TypeLookup {
-            current_module_source: &self.current_module_source,
+            current_module_source: frame,
             resolutions: &self.tysys.resolutions,
-            namespace_imports: &self.sem.imports.namespace_imports,
+            namespace_imports,
             all_newtypes: &self.tysys.all_newtypes,
             all_struct_fields: &self.tysys.all_struct_fields,
             all_variant_cases: &self.tysys.all_variant_cases,
@@ -374,6 +387,58 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.type_lookup().declaration_at(site, name)
     }
 
+    /// The module `node` was written in, which is the module it resolves in
+    /// however far its AST has travelled. A synthesized node, carrying no space
+    /// of its own, answers with the current module.
+    pub(super) fn home_module(&self, node: ast::AstId) -> ModuleSource {
+        self.tysys
+            .trait_env
+            .module_of_space(node.space())
+            .cloned()
+            .unwrap_or_else(|| self.current_module_source.clone())
+    }
+
+    /// The namespace aliases `module` declares. The walk's own are on `sem`,
+    /// being built; every other module's are pre-computed on `TraitEnv`.
+    pub(super) fn namespace_imports_in<'s>(
+        &'s self,
+        module: &ModuleSource,
+    ) -> Option<&'s trait_env::NamespaceImports> {
+        if *module == self.current_module_source {
+            return Some(&self.sem.imports.namespace_imports);
+        }
+        self.tysys.trait_env.namespace_imports(module)
+    }
+
+    /// The namespace aliases in scope for `node`: the ones its own module's
+    /// author wrote, not the ones in scope where the walk happens to stand.
+    pub(super) fn namespace_imports_at(
+        &self,
+        node: ast::AstId,
+    ) -> Option<&trait_env::NamespaceImports> {
+        let home = self
+            .tysys
+            .trait_env
+            .module_of_space(node.space())
+            .unwrap_or(&self.current_module_source);
+        self.namespace_imports_in(home)
+    }
+
+    /// Which module the alias `ns` names, as written at `node`.
+    pub(super) fn namespace_alias_source(
+        &self,
+        alias: &str,
+        node: ast::AstId,
+    ) -> Option<ModuleSource> {
+        self.namespace_imports_at(node)?.get(alias).cloned()
+    }
+
+    /// `ns::member` written at `node`, as the `ns$member` alias the registries
+    /// are keyed by. `None` when `ns` is no namespace alias of `node`'s module.
+    pub(super) fn canonical_ns_ref_at(&self, name: &str, node: ast::AstId) -> Option<String> {
+        canonical_ns_ref(self.namespace_imports_at(node)?, name)
+    }
+
     /// Run `body` in `module`'s perspective, swapping the current module and
     /// its namespace imports. For callee-scope work only, such as a parameter
     /// default; already being there skips the swap.
@@ -389,7 +454,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if self.current_module_source == *module {
             return body(self);
         }
-        let namespaces = self.tysys.trait_env.namespace_imports(module);
+        let namespaces = self
+            .tysys
+            .trait_env
+            .namespace_imports(module)
+            .cloned()
+            .unwrap_or_default();
         let saved_src = std::mem::replace(&mut self.current_module_source, module.clone());
         let saved_ns = std::mem::replace(&mut self.sem.imports.namespace_imports, namespaces);
 
@@ -490,7 +560,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// namespace member, etc.). Looks up the defining [`AstId`](crate::ast::AstId) through
     /// the symbol table; no-op if the name is not declared.
     pub(super) fn record_item_reference_by_name(&mut self, use_id: AstId, name: &str) {
-        let Some(sym) = self.symbol_named(&self.current_module_source, name) else {
+        // The name is spelled at `use_id`, so it means what its own module says
+        // it means. A travelled expression otherwise records an edge to a
+        // same-named item of whichever module took it.
+        let Some(sym) = self.symbol_named(&self.home_module(use_id), name) else {
             return;
         };
         let def_id = sym.defined_at;
@@ -863,8 +936,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self_kind: ast::SelfKind,
         is_ref_impl: bool,
         param_is_mut: Vec<bool>,
-        param_names: Vec<String>,
-        param_defaults: Vec<Option<ast::Expr>>,
+        param_defaults: Vec<(String, Option<ast::Expr>)>,
+        defaults_module: ModuleSource,
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
         consumes_self: bool,
@@ -879,8 +952,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut,
-                param_names,
                 param_defaults,
+                defaults_module,
                 return_type,
                 method_type_args,
                 consumes_self,
@@ -1124,39 +1197,45 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.tysys
             .resolutions
             .declared_if_walked(site)
-            .or_else(|| self.decl_key_or_local(name))
+            .or_else(|| self.decl_key_in(&self.home_module(site), name))
     }
 
     /// The declaration indexes, for a caller holding a spelling whose reference
-    /// site is not at hand — a rendered head, a synthesis target. Each frame is
-    /// one module, so a hit is unique; an unaccounted name falls to the prelude.
+    /// site is not at hand — a rendered head, a synthesis target. One that
+    /// holds a site should call [`Self::decl_key_at`] instead.
     ///
-    /// The frames are the walk's own position, never a caller's. Where it reads an
-    /// expression another module wrote, that writing module answers first.
+    /// The frame is where the AST being resolved was written: the walk's own
+    /// position, or the author's module while the walk is inside a travelled
+    /// expression. One frame and not a preference between two, so a name both
+    /// modules declare is not decided by which is tried first.
     pub(crate) fn decl_key_or_local(&self, name: &str) -> Option<DefId> {
+        let frame = self
+            .annotate_ctx
+            .resolving_home
+            .clone()
+            .unwrap_or_else(|| self.current_module_source.clone());
+        self.decl_key_in(&frame, name)
+    }
+
+    /// The declaration `name` refers to as written in `frame`; an unaccounted
+    /// name falls to the prelude. One frame is one module, so a hit is unique.
+    fn decl_key_in(&self, frame: &ModuleSource, name: &str) -> Option<DefId> {
         // A binder shadows every declaration of its name and has no identity of
         // its own; the indexes cannot see binders and would answer `struct T`.
         if self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
         }
         let defs = self.tysys.resolutions.defs();
-        let frames = self
-            .annotate_ctx
-            .default_scope_module
-            .iter()
-            .chain(std::iter::once(&self.current_module_source));
-        for frame in frames {
-            let found = self.tysys.resolutions.imported_as(frame, name).or_else(|| {
+        self.tysys
+            .resolutions
+            .imported_as(frame, name)
+            .or_else(|| {
                 self.tysys
                     .trait_env
                     .decls_named(name)
                     .find(|def| defs.module(*def) == frame)
-            });
-            if found.is_some() {
-                return found;
-            }
-        }
-        self.tysys.resolutions.prelude_decl(name)
+            })
+            .or_else(|| self.tysys.resolutions.prelude_decl(name))
     }
 
     /// The trait a bound's reference site names; `written` supplies the type
@@ -1617,8 +1696,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::impl_target`] for a receiver written at a reference site, so
-    /// `Type::method` keys to what `Type` names *in the module that wrote it* —
-    /// a default spliced into a same-named caller is where the two come apart.
+    /// `Type::method` keys to what `Type` names *in the module that wrote it*.
+    /// A default taken in a module declaring the same name is where the two
+    /// come apart.
     ///
     /// A binder answers nothing, so `Self::` / `T::` falls through to the
     /// spelling, by then the concrete name the rewrite produced.

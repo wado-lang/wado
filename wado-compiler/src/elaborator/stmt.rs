@@ -926,11 +926,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // mirroring an unqualified `Case` pattern.
                 t.name == *scrutinee_name
                     || self
-                        .sem
-                        .imports
-                        .namespace_imports
-                        .get(&t.name)
-                        .is_some_and(|m| *m == scrutinee_module)
+                        .namespace_alias_source(&t.name, t.id)
+                        .is_some_and(|m| m == scrutinee_module)
             }
             Type::Generic(g) => {
                 g.name == *scrutinee_name && scrutinee_arg_len.is_none_or(|n| n == g.args.len())
@@ -939,11 +936,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 ns.name == *scrutinee_name
                     && scrutinee_arg_len.is_none_or(|n| n == ns.args.len())
                     && self
-                        .sem
-                        .imports
-                        .namespace_imports
-                        .get(&ns.namespace)
-                        .is_some_and(|m| *m == scrutinee_module)
+                        .namespace_alias_source(&ns.namespace, ns.id)
+                        .is_some_and(|m| m == scrutinee_module)
             }
             Type::Function(_)
             | Type::Tuple(_)
@@ -1646,10 +1640,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // constant introduces no binding — it is either a literal
                         // or an opaque constant-value pattern — so return none
                         // either way.
-                        let vantage = (assoc.module.clone(), assoc.value.id().space());
                         let const_module = assoc.module.clone();
-                        self.with_default_scope_module(Some(const_module), |s| {
-                            s.with_foreign_vantage(Some(vantage), |s| {
+                        ctx.with_caller_bindings_hidden(|ctx| {
+                            self.with_resolving_home(Some(const_module), |s| {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });

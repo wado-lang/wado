@@ -1,0 +1,20 @@
+// A value default cannot name the callee's own type parameter. The default is
+// re-resolved at each call site, where `T` is not in scope. WEP 2026-04-11
+// records that as a known gap.
+//
+// What this pins is the diagnostic. The compiler reported the unknown function
+// and then panicked on the `()` it had just reported, so a correct error
+// reached the user as a stack trace.
+
+fn info<T: Default>(msg: String, fields: T = T::default()) -> i32 {
+    return 1;
+}
+
+export fn run() {
+    let n = info::<i32>("hi");
+}
+
+__DATA__
+{
+    "compile_error": "unknown function 'T::default'"
+}

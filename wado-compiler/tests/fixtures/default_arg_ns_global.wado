@@ -1,0 +1,20 @@
+// Regression: a default naming a namespaced global (`nsb::SOME`) resolves the
+// alias in the module that wrote it. The alias used to be looked up in the
+// module that took the default instead, so a caller declaring no `nsb` left
+// the name unresolved and a valid program was rejected with
+// "unknown identifier 'nsb::SOME'".
+//
+// This file deliberately declares no `nsb` alias. A namespaced *function* call
+// in a default already had coverage; a namespaced *global* did not.
+
+use { Conf, called, takes } from "./sub/default_arg_ns_global_lib.wado";
+
+export fn run() {
+    assert takes() == 41;
+    assert takes(3) == 3;
+    assert Conf {}.v == 41;
+    assert called() == 7;
+}
+
+__DATA__
+{"stdout": ""}

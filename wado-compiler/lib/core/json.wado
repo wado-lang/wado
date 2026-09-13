@@ -779,6 +779,9 @@ pub struct JsonDeserializer {
     /// level before descending, so it never needs unwinding.
     pub depth: i32 = 0,
     pub max_depth: i32 = DEFAULT_MAX_DEPTH,
+    /// Scratch for `scan_number_into`, reused so a number token costs no
+    /// allocation. Every field is written before it is read.
+    scratch: ScannedNumber = ScannedNumber::empty(),
 }
 
 /// A scanned JSON number token: sign, leading digits, the digit counts
@@ -1570,8 +1573,8 @@ impl JsonDeserializer {
 
     fn parse_i32_with_lead(&mut self, lead: i32) -> Result<i32, DeserializeError> {
         let start = self.pos as i64;
-        let mut n = ScannedNumber::empty();
-        self.scan_number_into(lead, &mut n)?;
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
         if !n.has_frac_or_exp {
             // `digits` is exact within FPFMT_DIGITS_MAX digits; longer tokens
             // always overflow i32. i32::MIN's magnitude is one above i32::MAX.
@@ -1588,7 +1591,7 @@ impl JsonDeserializer {
         }
         // Decimal point or exponent — reconstruct via f64 (e.g. 1e2 → 100).
         let v = checked_int_f64(
-            scanned_to_f64(&n),
+            scanned_to_f64(n),
             i32::MIN as f64,
             i32::MAX as f64 + 1.0,
             "value out of range for i32",
@@ -1650,8 +1653,8 @@ impl JsonDeserializer {
         }
         builtin::cold_path();
         let start = self.pos as i64;
-        let mut n = ScannedNumber::empty();
-        self.scan_number_into(lead, &mut n)?;
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
         if !n.has_frac_or_exp {
             // i64::MIN's magnitude (2^63) is one above i64::MAX.
             let limit: u64 = if n.neg { i64::MAX as u64 + 1 } else { i64::MAX as u64 };
@@ -1674,7 +1677,7 @@ impl JsonDeserializer {
             return Result::Ok(v);
         }
         let v = checked_int_f64(
-            scanned_to_f64(&n),
+            scanned_to_f64(n),
             -TWO_POW_63,
             TWO_POW_63,
             "value out of range for i64",
@@ -1695,8 +1698,8 @@ impl JsonDeserializer {
             builtin::cold_path();
             return Result::Err(DeserializeError::overflow("negative value for u64", start));
         }
-        let mut n = ScannedNumber::empty();
-        self.scan_number_into(lead, &mut n)?;
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
         if !n.has_frac_or_exp {
             if n.int_digits <= FPFMT_DIGITS_MAX {
                 return Result::Ok(n.digits);
@@ -1724,7 +1727,7 @@ impl JsonDeserializer {
             ));
         }
         let v = checked_int_f64(
-            scanned_to_f64(&n),
+            scanned_to_f64(n),
             0.0,
             TWO_POW_64,
             "value out of range for u64",
@@ -1740,9 +1743,9 @@ impl JsonDeserializer {
     }
 
     fn parse_f64_with_lead(&mut self, lead: i32) -> Result<f64, DeserializeError> {
-        let mut n = ScannedNumber::empty();
-        self.scan_number_into(lead, &mut n)?;
-        return Result::Ok(scanned_to_f64(&n));
+        let n = &mut self.scratch;
+        self.scan_number_into(lead, n)?;
+        return Result::Ok(scanned_to_f64(n));
     }
 
     /// Skips a string token without allocating. Shares `scan_string_run` with

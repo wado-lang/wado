@@ -1,0 +1,42 @@
+// Helper for `default_arg_caller_local_not_in_scope.wado`. Every default here
+// names a global of this module, and the caller binds a local of each name.
+
+global SECRET: i32 = 7;
+
+fn seven() -> i32 {
+    return 7;
+}
+
+/// A function-typed global, so the default below is an indirect call through a
+/// name looked up on the *value* path rather than the named-function one.
+global MAKE: fn() -> i32 = seven;
+
+pub fn called(v: i32 = MAKE()) -> i32 {
+    return v;
+}
+
+pub struct Conf {
+    pub v: i32 = SECRET,
+}
+
+pub fn take(v: i32 = SECRET) -> i32 {
+    return v;
+}
+
+pub struct Box {
+    pub base: i32,
+}
+
+impl Box {
+    pub fn new(base: i32) -> Box {
+        return Box { base };
+    }
+
+    pub fn plus(&self, v: i32 = SECRET) -> i32 {
+        return self.base + v;
+    }
+
+    pub fn of(v: i32 = SECRET) -> Box {
+        return Box { base: v };
+    }
+}

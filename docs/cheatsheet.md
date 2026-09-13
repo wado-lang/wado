@@ -1489,6 +1489,37 @@ for let arg of args() { println(`arg: ${arg}`); }
 if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 ```
 
+### core:fs
+
+Whole-file I/O against the first preopened directory (`wado run` grants the
+current one). `""` and `"."` name that directory. See
+[`core:fs`](./stdlib-core-fs.md) and
+[WEP: core:fs](./wep-2026-09-12-core-fs.md).
+
+```wado
+use fs from "core:fs";
+
+let text = fs::read_to_string(&"docs/spec.md")?;   // Result<String, FsError>
+let bytes = fs::read(&"icon.png")?;                // Result<ByteList, FsError>
+fs::write(&"build/out.json", &text)?;              // any AsByteSlice; creates/truncates
+fs::create_dir_all(&"build/reports")?;               // mkdir -p
+fs::create_dir(&"build/reports/today")?;             // one level; parent must exist
+fs::remove_file(&"build/stale.txt")?;
+
+for let entry of fs::read_dir(&"src")? {           // DirEntry { name, type }
+    if entry.type matches { Directory } { continue; }
+}
+
+if let Err(e) = fs::read_to_string(&"missing.txt") {
+    eprintln(`error: ${e}`);            // "missing.txt: no such file or directory"
+}
+
+let dir = fs::root()?;          // the Descriptor, for anything wasi:filesystem does
+```
+
+Streaming a file (rather than holding it) stays on `wasi:filesystem`; see
+`example/cat.wado`.
+
 ### core:collections
 
 `TreeMap<K, V>` and `TreeSet<T>`, iterating in insertion order. See
