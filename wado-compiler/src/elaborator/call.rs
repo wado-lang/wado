@@ -1279,7 +1279,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                     ) {
                         return return_type;
                     }
@@ -1290,7 +1290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return TypeTable::ERROR;
                 } else {
                     if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span,
+                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                     ) {
                         return return_type;
                     }
@@ -1305,7 +1305,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
                 if let Some(return_type) = self.resolve_named_type_blanket_static(
-                    prefix, suffix, call.id, &args, &call.args, call.span,
+                    prefix, suffix, call.id, &args, &call.args, call.span, ctx,
                 ) {
                     return return_type;
                 }
@@ -1611,13 +1611,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return TypeTable::ERROR;
                     }
 
+                    let defaults_module =
+                        defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+                    let own_slots = method_ref
+                        .method_id
+                        .and_then(|def| self.tysys.signatures.method_sig(def))
+                        .map(MethodSig::own_type_param_ids)
+                        .unwrap_or_default();
+                    let type_bindings =
+                        slot_type_bindings(&self.tysys.type_table, &own_slots, &method_type_args);
+                    self.record_default_walk(
+                        call.id,
+                        &args,
+                        &checked,
+                        &param_defaults,
+                        Some(defaults_module.clone()),
+                        &type_bindings,
+                        ctx,
+                    );
+
                     let key = call.id;
                     self.sem.types.static_method_dispatch.insert(
                         key,
                         StaticMethodDispatch {
                             method_def: method_ref.method_id,
-                            defaults_module: defaults_module
-                                .unwrap_or_else(|| func_ref.module_source.clone()),
+                            defaults_module,
                             function_ref: func_ref,
                             param_is_mut,
                             type_args: vec![],
@@ -2159,6 +2177,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &[],
             Some(site),
             ctx,
+        );
+    }
+
+    /// Put the walk of the defaults `site` left out on record, for a route that
+    /// has already settled its arguments and wants nothing from the walk but
+    /// the facts it leaves.
+    ///
+    /// Every route that resolves a call has to reach this or
+    /// [`Self::apply_param_defaults`]. Reify pads each site from the overlay
+    /// one of them leaves; a route reaching neither leaves reify replaying the
+    /// *declaration's* walk, where the callee's type parameters are still
+    /// abstract and the call's type arguments were never applied.
+    /// `reify_apply_param_defaults` asserts that no site arrives without one.
+    pub(super) fn record_default_walk(
+        &mut self,
+        site: AstId,
+        args: &[TypeId],
+        param_types: &[TypeId],
+        defaults: &[(String, Option<Expr>)],
+        defaults_module: Option<ModuleSource>,
+        type_bindings: &[DefaultTypeBinding],
+        ctx: &mut FunctionContext,
+    ) {
+        if args.len() >= param_types.len()
+            || !defaults.iter().any(|(_, d)| d.is_some())
+            || self.sem.types.body.default_overlays.contains_key(&site)
+        {
+            return;
+        }
+        let mut padded = args.to_vec();
+        self.fill_trailing_defaults(
+            &mut padded,
+            param_types,
+            defaults,
+            defaults_module,
+            type_bindings,
+            Some(site),
+            ctx,
+            |_, _, _, _| {},
         );
     }
 
@@ -3301,6 +3358,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         raw_args: &[Expr],
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         // `type_name` is the receiver spelling after `Self::` / `T::`
         // rewriting, which no source segment names.
@@ -3344,6 +3402,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             args,
             &arg_spans,
             span,
+            ctx,
         )
     }
 }
@@ -3458,7 +3517,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_param_type_id: TypeId,
         args: &[TypeId],
         call: &ast::CallExpr,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TypeId {
         let bounds = self
             .annotate_ctx
@@ -3550,6 +3609,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             let mangled_name = method_info.to_mangled_name();
+            let method_type_args_for_defaults = method_type_args.clone();
 
             // Build monomorph_info for method-level type args so the
             // monomorphizer can substitute TypeParam type args and
@@ -3587,12 +3647,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .cloned()
                 .zip(method_info_result.param_defaults.iter().cloned())
                 .collect();
+            let defaults_module = trait_module.unwrap_or_else(|| func_ref.module_source.clone());
+            // The method's own slots, as the turbofish spelled them or the
+            // solve above settled them. The receiver is the bound's own
+            // parameter, which the monomorphizer binds.
+            let type_bindings = slot_type_bindings(
+                &self.tysys.type_table,
+                &method_info_result.method_type_param_ids,
+                &method_type_args_for_defaults,
+            );
+            self.record_default_walk(
+                call.id,
+                args,
+                &method_info_result.param_types,
+                &param_defaults,
+                Some(defaults_module.clone()),
+                &type_bindings,
+                ctx,
+            );
             let key = call.id;
             self.sem.types.static_method_dispatch.insert(
                 key,
                 StaticMethodDispatch {
                     method_def: method_info_result.method_def,
-                    defaults_module: trait_module.unwrap_or_else(|| func_ref.module_source.clone()),
+                    defaults_module,
                     function_ref: func_ref,
                     param_is_mut: vec![false; args.len()],
                     type_args: vec![],

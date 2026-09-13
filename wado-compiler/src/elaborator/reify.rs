@@ -7839,6 +7839,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // facts — behind. Pushed so `ann` answers with this call's type
         // arguments rather than another call site's.
         let overlay = self.ann_ref(|facts| &facts.default_overlays, site);
+        assert!(
+            overlay.is_some(),
+            "every call site reify pads has a walk annotate left for it: \
+             a site reaching here without one replays the declaration's walk, \
+             where the callee's type parameters are still abstract. \
+             The route that resolved this call reached neither \
+             `apply_param_defaults` nor `record_default_walk`. \
+             Site {site:?} in {callee_module:?} at {call_span:?}"
+        );
         if let Some(overlay) = overlay {
             self.tuple_overlay_stack.push(overlay);
         }

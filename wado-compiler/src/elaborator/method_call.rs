@@ -73,6 +73,12 @@ pub(super) struct MethodCallInput<'a> {
     pub method_name: &'a str,
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
+    /// The node reify will pad this call's omitted arguments under, where that
+    /// is not `call_id`. A qualified `Trait::m(&x)` files its decision as a
+    /// static dispatch under the `CallExpr`, so the walk of its defaults has to
+    /// be keyed there too or reify finds none — see
+    /// [`Elaborator::record_default_walk`].
+    pub defaults_site: Option<AstId>,
     pub type_args: Vec<TypeId>,
     /// Per-position `_` mask for `type_args` (see `call::turbofish_holes`).
     /// Empty when the caller supplied no `_` placeholders (synthetic callers
@@ -191,6 +197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name: &method_call.method,
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
+                defaults_site: None,
                 type_args,
                 type_arg_holes,
                 args: &method_call.args,
@@ -232,6 +239,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_name,
             method_id,
             call_id,
+            defaults_site,
             type_args,
             type_arg_holes,
             args: args_ast,
@@ -734,7 +742,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &defaults,
             Some(callee_module.clone()),
             &default_type_bindings,
-            call_id,
+            defaults_site.or(call_id),
             ctx,
             |_, _, _, _| {},
         );
@@ -1297,6 +1305,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 method_id,
                 call_id: None,
+                // Reify pads this call under the `CallExpr`, where the static
+                // dispatch below is filed, so the walk is keyed there.
+                defaults_site: Some(call_id),
                 type_args: type_args.clone(),
                 type_arg_holes: vec![],
                 args: rest,
@@ -2355,6 +2366,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &args,
                 &arg_spans,
                 static_call.span,
+                ctx,
             )
         {
             return resolved;
@@ -2455,6 +2467,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Result::<…>::Ok`), yielding an empty struct name. Keyed on the
         // `StaticMethodCallExpr`'s own `AstId`; variant-ctor turbofish
         // shapes are handled by reify before this fact is consulted.
+        //
+        // Every path out of this function reaches the walk, not only the one
+        // that filled the arguments above: reify pads from what it leaves.
+        let defaults_module =
+            static_method_module.unwrap_or_else(|| func_ref.module_source.clone());
+        self.record_default_walk(
+            static_call.id,
+            &args,
+            &param_types,
+            &static_method_defaults,
+            Some(defaults_module.clone()),
+            &static_type_bindings,
+            ctx,
+        );
         let key = static_call.id;
         self.sem.types.static_method_dispatch.insert(
             key,
@@ -2462,8 +2488,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_def: selected.as_ref().and_then(|r| r.method_id),
                 // The scope annotate resolved these defaults in, so reify
                 // resolves them in the same one.
-                defaults_module: static_method_module
-                    .unwrap_or_else(|| func_ref.module_source.clone()),
+                defaults_module,
                 function_ref: func_ref,
                 param_is_mut,
                 type_args: method_type_args,
@@ -2491,6 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[TypeId],
         arg_spans: &[Span],
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> Option<TypeId> {
         let BlanketStatic {
             trait_name,
@@ -2578,12 +2604,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }),
             method_info: Some(method_info),
         };
+        // The template is written against the blanket parameter, which the
+        // monomorphizer binds to the receiver; nothing here names one of the
+        // method's own slots, so the walk carries no binding.
+        let defaults_module =
+            template_defaults_module.unwrap_or_else(|| func_ref.module_source.clone());
+        self.record_default_walk(
+            call_id,
+            args,
+            &param_types,
+            &static_method_defaults,
+            Some(defaults_module.clone()),
+            &[],
+            ctx,
+        );
         self.sem.types.static_method_dispatch.insert(
             call_id,
             StaticMethodDispatch {
                 method_def,
-                defaults_module: template_defaults_module
-                    .unwrap_or_else(|| func_ref.module_source.clone()),
+                defaults_module,
                 function_ref: func_ref,
                 param_is_mut: Vec::new(),
                 type_args: method_type_args.to_vec(),
@@ -3646,35 +3685,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // overlay; without one it replays the declaration's, where the
         // parameter is still abstract and the trait-bound check over WIR
         // rejects it.
-        if args.len() < callee_params.param_types.len()
-            && callee_params
-                .param_defaults
-                .iter()
-                .any(|(_, d)| d.is_some())
-            && let Some(sig) = &callee_sig
-        {
-            let own_ids = sig.own_type_param_ids();
-            let own_params = sig.own_params.clone();
-            let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
-            let type_bindings = self.value_default_slot_bindings(
-                &own_params,
-                &own_ids,
-                receiver,
-                method_type_args.to_vec(),
-                callee_params.defaults_module.clone(),
-            );
-            let mut padded = args.to_vec();
-            self.fill_trailing_defaults(
-                &mut padded,
-                &callee_params.param_types,
-                &callee_params.param_defaults,
-                callee_params.defaults_module.clone(),
-                &type_bindings,
-                Some(call_id),
-                ctx,
-                |_, _, _, _| {},
-            );
-        }
+        // A signature answers for the method's own slots; a spelling no index
+        // has one for — a trait's default body, reached on a type whose `impl`
+        // restates nothing — binds no name, and the walk still has to happen.
+        let type_bindings = match &callee_sig {
+            Some(sig) => {
+                let own_ids = sig.own_type_param_ids();
+                let own_params = sig.own_params.clone();
+                let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
+                self.value_default_slot_bindings(
+                    &own_params,
+                    &own_ids,
+                    receiver,
+                    method_type_args.to_vec(),
+                    callee_params.defaults_module.clone(),
+                )
+            }
+            None => Vec::new(),
+        };
+        self.record_default_walk(
+            call_id,
+            args,
+            &callee_params.param_types,
+            &callee_params.param_defaults,
+            callee_params.defaults_module.clone(),
+            &type_bindings,
+            ctx,
+        );
 
         let StaticMethodRef {
             module: struct_module,
