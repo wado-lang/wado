@@ -36,6 +36,7 @@
 //! are pure markers or unmodified passthrough data; duplicating them
 //! would invite drift without semantic benefit.
 
+use { Level } from "core:log";
 use { Visibility, OptionValue, GrammarOption, NamedAction, LexerRule, RepeatKind, ActionSource } from "./ir.wado";
 use { LitToken } from "./lexer_gen.wado";
 
@@ -95,9 +96,9 @@ pub struct LoweredGrammar {
     /// overlapping alts resolved by a scan tournament) so a grammar
     /// author can question their own grammar before blaming Gale.
     /// Inlined under its owning rule by `gale dump`, which renders all of
-    /// them; `gale gen` and Kiln report the `build_diagnostics` subset on
-    /// stderr. In the order lowering raised them, deduped on
-    /// `(owner, message)`.
+    /// them; `gale gen` and Kiln report each at the level
+    /// `diagnostic_level` gives its kind. In the order lowering raised
+    /// them, deduped on `(owner, message)`.
     pub diagnostics: List<Diagnostic>,
 }
 
@@ -212,7 +213,13 @@ pub variant DiagnosticKind {
     FragmentEntry,
 }
 
-/// Whether a build reports `kind` on its warning stream.
+/// The level a build reports `kind` at, or `null` for one it does not report.
+///
+/// `UnsupportedAction`, `HighlightQuery` and `FragmentEntry` each name something
+/// skipped or not run as written, so the parser an author gets is not the one
+/// the grammar describes: those warn. `OverlapTournament` is sound and often
+/// intended, so it is advisory — and being advisory is what lets a default build
+/// stay quiet, since it fires on most real grammars.
 ///
 /// `OptionalScanGuardFallback` describes a shape, not a mistake: every `e?`
 /// whose body leads with a rule reference resolves that way, and most cannot
@@ -221,22 +228,12 @@ pub variant DiagnosticKind {
 /// grammar, which buries them — so it stays in `gale dump`'s prediction
 /// report, where "what is prediction doing here" is the question being asked,
 /// and off `gale gen` / Kiln's stderr.
-pub fn surfaces_on_build(kind: &DiagnosticKind) -> bool {
+pub fn diagnostic_level(kind: &DiagnosticKind) -> Option<Level> {
     return match *kind {
-        OptionalScanGuardFallback => false,
-        OverlapTournament | UnsupportedAction | HighlightQuery | FragmentEntry => true,
+        OptionalScanGuardFallback => null,
+        OverlapTournament => Option::Some(Level::Info),
+        UnsupportedAction | HighlightQuery | FragmentEntry => Option::Some(Level::Warn),
     };
-}
-
-/// The diagnostics a build reports, in the order lowering raised them.
-pub fn build_diagnostics(all: &List<Diagnostic>) -> List<Diagnostic> {
-    let mut out: List<Diagnostic> = [];
-    for let d of all {
-        if surfaces_on_build(&d.kind) {
-            out.push(*d);
-        }
-    }
-    return out;
 }
 
 // ==========================================================================

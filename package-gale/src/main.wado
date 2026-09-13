@@ -14,7 +14,8 @@ use {
 } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
-use { build_diagnostics } from "./gir.wado";
+use { diagnostic_level } from "./gir.wado";
+use { event } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 
@@ -121,11 +122,14 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
     // Generate once and surface the prediction-strategy diagnostics the
     // single lowering raised. `generate` runs `normalize_caches` and lowers
     // internally (matching `cmd_dump`), so there is no separate diagnostic
-    // pass to keep in sync. Warnings are advisory; generation still
-    // proceeds and must succeed.
+    // pass to keep in sync. Every kind is advisory; generation still
+    // proceeds and must succeed. The level decides what a default run shows —
+    // see `gir::diagnostic_level`.
     let generated = generate(&mut merged, &options);
-    for let d of &build_diagnostics(&generated.diagnostics) {
-        eprintln(`gale: warning: ${d.owner.label()}: ${d.message}`);
+    for let d of &generated.diagnostics {
+        if let Some(level) = diagnostic_level(&d.kind) {
+            event(level, d.message, { owner: d.owner.label() });
+        }
     }
 
     match *output {

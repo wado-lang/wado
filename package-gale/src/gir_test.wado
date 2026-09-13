@@ -22,8 +22,7 @@ use {
     TournamentDispatch,
     Diagnostic,
     DiagnosticKind,
-    build_diagnostics,
-    surfaces_on_build,
+    diagnostic_level,
     DiagnosticOwner,
     DiagnosticSite,
     AltBody,
@@ -507,27 +506,18 @@ test "rule_header reaches every Rule variant" {
     assert rule_header(&lr).name == "c";
 }
 
-test "build_diagnostics keeps what a grammar author can act on" {
+test "a diagnostic's level says what a default build shows" {
+    // Only a kind that changes the parser an author gets warns. The overlap
+    // tournament is sound and fires on most real grammars, so it is advisory:
+    // that is what keeps a default build quiet without hiding it.
+    assert diagnostic_level(&DiagnosticKind::UnsupportedAction) matches { Some(Warn) };
+    assert diagnostic_level(&DiagnosticKind::HighlightQuery) matches { Some(Warn) };
+    assert diagnostic_level(&DiagnosticKind::FragmentEntry) matches { Some(Warn) };
+    assert diagnostic_level(&DiagnosticKind::OverlapTournament) matches { Some(Info) };
+
     // The scan-guard fallback fires on any `e?` whose body leads with a rule
     // reference — five times as often as the kinds that name something to fix
     // on a real grammar, which is enough to bury them. It stays in the dump
-    // report and off a build's stderr.
-    let overlap = Diagnostic {
-        owner: DiagnosticOwner::rule_dispatch(&"r"),
-        kind: DiagnosticKind::OverlapTournament,
-        message: "alts 0, 1 share lookahead {TK_ID}",
-    };
-    let fallback = Diagnostic {
-        owner: DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") },
-        kind: DiagnosticKind::OptionalScanGuardFallback,
-        message: "no fixed-token lookahead decides this optional",
-    };
-    let built = build_diagnostics(&[fallback, overlap, fallback]);
-    assert built.len() == 1, `expected only the overlap warning, got ${built.len()}`;
-    assert built[0].kind matches { OverlapTournament };
-    // `gale dump` still sees every one of them.
-    assert !surfaces_on_build(&DiagnosticKind::OptionalScanGuardFallback);
-    assert surfaces_on_build(&DiagnosticKind::UnsupportedAction);
-    assert surfaces_on_build(&DiagnosticKind::HighlightQuery);
-    assert surfaces_on_build(&DiagnosticKind::FragmentEntry);
+    // report and off a build's stream entirely, at any level.
+    assert diagnostic_level(&DiagnosticKind::OptionalScanGuardFallback) matches { None };
 }
