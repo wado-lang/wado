@@ -148,6 +148,15 @@ pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]
     matches!(params.get(args_len), Some((_, Some(_))))
 }
 
+/// Where a declaration's pack sits in the dense space its type arguments are
+/// indexed by — an effect parameter holds no slot in one.
+fn real_type_param_pack_pos(declared: &[ast::GenericParam]) -> Option<usize> {
+    declared
+        .iter()
+        .filter(|p| !p.is_effect)
+        .position(|p| p.is_pack)
+}
+
 /// Pair each declared slot with the type argument filling it, under the name
 /// the slot's binder carries. A slot that is no binder — a concrete
 /// instantiation an `impl` target spelled — names nothing and binds nothing.
@@ -1823,6 +1832,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // order the method and static-method paths take, so one
             // enforcement answers for every call kind.
             self.infer_type_args_from_assoc_bounds(&callee, &mut type_args);
+        }
+
+        // After the projection above, which is what answers for a pack bound
+        // through another parameter's associated type.
+        let declared = self.lookup_function_type_params(&callee);
+        self.settle_empty_pack_of(&declared, &mut type_args);
+
+        if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
         }
 
@@ -3129,6 +3146,53 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
         let tuple = self.tysys.type_table.borrow_mut().make_tuple(pack_args);
         type_args.insert(pack_pos, tuple);
+    }
+
+    /// [`Self::settle_empty_pack_of`] for what a turbofish alone already says,
+    /// before inference runs. An empty list is no turbofish at all, which says
+    /// nothing about the pack.
+    pub(super) fn pad_turbofish_empty_pack(
+        &mut self,
+        declared: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
+        if type_args.is_empty() {
+            return;
+        }
+        self.settle_empty_pack_of(declared, type_args);
+    }
+
+    /// Settle a pack slot nothing else answered for to the empty pack. A pack
+    /// stands for the arguments left over, and a site leaving none over says
+    /// it is empty rather than leaving inference a parameter to report.
+    pub(super) fn settle_empty_pack_of(
+        &mut self,
+        declared: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+    ) {
+        let Some(pack_pos) = real_type_param_pack_pos(declared) else {
+            return;
+        };
+        let real = declared.iter().filter(|p| !p.is_effect).count();
+        if type_args.len() == pack_pos {
+            let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+            type_args.push(empty);
+            return;
+        }
+        if type_args.len() != real {
+            return;
+        }
+        let slot = type_args[pack_pos];
+        if !self.is_unbound_type_param(slot) && !self.type_contains_pack(slot) {
+            return;
+        }
+        // A pack the caller declares interns to the same id as the callee's,
+        // so a scope holding one is a forwarding this cannot tell apart.
+        let scope = self.scope_type_param_ids();
+        if scope.contains(&slot) || scope.iter().any(|&s| self.type_contains_pack(s)) {
+            return;
+        }
+        type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
     }
 
     /// Look up a generic function (current or imported) and produce a temporary
