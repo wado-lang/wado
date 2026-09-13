@@ -205,6 +205,11 @@ Result<T, E>            // result type
 
 Newtypes are distinct types that inherit methods/operators/traits from the base type, require explicit `as` cast, and have zero runtime cost.
 
+A newtype names a value, it does not guard one: `as` converts both ways for
+free, so it admits exactly what its base admits. An invariant the base lacks
+(UTF-8 bytes, non-empty, normalized) needs a `struct` with a private field and
+a checked constructor.
+
 See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ```wado

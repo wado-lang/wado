@@ -6,9 +6,9 @@
 
 use crate::hashmap::{IndexMap, IndexSet};
 
+use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::is_test_function;
-use crate::defs::DefId;
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 

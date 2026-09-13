@@ -2471,6 +2471,12 @@ let raw: f64 = m as f64;      // explicit cast required
 - Zero runtime cost (same Wasm representation)
 - Literal coercion to `T` when type context expects `T`
 
+A newtype names a value, it does not guard one: `as` converts in both
+directions at no cost, so `T` admits exactly what `U` admits. An invariant the
+base type does not enforce — UTF-8 in a byte view, non-empty, normalized —
+belongs in a `struct` with a private field and a checked constructor, the only
+shape where the check is the only way in.
+
 #### Method Signature Substitution
 
 When calling inherited methods on a newtype, parameters and return types are substituted:
