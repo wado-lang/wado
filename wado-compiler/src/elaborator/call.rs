@@ -1799,7 +1799,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             CalleeRef::rendered(self.current_module_source.clone(), display_name)
         };
 
-<<<<<<< HEAD
         // Every shape above narrows to this one callee, so asking here asks for
         // all of them: naming an `#[unavailable]` declaration is the whole
         // answer, and a shape that resolved one has nothing left to check.
@@ -1809,21 +1808,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-||||||| fc7efb905
-        // Resolve explicit type arguments (`_` resolves to UNKNOWN).
-        let mut type_args: Vec<TypeId> = call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
-=======
->>>>>>> origin/main
         // Fill inference slots from the argument / expected types. One path
         // serves three forms — a fully omitted turbofish, omitted trailing args
         // (`from_bytes::<Blob>(bytes)`), and explicit `_` (`pick::<_, bool>(..)`)

@@ -616,7 +616,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-<<<<<<< HEAD
         // An `#[unavailable]` reserves a name, not a signature, so checking the
         // arguments against its parameters would report on a shape that means
         // nothing.
@@ -625,13 +624,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
-||||||| fc7efb905
-=======
+
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
         self.group_variadic_type_args_of(&method_own_params, &mut type_args);
->>>>>>> origin/main
 
         self.check_inherent_member_visibility(
             inherent_visibility,
