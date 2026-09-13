@@ -130,6 +130,32 @@ pub(super) struct MethodSignatureFacts {
     pub defaults_module: Option<ModuleSource>,
 }
 
+impl MethodSignatureFacts {
+    /// What the qualified spelling files: this call's type arguments, and the
+    /// callee's parameters with the receiver leading every list — never
+    /// omitted, hence no default, and `mut` exactly when the method takes
+    /// `&mut self`. The counterpart of [`CalleeParams::of_signature`], which
+    /// the ordinary spelling reaches.
+    fn into_dispatch_parts(self, receiver_type: TypeId) -> (Vec<TypeId>, CalleeParams) {
+        let mut param_is_mut = vec![self.self_kind == ast::SelfKind::MutRef];
+        param_is_mut.extend(self.param_is_mut);
+        let mut param_defaults: Vec<(String, Option<ast::Expr>)> = vec![("self".to_string(), None)];
+        param_defaults.extend(self.param_names.into_iter().zip(self.param_defaults));
+        let mut param_types = vec![receiver_type];
+        param_types.extend(self.param_types);
+        (
+            self.type_args,
+            CalleeParams {
+                param_is_mut,
+                param_defaults,
+                param_types,
+                self_in_args: true,
+                defaults_module: self.defaults_module,
+            },
+        )
+    }
+}
+
 impl MethodCallOutcome {
     fn no_dispatch(type_id: TypeId) -> Self {
         Self {
@@ -1232,35 +1258,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
-            let function_ref = dispatched.func;
-            // The receiver occupies slot 0 of the static shape, so every
-            // per-parameter list gains a leading entry for it. It is spelled at
-            // the call site and never omitted, hence no default; it is `mut`
-            // exactly when the method takes `&mut self`.
-            let mut param_is_mut = vec![sig.self_kind == ast::SelfKind::MutRef];
-            param_is_mut.extend(sig.param_is_mut);
-            let mut param_defaults: Vec<(String, Option<ast::Expr>)> =
-                vec![("self".to_string(), None)];
-            param_defaults.extend(sig.param_names.into_iter().zip(sig.param_defaults));
-            let mut param_types = vec![receiver_type];
-            param_types.extend(sig.param_types);
+            let (type_args, params) = sig.into_dispatch_parts(receiver_type);
             // An unannotated closure argument infers its parameter types from
             // this.
-            self.record_call_param_types(call_id, param_types.clone());
+            self.record_call_param_types(call_id, params.param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
-                StaticMethodDispatch {
-                    method_def: dispatched.method_def,
-                    defaults_module: sig
-                        .defaults_module
-                        .unwrap_or_else(|| function_ref.module_source.clone()),
-                    function_ref,
-                    param_is_mut,
-                    type_args: sig.type_args,
-                    param_defaults,
-                    param_types,
-                    self_in_args: true,
-                },
+                StaticMethodDispatch::of_params(
+                    dispatched.method_def,
+                    dispatched.func,
+                    type_args,
+                    params,
+                ),
             );
         }
         outcome.type_id
