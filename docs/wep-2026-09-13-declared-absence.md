@@ -84,7 +84,8 @@ the same type, and only `self` tells them apart. A declaration reserving
 
 A call that reaches such a declaration stops there. Its arguments are never
 counted or typed, since the parameters they would be checked against are not
-a signature.
+a signature. Naming it without calling it gets the same answer: there is no
+value to take, only the reason.
 
 A declaration standing in for a removed method may keep the signature it had,
 as a record, under the same rule.
@@ -98,7 +99,10 @@ it never reaches codegen.
 
 ### Placement
 
-Module-level `fn`, `impl` method, and trait method.
+Module-level `fn`, `impl` method, and trait method. Written anywhere else — an
+`interface` operation, a `resource` method — it is an error rather than an
+attribute nobody reads. `export` is refused with it: the keyword lowers a
+function at the component boundary, and this declaration has none to lower.
 
 ### Not rendered by `wado doc`
 
@@ -126,7 +130,12 @@ Nothing is queued. The gaps below are unowned.
   A deprecated item still exists, which is why it is a separate attribute
   rather than a third `#[unavailable]` state, and why the reasoning above for
   leaving absences out does not carry to it.
-- Types, traits, and globals cannot carry the attribute. Extending to them
-  looks mechanical, and no use has asked for it.
+- Types, traits, and globals cannot carry the attribute, and neither can an
+  `interface` operation or a `resource` method. Extending to any of them looks
+  mechanical, and no use has asked for it.
+- A trait may declare a name `#[unavailable]` and an `impl` may still supply a
+  body for it, which the receiver's own type then dispatches to. Closing it
+  needs the rule that an `impl Trait for T` declares only members the trait
+  declares — which Wado does not have today, for any member.
 - Whether a declaration standing in for a removed method is ever pruned, and on
   what schedule, is undecided. Left alone, they accumulate.

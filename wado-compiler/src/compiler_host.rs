@@ -321,10 +321,17 @@ impl DiagnosticSpan {
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(span) = &self.span {
+            // A span whose file the reporter did not know still places the
+            // error in a source; naming no file beats a leading colon.
+            let file = if span.file.is_empty() {
+                String::new()
+            } else {
+                format!("{}:", span.file)
+            };
             write!(
                 f,
-                "{}:{}:{}: {}: {}",
-                span.file, span.line, span.column, self.severity, self.message
+                "{file}{}:{}: {}: {}",
+                span.line, span.column, self.severity, self.message
             )
         } else {
             write!(f, "{}: {}", self.severity, self.message)

@@ -462,6 +462,98 @@ pub fn type_head_name(ty: &Type) -> Option<&str> {
     }
 }
 
+/// Where a module declares a function. What a declaration there may leave out,
+/// and what qualifies its name, follow from this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FunctionSite<'a> {
+    /// A module-level `fn`.
+    Free,
+    /// An `impl` method, under its type head where the head has a name.
+    Impl(Option<&'a str>),
+    /// A trait method.
+    Trait(&'a str),
+    /// An `interface` operation.
+    Interface(&'a str),
+    /// A `resource` method.
+    Resource(&'a str),
+}
+
+impl<'a> FunctionSite<'a> {
+    /// The name qualifying a declaration written here.
+    #[must_use]
+    pub fn owner(self) -> Option<&'a str> {
+        match self {
+            FunctionSite::Free => None,
+            FunctionSite::Impl(owner) => owner,
+            FunctionSite::Trait(owner)
+            | FunctionSite::Interface(owner)
+            | FunctionSite::Resource(owner) => Some(owner),
+        }
+    }
+
+    /// Whether a declaration written here may carry `#[unavailable]`.
+    /// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
+    #[must_use]
+    pub fn allows_unavailable(self) -> bool {
+        matches!(
+            self,
+            FunctionSite::Free | FunctionSite::Impl(_) | FunctionSite::Trait(_)
+        )
+    }
+
+    /// Whether a declaration written here needs a body of its own. An
+    /// operation of a trait, interface, or resource is a signature.
+    #[must_use]
+    pub fn needs_body(self) -> bool {
+        matches!(self, FunctionSite::Free | FunctionSite::Impl(_))
+    }
+}
+
+/// Call `f` for every function `module` declares, with the site declaring it.
+pub fn for_each_function<'a>(
+    module: &'a Module,
+    mut f: impl FnMut(FunctionSite<'a>, &'a Function),
+) {
+    for item in &module.items {
+        match item {
+            Item::Function(func) => f(FunctionSite::Free, func),
+            Item::Impl(block) => {
+                let site = FunctionSite::Impl(type_head_name(&block.ty));
+                for method in &block.methods {
+                    f(site, method);
+                }
+            }
+            Item::Trait(decl) => {
+                for method in &decl.methods {
+                    f(FunctionSite::Trait(&decl.name), method);
+                }
+            }
+            Item::Interface(decl) => {
+                for method in &decl.methods {
+                    f(FunctionSite::Interface(&decl.name), method);
+                }
+            }
+            Item::Resource(decl) => {
+                for method in &decl.methods {
+                    f(FunctionSite::Resource(&decl.name), method);
+                }
+            }
+            Item::Use(_)
+            | Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => {}
+        }
+    }
+}
+
 pub fn walk_item<V: AstVisitor>(v: &mut V, item: &Item) {
     match item {
         Item::Use(u) => {

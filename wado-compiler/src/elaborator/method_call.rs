@@ -610,9 +610,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // report on a shape that means nothing. A synthetic call names no
         // method and so reaches no such declaration.
         if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def)
-            && self.is_unavailable(def)
+            && self.record_reference_to_decl(method_id, def, span)
         {
-            self.record_reference_to_decl(method_id, def, span);
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
 
@@ -2348,8 +2347,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
             self.qualified_method_decl_id(&receiver, &static_call.method)
                 .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
-        }) {
-            self.record_reference_to_decl(static_call.method_id, method_def, static_call.span);
+        }) && self.record_reference_to_decl(static_call.method_id, method_def, static_call.span)
+        {
+            return TypeTable::ERROR;
         }
 
         // A concrete block hosts its own function; a generic one's instance is

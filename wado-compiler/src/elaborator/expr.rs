@@ -1178,6 +1178,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         self.record_item_reference_by_name(ident.id, &ident.name);
 
+        // Naming the function without calling it resolves the same declaration
+        // a call does, so it gets the same answer: a reason instead of a value.
+        if let Some(def) = self.tysys.resolutions.declared_if_walked(ident.id)
+            && self.report_unavailable(def, ident.span)
+        {
+            return TypeTable::ERROR;
+        }
+
         let Some((sig, _def_module, _defining_name)) = self.lookup_func_sig_for_ref(ident) else {
             // Fallback: known function but its signature is unreachable
             // (shouldn't normally happen). Emit a stub FuncRef so downstream

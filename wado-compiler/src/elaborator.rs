@@ -47,9 +47,7 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{
-    self, AstId, Block, Expr, Function, IdentExpr, ImplBlock, Item, Module, Visibility,
-};
+use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
@@ -97,37 +95,23 @@ pub(crate) fn collect_unavailable(
     defs: &DefTable,
 ) -> IndexMap<DefId, String> {
     let mut out = IndexMap::default();
-    let mut record = |func: &Function, owner: Option<&str>| {
-        let Some(reason) = func.unavailable() else {
-            return;
-        };
-        let Some(def) = defs.of_ast_id(func.id) else {
-            return;
-        };
-        let name = match owner {
-            Some(owner) => format!("{owner}::{}", func.name),
-            None => func.name.clone(),
-        };
-        out.insert(def, format!("`{name}` is unavailable: {reason}"));
-    };
     for module in modules.values() {
-        for item in &module.items {
-            match item {
-                Item::Function(func) => record(func, None),
-                Item::Impl(block) => {
-                    let owner = ast::type_head_name(&block.ty);
-                    for method in &block.methods {
-                        record(method, owner);
-                    }
-                }
-                Item::Trait(decl) => {
-                    for method in &decl.methods {
-                        record(method, Some(&decl.name));
-                    }
-                }
-                _ => {}
+        ast::for_each_function(module, |site, func| {
+            if !site.allows_unavailable() {
+                return;
             }
-        }
+            let Some(reason) = func.unavailable() else {
+                return;
+            };
+            let Some(def) = defs.of_ast_id(func.id) else {
+                return;
+            };
+            let name = match site.owner() {
+                Some(owner) => format!("{owner}::{}", func.name),
+                None => func.name.clone(),
+            };
+            out.insert(def, format!("`{name}` is unavailable: {reason}"));
+        });
     }
     out
 }
@@ -592,22 +576,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
     }
 
-    /// Record a use→def edge naming the declaration `def`, and report where
-    /// `def` is `#[unavailable]`: every call shape resolves through here, so
-    /// the reason reaches the site that wrote the name whichever shape it used.
-    /// The map is keyed by node on both sides, so the declaring node is read off
-    /// the identity here rather than carried beside it.
-    /// Whether `def` reports a reason in place of a body.
-    pub(super) fn is_unavailable(&self, def: DefId) -> bool {
-        self.tysys.unavailable.contains_key(&def)
+    /// Report where `def` is `#[unavailable]`. `true` says the site has its
+    /// whole answer: a reserved name carries no signature left to check.
+    pub(super) fn report_unavailable(&mut self, def: DefId, span: Span) -> bool {
+        let Some(message) = self.tysys.unavailable.get(&def).cloned() else {
+            return false;
+        };
+        let _ = self.emit(TypeError::Unavailable { message, span });
+        true
     }
 
-    pub(super) fn record_reference_to_decl(&mut self, use_id: AstId, def: DefId, span: Span) {
-        if let Some(message) = self.tysys.unavailable.get(&def).cloned() {
-            let _ = self.emit(TypeError::Unavailable { message, span });
-        }
+    /// Record a use→def edge naming `def`, reporting its unavailability.
+    /// Every call shape resolves through here, whichever shape it used.
+    pub(super) fn record_reference_to_decl(
+        &mut self,
+        use_id: AstId,
+        def: DefId,
+        span: Span,
+    ) -> bool {
+        let unavailable = self.report_unavailable(def, span);
         let node = self.tysys.resolutions.defs().ast_id(def);
         self.insert_reference(use_id, node);
+        unavailable
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from

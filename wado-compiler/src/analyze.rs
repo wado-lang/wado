@@ -5,7 +5,10 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{AstId, Function, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
+use crate::ast::{
+    AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
+    for_each_function,
+};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -71,6 +74,42 @@ fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
         | ModuleSource::EntryPoint { .. }
         | ModuleSource::Redirected { .. } => false,
     }
+}
+
+/// What is wrong with the function `site` declares, if anything.
+fn declaration_fault(
+    site: FunctionSite<'_>,
+    func: &Function,
+    module_source: &ModuleSource,
+) -> Option<AnalyzeError> {
+    if let Some(attr) = func.unavailable_attr() {
+        let fault = if !site.allows_unavailable() {
+            UnavailableFault::Placement
+        } else if func.body.is_some() {
+            UnavailableFault::HasBody
+        } else if func.is_export {
+            UnavailableFault::Exported
+        } else if attr.unavailable_reason().is_none_or(str::is_empty) {
+            UnavailableFault::NoReason
+        } else {
+            return None;
+        };
+        return Some(AnalyzeError::MalformedUnavailable {
+            fault,
+            span: func.name_span,
+        });
+    }
+    if !site.needs_body()
+        || func.body.is_some()
+        || func.is_cm_import()
+        || allows_bodyless_functions(module_source)
+    {
+        return None;
+    }
+    Some(AnalyzeError::MissingFunctionBody {
+        name: func.name.clone(),
+        span: func.name_span,
+    })
 }
 
 /// Error that can occur during analysis
@@ -147,6 +186,10 @@ pub enum UnavailableFault {
     HasBody,
     /// No reason, or an empty one.
     NoReason,
+    /// Written where the attribute is not placed.
+    Placement,
+    /// Written on an `export fn`, which promises the boundary a function.
+    Exported,
 }
 
 impl UnavailableFault {
@@ -157,6 +200,12 @@ impl UnavailableFault {
             }
             Self::NoReason => {
                 "`#[unavailable]` needs a reason, as `#[unavailable(\"write `x` instead\")]`"
+            }
+            Self::Placement => {
+                "`#[unavailable]` belongs on a module function, an `impl` method, or a trait method"
+            }
+            Self::Exported => {
+                "`export` lowers a function at the component boundary; an `#[unavailable]` one has none to lower"
             }
         }
     }
@@ -805,62 +854,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// supplies one (issue #2035), and that an `#[unavailable]` it carries is
     /// well formed.
     fn check_function_bodies(&mut self, module: &Module, module_source: &ModuleSource) {
-        for item in &module.items {
-            if let Item::Function(func) = item {
-                self.check_function_decl(func, module_source);
-            }
-            if let Item::Impl(impl_block) = item {
-                for method in &impl_block.methods {
-                    self.check_function_decl(method, module_source);
-                }
-            }
-            if let Item::Trait(trait_decl) = item {
-                for method in &trait_decl.methods {
-                    self.check_unavailable(method, module_source);
-                }
-            }
+        let mut errors = Vec::new();
+        for_each_function(module, |site, func| {
+            errors.extend(declaration_fault(site, func, module_source));
+        });
+        for error in errors {
+            let _ = self.logger.error_in(module_source, error);
         }
-    }
-
-    fn check_function_decl(&mut self, func: &Function, module_source: &ModuleSource) {
-        self.check_unavailable(func, module_source);
-        if func.body.is_some()
-            || func.is_cm_import()
-            || func.unavailable_attr().is_some()
-            || allows_bodyless_functions(module_source)
-        {
-            return;
-        }
-        let _ = self.logger.error_in(
-            module_source,
-            AnalyzeError::MissingFunctionBody {
-                name: func.name.clone(),
-                span: func.name_span,
-            },
-        );
-    }
-
-    /// An `#[unavailable]` stands in for a body and must say why, so a
-    /// declaration that keeps its body or omits the reason is rejected where it
-    /// is written.
-    fn check_unavailable(&mut self, func: &Function, module_source: &ModuleSource) {
-        let Some(attr) = func.unavailable_attr() else {
-            return;
-        };
-        let fault = if func.body.is_some() {
-            UnavailableFault::HasBody
-        } else if attr.unavailable_reason().is_none_or(str::is_empty) {
-            UnavailableFault::NoReason
-        } else {
-            return;
-        };
-        let _ = self.logger.error_in(
-            module_source,
-            AnalyzeError::MalformedUnavailable {
-                fault,
-                span: func.name_span,
-            },
-        );
     }
 
     fn validate_all_imports(

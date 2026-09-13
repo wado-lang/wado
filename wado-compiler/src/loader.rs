@@ -198,7 +198,13 @@ impl LoadError {
         match self {
             LoadError::BindError { .. } => Code::DuplicateDefinition,
             LoadError::WasmImport { .. } => Code::InvalidSyntax,
-            _ => Code::ModuleNotFound,
+            LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
+            LoadError::ModuleNotFound { .. }
+            | LoadError::IoError { .. }
+            | LoadError::UnknownNamespace { .. }
+            | LoadError::InvalidModulePath { .. }
+            | LoadError::DependencyUnresolved { .. }
+            | LoadError::StdlibIdentity { .. } => Code::ModuleNotFound,
         }
     }
 }
