@@ -287,3 +287,39 @@ test "a match binding does not alias the payload of a &mut local" {
         V::B => {}
     }
 }
+
+// Or-pattern alternatives bind one name between them but project different
+// cases, so the binding names only the value the whole pattern matched. Reading
+// it as one alternative's payload lets a write to the other's be called
+// disjoint, and the binding then aliases what the write repointed.
+
+variant W {
+    P(List<i32>),
+    Q(List<i32>),
+}
+
+fn or_arm_len(slot: &mut W) -> i32 {
+    match *slot {
+        W::P(xs) | W::Q(xs) => {
+            *slot = W::P([9, 9, 9]);
+            return xs.len();
+        }
+    }
+}
+
+test "an or-pattern binding does not alias the payload of a &mut parameter" {
+    let mut p = W::P([1]);
+    assert or_arm_len(&mut p) == 1;
+    let mut q = W::Q([1, 2]);
+    assert or_arm_len(&mut q) == 2;
+}
+
+test "an or-pattern binding does not alias a mut local" {
+    let mut w = W::Q([1]);
+    match w {
+        W::P(xs) | W::Q(xs) => {
+            w = W::P([9, 9]);
+            assert xs.len() == 1;
+        }
+    }
+}

@@ -5229,6 +5229,9 @@ pub enum TirPattern {
     Variant {
         enum_type: TypeId,
         variant_name: String,
+        /// Which case of `enum_type` this matches. Resolved where the pattern is
+        /// elaborated, so no consumer re-derives it from `variant_name`.
+        case_index: u32,
         bindings: Vec<TirPattern>,
         /// Payload type for the matched variant case (unit for no-payload cases)
         payload_type: TypeId,

@@ -267,14 +267,16 @@ fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
         return true;
     }
     if m.rebinds_place {
-        return !writes_inside(&m.path, read);
+        return !write_may_reach_inside(&m.path, read);
     }
     disjoint(&m.path, read)
 }
 
-/// Whether `write` names a place strictly inside the value `read` names: every
-/// selector `read` has, `write` may agree on, and `write` goes deeper.
-fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
+/// Whether `write` may name a place strictly inside the value `read` names:
+/// every selector `read` has, `write` may agree on, and `write` goes deeper. Two
+/// `Index` selectors carry no subscript, so this answers "may" and not "does" —
+/// it refuses a share, and nothing may grant one from it.
+fn write_may_reach_inside(write: &AccessPath, read: &AccessPath) -> bool {
     if write.selectors.len() <= read.selectors.len() {
         return false;
     }

@@ -414,6 +414,10 @@ impl<'a> Resolver<'a> {
                     self.bind_pattern(&field.pattern, &nested);
                 }
             }
+            // A variant, tuple or or-pattern binding names the value the pattern
+            // tested rather than a projection of it. Deepening the path by the
+            // payload's own selector is sound and measures worse — see the
+            // value-copy roadmap in WEP 2026-05-21.
             TirPattern::Tuple(sub, _)
             | TirPattern::Variant { bindings: sub, .. }
             | TirPattern::Or(sub) => {

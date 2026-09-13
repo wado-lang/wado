@@ -655,29 +655,41 @@ Verified against the tree.
       putting the copy on it makes which syntactic position a `match` sits in
       part of whether the binding is defended.
 
+      Two ways of giving the binding its own answer were written and measured
+      over the golden corpus. Both cost copies and neither saved any, so neither
+      is in the tree.
+
       Rewriting each binding into a `Let` over a projection of the scrutinee —
-      the form `let`-destructure already takes — is not the way. Measured over
-      the golden corpus it costs 5 copies and saves none, because it adds a wrap
+      the form `let`-destructure already takes — costs 5, because it adds a wrap
       site where the arm had none. `match self.p { P::A(xs) => { let ys = xs; …`
-      pays one copy today: the temp shares `self.p`, the binding names the
-      temp's payload, and `ys` takes the copy. Given its own `Let`, `xs` is
-      refused a share — `let ys = xs` consumes it, and a binding the fold moves
-      out of cannot share — so `xs` copies, and `ys` copies again because
-      nothing tells the second decision that the first made `xs` private.
+      pays one copy today: the temp shares `self.p`, the binding names the temp's
+      payload, and `ys` takes the copy. Given its own `Let`, `xs` is refused a
+      share — `let ys = xs` consumes it, and a binding the fold moves out of
+      cannot share — so `xs` copies, and `ys` copies again because nothing tells
+      the second decision that the first made `xs` private.
 
-      Finishing it means deepening the path the binding already has rather than
-      giving it a name. `place::bind_pattern` runs over a match arm as it does
-      over a `let` destructure, but its variant, tuple and or arms pass the base
-      through unchanged, so today an arm binding's path _is_ the scrutinee's. The
-      selector each of those arms drops is what the fold needs to answer move,
-      share and release for the binding itself, with the binding left in the
-      pattern and the temp no longer standing in for it.
+      Deepening the path instead of giving it a name adds no wrap site, and costs
+      9. `place::bind_pattern`'s variant arm pushes `Selector::Variant`, so the
+      binding names the payload inside the value the pattern tested, as a
+      `VariantPayload` read of it does; the release deepens with it, granting
+      itself to every read at or inside the rebound place rather than to the
+      rebound path alone. Correct — the e2e suite is green on it — and it
+      improves nothing: every change is a loss, all of it in the `&mut`-variant
+      shapes (`mut_ref_variant_element`, `ref_field_ref_variant`), where a
+      scrutinee temp that shared its list element stops sharing once its arm
+      binding reads one selector deeper. Which rule turns the depth into a
+      refused share was not established.
 
-      The release must deepen with it, and this is why that pairing is not
-      optional: it tests the rebound path for equality, and the equality holds
-      today only because the binding's path stops short. Deepen the path and
-      `self.f = null` stops releasing a binding read out of `self.f`'s payload
-      unless the release covers every read at or inside the rebound place.
+      Both attempts moved where the decision is made without adding anything the
+      fold knows when it decides, and on every program the corpus has, the
+      answer it gives for the temp is the better one. Whatever finishes this has
+      to supply a fact, not a new place to decide.
+
+      An or-pattern is a trap for either attempt: its alternatives bind one local
+      between them but project different cases, so the local names only what they
+      agree on — the value the whole pattern matched. A path reading it as one
+      alternative's payload lets a write to another's be called disjoint.
+      `pattern_temp_no_alias` pins it.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the

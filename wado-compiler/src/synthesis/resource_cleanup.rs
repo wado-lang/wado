@@ -475,7 +475,10 @@ fn result_drop_arm(
     cx: &mut Cx,
 ) -> TirMatchArm {
     let span = synth_span();
-    let case_name = cx.tt.compiler_variant_case(case).2.to_string();
+    let (case_name, case_index) = {
+        let (_, _, name, index) = cx.tt.compiler_variant_case(case);
+        (name.to_string(), index)
+    };
     let (payload_local, payload_name) = cx.alloc_local(payload_ty, "drop_v");
     let body_stmts = if drop_payload {
         drop_value(
@@ -490,6 +493,7 @@ fn result_drop_arm(
         pattern: TirPattern::Variant {
             enum_type: result_ty,
             variant_name: case_name,
+            case_index,
             bindings: vec![TirPattern::Binding {
                 name: payload_name,
                 local_index: payload_local,

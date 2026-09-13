@@ -2139,6 +2139,7 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Variant {
                 enum_type,
                 variant_name,
+                case_index: _,
                 bindings,
                 payload_type,
             } => PatKind::Variant {

@@ -1872,6 +1872,7 @@ fn push_result_task_return_epilogue(
 
     let span = synth_span();
     let arm = |case_name: &str,
+               case_index: u32,
                payload_name: String,
                payload_local: u32,
                payload_type: TypeId,
@@ -1879,6 +1880,7 @@ fn push_result_task_return_epilogue(
         pattern: TirPattern::Variant {
             enum_type: user_return_type,
             variant_name: case_name.to_string(),
+            case_index,
             bindings: vec![TirPattern::Binding {
                 name: payload_name,
                 local_index: payload_local,
@@ -1900,6 +1902,7 @@ fn push_result_task_return_epilogue(
             arms: vec![
                 arm(
                     &names.ok_name,
+                    names.ok_index,
                     ok_payload_name,
                     ok_payload_local,
                     ok_type_id,
@@ -1907,6 +1910,7 @@ fn push_result_task_return_epilogue(
                 ),
                 arm(
                     &names.err_name,
+                    names.err_index,
                     err_payload_name,
                     err_payload_local,
                     err_type_id,
@@ -2096,6 +2100,7 @@ pub(super) fn synthesize_variant_lower_to_flat(
             pattern: TirPattern::Variant {
                 enum_type: value_type_id,
                 variant_name: case.name.clone(),
+                case_index: case.index,
                 bindings,
                 payload_type: case.payload,
             },

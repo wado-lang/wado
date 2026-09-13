@@ -1,5 +1,4 @@
 use crate::compiler_item::CompilerItem;
-use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy;
@@ -127,9 +126,6 @@ fn peel_refs_and_box(
 /// chains and expands or-patterns. It runs after all of `lower::plan`, so
 /// scrutinees and synthesised references alike arrive box-shaped.
 pub struct Lowering {
-    /// Map from the `variant` declaration to its (`case_name`, `case_index`)
-    /// pairs.
-    variant_case_map: IndexMap<DefId, Vec<(String, u32)>>,
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Canonical stdlib name of the `Eq` trait.
@@ -150,16 +146,6 @@ impl Lowering {
     /// Gather the package-level maps once, before the translator's
     /// per-function walk begins.
     pub fn new(flat: &FlatPackage, returns_receiver_alias: &FuncKeySet) -> Self {
-        let mut variant_case_map: IndexMap<DefId, Vec<(String, u32)>> = IndexMap::default();
-        for variant in &flat.variants {
-            let cases: Vec<(String, u32)> = variant
-                .cases
-                .iter()
-                .map(|c| (c.name.clone(), c.index))
-                .collect();
-            variant_case_map.insert(variant.def, cases);
-        }
-
         let mut struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>> =
             IndexMap::default();
         for s in &flat.structs {
@@ -195,7 +181,6 @@ impl Lowering {
         });
         let string_ref_type = type_table.make_ref(string_type);
         Self {
-            variant_case_map,
             struct_fields_map,
             eq_trait_name,
             string_struct_name,
@@ -220,7 +205,6 @@ impl Lowering {
             self.eq_trait_name.clone(),
             self.string_struct_name.clone(),
             self.string_ref_type,
-            &self.variant_case_map,
             &self.struct_fields_map,
             &self.const_int_globals,
             &self.returns_receiver_alias,
@@ -250,9 +234,6 @@ struct PatternLowerer<'a> {
     string_struct_name: FqTypeName,
     /// `&String`; see `Lowering::string_ref_type`.
     string_ref_type: TypeId,
-    /// Map from the `variant` declaration to a list of (`case_name`,
-    /// `case_index`) pairs; the scrutinee's type names the declaration.
-    variant_case_map: &'a IndexMap<DefId, Vec<(String, u32)>>,
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
@@ -302,7 +283,6 @@ impl<'a> PatternLowerer<'a> {
         eq_trait_name: FqTraitName,
         string_struct_name: FqTypeName,
         string_ref_type: TypeId,
-        variant_case_map: &'a IndexMap<DefId, Vec<(String, u32)>>,
         struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
         returns_receiver_alias: &'a FuncKeySet,
@@ -314,20 +294,11 @@ impl<'a> PatternLowerer<'a> {
             eq_trait_name,
             string_struct_name,
             string_ref_type,
-            variant_case_map,
             struct_fields_map,
             const_int_globals,
             returns_receiver_alias,
             owned_temps: IndexSet::default(),
         }
-    }
-
-    /// Look up the case index for a case of `def`.
-    fn get_case_index(&self, def: DefId, case_name: &str) -> Option<u32> {
-        self.variant_case_map
-            .get(&def)
-            .and_then(|cases| cases.iter().find(|(name, _)| name == case_name))
-            .map(|(_, index)| *index)
     }
 
     /// Look up struct field definitions by `type_id`
@@ -635,11 +606,13 @@ impl<'a> PatternLowerer<'a> {
                 };
             }
             TirPattern::Variant {
-                enum_type,
                 variant_name,
+                case_index,
                 bindings,
                 payload_type,
+                ..
             } => {
+                let case_index = *case_index;
                 let temp_index = self.alloc_local(elem_type);
                 let temp_name = format!("$variant_{temp_index}");
 
@@ -656,71 +629,59 @@ impl<'a> PatternLowerer<'a> {
                     peel_refs_and_box(local, elem_type, type_table, span).0
                 };
 
-                // Generate VariantTest condition
-                let variant_def = match type_table.get(*enum_type) {
-                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                        type_table.nominal_def(*enum_type)
-                    }
-                    _ => None,
-                };
+                let cond = TirExpr::new(
+                    TirExprKind::VariantTest {
+                        expr: Box::new(variant_expr.clone()),
+                        case_index,
+                        case_name: variant_name.clone(),
+                    },
+                    TypeTable::BOOL,
+                    span,
+                );
+                conditions.push(cond);
 
-                if let Some(def) = variant_def
-                    && let Some(case_index) = self.get_case_index(def, variant_name)
-                {
-                    let cond = TirExpr::new(
-                        TirExprKind::VariantTest {
-                            expr: Box::new(variant_expr.clone()),
+                // Generate payload extraction for the arm body
+                if let Some(binding) = bindings.first() {
+                    let payload_expr = TirExpr::new(
+                        TirExprKind::VariantPayload {
+                            expr: Box::new(variant_expr),
                             case_index,
-                            case_name: variant_name.clone(),
+                            payload_type: *payload_type,
                         },
-                        TypeTable::BOOL,
+                        *payload_type,
                         span,
                     );
-                    conditions.push(cond);
 
-                    // Generate payload extraction for the arm body
-                    if let Some(binding) = bindings.first() {
-                        let payload_expr = TirExpr::new(
-                            TirExprKind::VariantPayload {
-                                expr: Box::new(variant_expr),
-                                case_index,
-                                payload_type: *payload_type,
-                            },
-                            *payload_type,
-                            span,
-                        );
-
-                        match binding {
-                            TirPattern::Binding {
-                                name,
-                                local_index,
-                                type_id,
-                            } => {
-                                body_prefix_stmts.push(TirStmt::new(
-                                    TirStmtKind::Let {
-                                        name: name.clone(),
-                                        local_index: *local_index,
-                                        is_mut: false,
-                                        is_reactive: false,
-                                        type_id: *type_id,
-                                        value: payload_expr,
-                                        skip_value_copy: false,
-                                    },
-                                    span,
-                                ));
-                            }
-                            _ => {
-                                // For more complex payload patterns (e.g. tuple),
-                                // use lower_pattern_to_lets
-                                self.lower_pattern_to_lets(
-                                    binding,
-                                    false,
-                                    payload_expr,
-                                    span,
-                                    body_prefix_stmts,
-                                    type_table,
-                                );
-                            }
+                    match binding {
+                        TirPattern::Binding {
+                            name,
+                            local_index,
+                            type_id,
+                        } => {
+                            body_prefix_stmts.push(TirStmt::new(
+                                TirStmtKind::Let {
+                                    name: name.clone(),
+                                    local_index: *local_index,
+                                    is_mut: false,
+                                    is_reactive: false,
+                                    type_id: *type_id,
+                                    value: payload_expr,
+                                    skip_value_copy: false,
+                                },
+                                span,
+                            ));
+                        }
+                        _ => {
+                            // For more complex payload patterns (e.g. tuple),
+                            // use lower_pattern_to_lets
+                            self.lower_pattern_to_lets(
+                                binding,
+                                false,
+                                payload_expr,
+                                span,
+                                body_prefix_stmts,
+                                type_table,
+                            );
                         }
                     }
                 }
@@ -1027,11 +988,13 @@ impl<'a> PatternLowerer<'a> {
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Variant {
-                enum_type,
                 variant_name,
+                case_index,
                 bindings,
                 payload_type,
+                ..
             } => {
+                let case_index = *case_index;
                 let temp_index = self.alloc_local(pattern_type);
                 let temp_name = format!("$variant_{temp_index}");
                 let let_stmt = TirStmt::new(
@@ -1056,23 +1019,6 @@ impl<'a> PatternLowerer<'a> {
                 );
                 let (variant_expr, _) =
                     peel_refs_and_box(variant_local, pattern_type, type_table, span);
-
-                let variant_def = match type_table.get(*enum_type) {
-                    ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
-                        type_table.nominal_def(*enum_type)
-                    }
-                    _ => None,
-                };
-                let case_index_opt =
-                    variant_def.and_then(|def| self.get_case_index(def, variant_name));
-
-                let Some(case_index) = case_index_opt else {
-                    // Variant info not found; fall back to letting value be bound and
-                    // continue with the continuation unconditionally.
-                    let cont_stmt = TirStmt::new(TirStmtKind::Expr(continuation), span);
-                    let block = TirBlock::new(vec![let_stmt, cont_stmt], span);
-                    return TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span);
-                };
 
                 let variant_test = TirExpr::new(
                     TirExprKind::VariantTest {
