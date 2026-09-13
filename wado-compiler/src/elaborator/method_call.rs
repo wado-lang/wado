@@ -27,7 +27,7 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
+use crate::elaborator::call::{turbofish_has_hole, turbofish_holes};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -74,8 +74,7 @@ pub(super) struct MethodCallInput<'a> {
     pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
     /// Per-position `_` mask for `type_args` (see `call::turbofish_holes`).
-    /// Empty when the caller supplied no `_` placeholders (synthetic callers
-    /// and fully-explicit turbofish), which leaves inference untriggered.
+    /// A synthetic caller, which writes no turbofish, passes it empty.
     pub type_arg_holes: Vec<bool>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
@@ -168,20 +167,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
-        // A `_` resolves to UNKNOWN here; its position is recorded in the hole
-        // mask below so the dispatch fills it from inference.
+        // A `_` resolves to UNKNOWN here; the mask records where, so the
+        // dispatch fills those positions from inference.
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        // Build the mask only for the `_` case; an empty vec (no allocation)
-        // marks "no holes" for the fully-explicit common path.
-        let type_arg_holes = if turbofish_has_hole(&method_call.type_args) {
-            turbofish_holes(&method_call.type_args)
-        } else {
-            Vec::new()
-        };
+        let type_arg_holes = turbofish_holes(&method_call.type_args);
 
         let outcome = self.resolve_method_call_with(
             MethodCallInput {
@@ -761,12 +754,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut subst_ctx = SubstitutionContext::new();
 
-        // Inference runs when the turbofish is omitted entirely or carries an
-        // explicit `_` placeholder; in the latter case the inferred holes are
-        // merged into the explicit args, which always win.
-        let has_hole = type_arg_holes.iter().any(|&h| h);
-        let method_type_args = if type_args.is_empty() || has_hole {
-            let inferred = self.infer_method_type_args(MethodInferenceInput {
+        let method_type_args = self.resolve_method_type_args(
+            type_args,
+            &type_arg_holes,
+            MethodInferenceInput {
                 receiver_type: receiver,
                 method_name,
                 slots: &method_type_param_ids,
@@ -779,17 +770,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: Some(callee_module.clone()),
                 span,
-            });
-            if type_args.is_empty() {
-                inferred
-            } else {
-                let mut merged = type_args;
-                merge_turbofish_type_args(&mut merged, &type_arg_holes, &inferred);
-                merged
-            }
-        } else {
-            type_args
-        };
+            },
+        );
 
         if !method_type_args.is_empty() {
             // The lookup already instantiated the declaring level, so only the

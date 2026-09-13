@@ -63,8 +63,7 @@ fn is_turbofish_hole(holes: &[bool], i: usize) -> bool {
     holes.get(i).copied().unwrap_or(true)
 }
 
-/// Whether a turbofish carries an explicit `_` placeholder. Non-allocating, so
-/// callers gate the (allocating) [`turbofish_holes`] mask on it.
+/// Whether a turbofish carries an explicit `_` placeholder.
 pub(super) fn turbofish_has_hole(ast_args: &[Type]) -> bool {
     ast_args.iter().any(|t| matches!(t, Type::Infer(_)))
 }
@@ -792,16 +791,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ResolvedType::Unit
                 );
                 if !payload_is_unit {
-                    let variant_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
                     let mut payload_type = case_data.payload;
-                    if !variant_type_args.is_empty() {
-                        payload_type = self
-                            .tysys
-                            .substitute_type_params(payload_type, &variant_type_args);
+                    if !type_args.is_empty() {
+                        payload_type = self.tysys.substitute_type_params(payload_type, &type_args);
                     } else if let Some(expected) = expected_type {
                         // Infer type args from expected type (e.g. Option::Some(null) expecting Option<Option<i32>>)
                         let expected_resolved =
@@ -846,10 +838,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // pinned post-inference below; this loop runs pre-inference, so it is
         // scoped to variant payloads to avoid touching them.
         if is_variant_payload {
-            for (i, arg) in args.iter_mut().enumerate() {
-                if let Some(&expected) = param_types.get(i) {
-                    self.pin_arg_hole_against(arg, expected);
-                }
+            for (arg, &expected) in args.iter_mut().zip(&param_types) {
+                self.pin_arg_hole_against(arg, expected);
             }
         }
 
@@ -913,19 +903,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
-                // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
-                let mut method_type_args: Vec<TypeId> = call
-                    .type_args
-                    .iter()
-                    .map(|ty| self.resolve_type(ty))
-                    .collect();
+                // The method-level type args (`i32::deserialize::<MockDeserializer>`);
+                // the call's were resolved once above, and inference below fills
+                // this copy without disturbing them.
+                let mut method_type_args = type_args.clone();
                 // Impl-level type args inferred from the LHS / receiver type.
                 // Only populated by `infer_static_method_type_args`; the
                 // explicit `call.type_args` only carries method-level args.
                 let mut impl_type_args_inferred: Vec<TypeId> = Vec::new();
-                // Omitted turbofish infers both levels; an explicit `_` fills
-                // only the hole slots (see `infer_static_call_type_args`).
-                if method_type_args.is_empty() {
+                // An omitted turbofish infers both levels; a partial one
+                // (`Type::m::<_, U>(..)`) keeps what it named and takes only
+                // its `_` slots from inference.
+                let method_holes = turbofish_holes(&call.type_args);
+                if method_type_args.is_empty() || method_holes.iter().any(|&hole| hole) {
                     let (impl_args, method_args) = self.infer_static_call_type_args(
                         prefix,
                         suffix,
@@ -936,24 +926,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         None,
                     );
                     impl_type_args_inferred = impl_args;
-                    method_type_args = method_args;
-                } else if turbofish_has_hole(&call.type_args) {
-                    // Partial method-level turbofish (`Type::m::<_, U>(..)`):
-                    // fill the `_` slots from inference, explicit args stay put.
-                    let (impl_args, method_args) = self.infer_static_call_type_args(
-                        prefix,
-                        suffix,
-                        &call.args,
-                        &args,
-                        expected_type,
-                        call.span,
-                        None,
-                    );
-                    if impl_type_args_inferred.is_empty() {
-                        impl_type_args_inferred = impl_args;
+                    if method_type_args.is_empty() {
+                        method_type_args = method_args;
+                    } else {
+                        merge_turbofish_type_args(
+                            &mut method_type_args,
+                            &method_holes,
+                            &method_args,
+                        );
                     }
-                    let holes = turbofish_holes(&call.type_args);
-                    merge_turbofish_type_args(&mut method_type_args, &holes, &method_args);
                 }
                 // The method's own parameters, in the dense space its type
                 // arguments are indexed by — an effect or `fn`-bound parameter
@@ -1423,11 +1404,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Static method call on a type from the namespace module.
-                    let mut method_type_args: Vec<TypeId> = call
-                        .type_args
-                        .iter()
-                        .map(|ty| self.resolve_type(ty))
-                        .collect();
+                    let mut method_type_args = type_args.clone();
 
                     // `ns::Type::method` never reaches the bare-spelling check,
                     // so the ladder is enforced here. The receiver is named at

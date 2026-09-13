@@ -17,7 +17,7 @@ use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTab
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{merge_turbofish_type_args, turbofish_has_hole, turbofish_holes};
+use super::call::{merge_turbofish_type_args, turbofish_holes};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -1283,6 +1283,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         filled
     }
 
+    /// A method call's type arguments: what its turbofish names, and inference
+    /// for every slot the turbofish wrote `_` at or stopped short of.
+    ///
+    /// `holes` is the `_` mask over `explicit` ([`turbofish_holes`]); empty
+    /// means no `_` was written. Every path that answers a method call combines
+    /// the two sources here, so none of them can drift into taking only one.
+    pub(super) fn resolve_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        holes: &[bool],
+        input: MethodInferenceInput<'_>,
+    ) -> Vec<TypeId> {
+        if !explicit.is_empty() && !holes.iter().any(|&hole| hole) {
+            return explicit;
+        }
+        let inferred = self.infer_method_type_args(input);
+        if explicit.is_empty() {
+            return inferred;
+        }
+        let mut merged = explicit;
+        merge_turbofish_type_args(&mut merged, holes, &inferred);
+        merged
+    }
+
     /// Infer an instance call's method-level type arguments from the method's
     /// already-resolved parameter and return types, which must come from a method
     /// lookup so their slots are the ones the caller binds. Deliberately does not
@@ -1358,15 +1382,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
-        // A slot answered with itself is not answered. The argument that
-        // supplied it is this call's own frame, reaching the solver through a
-        // variable the argument walk settled back onto the slot, and a rigid
-        // parameter carried past here dies in codegen as `unsubstituted
-        // TypeParam`. Putting the variable back lets the blame below report it
-        // at the call. A slot the enclosing scope declares is different: a
-        // caller is forwarding its own generics and monomorphization resolves
-        // it, so the same `scope_params` guard as
-        // `defer_or_report_uninferred_fn_type_args`.
+        // A slot answered with itself is not answered: the answer came back
+        // through this call's own variable, and a rigid parameter carried past
+        // here dies in codegen as `unsubstituted TypeParam`. Putting the
+        // variable back lets the blame below report it at the call. A slot the
+        // enclosing scope declares is a caller forwarding its own generics,
+        // which monomorphization resolves — hence the same `scope_params` guard
+        // as `defer_or_report_uninferred_fn_type_args`.
         let scope_params = self.scope_type_param_ids();
         for (i, answer) in inferred.iter_mut().enumerate() {
             if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
@@ -3105,10 +3127,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify (`reify_index_mut_method_call`) rebuilds the
-        // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
-        // above; the body walk only needed the dispatch fact. The
-        // index was resolved above for its side effects.
+        // `reify_index_mut_method_call` rebuilds the inner `*expr.index_mut(idx)`
+        // from the `operator_dispatch` recorded above, which is all the body walk
+        // needs; the index itself was resolved above for its side effects.
 
         // A `_` resolves to UNKNOWN, and inference fills it below.
         let mut type_args: Vec<TypeId> = method_call
@@ -3135,8 +3156,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
 
         if !method_type_param_ids.is_empty() {
-            if type_args.is_empty() || turbofish_has_hole(&method_call.type_args) {
-                let inferred = self.infer_method_type_args(MethodInferenceInput {
+            type_args = self.resolve_method_type_args(
+                type_args,
+                &turbofish_holes(&method_call.type_args),
+                MethodInferenceInput {
                     receiver_type: output_type,
                     method_name: &method_call.method,
                     slots: &method_type_param_ids,
@@ -3149,14 +3172,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
                     declaring_module: impl_module.clone(),
                     span: method_call.span,
-                });
-                if type_args.is_empty() {
-                    type_args = inferred;
-                } else {
-                    let holes = turbofish_holes(&method_call.type_args);
-                    merge_turbofish_type_args(&mut type_args, &holes, &inferred);
-                }
-            }
+                },
+            );
             if !type_args.is_empty() {
                 self.enforce_type_arg_bounds(&method_own_params, &type_args, method_call.span);
                 let subst = SubstitutionContext::new().bind(&method_type_param_ids, &type_args);

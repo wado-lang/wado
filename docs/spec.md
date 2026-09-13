@@ -2277,12 +2277,14 @@ The expected type may be written in the callee's own type parameters. `fold`
 declares `fn mut(Acc, Self::Item) -> Acc`. Each argument settles what it can, and
 a closure is checked after the arguments that do not need it. A sibling argument
 therefore fixes the closure's parameter types whether it is written before or
-after the closure. A numeric literal settles last, answering only what nothing
-else did: `fold(0, |acc, x| acc + x)` over a `List<i64>` takes `i64` from the
-body, not `i32` from the `0`. A turbofish settles the slots it names before any
-argument is checked, so `go::<String>(|a| a.len())` types the closure from what
-the call wrote. A parameter nothing settles is reported as uninferred at the
-call (`cannot infer type parameter ...`), not as an error inside the closure.
+after the closure.
+
+A numeric literal settles last, answering only what nothing else did: `fold(0,
+|acc, x| acc + x)` over a `List<i64>` takes `i64` from the body, not `i32` from
+the `0`. A turbofish settles the slots it names before any argument is checked,
+so `go::<String>(|a| a.len())` types the closure from what the call wrote. A
+parameter nothing settles is reported as uninferred at the call (`cannot infer
+type parameter ...`), not as an error inside the closure.
 
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.
@@ -3323,7 +3325,7 @@ rest_iter.next();  // skip first
 let rest = rest_iter.collect();  // [2, 3, 4, 5]
 
 // Terminals compose with the adapters
-let total = arr.iter_value().filter(|x: i32| x % 2 == 1).sum();  // Some(9)
+let total = arr.iter_value().filter(|x| x % 2 == 1).sum();  // Some(9)
 ```
 
 #### Value Semantics
@@ -3381,21 +3383,21 @@ Iterators support `map`, `filter`, and `fold` for functional-style data processi
 let arr: List<i32> = [1, 2, 3, 4, 5];
 
 // map - transform each element
-let doubled = arr.iter().map(|x: i32| x * 2).collect();
+let doubled = arr.iter().map(|x| x * 2).collect();
 // [2, 4, 6, 8, 10]
 
 // filter - keep elements matching predicate
-let evens = arr.iter().filter(|x: i32| x % 2 == 0).collect();
+let evens = arr.iter().filter(|x| x % 2 == 0).collect();
 // [2, 4]
 
 // fold - reduce to single value
-let sum = arr.iter().fold(0, |acc: i32, x: i32| acc + x);
+let sum = arr.iter().fold(0, |acc, x| acc + x);
 // 15
 
 // Chaining combinators
 let result = arr.iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
     .collect();
 // [30, 40, 50]
 ```

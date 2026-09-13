@@ -753,10 +753,8 @@ pub struct TypeTable {
     /// essentially every type query, so it is a hash-free `Vec` index.
     types: TypeMap<ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
-    /// The slot each inference variable stands for, read only by diagnostics:
-    /// `?0` names nothing the source wrote, where `A` is what the reader
-    /// annotates. Beside the variant, not inside it, so the interning key
-    /// stays the id alone.
+    /// The slot each inference variable stands for, read only by diagnostics.
+    /// Beside the variant, not inside it, so the interning key stays the id.
     infer_var_names: IndexMap<InferVarId, String>,
     /// Registry of stdlib items the compiler is allowed to reference
     /// (Box, Option, Default, `push_str`, …). Populated during the
@@ -2664,14 +2662,11 @@ impl TypeTable {
         self.intern(ResolvedType::InferVar(id))
     }
 
-    /// Record the slot `id` stands for, so a diagnostic that meets the
-    /// variable before anything solves it names the parameter the reader can
-    /// annotate rather than `?0`.
+    /// Record the slot `id` stands for, so a diagnostic that meets the variable
+    /// before anything solves it names the parameter a reader would annotate.
     ///
-    /// Called on every mint, `None` included. An id is unique only among the
-    /// variables live at once, and this table outlives them, so a mint that
-    /// reuses an id must clear the name its last holder left. Otherwise a
-    /// diagnostic reads a slot name out of a module that has already finalized.
+    /// Called on every mint, `None` included: ids restart per module while this
+    /// table outlives them, so a reused id must not read its last holder's name.
     pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
         match name {
             Some(name) => self.infer_var_names.insert(id, name),

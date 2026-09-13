@@ -1256,8 +1256,8 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });     // E = Stdout
-let x = apply(|n: i32| n + 1, 41);     // E = (none)
-let y = apply(|n: i32| {               // E = Stdout
+let x = apply(|n| n + 1, 41);          // E = (none)
+let y = apply(|n| {                    // E = Stdout
     println(`${n}`);
     return n * 2;
 }, 21);
