@@ -384,8 +384,8 @@ impl Resolver<'_> {
     /// The declaration a name written in this module refers to. The layers are
     /// ordered, and the order is the rule: the enclosing item's binders, the
     /// module's explicit imports keyed by local name, its own declarations, then
-    /// the prelude and its implementation modules. Own declarations outranking
-    /// the prelude is what makes a local `trait Left` mean itself (#1298).
+    /// the prelude. Own declarations outranking the prelude is what makes a
+    /// local `trait Left` mean itself (#1298).
     fn resolve_value_name(&self, name: &str) -> Resolution {
         if let Some(id) = self.binder(name) {
             return Resolution::Binder(id);
