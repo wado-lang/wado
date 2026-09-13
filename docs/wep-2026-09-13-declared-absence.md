@@ -99,10 +99,11 @@ it never reaches codegen.
 
 ### Placement
 
-Module-level `fn`, `impl` method, and trait method. Written anywhere else — an
-`interface` operation, a `resource` method — it is an error rather than an
-attribute nobody reads. `export` is refused with it: the keyword lowers a
-function at the component boundary, and this declaration has none to lower.
+Module-level `fn`, `impl` method, and trait method. An `interface` operation or
+a `resource` method may not carry it. Writing it there is an error, since an
+attribute nobody reads says nothing. `export` is refused with it too: the
+keyword lowers a function at the component boundary, and this declaration has
+none to lower.
 
 ### Not rendered by `wado doc`
 
@@ -135,7 +136,7 @@ Nothing is queued. The gaps below are unowned.
   mechanical, and no use has asked for it.
 - A trait may declare a name `#[unavailable]` and an `impl` may still supply a
   body for it, which the receiver's own type then dispatches to. Closing it
-  needs the rule that an `impl Trait for T` declares only members the trait
-  declares — which Wado does not have today, for any member.
+  needs a rule Wado does not have today for any member: that an
+  `impl Trait for T` declares only members the trait declares.
 - Whether a declaration standing in for a removed method is ever pruned, and on
   what schedule, is undecided. Left alone, they accumulate.

@@ -6,28 +6,44 @@
 /// The source text a string literal needs between its quotes to denote `s`.
 /// The inverse of [`unescape_string`].
 pub(crate) fn escape_string(s: &str) -> String {
-    let mut result = String::new();
+    let mut out = String::new();
     for c in s.chars() {
-        match c {
-            '"' => result.push_str("\\\""),
-            '\\' => result.push_str("\\\\"),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
-            c if c.is_control() => {
-                result.push_str(&format!("\\u{{{:04X}}}", c as u32));
-            }
-            c => result.push(c),
-        }
+        push_escaped(&mut out, c, '"');
     }
-    result
+    out
 }
 
-/// Interpret the raw content of a string literal (between quotes, without the quotes).
-///
-/// Processes all escape sequences and handles surrogate pairs (`𐀀` style).
-/// Returns the resulting Rust `String`, or an error message.
+/// The source text of a string literal denoting `s`, its quotes included.
+pub(crate) fn quoted(s: &str) -> String {
+    format!("\"{}\"", escape_string(s))
+}
+
+/// The source text a char literal needs between its quotes to denote `c`.
+/// The inverse of [`unescape_char`].
+pub(crate) fn escape_char(c: char) -> String {
+    let mut out = String::new();
+    push_escaped(&mut out, c, '\'');
+    out
+}
+
+fn push_escaped(out: &mut String, c: char, quote: char) {
+    match c {
+        c if c == quote => {
+            out.push('\\');
+            out.push(c);
+        }
+        '\\' => out.push_str("\\\\"),
+        '\n' => out.push_str("\\n"),
+        '\r' => out.push_str("\\r"),
+        '\t' => out.push_str("\\t"),
+        '\0' => out.push_str("\\0"),
+        c if c.is_control() => out.push_str(&format!("\\u{{{:04X}}}", c as u32)),
+        c => out.push(c),
+    }
+}
+
+/// The `String` the raw content of a string literal denotes, or why it denotes
+/// none. Resolves every escape, surrogate pairs included.
 pub(crate) fn unescape_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
@@ -79,13 +95,8 @@ pub(crate) fn unescape_string(raw: &str) -> Result<String, String> {
     Ok(result)
 }
 
-/// Interpret the raw content of a byte-string literal `b"..."` (between quotes,
-/// without the quotes) into the bytes it denotes.
-///
-/// `\xNN` (two hex digits) yields one raw byte; every other escape shares the
-/// string decoder ([`unescape_one`]) and must resolve to an ASCII value.
-/// Unicode escapes (`\u{...}` / `\uHHHH`), non-ASCII source characters, and
-/// escapes above U+007F are rejected — a byte string is ASCII plus `\xNN`.
+/// The bytes the raw content of a `b"..."` literal denotes, or why it denotes
+/// none. A byte string is ASCII plus `\xNN`, so anything above U+007F is an error.
 pub(crate) fn unescape_bytes(raw: &str) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     let mut chars = raw.chars().peekable();
@@ -137,9 +148,7 @@ pub(crate) fn unescape_byte(raw: &str) -> Result<u8, String> {
     }
 }
 
-/// Interpret the raw content of a char literal (between quotes, without the quotes).
-///
-/// Returns the resulting `char`, or an error message.
+/// The `char` the raw content of a char literal denotes, or why it denotes none.
 pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
     let mut chars = raw.chars().peekable();
     let result = match chars.next() {
@@ -153,16 +162,14 @@ pub(crate) fn unescape_char(raw: &str) -> Result<char, String> {
     Ok(result)
 }
 
-/// Unescape a template string literal part (raw text between backticks).
-///
-/// Like `unescape_string` but also handles the escapes only a template needs:
-/// the interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
-/// [`unescape_template_string`] past the body walk, which is what rejects a
-/// malformed escape — no phase after it has a diagnostic channel for one.
+/// [`unescape_template_string`] past the body walk, which is the phase that
+/// rejects a malformed escape; no later one has a diagnostic channel for it.
 pub(crate) fn unescape_template_segment(raw: &str) -> String {
     unescape_template_string(raw).expect("the body walk rejects a malformed template escape")
 }
 
+/// [`unescape_string`] for a template's raw text, which also escapes the
+/// interpolation syntax (`\{`, `\}`, `\$`) and the delimiter (`` \` ``).
 pub(crate) fn unescape_template_string(raw: &str) -> Result<String, String> {
     let mut result = String::new();
     let mut chars = raw.chars().peekable();
@@ -320,4 +327,31 @@ fn decode_surrogate_pair(high: u16, low: u16) -> u32 {
     let high = u32::from(high - 0xD800);
     let low = u32::from(low - 0xDC00);
     0x10000 + (high << 10) + low
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escape_string_denotes_what_unescape_reads() {
+        for s in [
+            "hello",
+            "hello\nworld",
+            "say \"hi\"",
+            "back\\slash",
+            "\u{1}",
+        ] {
+            assert_eq!(unescape_string(&escape_string(s)).unwrap(), s);
+        }
+        assert_eq!(escape_string("hello\nworld"), "hello\\nworld");
+        assert_eq!(quoted("say \"hi\""), "\"say \\\"hi\\\"\"");
+    }
+
+    #[test]
+    fn escape_char_denotes_what_unescape_reads() {
+        for c in ['a', '\'', '"', '\\', '\n', '\0', '\u{1}', '\u{1F600}'] {
+            assert_eq!(unescape_char(&escape_char(c)).unwrap(), c);
+        }
+    }
 }
