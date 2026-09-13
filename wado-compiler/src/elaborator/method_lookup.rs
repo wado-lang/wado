@@ -1290,7 +1290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         explicit: Vec<TypeId>,
         input: MethodInferenceInput<'_>,
     ) -> Vec<TypeId> {
-        if input.slots.is_empty() || !turbofish_leaves_slot(&explicit) {
+        if !turbofish_leaves_slot(&explicit, input.slots.len()) {
             return explicit;
         }
         let inferred = self.infer_method_type_args(input);
@@ -2958,6 +2958,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index_expr: &ast::IndexExpr,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
         let (struct_name, base_type_id) = self.index_container_head(index_expr, ctx)?;
 
@@ -3175,7 +3176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 args: &args,
                 raw_args: &method_call.args,
                 decl_return_type: return_type,
-                expected_return_type: None,
+                expected_return_type: expected_type,
                 trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
                 declaring_module: impl_module.clone(),
                 span: method_call.span,

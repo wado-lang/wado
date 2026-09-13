@@ -176,7 +176,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // would otherwise generate Index::index instead of IndexMut::index_mut
         if let ast::Expr::Index(index_expr) = &method_call.receiver
             && let Some(result) =
-                self.try_resolve_index_mut_method_call(index_expr, method_call, ctx)
+                self.try_resolve_index_mut_method_call(index_expr, method_call, ctx, expected_type)
         {
             return result;
         }
@@ -1665,9 +1665,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // dispatch solves them — and an unsolved one is reported rather than
         // left to reach codegen unsubstituted.
         if let Some(sig) = callee_sig
-            && turbofish_leaves_slot(&method_type_args)
+            && turbofish_leaves_slot(&method_type_args, sig.own_params.len())
             && sig.declaring_slot_count > 0
-            && let Some(own) = sig.own_params.first()
+            && !sig.own_params.is_empty()
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
             let own_ids = sig.own_type_param_ids();
@@ -1685,32 +1685,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // a block declaring slots of its own rejected the call the same
             // declaration accepts on a receiver that declares none.
             let defaulted = self.fill_static_default_type_args(&sig, target_type_id, &mut inferred);
-            if defaulted || own_ids.iter().all(|id| bindings.contains_key(id)) {
-                merge_turbofish_type_args(&mut method_type_args, &inferred);
-                let declaring_args = self
-                    .receiver_declaring_args(Some(target_type_id), &[])
-                    .unwrap_or_default();
-                let declaring = sig
-                    .declaring_impl
-                    .and_then(|id| self.tysys.signatures.impl_sig(id))
-                    .cloned();
-                let instantiated = sig.instantiate_call_with(
-                    &self.tysys.type_table,
-                    declaring.as_ref(),
-                    &declaring_args,
-                    &method_type_args,
-                );
-                param_types = instantiated.param_types;
-                self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
-            } else {
+            // A slot the turbofish names is answered, and was substituted into
+            // `param_types` above, so inference sees nothing left to bind for it.
+            let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
+                !bindings.contains_key(id)
+                    && method_type_args
+                        .get(i)
+                        .is_none_or(|&a| a == TypeTable::UNKNOWN)
+            });
+            if let Some((i, _)) = unanswered
+                && !defaulted
+            {
                 let _ = self.emit(TypeError::UninferredStaticTypeArg {
                     receiver,
                     method: static_call.method.clone(),
-                    param: own.name.clone(),
+                    param: sig.own_params[i].name.clone(),
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;
             }
+            merge_turbofish_type_args(&mut method_type_args, &inferred);
+            let declaring_args = self
+                .receiver_declaring_args(Some(target_type_id), &[])
+                .unwrap_or_default();
+            let declaring = sig
+                .declaring_impl
+                .and_then(|id| self.tysys.signatures.impl_sig(id))
+                .cloned();
+            let instantiated = sig.instantiate_call_with(
+                &self.tysys.type_table,
+                declaring.as_ref(),
+                &declaring_args,
+                &method_type_args,
+            );
+            param_types = instantiated.param_types;
+            self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
         }
 
         // Pad omitted trailing arguments with declared parameter defaults.

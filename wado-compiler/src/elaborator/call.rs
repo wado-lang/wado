@@ -63,11 +63,11 @@ pub(super) fn arg_spans_of(raw_args: &[Expr], resolved: usize, call_span: Span) 
         .collect()
 }
 
-/// Whether resolved type args leave anything for inference: none written, or a
-/// `_` among them. A `_` resolves to [`TypeTable::UNKNOWN`], so they are their
-/// own hole mask.
-pub(super) fn turbofish_leaves_slot(type_args: &[TypeId]) -> bool {
-    type_args.is_empty() || type_args.contains(&TypeTable::UNKNOWN)
+/// Whether `slot_count` slots leave anything for inference: a `_` among the
+/// written args, or fewer written than there are slots. `slot_count` is asked
+/// for rather than derived, since a short list looks complete on its own.
+pub(super) fn turbofish_leaves_slot(type_args: &[TypeId], slot_count: usize) -> bool {
+    type_args.len() < slot_count || type_args.contains(&TypeTable::UNKNOWN)
 }
 
 /// Fill the `_` and unwritten slots of `explicit` from `inferred`, in place.
@@ -1675,7 +1675,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .filter(|p| !p.is_effect)
                 .count();
-            if turbofish_leaves_slot(&type_args) || type_args.len() < type_param_count {
+            if turbofish_leaves_slot(&type_args, type_param_count) {
                 let inferred =
                     self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
                 merge_turbofish_type_args(&mut type_args, &inferred);
@@ -2845,7 +2845,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         explicit: Vec<TypeId>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        if !turbofish_leaves_slot(&explicit) {
+        // An unwritten turbofish leaves the impl level to infer as well, which
+        // the method's own slot count says nothing about.
+        let own_slots = self
+            .static_call_sig(
+                callee.type_name,
+                callee.method_name,
+                callee.receiver_key,
+                SigChoice::Any,
+            )
+            .map_or(0, |sig| sig.own_type_params().len());
+        if !explicit.is_empty() && !turbofish_leaves_slot(&explicit, own_slots) {
             return (Vec::new(), explicit);
         }
         let (impl_args, method_args) = self.infer_static_call_type_args(
