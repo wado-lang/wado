@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789267460285,
+  "lastUpdate": 1789268953502,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55541,6 +55541,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fc7efb905a76020e5730dbf715fbd079f4c586c4"
         },
         "date": 1789267459588,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "67772ea9055bad2e3b599f0ae613287c77062733",
+          "message": "Merge pull request #2042 from wado-lang/claude/wadopoet-tagged-templates-jh0vvy\n\nfeat!: a `wado` tag that escapes each hole by its template context, and a prelude scope limited to `core:prelude`'s exports",
+          "timestamp": "2026-09-13T11:45:25+09:00",
+          "tree_id": "a4ac66b976168be9fb9ce0cf8b8e267d043f2f58",
+          "url": "https://github.com/wado-lang/wado/commit/67772ea9055bad2e3b599f0ae613287c77062733"
+        },
+        "date": 1789268953179,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
