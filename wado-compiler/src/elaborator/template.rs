@@ -9,7 +9,7 @@ use crate::tir::TypeId;
 
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
-use crate::elaborator::util::unescape_template_string;
+use crate::escape::unescape_template_string;
 
 /// A template's static parts: the raw segments — one more than the holes —
 /// and each hole's resolved type and specifier, in source order.

@@ -18,6 +18,7 @@ use crate::ast::{
     WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
+use crate::escape::escape_string;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexSet;
 use crate::semantics::member_visible;
@@ -916,7 +917,7 @@ impl<'a> Unparser<'a> {
         match arg {
             AttrArg::Str(s) => {
                 self.output.push('"');
-                self.output.push_str(s);
+                self.output.push_str(&escape_string(s));
                 self.output.push('"');
             }
             AttrArg::Ident(s) | AttrArg::Number(s) => {
@@ -925,7 +926,7 @@ impl<'a> Unparser<'a> {
             AttrArg::KeyValue(k, v) => {
                 self.output.push_str(k);
                 self.output.push_str(" = \"");
-                self.output.push_str(v);
+                self.output.push_str(&escape_string(v));
                 self.output.push('"');
             }
             AttrArg::KeyArray(k, vs) => {
@@ -933,7 +934,7 @@ impl<'a> Unparser<'a> {
                 self.output.push_str(" = ");
                 self.delimited("[", "]", vs, |s, v| {
                     s.output.push('"');
-                    s.output.push_str(v);
+                    s.output.push_str(&escape_string(v));
                     s.output.push('"');
                 });
             }
@@ -3486,25 +3487,6 @@ fn format_field_name(name: &str) -> String {
     } else {
         format!("\"{}\"", escape_string(name))
     }
-}
-
-fn escape_string(s: &str) -> String {
-    let mut result = String::new();
-    for c in s.chars() {
-        match c {
-            '"' => result.push_str("\\\""),
-            '\\' => result.push_str("\\\\"),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
-            c if c.is_control() => {
-                result.push_str(&format!("\\u{{{:04X}}}", c as u32));
-            }
-            c => result.push(c),
-        }
-    }
-    result
 }
 
 fn escape_char(c: char) -> String {

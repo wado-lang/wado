@@ -23,6 +23,7 @@ pub mod defs;
 pub mod doc;
 pub mod effect_check;
 pub mod elaborator;
+pub(crate) mod escape;
 pub mod flat_package;
 pub mod format_spec;
 pub mod hashmap;

@@ -120,11 +120,6 @@ Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 
-- An attribute's string arguments keep their escape sequences: the parser
-  stores a string literal's raw text, so `#[unavailable("use \"x\"")]` reports
-  the backslashes. No other attribute carries prose, so nothing hit this
-  before. Closing it means reading an attribute's strings the way an
-  expression's are read, which today only the elaborator can do.
 - `#[deprecated("...")]` is the family's third state and is not designed here.
   It stays callable and reports a warning, and it shares the mechanism above.
   What it needs beyond that is a warning path and its own answer on `wado doc`.

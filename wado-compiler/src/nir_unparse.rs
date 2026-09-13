@@ -4,6 +4,7 @@
 //! `docs/wep-2026-05-11-nir.md`.
 
 use crate::const_eval::Value;
+use crate::escape::escape_string;
 use crate::lexer::is_valid_ident;
 use crate::nir::{
     FuncId, NirBinaryOp, NirEnum, NirFlags, NirFunction, NirGlobal, NirLiteralPattern, NirModule,
@@ -17,25 +18,6 @@ use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{EffectRef, ResolvedType, TypeTable};
 use crate::unparse::unparse_with_row_into;
 use crate::{nir, tir};
-
-fn escape_string(s: &str) -> String {
-    let mut result = String::new();
-    for c in s.chars() {
-        match c {
-            '"' => result.push_str("\\\""),
-            '\\' => result.push_str("\\\\"),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\0' => result.push_str("\\0"),
-            c if c.is_control() => {
-                result.push_str(&format!("\\u{{{:04X}}}", c as u32));
-            }
-            c => result.push(c),
-        }
-    }
-    result
-}
 
 /// Unparses NIR back to pseudo-Wado source code.
 /// The output shows the code after monomorphization and lowering.
