@@ -655,6 +655,19 @@ Verified against the tree.
       pattern lowering puts the copy on a temp that exists for
       `labeled_block_fusion`, so which syntactic position a `match` sits in
       changes whether the binding is defended.
+
+      Finishing it means the temp is gone for a place scrutinee and the lowerer
+      keeps none of `place_is_writable` / `binds_by_value` / `owned_temps`. The
+      binding's own `Let` is not enough on its own: written that way, the
+      scrutinee is read once by the pattern test and again by each binding, and
+      two rules that answer for the temp's single read do not answer for the
+      second:
+
+      - The release tests the rebound path for equality, so `p = x` releases a
+        binding read out of `p` — the temp's path exactly — and not one read out
+        of `p.f`, which is what an arm projects.
+      - A path through a `&mut` receiver is refused a share outright, so a
+        projection of a receiver's field earns none.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the

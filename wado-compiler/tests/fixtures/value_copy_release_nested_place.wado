@@ -1,0 +1,43 @@
+// WEP 2026-05-21: repointing a place gives up everything it held, so a binding
+// read out of any depth under it owns what it gave up — `s = fresh` releases one
+// taken from `s.inner.tags` as it releases one taken from `s` itself. The
+// release does not reach past a write landing inside that same storage first.
+//
+// Two levels deep, which the one-level rows elsewhere leave open.
+
+struct Inner {
+    tags: List<String>,
+}
+
+struct Outer {
+    inner: Inner,
+    id: i32,
+}
+
+fn fresh(id: i32) -> Outer {
+    return Outer { inner: Inner { tags: ["z"] }, id };
+}
+
+export fn run() {
+    let mut s = Outer { inner: Inner { tags: ["a", "b"] }, id: 1 };
+
+    let taken = s.inner.tags;
+    s = fresh(2);
+    assert taken.len() == 2;
+    assert s.inner.tags.len() == 1;
+
+    let mut t = Outer { inner: Inner { tags: ["a"] }, id: 3 };
+    let kept = t.inner.tags;
+    t.inner.tags.push("c");
+    t = fresh(4);
+    assert kept.len() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": [
+        "taken = s.inner.tags;",
+        "kept = \"value_copy_release_nested_place.wado/$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>\"(t.inner.tags)"
+    ]
+}
