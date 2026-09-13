@@ -1,6 +1,10 @@
 // The other side of `error_struct_literal_slot_unpinned`: a slot no field
 // mentions is a phantom, which the annotation pins and monomorphization
 // substitutes. Nothing here is an inference failure.
+//
+// A phantom the declaration defaults needs no annotation, and a bound on that
+// slot is checked against the default rather than against the rigid parameter —
+// `core:log`'s `TextSink<C: Clock = NoClock>`, written `TextSink {}`.
 
 use { println, Stdout } from "core:cli";
 
@@ -8,12 +12,48 @@ struct Tagged<T> {
     value: i32,
 }
 
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Zero {}
+
+impl Mark for Zero {
+    fn tag() -> i32 {
+        return 10;
+    }
+}
+
+struct One {}
+
+impl Mark for One {
+    fn tag() -> i32 {
+        return 20;
+    }
+}
+
+struct Marked<M: Mark = Zero> {
+    value: i32,
+}
+
+impl<M: Mark> Marked<M> {
+    fn total(&self) -> i32 {
+        return self.value + M::tag();
+    }
+}
+
 export fn run() with Stdout {
     let t: Tagged<i32> = Tagged { value: 1 };
     println(`${t.value}`);
+
+    let defaulted = Marked { value: 1 };
+    println(`${defaulted.total()}`);
+
+    let spelled: Marked<One> = Marked { value: 2 };
+    println(`${spelled.total()}`);
 }
 
 __DATA__
 {
-    "stdout": "1\n"
+    "stdout": "1\n11\n22\n"
 }

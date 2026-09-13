@@ -247,3 +247,77 @@ fn generator_importing_wasi_clocks_is_rejected() {
             .join("\n")
     );
 }
+
+/// A generator reaching a `core:*` module that itself imports WASI must not
+/// pick up that import: the Kiln linker offers only `core:kiln/kiln-host`, so a
+/// `wasi:*` interface carrying a function fails instantiation. The `use`-site
+/// check cannot see this — `core:log` is not a `wasi:` import at the source
+/// level — so the guarantee is asserted on the emitted component.
+///
+/// `core:log` selects its timestamp by type parameter for exactly this reason:
+/// the default `TextSink` is over `NoClock`, which monomorphizes to code that
+/// never reads a clock. A runtime flag left the call reachable, and the
+/// `wasi:clocks` import with it.
+const CORE_LOG_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { info } from "core:log";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    info(`generating`, { path: req.primary.path });
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+/// The `wasi:` interfaces a generator component imports, as printed names.
+fn wasi_imports_of(wasm: &[u8]) -> Vec<String> {
+    let wat = wasmprinter::print_bytes(wasm).expect("printable component");
+    let mut names: Vec<String> = wat
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix("(import \"wasi:"))
+        .filter_map(|rest| rest.split('"').next())
+        .map(|name| format!("wasi:{name}"))
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn compile_generator(source: &str, what: &str) -> CompileResult {
+    let host = MapHost::new(&[]);
+    let result = block_on(compile_with_options(
+        source,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    match result {
+        Ok(result) => result,
+        Err(_) => {
+            let diags = host.diagnostics();
+            panic!(
+                "{what} failed to compile:\n{}",
+                diags
+                    .iter()
+                    .map(|d| format!("  {d}"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+        }
+    }
+}
+
+#[test]
+fn generator_using_core_log_adds_no_wasi_import() {
+    let baseline = wasi_imports_of(&compile_generator(NOOP_GENERATOR, "noop generator").wasm);
+    let with_log =
+        wasi_imports_of(&compile_generator(CORE_LOG_GENERATOR, "core:log generator").wasm);
+
+    // The baseline carries `wasi:cli/types`, an instance exporting only an
+    // `error-code` enum. A type-only import needs nothing from the linker,
+    // which is why every generator already instantiates with it.
+    assert_eq!(
+        with_log, baseline,
+        "core:log added a WASI import the Kiln linker never provides"
+    );
+}

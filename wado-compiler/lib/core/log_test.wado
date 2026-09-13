@@ -377,7 +377,7 @@ test "a directive list is also buildable by hand" {
 // === Sinks ===
 
 test "text sink renders one line per event" {
-    let mut sink = TextSink { timestamp: false };
+    let mut sink = TextSink {};
     let line = sink.render(&text_event(Level::Info, "user logged in", Value::Null));
     assert line == "INFO 1 app: user logged in";
     // The sequence number advances per rendered line.
@@ -385,7 +385,7 @@ test "text sink renders one line per event" {
 }
 
 test "text sink appends fields as key=value, unquoted" {
-    let mut sink = TextSink { timestamp: false, seq: false };
+    let mut sink = TextSink { seq: false };
     let mut fields: TreeMap<String, Value> = TreeMap::new();
     fields["user_id"] = Value::Int(7);
     fields["ip"] = Value::String("127.0.0.1");
@@ -394,20 +394,20 @@ test "text sink appends fields as key=value, unquoted" {
 }
 
 test "text sink location is opt-in" {
-    let mut sink = TextSink { timestamp: false, seq: false, location: true };
+    let mut sink = TextSink { seq: false, location: true };
     let line = sink.render(&text_event(Level::Error, "boom", Value::Null));
     assert line == "ERROR app: boom at app.wado:7";
 }
 
 test "text sink names the parent span" {
-    let mut sink = TextSink { timestamp: false, seq: false };
+    let mut sink = TextSink { seq: false };
     let mut e = text_event(Level::Info, "inside", Value::Null);
     e.parent = Option::<SpanId>::Some(3);
     assert sink.render(&e) == "INFO span=3 app: inside";
 }
 
 test "json sink writes one object per event" {
-    let mut sink = JsonSink { timestamp: false };
+    let mut sink = JsonSink {};
     let mut fields: TreeMap<String, Value> = TreeMap::new();
     fields["user_id"] = Value::Int(7);
     let line = sink.render(&text_event(Level::Info, "user logged in", Value::Object(fields)));
@@ -415,13 +415,13 @@ test "json sink writes one object per event" {
 }
 
 test "json sink omits the keys its switches turn off" {
-    let mut sink = JsonSink { timestamp: false, seq: false };
+    let mut sink = JsonSink { seq: false };
     let line = sink.render(&text_event(Level::Warn, "plain", Value::Null));
     assert line == "{\"level\":\"warn\",\"target\":\"app\",\"message\":\"plain\",\"fields\":null}";
 }
 
 test "json sink includes the parent span and location when asked" {
-    let mut sink = JsonSink { timestamp: false, seq: false, location: true };
+    let mut sink = JsonSink { seq: false, location: true };
     let mut e = text_event(Level::Info, "inside", Value::Null);
     e.parent = Option::<SpanId>::Some(3);
     let line = sink.render(&e);
@@ -431,7 +431,7 @@ test "json sink includes the parent span and location when asked" {
 }
 
 test "the writing sinks track spans like any subscriber" {
-    let mut sink = TextSink { timestamp: false };
+    let mut sink = TextSink {};
     with Log => &mut sink do {
         let s = span(Level::Info, `request`);
         assert s.id() == 1;

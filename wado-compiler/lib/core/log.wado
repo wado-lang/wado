@@ -449,15 +449,47 @@ impl SpanStack {
     }
 }
 
-/// The current wall-clock time, rendered with millisecond precision.
+/// How a sink stamps an event with a time, or declines to. `None` is no stamp.
+///
+/// A type parameter rather than a field because only a type can remove the
+/// clock: a sink over [`NoClock`] monomorphizes to code that never reads one,
+/// so the component carries no `wasi:clocks` import. A runtime flag cannot do
+/// that — the call stays reachable, and at `-O0` nothing folds it away.
+pub trait Clock {
+    fn now() -> Option<String>;
+}
+
+/// No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
+/// program that installs nothing logs in any world — including
+/// `core:kiln/generator`, whose linker offers no WASI at all.
+///
+/// This is the conservative end of the trade, not a verdict on what a default
+/// line should carry: giving worlds that do have a clock a stamped default is a
+/// compatible change, and may replace this once there is a mechanism that keeps
+/// the guarantee.
+pub struct NoClock {
+}
+
+impl Clock for NoClock {
+    fn now() -> Option<String> {
+        return null;
+    }
+}
+
+/// Wall-clock stamps with millisecond precision. Installing a sink over this
+/// adds a `wasi:clocks` import, so it belongs only in a world that has one.
 ///
 /// `#[ambient]` for the same reason the facade is: a sink's operations are
 /// `Log`'s, whose signatures carry no effect, so the clock read cannot be
-/// declared on them. A world without `wasi:clocks` traps here — hence
-/// `timestamp: false` on a sink installed in one.
-#[ambient]
-fn timestamp_now() -> String {
-    return `${Instant::from(SystemClock::now()):#}`;
+/// declared on them.
+pub struct WallClock {
+}
+
+impl Clock for WallClock {
+    #[ambient]
+    fn now() -> Option<String> {
+        return Option::Some(`${Instant::from(SystemClock::now()):#}`);
+    }
 }
 
 // === Sinks ===
@@ -474,23 +506,23 @@ fn timestamp_now() -> String {
 ///
 /// Each part its configuration turns off is omitted; `location` appends
 /// ` at file:line`. Writes through the ambient `log_stderr`, so the sink needs
-/// no `Stderr` in its signature and installs in any world.
-pub struct TextSink {
-    pub timestamp: bool = true,
+/// no `Stderr` in its signature and installs in any world. `C` selects the
+/// timestamp: `TextSink<WallClock>` stamps, the default `TextSink` does not.
+pub struct TextSink<C: Clock = NoClock> {
     pub seq: bool = true,
     pub location: bool = false,
     spans: SpanStack = SpanStack {},
     next_seq: u64 = 0,
 }
 
-impl TextSink {
+impl<C: Clock> TextSink<C> {
     /// The line this sink would write for `event`, without writing it — the
     /// hook for sending the same format somewhere other than stderr. Consumes
     /// a sequence number, so one call is one line.
     pub fn render(&mut self, event: &Event) -> String {
         let mut line = String::new();
-        if self.timestamp {
-            line.push_str(&timestamp_now());
+        if let Some(ts) = C::now() {
+            line.push_str(&ts);
             line.push_str(&" ");
         }
         line.push_str(&event.meta.level.label());
@@ -510,7 +542,7 @@ impl TextSink {
     }
 }
 
-impl Log for TextSink {
+impl<C: Clock> Log for TextSink<C> {
     fn enabled(&self, level: Level) -> bool {
         resume true;
     }
@@ -551,24 +583,24 @@ impl Log for TextSink {
 /// {"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
 /// ```
 ///
-/// Keys a switch turns off are absent rather than null.
-pub struct JsonSink {
-    pub timestamp: bool = true,
+/// Keys a switch turns off are absent rather than null. `C` selects the `ts`
+/// key the way it does for [`TextSink`].
+pub struct JsonSink<C: Clock = NoClock> {
     pub seq: bool = true,
     pub location: bool = false,
     spans: SpanStack = SpanStack {},
     next_seq: u64 = 0,
 }
 
-impl JsonSink {
+impl<C: Clock> JsonSink<C> {
     /// The JSON line this sink would write for `event`, without writing it.
     /// Consumes a sequence number, so one call is one line. A sink swallows its
     /// own serialize errors, so an unserializable event renders as `{}` rather
     /// than aborting the program.
     pub fn render(&mut self, event: &Event) -> String {
         let mut obj = TreeMap::<String, Value>::new();
-        if self.timestamp {
-            obj["ts"] = Value::String(timestamp_now());
+        if let Some(ts) = C::now() {
+            obj["ts"] = Value::String(ts);
         }
         if self.seq {
             self.next_seq += 1;
@@ -592,7 +624,7 @@ impl JsonSink {
     }
 }
 
-impl Log for JsonSink {
+impl<C: Clock> Log for JsonSink<C> {
     fn enabled(&self, level: Level) -> bool {
         resume true;
     }

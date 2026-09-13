@@ -4698,15 +4698,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut inferred = infer.solve();
         // A phantom parameter — one no field mentions — is not an inference
-        // failure: the declaration's own parameter *is* the answer, and
-        // monomorphization substitutes it. A slot a field does mention and
+        // failure: the declaration answers it, and monomorphization substitutes
+        // that. A slot the declaration defaults takes the default; otherwise the
+        // declaration's own parameter stands. A slot a field does mention and
         // nothing solved is a failure, so its variable stays put to be blamed
         // and reported.
+        //
+        // The default rather than the parameter is what a bound on the slot is
+        // then checked against: `struct S<C: Clock = NoClock>` written `S {}`
+        // means `S<NoClock>`, and checking `Clock` against the rigid `C` fails a
+        // literal the declaration already answered.
         //
         // Recorded before the answers are, so a phantom's variable is solved
         // to that parameter rather than left unsolved and pinned to `error`
         // at finalize behind no diagnostic.
-        for (slot, answer) in inferred.iter_mut().enumerate() {
+        for slot in 0..inferred.len() {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
@@ -4719,13 +4725,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .any(|&f| table.contains_type_param_index(f, index))
             };
-            if inst.vars.get(slot) == Some(answer) && is_phantom {
-                *answer = decl_param;
+            if inst.vars.get(slot) != inferred.get(slot) || !is_phantom {
+                continue;
             }
+            inferred[slot] = self
+                .phantom_slot_default(&struct_info, slot)
+                .unwrap_or(decl_param);
         }
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
+    }
+
+    /// The type a phantom slot takes from the `= Default` its declaration wrote,
+    /// resolved at the literal's site as a written argument would be.
+    fn phantom_slot_default(
+        &mut self,
+        struct_info: &StructFieldInfo,
+        slot: usize,
+    ) -> Option<TypeId> {
+        let default = struct_info.type_param_defaults.get(slot)?.clone()?;
+        let resolved = self.resolve_type(&default);
+        (resolved != TypeTable::ERROR).then_some(resolved)
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
