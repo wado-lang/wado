@@ -134,9 +134,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.mint_infer_var_for(None)
     }
 
-    /// [`Self::mint_infer_var`] for a variable standing in for a named slot. A
-    /// diagnostic renders the variable as that name, since `?0` names nothing
-    /// the source wrote.
+    /// [`Self::mint_infer_var`] for a named slot, which a diagnostic renders
+    /// the variable as.
     pub(super) fn mint_infer_var_named(&mut self, slot_name: &str) -> TypeId {
         self.mint_infer_var_for(Some(slot_name))
     }
@@ -314,14 +313,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.solve_holes_against(holey, expected, None);
     }
 
-    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables the
-    /// asking site minted.
-    ///
-    /// A parameter type can carry a hole that belongs to someone else: one an
-    /// argument's own type deferred, or one the receiver is still waiting on.
-    /// That hole has its own sink, which nothing re-checks against an answer
-    /// pinned here, so an argument that merely agrees with the hole fixes it to
-    /// the wrong type and reaches codegen unchecked.
+    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables
+    /// the asking site minted. Someone else's hole has its own sink, which
+    /// nothing re-checks, so an answer pinned here would be believed unchecked.
     pub(super) fn solve_own_infer_holes_against(
         &mut self,
         holey: TypeId,
@@ -331,8 +325,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.solve_holes_against(holey, expected, Some(own));
     }
 
-    /// The body of the two above: `own` of `None` takes every binding, `Some`
-    /// only the bindings for those variables.
+    /// The body of the two above: `None` takes every binding, `Some` only those
+    /// variables'.
     fn solve_holes_against(&mut self, holey: TypeId, expected: TypeId, own: Option<&[TypeId]>) {
         if !self.type_has_infer_hole(holey) {
             return;
@@ -354,9 +348,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Pin a deferred hole an argument carried in (`let v = gen()?; foo(v)`)
-    /// against the parameter type it is checked against, and substitute the
-    /// answer into the argument. A no-op unless the hole may pin here.
+    /// Pin a hole the argument carried in (`let v = gen()?; foo(v)`) against
+    /// its parameter type. A no-op unless the hole may pin here.
     pub(super) fn pin_arg_hole_against(&mut self, arg: &mut TypeId, expected: TypeId) {
         if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
             self.solve_infer_holes_against(*arg, expected);

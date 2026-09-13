@@ -1,0 +1,33 @@
+// A `_` in a turbofish is a slot the call site left to inference, and every
+// spelling that reaches a generic method has to say so: the resolved type
+// arguments carry `unknown` where the source wrote `_`, and inference fills
+// exactly those.
+//
+// A call that files its own dispatch record — the trait-qualified form — files
+// what inference settled on, not what the source wrote. Filing the raw
+// turbofish names the callee `take<unknown>` and its parameter has no type.
+
+use ns from "./sub/turbofish_hole_slot_dep.wado";
+use { Take } from "./sub/turbofish_hole_slot_dep.wado";
+
+test "a namespaced static call fills the `_` beside an explicit argument" {
+    assert ns::Cell::pair::<_, String>(1, |b| b.len()) == 0;
+}
+
+test "a trait-qualified call fills the `_` from its argument" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::take::<_>(&b, "abc").len() == 3;
+}
+
+test "a trait-qualified turbofish types the closure parameter" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::map::<String>(&b, |a| a.len()) == 0;
+}
+
+test "a trait-qualified call without a turbofish types it from the argument" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::map(&b, |a: String| a.len()) == 0;
+}
+
+__DATA__
+{"test": {}}

@@ -24,11 +24,8 @@ pub(super) struct Instantiation<'a> {
     pub(super) span: Span,
     /// What the use site's turbofish names, in slot order:
     /// [`TypeTable::UNKNOWN`] where it wrote `_` or stopped short, empty where
-    /// it wrote none.
-    ///
-    /// A field, so a site cannot instantiate without saying what it already
-    /// knows. Applied after the argument walk instead, it would reach a
-    /// closure body only once that body had been resolved against a hole.
+    /// it wrote none. Required, so no site can instantiate without saying what
+    /// it already knows.
     pub(super) type_args: &'a [TypeId],
 }
 
@@ -45,12 +42,9 @@ pub(super) struct Instantiated {
     /// [`Elaborator::record_instantiation`] to the slots still unsolved when
     /// the use site commits. Held rather than attached at mint time because a
     /// site may instantiate speculatively — inference runs twice for a partial
-    /// turbofish — and a discarded instantiation must report nothing.
-    ///
-    /// `None` marks a slot this instantiation will never have to solve: one
-    /// left rigid, or one the turbofish already named. Neither can go
-    /// unanswered, so neither carries a blame or a bound to re-check — the
-    /// turbofish's own types are bounds-checked where they are read.
+    /// turbofish — and a discarded instantiation must report nothing. `None`
+    /// marks a slot that cannot go unanswered: one left rigid, or one the
+    /// turbofish named.
     diags: Vec<Option<(Span, String, String)>>,
 }
 
@@ -65,9 +59,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// never bind. Instantiating a pack needs a pack-shaped variable, which
     /// does not exist yet.
     ///
-    /// A slot [`Instantiation::type_args`] names is solved to that type as it
-    /// is minted, so the variable is a hole only where the site has no answer
-    /// yet.
+    /// A slot [`Instantiation::type_args`] names is solved as it is minted.
     pub(super) fn instantiate(&mut self, slots: &[TypeId], of: &Instantiation<'_>) -> Instantiated {
         let mut vars = Vec::with_capacity(slots.len());
         let mut diags = Vec::with_capacity(slots.len());
@@ -88,9 +80,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let var = self.mint_infer_var_named(&name);
             subst.insert(index, var);
             vars.push(var);
-            // A slot the turbofish names is answered before the first argument
-            // is checked against it, so what the source wrote is what an
-            // argument — a closure body above all — meets.
+            // Answered here, so an argument meets what the source wrote.
             if let Some(&named) = of.type_args.get(i)
                 && named != TypeTable::UNKNOWN
             {
@@ -150,13 +140,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Resolve a call's arguments against `slots` rather than against the
-    /// declaration's own parameters: instantiate, carry the bounds, walk, and
-    /// settle what the arguments answered back onto the slots.
-    ///
-    /// The whole sequence is one call, so a path that answers a call gets all
-    /// of it or none. Resolving against a rigid slot instead hands a closure a
-    /// type no expression can construct.
+    /// Instantiate `slots`, carry their bounds, resolve the arguments against
+    /// them, and settle the answers back. One call, so no path can take part of
+    /// the sequence: against a rigid slot a closure gets a type nothing can
+    /// construct.
     pub(super) fn resolve_args_through_slots(
         &mut self,
         ctx: &mut FunctionContext,
@@ -177,14 +164,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args
     }
 
-    /// Settle the variables an argument walk used back onto the slots they
-    /// stand for, substituting the answers through `args`.
-    ///
-    /// [`Self::solve_infer_var`] keeps the first answer, so a slot the
-    /// arguments pinned stays pinned and one they left open returns to the
-    /// declaration's parameter. Type-argument inference then sees the rigid
-    /// signature it would have seen had the arguments never been instantiated
-    /// against.
+    /// Settle the walk's variables back onto their slots, substituting through
+    /// `args`. [`Self::solve_infer_var`] keeps the first answer, so a slot the
+    /// arguments pinned stays pinned and one they left open goes back rigid.
     pub(super) fn settle_onto_slots(
         &mut self,
         inst: &Instantiated,

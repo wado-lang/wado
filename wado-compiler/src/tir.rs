@@ -2662,11 +2662,9 @@ impl TypeTable {
         self.intern(ResolvedType::InferVar(id))
     }
 
-    /// Record the slot `id` stands for, so a diagnostic that meets the variable
-    /// before anything solves it names the parameter a reader would annotate.
-    ///
-    /// Called on every mint, `None` included: ids restart per module while this
-    /// table outlives them, so a reused id must not read its last holder's name.
+    /// Record the slot `id` stands for, for diagnostics. Called on every mint,
+    /// `None` included: ids restart per module while this table outlives them,
+    /// so a reused id must not read its last holder's name.
     pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
         match name {
             Some(name) => self.infer_var_names.insert(id, name),
@@ -2674,8 +2672,7 @@ impl TypeTable {
         };
     }
 
-    /// How `id` reads in a message: its slot's name where one was recorded,
-    /// else the variable's own identity.
+    /// How `id` reads in a message: its slot's name, else its own.
     fn infer_var_name(&self, id: InferVarId) -> String {
         self.infer_var_names
             .get(&id)
@@ -4582,10 +4579,8 @@ impl TypeTable {
             }
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
-            // A mangled name is an identity, so a variable keeps its own here:
-            // two unsolved slots that happen to share a spelling must not
-            // collapse onto one name. The slot's name is for reading, and
-            // belongs to `render_type_name` alone.
+            // A mangled name is an identity, so two unsolved slots sharing a
+            // spelling must not collapse. The slot's name is for reading.
             ResolvedType::InferVar(var) => TypeNameInfo::Named(var.to_string()),
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args

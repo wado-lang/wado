@@ -27,7 +27,6 @@ use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
-use crate::elaborator::call::{turbofish_has_hole, turbofish_holes};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
@@ -73,9 +72,6 @@ pub(super) struct MethodCallInput<'a> {
     pub method_id: Option<AstId>,
     pub call_id: Option<AstId>,
     pub type_args: Vec<TypeId>,
-    /// Per-position `_` mask for `type_args` (see `call::turbofish_holes`).
-    /// A synthetic caller, which writes no turbofish, passes it empty.
-    pub type_arg_holes: Vec<bool>,
     pub args: &'a [ast::Expr],
     pub expected_type: Option<TypeId>,
     pub span: Span,
@@ -86,21 +82,11 @@ pub(super) struct MethodCallInput<'a> {
     pub required_trait: Option<RequiredTrait>,
 }
 
-/// Result of [`Elaborator::resolve_method_call_with`]: the call's result
-/// type plus, on successful dispatch, the receiver-adjustment
-/// inputs and resolved target a synthetic caller (for-of's `into_iter()`
-/// / `next()`, whose `call_id == None` skips `record_method_dispatch`)
-/// needs to record the decision its own way. `None` when a short-circuit
-/// path returned early or method lookup failed.
+/// Result of [`Elaborator::resolve_method_call_with`]: the call's result type,
+/// plus what a caller passing `call_id: None` needs to file its own record.
 pub(super) struct MethodCallOutcome {
     pub type_id: TypeId,
     pub dispatch: Option<DispatchedMethod>,
-    /// The resolved signature, for a caller that suppressed
-    /// `record_method_dispatch` with `call_id: None` and files its own record.
-    /// The qualified-call path files a *static* dispatch, which needs the same
-    /// facts: without them its arguments lose their defaults, their `is_mut`
-    /// shape, and the expected types an unannotated closure argument infers
-    /// from.
     pub signature: Option<MethodSignatureFacts>,
 }
 
@@ -127,11 +113,17 @@ pub(super) struct BlanketStatic {
     pub def: DefId,
 }
 
+/// What one call resolved to, after inference. A caller filing its own record
+/// takes these, so its record says the same thing the ordinary path's would.
 pub(super) struct MethodSignatureFacts {
     pub param_is_mut: Vec<bool>,
     pub param_names: Vec<String>,
     pub param_defaults: Vec<Option<ast::Expr>>,
+    /// With `type_args` substituted in: what the arguments were checked
+    /// against, and what an unannotated closure argument infers from.
     pub param_types: Vec<TypeId>,
+    /// The method's own type arguments, the inferred ones included.
+    pub type_args: Vec<TypeId>,
     pub self_kind: ast::SelfKind,
     /// The scope `param_defaults` resolve in, where the selected method is not
     /// the declaration that wrote them.
@@ -167,14 +159,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let receiver = self.resolve_expr(&method_call.receiver, ctx, None);
 
-        // A `_` resolves to UNKNOWN here; the mask records where, so the
-        // dispatch fills those positions from inference.
+        // A `_` resolves to UNKNOWN, so these are their own hole mask.
         let type_args: Vec<TypeId> = method_call
             .type_args
             .iter()
             .map(|ty| self.resolve_type(ty))
             .collect();
-        let type_arg_holes = turbofish_holes(&method_call.type_args);
 
         let outcome = self.resolve_method_call_with(
             MethodCallInput {
@@ -184,7 +174,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_id: Some(method_call.method_id),
                 call_id: Some(method_call.id),
                 type_args,
-                type_arg_holes,
                 args: &method_call.args,
                 expected_type,
                 span: method_call.span,
@@ -225,7 +214,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_id,
             call_id,
             type_args,
-            type_arg_holes,
             args: args_ast,
             expected_type,
             span,
@@ -756,7 +744,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let method_type_args = self.resolve_method_type_args(
             type_args,
-            &type_arg_holes,
             MethodInferenceInput {
                 receiver_type: receiver,
                 method_name,
@@ -1079,15 +1066,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         // Record the dispatch decision so reify can emit the same TIR without
-        // re-running trait lookup or mangling. Skipped for a synthetic call, for
-        // the short-circuits that returned above, and on the error-recovery path.
-        // Only a trait-qualified caller reads the signature facts back, so an
-        // ordinary call skips the four vector clones and their default ASTs.
+        // re-running trait lookup or mangling. Only a trait-qualified caller
+        // reads the signature facts back, so an ordinary call skips the clones.
         let signature = (method_found && required_trait.is_some()).then(|| MethodSignatureFacts {
             param_is_mut: param_is_mut.clone(),
             param_names: param_names.clone(),
             param_defaults: param_defaults.clone(),
-            param_types: expected_param_types.clone(),
+            param_types: substituted_param_types.clone(),
+            type_args: method_type_args.clone(),
             self_kind,
             defaults_module: defaults_module.clone(),
         });
@@ -1241,8 +1227,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_name,
                 method_id,
                 call_id: None,
-                type_args: type_args.clone(),
-                type_arg_holes: vec![],
+                type_args,
                 args: rest,
                 expected_type,
                 span,
@@ -1273,8 +1258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut param_types = vec![receiver_type];
             param_types.extend(sig.param_types);
             // An unannotated closure argument infers its parameter types from
-            // this; without it the closure's functor is generated with
-            // `unknown` params and dropped before codegen.
+            // this.
             self.record_call_param_types(call_id, param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,
@@ -1285,7 +1269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .unwrap_or_else(|| function_ref.module_source.clone()),
                     function_ref,
                     param_is_mut,
-                    type_args,
+                    type_args: sig.type_args,
                     param_defaults,
                     param_types,
                     self_in_args: true,
@@ -1884,40 +1868,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
 
                     // Refine `_` placeholders in the turbofish (`Result::<_,
-                    // MyErr>::Ok(7)`): infer the hole slots from the payload
-                    // while the explicit args stay pinned. Without holes the
-                    // explicitly-resolved `target_type_id` is already complete.
-                    let has_target_hole = matches!(
-                        &static_call.target_type,
-                        ast::Type::Generic(g) if turbofish_has_hole(&g.args)
-                    );
-                    let result_type = if has_target_hole {
-                        let target_holes = match &static_call.target_type {
-                            ast::Type::Generic(g) => turbofish_holes(&g.args),
-                            _ => Vec::new(),
-                        };
-                        let explicit_args = match self.tysys.type_table.borrow().get(target_type_id)
-                        {
-                            ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
-                            _ => Vec::new(),
-                        };
-                        {
-                            let inferred = self.tysys.infer_variant_type_args(
-                                &self.annotate_ctx,
-                                &variant_info,
-                                &case_data,
-                                args.first().copied(),
-                                None,
-                                &explicit_args,
-                                &target_holes,
-                            );
-                            self.defer_uninferable_variant(
-                                inferred,
-                                &name,
-                                &variant_info,
-                                static_call.span,
-                            )
-                        }
+                    // MyErr>::Ok(7)`): infer those slots from the payload while
+                    // the explicit args stay pinned.
+                    let explicit_args = match self.tysys.type_table.borrow().get(target_type_id) {
+                        ResolvedType::GenericInstance { type_args, .. } => type_args.clone(),
+                        _ => Vec::new(),
+                    };
+                    let result_type = if explicit_args.contains(&TypeTable::UNKNOWN) {
+                        let inferred = self.tysys.infer_variant_type_args(
+                            &self.annotate_ctx,
+                            &variant_info,
+                            &case_data,
+                            args.first().copied(),
+                            None,
+                            &explicit_args,
+                        );
+                        self.defer_uninferable_variant(
+                            inferred,
+                            &name,
+                            &variant_info,
+                            static_call.span,
+                        )
                     } else {
                         target_type_id
                     };
