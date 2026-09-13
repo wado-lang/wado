@@ -40,17 +40,20 @@ does not use.
 
 ## Decision
 
-Six methods, each with the name, parameters, and meaning Rust gives it:
+Nine methods, each with the name, parameters, and meaning Rust gives it:
 
 ```wado
 impl<T> Option<T> {
     pub fn unwrap_or(self, default: T) -> T;
+    pub fn unwrap_or_else(self, mut f: fn mut() -> T) -> T;
     pub fn map<U>(self, mut f: fn mut(T) -> U) -> Option<U>;
     pub fn ok_or<E>(self, err: E) -> Result<T, E>;
+    pub fn ok_or_else<E>(self, mut f: fn mut() -> E) -> Result<T, E>;
 }
 
 impl<T, E> Result<T, E> {
     pub fn unwrap_or(self, default: T) -> T;
+    pub fn unwrap_or_else(self, mut f: fn mut(E) -> T) -> T;
     pub fn map<U>(self, mut f: fn mut(T) -> U) -> Result<U, E>;
     pub fn map_err<F>(self, mut f: fn mut(E) -> F) -> Result<T, F>;
 }
@@ -64,6 +67,20 @@ in a function returning `Option`, and rejects one in a function returning
 sites that want it add call-site context, as in
 `Err(e) => Err(failure(path, e))`, which a type-directed `From` impl cannot
 supply.
+
+### The lazy forms
+
+With `??` refused, a method is the only thing that keeps a fallback from being
+evaluated where it goes unused, so `unwrap_or_else` and `ok_or_else` are
+offered beside the eager pair. The corpus asks for them unevenly: thirteen
+sites build an error the success path never reads, against about five whose
+fallback is a `String::new()` that costs nothing early. They are adopted
+together anyway, since the argument for each is the same one and a caller who
+learns it on `Option` should find it on `Result`.
+
+`Result::unwrap_or_else` takes the `Err` payload, as Rust's does. That is what
+makes it the only non-`match` form that reads the error while recovering from
+it, which `let ... else` cannot do — it binds nothing on the failing side.
 
 ### A Rust name keeps its Rust meaning
 
@@ -103,8 +120,8 @@ the reason above; see
 carried in prose, since no caller reaching for them writes a Rust name Wado
 answers differently.
 
-`unwrap_or_else`, `ok_or_else`, and `and_then` are absent rather than
-declined, so nothing marks them. Known gaps says what each waits on.
+`and_then` is absent rather than declined, so nothing marks it. Known gaps
+says what it waits on.
 
 ## Roadmap
 
@@ -112,18 +129,15 @@ Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 
-- `unwrap_or_else` and `ok_or_else` are absent. Each is the lazy form of a
-  method that is offered, and with `??` refused nothing else keeps a fallback
-  from being evaluated where it goes unused. The corpus splits them. Thirteen
-  sites build an error the success path never reads — `DeserializeError`, a
-  formatted message — which `ok_or` would evaluate and `ok_or_else` would not.
-  About five want `unwrap_or_else`, and most of those are a `String::new()` or
-  a `TreeMap::new()` that costs nothing to evaluate early. Idiomatic Rust
-  keeps that ratio: `ok_or_else` 354 calls to `unwrap_or_else`'s 74. Adopting
-  one is adopting both, since the argument for each is the same.
-- A fallback that reads the `Err` payload without diverging has no
-  non-`match` form, since `let ... else` cannot bind the payload. There are 15
-  such sites, and `Result::unwrap_or_else` is what would cover them.
+- Whether the eager pair keeps its evaluation is open. Sinking `unwrap_or`'s
+  and `ok_or`'s argument into the branch that uses it would make the caller's
+  choice between the two forms a matter of reading rather than of cost. Where
+  the argument is pure and cannot trap, the effect system already proves that
+  sinking invisible and no rule has to change — the pass is simply not written
+  (`licm` hoists; nothing sinks). Past that, eliding an argument that prints,
+  mutates, or traps makes the observable behavior depend on a runtime value,
+  and leaves `unwrap_or_else` with no purpose it does not already serve.
+  Nothing decides how far to go.
 - `and_then` is absent. `?` covers it, including propagating an `Option` in an
   `Option`-returning function, and no Wado site wants it. Idiomatic Rust calls
   it 242 times in the measured corpus, so this is the kind of gap that shows

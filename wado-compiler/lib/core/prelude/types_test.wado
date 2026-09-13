@@ -82,6 +82,28 @@ test "Option::unwrap_or" {
     assert none.unwrap_or(0) == 0;
 }
 
+test "Option::unwrap_or_else" {
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.unwrap_or_else(|| 0) == 42;
+    assert none.unwrap_or_else(|| 7) == 7;
+}
+
+test "Option::unwrap_or_else runs the fallback only for None" {
+    let mut calls = 0;
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.unwrap_or_else(|| {
+        calls += 1;
+        return 0;
+    }) == 42;
+    assert none.unwrap_or_else(|| {
+        calls += 1;
+        return 0;
+    }) == 0;
+    assert calls == 1;
+}
+
 test "Option::map" {
     let some: Option<i32> = Option::Some(21);
     let none: Option<i32> = null;
@@ -116,11 +138,40 @@ test "Option::ok_or" {
     assert none.ok_or("missing") == Result::<i32, String>::Err("missing");
 }
 
+test "Option::ok_or_else" {
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.ok_or_else(|| "missing") == Result::<i32, String>::Ok(42);
+    assert none.ok_or_else(|| "missing") == Result::<i32, String>::Err("missing");
+}
+
+test "Option::ok_or_else builds the error only for None" {
+    let mut calls = 0;
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.ok_or_else(|| {
+        calls += 1;
+        return "missing";
+    }) == Result::<i32, String>::Ok(42);
+    assert none.ok_or_else(|| {
+        calls += 1;
+        return "missing";
+    }) == Result::<i32, String>::Err("missing");
+    assert calls == 1;
+}
+
 test "Result::unwrap_or" {
     let ok: Result<i32, String> = Result::Ok(42);
     let err: Result<i32, String> = Result::Err("boom");
     assert ok.unwrap_or(0) == 42;
     assert err.unwrap_or(0) == 0;
+}
+
+test "Result::unwrap_or_else reads the Err payload" {
+    let ok: Result<i32, String> = Result::Ok(42);
+    let err: Result<i32, String> = Result::Err("boom");
+    assert ok.unwrap_or_else(|e: String| e.len() as i32) == 42;
+    assert err.unwrap_or_else(|e: String| e.len() as i32) == 4;
 }
 
 test "Result::map" {
