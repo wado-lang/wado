@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789233953919,
+  "lastUpdate": 1789261856205,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55409,6 +55409,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0dcabd7d908459108129c8514dd5281f155d7419"
         },
         "date": 1789233952929,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "96199eef487a9ed52056e90e76a431a7cc54bab1",
+          "message": "Merge pull request #2041 from wado-lang/claude/core-fs-design-a1hk7u\n\nfeat(core:fs): whole-file I/O in one call, and a read that fails instead of truncating",
+          "timestamp": "2026-09-13T09:52:40+09:00",
+          "tree_id": "d38ec9245f3d948893f936e72a14cb515f29dd3a",
+          "url": "https://github.com/wado-lang/wado/commit/96199eef487a9ed52056e90e76a431a7cc54bab1"
+        },
+        "date": 1789261855525,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
