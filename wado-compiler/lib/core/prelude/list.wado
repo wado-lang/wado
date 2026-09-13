@@ -22,7 +22,7 @@ use {
 use { Option } from "core:prelude/types.wado";
 use { String } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
-use { write_seq_inspect } from "core:prelude/array.wado";
+use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use {
     AsSlice,
@@ -371,38 +371,13 @@ impl<T: Eq> List<T> {
 
 impl<T: Eq> Eq for List<T> {
     pub fn eq(&self, other: &Self) -> bool {
-        if self.used != other.used {
-            return false;
-        }
-        for let mut i = 0; i < self.used; i += 1 {
-            if self.repr[i] != other.repr[i] {
-                return false;
-            }
-        }
-        return true;
+        return seq_eq(&self.repr, 0, self.used, &other.repr, 0, other.used);
     }
 }
 
 impl<T: Ord> Ord for List<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let min_len = i32::min(self.used, other.used);
-        for let mut i = 0; i < min_len; i += 1 {
-            let a = self.repr[i];
-            let b = other.repr[i];
-            if a < b {
-                return Ordering::Less;
-            }
-            if a > b {
-                return Ordering::Greater;
-            }
-        }
-        if self.used < other.used {
-            return Ordering::Less;
-        }
-        if self.used > other.used {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return seq_cmp(&self.repr, 0, self.used, &other.repr, 0, other.used);
     }
 }
 

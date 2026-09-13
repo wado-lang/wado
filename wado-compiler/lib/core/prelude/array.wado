@@ -180,43 +180,54 @@ impl<T> IndexValue<RangeInclusive<i32>> for Array<T> {
     }
 }
 
-impl<T: Eq> Eq for Array<T> {
-    pub fn eq(&self, other: &Self) -> bool {
-        let len = builtin::array_len(self);
-        if len != builtin::array_len(other) {
+/// True when `a[a_start..a_end)` and `b[b_start..b_end)` hold equal elements.
+internal fn seq_eq<T: Eq>(a: &Array<T>, a_start: i32, a_end: i32, b: &Array<T>, b_start: i32, b_end: i32) -> bool {
+    let len = a_end - a_start;
+    if len != b_end - b_start {
+        return false;
+    }
+    for let mut i = 0; i < len; i += 1 {
+        if builtin::array_get_value(a, a_start + i) != builtin::array_get_value(b, b_start + i) {
             return false;
         }
-        for let mut i = 0; i < len; i += 1 {
-            if builtin::array_get_value(self, i) != builtin::array_get_value(other, i) {
-                return false;
-            }
+    }
+    return true;
+}
+
+/// Lexicographic order of `a[a_start..a_end)` against `b[b_start..b_end)`,
+/// comparing elements and then lengths.
+internal fn seq_cmp<T: Ord>(a: &Array<T>, a_start: i32, a_end: i32, b: &Array<T>, b_start: i32, b_end: i32) -> Ordering {
+    let a_len = a_end - a_start;
+    let b_len = b_end - b_start;
+    let min_len = i32::min(a_len, b_len);
+    for let mut i = 0; i < min_len; i += 1 {
+        let x = builtin::array_get_value(a, a_start + i);
+        let y = builtin::array_get_value(b, b_start + i);
+        if x < y {
+            return Ordering::Less;
         }
-        return true;
+        if x > y {
+            return Ordering::Greater;
+        }
+    }
+    if a_len < b_len {
+        return Ordering::Less;
+    }
+    if a_len > b_len {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+impl<T: Eq> Eq for Array<T> {
+    pub fn eq(&self, other: &Self) -> bool {
+        return seq_eq(self, 0, builtin::array_len(self), other, 0, builtin::array_len(other));
     }
 }
 
 impl<T: Ord> Ord for Array<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let len = builtin::array_len(self);
-        let other_len = builtin::array_len(other);
-        let min_len = i32::min(len, other_len);
-        for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get_value(self, i);
-            let b = builtin::array_get_value(other, i);
-            if a < b {
-                return Ordering::Less;
-            }
-            if a > b {
-                return Ordering::Greater;
-            }
-        }
-        if len < other_len {
-            return Ordering::Less;
-        }
-        if len > other_len {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return seq_cmp(self, 0, builtin::array_len(self), other, 0, builtin::array_len(other));
     }
 }
 

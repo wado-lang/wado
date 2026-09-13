@@ -10,7 +10,7 @@ use { ReflectTemplate } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
-use { Array } from "core:prelude/array.wado";
+use { Array, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 
@@ -102,29 +102,6 @@ fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len
         }
     }
     return true;
-}
-
-/// Lexicographic order of `a[a_start..a_start+a_len)` against
-/// `b[b_start..b_start+b_len)`, comparing bytes and then lengths.
-fn compare_byte_ranges(a: &Array<u8>, a_start: i32, a_len: i32, b: &Array<u8>, b_start: i32, b_len: i32) -> Ordering {
-    let min_len = i32::min(a_len, b_len);
-    for let mut i = 0; i < min_len; i += 1 {
-        let a_byte = a[a_start + i];
-        let b_byte = b[b_start + i];
-        if a_byte < b_byte {
-            return Ordering::Less;
-        }
-        if a_byte > b_byte {
-            return Ordering::Greater;
-        }
-    }
-    if a_len < b_len {
-        return Ordering::Less;
-    }
-    if a_len > b_len {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
 }
 
 /// One UTF-8 scalar decoded from a byte slice.
@@ -1388,13 +1365,13 @@ impl LenientFromStr for String {
 
 impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return compare_byte_ranges(
+        return seq_cmp(
             &self.repr as &Array<u8>,
             0,
-            self.len(),
+            self.used,
             &other.repr as &Array<u8>,
             0,
-            other.len(),
+            other.used,
         );
     }
 }
@@ -1527,6 +1504,6 @@ impl Eq for StrSlice {
 
 impl Ord for StrSlice {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return compare_byte_ranges(self.repr, self.start, self.len(), other.repr, other.start, other.len());
+        return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }

@@ -697,7 +697,6 @@ fn "http_fields_from_list_error.wado/$cm_task_entry__handle"(request) {
     let self_201: ref "core:prelude/string.wado//StrUtf8ByteIter";
     let self_205: ref "core:prelude/slice.wado//SliceValueIter<u8>";
     let result: ref "core:prelude//List<u8>";
-    let bytes_212: ref "core:prelude/slice.wado//Slice<u8>";
     let bad: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3_215: ref "core:prelude/format.wado//Formatter";
@@ -711,10 +710,12 @@ fn "http_fields_from_list_error.wado/$cm_task_entry__handle"(request) {
     let elements_229: ref Array<u8>;
     let item_231: u8;
     let used: i32;
+    let end_241: i32;
     let len: i32;
     let out: ref Array<u8>;
     let $sroa_null_byte_repr: ref Array<u8>;
     let $licm_repr_252: ref Array<u8>;
+    let $sroa_bytes_repr: ref Array<u8>;
     elements_199 = array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-valid"), used: 7 }, 1: ref.as_non_null(self_201 = struct.new "core:prelude/string.wado//StrUtf8ByteIter" { repr: ref.as_non_null(global:http_fields_from_list_error.wado::$const_obj_18), used: 5, index: 0 }; "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_iter<core:prelude/string.wado/StrUtf8ByteIter>"(self_201)) });
     valid_entries = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: elements_199, used: builtin::array_len(elements_199) };
     valid_result = "http_fields_from_list_error.wado/$cm_binding__Fields_from_list"(valid_entries);
@@ -747,8 +748,9 @@ fn "http_fields_from_list_error.wado/$cm_task_entry__handle"(request) {
     $sroa_slot_222 = 0;
     $sroa_slot_223 = ref.null none;
     $inline_core_prelude_string_wado_String__from_utf8_slice_9: block {
-        bytes_212 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: result.repr, start: 0, end: result.used };
-        bad = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset"(bytes_212);
+        end_241 = result.used;
+        $sroa_bytes_repr = result.repr;
+        bad = "core:prelude/string.wado/core:prelude/string.wado/String::utf8_error_offset"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_bytes_repr, start: 0, end: end_241 });
         if @unlikely(bad >= 0) {
             cold_path;
             $sroa_slot_222 = 1;
@@ -756,9 +758,9 @@ fn "http_fields_from_list_error.wado/$cm_task_entry__handle"(request) {
             break $inline_core_prelude_string_wado_String__from_utf8_slice_9;
         }
         $sroa_slot_222 = 0;
-        $sroa_slot_223 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(len = bytes_212.end - bytes_212.start; out = builtin::array_new<u8>(select i32(len > 0, len, 0)); if len > 0 {
-            builtin::array_copy<u8>(out, 0, bytes_212.repr, bytes_212.start, len);
-        }; out), used: bytes_212.end - bytes_212.start };
+        $sroa_slot_223 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(len = end_241 - 0; out = builtin::array_new<u8>(select i32(len > 0, len, 0)); if len > 0 {
+            builtin::array_copy<u8>(out, 0, $sroa_bytes_repr, 0, len);
+        }; out), used: end_241 - 0 };
         break $inline_core_prelude_string_wado_String__from_utf8_slice_9;
     };
     let $match_scrut_1: i32;
@@ -2785,7 +2787,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
     let b1_7: u8;
     let b2_8: u8;
     let b3: u8;
-    b0 = builtin::array_get_value<u8>(bytes.repr, bytes.start + start);
+    let $av_24: i32;
+    $av_24 = bytes.start;
+    b0 = builtin::array_get_value<u8>(bytes.repr, $av_24 + start);
     if @likely(b0 <u 128) {
         return 1;
     }
@@ -2798,7 +2802,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_4 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_4 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 1));
         if @unlikely(select i32(b1_4 <u 128, 1, b1_4 >u 191)) {
             cold_path;
             return 0;
@@ -2810,7 +2814,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_5 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_5 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 1));
         if @unlikely((if (if select i32(b1_5 <u 128, 1, b1_5 >u 191) -> i32 {
             1;
         } else {
@@ -2823,7 +2827,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b2_6 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 2));
+        b2_6 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 2));
         if @unlikely(select i32(b2_6 <u 128, 1, b2_6 >u 191)) {
             cold_path;
             return 0;
@@ -2835,7 +2839,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b1_7 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 1));
+        b1_7 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 1));
         if @unlikely((if (if select i32(b1_7 <u 128, 1, b1_7 >u 191) -> i32 {
             1;
         } else {
@@ -2848,12 +2852,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::utf8_sequence_len"
             cold_path;
             return 0;
         }
-        b2_8 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 2));
+        b2_8 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 2));
         if @unlikely(select i32(b2_8 <u 128, 1, b2_8 >u 191)) {
             cold_path;
             return 0;
         }
-        b3 = builtin::array_get_value<u8>(bytes.repr, bytes.start + (start + 3));
+        b3 = builtin::array_get_value<u8>(bytes.repr, $av_24 + (start + 3));
         if @unlikely(select i32(b3 <u 128, 1, b3 >u 191)) {
             cold_path;
             return 0;

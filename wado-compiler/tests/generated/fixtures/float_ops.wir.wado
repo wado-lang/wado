@@ -1022,24 +1022,22 @@ fn "float_ops.wado/$test_7_a_radix_literal_coerces_to_a_float"() {
 }
 
 fn "float_ops.wado/$test_8_float_literal_in_a_simd_lane"() {
-    let v_0: v128;
     let $v1_1: f32;
     let $v2_2: f64;
-    let w: v128;
     let $v1_5: f32;
     let $v2_6: f64;
     let v_13: v128;
     let v_25: v128;
-    $v2_2 = builtin::f64_promote_f32(local.tee $v1_1(f32x4.extract_lane(0, local.tee v_0(local.tee v_13(f32x4.replace_lane(3, local.tee v_13(f32x4.replace_lane(2, local.tee v_13(f32x4.replace_lane(1, local.tee v_13(f32x4.replace_lane(0, local.tee v_13(f32x4.splat(0_f32)), 1.3_f32)), 2.7_f32)), -1.3_f32)), -2.7_f32))))));
+    $v2_2 = builtin::f64_promote_f32(local.tee $v1_1(f32x4.extract_lane(0, local.tee v_13(f32x4.replace_lane(3, local.tee v_13(f32x4.replace_lane(2, local.tee v_13(f32x4.replace_lane(1, local.tee v_13(f32x4.replace_lane(0, local.tee v_13(f32x4.splat(0_f32)), 1.3_f32)), 2.7_f32)), -1.3_f32)), -2.7_f32)))));
     if @unlikely(($v2_2 > 1) == 0) {
         cold_path;
-        "float_ops.wado/$test_8_float_literal_in_a_simd_lane$cold1"(v_0, $v1_1, $v2_2);
+        "float_ops.wado/$test_8_float_literal_in_a_simd_lane$cold1"(v_13, $v1_1, $v2_2);
         unreachable;
     }
-    $v2_6 = builtin::f64_promote_f32(local.tee $v1_5(f32x4.extract_lane(3, local.tee w(local.tee v_25(f32x4.replace_lane(3, local.tee v_25(f32x4.replace_lane(2, local.tee v_25(f32x4.replace_lane(1, local.tee v_25(f32x4.replace_lane(0, local.tee v_25(f32x4.splat(0_f32)), 0.1_f32)), 0.2_f32)), 0.3_f32)), 0.4_f32))))));
+    $v2_6 = builtin::f64_promote_f32(local.tee $v1_5(f32x4.extract_lane(3, local.tee v_25(f32x4.replace_lane(3, local.tee v_25(f32x4.replace_lane(2, local.tee v_25(f32x4.replace_lane(1, local.tee v_25(f32x4.replace_lane(0, local.tee v_25(f32x4.splat(0_f32)), 0.1_f32)), 0.2_f32)), 0.3_f32)), 0.4_f32)))));
     if @unlikely(($v2_6 > 0.3) == 0) {
         cold_path;
-        "float_ops.wado/$test_8_float_literal_in_a_simd_lane$cold0"(w, $v1_5, $v2_6);
+        "float_ops.wado/$test_8_float_literal_in_a_simd_lane$cold0"(v_25, $v1_5, $v2_6);
         unreachable;
     }
 }
