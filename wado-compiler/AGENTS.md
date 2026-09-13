@@ -36,8 +36,8 @@ The Wado compiler crate.
 
 ## Standard Libraries
 
-`src/stdlib.rs` maps every import to its file under `lib/`. A dev build
-reads them from disk, so editing one takes effect on the next `wado` run with no
+`src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
+them from disk, so editing one takes effect on the next `wado` run with no
 rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
 from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
