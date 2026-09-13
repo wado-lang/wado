@@ -455,17 +455,23 @@ type arguments, in the declaring module and across a module boundary.
 | -------------------------------- | --------- | --------------------------- | -------------------------------- | ------------------- |
 | Free function                    | ✅        | ✅                          | ✅                               | ✅                  |
 | Instance method — `impl`'s param | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
-| Instance method — method's own   | ✅        | ✅                          | ❌ (gap below)                   | ✅                  |
+| Instance method — method's own   | ✅        | ✅                          | ✅                               | ✅                  |
 | Static method — `impl`'s param   | ✅ ᴿ      | ✅ ᴿ                        | ✅ ᴿ                             | ✅                  |
-| Static method — method's own     | ✅        | ✅                          | ✅ ᴳ                             | ✅                  |
+| Static method — method's own     | ✅        | ✅                          | ✅                               | ✅                  |
 | Trait method — trait's own param | ✅        | ✅                          | ✅                               | ✅                  |
-| Trait method — method's own      | ✅        | ✅                          | ❌ (gap below)                   | ✅                  |
+| Trait method — method's own      | ✅        | ✅                          | ✅                               | ✅                  |
 | Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
 
 ᴿ The receiver settles the `impl` block's parameters, so the column describes
 how the receiver's own type was settled. ᴬ The literal's annotation names the
-instantiation. ᴳ Only where the `impl` block declares type parameters of its
-own; on a block that declares none the gap below applies.
+instantiation.
+
+The method's own type default is settled before the value defaults are walked,
+against the same slots the call's own inference uses. It runs only where the
+method declares a value default: resolving one is what needs the receiver's
+associated types registered (`Iterator::collect` writes
+`<C: FromIterator<Elem = Self::Item> = List<Self::Item>>`), and that
+registration is not safe this early.
 
 An `interface` operation is absent by rule, not by omission: an operation
 declares neither parameter defaults nor type parameters (see
@@ -595,37 +601,6 @@ let resp = Fetch::fetch(url, init).read();
 - [ ] `wado-from-idl`: emit `= default` instead of `Option<T>` for WebIDL parameters with IDL defaults, and map WebIDL dictionaries to structs with field defaults. Blocked on WebIDL support in `wado-from-idl` itself (currently WIT-only).
 
 ## Known gaps
-
-A value default on a method cannot name a method type parameter whose only
-source is that parameter's own type default:
-
-```wado
-impl<T> B<T> {
-    fn tagged<U: Default = NoFields>(&self, u: U = U::default()) -> String { ... }
-}
-b.tagged();   // error: unknown function `U::default`
-```
-
-A turbofish (`b.tagged::<i32>()`) or an argument beside it settles `U` and the
-default resolves.
-
-Three spellings reach the gap, and one escapes it:
-
-| Declaration                                     | `U` from its own type default       |
-| ----------------------------------------------- | ----------------------------------- |
-| Instance method, any `impl`                     | ❌ unknown function `U::default`    |
-| Trait method taking `&self`                     | ❌ unknown function `U::default`    |
-| Static on an `impl` declaring no type parameter | ❌ `U` does not implement `Default` |
-| Static on an `impl` declaring one               | ✅                                  |
-
-The two diagnostics are one gap: the method's slots are solved against the
-`impl` block's, so a block that declares some carries the method's own along
-with them and a block that declares none has nowhere to put them.
-
-Closing it means settling a method type parameter's own type default before the
-value defaults are filled; the step that does so today registers the receiver's
-associated types as a side effect, which is not safe to run that early. Not
-scheduled.
 
 A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that

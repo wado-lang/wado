@@ -694,12 +694,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
         // A default may also name the method's *own* type parameter
         // (`u: U = U::default()`). The turbofish spells it; otherwise the
-        // written arguments pin it, solved here against the same slots the
-        // pipeline's inference uses below. This solve mints no instantiation
-        // and reports nothing — a slot it leaves open binds no name, and the
-        // walk below then says so in its own terms.
+        // written arguments pin it, or its own type default does, settled here
+        // against the same slots the pipeline's inference uses below. This
+        // solve mints no instantiation and reports nothing — a slot it leaves
+        // open binds no name, and the walk below then says so in its own terms.
+        //
+        // A method that declares no value default settles nothing, so it does
+        // not run: `Iterator::collect` would resolve `= List<Self::Item>` here,
+        // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
-        if !method_type_param_ids.is_empty() {
+        if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
             let known = if !type_args.is_empty() && !type_arg_holes.iter().any(|&h| h) {
                 type_args.clone()
             } else {
@@ -716,10 +720,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 infer.solve()
             };
-            default_type_bindings.extend(slot_type_bindings(
-                &self.tysys.type_table,
+            default_type_bindings.extend(self.value_default_slot_bindings(
+                &method_own_params,
                 &method_type_param_ids,
-                &known,
+                base_type_id,
+                known,
+                defaults_module.clone(),
             ));
         }
         self.fill_trailing_defaults(
@@ -1737,16 +1743,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_ref()
             .map(MethodSig::own_type_param_ids)
             .unwrap_or_default();
+        let own_params = callee_sig
+            .as_ref()
+            .map(|sig| sig.own_params.clone())
+            .unwrap_or_default();
 
-        // A static's own slots, where the spelling wrote none. With no slots of
-        // its own the block leaves the method's numbered from zero and the
-        // receiver's substitution reaches them anyway; with slots of its own it
-        // does not, so they are solved here from the arguments — as instance
-        // dispatch solves them — and an unsolved one is reported rather than
-        // left to reach codegen unsubstituted.
+        // A static's own slots, where the spelling wrote none: solved here from
+        // the arguments, as instance dispatch solves them, so that what binds
+        // them reaches reify rather than leaving an abstract `U::default()` to
+        // be rejected at the trait-bound check over WIR.
+        //
+        // Only a block declaring slots of its own answers for an unsolved one.
+        // A block declaring none leaves the method's numbered from zero, where
+        // the receiver's substitution reaches them, and a slot this solve
+        // leaves open is that substitution's to fill.
+        let strict = callee_sig
+            .as_ref()
+            .is_some_and(|sig| sig.declaring_slot_count > 0);
         if let Some(sig) = callee_sig
             && static_call.type_args.is_empty()
-            && sig.declaring_slot_count > 0
             && let Some(own) = sig.own_params.first()
             && let Some(receiver) = struct_name_for_lookup.clone()
         {
@@ -1782,7 +1797,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 param_types = instantiated.param_types;
                 self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
-            } else {
+            } else if strict {
                 let _ = self.emit(TypeError::UninferredStaticTypeArg {
                     receiver,
                     method: static_call.method.clone(),
@@ -1811,13 +1826,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 slot_type_bindings(&self.tysys.type_table, &impl_sig.target_type_args, &args)
             })
             .unwrap_or_default();
-        // The static's own slots, as the turbofish spelled them or the block
-        // above solved them.
-        static_type_bindings.extend(slot_type_bindings(
-            &self.tysys.type_table,
-            &own_type_param_ids,
-            &method_type_args,
-        ));
+        // The static's own slots, as the turbofish spelled them, as the block
+        // above solved them, or as their own type defaults settle them. That
+        // last source is the one the block above cannot reach: it runs only
+        // where the declaring block has slots of its own, and a block with none
+        // leaves the method's unbound rather than wrong.
+        if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
+            static_type_bindings.extend(self.value_default_slot_bindings(
+                &own_params,
+                &own_type_param_ids,
+                target_type_id,
+                method_type_args.clone(),
+                static_method_module.clone(),
+            ));
+        } else {
+            static_type_bindings.extend(slot_type_bindings(
+                &self.tysys.type_table,
+                &own_type_param_ids,
+                &method_type_args,
+            ));
+        }
         self.fill_trailing_defaults(
             &mut args,
             &param_types,
@@ -3426,7 +3454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_type_args: &[TypeId],
         call_id: AstId,
         span: Span,
-        _ctx: &mut FunctionContext,
+        ctx: &mut FunctionContext,
     ) -> TypeId {
         // The call site may refer to the receiver type through a
         // `use { Counter as CounterA }` alias. Resolve the alias to its
@@ -3599,19 +3627,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // index answers for one kind of method, and an instance one reached
         // qualified then lost its binding and left reify emitting a call to a
         // name nothing declares.
-        let cm_name = self
-            .static_call_sig(
-                &actual_struct_name,
-                method_name,
-                receiver_key.as_ref(),
-                SigChoice::Any,
-            )
-            .and_then(|sig| sig.cm_name);
+        let callee_sig = self.static_call_sig(
+            &actual_struct_name,
+            method_name,
+            receiver_key.as_ref(),
+            SigChoice::Any,
+        );
+        let cm_name = callee_sig.as_ref().and_then(|sig| sig.cm_name.clone());
 
         // From the resolution that named the callee. Asking again by the base's
         // bare name asks the *caller's* frame, which an alias leaves without
         // that name at all.
         let callee_params = resolution.params;
+
+        // Walk the defaults this spelling left out, so a default naming the
+        // method's own type parameter (`u: U = U::default()`) resolves against
+        // what the call settled that parameter to. Reify pads from this walk's
+        // overlay; without one it replays the declaration's, where the
+        // parameter is still abstract and the trait-bound check over WIR
+        // rejects it.
+        if args.len() < callee_params.param_types.len()
+            && callee_params
+                .param_defaults
+                .iter()
+                .any(|(_, d)| d.is_some())
+            && let Some(sig) = &callee_sig
+        {
+            let own_ids = sig.own_type_param_ids();
+            let own_params = sig.own_params.clone();
+            let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
+            let type_bindings = self.value_default_slot_bindings(
+                &own_params,
+                &own_ids,
+                receiver,
+                method_type_args.to_vec(),
+                callee_params.defaults_module.clone(),
+            );
+            let mut padded = args.to_vec();
+            self.fill_trailing_defaults(
+                &mut padded,
+                &callee_params.param_types,
+                &callee_params.param_defaults,
+                callee_params.defaults_module.clone(),
+                &type_bindings,
+                Some(call_id),
+                ctx,
+                |_, _, _, _| {},
+            );
+        }
 
         let StaticMethodRef {
             module: struct_module,

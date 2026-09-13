@@ -1259,22 +1259,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(trait_) = trait_decl {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
         }
-        // Re-registering the parameters gives a default like `= T` a scope to
-        // resolve against. Number them from the index the declaration gave the
-        // first slot — read off the slot, not counted from the receiver's type
-        // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = self.slot_base(slots);
-        let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
-            s.with_resolving_home(declaring_module, |s| {
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(method_type_params, base);
-                method_type_params
-                    .iter()
-                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                    .collect()
-            })
-        });
+        let defaults = self.resolve_method_type_param_defaults(
+            method_type_params,
+            receiver_type,
+            slots,
+            declaring_module,
+        );
         let mut filled = false;
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
@@ -1291,6 +1281,117 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         filled
+    }
+
+    /// Resolve each method type parameter's declared type default, with `Self`
+    /// set to the concrete receiver and `resolving_home` pointed at the
+    /// declaring module — a default may name a type private to that module
+    /// (`<T = Priv>`), which the call site cannot resolve.
+    ///
+    /// Registers nothing. A default naming an associated type of the receiver
+    /// needs those registered first, which is the caller's to do and is why
+    /// this is separate: the value defaults are filled before the point where
+    /// registering is safe, and they need the plain answer.
+    fn resolve_method_type_param_defaults(
+        &mut self,
+        method_type_params: &[ast::GenericParam],
+        receiver_type: TypeId,
+        slots: &[TypeId],
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<Option<TypeId>> {
+        // Re-registering the parameters gives a default like `= T` a scope to
+        // resolve against. Number them from the index the declaration gave the
+        // first slot — read off the slot, not counted from the receiver's type
+        // arguments, which overshoots on a concrete or pack-bearing impl.
+        let base = self.slot_base(slots);
+        self.with_self_type(receiver_type, |s| {
+            s.with_resolving_home(declaring_module, |s| {
+                let mut scope = s.enter_inherited_type_param_scope();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.register_generic_params(method_type_params, base);
+                method_type_params
+                    .iter()
+                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect()
+            })
+        })
+    }
+
+    /// What a value default naming one of the method's own type parameters
+    /// resolves that name against: the type argument the call settled on.
+    ///
+    /// `known` is the turbofish or a solve over the written arguments; a slot
+    /// neither pinned takes the type default its declaration wrote. Call it
+    /// only where the method declares a value default, since resolving a type
+    /// default is what this is for and doing so is not free — see
+    /// [`Self::method_type_args_for_value_defaults`].
+    pub(super) fn value_default_slot_bindings(
+        &mut self,
+        own_params: &[ast::GenericParam],
+        own_ids: &[TypeId],
+        receiver: TypeId,
+        mut known: Vec<TypeId>,
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<DefaultTypeBinding> {
+        // A turbofish spelling a different count settles nothing, and the
+        // slots then stand for themselves.
+        if known.len() != own_ids.len() {
+            known = own_ids.to_vec();
+        }
+        self.method_type_args_for_value_defaults(
+            own_params,
+            receiver,
+            own_ids,
+            declaring_module,
+            &mut known,
+        );
+        slot_type_bindings(&self.tysys.type_table, own_ids, &known)
+    }
+
+    /// The type arguments a value default resolves against, with a slot that
+    /// nothing pinned taking the type default its declaration wrote.
+    ///
+    /// `known` comes from the turbofish or from a solve over the written
+    /// arguments, so this runs before the call's real inference and before the
+    /// receiver's associated types are registered. A default this cannot
+    /// answer — one naming such an associated type — leaves its slot as it
+    /// found it, and the value default then reports in its own terms.
+    fn method_type_args_for_value_defaults(
+        &mut self,
+        method_type_params: &[ast::GenericParam],
+        receiver_type: TypeId,
+        slots: &[TypeId],
+        declaring_module: Option<ModuleSource>,
+        known: &mut [TypeId],
+    ) {
+        let receiver_type = self.tysys.get_base_type(receiver_type);
+        let fillable: Vec<bool> = method_type_params
+            .iter()
+            .zip(known.iter())
+            .map(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid))
+            .collect();
+        if !fillable.iter().any(|&f| f) {
+            return;
+        }
+        let defaults = self.resolve_method_type_param_defaults(
+            method_type_params,
+            receiver_type,
+            slots,
+            declaring_module,
+        );
+        for (i, &fill) in fillable.iter().enumerate() {
+            if fill
+                && let Some(default_ty) = defaults[i]
+                && default_ty != TypeTable::ERROR
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(default_ty)
+            {
+                known[i] = default_ty;
+            }
+        }
     }
 
     /// Infer an instance call's method-level type arguments from the method's

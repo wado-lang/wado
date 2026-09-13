@@ -66,6 +66,27 @@ impl<T: Default> Box2<T> {
     fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
         return `${u:?}`;
     }
+
+    // The same on an instance method, which the `impl`'s own parameter does
+    // not answer for.
+    fn marked<U: Default = NoFields>(&self, u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+}
+
+// A block declaring no type parameter of its own numbers the method's from
+// zero, where the receiver's substitution reaches them. Nothing then solves
+// them, so the method's own type default is the only source left.
+struct Plain {}
+
+impl Plain {
+    fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+
+    fn marked<U: Default = NoFields>(&self, u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
 }
 
 trait Show {
@@ -73,6 +94,9 @@ trait Show {
     // the default, and the impl restates the list without it.
     fn show(&self, v: NoFields = NoFields {}) -> String;
     fn showing<U: Default>(&self, u: U = U::default()) -> String;
+
+    // The method's own parameter, supplied by its own type default.
+    fn shown<U: Default = NoFields>(&self, u: U = U::default()) -> String;
 }
 
 impl<T: Default> Show for Box2<T> {
@@ -81,6 +105,10 @@ impl<T: Default> Show for Box2<T> {
     }
 
     fn showing<U: Default>(&self, u: U) -> String {
+        return `${u:?}`;
+    }
+
+    fn shown<U: Default>(&self, u: U) -> String {
         return `${u:?}`;
     }
 }
@@ -119,6 +147,10 @@ test "an instance method's default names a type parameter in scope" {
     assert bi.paired(7) == "7/0";
     assert bi.paired("s") == "\"s\"/\"\"";
     assert bi.paired::<bool>(true) == "true/false";
+    assert bi.marked() == "NoFields {}";
+    assert bi.marked::<i32>() == "0";
+    assert Plain {}.marked() == "NoFields {}";
+    assert Plain {}.marked::<i32>() == "0";
 }
 
 // The same two sources, plus the static's own type-parameter default.
@@ -129,6 +161,8 @@ test "a static method's default names a type parameter in scope" {
     assert Box2::<i32>::make("s") == "\"s\"/\"\"";
     assert Box2::<i32>::tagged() == "NoFields {}";
     assert Box2::<i32>::tagged::<bool>() == "false";
+    assert Plain::tagged() == "NoFields {}";
+    assert Plain::tagged::<bool>() == "false";
 }
 
 // The default belongs to the trait declaration; the impl restates the list
@@ -138,6 +172,8 @@ test "a trait method's default names a type parameter in scope" {
     assert bi.show() == "NoFields {}";
     assert bi.showing::<i32>() == "0";
     assert bi.showing::<bool>() == "false";
+    assert bi.shown() == "NoFields {}";
+    assert bi.shown::<i32>() == "0";
 }
 
 // From the annotation, then from a sibling field.
