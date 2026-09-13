@@ -1,21 +1,19 @@
 # wado-compiler
 
-The Wado compiler crate. The NIR optimizer has its own guide:
-[`docs/optimizer.md`](../docs/optimizer.md).
+The Wado compiler crate.
 
 ## Rules
 
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
-  are denied at the crate root. A user-facing message goes through `Logger` to
-  the host. A developer trace goes through `compiler_trace!` to the sink the
-  host installed. What only a broken stdlib can reach is an `assert!`.
+  are denied at the crate root. A user-facing message goes through `Logger`, a
+  developer trace through `compiler_trace!`, and what only a broken stdlib can
+  reach through `assert!`.
 - `src/codegen.rs` emits the `Package` as is; it knows nothing of the earlier
   phases.
 - Only `src/name.rs` knows a name format. Mangling and monomorphization go
   through it.
 - Every name the compiler mints for itself starts with one `$`
-  (`name::INTERNAL_PREFIX`), which no Wado identifier can spell: a local, a label,
-  a global, a synthesized struct or function.
+  (`name::INTERNAL_PREFIX`), which no Wado identifier can spell.
   `mise run check-internal-names` gates it.
 - What makes such a name unique is a serial that advances on read
   (`FunctionContext::fresh_serial`), never a local index the site has yet to
@@ -34,11 +32,11 @@ The Wado compiler crate. The NIR optimizer has its own guide:
 
 ## Standard Libraries
 
-`src/stdlib.rs` lists `lib/core/` and `lib/wasi/`. A dev build reads them from
-disk, so editing one takes effect on the next `wado` run with no rebuild. A
-release build embeds them, as does any `wasm32` build, which has no filesystem.
-`lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/` from a
-WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
+`src/stdlib.rs` maps every stdlib import to its file under `lib/`. A dev build
+reads them from disk, so editing one takes effect on the next `wado` run with no
+rebuild. A release build embeds them, as does any `wasm32` build, which has no
+filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
+from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
 `builtin::select` returns one of its operands rather than a copy, so write the
 `if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`
