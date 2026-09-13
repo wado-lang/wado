@@ -489,46 +489,54 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
         args.iter()
             .map(|ty| {
-                self.reject_non_type_in_type(ty);
+                // A name no declaration answers is left to the position's own
+                // resolution, which reports it where an annotation would not.
+                self.walk_type_heads(ty, &mut |scope, id, name, span, _| {
+                    scope.reject_non_type_decl(id, name, span)
+                });
                 self.resolve_type(ty)
             })
             .collect()
     }
 
-    /// Report every `interface` and `trait` a written type reaches. Unlike an
-    /// annotation, nothing here reports a name no declaration answers — the
-    /// position's own resolution does that.
-    fn reject_non_type_in_type(&mut self, ty: &Type) {
+    /// Walk the named heads a written type reaches, outermost first. `head`
+    /// takes each one's site, name, span and whether it carries arguments, and
+    /// answers whether the walk stops there: a head it rejected makes its own
+    /// arguments noise.
+    pub(super) fn walk_type_heads(
+        &mut self,
+        ty: &Type,
+        head: &mut impl FnMut(&mut Self, AstId, &str, Span, bool) -> bool,
+    ) {
         match ty {
             Type::Named(named) => {
-                self.reject_non_type_decl(named.id, &named.name, named.span);
+                head(self, named.id, &named.name, named.span, false);
             }
             Type::Generic(generic) => {
-                // With the head rejected the arguments are noise.
-                if self.reject_non_type_decl(generic.id, &generic.name, generic.span) {
+                if head(self, generic.id, &generic.name, generic.span, true) {
                     return;
                 }
                 for arg in &generic.args {
-                    self.reject_non_type_in_type(arg);
+                    self.walk_type_heads(arg, head);
                 }
             }
             Type::NamespacedGeneric(namespaced) => {
                 for arg in &namespaced.args {
-                    self.reject_non_type_in_type(arg);
+                    self.walk_type_heads(arg, head);
                 }
             }
             Type::Function(func_ty) => {
                 for param in &func_ty.params {
-                    self.reject_non_type_in_type(param);
+                    self.walk_type_heads(param, head);
                 }
-                self.reject_non_type_in_type(&func_ty.return_type);
+                self.walk_type_heads(&func_ty.return_type, head);
             }
             Type::Reference(inner) | Type::MutReference(inner) => {
-                self.reject_non_type_in_type(inner);
+                self.walk_type_heads(inner, head);
             }
             Type::Tuple(elements) => {
                 for element in elements {
-                    self.reject_non_type_in_type(element);
+                    self.walk_type_heads(element, head);
                 }
             }
             Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}

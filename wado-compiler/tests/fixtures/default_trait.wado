@@ -52,8 +52,8 @@ test "a T: Default bound resolves through the marker'd type" {
 
 struct NoFields {}
 
-// A fieldless struct qualifies vacuously — it has exactly one value — which is
-// what lets a marker like this serve as a type parameter's default.
+// A fieldless struct has exactly one value, so it qualifies with no field to
+// default. That is what lets a marker like this be a type parameter's default.
 test "a fieldless struct has a default" {
     assert NoFields::default() matches { NoFields {} };
     let _ = make::<NoFields>();

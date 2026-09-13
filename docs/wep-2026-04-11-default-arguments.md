@@ -469,13 +469,14 @@ how the receiver's own type was settled. ᴬ The literal's annotation names the
 instantiation.
 
 A variadic pack is a type parameter like any other, so `[..T::default()]` is a
-default the same way `T::default()` is. What it settles to is a tuple rather
-than a type, and the parameter it fills is the only place that tuple is written
-down — so the reified default records it on the expansion node, and a
-monomorphizer pass ahead of instantiation expands the node from it. Without
-that the spliced default waits for a substitution that only a generic caller
-would ever perform. A pack declares no type default of its own, which is why
-that column is empty.
+default the same way `T::default()` is. A pack settles to a tuple rather than to
+a single type. Nothing records that tuple except the parameter the default
+fills, so reify reads it off there and stamps it on the expansion node. A
+monomorphizer pass ahead of instantiation then expands the node from the stamp.
+Without it the spliced default waits for a substitution only a generic caller
+performs, and a concrete caller reaches lowering with the node still standing.
+A pack declares no type default of its own, so that column is empty for both
+pack rows.
 
 The method's own type default is settled before the value defaults are walked,
 against the same slots the call's own inference uses. It runs only where the

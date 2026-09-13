@@ -2667,7 +2667,7 @@ ServerConfig { port: 3000 };  // compile error: missing required field 'host'
 
 Default expressions are evaluated at the construction site. They must be effect-free (validated by the effect system) and cannot reference other fields. Field shorthand (`{ host }`) and destructuring are unaffected — destructuring sees every field regardless of defaults.
 
-A non-generic struct whose every field has a default auto-derives `Default`, a fieldless one vacuously; see [Default Trait](#default-trait).
+A non-generic struct whose every field has a default auto-derives `Default`. A fieldless struct has no field to default, so it qualifies. See [Default Trait](#default-trait).
 
 ### Generic Type Inference
 
@@ -2725,7 +2725,7 @@ let a = pick::<_, bool>(1, true);      // infers the first type argument
 
 Traits define shared behavior that types can implement. Wado uses static dispatch for trait methods - all calls are resolved at compile time.
 
-A `trait` name, and an `interface` name with it, is declared in the type namespace — one name reaches one declaration wherever it is written — but neither denotes a type. Each names a set of operations, and no value has one as its type. A type position naming one is a compile error, so a trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
+A `trait` and an `interface` are declared in the type namespace: one name reaches one declaration wherever it is written. Neither denotes a type. Each names a set of operations, and no value has one as its type, so a type position naming one is a compile error. A trait reaches a type only as a bound (`fn f<T: Greet>(x: T)`).
 
 ```wado
 // Trait declaration

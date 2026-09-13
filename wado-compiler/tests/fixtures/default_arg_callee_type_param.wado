@@ -3,12 +3,12 @@
 //! `T::default()` is a static call on a concrete type by the time it resolves.
 //!
 //! Two axes have to be covered together, and the blocks below walk their
-//! product: the kinds of site that take a default — one block each — and every
-//! way a type argument reaches one (turbofish, a sibling argument or field, a
-//! type parameter's own default, a caller forwarding its own binder). This is
-//! the coverage matrix in the WEP. Each callee is read at two type arguments,
-//! because they share one default expression: a walk answering for both would
-//! hand one site the other's value.
+//! product. One axis is the kind of site that takes a default, one block each.
+//! The other is how a type argument reaches it: a turbofish, a sibling argument
+//! or field, a type parameter's own default, a caller forwarding its own
+//! binder. This is the coverage matrix in the WEP. Each callee is read at two
+//! type arguments, because they share one default expression: a walk answering
+//! for both would hand one site the other's value.
 //!
 //! The `NoFields` idiom rests on a fieldless struct satisfying `Default`
 //! vacuously, which `default_trait.wado` pins.

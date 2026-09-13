@@ -1,13 +1,13 @@
-// An `interface` and a `trait` are declared in the type namespace — one name
-// reaches one declaration wherever it is written — and neither denotes a type.
-// A type position naming one says so where it was written.
+// An `interface` and a `trait` are declared in the type namespace: one name
+// reaches one declaration wherever it is written. Neither denotes a type, and a
+// type position naming one says so where it was written.
 //
-// One annotation per file, because the annotation check stops at the first
-// error reported. The turbofish next to it is a separate route: type arguments
-// are resolved by the call, not by the annotation walk, and an unreported one
-// there resolves to `unknown`, which satisfies every bound. `mk::<Stdout>()`
-// passed its `T: Default` check that way and reached monomorphization, where
-// no impl exists and the compiler panicked.
+// A turbofish is its own route. Type arguments are resolved by the call rather
+// than by the annotation walk, and an unreported one resolved to `unknown`,
+// which satisfies every bound: the call passed its `T: Default` check and
+// reached monomorphization, where no impl exists and the compiler panicked.
+// `interface_in_annotation_error.wado` covers the annotation route, which has
+// to be its own file because that check stops at the first error reported.
 
 interface Counter {
     fn next() -> i32;

@@ -43,10 +43,7 @@ pub struct Logger<'a, H: CompilerHost> {
     host: &'a H,
     level: LogLevel,
     error_count: Cell<usize>,
-    /// Faults offered, counting one the dedup below swallowed. What a walk
-    /// asking "did I report anything?" has to compare: the same fault at the
-    /// same place is printed once, so [`Self::error_count`] does not move for
-    /// the second walk that hit it, and a delta over it reads as clean.
+    /// Faults offered, counting the ones the dedup swallowed.
     offered_error_count: Cell<usize>,
     /// Nesting depth of [`Logger::quiet`] scopes. While non-zero, an error is
     /// dropped instead of emitted and does not count.
@@ -248,11 +245,9 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
         self.error_count.get()
     }
 
-    /// Faults offered, one already-said among them included. Compare a delta
-    /// over this to ask whether a walk reported; a delta over
-    /// [`Self::error_count`] answers that wrongly for the second walk to reach
-    /// one place, which is every re-walked node — a default argument, a trait's
-    /// default body synthesized per implementing type.
+    /// Faults offered, the already-said among them included. A walk asking
+    /// whether it reported compares a delta over this, not over
+    /// [`Self::error_count`], which the dedup holds still on a re-walked node.
     pub fn offered_error_count(&self) -> usize {
         self.offered_error_count.get()
     }

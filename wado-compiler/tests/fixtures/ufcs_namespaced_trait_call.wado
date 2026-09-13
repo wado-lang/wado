@@ -1,14 +1,14 @@
-//! `ns::Trait::method(&recv)` — the namespaced spelling of the trait-qualified
-//! (UFCS) call. The trait is the second-to-last segment whatever the prefix, so
-//! the bare and namespaced spellings name the same declaration and take the
+//! `ns::Trait::method(&recv)`, the namespaced spelling of the trait-qualified
+//! (UFCS) call. The trait is the segment before the method whatever the prefix,
+//! so the bare and namespaced spellings name the same declaration and take the
 //! same defaults from it.
 //!
-//! The check that routes a call to the trait-qualified path split the path at
-//! its *first* `::`, so the namespaced form asked whether `lib` declared a
-//! method named `Greet::greet`. Nothing did, and the call fell to the branch
-//! that reads the middle segment as a type: `Greet` is a trait and names none,
-//! so the call resolved to `unknown` with no diagnostic, and the first
-//! expression to use the result complained about `unknown` instead.
+//! The check routing a call to the trait-qualified path split the path at its
+//! *first* `::`, so the namespaced form asked whether `m` declared a method
+//! named `Greet::greet`. Nothing did. The call fell to the branch reading the
+//! middle segment as a type, where `Greet` is a trait and names none, and
+//! resolved to `unknown` with no diagnostic. The first expression to use the
+//! result complained about `unknown` instead.
 
 use m from "./sub/ufcs_namespaced_trait_target.wado";
 use { Greet } from "./sub/ufcs_namespaced_trait_target.wado";

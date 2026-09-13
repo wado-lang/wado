@@ -11,7 +11,9 @@ use crate::ast::{
 use crate::compiler_host::CompilerHost;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::tir::{FunctionRef, ResolvedType, TirField, TirStruct, TypeId, TypeTable};
+use crate::tir::{
+    FunctionRef, ResolvedType, SubstitutionContext, TirField, TirStruct, TypeId, TypeTable,
+};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -1642,72 +1644,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return;
                 }
             }
-        }
-    }
-
-    /// Substitute type parameters using a TypeId-to-TypeId map.
-    /// Unlike `substitute_type_params` (which substitutes by index), this only
-    /// replaces `TypeIds` that are explicitly in the map, leaving all others unchanged.
-    /// This is used in struct literal field type fixup to avoid incorrectly replacing
-    /// impl-scope `TypeParams` that share the same index as the struct's own `TypeParams`.
-    pub(super) fn substitute_type_params_by_map(
-        &mut self,
-        type_id: TypeId,
-        map: &IndexMap<TypeId, TypeId>,
-    ) -> TypeId {
-        if map.is_empty() {
-            return type_id;
-        }
-        if let Some(&concrete) = map.get(&type_id) {
-            return concrete;
-        }
-        let resolved_type = self.tysys.type_table.borrow().get(type_id).clone();
-        match resolved_type {
-            ResolvedType::BuiltinArray(elem) => {
-                let new_elem = self.substitute_type_params_by_map(elem, map);
-                if new_elem == elem {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .intern(ResolvedType::BuiltinArray(new_elem))
-                }
-            }
-            ResolvedType::Ref(inner) => {
-                let new_inner = self.substitute_type_params_by_map(inner, map);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys.type_table.borrow_mut().make_ref(new_inner)
-                }
-            }
-            ResolvedType::MutRef(inner) => {
-                let new_inner = self.substitute_type_params_by_map(inner, map);
-                if new_inner == inner {
-                    type_id
-                } else {
-                    self.tysys.type_table.borrow_mut().make_mut_ref(new_inner)
-                }
-            }
-            ResolvedType::GenericInstance {
-                def,
-                type_args: inner_args,
-            } => {
-                let new_args: Vec<TypeId> = inner_args
-                    .iter()
-                    .map(|&a| self.substitute_type_params_by_map(a, map))
-                    .collect();
-                if new_args == inner_args {
-                    type_id
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_generic_instance(def, new_args)
-                }
-            }
-            _ => type_id,
         }
     }
 
@@ -4012,7 +3948,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (field_default_bindings, settled_params) = if walks_a_default {
                 self.field_default_type_bindings(struct_decl, annotated_args.as_deref(), &fields)
             } else {
-                (Vec::new(), IndexMap::default())
+                (Vec::new(), SubstitutionContext::new())
             };
             // The default is the struct module's AST, and its scope, its import
             // aliases and the vantage its visibility is judged from are all
@@ -4041,8 +3977,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // The declared type still names the struct's own
                         // parameters where no annotation pinned them, and the
                         // default answers in the settled ones.
-                        let expected_type_id =
-                            s.substitute_type_params_by_map(*expected_type_id, &settled_params);
+                        let expected_type_id = settled_params
+                            .substitute(*expected_type_id, &mut s.tysys.type_table.borrow_mut());
                         let resolved = ctx.with_caller_bindings_hidden(|ctx| {
                             s.resolve_expr(&default_expr, ctx, Some(expected_type_id))
                         });
@@ -4117,21 +4053,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut fields: Vec<ResolvedField> = if type_args.is_empty() {
                 fields
             } else {
-                let struct_param_map: IndexMap<TypeId, TypeId> = self
+                let slots = self
                     .struct_fields_of_written_decl(struct_decl)
-                    .map(|info| {
-                        info.type_param_type_ids
-                            .iter()
-                            .zip(type_args.iter())
-                            .map(|(&param_id, &concrete_id)| (param_id, concrete_id))
-                            .collect()
-                    })
+                    .map(|info| info.type_param_type_ids.clone())
                     .unwrap_or_default();
+                let subst = SubstitutionContext::new().bind(&slots, &type_args);
                 fields
                     .into_iter()
                     .map(|mut field| {
-                        field.type_id =
-                            self.substitute_type_params_by_map(field.type_id, &struct_param_map);
+                        field.type_id = subst
+                            .substitute(field.type_id, &mut self.tysys.type_table.borrow_mut());
                         field
                     })
                     .collect()
@@ -4630,9 +4561,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         struct_decl: Option<DefId>,
         expected_args: Option<&[TypeId]>,
         fields: &[ResolvedField],
-    ) -> (Vec<DefaultTypeBinding>, IndexMap<TypeId, TypeId>) {
+    ) -> (Vec<DefaultTypeBinding>, SubstitutionContext) {
         let Some(info) = self.struct_fields_of_written_decl(struct_decl) else {
-            return (Vec::new(), IndexMap::default());
+            return (Vec::new(), SubstitutionContext::new());
         };
         let mut settled: IndexMap<TypeId, TypeId> = IndexMap::default();
         // The annotation names the whole instantiation, so it answers for every
@@ -4662,10 +4593,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter_map(|slot| settled.get(slot).map(|&arg| (*slot, arg)))
             .unzip();
-        let map = slots.iter().copied().zip(args.iter().copied()).collect();
         (
             slot_type_bindings(&self.tysys.type_table, &slots, &args),
-            map,
+            SubstitutionContext::new().bind(&slots, &args),
         )
     }
 

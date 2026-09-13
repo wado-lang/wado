@@ -3245,11 +3245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.resolve_expr(a, ctx, expected);
         }
 
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
+        let type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
         let mangled_method_name =
