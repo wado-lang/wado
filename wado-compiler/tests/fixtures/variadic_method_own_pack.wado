@@ -2,11 +2,9 @@
 //! block declares. The two are separate spaces: the block's parameter comes
 //! from the receiver, the method's pack from the call.
 //!
-//! Both ways of settling it are read here. A turbofish spells one argument per
-//! element and the slot holds the tuple; inference reads the tuple off the
-//! argument. Either way `[..U]` splices into the parameter type. Substituting
-//! the pack in without splicing made the parameter `[[i32, bool]]`, so every
-//! call reported a type mismatch against the tuple it had just passed.
+//! Both ways of settling it are read here: a turbofish spelling one argument
+//! per element, and inference reading the tuple off the argument. Either way
+//! `[..U]` splices into the parameter type rather than nesting in it.
 
 struct Box2<T> {
     v: T,

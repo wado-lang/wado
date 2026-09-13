@@ -6864,10 +6864,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Record on the `TypePackExpansion` of a parameter default the tuple the
-    /// call settled the pack to, read off the parameter's own concrete type.
-    /// The default is spliced into the caller, which may be a function nothing
-    /// instantiates, so the pack has no later chance to be substituted.
+    /// Record on a default's `TypePackExpansion` the tuple the call settled the
+    /// pack to, read off the parameter's own concrete type. The caller it is
+    /// spliced into may be one nothing instantiates, so this is the last chance.
     fn settle_packs_in_default(&mut self, expr: &mut TirExpr, expected: TypeId) {
         use crate::tir::{ResolvedType, TirExprKind, TypeTable};
 

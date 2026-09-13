@@ -246,8 +246,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     }
 
     /// Faults offered, the already-said among them included. A walk asking
-    /// whether it reported compares a delta over this, not over
-    /// [`Self::error_count`], which the dedup holds still on a re-walked node.
+    /// whether it reported reads this; the dedup holds `error_count` still.
     pub fn offered_error_count(&self) -> usize {
         self.offered_error_count.get()
     }
@@ -565,9 +564,8 @@ mod tests {
         assert_eq!(logger.error_count(), MAX_ERRORS);
     }
 
-    /// The same fault at the same place is printed once, so `error_count` does
-    /// not move for the second report. A walk asking whether it reported
-    /// anything has to read `offered_error_count`, which does.
+    /// The same fault at the same place is printed once, so only the offered
+    /// count moves for the second report.
     #[test]
     fn test_dedup_moves_only_the_offered_count() {
         let host = InMemoryCompilerHost::new();

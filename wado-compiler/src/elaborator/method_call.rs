@@ -711,15 +711,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .cloned()
             .zip(param_defaults.iter().cloned())
             .collect();
-        // A default may also name the method's *own* type parameter
-        // (`u: U = U::default()`). The turbofish spells it; otherwise the
-        // written arguments pin it, or its own type default does, settled here
-        // against the same slots the pipeline's inference uses below. This
-        // solve mints no instantiation and reports nothing — a slot it leaves
-        // open binds no name, and the walk below then says so in its own terms.
-        //
-        // A method that declares no value default settles nothing, so it does
-        // not run: `Iterator::collect` would resolve `= List<Self::Item>` here,
+        // Runs only where a value default names one of the method's own slots.
+        // `Iterator::collect` would otherwise resolve `= List<Self::Item>` here,
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {

@@ -95,25 +95,18 @@ pub(super) enum SigChoice {
 }
 
 /// A type parameter of the declaration that wrote a default, paired with the
-/// type argument the site taking the default settled on. Resolving the default
-/// against it is what lets `fields: T = T::default()` mean the caller's `T`.
+/// type argument the site taking the default settled on.
 #[derive(Debug, Clone)]
 pub(super) struct DefaultTypeBinding {
     pub(super) name: String,
-    /// Carried along so a default dispatching on the parameter still has them
-    /// where the argument is itself a parameter, of the caller or of an
-    /// enclosing `impl`.
+    /// What a default dispatching on the parameter has to go on where the
+    /// argument is itself a parameter.
     pub(super) bounds: Vec<ast::TraitBound>,
     pub(super) settled: SettledAs,
 }
 
-/// What a site settled one type parameter to.
-///
-/// A pack carries no type here, so no producer can hand it the tuple the call
-/// settled it to: `[..T::default()]` means the pack's elements, and a tuple
-/// would spell `[i32,String]::default`, a callee nothing declares. The pack
-/// the name enters scope as is minted from the name and that position, in
-/// `with_callee_type_bindings` and nowhere else.
+/// What a site settled one type parameter to. A pack carries no type here:
+/// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
 #[derive(Debug, Clone)]
 pub(super) enum SettledAs {
     /// The type argument that filled a scalar slot.
@@ -150,9 +143,7 @@ fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::Tr
 }
 
 /// Whether a call supplying `args_len` arguments leaves a defaulted parameter
-/// for a walk to fill — the first position it omits declaring one. Annotate
-/// walks exactly when this holds and reify pads exactly when it holds, which is
-/// what lets reify assert that annotate left it a walk.
+/// for a walk to fill. Annotate walks and reify pads on the same answer.
 pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]) -> bool {
     matches!(params.get(args_len), Some((_, Some(_))))
 }
@@ -2214,15 +2205,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Put the walk of the defaults `site` left out on record, for a route that
-    /// has already settled its arguments and wants nothing from the walk but
-    /// the facts it leaves.
+    /// has already settled its arguments.
     ///
-    /// Every route that resolves a call has to reach this or
-    /// [`Self::apply_param_defaults`]. Reify pads each site from the overlay
-    /// one of them leaves; a route reaching neither leaves reify replaying the
-    /// *declaration's* walk, where the callee's type parameters are still
-    /// abstract and the call's type arguments were never applied.
-    /// `reify_apply_param_defaults` asserts that no site arrives without one.
+    /// Every route resolving a call reaches this or
+    /// [`Self::apply_param_defaults`]; `reify_apply_param_defaults` asserts it.
     pub(super) fn record_default_walk(
         &mut self,
         site: AstId,
@@ -2349,18 +2335,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// Run `body` — a walk of the defaults `site` left out — in the module that
-    /// wrote them, with `type_bindings` standing for the type arguments `site`
-    /// settled on.
+    /// Run a walk of the defaults `site` left out, in the module that wrote
+    /// them and under the type arguments `site` settled on.
     ///
-    /// The facts the walk records are kept as `site`'s own overlay, so a second
-    /// site taking the same defaults against other type arguments does not
-    /// answer for this one. They are set aside rather than peeled off
-    /// afterwards: the declaring module's own walk already recorded these
-    /// `AstId`s, so what this walk writes would land on top of those rather
-    /// than after them. A site with no node of its own has nothing for reify to
-    /// key on and records where it always did. See
-    /// [`sem::types::BodyFacts::default_overlays`].
+    /// The walk's facts become `site`'s own overlay, so one site's answer is
+    /// never another's. See [`sem::types::BodyFacts::default_overlays`].
     pub(super) fn resolving_defaults_at<R>(
         &mut self,
         site: Option<AstId>,

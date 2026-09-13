@@ -445,9 +445,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What a type position's name denotes where it denotes no type: `an
-    /// interface` or `a trait`. Both share the type namespace — one name, one
-    /// declaration, wherever it is written — and each names a set of
-    /// operations rather than anything a value can be.
+    /// interface` or `a trait`, both of which share the type namespace.
     fn non_type_decl_kind(&self, site: AstId, name: &str) -> Option<&'static str> {
         if name == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(name) {
             return None;
@@ -482,10 +480,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// The types a turbofish supplies. A type argument naming an `interface`
-    /// or a `trait` is rejected here: left to resolve it comes out `unknown`,
-    /// which satisfies every bound, and the call then fails somewhere with
-    /// nothing pointing back at what was written.
+    /// The types a turbofish supplies. One naming an `interface` or a `trait`
+    /// is rejected here, since `unknown` would satisfy every bound in silence.
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
         args.iter()
             .map(|ty| {
@@ -500,9 +496,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Walk the named heads a written type reaches, outermost first. `head`
-    /// takes each one's site, name, span and whether it carries arguments, and
-    /// answers whether the walk stops there: a head it rejected makes its own
-    /// arguments noise.
+    /// takes a head's site, name, span and whether it carries arguments, and
+    /// answers whether the walk stops there.
     pub(super) fn walk_type_heads(
         &mut self,
         ty: &Type,

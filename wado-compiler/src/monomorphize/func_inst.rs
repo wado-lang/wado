@@ -87,11 +87,11 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 }
 
 /// Expand every `TypePackExpansion` whose own site settled the pack, in every
-/// body of the module — a function's and a global initializer's alike. Such a
-/// node is a parameter default spliced into its caller, and a caller with no
-/// type parameters is one `instantiate_function` never visits. Runs before
-/// instantiation sites are collected, so the calls it produces are collected
-/// and monomorphized like any other.
+/// body of the module: a function's and a global initializer's alike.
+///
+/// Such a node sits in a caller that may declare no type parameter, which
+/// `instantiate_function` never visits. Runs before instantiation sites are
+/// collected, so the calls it produces are monomorphized like any other.
 pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;

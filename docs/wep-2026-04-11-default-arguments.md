@@ -463,6 +463,7 @@ type arguments, in the declaring module and across a module boundary.
 | Struct field                     | ✅ ᴬ      | ✅                          | ✅ ᴬ                             | ✅                  |
 | Free function — variadic pack    | ✅        | ✅                          | —                                | ✅                  |
 | Instance method — variadic pack  | ✅        | ✅                          | —                                | ✅                  |
+| Static method — variadic pack    | ✅        | —                           | —                                | ✅                  |
 
 ᴿ The receiver settles the `impl` block's parameters, so the column describes
 how the receiver's own type was settled. ᴬ The literal's annotation names the
@@ -472,11 +473,16 @@ A variadic pack is a type parameter like any other, so `[..T::default()]` is a
 default the same way `T::default()` is. A pack settles to a tuple rather than to
 a single type. Nothing records that tuple except the parameter the default
 fills, so reify reads it off there and stamps it on the expansion node. A
-monomorphizer pass ahead of instantiation then expands the node from the stamp.
-Without it the spliced default waits for a substitution only a generic caller
-performs, and a concrete caller reaches lowering with the node still standing.
-A pack declares no type default of its own, so that column is empty for both
-pack rows.
+monomorphizer pass ahead of instantiation then expands the node from the stamp,
+in every body of the module: a global initializer takes a default as a function
+body does. Without it the spliced default waits for a substitution only a
+generic caller performs, and a concrete caller reaches lowering with the node
+still standing. A pack declares no type default of its own, so that column is
+empty for every pack row.
+
+A turbofish spells one type argument per pack element, so the arguments are
+grouped into slots before anything counts them. A scalar parameter ahead of the
+pack keeps the argument written for it.
 
 The method's own type default is settled before the value defaults are walked,
 against the same slots the call's own inference uses. It runs only where the
@@ -617,6 +623,15 @@ let resp = Fetch::fetch(url, init).read();
 A call that pins no type argument at all reports the parameter it could not
 infer, preceded by an `unknown function 'T::default'` from the default walk that
 had nothing to resolve against. The second diagnostic is the one to read.
+
+A turbofish that fills every parameter ahead of a pack and takes every other
+argument from a default cannot say the pack is empty: `headed::<i32>()` on
+`fn headed<A: Default, ..T: Default>(a: A = …, t: [..T] = …)` counts one
+argument against two parameters, asks inference for `T`, and reports it
+uninferred. Closing it would mean reading a short turbofish as an empty pack
+wherever the pack is last, which is a rule about what a turbofish means rather
+than about defaults. A call spelling the tuple (`headed::<i32>(0, [])`) settles
+it today.
 
 ## See Also
 
