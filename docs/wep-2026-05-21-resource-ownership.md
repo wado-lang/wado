@@ -401,9 +401,10 @@ it. Two reads are such a move: a value read of the binding, and a place-level
 move of a field out of it. A binding with neither is handed nowhere, so refusing
 it a share on move-eligibility alone costs a copy that defends nothing.
 
-A `match` over a place needs no temp of its own: the arms project the place
-where it lies and each binding asks the fold for itself. Only a non-place
-scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
+A `match` over a writable place is hoisted into a temp, and the fold decides that
+temp's copy for every binding under it. One wrap site answers for the whole arm:
+the bindings read the temp, so each is as defended as the temp is. A place nothing
+can write is matched where it lies, its bindings costing nothing.
 
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
@@ -649,24 +650,27 @@ Verified against the tree.
       expressions it writes, so it predicts none of the temps pattern lowering
       mints after it. A miss left the fold no helper to call, which
       `wrap_value_copy` asserts on.
-- [ ] Decide a match arm's binding in the fold, by lowering it to an ordinary
-      projection of the scrutinee as `let`-destructure already is. Deciding it in
-      pattern lowering puts the copy on a temp that exists for
-      `labeled_block_fusion`, so which syntactic position a `match` sits in
-      changes whether the binding is defended.
+- [ ] Let the fold decide a match arm's binding for itself, so the answer stops
+      depending on the temp. The temp exists for `labeled_block_fusion`, and
+      putting the copy on it makes which syntactic position a `match` sits in
+      part of whether the binding is defended.
 
-      Finishing it means the temp is gone for a place scrutinee and the lowerer
-      keeps none of `place_is_writable` / `binds_by_value` / `owned_temps`.
-      Giving each binding a `Let` is not enough by itself. The temp is read once;
-      a projection is read twice, because the pattern tests the scrutinee and
-      then each binding reads it again. Two rules answer for the single read
-      only:
+      Rewriting each binding into a `Let` over a projection of the scrutinee —
+      the form `let`-destructure already takes — is not the way. Measured over
+      the golden corpus it costs 5 copies and saves none, because it adds a wrap
+      site where the arm had none. `match self.p { P::A(xs) => { let ys = xs; …`
+      pays one copy today: the temp shares `self.p`, the binding names the
+      temp's payload, and `ys` takes the copy. Given its own `Let`, `xs` is
+      refused a share — `let ys = xs` consumes it, and a binding the fold moves
+      out of cannot share — so `xs` copies, and `ys` copies again because
+      nothing tells the second decision that the first made `xs` private.
 
-      - The release tests the rebound path for equality. `p = x` releases a
-        binding read out of `p`, which is the temp's path, and not one read out
-        of `p.f`, which is what an arm projects.
-      - A path through a `&mut` receiver is refused a share outright, so a
-        projection of a receiver's field earns none.
+      Finishing it means the fold reading an arm binding's own path — the
+      scrutinee's, one selector deeper — off `match_sources`, and answering
+      move, share and release there, with the binding left in the pattern. The
+      release is the rule that needs the depth: it tests the rebound path for
+      equality, so `self.f = null` releases a binding read out of `self.f` and
+      not one read out of `self.f`'s payload.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the
@@ -724,6 +728,20 @@ Verified against the tree.
       its own leaves all 1768 WIR goldens byte-identical, and a case written to
       exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
       called with a fresh `Holder` — is byte-identical at `-O0` too.
+
+- [ ] Read the wrap the fold has just decided as the freshness it creates. A copy
+      hands its target storage nothing else reaches, so the next read of that
+      target may move out of it; today it copies again, since ownedness is
+      computed from a local's source before any wrap site is chosen.
+      `let xs = value_copy(p); let ys = value_copy(xs);` is the shape, and it is
+      what makes an added wrap site cost two copies rather than move the one it
+      already had. The verdicts are a fixpoint over sources, so the wrap a local
+      receives cannot feed the same pass that chose it without a second round.
+
+- [ ] Answer a pattern-destructured field's path without the conservatism its
+      missing type forces. The resolver marks such a path as crossing a borrow,
+      because the pattern carries no type to say whether the field it names
+      borrows, and a path that crosses one is refused a share outright.
 
 ## Deferred: the `move` and `unique` keywords
 
