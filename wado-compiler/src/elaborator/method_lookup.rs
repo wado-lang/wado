@@ -2289,7 +2289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
-                        impl_type_bindings: impl_type_bindings.clone(),
+                        impl_type_bindings,
                         method_def: Some(default_method.sig.def),
                         return_type: instantiated.return_type,
                         self_kind,
