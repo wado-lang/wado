@@ -1,0 +1,30 @@
+// `nsb` is this file's own import alias. Every default below is re-resolved at
+// the call site, which has no such alias — a free function's, an instance
+// method's, and a static method's.
+
+use nsb from "./default_arg_namespaced_callee_b.wado";
+
+global CHOSEN: nsb::Pick = nsb::Pick::Case(41);
+
+pub fn with_default(v: i32 = nsb::make()) -> i32 {
+    return v;
+}
+
+// The alias qualifies a *pattern* here, which is a lookup of its own.
+pub fn picked(v: i32 = match CHOSEN { nsb::Case(n) => n, Other => 0 }) -> i32 {
+    return v;
+}
+
+pub struct Holder {
+    pub q: i32,
+}
+
+impl Holder {
+    pub fn scaled(&self, k: i32 = nsb::make()) -> i32 {
+        return self.q * k;
+    }
+
+    pub fn build(n: i32 = nsb::make()) -> Holder {
+        return Holder { q: n };
+    }
+}

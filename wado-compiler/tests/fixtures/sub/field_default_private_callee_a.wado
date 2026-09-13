@@ -1,0 +1,30 @@
+// The defaults below call items only this file can see. A construction site in
+// another file omits those fields, so the defaults are resolved there.
+
+fn secret_int() -> i32 {
+    return 7;
+}
+
+struct Hidden {
+    v: i32,
+}
+
+impl Hidden {
+    fn make() -> Hidden {
+        return Hidden { v: 9 };
+    }
+}
+
+pub struct Config {
+    pub name: String,
+    tag: i32 = secret_int(),
+    hidden: Hidden = Hidden::make(),
+}
+
+pub fn tag_of(c: &Config) -> i32 {
+    return c.tag;
+}
+
+pub fn hidden_of(c: &Config) -> i32 {
+    return c.hidden.v;
+}

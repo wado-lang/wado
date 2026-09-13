@@ -1,10 +1,10 @@
 // Regression: a cross-module struct literal that omits a field defaulted to a
 // module-private `global` of the struct's declaring module must resolve that
-// default in the declaring module's lexical scope — the same callee-scope
-// fallback (`default_scope_module`) that function default arguments use.
+// default in the declaring module's lexical scope, the same way a function's
+// default arguments do.
 //
-// Before the wiring, the default's `SEED` reference was resolved in the
-// construction site's scope and failed with `unknown identifier 'SEED'`.
+// The default's `SEED` reference used to resolve in the construction site's
+// scope and failed with `unknown identifier 'SEED'`.
 use { println, Stdout } from "core:cli";
 use { Config, config_threshold } from "./sub/struct_default_private_global_lib.wado";
 

@@ -683,37 +683,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| inherent_impl_module.clone())
             .unwrap_or_else(|| struct_module.clone());
 
-        // Pad missing trailing args with declared parameter defaults.
-        // Earlier-parameter references inside a default (e.g. `fn f(w, h = w)`)
-        // are handled by substituting the caller's arg ASTs for those parameter
-        // names before resolving, mirroring the free-function path in
-        // `pad_args_with_defaults`.
-        if args.len() < expected_param_types.len() && !param_defaults.is_empty() {
-            let mut subs: hashmap::IndexMap<String, ast::Expr> = hashmap::IndexMap::default();
-            for (i, arg_ast) in args_ast.iter().enumerate() {
-                if let Some(name) = param_names.get(i) {
-                    subs.insert(name.clone(), arg_ast.clone());
-                }
-            }
-            self.with_default_scope_module(Some(callee_module.clone()), |s| {
-                for i in args.len()..expected_param_types.len() {
-                    let Some(Some(default_ast)) = param_defaults.get(i) else {
-                        break;
-                    };
-                    let expected_type = expected_param_types[i];
-                    let mut default_expr = default_ast.clone();
-                    let vantage = Some((callee_module.clone(), default_expr.id().space()));
-                    default_expr.substitute_idents(&subs);
-                    let resolved = s.with_foreign_vantage(vantage, |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    });
-                    args.push(resolved);
-                    if let Some(name) = param_names.get(i) {
-                        subs.insert(name.clone(), default_expr);
-                    }
-                }
-            });
-        }
+        let defaults: Vec<(String, Option<Expr>)> = param_names
+            .iter()
+            .cloned()
+            .zip(param_defaults.iter().cloned())
+            .collect();
+        self.fill_trailing_defaults(
+            &mut args,
+            &expected_param_types,
+            &defaults,
+            Some(callee_module.clone()),
+            ctx,
+            |_, _, _, _| {},
+        );
 
         // Arity, once the declared defaults have filled what they can. A
         // defaulted parameter is optional and the rest are required; the
@@ -791,7 +773,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 decl_return_type: return_type,
                 expected_return_type: expected_type,
                 trait_decl: trait_name.as_ref().and_then(FqTraitName::canonical),
-                declaring_module: Some(callee_module),
+                declaring_module: Some(callee_module.clone()),
                 span,
             });
             if type_args.is_empty() {
@@ -1131,8 +1113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self_kind,
                 is_ref_impl,
                 param_is_mut,
-                param_names,
-                param_defaults,
+                defaults,
+                callee_module,
                 return_type,
                 method_type_args,
                 consumes_self,
@@ -1772,34 +1754,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Pad omitted trailing arguments with declared parameter defaults.
         // Variant / flags constructors carry no defaults, so the arg-count
         // checks below are unaffected.
-        if args.len() < param_types.len() && !static_method_defaults.is_empty() {
-            let defaults = &static_method_defaults;
-            let mut subs: hashmap::IndexMap<String, ast::Expr> = hashmap::IndexMap::default();
-            for (i, arg_ast) in static_call.args.iter().enumerate() {
-                if let Some((pname, _)) = defaults.get(i) {
-                    subs.insert(pname.clone(), arg_ast.clone());
-                }
-            }
-            for i in args.len()..param_types.len() {
-                let Some((pname, Some(default_ast))) = defaults.get(i) else {
-                    break;
-                };
-                let expected_type = param_types[i];
-                let mut default_expr = default_ast.clone();
-                let vantage = static_method_module
-                    .clone()
-                    .map(|m| (m, default_expr.id().space()));
-                default_expr.substitute_idents(&subs);
-                let resolved = self.with_default_scope_module(static_method_module.clone(), |s| {
-                    s.with_foreign_vantage(vantage, |s| {
-                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                    })
-                });
-                args.push(resolved);
-                arg_spans.push(default_expr.span());
-                subs.insert(pname.clone(), default_expr);
-            }
-        }
+        self.fill_trailing_defaults(
+            &mut args,
+            &param_types,
+            &static_method_defaults,
+            static_method_module.clone(),
+            ctx,
+            |_, _, default_expr, _| arg_spans.push(default_expr.span()),
+        );
 
         // A declared static is checked against its signature here, where the
         // spelled `Type::<T>::method(…)` call would otherwise reach codegen
@@ -3517,7 +3479,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .static_method_entries(&target, method_name)
                 .find(|e| e.is_inherent())
                 .map(|e| e.module.clone())
-                .unwrap_or_else(|| self.declaring_module_of(&actual_struct_name));
+                .unwrap_or_else(|| self.declaring_module_at(Some(call_id), &actual_struct_name));
             StaticMethodRef::new(module, &actual_struct_name, method_name, None, None)
         });
 

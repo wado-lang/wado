@@ -229,15 +229,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declared type of a *global* (current-module or imported) named
-    /// `name`, if one exists. Lets a bare call resolve a global callee (a
-    /// function-typed global becomes an indirect call; any other type gets a
-    /// clear not-callable diagnostic instead of "unknown function").
-    fn global_var_type(&self, name: &str) -> Option<TypeId> {
-        self.sem
-            .decls
-            .lookup_global(name, &self.current_module_source)
-            .map(|(_, _, ty, _)| ty)
+    /// The declared type of a *global* named `name` as written at `site`, if
+    /// one exists. Lets a bare call resolve a global callee (a function-typed
+    /// global becomes an indirect call; any other type gets a clear
+    /// not-callable diagnostic instead of "unknown function").
+    fn global_var_type(&self, site: ast::AstId, name: &str) -> Option<TypeId> {
+        self.global_type_in(name, &self.home_module(site))
     }
 
     /// Walk a callee expression down to its *root place* identifier so
@@ -426,7 +423,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .map(|local| (local.type_id, local.defining_ast_id));
             let value_ty = local
                 .map(|(ty, _)| ty)
-                .or_else(|| self.global_var_type(&ident.name));
+                .or_else(|| self.global_var_type(ident.id, &ident.name));
             if let Some(value_ty) = value_ty {
                 // Record the use→def edge the same way `resolve_ident` would,
                 // so navigation on a value-binding callee (local or global)
@@ -1267,8 +1264,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
-            else if let Some(ns_source) = self.sem.imports.namespace_imports.get(prefix).cloned()
-            {
+            else if let Some(ns_source) = self.namespace_alias_source(prefix, call.callee.id()) {
                 // suffix may be "Type::method" or plain "func"
                 if let Some(inner_pos) = suffix.find("::") {
                     let type_name = &suffix[..inner_pos];
@@ -1772,7 +1768,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.lookup_function_param_defaults(&call.callee, ctx);
         if !check_param_types.is_empty() && args.len() < check_param_types.len() {
             self.apply_param_defaults(
-                &call.args,
                 &mut args,
                 &check_param_types,
                 &param_defaults,
@@ -1884,7 +1879,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
 
         if pad_with_defaults && args.len() < fn_params.len() {
-            self.pad_args_with_defaults(&call.callee, &call.args, &mut args, fn_params, ctx);
+            self.pad_args_with_defaults(&call.callee, &mut args, fn_params, ctx);
         }
 
         if args.len() != fn_params.len() {
@@ -2049,8 +2044,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // bare-name lookup reaches. Without it the arguments resolve with no
             // expected type, so a sequence literal never coerces to its `List`
             // parameter and reaches codegen mismatched.
-            if self.sem.imports.namespace_imports.contains_key(prefix) {
-                let ns_source = self.sem.imports.namespace_imports[prefix].clone();
+            if let Some(ns_source) =
+                callee_site.and_then(|id| self.namespace_alias_source(prefix, id))
+            {
                 if let Some(def) = self.decl_in_module(&ns_source, suffix)
                     && let Some(sig) = self.tysys.signatures.function_sig(def)
                 {
@@ -2093,68 +2089,45 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn pad_args_with_defaults(
         &mut self,
         callee: &Expr,
-        call_args_ast: &[Expr],
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
         ctx: &mut FunctionContext,
     ) {
         let (defaults, callee_module) = self.lookup_function_param_defaults(callee, ctx);
-        self.apply_param_defaults(
-            call_args_ast,
-            args,
-            param_types,
-            &defaults,
-            callee_module,
-            ctx,
-        );
+        self.apply_param_defaults(args, param_types, &defaults, callee_module, ctx);
     }
 
-    /// Fill missing trailing arguments from `defaults`, resolving each in the
-    /// caller's context. A default may name an earlier parameter (`fn rect(w, h
-    /// = w)`), so param-name idents in its cloned AST are substituted with the
-    /// caller's argument AST before resolution. A position with no declared
-    /// default is left for the arity check.
+    /// Fill missing trailing arguments from `defaults`, each resolved as its
+    /// author wrote it. A position with no declared default is left for the
+    /// arity check.
     pub(super) fn apply_param_defaults(
         &mut self,
-        call_args_ast: &[Expr],
         args: &mut Vec<TypeId>,
         param_types: &[TypeId],
         defaults: &[(String, Option<Expr>)],
         callee_module: Option<ModuleSource>,
         ctx: &mut FunctionContext,
     ) {
-        if defaults.is_empty() {
-            return;
-        }
-        let mut subs: IndexMap<String, Expr> = IndexMap::default();
-        for (i, arg_ast) in call_args_ast.iter().enumerate() {
-            if let Some((name, _)) = defaults.get(i) {
-                subs.insert(name.clone(), arg_ast.clone());
-            }
-        }
-        self.with_default_scope_module(callee_module, |s| {
-            for i in args.len()..param_types.len() {
-                let (name, default_ast) = match defaults.get(i) {
-                    Some((n, Some(d))) => (n.clone(), d.clone()),
-                    _ => break,
-                };
-                let mut default_expr = default_ast;
-                let vantage = s
-                    .annotate_ctx
-                    .default_scope_module
-                    .clone()
-                    .map(|m| (m, default_expr.id().space()));
-                default_expr.substitute_idents(&subs);
+        // The check below is for a default that resolved to `()` with nothing
+        // reported. One that did report has already said why, so let it stand
+        // rather than replacing its diagnostic with a panic.
+        let errors_before = self.logger.error_count();
+        self.fill_trailing_defaults(
+            args,
+            param_types,
+            defaults,
+            callee_module,
+            ctx,
+            |s, i, default_expr, resolved| {
                 let expected_type = param_types[i];
-                let resolved = s.with_foreign_vantage(vantage, |s| {
-                    s.resolve_expr(&default_expr, ctx, Some(expected_type))
-                });
                 if resolved == TypeTable::UNIT
                     && expected_type != TypeTable::UNIT
                     && expected_type != TypeTable::ERROR
                     && expected_type != TypeTable::UNKNOWN
+                    && s.logger.error_count() == errors_before
                 {
                     let expected_name = s.tysys.type_table.borrow().type_name(expected_type);
+                    let name = &defaults[i].0;
                     panic!(
                         "compiler bug: default expression for parameter '{name}' \
                          re-resolved to () at call site but parameter expects '{expected_name}'. \
@@ -2167,8 +2140,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         default_expr.span()
                     );
                 }
+            },
+        );
+    }
+
+    /// Fill `args` from `defaults` up to `param_types`, each default resolved
+    /// as its author wrote it in `callee_module`: the caller's bindings are out
+    /// of scope, and a default naming a parameter ahead of it is answered by
+    /// that parameter's already-known type rather than by a second walk of the
+    /// caller's argument. `filled` sees each appended `(index, default,
+    /// resolved type)`. A position no default covers stops the fill and is left
+    /// to the arity check.
+    pub(super) fn fill_trailing_defaults(
+        &mut self,
+        args: &mut Vec<TypeId>,
+        param_types: &[TypeId],
+        defaults: &[(String, Option<Expr>)],
+        callee_module: Option<ModuleSource>,
+        ctx: &mut FunctionContext,
+        mut filled: impl FnMut(&mut Self, usize, &Expr, TypeId),
+    ) {
+        if defaults.is_empty() {
+            return;
+        }
+        let mut param_types_so_far: IndexMap<String, TypeId> = IndexMap::default();
+        for (i, arg_type) in args.iter().enumerate() {
+            if let Some((name, _)) = defaults.get(i) {
+                param_types_so_far.insert(name.clone(), *arg_type);
+            }
+        }
+        self.with_resolving_home(callee_module, |s| {
+            for i in args.len()..param_types.len() {
+                let Some((name, Some(default_expr))) = defaults.get(i).cloned() else {
+                    break;
+                };
+                let expected_type = param_types[i];
+                let resolved = ctx.with_caller_bindings_hidden(|ctx| {
+                    s.with_default_arg_types(param_types_so_far.clone(), |s| {
+                        s.resolve_expr(&default_expr, ctx, Some(expected_type))
+                    })
+                });
+                filled(s, i, &default_expr, resolved);
                 args.push(resolved);
-                subs.insert(name, default_expr);
+                param_types_so_far.insert(name, resolved);
             }
         });
     }
@@ -2567,7 +2581,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// type-arg slot call-site inference left unbound, seeding an empty
     /// `type_args` first so an omitted turbofish is covered. Each default
     /// resolves with the callee's params in scope (`<T, U = T>` picks up `T`)
-    /// and at `default_scope_module`, so it may name a type private to it.
+    /// and at `resolving_home`, so it may name a type private to it.
     fn fill_defaulted_fn_type_args(&mut self, callee: &CalleeRef, type_args: &mut Vec<TypeId>) {
         let params = self.lookup_function_type_params(callee);
         let space: Vec<ast::GenericParam> = params
@@ -2581,7 +2595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let n = space.len();
 
         let defaults: Vec<Option<TypeId>> =
-            self.with_default_scope_module(Some(callee.module().clone()), |s| {
+            self.with_resolving_home(Some(callee.module().clone()), |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.register_generic_params(&params, 0);

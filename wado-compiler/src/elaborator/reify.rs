@@ -2657,12 +2657,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Run `f` with the default-argument override map suppressed. Mirrors
-    /// `Expr::substitute_idents` leaving binder / control forms (closure,
-    /// block, `if`, `match`, …) untouched on the annotate side: a reference
-    /// shadowed by a binding introduced *inside* such a form must resolve to
-    /// that binding, not to an outer parameter's substituted argument. No-op
-    /// outside a default-argument walk. See `reify_pad_args_with_defaults`.
+    /// Run `f` with the default-argument override map suppressed, for a binder
+    /// or control form (closure, block, `if`, `match`, …): a reference the form
+    /// binds itself must resolve to that binding, not to an outer parameter's
+    /// argument. No-op outside a default-argument walk. See
+    /// `reify_pad_args_with_defaults`.
     fn with_defaults_suppressed<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.default_arg_overrides.is_empty() {
             return f(self);
@@ -5663,13 +5662,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // free identifiers and decl lookups still resolve in the
                     // struct module's scope, so the perspective swap remains for
                     // name resolution.
-                    let value = if struct_module == self.current_module_source {
-                        self.reify_expr(default_expr, ctx, Some(expected_field_ty))
-                    } else {
+                    let value = ctx.with_caller_bindings_hidden(|ctx| {
                         self.with_const_module_perspective(&struct_module, |this| {
                             this.reify_expr(default_expr, ctx, Some(expected_field_ty))
                         })
-                    };
+                    });
                     fields.push(TirStructField {
                         name: name.clone(),
                         value,
@@ -7804,6 +7801,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// the call omitted. `func_params` is the callee's `(name, default)` list in
     /// declaration order, `callee_module` its defining module (for the
     /// perspective swap), and `call_span` the call site (for location literals).
+    /// An absent `param_types` entry means no expected type.
     fn reify_apply_param_defaults(
         &mut self,
         args: &mut Vec<CallArg>,
@@ -7816,15 +7814,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if func_params.is_empty() || args.len() >= func_params.len() {
             return;
         }
-        // A default may reference an earlier parameter. The substituted
-        // value is the caller's argument, already reified under the
-        // caller's perspective in `args[i]` (and, for later defaults,
-        // the synthesized value reified below). Map parameter name →
-        // reified TIR so `reify_ident` returns it directly: re-resolving
-        // the spliced caller AST under the callee's swapped perspective
-        // (below) would key its AstIds against the wrong module's
-        // annotations and mis-type the node. Save / restore so nested
-        // defaults compose.
+        // A default may name an earlier parameter, which means the caller's
+        // argument — already reified under the caller's perspective in
+        // `args[i]`, or, for a later default, the value synthesized below.
+        // Map parameter name → reified TIR so `reify_ident` hands it back
+        // directly, since the perspective swap below leaves the caller's
+        // module behind. Saved and restored so nested defaults compose.
         let mut overrides: IndexMap<String, TirExpr> = IndexMap::default();
         for (i, arg) in args.iter().enumerate() {
             if let Some((name, _)) = func_params.get(i) {
@@ -7877,9 +7872,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // A default declared on a trait method has no body for annotate to
             // walk, so without the parameter's type here it reifies untyped.
             let expected = param_types.get(i).copied();
-            let resolved = self.reify_expr(&default_ast, ctx, expected);
+            let resolved =
+                ctx.with_caller_bindings_hidden(|ctx| self.reify_expr(&default_ast, ctx, expected));
             // Later defaults may reference this one's parameter.
             self.default_arg_overrides.insert(name, resolved.clone());
+            // `CallArg::is_mut` says the callee may write the caller's storage
+            // through this slot. A default is a value synthesized here, so
+            // there is no caller storage behind it.
             args.push(CallArg::new(resolved, false));
         }
 
@@ -8752,30 +8751,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             })
             .collect();
 
-        // Pad missing trailing args with the method's defaults.
-        // Mirrors `resolve_method_call_with`; the recorded `param_names` /
-        // `param_defaults` arrive on `MethodDispatch` from annotate.
-        if args.len() < dispatch.param_defaults.len() {
-            let mut subs: IndexMap<String, ast::Expr> = IndexMap::default();
-            for (i, arg_ast) in method_call.args.iter().enumerate() {
-                if let Some(name) = dispatch.param_names.get(i) {
-                    subs.insert(name.clone(), arg_ast.clone());
-                }
-            }
-            for i in args.len()..dispatch.param_defaults.len() {
-                let Some(Some(default_ast)) = dispatch.param_defaults.get(i) else {
-                    break;
-                };
-                let mut default_expr = default_ast.clone();
-                default_expr.substitute_idents(&subs);
-                let resolved = self.reify_expr(&default_expr, ctx, None);
-                let is_mut = dispatch.param_is_mut.get(i).copied().unwrap_or(false);
-                args.push(CallArg::new(resolved, is_mut));
-                if let Some(name) = dispatch.param_names.get(i) {
-                    subs.insert(name.clone(), default_expr);
-                }
-            }
-        }
+        // Pad missing trailing args with the method's defaults, standing in the
+        // module that declared them — the same walk the free-function path takes.
+        self.reify_apply_param_defaults(
+            &mut args,
+            &dispatch.param_defaults,
+            &[],
+            &dispatch.defaults_module,
+            method_call.span,
+            ctx,
+        );
 
         // The call's result type is the resolved method's return type
         // (recorded on the dispatch), not the per-`AstId` `expression_types`
@@ -8956,9 +8941,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // expression, a free reference to an earlier parameter resolves to the
         // caller's already-reified argument (kept under the caller's
         // perspective). `reify_expr` clears this map before descending into a
-        // binder / control form (closure, block, …) — exactly the forms
-        // `Expr::substitute_idents` leaves untouched on the annotate side — so
-        // a reference shadowed by an inner binding is never reached here. See
+        // binder / control form (closure, block, …), so a reference shadowed by
+        // an inner binding is never reached here. See
         // `reify_pad_args_with_defaults`.
         if !self.default_arg_overrides.is_empty()
             && let Some(tir) = self.default_arg_overrides.get(&ident.name)

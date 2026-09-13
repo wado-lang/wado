@@ -788,6 +788,11 @@ pub struct TraitEnv {
     /// standing in a foreign module's perspective reads them instead of
     /// re-walking its `use` declarations. See [`namespace_imports_of`].
     pub(super) module_namespace_imports: IndexMap<ModuleSource, NamespaceImports>,
+    /// Which module each `AstIdSpace` was parsed from, so any node says where
+    /// it was written — the module it resolves in however far its AST travels.
+    ///
+    /// Rebuilt per load: a re-parse mints a new space.
+    space_modules: IndexMap<ast::AstIdSpace, ModuleSource>,
     /// Associated-type name → the declaring trait's bounds for it, first
     /// declaration wins (matching the previous whole-program scan order).
     /// Consumed by `find_assoc_type_bounds` without an AST scan.
@@ -903,10 +908,17 @@ impl TraitEnv {
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
         let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
+        let mut space_modules: IndexMap<ast::AstIdSpace, ModuleSource> = IndexMap::default();
         for (module_source, module) in modules {
             module_namespace_imports.insert(
                 module_source.clone(),
                 namespace_imports_of(interner, module, module_source, entry_module, invocations),
+            );
+            let claimed = space_modules.insert(module.ast_id_space(), module_source.clone());
+            assert!(
+                claimed.is_none(),
+                "one module is one `AstIdSpace`, but {module_source} shares one with {}",
+                claimed.expect("just checked")
             );
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
@@ -1292,6 +1304,7 @@ impl TraitEnv {
                 function_type_params,
                 decls_by_name,
                 module_namespace_imports,
+                space_modules,
                 assoc_type_bound_index,
                 blanket_impls,
                 impl_method_index,
@@ -1304,13 +1317,16 @@ impl TraitEnv {
         )
     }
 
-    /// The pre-computed namespace aliases for `module`. Empty for a module
-    /// with none.
-    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> NamespaceImports {
-        self.module_namespace_imports
-            .get(module)
-            .cloned()
-            .unwrap_or_default()
+    /// The module `space` was parsed from, or `None` for a synthesized node,
+    /// which no module wrote.
+    pub(super) fn module_of_space(&self, space: ast::AstIdSpace) -> Option<&ModuleSource> {
+        self.space_modules.get(&space)
+    }
+
+    /// The pre-computed namespace aliases for `module`. Every loaded module has
+    /// a table, empty where it wrote no `use ns from "..."`.
+    pub(super) fn namespace_imports(&self, module: &ModuleSource) -> Option<&NamespaceImports> {
+        self.module_namespace_imports.get(module)
     }
 
     /// Every trait with its supertrait closure.
