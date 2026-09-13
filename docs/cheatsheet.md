@@ -450,6 +450,22 @@ let res = Result::<i32, String>::Ok(42);
 let none = Option::<i32>::None;
 ```
 
+`Option` and `Result` carry a deliberately small method set: the extracting
+ones (`unwrap`, `expect`, and on `Result` also `is_ok` / `is_err` /
+`unwrap_err` / `expect_err`), plus these. See
+[WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
+for what is not provided and why.
+
+```wado
+opt.unwrap_or(0)                  // the value, or the fallback
+opt.map(|v: i32| v * 2)           // Option<U>; None passes through
+opt.ok_or("missing")              // Result<T, E> — `?` will not bridge these
+
+res.unwrap_or(0)                  // the Ok value, or the fallback
+res.map(|v: i32| v * 2)           // Result<U, E>; an Err passes through
+res.map_err(|e: String| e.len())  // Result<T, F>; an Ok passes through
+```
+
 See Control Flow for pattern matching with `match`, `if let`, and `matches`.
 
 ### Flags
