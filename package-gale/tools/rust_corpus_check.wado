@@ -3,49 +3,39 @@
 //! diagnostic. `AGENTS.md` has the invocation; paths open relative to the
 //! first preopen, so run it from the repository root.
 
-use { parse_rust, corpus_root, read_file, collect_paths } from "./rust_corpus.wado";
+use { parse_rust } from "./rust_corpus.wado";
+use { collect_paths, line_of } from "../src/corpus.wado";
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
-/// The 1-based line holding byte offset `at`.
-fn line_of(source: &String, at: i32) -> i32 {
-    let mut line = 1;
-    let mut i = 0;
-    while i < at && i < source.len() {
-        if source.get_byte_unchecked(i) == b'\n' {
-            line += 1;
-        }
-        i += 1;
-    }
-    return line;
-}
-
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let Some(root) = corpus_root() else {
-        return;
-    };
-    let paths = collect_paths(&root, &args());
+    let paths = collect_paths(&args(), &".rs");
 
     let mut bad = 0;
     for let path of &paths {
-        if let Some(source) = read_file(&root, path) {
-            let result = parse_rust(&source);
-            if result.diagnostics.len() == 0 {
-                println(`ok\t${*path}`);
-            } else {
+        let source = match fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln(`error: ${e}`);
                 bad += 1;
-                let first = result.diagnostics[0];
-                // The rule stack, not the message: recovery restarts at an item
-                // boundary, so every failure inside one reports the same
-                // "expected KW_EXTERN" and the stack is what names the rule.
-                let stack = first.rule_path();
-                println(
-                    `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
-                );
-            }
+                println(`ng\t${*path}\t0\t0\tunreadable\t`);
+                continue;
+            },
+        };
+        let result = parse_rust(&source);
+        if result.diagnostics.len() == 0 {
+            println(`ok\t${*path}`);
         } else {
             bad += 1;
-            println(`ng\t${*path}\t0\t0\tunreadable\t`);
+            let first = result.diagnostics[0];
+            // The rule stack, not the message: recovery restarts at an item
+            // boundary, so every failure inside one reports the same
+            // "expected KW_EXTERN" and the stack is what names the rule.
+            let stack = first.rule_path();
+            println(
+                `ng\t${*path}\t${result.diagnostics.len()}\t${line_of(&source, first.span.start)}\t${first.message}\t${stack}`,
+            );
         }
     }
     eprintln(`summary: ${paths.len()} files, ${bad} with diagnostics`);

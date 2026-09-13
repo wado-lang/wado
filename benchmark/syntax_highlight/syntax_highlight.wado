@@ -5,7 +5,8 @@
 
 use { Stdout } from "core:cli";
 use { MonotonicClock } from "wasi:clocks";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { Benchmark } from "core:benchmark";
 use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
     with {
@@ -15,20 +16,6 @@ use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
         },
     };
 
-fn read_file(path: String) -> String with Preopens {
-    let dirs = Preopens::get_directories();
-    let root = dirs[0].0;
-    let file = match root.open_at(PathFlags::none(), path, OpenFlags::none(), DescriptorFlags::Read).wait() {
-        Ok(f) => f,
-        Err(_) => panic(`failed to open ${path}`),
-    };
-    let [stream, _done] = file.read_via_stream(0 as Filesize);
-    let mut buf = String::with_capacity(64 * 1024);
-    buf.push_bytes_unchecked(&(stream.read_to_end() as ByteList));
-    stream.drop();
-    return buf;
-}
-
 
 test "smoke" {
     // Tiny inline statement; no Preopens needed.
@@ -36,7 +23,7 @@ test "smoke" {
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
-    let sql = read_file("sqlite_parse/queries.sql");
+    let sql = fs::read_to_string(&"sqlite_parse/queries.sql").unwrap();
     let mut b = Benchmark {
         name: "syntax-highlight (Gale)",
         input_size: Option::Some(sql.len()),

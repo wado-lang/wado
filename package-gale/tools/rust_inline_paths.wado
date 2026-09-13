@@ -9,9 +9,11 @@ use rust from "../tests/grammars/RustLexer.g4"
             output_dir: "../tests/generated/cst_rust",
         },
     };
-use { parse_rust, corpus_root, read_file, collect_paths } from "./rust_corpus.wado";
+use { parse_rust } from "./rust_corpus.wado";
+use { collect_paths } from "../src/corpus.wado";
 use { args, println, eprintln, exit, Stdout, Stderr, Environment, Exit } from "core:cli";
-use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags } from "wasi:filesystem";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
 use { TreeMap } from "core:collections";
 use { from_string, to_string_pretty } from "core:json";
 
@@ -105,10 +107,14 @@ pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
 
 /// The inline paths `path` carries. A file that cannot be read or parsed lands
 /// in `failed`, never in a clean count.
-fn scan(root: &Descriptor, path: &String, failed: &mut i32) -> List<InlinePath> with Stderr {
-    let Some(source) = read_file(root, path) else {
-        *failed += 1;
-        return [];
+fn scan(path: &String, failed: &mut i32) -> List<InlinePath> with (Stderr, Preopens) {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            *failed += 1;
+            return [];
+        },
     };
     return match find_inline_paths(&source) {
         Ok(hits) => hits,
@@ -120,41 +126,14 @@ fn scan(root: &Descriptor, path: &String, failed: &mut i32) -> List<InlinePath> 
     };
 }
 
-fn write_file(root: &Descriptor, path: &String, content: &String) -> bool with Stderr {
-    let file = match root.open_at(
-        PathFlags::none(),
-        *path,
-        OpenFlags::Create | OpenFlags::Truncate,
-        DescriptorFlags::Read | DescriptorFlags::Write,
-    ).wait() {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln(`error: ${*path}: cannot create: ${e:?}`);
-            return false;
-        },
-    };
-    let bytes: List<u8> = content.bytes().collect();
-    let [rx, tx] = Stream::<u8>::new();
-    let sub = file.write_via_stream(rx, 0 as Filesize);
-    tx.write_all(bytes);
-    tx.drop();
-    let written = sub.read();
-    sub.drop();
-    if let Some(Err(e)) = written {
-        eprintln(`error: ${*path}: cannot write: ${e:?}`);
-        return false;
-    }
-    return true;
-}
-
 /// File path to the number of inline paths it carries, omitting the clean ones.
 /// The baseline is serialized straight from this, so the walk is sorted.
-fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with Stderr {
+fn census(paths: &List<String>, failed: &mut i32) -> TreeMap<String, i32> with (Stderr, Preopens) {
     let mut sorted = *paths;
     sorted.sort();
     let mut counts = TreeMap::<String, i32>::new();
     for let path of &sorted {
-        let found = scan(root, path, failed).len();
+        let found = scan(path, failed).len();
         if found > 0 {
             counts[*path] = found;
         }
@@ -162,9 +141,13 @@ fn census(root: &Descriptor, paths: &List<String>, failed: &mut i32) -> TreeMap<
     return counts;
 }
 
-fn read_baseline(root: &Descriptor) -> Option<TreeMap<String, i32>> with Stderr {
-    let Some(text) = read_file(root, &BASELINE_PATH) else {
-        return null;
+fn read_baseline() -> Option<TreeMap<String, i32>> with (Stderr, Preopens) {
+    let text = match fs::read_to_string(&BASELINE_PATH) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln(`error: ${e}`);
+            return null;
+        },
     };
     return match from_string::<TreeMap<String, i32>>(text) {
         Ok(map) => Option::Some(map),
@@ -175,7 +158,7 @@ fn read_baseline(root: &Descriptor) -> Option<TreeMap<String, i32>> with Stderr 
     };
 }
 
-fn write_baseline(root: &Descriptor, counts: &TreeMap<String, i32>) -> bool with Stderr {
+fn write_baseline(counts: &TreeMap<String, i32>) -> bool with (Stderr, Preopens) {
     let text = match to_string_pretty(counts, Option::Some('\n')) {
         Ok(s) => s,
         Err(e) => {
@@ -183,7 +166,11 @@ fn write_baseline(root: &Descriptor, counts: &TreeMap<String, i32>) -> bool with
             return false;
         },
     };
-    return write_file(root, &BASELINE_PATH, &text);
+    if let Err(e) = fs::write(&BASELINE_PATH, &text) {
+        eprintln(`error: ${e}`);
+        return false;
+    }
+    return true;
 }
 
 fn total(counts: &TreeMap<String, i32>) -> i32 {
@@ -218,11 +205,11 @@ fn report_grown(rows: &List<[String, i32, i32]>) with Stderr {
     eprintln("Run `scripts/check-rust-paths.sh <file>` to list them.");
 }
 
-fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with (Stdout, Stderr) {
+fn list_mode(paths: &List<String>) -> i32 with (Stdout, Stderr, Preopens) {
     let mut found = 0;
     let mut failed = 0;
     for let path of paths {
-        for let hit of scan(root, path, &mut failed) {
+        for let hit of scan(path, &mut failed) {
             println(`${*path}:${hit.line}:${hit.column}: ${hit.text}`);
             found += 1;
         }
@@ -231,14 +218,14 @@ fn list_mode(root: &Descriptor, paths: &List<String>) -> i32 with (Stdout, Stder
     return if failed > 0 { 1 } else { 0 };
 }
 
-fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr) {
+fn ratchet_mode(paths: &List<String>, update: bool) -> i32 with (Stdout, Stderr, Preopens) {
     let mut failed = 0;
-    let counts = census(root, paths, &mut failed);
+    let counts = census(paths, &mut failed);
     if failed > 0 {
         eprintln(`error: ${failed} of ${paths.len()} files could not be measured`);
         return 1;
     }
-    let Some(baseline) = read_baseline(root) else {
+    let Some(baseline) = read_baseline() else {
         return 1;
     };
     // The baseline only ever ratchets down. Recording a file that grew would
@@ -249,7 +236,7 @@ fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 wi
         return 1;
     }
     if update {
-        if !write_baseline(root, &counts) {
+        if !write_baseline(&counts) {
             return 1;
         }
         println(`baseline: ${total(&counts)} inline paths in ${counts.len()} files`);
@@ -263,14 +250,11 @@ fn ratchet_mode(root: &Descriptor, paths: &List<String>, update: bool) -> i32 wi
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
-    let Some(root) = corpus_root() else {
-        exit(1);
-    };
     let argv = args();
-    let paths = collect_paths(&root, &argv);
+    let paths = collect_paths(&argv, &".rs");
     let update = argv.into_iter().any(|a: String| a == "--update");
     let check = argv.into_iter().any(|a: String| a == "--check");
-    let status = if update || check { ratchet_mode(&root, &paths, update) } else { list_mode(&root, &paths) };
+    let status = if update || check { ratchet_mode(&paths, update) } else { list_mode(&paths) };
     if status != 0 {
         exit(status as u8);
     }

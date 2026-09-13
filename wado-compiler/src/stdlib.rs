@@ -72,6 +72,7 @@ stdlib_table! {
     "core:prelude/types.wado" => "core/prelude/types.wado",
     "core:zlib" => "core/zlib.wado",
     "core:base64" => "core/base64.wado",
+    "core:fs" => "core/fs.wado",
     "core:benchmark" => "core/benchmark.wado",
     "core:serde" => "core/serde.wado",
     "core:json" => "core/json.wado",
