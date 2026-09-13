@@ -829,7 +829,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let method_def = selected
                         .or_else(|| self.qualified_method_decl_at(receiver_site, prefix, suffix));
                     if let Some(method_def) = method_def {
-                        self.record_reference_to_decl(suffix_seg.id, method_def);
+                        self.record_reference_to_decl(suffix_seg.id, method_def, suffix_seg.span);
                     }
                 }
                 // Resolve method-level type args (e.g., i32::deserialize::<MockDeserializer>)
@@ -1454,7 +1454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             self.qualified_method_decl_id(&receiver, method_name)
                         })
                     {
-                        self.record_reference_to_decl(method_seg.id, method_def);
+                        self.record_reference_to_decl(method_seg.id, method_def, method_seg.span);
                     }
 
                     // Qualify by the module the impl was located in:
@@ -1648,7 +1648,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .declared_if_walked(ident.id)
             .filter(|def| self.tysys.resolutions.defs().kind(*def) == DefKind::Function)
         {
-            self.record_reference_to_decl(ident.id, callee);
+            self.record_reference_to_decl(ident.id, callee, ident.span);
             (Some(self.callee_of(callee)), effective_name.to_string())
         }
         // `panic` / `unreachable` where no site answered — a synthesised call.

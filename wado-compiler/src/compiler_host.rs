@@ -91,6 +91,10 @@ pub enum Code {
     UninitializedVariable,
     /// Function declared without a body where nothing supplies one
     MissingFunctionBody,
+    /// An `#[unavailable]` that cannot report what it was written to report
+    MalformedUnavailable,
+    /// A site naming a declaration that reports a reason instead of a body
+    Unavailable,
 
     // Type errors
     /// Type mismatch
@@ -225,6 +229,8 @@ impl std::fmt::Display for Code {
             Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
             Code::UninitializedVariable => "UNINITIALIZED_VARIABLE",
             Code::MissingFunctionBody => "MISSING_FUNCTION_BODY",
+            Code::MalformedUnavailable => "MALFORMED_UNAVAILABLE",
+            Code::Unavailable => "UNAVAILABLE",
             Code::TypeMismatch => "TYPE_MISMATCH",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",

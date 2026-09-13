@@ -108,6 +108,8 @@ pub enum AnalyzeError {
     },
     /// A function declared without a body where nothing supplies one.
     MissingFunctionBody { name: String, span: Span },
+    /// An `#[unavailable]` that cannot report what it was written to report.
+    MalformedUnavailable { fault: UnavailableFault, span: Span },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
     /// Invalid module path (not a valid URI reference)
@@ -136,6 +138,28 @@ pub enum AnalyzeError {
         reexport_visibility: Visibility,
         span: Span,
     },
+}
+
+/// What is wrong with an `#[unavailable]` declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnavailableFault {
+    /// The declaration keeps a body, which the attribute stands in for.
+    HasBody,
+    /// No reason, or an empty one.
+    NoReason,
+}
+
+impl UnavailableFault {
+    fn message(self) -> &'static str {
+        match self {
+            Self::HasBody => {
+                "`#[unavailable]` replaces a body; this declaration has one, so remove one of them"
+            }
+            Self::NoReason => {
+                "`#[unavailable]` needs a reason, as `#[unavailable(\"write `x` instead\")]`"
+            }
+        }
+    }
 }
 
 impl AnalyzeError {
@@ -182,6 +206,11 @@ impl AnalyzeError {
             AnalyzeError::MissingFunctionBody { name, span } => (
                 Code::MissingFunctionBody,
                 format!("function '{name}' has no body"),
+                *span,
+            ),
+            AnalyzeError::MalformedUnavailable { fault, span } => (
+                Code::MalformedUnavailable,
+                fault.message().to_string(),
                 *span,
             ),
             AnalyzeError::UndefinedSymbol { name, span } => (
@@ -772,32 +801,63 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         self.logger.ok_or_bail(())
     }
 
-    /// Reject a function that declares no body where nothing supplies one
-    /// (issue #2035).
+    /// Check every function declaration: that it has a body where nothing else
+    /// supplies one (issue #2035), and that an `#[unavailable]` it carries is
+    /// well formed.
     fn check_function_bodies(&mut self, module: &Module, module_source: &ModuleSource) {
-        if allows_bodyless_functions(module_source) {
-            return;
-        }
         for item in &module.items {
             if let Item::Function(func) = item {
-                self.check_function_body(func, module_source);
+                self.check_function_decl(func, module_source);
             }
             if let Item::Impl(impl_block) = item {
                 for method in &impl_block.methods {
-                    self.check_function_body(method, module_source);
+                    self.check_function_decl(method, module_source);
+                }
+            }
+            if let Item::Trait(trait_decl) = item {
+                for method in &trait_decl.methods {
+                    self.check_unavailable(method, module_source);
                 }
             }
         }
     }
 
-    fn check_function_body(&mut self, func: &Function, module_source: &ModuleSource) {
-        if func.body.is_some() || func.is_cm_import() {
+    fn check_function_decl(&mut self, func: &Function, module_source: &ModuleSource) {
+        self.check_unavailable(func, module_source);
+        if func.body.is_some()
+            || func.is_cm_import()
+            || func.unavailable_attr().is_some()
+            || allows_bodyless_functions(module_source)
+        {
             return;
         }
         let _ = self.logger.error_in(
             module_source,
             AnalyzeError::MissingFunctionBody {
                 name: func.name.clone(),
+                span: func.name_span,
+            },
+        );
+    }
+
+    /// An `#[unavailable]` stands in for a body and must say why, so a
+    /// declaration that keeps its body or omits the reason is rejected where it
+    /// is written.
+    fn check_unavailable(&mut self, func: &Function, module_source: &ModuleSource) {
+        let Some(attr) = func.unavailable_attr() else {
+            return;
+        };
+        let fault = if func.body.is_some() {
+            UnavailableFault::HasBody
+        } else if attr.unavailable_reason().is_none_or(str::is_empty) {
+            UnavailableFault::NoReason
+        } else {
+            return;
+        };
+        let _ = self.logger.error_in(
+            module_source,
+            AnalyzeError::MalformedUnavailable {
+                fault,
                 span: func.name_span,
             },
         );

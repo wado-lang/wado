@@ -13,8 +13,7 @@ The same gap opens after a removal. A method taken out of the standard library
 leaves no trace, so an upgrade reports the same "no method named" and the
 reader has nowhere to learn what replaced it.
 
-Three states want distinct answers, and only the first is a name the language
-has:
+Three states want distinct answers, and the language can spell none of them:
 
 | State        | Callable   | Existed before | Required information |
 | ------------ | ---------- | -------------- | -------------------- |
@@ -34,43 +33,40 @@ diagnostics: `static_assert` (C++11), `[[deprecated]]` (C++14),
 ## Decision
 
 A declaration carries a diagnostic instead of a body, and `#[unavailable]` is
-that diagnostic:
+that diagnostic. One argument, the sentence the caller reads:
 
 ```wado
 #[unavailable("argument order is a known trap; write `map(f).unwrap_or(v)`")]
 fn map_or();
 
-#[unavailable(removed_since = "0.5.0", "use `Option::ok_or`")]
+#[unavailable("removed in 0.5.0; use `Option::ok_or`")]
 fn into_result();
 ```
 
 ```
 error: `Option::map_or` is unavailable: argument order is a known trap; write `map(f).unwrap_or(v)`
-error: `Option::into_result` was removed in 0.5.0: use `Option::ok_or`
+error: `Option::into_result` is unavailable: removed in 0.5.0; use `Option::ok_or`
 ```
 
-### One attribute, two states
+### One attribute, and the states live in the sentence
 
 Both states answer the same call the same way — the name resolves, the call is
-an error, and the reason is what the caller reads. What separates them is
-whether the name existed before, which is a version rather than a second
-attribute. Swift reaches the same conclusion from the other direction, folding
-its three states into `@available`.
+an error, and the reason is what the caller reads. What separates them is a
+fact about the past, and the caller is the only one who reads it. Nothing
+machine-processes a removal version, so a field for it buys a validation rule
+and a second way to be wrong, and buys nothing else. An author who wants to
+date a removal writes the date in the sentence.
 
-`removed_since` carries that version, and naming the state in the key is what
-lets one argument do the work of two: a bare `since` would not say which state
-it dates, since the attribute's own name covers both. Without the key the name
-never existed, and there is nothing to date.
+Swift reaches the same conclusion from the other direction, folding its three
+states into `@available`; this goes one step further and folds the argument in
+too.
 
 ### The reason is mandatory
 
-The reason is the last argument, a positional string, as
-`#[compiler_item("option")]`, `#[cm("future-write")]`, and
-`#[timeout_ms(5000)]` take theirs. An empty or missing string is a compile
-error: an attribute that omits the sentence is worse than no attribute, since
-it asserts a decision was made while hiding it.
-
-`removed_since` takes the `#[param(from_env = "PORT")]` key-value form.
+The reason is a positional string, as `#[compiler_item("option")]`,
+`#[cm("future-write")]`, and `#[timeout_ms(5000)]` take theirs. An empty or
+missing string is a compile error: an attribute that omits the sentence is
+worse than no attribute, since it asserts a decision was made while hiding it.
 
 ### The declaration reserves a name, not a signature
 
@@ -81,8 +77,17 @@ surface that rots, and it sits badly with the policy the attribute exists to
 record. Wado does not offer a Rust name under different parameters, so writing
 those parameters out writes down the thing being refused.
 
-A `removed_since` declaration may keep the signature the method had, as a
-record, under the same rule.
+`self` is the exception, because it is not part of the signature but of which
+name is reserved: an instance method and a static one are different names on
+the same type, and only `self` tells them apart. A declaration reserving
+`opt.map_or(…)` writes `fn map_or(&self)`.
+
+A call that reaches such a declaration stops there. Its arguments are never
+counted or typed, since the parameters they would be checked against are not
+a signature.
+
+A declaration standing in for a removed method may keep the signature it had,
+as a record, under the same rule.
 
 ### Name resolution
 
@@ -111,30 +116,22 @@ method declaration (issue #2035). `#[unavailable]` joins that list.
 
 ## Roadmap
 
-1. Parse `#[unavailable]` on a bodyless `fn` at module level, in an `impl`, and
-   in a `trait`, rejecting a missing or empty reason and an empty
-   `removed_since`. Done when a declaration carrying it parses and a malformed
-   one is diagnosed.
-2. Carry it through name resolution so a call reaches the declaration and
-   reports the reason, and so nothing else sees the name: no trait
-   requirement satisfied, nothing emitted. Done when a call to an
-   `#[unavailable]` method reports its reason and an `impl` carrying one does
-   not count as implementing it.
-3. Mark the methods Wado has already decided against, starting with
-   `Option::map_or` and `Option::map_or_else` (see
-   [WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)).
-   Done when calling either reports the reason rather than "no method named".
+Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 
-- `#[deprecated(since = "...", "...")]` is the family's third state and is not
-  designed here. It stays callable and reports a warning, and it shares the
-  mechanism above. What it needs beyond that is a warning path, a decision on
-  whether to match Rust's `note = "..."` argument spelling, and its own answer
-  on `wado doc`. A deprecated item still exists, which is why it is a separate
-  attribute rather than a third `#[unavailable]` state, and why the reasoning
-  above for leaving absences out does not carry to it.
+- An attribute's string arguments keep their escape sequences: the parser
+  stores a string literal's raw text, so `#[unavailable("use \"x\"")]` reports
+  the backslashes. No other attribute carries prose, so nothing hit this
+  before. Closing it means reading an attribute's strings the way an
+  expression's are read, which today only the elaborator can do.
+- `#[deprecated("...")]` is the family's third state and is not designed here.
+  It stays callable and reports a warning, and it shares the mechanism above.
+  What it needs beyond that is a warning path and its own answer on `wado doc`.
+  A deprecated item still exists, which is why it is a separate attribute
+  rather than a third `#[unavailable]` state, and why the reasoning above for
+  leaving absences out does not carry to it.
 - Types, traits, and globals cannot carry the attribute. Extending to them
   looks mechanical, and no use has asked for it.
-- Whether a `removed_since` declaration is ever pruned, and on what schedule,
-  is undecided. Left alone, they accumulate.
+- Whether a declaration standing in for a removed method is ever pruned, and on
+  what schedule, is undecided. Left alone, they accumulate.

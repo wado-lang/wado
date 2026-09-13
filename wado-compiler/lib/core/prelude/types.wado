@@ -106,6 +106,12 @@ impl<T> Option<T> {
             None => Result::<T, E>::Err(err),
         };
     }
+
+    #[unavailable("the name reads as map-then-fallback while the signature takes the fallback first; write `map(f).unwrap_or(v)`")]
+    pub fn map_or(&self);
+
+    #[unavailable("the argument order traps the same way `map_or` does; write `map(f)` and match on the result")]
+    pub fn map_or_else(&self);
 }
 
 /// Cold slow path for `unwrap`/`expect` failures: traps with `${msg}: ${value:?}`.

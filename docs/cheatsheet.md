@@ -466,6 +466,25 @@ res.map(|v: i32| v * 2)           // Result<U, E>; an Err passes through
 res.map_err(|e: String| e.len())  // Result<T, F>; an Ok passes through
 ```
 
+### Declared Absence
+
+A name Wado deliberately does not offer is declared, not simply missing, so a
+call to it reports why instead of "no method named". See
+[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+
+```wado
+#[unavailable("write `map(f).unwrap_or(v)`")]
+pub fn map_or(&self);                       // a name that never existed
+
+#[unavailable("removed in 0.5.0; use `Option::ok_or`")]
+pub fn into_result(&self);                  // a name that was taken out
+```
+
+The reason is required, and it is the whole attribute — a removal dates itself
+in the sentence. The declaration reserves a name — `self` says whether it is
+the instance or the static one — and a call to it is never checked against the
+parameters it writes.
+
 See Control Flow for pattern matching with `match`, `if let`, and `matches`.
 
 ### Flags

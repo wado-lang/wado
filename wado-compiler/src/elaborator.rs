@@ -47,9 +47,11 @@ use std::rc::Rc;
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
+use crate::ast::{
+    self, AstId, Block, Expr, Function, IdentExpr, ImplBlock, Item, Module, Visibility,
+};
 use crate::compiler_host::{CompilerHost, Diagnostic};
-use crate::defs::{DefId, DefKind};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
@@ -84,6 +86,50 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
         }
     }
     index
+}
+
+/// What every `#[unavailable]` declaration in the program reports, by the
+/// declaration. Rendered here rather than at the site that reports it: only the
+/// declaring `impl` or `trait` can qualify the name, and the sentence is the
+/// same wherever it is read.
+pub(crate) fn collect_unavailable(
+    modules: &IndexMap<ModuleSource, Module>,
+    defs: &DefTable,
+) -> IndexMap<DefId, String> {
+    let mut out = IndexMap::default();
+    let mut record = |func: &Function, owner: Option<&str>| {
+        let Some(reason) = func.unavailable() else {
+            return;
+        };
+        let Some(def) = defs.of_ast_id(func.id) else {
+            return;
+        };
+        let name = match owner {
+            Some(owner) => format!("{owner}::{}", func.name),
+            None => func.name.clone(),
+        };
+        out.insert(def, format!("`{name}` is unavailable: {reason}"));
+    };
+    for module in modules.values() {
+        for item in &module.items {
+            match item {
+                Item::Function(func) => record(func, None),
+                Item::Impl(block) => {
+                    let owner = ast::type_head_name(&block.ty);
+                    for method in &block.methods {
+                        record(method, owner);
+                    }
+                }
+                Item::Trait(decl) => {
+                    for method in &decl.methods {
+                        record(method, Some(&decl.name));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    out
 }
 
 pub use types::TypeError;
@@ -547,10 +593,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
     }
 
-    /// Record a use→def edge naming the declaration `def`. The map is keyed by
-    /// node on both sides, so the declaring node is read off the identity here
-    /// rather than carried beside it.
-    pub(super) fn record_reference_to_decl(&mut self, use_id: AstId, def: DefId) {
+    /// Record a use→def edge naming the declaration `def`, and report where
+    /// `def` is `#[unavailable]`: every call shape resolves through here, so
+    /// the reason reaches the site that wrote the name whichever shape it used.
+    /// The map is keyed by node on both sides, so the declaring node is read off
+    /// the identity here rather than carried beside it.
+    /// Whether `def` reports a reason in place of a body.
+    pub(super) fn is_unavailable(&self, def: DefId) -> bool {
+        self.tysys.unavailable.contains_key(&def)
+    }
+
+    pub(super) fn record_reference_to_decl(&mut self, use_id: AstId, def: DefId, span: Span) {
+        if let Some(message) = self.tysys.unavailable.get(&def).cloned() {
+            let _ = self.emit(TypeError::Unavailable { message, span });
+        }
         let node = self.tysys.resolutions.defs().ast_id(def);
         self.insert_reference(use_id, node);
     }

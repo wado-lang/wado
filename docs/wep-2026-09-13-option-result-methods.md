@@ -89,19 +89,18 @@ followed by `unwrap_or(v)`, which risks no ordering at all.
 `and`, `or`, `xor`, `filter`, `zip`, `flatten`, and `unwrap_or_default` are
 not offered. No Wado site wants them, and idiomatic Rust barely does.
 
-These omissions are carried in prose until the mechanism for writing them at
-the declaration exists; see
-[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+`map_or` and `map_or_else` carry `#[unavailable]`, so calling either reports
+the reason above; see
+[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md). The rest are
+carried in prose, since no caller reaching for them writes a Rust name Wado
+answers differently.
 
 `unwrap_or_else`, `ok_or_else`, and `and_then` are absent rather than
 declined, so nothing marks them. Known gaps says what each waits on.
 
 ## Roadmap
 
-1. Mark `map_or` and `map_or_else` `#[unavailable]`, once
-   [WEP: Declared Absence](./wep-2026-09-13-declared-absence.md) lands that
-   attribute. Done when calling either reports why rather than "no method
-   named".
+Nothing is queued. The gaps below are unowned.
 
 ## Known gaps
 

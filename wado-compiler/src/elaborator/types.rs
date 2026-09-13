@@ -328,6 +328,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A site named a declaration that reports a reason in place of a body.
+    /// The sentence is the declaration's own, rendered once by
+    /// [`super::collect_unavailable`].
+    Unavailable {
+        message: String,
+        span: Span,
+    },
+
     /// Unknown variable
     UnknownIdentifier {
         name: String,
@@ -1205,6 +1213,9 @@ impl TypeError {
                 format!("unknown function '{name}'"),
                 *span,
             ),
+            TypeError::Unavailable { message, span } => {
+                (Code::Unavailable, message.clone(), *span)
+            }
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),

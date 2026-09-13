@@ -1323,6 +1323,10 @@ impl AttrArg {
     }
 }
 
+/// The attribute a declaration carries in place of a body.
+/// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
+pub const UNAVAILABLE: &str = "unavailable";
+
 /// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
 pub struct Attribute {
@@ -1360,6 +1364,14 @@ impl Attribute {
     /// For `#[wire(default)]`, `attr.has_arg("default")` returns `true`.
     pub fn has_arg(&self, name: &str) -> bool {
         self.args.iter().any(|arg| arg.name() == name)
+    }
+
+    /// The sentence `#[unavailable(...)]` reports, as its one string argument.
+    pub fn unavailable_reason(&self) -> Option<&str> {
+        self.args.iter().find_map(|arg| match arg {
+            AttrArg::Str(s) => Some(s.as_str()),
+            _ => None,
+        })
     }
 
     /// The linearity `#[cm(..., linearity=...)]` declares, if any.
@@ -1963,6 +1975,21 @@ impl Function {
     /// Whether the Component Model supplies this declaration's body.
     pub fn is_cm_import(&self) -> bool {
         self.body.is_none() && self.attrs.iter().any(|a| a.cm_boundary.is_some())
+    }
+
+    /// The `#[unavailable]` attribute this declaration carries, if any. Present
+    /// even when malformed, so the check that rejects it sees it.
+    pub fn unavailable_attr(&self) -> Option<&Attribute> {
+        self.attrs.iter().find(|a| a.name == UNAVAILABLE)
+    }
+
+    /// Why a site naming this declaration cannot call it. `None` for a
+    /// declaration carrying no `#[unavailable]`, and for one `analyze` rejects
+    /// as saying nothing.
+    pub fn unavailable(&self) -> Option<&str> {
+        self.unavailable_attr()?
+            .unavailable_reason()
+            .filter(|reason| !reason.is_empty())
     }
 }
 

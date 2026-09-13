@@ -105,6 +105,12 @@ pub(crate) struct TypeSystem {
     /// afterwards.
     pub(crate) loaded_module_func_indices: Rc<IndexMap<ModuleSource, IndexMap<String, usize>>>,
 
+    /// What a site naming an `#[unavailable]` declaration reports, by the
+    /// declaration. The sentence is rendered once here, where the declaring
+    /// `impl` or `trait` is in hand to qualify the name.
+    /// See [WEP: Declared Absence](../../../docs/wep-2026-09-13-declared-absence.md).
+    pub(crate) unavailable: Rc<IndexMap<DefId, String>>,
+
     /// Every source declaration's decl-pass facts — signatures, globals,
     /// associated constants, data sections. See [`super::sig::Signatures`]
     /// for the membership rule.

@@ -604,6 +604,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
+        // The name resolved, and the declaration answers with its reason. The
+        // call goes no further: an `#[unavailable]` reserves a name, not a
+        // signature, so checking the arguments against its parameters would
+        // report on a shape that means nothing. A synthetic call names no
+        // method and so reaches no such declaration.
+        if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def)
+            && self.is_unavailable(def)
+        {
+            self.record_reference_to_decl(method_id, def, span);
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
+
         self.check_inherent_member_visibility(
             inherent_visibility,
             inherent_impl_module.as_ref(),
@@ -1082,7 +1094,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // signature. A name scan cannot stand in: two impls on one type can
         // declare the same method, and only dispatch knows which answered.
         if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
-            self.record_reference_to_decl(method_id, def);
+            self.record_reference_to_decl(method_id, def, span);
         }
 
         let func = FunctionRef {
@@ -2337,7 +2349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.qualified_method_decl_id(&receiver, &static_call.method)
                 .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
         }) {
-            self.record_reference_to_decl(static_call.method_id, method_def);
+            self.record_reference_to_decl(static_call.method_id, method_def, static_call.span);
         }
 
         // A concrete block hosts its own function; a generic one's instance is
