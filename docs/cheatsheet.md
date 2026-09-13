@@ -452,9 +452,7 @@ let none = Option::<i32>::None;
 
 `Option` and `Result` carry a deliberately small method set. The extracting
 ones are `unwrap` and `expect`, and on `Result` also `is_ok` / `is_err` /
-`unwrap_err` / `expect_err`. The value-carrying ones are below. See
-[WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
-for what is not provided and why.
+`unwrap_err` / `expect_err`. The value-carrying ones are below.
 
 ```wado
 opt.unwrap_or(0)                  // the value, or the fallback
