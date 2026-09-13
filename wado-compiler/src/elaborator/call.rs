@@ -939,6 +939,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.record_reference_to_decl(suffix_seg.id, method_def);
                     }
                 }
+                // The method's own parameters, in the dense space its type
+                // arguments are indexed by — an effect or `fn`-bound parameter
+                // holds no slot in one.
+                let mtype_params: Vec<ast::GenericParam> = self
+                    .lookup_static_method_type_params(prefix, suffix)
+                    .into_iter()
+                    .filter(ast::GenericParam::is_real_type_param)
+                    .collect();
+                // Before anything counts slots, since a pack's arguments are
+                // one per element until they are grouped.
+                let mut written = type_args.clone();
+                self.group_variadic_type_args_of(&mtype_params, &mut written);
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -952,16 +964,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &args,
                     expected_type,
                     call.span,
-                    type_args.clone(),
+                    written,
                 );
-                // The method's own parameters, in the dense space its type
-                // arguments are indexed by — an effect or `fn`-bound parameter
-                // holds no slot in one.
-                let mtype_params: Vec<ast::GenericParam> = self
-                    .lookup_static_method_type_params(prefix, suffix)
-                    .into_iter()
-                    .filter(ast::GenericParam::is_real_type_param)
-                    .collect();
                 // A method-level parameter bound only through another's
                 // associated type (`..V` off `Holes`) is projected once the
                 // owner is inferred, as the free-function path does; the

@@ -616,6 +616,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
+        // Before anything counts slots, since a pack's arguments are one per
+        // element until they are grouped.
+        let mut type_args = type_args;
+        self.group_variadic_type_args_of(&method_own_params, &mut type_args);
+
         self.check_inherent_member_visibility(
             inherent_visibility,
             inherent_impl_module.as_ref(),
@@ -808,10 +813,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         receiver = adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table);
 
-        // `m::<i32, bool>()` spells one argument per pack element; the slot
-        // holds the tuple, which is also the shape inference produces.
-        let mut type_args = type_args;
-        self.group_variadic_type_args_of(&method_own_params, &mut type_args);
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
             MethodInferenceInput {
@@ -1662,6 +1663,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve method-level type arguments
         let mut method_type_args: Vec<TypeId> = self.resolve_turbofish_args(&static_call.type_args);
+        // Before anything counts slots, since a pack's arguments are one per
+        // element until they are grouped.
+        if let Some(sig) = callee_sig.as_ref() {
+            let own_params = sig.own_params.clone();
+            self.group_variadic_type_args_of(&own_params, &mut method_type_args);
+        }
 
         // Not folded into `lookup_static_method_param_types`: variant
         // constructors need its answer to stay empty.

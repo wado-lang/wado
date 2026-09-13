@@ -141,7 +141,30 @@ impl<T: Default> Box2<T> {
         }
         return s;
     }
+
+    // The same on a static, where the turbofish is all that settles it.
+    fn spread_static<..U: Default>(u: [..U] = [..U::default()]) -> String {
+        let mut s = "";
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+
+    // A scalar ahead of the pack: the turbofish spells one argument for it and
+    // one per pack element, and grouping them is what keeps `A` its own.
+    fn headed<A: Default, ..U: Default>(&self, a: A = A::default(), u: [..U] = [..U::default()]) -> String {
+        let mut s = `${a:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
 }
+
+// A default's pack is spliced into whatever takes it, and a global initializer
+// takes one as a function body does.
+global PACKED: String = packed::<i32, String>("g:");
 
 // A field default: the parameter comes from the annotation, or from a sibling
 // field where the literal carries none.
@@ -226,6 +249,11 @@ test "a variadic pack's default names the pack it stands for" {
     assert bi.spread::<i32, bool>() == "10false";
     assert bi.spread::<String>() == "1\"\"";
     assert bi.spread([7, "x"]) == "17\"x\"";
+    assert Box2::<i32>::spread_static::<i32, bool>() == "0false";
+    assert Box2::<i32>::spread_static::<String>() == "\"\"";
+    assert bi.headed::<i32, String, bool>() == "0\"\"false";
+    assert bi.headed::<String, i32>() == "\"\"0";
+    assert PACKED == "g:0\"\"";
 }
 
 // From the annotation, then from a sibling field.

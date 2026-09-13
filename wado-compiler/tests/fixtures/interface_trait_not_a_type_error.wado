@@ -9,6 +9,8 @@
 // `interface_in_annotation_error.wado` covers the annotation route, which has
 // to be its own file because that check stops at the first error reported.
 
+use m from "./sub/ufcs_namespaced_trait_target.wado";
+
 interface Counter {
     fn next() -> i32;
 }
@@ -25,6 +27,9 @@ export fn run() {
     let a = mk::<Counter>();
     let b = mk::<Greet>();
     let c = mk::<List<Greet>>();
+    // The namespaced spelling names the same declaration, so it says the same
+    // thing. The head of `ns::Name` is a head like any other.
+    let d = mk::<m::Greet>();
 }
 
 __DATA__

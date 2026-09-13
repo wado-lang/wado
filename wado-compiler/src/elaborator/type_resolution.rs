@@ -521,6 +521,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
             Type::NamespacedGeneric(namespaced) => {
+                // `Self::Assoc` and `T::Assoc` project through a type rather
+                // than naming a declaration, and the projection is what
+                // answers for them.
+                let projects = namespaced.namespace == "Self"
+                    || self
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_params
+                        .contains_key(&namespaced.namespace);
+                if !projects
+                    && head(
+                        self,
+                        namespaced.id,
+                        &namespaced.name,
+                        namespaced.name_span,
+                        !namespaced.args.is_empty(),
+                    )
+                {
+                    return;
+                }
                 for arg in &namespaced.args {
                     self.walk_type_heads(arg, head);
                 }

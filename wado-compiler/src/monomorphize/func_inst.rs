@@ -87,10 +87,11 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
 }
 
 /// Expand every `TypePackExpansion` whose own site settled the pack, in every
-/// function of the module. Such a node is a parameter default spliced into its
-/// caller, and a caller with no type parameters is one `instantiate_function`
-/// never visits. Runs before instantiation sites are collected, so the calls it
-/// produces are collected and monomorphized like any other.
+/// body of the module — a function's and a global initializer's alike. Such a
+/// node is a parameter default spliced into its caller, and a caller with no
+/// type parameters is one `instantiate_function` never visits. Runs before
+/// instantiation sites are collected, so the calls it produces are collected
+/// and monomorphized like any other.
 pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;
@@ -164,6 +165,27 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         func.local_count = local_count;
         func.locals = locals;
         func.body = Some(body);
+    }
+
+    for global in &mut module.globals {
+        let mut locals = std::mem::take(&mut global.locals);
+        // A global carries no count beside its locals, so the vec is the count.
+        let mut local_count = locals.len() as u32;
+        let init = global.init.slot_expr_mut();
+        SettledPackExpander {
+            mono,
+            type_table: &type_table_rc,
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_expr(init);
+        PackExpansionLocalSplitter {
+            local_count: &mut local_count,
+            locals: &mut locals,
+        }
+        .visit_expr(init);
+        assert_eq!(locals.len() as u32, local_count);
+        global.locals = locals;
     }
 }
 
