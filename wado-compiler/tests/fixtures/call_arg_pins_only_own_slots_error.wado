@@ -1,0 +1,24 @@
+// The tiered argument walk that types a closure's parameters
+// (`closure_param_from_callee_type_param.wado`) pins what an argument answers
+// about the callee's *own* slots. A hole someone else deferred is not one of
+// them: it has its own sink, which nothing re-checks against an answer pinned
+// here.
+//
+// `make()` defers `T`. Pinning it from `push(1)` fixed the list to `List<i32>`
+// and then pushed an `i64` into it, reaching codegen as a Wasm module the
+// validator rejects. Nothing answers `T`, so the call is where that is said.
+
+fn make<T>() -> List<T> {
+    return [];
+}
+
+test "an argument does not answer a hole the receiver deferred" {
+    let mut xs = make();
+    xs.push(1);
+    let y: i64 = 5;
+    xs.push(y);
+    assert xs.len() == 2;
+}
+
+__DATA__
+{"test": {}, "compile_error": "cannot infer type parameter `T` of function `make`"}

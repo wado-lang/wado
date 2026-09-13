@@ -146,9 +146,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let hole = {
             let mut tt = self.tysys.type_table.borrow_mut();
             let hole = tt.make_infer_var(var);
-            if let Some(name) = slot_name {
-                tt.name_infer_var(var, name.to_string());
-            }
+            tt.set_infer_var_name(var, slot_name.map(str::to_string));
             hole
         };
         assert!(
@@ -313,6 +311,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
     /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
+        self.solve_holes_against(holey, expected, None);
+    }
+
+    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables the
+    /// asking site minted.
+    ///
+    /// A parameter type can carry a hole that belongs to someone else: one an
+    /// argument's own type deferred, or one the receiver is still waiting on.
+    /// That hole has its own sink, which nothing re-checks against an answer
+    /// pinned here, so an argument that merely agrees with the hole fixes it to
+    /// the wrong type and reaches codegen unchecked.
+    pub(super) fn solve_own_infer_holes_against(
+        &mut self,
+        holey: TypeId,
+        expected: TypeId,
+        own: &[TypeId],
+    ) {
+        self.solve_holes_against(holey, expected, Some(own));
+    }
+
+    /// The body of the two above: `own` of `None` takes every binding, `Some`
+    /// only the bindings for those variables.
+    fn solve_holes_against(&mut self, holey: TypeId, expected: TypeId, own: Option<&[TypeId]>) {
         if !self.type_has_infer_hole(holey) {
             return;
         }
@@ -323,6 +344,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let usable: Vec<(TypeId, TypeId)> = bindings
             .into_iter()
+            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)))
             .filter(|&(_, concrete)| self.is_usable_answer(concrete))
             .collect();
         for (hole, concrete) in usable {

@@ -58,6 +58,8 @@ Arguments are then resolved in three tiers, each pinning what it answers about t
 2. Those closures. A closure takes its parameter types off the signature, and its body applies operators and methods to them right away. An operator applied to a variable resolves against nothing, so the closure waits for the arguments that can answer it. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
 3. Numeric literals, answering only what is still open. `i32` / `f64` is a default, not an answer. In `fold(0, |acc, x| acc + x)` over a `List<i64>` the body says the accumulator is `i64`; in `fold(0, |acc, x| x)` the `0` is all there is.
 
+An argument answers only the variables the call itself minted. A parameter type can be built over a hole some other site deferred, such as the receiver's element type. That hole has its own sink, and nothing re-checks the sink against an answer pinned here, so an argument that merely agrees with the hole would fix it to the wrong type and be believed.
+
 Once every argument is resolved each variable is settled back onto its slot, so type-argument inference proper still sees the declaration's own frame. A slot that inference then answers with itself is not answered. It goes back to the variable, and the call reports it: a rigid parameter carried past this point dies in codegen rather than in a diagnostic.
 
 A variable renders in a diagnostic as the slot it stands for. `?0` names nothing the source wrote, where `A` is exactly what the reader would annotate. A mangled name keeps the variable's own identity, so two same-named slots cannot collapse onto one name.

@@ -694,7 +694,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve arguments with coercion using method parameter types
         let mut args: Vec<TypeId> =
-            self.resolve_args_against_params(args_ast, ctx, arg_param_types);
+            self.resolve_args_against_params(args_ast, ctx, arg_param_types, arg_inst.as_ref());
 
         if let Some(inst) = &arg_inst {
             self.settle_onto_slots(inst, &method_type_param_ids, &mut args);

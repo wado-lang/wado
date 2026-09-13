@@ -13,7 +13,7 @@ use super::callee::{CalleeRef, StaticMethodRef};
 use super::coercion::is_numeric_literal_arg;
 use super::expr::BareCase;
 use super::infer::InferCtx;
-use super::instantiate::Instantiation;
+use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope};
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
@@ -300,6 +300,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve a call's arguments against parameter types that may still hold
     /// this call's inference variables, each pinning what it answers.
     ///
+    /// `inst` is this call's instantiation of its callee's own slots. Its
+    /// variables are the only ones an argument may answer here
+    /// ([`Self::solve_own_infer_holes_against`]). A callee that declares no
+    /// slots has none, and the walk is then a plain in-order resolve.
+    ///
     /// Three tiers decide who answers first, as the solver's own tiers do
     /// ([`InferCtx::add`], [`InferCtx::add_expected_return`],
     /// [`InferCtx::add_deferred`]):
@@ -318,7 +323,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         args: &[ast::Expr],
         ctx: &mut FunctionContext,
         param_types: &[TypeId],
+        inst: Option<&Instantiated>,
     ) -> Vec<TypeId> {
+        let own_vars = inst.map_or(&[][..], |inst| &inst.vars);
         let mut resolved: Vec<Option<TypeId>> = vec![None; args.len()];
         let mut deferred: Vec<usize> = Vec::new();
         for (i, arg) in args.iter().enumerate() {
@@ -327,11 +334,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 deferred.push(i);
                 continue;
             }
-            resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param));
+            resolved[i] = Some(self.resolve_arg_against_param(arg, ctx, param, own_vars));
         }
         for i in deferred {
             let param = param_types.get(i).copied();
-            resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param));
+            resolved[i] = Some(self.resolve_arg_against_param(&args[i], ctx, param, own_vars));
         }
         let resolved: Vec<TypeId> = resolved
             .into_iter()
@@ -342,13 +349,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(param) = param_types.get(i).copied()
             {
                 let expected = self.apply_infer_holes(param);
-                self.solve_infer_holes_against(expected, resolved[i]);
+                self.solve_own_infer_holes_against(expected, resolved[i], own_vars);
             }
         }
         resolved
     }
 
     /// Whether a parameter type still holds a variable nothing has answered.
+    /// Whose variable it is does not matter: a type built over one cannot say
+    /// what a closure's parameters are, so the closure waits either way.
     fn param_still_open(&mut self, param_type: Option<TypeId>) -> bool {
         let Some(param_type) = param_type else {
             return false;
@@ -360,12 +369,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Resolve one call argument against a parameter type that may still hold
     /// this call's inference variables, and pin what the argument answers about
     /// them. See [`Self::resolve_args_against_params`] for the order the
-    /// arguments are walked in and why a numeric literal does not pin here.
+    /// arguments are walked in, which variables `own_vars` holds, and why a
+    /// numeric literal does not pin here.
     fn resolve_arg_against_param(
         &mut self,
         arg: &ast::Expr,
         ctx: &mut FunctionContext,
         param_type: Option<TypeId>,
+        own_vars: &[TypeId],
     ) -> TypeId {
         let Some(param_type) = param_type else {
             return self.resolve_expr(arg, ctx, None);
@@ -373,7 +384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let expected = self.apply_infer_holes(param_type);
         let resolved = self.resolve_expr(arg, ctx, Some(expected));
         if !is_numeric_literal_arg(Some(arg)) {
-            self.solve_infer_holes_against(expected, resolved);
+            self.solve_own_infer_holes_against(expected, resolved, own_vars);
         }
         resolved
     }
@@ -810,7 +821,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Resolve arguments with coercion awareness
         let mut args: Vec<TypeId> = match given_args {
             Some(args) => args,
-            None => self.resolve_args_against_params(&call.args, ctx, &param_types),
+            None => {
+                self.resolve_args_against_params(&call.args, ctx, &param_types, arg_inst.as_ref())
+            }
         };
 
         if let Some(inst) = &arg_inst {

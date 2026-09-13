@@ -2667,8 +2667,16 @@ impl TypeTable {
     /// Record the slot `id` stands for, so a diagnostic that meets the
     /// variable before anything solves it names the parameter the reader can
     /// annotate rather than `?0`.
-    pub fn name_infer_var(&mut self, id: InferVarId, name: String) {
-        self.infer_var_names.insert(id, name);
+    ///
+    /// Called on every mint, `None` included. An id is unique only among the
+    /// variables live at once, and this table outlives them, so a mint that
+    /// reuses an id must clear the name its last holder left. Otherwise a
+    /// diagnostic reads a slot name out of a module that has already finalized.
+    pub fn set_infer_var_name(&mut self, id: InferVarId, name: Option<String>) {
+        match name {
+            Some(name) => self.infer_var_names.insert(id, name),
+            None => self.infer_var_names.swap_remove(&id),
+        };
     }
 
     /// How `id` reads in a message: its slot's name where one was recorded,
