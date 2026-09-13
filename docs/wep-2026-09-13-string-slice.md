@@ -10,9 +10,9 @@ dispatch monomorphizes a generic bound away at `-O2`.
 
 The missing third is the view: a subrange of a string that is neither a copy nor
 a reference to the whole. Without one, an API that works on part of a string
-passes the part as arguments. The standard library does exactly that —
-`FromStr::from_str_range(s, start, end)` and `i32::from_str_range` take the
-range beside the string — and every caller repeats the triple.
+passes the part as arguments. The standard library did exactly that.
+`FromStr::from_str_range(s, start, end)` took the range beside the string, and
+every caller repeated the triple.
 
 `ByteSlice` already views a `String`'s bytes with no copy, but it views bytes,
 not text: nothing holds its ends on character boundaries. A newtype cannot hold
@@ -60,16 +60,16 @@ What follows:
       rejected.
 - [x] Make a view scalarize at `-O2`. Done when a byte-scanning loop over a
       view of a `&String` emits no `struct.new`.
-- [ ] Add `StrSlice` to `core:prelude`: a struct over a string's bytes plus a
+- [x] Add `StrSlice` to `core:prelude`: a struct over a string's bytes plus a
       range, with private fields and constructors that reject an end off a
       character boundary. Done when a view can be built, compared, printed, and
       iterated by character.
-- [ ] Add `AsStrSlice` with impls for `String` and `StrSlice`. Done when one
+- [x] Add `AsStrSlice` with impls for `String` and `StrSlice`. Done when one
       generic signature accepts an owned string, a reference to one, and a
       subrange view.
-- [ ] Migrate the standard library's `(text, start, end)` triples to `StrSlice`,
+- [x] Migrate the standard library's `(text, start, end)` triples to `StrSlice`,
       replacing the triple signatures rather than keeping both. Done when
-      `from_str_range` and its callers take a view and no triple form remains.
+      `FromStr` names `from_str_slice` and no triple form remains.
 
 ## Known gaps
 
@@ -77,13 +77,15 @@ What follows:
   Closing it needs argument promotion, which `docs/optimizer.md` already lists
   as not implemented: a callee taking an aggregate by value and only reading its
   fields would take the fields instead.
-- The `StrSlice` API surface is open — which of `String`'s methods it carries,
+- The `StrSlice` API surface is open: which of `String`'s methods it carries,
   which prelude traits it implements, and whether `String`'s own methods start
   taking `impl AsStrSlice`.
 - Whether `AsStrSlice` joins the prelude's auto-imported set, as `AsByteSlice`
   has not.
-- What a boundary check costs when a subrange is built in a loop, and whether an
-  unchecked constructor is needed beside the checked one.
+- `StrSlice` carries no string search or comparison beyond `Eq` / `Ord`:
+  `contains`, `starts_with`, `split` and the trims stay on `String`, so working
+  on part of a string still copies it out for those. Closing it means porting
+  each one to a view and having `String`'s own delegate.
 - A cast between two references whose referents share one representation head
   (`&ByteSlice` to `&Slice<u8>`) is not dropped, so it still hides the operand's
   shape from the rules that match on one. Only the unreferenced case is covered.

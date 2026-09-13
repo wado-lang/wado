@@ -943,9 +943,11 @@ fn mint_scalarized_clones(
             }
         }
         if let Some(body) = clone.body.as_mut() {
-            for s in &affected {
-                body.values.retype_local(s.local, s.scalar_type_id);
-            }
+            let retyped: Vec<(u32, TypeId)> = affected
+                .iter()
+                .map(|s| (s.local, s.scalar_type_id))
+                .collect();
+            body.values.retype_locals(&retyped);
             let root = body.root;
             rewrite_param_reads(body, NodeRef::Block(root), &affected);
         }

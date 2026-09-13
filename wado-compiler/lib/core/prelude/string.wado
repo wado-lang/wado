@@ -104,6 +104,29 @@ fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len
     return true;
 }
 
+/// Lexicographic order of `a[a_start..a_start+a_len)` against
+/// `b[b_start..b_start+b_len)`, comparing bytes and then lengths.
+fn compare_byte_ranges(a: &Array<u8>, a_start: i32, a_len: i32, b: &Array<u8>, b_start: i32, b_len: i32) -> Ordering {
+    let min_len = i32::min(a_len, b_len);
+    for let mut i = 0; i < min_len; i += 1 {
+        let a_byte = a[a_start + i];
+        let b_byte = b[b_start + i];
+        if a_byte < b_byte {
+            return Ordering::Less;
+        }
+        if a_byte > b_byte {
+            return Ordering::Greater;
+        }
+    }
+    if a_len < b_len {
+        return Ordering::Less;
+    }
+    if a_len > b_len {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
 /// One UTF-8 scalar decoded from a byte slice.
 struct Utf8Scalar {
     /// Decoded code point; meaningful only when `valid`.
@@ -1365,30 +1388,14 @@ impl LenientFromStr for String {
 
 impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let len_a = self.len();
-        let len_b = other.len();
-        let min_len = i32::min(len_a, len_b);
-
-        let a_repr = &self.repr as &Array<u8>;
-        let b_repr = &other.repr as &Array<u8>;
-        for let mut i = 0; i < min_len; i += 1 {
-            let a_byte = a_repr[i];
-            let b_byte = b_repr[i];
-            if a_byte < b_byte {
-                return Ordering::Less;
-            }
-            if a_byte > b_byte {
-                return Ordering::Greater;
-            }
-        }
-
-        if len_a < len_b {
-            return Ordering::Less;
-        }
-        if len_a > len_b {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return compare_byte_ranges(
+            &self.repr as &Array<u8>,
+            0,
+            self.len(),
+            &other.repr as &Array<u8>,
+            0,
+            other.len(),
+        );
     }
 }
 
@@ -1406,12 +1413,8 @@ impl From<char> for String {
     }
 }
 
-/// A view of a string's UTF-8 bytes over the byte range `[start, end)`, both
-/// ends on character boundaries. Creating one copies nothing.
-///
-/// A newtype over `ByteSlice` could not carry that invariant, since `as`
-/// converts both ways for free. The fields are private and every constructor
-/// that can land off a boundary checks.
+/// A view of part of a string, its ends on UTF-8 character boundaries.
+/// Creating one copies nothing.
 pub struct StrSlice {
     repr: &Array<u8>,
     start: i32,
@@ -1498,10 +1501,8 @@ impl StrSlice {
     }
 }
 
-/// Conversion to a `StrSlice` that copies no bytes.
-///
-/// Implemented by `String` and `StrSlice`, so one signature takes an owned
-/// string, a reference to one, or a view of part of one.
+/// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
+/// owned string, a reference to one, or a view of part of one.
 pub trait AsStrSlice {
     fn as_str_slice(&self) -> StrSlice with stores[self];
 }
@@ -1520,42 +1521,12 @@ impl AsStrSlice for StrSlice {
 
 impl Eq for StrSlice {
     pub fn eq(&self, other: &Self) -> bool {
-        let len = self.len();
-        if len != other.len() {
-            return false;
-        }
-        for let mut i = 0; i < len; i += 1 {
-            if self.get_byte_unchecked(i) != other.get_byte_unchecked(i) {
-                return false;
-            }
-        }
-        return true;
+        return self.len() == other.len() && self.cmp(other) == Ordering::Equal;
     }
 }
 
 impl Ord for StrSlice {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let len_a = self.len();
-        let len_b = other.len();
-        let min_len = i32::min(len_a, len_b);
-
-        for let mut i = 0; i < min_len; i += 1 {
-            let a_byte = self.get_byte_unchecked(i);
-            let b_byte = other.get_byte_unchecked(i);
-            if a_byte < b_byte {
-                return Ordering::Less;
-            }
-            if a_byte > b_byte {
-                return Ordering::Greater;
-            }
-        }
-
-        if len_a < len_b {
-            return Ordering::Less;
-        }
-        if len_a > len_b {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return compare_byte_ranges(self.repr, self.start, self.len(), other.repr, other.start, other.len());
     }
 }

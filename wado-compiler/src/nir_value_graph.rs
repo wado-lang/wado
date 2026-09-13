@@ -862,12 +862,14 @@ impl ValuePool {
         });
     }
 
-    /// Re-record the type of every `Opaque(Local idx)` leaf, which a pass
-    /// re-typing a local owes: extraction names a `FieldAccess` field by it.
-    pub fn retype_local(&mut self, idx: u32, ty: TypeId) {
+    /// Re-record the type of every `Opaque(Local)` leaf whose local `types`
+    /// names, which a pass re-typing locals owes: extraction names a
+    /// `FieldAccess` field by that type.
+    pub fn retype_locals(&mut self, types: &[(u32, TypeId)]) {
         for i in 0..self.values.len() {
             if let ValueKind::Opaque(oid) = self.values[i]
-                && self.opaque_source(oid) == Some(OpaqueSource::Local(idx))
+                && let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid)
+                && let Some(&(_, ty)) = types.iter().find(|(local, _)| *local == idx)
             {
                 self.set_type(ValueId(i as u32), ty);
             }

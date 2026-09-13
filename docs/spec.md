@@ -3521,7 +3521,7 @@ f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 
