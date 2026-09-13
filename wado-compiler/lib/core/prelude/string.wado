@@ -92,6 +92,20 @@ fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     return p;
 }
 
+/// True when `index`, counted from `start`, is 0, `len`, or the start of a
+/// UTF-8 character.
+fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
+    if index == 0 || index == len {
+        return true;
+    }
+    if index < 0 || index > len {
+        return false;
+    }
+    // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
+    let b = repr[start + index];
+    return b < 0x80 || b >= 0xC0;
+}
+
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
 /// Caller ensures `pos + needle_len <= haystack.len()`.
 #[inline]
@@ -714,15 +728,7 @@ impl String {
     /// Returns true if `byte_index` is 0, `self.len()`, or the start of a
     /// UTF-8 character in this string.
     pub fn is_char_boundary(&self, byte_index: i32) -> bool {
-        if byte_index == 0 || byte_index == self.used {
-            return true;
-        }
-        if byte_index < 0 || byte_index > self.used {
-            return false;
-        }
-        // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
-        let b = self.repr[byte_index];
-        return b < 0x80 || b >= 0xC0;
+        return boundary_at(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// Removes and returns the last character, or None if empty.
@@ -1427,15 +1433,7 @@ impl StrSlice {
     /// Returns true if `index`, counted from the view's start, is 0, `len()`,
     /// or the start of a character.
     pub fn is_char_boundary(&self, index: i32) -> bool {
-        if index == 0 || index == self.len() {
-            return true;
-        }
-        if index < 0 || index > self.len() {
-            return false;
-        }
-        // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
-        let b = self.repr[self.start + index];
-        return b < 0x80 || b >= 0xC0;
+        return boundary_at(self.repr, self.start, self.len(), index);
     }
 
     /// A sub-view over `[start, end)`, counted from this view's start.

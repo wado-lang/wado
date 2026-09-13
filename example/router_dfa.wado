@@ -118,7 +118,10 @@ impl DfaRouter {
             }
             // Try literal first via byte-range binary search (no allocation).
             // On miss fall back to param, then wildcard.
-            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            let target = bsearch_target_by_bytes(
+                &self.states[state].literals,
+                &path.as_str_slice().sub_unchecked(pos, end),
+            );
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
@@ -181,15 +184,15 @@ fn bsearch_label(edges: &List<DfaLiteralEdge>, key: &String) -> [i32, bool] {
     return [lo, false];
 }
 
-/// Binary search variant that compares edge labels against `path[start..end]`
-/// directly, with no intermediate `String` allocation. Returns the matched
-/// edge's target state id, or -1 on miss.
-fn bsearch_target_by_bytes(edges: &List<DfaLiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+/// Binary search variant that compares edge labels against a view of the
+/// path, with no intermediate `String` allocation. Returns the matched edge's
+/// target state id, or -1 on miss.
+fn bsearch_target_by_bytes(edges: &List<DfaLiteralEdge>, segment: &StrSlice) -> i32 {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
+        match edges[mid].label.as_str_slice().cmp(segment) {
             Less => {
                 lo = mid + 1;
             },
@@ -202,32 +205,6 @@ fn bsearch_target_by_bytes(edges: &List<DfaLiteralEdge>, path: &String, start: i
         }
     }
     return -1;
-}
-
-/// Lexicographic byte comparison between `label` (whole string) and
-/// `path[start..end]`. Equivalent to `label.cmp(&path.substr_bytes(start, end))`
-/// but without the intermediate allocation.
-fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32) -> Ordering {
-    let llen = label.len();
-    let blen = end - start;
-    let cmp_len = if llen < blen { llen } else { blen };
-    for let mut i = 0; i < cmp_len; i += 1 {
-        let a = label.get_byte_unchecked(i);
-        let b = path.get_byte_unchecked(start + i);
-        if a < b {
-            return Ordering::Less;
-        }
-        if a > b {
-            return Ordering::Greater;
-        }
-    }
-    if llen < blen {
-        return Ordering::Less;
-    }
-    if llen > blen {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
 }
 
 test "dfa: static routes" {

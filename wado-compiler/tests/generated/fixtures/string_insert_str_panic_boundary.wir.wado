@@ -119,11 +119,13 @@ global global:core:prelude/primitive.wado::$const_obj_22: ref null "core:prelude
 fn "string_insert_str_panic_boundary.wado/$cm_export__run"() {
     let s_0: ref "core:prelude/string.wado//String";
     let $v2: bool;
+    let repr: ref Array<u8>;
     let b: u8;
     let $sroa_s_repr: ref Array<u8>;
     s_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("日本語"), used: 9 };
     $sroa_s_repr = array.new_fixed<u8>(88);
-    b = builtin::array_get_value<u8>(s_0.repr, 2);
+    repr = s_0.repr;
+    b = builtin::array_get_value<u8>(repr, 2);
     $v2 = select i32(b <u 128, 1, b >=u 192);
     if @unlikely($v2 == 0) {
         cold_path;
@@ -275,7 +277,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::insert_str$cold0"(
     let f_112: ref "core:prelude/format.wado//Formatter";
     let new_used_122: i32;
     let start_123: i32;
-    "core:rt/panic"($local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(241), used: 0 }; $local_5.used = 67; self_17 = $local_5.repr; builtin::array_copy<u8>(self_17, 0, global:core:prelude/string.wado::$const_obj_21, 0, 20); self_21 = $local_5.repr; builtin::array_copy<u8>(self_21, 0 + 20, global:core:prelude/string.wado::$const_obj_20, 0, 18); self_25 = $local_5.repr; builtin::array_copy<u8>(self_25, 0 + 38, global:core:prelude/string.wado::$const_obj_19, 0, 4); self_29 = $local_5.repr; builtin::array_copy<u8>(self_29, 0 + 42, global:core:prelude/string.wado::$const_obj_18, 0, 24); self_33 = $local_5.repr; builtin::array_copy<u8>(self_33, 0 + 66, global:core:prelude/string.wado::$const_obj_17, 0, 1); $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 }; f_39 = $local_6; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(1015, f_39); new_used_44 = $local_5.used + 102; if @unlikely(new_used_44 > builtin::array_len($local_5.repr)) {
+    "core:rt/panic"($local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(241), used: 0 }; $local_5.used = 67; self_17 = $local_5.repr; builtin::array_copy<u8>(self_17, 0, global:core:prelude/string.wado::$const_obj_21, 0, 20); self_21 = $local_5.repr; builtin::array_copy<u8>(self_21, 0 + 20, global:core:prelude/string.wado::$const_obj_20, 0, 18); self_25 = $local_5.repr; builtin::array_copy<u8>(self_25, 0 + 38, global:core:prelude/string.wado::$const_obj_19, 0, 4); self_29 = $local_5.repr; builtin::array_copy<u8>(self_29, 0 + 42, global:core:prelude/string.wado::$const_obj_18, 0, 24); self_33 = $local_5.repr; builtin::array_copy<u8>(self_33, 0 + 66, global:core:prelude/string.wado::$const_obj_17, 0, 1); $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 }; f_39 = $local_6; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(1021, f_39); new_used_44 = $local_5.used + 102; if @unlikely(new_used_44 > builtin::array_len($local_5.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_5, new_used_44);
     }; start_45 = $local_5.used; $local_5.used = new_used_44; self_47 = $local_5.repr; builtin::array_copy<u8>(self_47, start_45, global:core:prelude/string.wado::$const_obj_16, 0, 2); self_51 = $local_5.repr; builtin::array_copy<u8>(self_51, start_45 + 2, global:core:prelude/string.wado::$const_obj_15, 0, 48); self_55 = $local_5.repr; builtin::array_copy<u8>(self_55, start_45 + 50, global:core:prelude/string.wado::$const_obj_14, 0, 46); self_59 = $local_5.repr; builtin::array_copy<u8>(self_59, start_45 + 96, global:core:prelude/string.wado::$const_obj_13, 0, 6); $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 }; f_65 = $local_6; self_67 = f_65.buf; new_used_76 = self_67.used + 5; if @unlikely(new_used_76 > builtin::array_len(self_67.repr)) {

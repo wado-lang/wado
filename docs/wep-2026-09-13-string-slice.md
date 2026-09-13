@@ -80,8 +80,6 @@ What follows:
 - The `StrSlice` API surface is open: which of `String`'s methods it carries,
   which prelude traits it implements, and whether `String`'s own methods start
   taking `impl AsStrSlice`.
-- Whether `AsStrSlice` joins the prelude's auto-imported set, as `AsByteSlice`
-  has not.
 - `StrSlice` carries no string search or comparison beyond `Eq` / `Ord`:
   `contains`, `starts_with`, `split` and the trims stay on `String`, so working
   on part of a string still copies it out for those. Closing it means porting
