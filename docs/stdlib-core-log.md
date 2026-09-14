@@ -295,11 +295,12 @@ a sequence number, so one call is one line.
 One JSON object per line (JSONL) on stderr, through `json::to_string`:
 
 ```json
-{"ts":"2026-08-08T11:47:08.204Z","seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
+{"seq":42,"level":"info","target":"handle_request","message":"user logged in","span":3,"fields":{"user_id":7}}
 ```
 
 Keys a switch turns off are absent rather than null. `C` selects the `ts`
-key the way it does for [`TextSink`].
+key the way it does for [`TextSink`], so the default over `NoClock` writes
+no `ts` and `JsonSink<WallClock>` leads with one.
 
 #### `seq: bool`
 
