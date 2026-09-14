@@ -253,7 +253,7 @@ fn "opt_slot_temp_sroa_struct_block.wado/wide_boxed"(p) {
     let $local_1: ref "core:prelude/string.wado//String";
     let new_used: i32;
     let start_12: i32;
-    return struct.new "opt_slot_temp_sroa_struct_block.wado//Boxed" { a: $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; new_used = $local_1.used + 1; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+    return struct.new "opt_slot_temp_sroa_struct_block.wado//Boxed" { a: $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 }; new_used = 0 + 1; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
     }; start_12 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_12, global:opt_slot_temp_sroa_struct_block.wado::$const_obj_6, 0, 1); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(p, $local_1); $local_1, b: builtin::i64_extend_i32_s(p) * 5_i64 };

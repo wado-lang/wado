@@ -115,7 +115,7 @@ fn "wir_optimize_vcopy_return_struct.wado/make_inner"(v) {
     if v < 0 {
         return 1, ref.null none, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
     }
-    return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: v, name: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; new_used = $local_1.used + 5; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
+    return 0, struct.new "wir_optimize_vcopy_return_struct.wado//Inner" { value: v, name: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 }; new_used = 0 + 5; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
     }; start_12 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_12, global:wir_optimize_vcopy_return_struct.wado::$const_obj_1, 0, 5); "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(v, $local_1); $local_1) }, ref.null none;

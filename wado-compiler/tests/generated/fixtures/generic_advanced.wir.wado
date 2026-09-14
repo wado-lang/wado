@@ -239,7 +239,6 @@ fn "generic_advanced.wado/$test_1_field_monomorphization"() {
     let $fuse_at_27: i32;
     let $fuse_at_28: i32;
     let elements: ref Array<i32>;
-    let used_34: i32;
     let used_43: i32;
     let used_52: i32;
     let $v1_63: i32;
@@ -248,13 +247,12 @@ fn "generic_advanced.wado/$test_1_field_monomorphization"() {
     let $sroa_container_items: ref "core:prelude//List<i32>";
     elements = array.new_fixed<i32>();
     $sroa_container_items = struct.new "core:prelude//List<i32>" { repr: elements, used: 0 };
-    used_34 = $sroa_container_items.used;
-    if @unlikely(used_34 >= builtin::array_len($sroa_container_items.repr)) {
+    if @unlikely(0 >= builtin::array_len($sroa_container_items.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_container_items);
     }
-    builtin::array_set<i32>($sroa_container_items.repr, used_34, 10);
-    $sroa_container_items.used = used_34 + 1;
+    builtin::array_set<i32>($sroa_container_items.repr, 0, 10);
+    $sroa_container_items.used = 0 + 1;
     used_43 = $sroa_container_items.used;
     if @unlikely(used_43 >= builtin::array_len($sroa_container_items.repr)) {
         cold_path;

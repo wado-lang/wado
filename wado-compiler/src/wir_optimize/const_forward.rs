@@ -279,23 +279,6 @@ fn collect_aliased_in_instr(
                 aliased.insert(name.clone());
             }
         }
-        // A container element takes the local's own object, so everything that
-        // reaches the container reaches it. A call is no part of this: the
-        // store outlives the call the container may have been built inside.
-        WirInstr::StructNew { fields, .. } => {
-            for field in fields {
-                collect_reference_locals(field, aliased);
-            }
-        }
-        WirInstr::ArrayNewFixed { elements, .. } => {
-            for element in elements {
-                collect_reference_locals(element, aliased);
-            }
-        }
-        WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, aliased),
-        WirInstr::StructSet { value, .. } | WirInstr::ArraySet { value, .. } => {
-            collect_reference_locals(value, aliased);
-        }
         _ => {}
     }
     // Recurse into children, propagating the suppression context.
@@ -581,13 +564,40 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
+/// The locals whose own object `instr` puts in a container — a struct field, an
+/// array element or a global — where whatever reaches the container reaches it.
+//
+// This is where a load's pointee gets a name, which is why
+// `collect_reference_locals` may stop at a load. A store is a point in the flow,
+// not a property of the local: the fact recorded at a local's construction holds
+// until its object goes in, so the escape invalidates rather than disqualifies.
+fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
+    match instr {
+        WirInstr::StructNew { fields, .. } => {
+            for field in fields {
+                collect_reference_locals(field, names);
+            }
+        }
+        WirInstr::ArrayNewFixed { elements, .. } => {
+            for element in elements {
+                collect_reference_locals(element, names);
+            }
+        }
+        WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, names),
+        WirInstr::StructSet { value, .. }
+        | WirInstr::ArraySet { value, .. }
+        | WirInstr::GlobalSet { value, .. } => collect_reference_locals(value, names),
+        _ => {}
+    }
+}
+
 /// The locals whose own object `instr` hands over, wherever in it the read of
 /// them sits.
 //
 // A load hands over the field's pointee, not the base. Naming that pointee takes
-// a local whose object is in the container, and `collect_aliased_in_instr` marks
-// such a local `aliased`, which leaves it no fact to falsify. A nested call
-// inside `instr` is its own channel, reached by the caller's walk.
+// a local whose object is in a container, and putting it there is an escape
+// `collect_container_escapes` invalidates at. A nested call inside `instr` is its
+// own channel, reached by the caller's walk.
 fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::LocalGet { name, result_ty } => {
@@ -719,6 +729,12 @@ fn invalidate_effects_in_instr(
     known: &mut FieldKnowledge<'_>,
     scope: InvalidationScope,
 ) {
+    let mut escaped = IndexSet::default();
+    collect_container_escapes(instr, &mut escaped);
+    for name in &escaped {
+        known.invalidate_mutated_local(name);
+    }
+
     match instr {
         WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
             known.invalidate_local(name);
@@ -1278,10 +1294,8 @@ mod tests {
         );
     }
 
-    // A call inside an `if` arm may mutate a local passed to it; the merge
-    // must invalidate that local's facts. Runs with an empty aliased set,
-    // modelling a callee without `stores` — the merge invalidation alone
-    // must protect the read.
+    // A local whose object goes into a struct field is reachable through that
+    // field, so a call handed the field mutates it.
     #[test]
     fn a_field_that_holds_a_local_s_object_is_a_channel_to_it() {
         let types = test_types();
@@ -1330,6 +1344,87 @@ mod tests {
             right.as_ref(),
             WirInstr::StructGet { .. },
             "the call is handed `b`'s own object through `a.child` and may mutate `b.f`"
+        );
+    }
+
+    // A global is a container like any other, and a write through it is not a
+    // `LocalGet` base that `StructSet` invalidation would recognize.
+    #[test]
+    fn a_global_that_holds_a_local_s_object_is_a_channel_to_it() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            WirInstr::GlobalSet {
+                name: WirName {
+                    fq: "test//g".to_string(),
+                },
+                value: Box::new(struct_local_get("b")),
+            },
+            WirInstr::Call {
+                func_id: WirFuncId::new(0, "test//mutate".into()),
+                args: vec![WirInstr::GlobalGet {
+                    name: WirName {
+                        fq: "test//g".to_string(),
+                    },
+                    result_ty: WirType::Ref {
+                        type_id: test_type_id(),
+                        nullable: false,
+                    },
+                }],
+            },
+            local_set("out", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[3]),
+            WirInstr::StructGet { .. },
+            "the call reaches `b`'s object through the global and may mutate `b.f`"
+        );
+    }
+
+    // The store is a point in the flow, not a property of the local: a read
+    // between construction and escape still folds.
+    #[test]
+    fn a_fact_holds_until_its_local_s_object_goes_into_a_container() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            local_set("early", struct_get("b")),
+            local_set(
+                "a",
+                WirInstr::StructNew {
+                    type_id: outer_type_id(),
+                    fields: vec![struct_local_get("b")],
+                },
+            ),
+            WirInstr::Call {
+                func_id: WirFuncId::new(0, "test//mutate".into()),
+                args: vec![WirInstr::LocalGet {
+                    name: "a".to_string(),
+                    result_ty: WirType::Ref {
+                        type_id: outer_type_id(),
+                        nullable: false,
+                    },
+                }],
+            },
+            local_set("late", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[1]),
+            WirInstr::I32Const(7),
+            "nothing can reach `b` before its object goes into `a`"
+        );
+        assert_matches!(
+            set_value(&body[4]),
+            WirInstr::StructGet { .. },
+            "once `b`'s object is in `a`, the call reaches it"
         );
     }
 
