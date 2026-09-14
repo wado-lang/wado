@@ -1822,6 +1822,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Variant {
                 bindings,
+                case_index,
                 payload_type,
                 ..
             } => {
@@ -1840,7 +1841,7 @@ impl<'a> PatternLowerer<'a> {
                                 type_table.get_local_type(variant_temp_index, &self.locals),
                                 span,
                             )),
-                            case_index: 0, // Will be refined when we have more info
+                            case_index: *case_index,
                             payload_type: *payload_type,
                         },
                         *payload_type,
@@ -1978,6 +1979,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Variant {
                 bindings,
+                case_index,
                 payload_type,
                 ..
             } => {
@@ -2001,7 +2003,7 @@ impl<'a> PatternLowerer<'a> {
                                 type_table.get_local_type(variant_temp_index, &self.locals),
                                 span,
                             )),
-                            case_index: 0,
+                            case_index: *case_index,
                             payload_type: *payload_type,
                         },
                         *payload_type,

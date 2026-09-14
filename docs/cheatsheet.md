@@ -418,7 +418,8 @@ let name = match c {
 // A case may also be written under a qualifier: the scrutinee's type
 // (`Color::Red`), `Self` inside an `impl`, any name on the scrutinee's newtype
 // chain, or a namespace the type is reachable through (`hue::Red`). The name
-// must be imported — only the prelude is in scope without a `use`.
+// must be visible at the pattern, and only the prelude is visible without a
+// `use`, so a qualifier naming an unimported type is an error.
 ```
 
 ### Variants

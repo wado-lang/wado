@@ -659,8 +659,9 @@ Verified against the tree.
 - [x] Whether a binding aliases storage something still reads is asked of the
       whole chain its source stands on, so a match temp standing between the
       binding and the holder does not read as the holder's death.
-- [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
-      counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
+- [x] A place scrutinee nothing can write is matched where it lies, and a
+      receiver-aliasing call counts as a place, so `match *r` and `match xs[0]`
+      decide as `match r` does. A writable one is hoisted into a temp.
 - [x] A closure costs its captures their move, their share and their
       confinement, not its whole frame's.
 - [x] A projection to a scalar keeps its root live without consuming it, so
