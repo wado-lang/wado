@@ -54,22 +54,6 @@ pub struct EffectError {
     pub module: String,
 }
 
-impl std::fmt::Display for EffectError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{}: missing {} '{}' required by '{}'",
-            self.span.line,
-            self.span.column,
-            self.kind.noun(),
-            self.missing_effect,
-            self.callee
-        )
-    }
-}
-
-impl std::error::Error for EffectError {}
-
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
@@ -97,18 +81,6 @@ pub struct StoresError {
     pub module: String,
 }
 
-impl std::fmt::Display for StoresError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{}: {}",
-            self.span.line, self.span.column, self.message
-        )
-    }
-}
-
-impl std::error::Error for StoresError {}
-
 impl From<StoresError> for Diagnostic {
     fn from(e: StoresError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
@@ -128,18 +100,6 @@ pub struct DefaultPurityError {
     pub span: Span,
     pub module: String,
 }
-
-impl std::fmt::Display for DefaultPurityError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{}: default value expression must be pure (no effects), but calls effectful function '{}'",
-            self.span.line, self.span.column, self.callee
-        )
-    }
-}
-
-impl std::error::Error for DefaultPurityError {}
 
 impl From<DefaultPurityError> for Diagnostic {
     fn from(e: DefaultPurityError) -> Self {
@@ -2729,11 +2689,11 @@ mod tests {
             },
             module: "example/hello.wado".to_string(),
         };
-        assert_eq!(
-            error.to_string(),
-            "10:5: missing effect 'Stdout' required by 'println'"
-        );
         let diag = Diagnostic::from(error);
+        assert_eq!(
+            diag.message,
+            "missing effect 'Stdout' required by 'println'"
+        );
         assert_eq!(diag.span.expect("span").file, "example/hello.wado");
     }
 }

@@ -71,6 +71,26 @@ test "generate header with multiple source files" {
     }
 }
 
+test "generate header escapes a source file name" {
+    let mut grammar = Grammar {
+        name: "Odd",
+        kind: GrammarKind::Combined,
+        parser_rules: [],
+        lexer_rules: [],
+        mode_names: ["DEFAULT_MODE"],
+        channels: [],
+        options: [],
+        named_actions: [],
+        pending_refs: [],
+        source_files: ["a\"b\\c.g4"],
+    };
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let header = "#![generated(by = \"gale\", sources = [\"a\\\"b\\\\c.g4\"])]";
+    for let mut i = 0; i < header.len(); i += 1 {
+        assert output.get_byte_unchecked(i) == header.get_byte_unchecked(i);
+    }
+}
+
 test "generate token kind" {
     let mut grammar = Grammar {
         name: "Test",

@@ -72,32 +72,6 @@ pub enum ResourceMoveError {
     },
 }
 
-impl std::fmt::Display for ResourceMoveError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResourceMoveError::UseAfterMove {
-                name,
-                use_span,
-                move_span,
-                ..
-            } => write!(
-                f,
-                "{}:{}: resource `{}` used after it was moved (moved at {}:{})",
-                use_span.line, use_span.column, name, move_span.line, move_span.column,
-            ),
-            ResourceMoveError::MoveOutOfBorrow {
-                type_name, span, ..
-            } => write!(
-                f,
-                "{}:{}: cannot move resource `{type_name}` out of a borrow",
-                span.line, span.column,
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ResourceMoveError {}
-
 impl From<ResourceMoveError> for Diagnostic {
     fn from(e: ResourceMoveError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};

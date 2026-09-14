@@ -13,10 +13,14 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
+use crate::tir::{FunctionRef, ResolvedType, SubstitutionContext, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
+use super::call::{
+    DefaultTypeBinding, SettledAs, merge_turbofish_type_args, slot_type_bindings,
+    turbofish_leaves_slot,
+};
 use super::coercion::is_numeric_literal_arg;
 use super::infer::InferCtx;
 use super::instantiate::Instantiation;
@@ -616,8 +620,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 impl TypeSystem {
     /// `Some(struct_type)` when `struct_name` is a non-generic struct whose
     /// fields all declare a default, making it eligible for auto-derived
-    /// `Default::default()`. `None` for an unknown name, a required field, no
-    /// fields at all, or a generic struct. Does not check for a user-written
+    /// `Default::default()` — a fieldless one vacuously. `None` for an unknown
+    /// name, a required field, or a generic struct. Does not check for a user-written
     /// `impl Default`, so consult it only as a fallback after the regular
     /// impl-lookup paths.
     pub(super) fn auto_derive_default_struct_type(
@@ -729,6 +733,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let elems = type_args;
                     if method_name == "len" {
                         return Some(MethodInfo {
+                            impl_type_bindings: Vec::new(),
                             method_def: None,
                             return_type: TypeTable::I32,
                             self_kind: ast::SelfKind::Ref,
@@ -773,6 +778,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
                         return Some(MethodInfo {
+                            impl_type_bindings: Vec::new(),
                             method_def: None,
                             return_type,
                             self_kind: ast::SelfKind::Ref,
@@ -1032,8 +1038,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let slots = impl_sig.slots(&self.tysys.type_table, receiver_type_args.unwrap_or(&[]));
         let instantiated = sig.decl.instantiate_slots(&self.tysys.type_table, &slots);
         let first_value = sig.first_value_param().min(instantiated.param_types.len());
+        let impl_type_bindings = slot_type_bindings(
+            &self.tysys.type_table,
+            &impl_sig.target_type_args,
+            receiver_type_args.unwrap_or(&[]),
+        );
 
         Some(MethodInfo {
+            impl_type_bindings,
             method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -1154,6 +1166,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let method_type_param_ids = sig.own_type_param_ids();
 
         Some(MethodInfo {
+            // A generic resource is rejected, so its methods take no slots.
+            impl_type_bindings: Vec::new(),
             method_def: Some(sig.def),
             return_type: instantiated.return_type,
             self_kind: sig.self_kind,
@@ -1248,22 +1262,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(trait_) = trait_decl {
             self.register_assoc_types_for_concrete_type_and_trait(receiver_type, trait_);
         }
-        // Re-registering the parameters gives a default like `= T` a scope to
-        // resolve against. Number them from the index the declaration gave the
-        // first slot — read off the slot, not counted from the receiver's type
-        // arguments, which overshoots on a concrete or pack-bearing impl.
-        let base = self.slot_base(slots);
-        let defaults: Vec<Option<TypeId>> = self.with_self_type(receiver_type, |s| {
-            s.with_resolving_home(declaring_module, |s| {
-                let mut scope = s.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.register_generic_params(method_type_params, base);
-                method_type_params
-                    .iter()
-                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
-                    .collect()
-            })
-        });
+        let defaults = self.resolve_method_type_param_defaults(
+            method_type_params,
+            receiver_type,
+            slots,
+            declaring_module,
+        );
         let mut filled = false;
         for i in 0..inferred.len() {
             if self.is_unbound_type_param(inferred[i])
@@ -1280,6 +1284,166 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
         filled
+    }
+
+    /// Resolve each method type parameter's declared type default, with `Self`
+    /// set to the concrete receiver and `resolving_home` pointed at the
+    /// declaring module — a default may name a type private to that module
+    /// (`<T = Priv>`), which the call site cannot resolve.
+    ///
+    /// Registers nothing. A default naming an associated type of the receiver
+    /// needs those registered first, which is the caller's to do and is why
+    /// this is separate: the value defaults are filled before the point where
+    /// registering is safe, and they need the plain answer.
+    fn resolve_method_type_param_defaults(
+        &mut self,
+        method_type_params: &[ast::GenericParam],
+        receiver_type: TypeId,
+        slots: &[TypeId],
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<Option<TypeId>> {
+        // Re-registering the parameters gives a default like `= T` a scope to
+        // resolve against. Number them from the index the declaration gave the
+        // first slot — read off the slot, not counted from the receiver's type
+        // arguments, which overshoots on a concrete or pack-bearing impl.
+        let base = self.slot_base(slots);
+        self.with_self_type(receiver_type, |s| {
+            s.with_resolving_home(declaring_module, |s| {
+                let mut scope = s.enter_inherited_type_param_scope();
+                scope.annotate_ctx.trait_ctx.type_params.clear();
+                scope.register_generic_params(method_type_params, base);
+                method_type_params
+                    .iter()
+                    .map(|p| p.default.as_ref().map(|ty| scope.resolve_type(ty)))
+                    .collect()
+            })
+        })
+    }
+
+    /// What a value default naming one of the method's own type parameters
+    /// resolves that name against: the type argument the call settled on.
+    ///
+    /// `known` is the turbofish or a solve over the written arguments; a slot
+    /// neither pinned takes the type default its declaration wrote. Call it
+    /// only where the method declares a value default, since resolving a type
+    /// default is what this is for and doing so is not free — see
+    /// [`Self::method_type_args_for_value_defaults`].
+    pub(super) fn value_default_slot_bindings(
+        &mut self,
+        own_params: &[ast::GenericParam],
+        own_ids: &[TypeId],
+        receiver: TypeId,
+        mut known: Vec<TypeId>,
+        declaring_module: Option<ModuleSource>,
+    ) -> Vec<DefaultTypeBinding> {
+        // A turbofish spelling a different count settles nothing, and the
+        // slots then stand for themselves.
+        if known.len() != own_ids.len() {
+            known = own_ids.to_vec();
+        }
+        self.method_type_args_for_value_defaults(
+            own_params,
+            receiver,
+            own_ids,
+            declaring_module,
+            &mut known,
+        );
+        let mut bindings = slot_type_bindings(&self.tysys.type_table, own_ids, &known);
+        // A pack stays abstract through the walk — the call settles what it
+        // holds, never what it is — so `U::default()` dispatches on its bound
+        // rather than on a receiver. The declaration wrote that bound, and
+        // nothing at the call site carries it.
+        for binding in &mut bindings {
+            if binding.settled.is_pack()
+                && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
+            {
+                binding.bounds = param.bounds.clone();
+            }
+        }
+        bindings
+    }
+
+    /// The type arguments a value default resolves against, with a slot that
+    /// nothing pinned taking the type default its declaration wrote.
+    ///
+    /// `known` comes from the turbofish or from a solve over the written
+    /// arguments, so this runs before the call's real inference and before the
+    /// receiver's associated types are registered. A default this cannot
+    /// answer — one naming such an associated type — leaves its slot as it
+    /// found it, and the value default then reports in its own terms.
+    fn method_type_args_for_value_defaults(
+        &mut self,
+        method_type_params: &[ast::GenericParam],
+        receiver_type: TypeId,
+        slots: &[TypeId],
+        declaring_module: Option<ModuleSource>,
+        known: &mut [TypeId],
+    ) {
+        let receiver_type = self.tysys.get_base_type(receiver_type);
+        let fillable: Vec<bool> = method_type_params
+            .iter()
+            .zip(known.iter())
+            .map(|(p, &tid)| p.default.is_some() && self.is_unbound_type_param(tid))
+            .collect();
+        if !fillable.iter().any(|&f| f) {
+            return;
+        }
+        let defaults = self.resolve_method_type_param_defaults(
+            method_type_params,
+            receiver_type,
+            slots,
+            declaring_module,
+        );
+        for (i, &fill) in fillable.iter().enumerate() {
+            if fill
+                && let Some(default_ty) = defaults[i]
+                && default_ty != TypeTable::ERROR
+                && !self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .contains_type_param(default_ty)
+            {
+                known[i] = default_ty;
+            }
+        }
+    }
+
+    /// A method call's type arguments: what its turbofish names, plus inference
+    /// for each `_`, which reaches here as [`TypeTable::UNKNOWN`] in `explicit`.
+    fn resolve_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        input: MethodInferenceInput<'_>,
+    ) -> Vec<TypeId> {
+        if !turbofish_leaves_slot(&explicit, input.slots.len()) {
+            return explicit;
+        }
+        let inferred = self.infer_method_type_args(input);
+        if explicit.is_empty() {
+            return inferred;
+        }
+        let mut merged = explicit;
+        merge_turbofish_type_args(&mut merged, &inferred);
+        merged
+    }
+
+    /// [`Self::resolve_method_type_args`], then what every caller does with the
+    /// answer: check the declared bounds, and bind the slots for substitution.
+    pub(super) fn bind_method_type_args(
+        &mut self,
+        explicit: Vec<TypeId>,
+        input: MethodInferenceInput<'_>,
+    ) -> (Vec<TypeId>, SubstitutionContext) {
+        let (slots, own_params, span) = (input.slots, input.own_params, input.span);
+        let mut type_args = self.resolve_method_type_args(explicit, input);
+        self.settle_empty_pack_of(own_params, &mut type_args);
+        let mut subst = SubstitutionContext::new();
+        if !type_args.is_empty() {
+            subst = subst.bind(slots, &type_args);
+            self.enforce_type_arg_bounds(own_params, &type_args, span);
+        }
+        (type_args, subst)
     }
 
     /// Infer an instance call's method-level type arguments from the method's
@@ -1322,6 +1486,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 kind: "method",
                 name: method_name,
                 span,
+                // The inference pass itself: its caller merges the turbofish in
+                // afterwards, so every slot is open here.
+                type_args: &[],
             },
         );
         self.record_slot_bounds(&inst, &method_type_params, span);
@@ -1353,6 +1520,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             declaring_module,
             &mut inferred,
         );
+        // A slot answered with itself is not answered: a rigid parameter carried
+        // past here dies in codegen, so put the variable back and let the blame
+        // below report it at the call. A slot the enclosing scope declares is
+        // the caller forwarding its own generics, which monomorphization
+        // resolves. `defer_or_report_uninferred_fn_type_args` guards it too.
+        let scope_params = self.scope_type_param_ids();
+        for (i, answer) in inferred.iter_mut().enumerate() {
+            if slots.get(i) == Some(answer) && !scope_params.contains(answer) {
+                *answer = inst.vars[i];
+            }
+        }
         // A slot the solver left as its own variable is unconstrained. The
         // variable already carries the "cannot infer" diagnostic and the
         // module-end sweep, so nothing needs classifying here: what an
@@ -1849,6 +2027,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .values()
             .map(|b| (b.index, b.type_id))
             .collect();
+        // The same frame under the names the block wrote, which is what a
+        // parameter default naming one (`v: T = T::default()`) spells. Taken
+        // before the method's own parameters join the frame: those are still
+        // abstract here, and the call site binds them.
+        let impl_type_bindings: Vec<DefaultTypeBinding> = scope
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .iter()
+            .map(|(name, binder)| DefaultTypeBinding {
+                name: name.clone(),
+                bounds: scope
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_param_bounds
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_default(),
+                // The frame holds a pack as the pack it was declared as, so
+                // there is nothing left to mint: it carries over as it stands.
+                settled: SettledAs::Type(binder.type_id),
+            })
+            .collect();
         // A binding naming a type private to the declaring module (`type Iter
         // = TreeSetIter<T>`) means what the block wrote, not what the caller's
         // perspective can see (issue #1416) — which is why the decl pass, not
@@ -2023,6 +2224,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
+                    impl_type_bindings: impl_type_bindings.clone(),
                     method_def: Some(method_sig.def),
                     return_type,
                     self_kind,
@@ -2088,6 +2290,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {
+                        impl_type_bindings,
                         method_def: Some(default_method.sig.def),
                         return_type: instantiated.return_type,
                         self_kind,
@@ -2907,6 +3110,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index_expr: &ast::IndexExpr,
         method_call: &ast::MethodCallExpr,
         ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
     ) -> Option<TypeId> {
         let (struct_name, base_type_id) = self.index_container_head(index_expr, ctx)?;
 
@@ -2999,15 +3203,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let MethodInfo {
             method_def,
-            return_type,
+            mut return_type,
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
             owner: _,
             cm_name: _,
-            method_own_params: _,
+            method_own_params,
             is_ref_impl: method_is_ref_impl,
-            method_type_param_ids: _,
+            method_type_param_ids,
             impl_module,
             from_concrete_impl: _,
             param_defaults: method_param_defaults,
@@ -3015,6 +3219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             consumes_self: _,
             inherent_visibility,
             defaults_module,
+            impl_type_bindings: _,
         } = method_info?;
 
         // Only use IndexMut if the method requires &mut self
@@ -3024,8 +3229,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Past the bail, this path owns the call, so it owns the use->def edge
         // for the method name too — `resolve_method_call_with` never sees it.
-        if let Some(def) = method_def {
-            self.record_reference_to_decl(method_call.method_id, def);
+        if let Some(def) = method_def
+            && self.record_reference_to_decl(method_call.method_id, def, method_call.span)
+        {
+            return Some(TypeTable::ERROR);
         }
 
         // This path answers the call itself, so the ladder is enforced here
@@ -3085,21 +3292,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
         );
 
-        // Reify (`reify_index_mut_method_call`) rebuilds the
-        // inner `*expr.index_mut(idx)` from the recorded `operator_dispatch`
-        // above; the body walk only needed the dispatch fact. The
-        // index was resolved above for its side effects.
+        // `reify_index_mut_method_call` rebuilds the inner `*expr.index_mut(idx)`
+        // from the `operator_dispatch` recorded above; the index was resolved
+        // there for its side effects.
 
-        for (i, a) in method_call.args.iter().enumerate() {
-            let expected = param_types.get(i).copied();
-            self.resolve_expr(a, ctx, expected);
+        // A `_` resolves to UNKNOWN, and inference fills it below.
+        let mut type_args: Vec<TypeId> = self.resolve_turbofish_args(&method_call.type_args);
+
+        // This path answers the call, so it runs the method's own inference too:
+        // a subscript receiver does not decide whether an argument gets a type.
+        let args = self.resolve_args_through_slots(
+            ctx,
+            &method_call.args,
+            &param_types,
+            &method_type_param_ids,
+            &method_own_params,
+            &Instantiation {
+                kind: "method",
+                name: &method_call.method,
+                span: method_call.span,
+                type_args: &type_args,
+            },
+        );
+
+        let subst;
+        (type_args, subst) = self.bind_method_type_args(
+            type_args,
+            MethodInferenceInput {
+                receiver_type: output_type,
+                method_name: &method_call.method,
+                slots: &method_type_param_ids,
+                own_params: &method_own_params,
+                param_types: &param_types,
+                args: &args,
+                raw_args: &method_call.args,
+                decl_return_type: return_type,
+                expected_return_type: expected_type,
+                trait_decl: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                declaring_module: impl_module.clone(),
+                span: method_call.span,
+            },
+        );
+        if !subst.is_empty() {
+            return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
-
-        let type_args: Vec<TypeId> = method_call
-            .type_args
-            .iter()
-            .map(|ty| self.resolve_type(ty))
-            .collect();
 
         let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
         let mangled_method_name =
@@ -3138,6 +3374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .into_iter()
                 .zip(method_param_defaults)
                 .collect(),
+            param_types.clone(),
             defaults_module
                 .or_else(|| impl_module.clone())
                 .unwrap_or_else(|| self.current_module_source.clone()),

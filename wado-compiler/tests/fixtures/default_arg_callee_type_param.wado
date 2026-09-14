@@ -1,0 +1,317 @@
+//! A value default may name a type parameter of the declaration that wrote it.
+//! It stands for the type argument the site taking the default settled on, so
+//! `T::default()` is a static call on a concrete type by the time it resolves.
+//!
+//! Two axes have to be covered together, and the blocks below walk their
+//! product. One axis is the kind of site that takes a default, one block each.
+//! The other is how a type argument reaches it: a turbofish, a sibling argument
+//! or field, a type parameter's own default, a caller forwarding its own
+//! binder. This is the coverage matrix in the WEP. Each callee is read at two
+//! type arguments, because they share one default expression: a walk answering
+//! for both would hand one site the other's value.
+//!
+//! The `NoFields` idiom rests on a fieldless struct satisfying `Default`
+//! vacuously, which `default_trait.wado` pins.
+
+use { Slot, Wrap, zero as xmod_zero } from "./sub/default_arg_callee_type_param_lib.wado";
+
+struct NoFields {}
+
+impl Default for NoFields;
+
+fn zero<T: Default>(v: T = T::default()) -> String {
+    return `${v:?}`;
+}
+
+fn pair<T: Default>(seen: T, fallback: T = T::default()) -> String {
+    return `${seen:?}/${fallback:?}`;
+}
+
+fn tagged<T: Default = NoFields>(msg: String, fields: T = T::default()) -> String {
+    return `${msg}:${fields:?}`;
+}
+
+// A caller forwarding its own binder: `T` stands for a binder rather than a
+// type, and the default monomorphizes with the caller as any body does. Every
+// site reaches it, so every site is walked here.
+fn forwarded<X: Default>(_seen: X) -> String {
+    let b: Box2<X> = Box2 { v: X::default() };
+    let h: Holder<X> = Holder {};
+    return `${zero::<X>()}|${b.get()}|${Box2::<X>::of().v:?}|${h.v:?}`;
+}
+
+struct Box2<T> {
+    v: T,
+}
+
+impl<T: Default> Box2<T> {
+    fn get(&self, fallback: T = T::default()) -> String {
+        return `${fallback:?}`;
+    }
+
+    fn of(v: T = T::default()) -> Box2<T> {
+        return Box2 { v };
+    }
+
+    // The method's own parameter, which the impl's does not answer for.
+    fn paired<U: Default>(&self, a: U, b: U = U::default()) -> String {
+        return `${a:?}/${b:?}`;
+    }
+
+    fn make<U: Default>(a: U, b: U = U::default()) -> String {
+        return `${a:?}/${b:?}`;
+    }
+
+    // A static's own parameter, supplied by its own type default.
+    fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+
+    // The same on an instance method, which the `impl`'s own parameter does
+    // not answer for.
+    fn marked<U: Default = NoFields>(&self, u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+}
+
+// A block declaring no type parameter of its own numbers the method's from
+// zero, where the receiver's substitution reaches them. Nothing then solves
+// them, so the method's own type default is the only source left.
+struct Plain {}
+
+impl Plain {
+    fn tagged<U: Default = NoFields>(u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+
+    fn marked<U: Default = NoFields>(&self, u: U = U::default()) -> String {
+        return `${u:?}`;
+    }
+}
+
+trait Show {
+    // On a trait method both the trait's parameter and the method's own reach
+    // the default, and the impl restates the list without it.
+    fn show(&self, v: NoFields = NoFields {}) -> String;
+    fn showing<U: Default>(&self, u: U = U::default()) -> String;
+
+    // The method's own parameter, supplied by its own type default.
+    fn shown<U: Default = NoFields>(&self, u: U = U::default()) -> String;
+}
+
+impl<T: Default> Show for Box2<T> {
+    fn show(&self, v: NoFields) -> String {
+        return `${v:?}`;
+    }
+
+    fn showing<U: Default>(&self, u: U) -> String {
+        return `${u:?}`;
+    }
+
+    fn shown<U: Default>(&self, u: U) -> String {
+        return `${u:?}`;
+    }
+}
+
+// A variadic pack is a type parameter like any other: the default names it,
+// and the site settles it to the tuple of type arguments the call supplied.
+fn packed<..T: Default>(tag: String, t: [..T] = [..T::default()]) -> String {
+    let mut s = tag;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
+// An `fn`-bound parameter ahead of the pack. Its bound fixes it to one function
+// type, so it holds no slot and the pack is the first the arguments index.
+fn applied<F: fn(i32) -> i32, ..T: Default>(f: F, t: [..T] = [..T::default()]) -> String {
+    let mut s = `${f(1)}`;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
+// A caller forwarding a pack of its own. Its pack interns to the same type as
+// the callee's, so nothing here may read the slot as left over.
+fn forwarded_pack<..T: Default>(t: [..T]) -> String {
+    return packed("f:", t);
+}
+
+fn headed<A: Default, ..T: Default>(a: A = A::default(), t: [..T] = [..T::default()]) -> String {
+    let mut s = `${a:?}`;
+    for let v of t {
+        s.push_str(&`${v:?}`);
+    }
+    return s;
+}
+
+impl<T: Default> Box2<T> {
+    // A pack the method declares itself, which the `impl`'s own parameter does
+    // not answer for.
+    fn spread<..U: Default>(&self, u: [..U] = [..U::default()]) -> String {
+        let mut s = `${self.v:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+
+    // The same on a static, where the turbofish is all that settles it.
+    fn spread_static<..U: Default>(u: [..U] = [..U::default()]) -> String {
+        let mut s = "";
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+
+    // A scalar ahead of the pack: the turbofish spells one argument for it and
+    // one per pack element, and grouping them is what keeps `A` its own.
+    fn headed<A: Default, ..U: Default>(&self, a: A = A::default(), u: [..U] = [..U::default()]) -> String {
+        let mut s = `${a:?}`;
+        for let v of u {
+            s.push_str(&`${v:?}`);
+        }
+        return s;
+    }
+}
+
+// A default's pack is spliced into whatever takes it, and a global initializer
+// takes one as a function body does.
+global PACKED: String = packed::<i32, String>("g:");
+global EMPTY: String = packed("h:");
+
+// A field default: the parameter comes from the annotation, or from a sibling
+// field where the literal carries none.
+struct Holder<T: Default> {
+    v: T = T::default(),
+}
+
+struct Sibling<T: Default> {
+    a: T,
+    b: T = T::default(),
+}
+
+// Turbofish, then a sibling argument, then the type parameter's own default,
+// then a caller forwarding its own binder.
+test "a free function's default names its own type parameter" {
+    assert zero::<i32>() == "0";
+    assert zero::<String>() == "\"\"";
+    assert pair(7) == "7/0";
+    assert pair(2.5) == "2.5/0.0";
+    assert tagged("started") == "started:NoFields {}";
+    assert tagged::<i32>("count") == "count:0";
+    assert forwarded(3) == "0|0|0|0";
+    assert forwarded("s") == "\"\"|\"\"|\"\"|\"\"";
+}
+
+// The impl's parameter comes from the receiver, the method's own from a
+// turbofish or a sibling argument.
+test "an instance method's default names a type parameter in scope" {
+    let bi: Box2<i32> = Box2 { v: 1 };
+    let bs: Box2<String> = Box2 { v: "x" };
+    assert bi.get() == "0";
+    assert bs.get() == "\"\"";
+    assert bi.paired(7) == "7/0";
+    assert bi.paired("s") == "\"s\"/\"\"";
+    assert bi.paired::<bool>(true) == "true/false";
+    assert bi.marked() == "NoFields {}";
+    assert bi.marked::<i32>() == "0";
+    assert Plain {}.marked() == "NoFields {}";
+    assert Plain {}.marked::<i32>() == "0";
+}
+
+// The same two sources, plus the static's own type-parameter default.
+test "a static method's default names a type parameter in scope" {
+    assert Box2::<i32>::of().v == 0;
+    assert Box2::<String>::of().v == "";
+    assert Box2::<i32>::make(7) == "7/0";
+    assert Box2::<i32>::make("s") == "\"s\"/\"\"";
+    assert Box2::<i32>::tagged() == "NoFields {}";
+    assert Box2::<i32>::tagged::<bool>() == "false";
+    assert Plain::tagged() == "NoFields {}";
+    assert Plain::tagged::<bool>() == "false";
+}
+
+// The default belongs to the trait declaration; the impl restates the list
+// without it.
+test "a trait method's default names a type parameter in scope" {
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.show() == "NoFields {}";
+    assert bi.showing::<i32>() == "0";
+    assert bi.showing::<bool>() == "false";
+    assert bi.shown() == "NoFields {}";
+    assert bi.shown::<i32>() == "0";
+
+    // The UFCS spelling of the same declaration. It files its decision as a
+    // static dispatch under the `CallExpr`, so the walk of its defaults is
+    // keyed there rather than under the method-call node the receiver-taking
+    // spelling uses.
+    assert Show::shown(&bi) == "NoFields {}";
+    assert Show::shown::<i32>(&bi) == "0";
+}
+
+// The pack the turbofish settles, at two arities and two element sets, then a
+// call that supplies the tuple itself and takes no default at all.
+test "a variadic pack's default names the pack it stands for" {
+    assert packed::<i32>("a:") == "a:0";
+    assert packed::<i32, String, bool>("b:") == "b:0\"\"false";
+    assert packed::<String>("c:") == "c:\"\"";
+    assert packed::<i32, String>("d:", [7, "x"]) == "d:7\"x\"";
+    assert headed::<i32, String, bool>() == "0\"\"false";
+    assert headed::<String, i32>() == "\"\"0";
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.spread::<i32, bool>() == "10false";
+    assert bi.spread::<String>() == "1\"\"";
+    assert bi.spread([7, "x"]) == "17\"x\"";
+    assert Box2::<i32>::spread_static::<i32, bool>() == "0false";
+    assert Box2::<i32>::spread_static::<String>() == "\"\"";
+    assert bi.headed::<i32, String, bool>() == "0\"\"false";
+    assert bi.headed::<String, i32>() == "\"\"0";
+    assert PACKED == "g:0\"\"";
+}
+
+// A pack stands for the arguments left over, so a site leaving none over
+// settles it to the empty pack rather than asking inference for it.
+test "a pack nothing settles is empty" {
+    assert headed::<i32>() == "0";
+    assert packed("e:") == "e:";
+    let bi: Box2<i32> = Box2 { v: 1 };
+    assert bi.spread() == "1";
+    assert bi.headed::<i32>() == "0";
+    assert Box2::<i32>::spread_static() == "";
+    assert EMPTY == "h:";
+    assert forwarded_pack([1, "x"]) == "f:1\"x\"";
+    assert applied(|x| x + 1) == "2";
+    assert applied::<i32, bool>(|x| x + 1) == "20false";
+}
+
+// From the annotation, then from a sibling field.
+test "a struct field's default names the struct's own type parameter" {
+    let hi: Holder<i32> = Holder {};
+    let hs: Holder<String> = Holder {};
+    assert hi.v == 0;
+    assert hs.v == "";
+    assert Sibling { a: 5 }.b == 0;
+    assert Sibling { a: "x" }.b == "";
+}
+
+// Every site again across a module boundary, where `T` is a binder the caller
+// cannot name at all and the walk runs under the declaring module.
+test "a cross-module default names the declaration's type parameter" {
+    assert xmod_zero::<i32>() == 0;
+    assert xmod_zero::<String>() == "";
+    assert xmod_zero(9) == 9;
+    let wi: Wrap<i32> = Wrap { v: 1 };
+    let ws: Wrap<String> = Wrap { v: "x" };
+    assert wi.or_default() == 0;
+    assert ws.or_default() == "";
+    assert Wrap::<i32>::empty().v == 0;
+    assert Wrap::<String>::empty().v == "";
+    let si: Slot<i32> = Slot {};
+    let ss: Slot<String> = Slot {};
+    assert si.v == 0;
+    assert ss.v == "";
+}

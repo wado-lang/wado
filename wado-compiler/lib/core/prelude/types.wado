@@ -82,6 +82,42 @@ impl<T> Option<T> {
         }
         panic(msg);
     }
+
+    /// Returns the contained value, or `default` if None.
+    pub fn unwrap_or(self, default: T) -> T {
+        return match self {
+            Some(v) => v,
+            None => default,
+        };
+    }
+
+    /// Applies `f` to the contained value, leaving None untouched.
+    pub fn map<U>(self, mut f: fn mut(T) -> U) -> Option<U> {
+        return match self {
+            Some(v) => Option::<U>::Some(f(v)),
+            None => Option::<U>::None,
+        };
+    }
+
+    /// Converts to a Result, mapping None to `Err(err)`.
+    pub fn ok_or<E>(self, err: E) -> Result<T, E> {
+        return match self {
+            Some(v) => Result::<T, E>::Ok(v),
+            None => Result::<T, E>::Err(err),
+        };
+    }
+
+    #[unavailable("a closure hides its cost at the call site; write `match` when the fallback must not be evaluated")]
+    pub fn unwrap_or_else(&self);
+
+    #[unavailable("a closure hides its cost at the call site; write `match` when the error must not be built")]
+    pub fn ok_or_else(&self);
+
+    #[unavailable("the name reads as map-then-fallback while the signature takes the fallback first; write `map(f).unwrap_or(v)`")]
+    pub fn map_or(&self);
+
+    #[unavailable("the argument order traps the same way `map_or` does; write `map(f)` and match on the result")]
+    pub fn map_or_else(&self);
 }
 
 /// Cold slow path for `unwrap`/`expect` failures: traps with `${msg}: ${value:?}`.
@@ -137,6 +173,33 @@ impl<T, E> Result<T, E> {
             Ok(v) => unwrap_failed(msg, v),
         };
     }
+
+    /// Returns the contained Ok value, or `default` if Err.
+    pub fn unwrap_or(self, default: T) -> T {
+        return match self {
+            Ok(v) => v,
+            Err(_) => default,
+        };
+    }
+
+    /// Applies `f` to the contained Ok value, leaving an Err untouched.
+    pub fn map<U>(self, mut f: fn mut(T) -> U) -> Result<U, E> {
+        return match self {
+            Ok(v) => Result::<U, E>::Ok(f(v)),
+            Err(e) => Result::<U, E>::Err(e),
+        };
+    }
+
+    /// Applies `f` to the contained Err value, leaving an Ok untouched.
+    pub fn map_err<F>(self, mut f: fn mut(E) -> F) -> Result<T, F> {
+        return match self {
+            Ok(v) => Result::<T, F>::Ok(v),
+            Err(e) => Result::<T, F>::Err(f(e)),
+        };
+    }
+
+    #[unavailable("a closure hides its cost at the call site; write `match` to read the `Err` value or to skip building a fallback")]
+    pub fn unwrap_or_else(&self);
 }
 
 impl<T> Default for Option<T> {

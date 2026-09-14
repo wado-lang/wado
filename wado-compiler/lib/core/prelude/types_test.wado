@@ -74,3 +74,65 @@ test "Result::expect_err on Ok traps" {
     let x: Result<i32, String> = Result::Ok(7);
     x.expect_err("must be err");
 }
+
+test "Option::unwrap_or" {
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.unwrap_or(0) == 42;
+    assert none.unwrap_or(0) == 0;
+}
+
+test "Option::map" {
+    let some: Option<i32> = Option::Some(21);
+    let none: Option<i32> = null;
+    assert some.map(|v: i32| v * 2) == Option::Some(42);
+    assert none.map(|v: i32| v * 2) == Option::<i32>::None;
+}
+
+test "Option::map changes the type" {
+    let some: Option<i32> = Option::Some(7);
+    assert some.map(|v: i32| `${v}`) == Option::Some("7");
+}
+
+test "Option::map over a mutating capture" {
+    let mut calls = 0;
+    let some: Option<i32> = Option::Some(1);
+    let none: Option<i32> = null;
+    assert some.map(|v: i32| {
+        calls += 1;
+        return v;
+    }) == Option::Some(1);
+    assert none.map(|v: i32| {
+        calls += 1;
+        return v;
+    }) == Option::<i32>::None;
+    assert calls == 1;
+}
+
+test "Option::ok_or" {
+    let some: Option<i32> = Option::Some(42);
+    let none: Option<i32> = null;
+    assert some.ok_or("missing") == Result::<i32, String>::Ok(42);
+    assert none.ok_or("missing") == Result::<i32, String>::Err("missing");
+}
+
+test "Result::unwrap_or" {
+    let ok: Result<i32, String> = Result::Ok(42);
+    let err: Result<i32, String> = Result::Err("boom");
+    assert ok.unwrap_or(0) == 42;
+    assert err.unwrap_or(0) == 0;
+}
+
+test "Result::map" {
+    let ok: Result<i32, String> = Result::Ok(21);
+    let err: Result<i32, String> = Result::Err("boom");
+    assert ok.map(|v: i32| v * 2) == Result::<i32, String>::Ok(42);
+    assert err.map(|v: i32| v * 2) == Result::<i32, String>::Err("boom");
+}
+
+test "Result::map_err" {
+    let ok: Result<i32, String> = Result::Ok(42);
+    let err: Result<i32, String> = Result::Err("boom");
+    assert ok.map_err(|e: String| e.len()) == Result::<i32, i32>::Ok(42);
+    assert err.map_err(|e: String| e.len()) == Result::<i32, i32>::Err(4);
+}

@@ -1,0 +1,65 @@
+// A turbofish may name fewer types than the callee declares, leaving the rest
+// to inference. One case per call path that answers a call.
+
+struct Holder {
+    n: i32,
+}
+
+impl Holder {
+    fn two<A: Default, B: Default>(a: A, b: B) -> i32 {
+        return 1;
+    }
+}
+
+impl<T: Default> Wrap<T> {
+    fn two<A: Default, B: Default>(a: A, b: B) -> i32 {
+        return 2;
+    }
+}
+
+struct Wrap<T> {
+    v: T,
+}
+
+trait Pick {
+    fn pick<A: Default, B: Default>(&self, a: A, b: B) -> i32;
+}
+
+struct Chooser {
+    n: i32,
+}
+
+impl Pick for Chooser {
+    fn pick<A: Default, B: Default>(&self, a: A, b: B) -> i32 {
+        return 3;
+    }
+}
+
+fn free_two<A: Default, B: Default>(a: A, b: B) -> i32 {
+    return 4;
+}
+
+test "a free function fills the slots the turbofish stops short of" {
+    assert free_two::<i32>(1, "s") == 4;
+}
+
+test "a static call fills the slots the turbofish stops short of" {
+    assert Holder::two::<i32>(1, "s") == 1;
+}
+
+test "a static call on a generic receiver fills them too" {
+    assert Wrap::<i32>::two::<i32>(1, "s") == 2;
+}
+
+test "an instance call fills the slots the turbofish stops short of" {
+    let c = Chooser { n: 0 };
+    assert c.pick::<i32>(1, "s") == 3;
+}
+
+test "a trait-qualified call fills them too" {
+    let c = Chooser { n: 0 };
+    assert Pick::pick::<i32>(&c, 1, "s") == 3;
+}
+
+__DATA__
+{"test": {}}

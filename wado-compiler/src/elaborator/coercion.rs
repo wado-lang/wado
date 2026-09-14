@@ -12,6 +12,7 @@ use crate::elaborator::sem::types::{
 };
 use crate::elaborator::typecheck::{TypeCheckResult, check_assignable};
 use crate::elaborator::types::FromArrayInfo;
+use crate::escape::{unescape_byte, unescape_bytes};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
@@ -277,7 +278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let repr = match kind {
             NumericLiteralKind::Byte(raw) => {
                 assert!(neg.is_none(), "there is no negated byte literal");
-                match util::unescape_byte(raw) {
+                match unescape_byte(raw) {
                     Ok(byte) => {
                         byte_repr = byte.to_string();
                         byte_repr.as_str()
@@ -503,7 +504,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if base_id == list_u8 {
                 if let Expr::Literal(lit) = expr
                     && let Literal::Bytes(raw) = &lit.value
-                    && let Err(message) = util::unescape_bytes(raw)
+                    && let Err(message) = unescape_bytes(raw)
                 {
                     let _ = self.emit(TypeError::InvalidLiteral {
                         message,

@@ -1,0 +1,13 @@
+// Naming the declaration without calling it gets the same answer a call does.
+// Before, it reported nothing and reached codegen with no function behind it.
+
+#[unavailable("write `map(f).unwrap_or(v)`")]
+fn map_or(x: i32) -> i32;
+
+export fn run() {
+    let f = map_or;
+    let _ = f(1);
+}
+
+__DATA__
+{"compile_error": "`map_or` is unavailable: write `map(f).unwrap_or(v)`"}

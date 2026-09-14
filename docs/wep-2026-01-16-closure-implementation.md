@@ -46,6 +46,23 @@ Closure types use a single bare form — `fn(T) -> U` or `fn mut(T) -> U` — in
 
 The compiler chooses static (specialised) vs dynamic (canonical) dispatch via escape analysis. From the user's perspective, both forms behave identically — only the runtime representation differs. There is no user-visible `impl` / `dyn` distinction. The LSP surfaces the compiler's dispatch decision as an inline hint or hover annotation when the user cares about it.
 
+### Parameter Type Inference
+
+A closure literal's parameter types come from the expected `fn(..)` type at its use site, matched by position. Every row of the table above supplies one, as does a `let` carrying a `fn(..)` annotation and a newtype over `fn(..)`. An annotation is needed only where nothing supplies one, and always wins.
+
+The expected type may be one of the callee's own type parameters. `Iterator::fold` declares `fn mut(Acc, Self::Item) -> Acc`. A call instantiates those slots into inference variables before resolving an argument, so the closure body meets a variable rather than an `Acc` no expression can construct. A slot the turbofish names is solved as that variable is minted.
+
+Arguments then resolve in two passes, each answering the variables it resolved against:
+
+1. Everything but a closure whose parameter types still hold a variable, in source order.
+2. Those closures. A closure applies operators and methods to its parameters as it resolves, so it must wait for the arguments that type them. This is what lets `apply_pair(|a, b| a + b, x, y)` dispatch `+` on `x`'s type.
+
+A numeric literal resolves in the first pass but answers after the second, and only where nothing else did: in `fold(0, |acc, x| acc + x)` over a `List<i64>` the body decides. An argument answers only variables the call itself minted. A hole deferred elsewhere has its own sink, and nothing re-checks it.
+
+Each variable then settles back onto its slot. A slot that inference answers with itself is not answered: the call reports it, naming the slot (`A`, not `?0`).
+
+Every path that answers a call runs this sequence, including the two that resolve the call themselves rather than delegating: the trait-qualified `Trait::m(recv, ..)`, and `xs[i].m(..)` on a `&mut self` method.
+
 ### Generic Bound Syntax
 
 `fn(...)` and `fn mut(...)` may appear as trait bounds. This is the way to name a closure type and reuse it across multiple positions in a generic function:
@@ -289,8 +306,10 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 5. Closures cannot cross Component Model boundary (MVP).
    - Mitigation: documented; resource adapter as future work.
 
-## Future Work
+## Known gaps
 
+- A closure with no expected type (`let f = |x| x + 1;`) still needs annotations: nothing infers them from the body, or from a later call.
+- Two closures in one call that could only answer each other (`f(|a| g(a), |b| h(b))`) resolve in source order, and nothing revisits the first. A fixed point would need the body walk to be replayable, which it is not.
 - User-defined callable types (some syntax for implementing the closure trait on user structs): low priority.
 - Resource adapter for closures at the Component Model boundary.
 - `with ..` effect-polymorphism shorthand if `<effect E>` verbosity proves painful.

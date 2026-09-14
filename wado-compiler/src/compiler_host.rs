@@ -89,6 +89,12 @@ pub enum Code {
     ImmutableAssignment,
     /// Variable used before it was definitely initialized
     UninitializedVariable,
+    /// Function declared without a body where nothing supplies one
+    MissingFunctionBody,
+    /// An `#[unavailable]` that cannot report what it was written to report
+    MalformedUnavailable,
+    /// A site naming a declaration that reports a reason instead of a body
+    Unavailable,
 
     // Type errors
     /// Type mismatch
@@ -222,6 +228,9 @@ impl std::fmt::Display for Code {
             Code::DuplicateDefinition => "DUPLICATE_DEFINITION",
             Code::ImmutableAssignment => "IMMUTABLE_ASSIGNMENT",
             Code::UninitializedVariable => "UNINITIALIZED_VARIABLE",
+            Code::MissingFunctionBody => "MISSING_FUNCTION_BODY",
+            Code::MalformedUnavailable => "MALFORMED_UNAVAILABLE",
+            Code::Unavailable => "UNAVAILABLE",
             Code::TypeMismatch => "TYPE_MISMATCH",
             Code::UnknownType => "UNKNOWN_TYPE",
             Code::InvalidCast => "INVALID_CAST",
@@ -312,10 +321,17 @@ impl DiagnosticSpan {
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(span) = &self.span {
+            // A span whose file the reporter did not know still places the
+            // error in a source; naming no file beats a leading colon.
+            let file = if span.file.is_empty() {
+                String::new()
+            } else {
+                format!("{}:", span.file)
+            };
             write!(
                 f,
-                "{}:{}:{}: {}: {}",
-                span.file, span.line, span.column, self.severity, self.message
+                "{file}{}:{}: {}: {}",
+                span.line, span.column, self.severity, self.message
             )
         } else {
             write!(f, "{}: {}", self.severity, self.message)
