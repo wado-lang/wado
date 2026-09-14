@@ -17,20 +17,8 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
-<<<<<<< HEAD
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
-use crate::name::mangle_local_item_name;
-||||||| b857806bc
-use crate::elaborator::types::{
-    BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
-};
-use crate::name::mangle_local_item_name;
-=======
-use crate::elaborator::types::{
-    BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
-};
 use crate::name::{mangle_local_item_name, namespace_member_alias};
->>>>>>> origin/main
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
