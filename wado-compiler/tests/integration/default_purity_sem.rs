@@ -103,9 +103,10 @@ export fn run() with Stdout {
 "#;
     let reported = reported(source);
     assert!(
-        reported.iter().any(|(context, impurity)| *context
-            == PureContext::GlobalInitializer
-            && matches!(impurity, Impurity::Call(callee) if callee == "noisy")),
+        reported.iter().any(
+            |(context, impurity)| *context == PureContext::GlobalInitializer
+                && matches!(impurity, Impurity::Call(callee) if callee == "noisy")
+        ),
         "expected `noisy` flagged in a global initializer, got {reported:?}"
     );
 }
@@ -127,9 +128,10 @@ export fn run() {
 "#;
     let reported = reported(source);
     assert!(
-        reported.iter().any(|(context, impurity)| *context
-            == PureContext::GlobalInitializer
-            && matches!(impurity, Impurity::Call(callee) if callee == "next")),
+        reported.iter().any(
+            |(context, impurity)| *context == PureContext::GlobalInitializer
+                && matches!(impurity, Impurity::Call(callee) if callee == "next")
+        ),
         "expected the operation `next` flagged in a global initializer, got {reported:?}"
     );
 }
@@ -168,9 +170,10 @@ export fn run() {
 "#;
     let reported = reported(source);
     assert!(
-        reported.iter().any(|(context, impurity)| *context
-            == PureContext::GlobalInitializer
-                && matches!(impurity, Impurity::HandlerInstall)),
+        reported.iter().any(
+            |(context, impurity)| *context == PureContext::GlobalInitializer
+                && matches!(impurity, Impurity::HandlerInstall)
+        ),
         "expected the handler install flagged in a global initializer, got {reported:?}"
     );
 }

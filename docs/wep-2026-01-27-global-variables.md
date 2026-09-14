@@ -56,6 +56,21 @@ fn example() {
 }
 ```
 
+### An initializer performs no effect
+
+An initializer runs at module instantiation. No handler is installed then, and
+the order among initializers is the dependency order, not one the program wrote.
+An effect performed there has no semantics to give it, so it is a compile error:
+
+- calling a function that declares an effect,
+- dispatching an `interface` operation.
+
+This is the rule default-value expressions already carry, so one checker answers
+for every position that must be pure, naming the position in the diagnostic.
+
+Installing a handler with `with … do` is rejected here too, on narrower grounds —
+see the gap below.
+
 ### What a constant expression can hold
 
 Wado targets Wasm 3.0, so the GC and extended-const instructions are available.
@@ -186,6 +201,20 @@ there rather than reasoning about it.
       admits. An aggregate or a sequence stays with the classifier that runs on
       the lowered Wasm value, because whether the builder sequence producing it
       collapsed is not knowable before the optimizer runs.
+
+## Known gaps
+
+- An initializer that installs its own handler is rejected, though it need not
+  be. `with E => h do { E::op() }` discharges inside itself: the handler is
+  installed and the operations its body dispatches are answered by it, so the
+  expression as a whole performs no effect and the purity rule above does not
+  reach it. What rejects it is narrower — the dispatch desugaring
+  (`effect_dispatch::synthesize_post_check`) walks function bodies, so a
+  `WithHandler` left in an initializer reaches lowering undesugared. Closing this
+  means desugaring initializers too, and giving the purity walk the
+  grant/discharge tracking the effect checker has, so an operation the installed
+  handler does not cover is still caught. Whether that complexity is worth the
+  expressiveness is open.
 
 ## Future work
 

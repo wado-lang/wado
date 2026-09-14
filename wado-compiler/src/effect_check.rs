@@ -110,12 +110,14 @@ impl PureContext {
     }
 }
 
-/// What made an expression impure, as the diagnostic words it.
+/// Why an expression that must be pure is rejected, as the diagnostic words it.
 #[derive(Debug, Clone)]
 pub enum Impurity {
     /// The named callee declares an effect, or is an operation needing one.
     Call(String),
-    /// `with E => h do { … }`, which writes the dispatch global.
+    /// `with E => h do { … }`. Self-contained rather than impure — the install
+    /// discharges what its body dispatches — but the dispatch desugaring
+    /// reaches function bodies only, so it is not available here.
     HandlerInstall,
 }
 
@@ -131,17 +133,19 @@ pub struct DefaultPurityError {
 impl From<DefaultPurityError> for Diagnostic {
     fn from(e: DefaultPurityError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let cause = match &e.impurity {
-            Impurity::Call(callee) => format!("calls effectful function '{callee}'"),
-            Impurity::HandlerInstall => "installs an effect handler".to_string(),
+        let noun = e.context.noun();
+        let message = match &e.impurity {
+            Impurity::Call(callee) => {
+                format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
+            }
+            Impurity::HandlerInstall => {
+                format!("{noun} cannot install an effect handler with `with ... do`")
+            }
         };
         Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
-            message: format!(
-                "{} must be pure (no effects), but {cause}",
-                e.context.noun()
-            ),
+            message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
@@ -2749,8 +2753,13 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::WithHandler(with_handler) => {
-                // Installing a handler writes the dispatch global — impure.
+                // The install discharges the operations its body dispatches, so
+                // the construct is self-contained — rejected for now because
+                // nothing before `lower` desugars one outside a function body,
+                // not because it is impure. Its body is left unwalked: those
+                // dispatches are this install's to answer for.
                 self.flag(Impurity::HandlerInstall, with_handler.span);
+                return;
             }
             _ => {}
         }
