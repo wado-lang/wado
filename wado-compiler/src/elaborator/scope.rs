@@ -197,25 +197,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Run `body` with `def`'s own type parameters in scope, for resolving a
-    /// type the declaration wrote — its `= Default` — away from its use site.
+    /// Run `body` with `names` bound to `args` and no other type parameter in
+    /// scope, for resolving a type the declaration wrote — a `= Default` or a
+    /// newtype's base — against the arguments settled for it.
     ///
     /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
     /// happens to declare, so the use site's parameters must not be in scope
-    /// while the default resolves. `None` when `def` keeps no resolved
-    /// parameters, which is a generic newtype.
-    pub(super) fn with_declared_type_params<R>(
+    /// while the default resolves. A name past `args` stays unbound, which is
+    /// how a default reaches only the parameters to its left.
+    pub(super) fn with_type_param_args<R>(
         &mut self,
-        def: DefId,
+        names: &[String],
+        args: &[TypeId],
         body: impl FnOnce(&mut Self) -> R,
-    ) -> Option<R> {
-        let params = self.type_lookup().declared_type_params(def)?;
-        let ids = self.type_lookup().declared_type_param_ids(def)?.to_vec();
-        let binders: IndexMap<String, BinderInScope> = params
+    ) -> R {
+        let binders: IndexMap<String, BinderInScope> = names
             .iter()
-            .zip(ids)
+            .zip(args)
             .enumerate()
-            .map(|(slot, ((name, _), type_id))| {
+            .map(|(slot, (name, &type_id))| {
                 (
                     name.clone(),
                     BinderInScope::undeclared(slot as u32, type_id),
@@ -224,7 +224,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params = binders;
-        Some(body(&mut scope))
+        body(&mut scope)
     }
 
     /// Run `body` with the scope field selected by `field` set to `value`,

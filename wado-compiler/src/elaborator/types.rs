@@ -283,6 +283,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A type parameter's `= Default` names a parameter declared at or after
+    /// its own slot, which no argument has settled yet.
+    ForwardTypeParamDefault {
+        param: String,
+        referenced: String,
+        span: Span,
+    },
+
     /// A type position names an `interface` or a `trait`. Both share the type
     /// namespace, and neither denotes a type.
     NotAType {
@@ -1178,6 +1186,19 @@ impl TypeError {
                 format!(
                     "the default for this type parameter names '{name}', the declaration \
                      it belongs to, so it stands for itself"
+                ),
+                *span,
+            ),
+            TypeError::ForwardTypeParamDefault {
+                param,
+                referenced,
+                span,
+            } => (
+                Code::UnknownType,
+                format!(
+                    "the default for type parameter '{param}' names '{referenced}', which is \
+                     declared no earlier than '{param}' itself: only a parameter to its left \
+                     has an argument to stand for"
                 ),
                 *span,
             ),
@@ -2951,6 +2972,13 @@ impl<'a> TypeLookup<'a> {
         }
         let info = self.generic_newtype_of(def)?;
         (!info.type_params.is_empty()).then_some(&*info.type_params)
+    }
+
+    /// Whether every parameter `def` declares has a default, which is what
+    /// makes its bare name an application of them all.
+    pub(super) fn every_type_param_defaults(&self, def: DefId) -> bool {
+        self.declared_generic_params(def)
+            .is_some_and(|params| params.iter().all(|p| p.default.is_some()))
     }
 
     /// `args` extended with the declared default of each parameter the site

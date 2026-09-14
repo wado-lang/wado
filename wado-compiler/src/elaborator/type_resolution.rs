@@ -2,7 +2,6 @@
 
 use crate::ast::{AstId, GenericType, Type};
 use crate::compiler_host::CompilerHost;
-use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -593,6 +592,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_lookup()
             .declared_type_params(def)
             .map_or(0, |params| params.len());
+        if !self.type_param_defaults_are_ordered(def) {
+            resolved.resize(arity.max(resolved.len()), TypeTable::ERROR);
+            return resolved;
+        }
         for slot in resolved.len()..arity {
             // A slot whose default does not resolve still takes the parameter it
             // declared: an application short of its arity reads as a different
@@ -629,14 +632,56 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(out)
     }
 
+    /// Whether every default `def` declares names only parameters to its left.
+    ///
+    /// A default standing for a parameter no argument has settled yet has
+    /// nothing to substitute, so it would leak the parameter itself into the
+    /// instantiation. Checked once per declaration: the declaration is what is
+    /// ill-formed, not the application that reached it.
+    pub(super) fn type_param_defaults_are_ordered(&mut self, def: DefId) -> bool {
+        if let Some(&ordered) = self.checked_type_param_defaults.get(&def) {
+            return ordered;
+        }
+        let Some(params) = self
+            .type_lookup()
+            .declared_generic_params(def)
+            .map(<[ast::GenericParam]>::to_vec)
+        else {
+            return true;
+        };
+        let mut ordered = true;
+        for slot in 0..params.len() {
+            let Some(default) = params[slot].default.clone() else {
+                continue;
+            };
+            let mut referenced = None;
+            self.walk_type_heads(&default, &mut |_, _, name, _, _| {
+                if referenced.is_none() && params[slot..].iter().any(|p| p.name == name) {
+                    referenced = Some(name.to_string());
+                }
+                false
+            });
+            if let Some(referenced) = referenced {
+                ordered = false;
+                let _ = self.emit(TypeError::ForwardTypeParamDefault {
+                    param: params[slot].name.clone(),
+                    referenced,
+                    span: default.span(),
+                });
+            }
+        }
+        self.checked_type_param_defaults.insert(def, ordered);
+        ordered
+    }
+
     /// The type `def`'s slot takes from the `= Default` it declared, given the
     /// arguments `settled` ahead of it. `None` when the slot declares none, or
     /// the default names nothing this declaration can answer.
     ///
-    /// Resolved under `def`'s own parameters, then substituted by slot: a
+    /// Resolved with only the parameters `settled` covers in scope, so a
     /// default naming a parameter to its left (`struct Pair<A, B = A>`) stands
-    /// for that parameter's argument. Doing it in that order is what keeps the
-    /// use site's spellings out of a type the declaration wrote.
+    /// for that parameter's argument and never for what the use site happens to
+    /// call it.
     pub(super) fn declared_default_type_arg(
         &mut self,
         def: DefId,
@@ -645,10 +690,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TypeId> {
         let params = self.type_lookup().declared_type_params(def)?;
         let default = params.get(slot)?.1.clone()?;
-        let own = self.type_lookup().declared_type_param_ids(def)?.to_vec();
+        let names: Vec<String> = params.into_iter().map(|(name, _)| name).collect();
         let resolved = self.expanding_defaults_of(def, default.span(), |e| {
-            e.with_declared_type_params(def, |e| e.resolve_type(&default))
-        })??;
+            e.with_type_param_args(&names, settled, |e| e.resolve_type(&default))
+        })?;
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
             // name that reached nothing is named at the declaration instead.
@@ -658,19 +703,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return None;
         }
-        let mut subst = IndexMap::default();
-        for (&param, &arg) in own.iter().zip(settled) {
-            if let ResolvedType::TypeParam { index, .. } = self.tysys.type_table.borrow().get(param)
-            {
-                subst.insert(*index, arg);
-            }
-        }
-        Some(
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .substitute_type_params(resolved, &subst),
-        )
+        Some(resolved)
     }
 
     fn resolve_named_type_at(
@@ -704,17 +737,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(expected) = self.bare_generic_type_arity(def) {
                 // Every parameter declaring a default makes the bare name the
                 // defaulted instantiation; otherwise the site must write them.
-                // Every argument here is one the declaration wrote, so the whole
-                // application resolves under the declaration's own parameters.
-                if let Some(args) = self.type_lookup().type_args_with_defaults(def, &[]) {
-                    return self
-                        .expanding_defaults_of(def, span, |e| {
-                            e.with_declared_type_params(def, |e| {
-                                e.resolve_generic_type_at(site, name, &args, span)
-                            })
-                            .unwrap_or_else(|| e.resolve_generic_type_at(site, name, &args, span))
-                        })
-                        .unwrap_or(TypeTable::ERROR);
+                // The application writes no argument, so every slot is filled
+                // from the declaration by the one path that fills them.
+                if self.type_lookup().every_type_param_defaults(def) {
+                    return self.resolve_generic_type_at(site, name, &[], span);
                 }
                 if enforce_arity {
                     let _ = self.emit(TypeError::MissingTypeArguments {
@@ -893,20 +919,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .make_generic_instance(def, type_args)
                     }
                 } else if let Some(gn_info) = self.lookup_generic_newtype_of_decl(def).cloned() {
-                    // Generic newtype instantiation: type MyArray<T> = List<T>.
-                    // Its base is substituted as AST, so a trailing argument the
-                    // site left out is filled the same way — it keeps no
-                    // resolved parameters to resolve a default against.
-                    let ast_filled = self.type_lookup().type_args_with_defaults(def, args);
-                    let args = ast_filled.as_deref().unwrap_or(args);
-                    let concrete_base_ast = gn_info.base_instantiated(args);
-                    let base_type_id = self.resolve_type(&concrete_base_ast);
-                    let resolved_args: Vec<TypeId> =
-                        args.iter().map(|t| self.resolve_type(t)).collect();
-                    self.check_type_decl_arg_bounds(def, &resolved_args, span);
+                    // Generic newtype instantiation: `type MyArray<T> = List<T>`.
+                    // Its base is a type the declaration wrote, so it resolves
+                    // against the arguments rather than at the use site — the
+                    // same rule its defaults follow, so no kind is the odd one
+                    // out.
+                    let type_args = self.type_args_of_application(def, args);
+                    let names: Vec<String> =
+                        gn_info.type_params.iter().map(|p| p.name.clone()).collect();
+                    let base_type_id = self.with_type_param_args(&names, &type_args, |e| {
+                        e.resolve_type(&gn_info.base_type_ast)
+                    });
+                    self.check_type_decl_arg_bounds(def, &type_args, span);
                     self.tysys.type_table.borrow_mut().make_newtype_instance(
                         def,
-                        resolved_args,
+                        type_args,
                         base_type_id,
                     )
                 } else {

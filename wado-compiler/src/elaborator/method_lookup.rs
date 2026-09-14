@@ -3248,7 +3248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.span,
         );
 
-        let container_fq = self.tysys.fq_receiver_head(base_type_id);
+        let container_fq = index_mut_info.receiver.clone();
         let mangled_index_mut_name = MethodName::format_local(
             &container_fq,
             Some(&index_mut_info.trait_name),

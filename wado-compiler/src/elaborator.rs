@@ -151,6 +151,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// right now. A default naming its own declaration (`struct Rec<T = Rec>`)
     /// has no fixpoint, so one already on the walk is reported, not re-entered.
     pub(super) expanding_type_param_defaults: hashmap::IndexSet<DefId>,
+    /// The declarations whose declared `= Default`s have been checked for a
+    /// forward reference. The declaration is ill-formed, not the application,
+    /// so every use of it reads one report rather than its own.
+    pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {

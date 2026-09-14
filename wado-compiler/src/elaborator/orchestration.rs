@@ -1445,6 +1445,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             infer_holes: InferHoleTable::default(),
             assoc_binding_stack: hashmap::IndexSet::default(),
             expanding_type_param_defaults: hashmap::IndexSet::default(),
+            checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }
 
@@ -3395,7 +3396,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         return TypeTable::UNKNOWN;
                     };
                     if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                        let concrete_base = gn_info.base_instantiated(&generic.args);
+                        let concrete_base = gn_info.base_instantiated(args);
                         let base_type_id = Self::resolve_type_static_with_params(
                             &concrete_base,
                             type_table,

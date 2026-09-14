@@ -1,0 +1,27 @@
+// A default may name a parameter to its left, whose argument it stands for. One
+// naming a parameter at or after its own slot has no argument to stand for, so
+// it used to leak the parameter itself into the instantiation and reach WIR as
+// `Fwd<B, i32>`, a shape nothing registers.
+
+struct Fwd<A = B, B = i32> {
+    v: B,
+}
+
+// A default naming its own parameter is the same miss, one slot nearer.
+struct Own<A = A> {
+    v: i32,
+}
+
+export fn run() {
+    let f: Fwd = Fwd { v: 1 };
+    let o: Own = Own { v: 2 };
+    assert f.v + o.v == 3;
+}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    "the default for type parameter 'A' names 'B', which is declared no earlier than 'A' itself",
+    "the default for type parameter 'A' names 'A', which is declared no earlier than 'A' itself"
+  ]
+}

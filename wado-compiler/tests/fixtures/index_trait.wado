@@ -322,6 +322,37 @@ impl IndexAssign<List<i32>> for Grid {
     }
 }
 
+// An impl written at one instantiation generates that instance's own function,
+// so every indexing trait has to spell the receiver as `Cell<Tally>` rather
+// than as the bare `Cell` a parameterized block would key on.
+struct Cell<T> {
+    item: T,
+}
+
+impl IndexRef<i32> for Cell<Tally> {
+    type Output = Tally;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.item;
+    }
+}
+
+impl IndexRefMut<i32> for Cell<Tally> {
+    type Output = Tally;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
+impl IndexAssign<i32> for Cell<Tally> {
+    type Output = Tally;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.item = value;
+    }
+}
+
 struct Bag {
     items: List<i32>,
 }
@@ -449,6 +480,16 @@ test "read, mutate and assign through the three traits on one type" {
     assert c.item.n == 20;
     c[0] = Value::new(100);
     assert c.item.n == 100;
+}
+
+test "an impl at one instantiation serves every indexing trait" {
+    let mut c = Cell { item: Tally { value: 0 } };
+    c[0].increment();
+    c[0].increment();
+    assert c.item.value == 2;
+    assert c[0].value == 2;
+    c[0] = Tally { value: 9 };
+    assert c.item.value == 9;
 }
 
 test "a reference-typed key coerces the subscript" {
