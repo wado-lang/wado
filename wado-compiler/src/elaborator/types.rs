@@ -56,6 +56,44 @@ pub(crate) struct StructFieldInfo {
 /// members and keeps its own identity, so `C::Green` on `type C = Color` reads
 /// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
 /// when the prefix names something that owns its members.
+/// Every named head `ty` reaches, as a reference site and its spelling.
+///
+/// The scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::`
+/// prefix is collected like any other and left to `declaration_at`, which
+/// answers `None` for a binder.
+fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
+    match ty {
+        ast::Type::Named(named) => out.push((named.id, named.name.clone())),
+        ast::Type::Generic(generic) => {
+            out.push((generic.id, generic.name.clone()));
+            for arg in &generic.args {
+                collect_type_heads(arg, out);
+            }
+        }
+        ast::Type::NamespacedGeneric(namespaced) => {
+            out.push((namespaced.id, namespaced.name.clone()));
+            for arg in &namespaced.args {
+                collect_type_heads(arg, out);
+            }
+        }
+        ast::Type::Function(func_ty) => {
+            for param in &func_ty.params {
+                collect_type_heads(param, out);
+            }
+            collect_type_heads(&func_ty.return_type, out);
+        }
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            collect_type_heads(inner, out);
+        }
+        ast::Type::Tuple(elements) => {
+            for element in elements {
+                collect_type_heads(element, out);
+            }
+        }
+        ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+    }
+}
+
 pub(super) fn newtype_member_owner(
     lookup: &TypeLookup<'_>,
     tysys: &TypeSystem,
@@ -275,8 +313,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A type parameter's `= Default` names the declaration it belongs to, so
-    /// filling the slot would ask for itself.
+    /// Expanding a type parameter's `= Default` reaches the declaration it
+    /// belongs to again, so filling the slot has no fixpoint.
     RecursiveTypeParamDefault {
         name: String,
         span: Span,
@@ -1179,8 +1217,8 @@ impl TypeError {
             TypeError::RecursiveTypeParamDefault { name, span } => (
                 Code::UnknownType,
                 format!(
-                    "the default for this type parameter names '{name}', the declaration \
-                     it belongs to, so it stands for itself"
+                    "the default for this type parameter expands into '{name}' again, the \
+                     declaration it belongs to, so filling the slot never settles"
                 ),
                 *span,
             ),
@@ -2979,6 +3017,9 @@ impl<'a> TypeLookup<'a> {
         if args.len() >= params.len() {
             return None;
         }
+        if !self.type_param_defaults_terminate(def) {
+            return None;
+        }
         let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         let mut filled = args.to_vec();
         for param in &params[args.len()..] {
@@ -2991,6 +3032,55 @@ impl<'a> TypeLookup<'a> {
             ));
         }
         Some(filled)
+    }
+
+    /// Whether expanding `def`'s declared defaults reaches a fixpoint.
+    ///
+    /// A default names a type, whose own defaults name types, and so on. Where
+    /// that walk revisits a declaration it is already inside, no amount of
+    /// expansion settles the arguments.
+    pub(super) fn type_param_defaults_terminate(&self, def: DefId) -> bool {
+        let mut expanding = hashmap::IndexSet::default();
+        let mut settled = hashmap::IndexSet::default();
+        !self.defaults_reach_a_cycle(def, &mut expanding, &mut settled)
+    }
+
+    fn defaults_reach_a_cycle(
+        &self,
+        def: DefId,
+        expanding: &mut hashmap::IndexSet<DefId>,
+        settled: &mut hashmap::IndexSet<DefId>,
+    ) -> bool {
+        if settled.contains(&def) {
+            return false;
+        }
+        if !expanding.insert(def) {
+            return true;
+        }
+        let mut cycles = false;
+        if let Some(params) = self.declared_generic_params(def) {
+            for param in params {
+                let Some(default) = &param.default else {
+                    continue;
+                };
+                let mut heads = Vec::new();
+                collect_type_heads(default, &mut heads);
+                cycles = heads.into_iter().any(|(site, name)| {
+                    self.declaration_at(Some(site), &name)
+                        .is_some_and(|target| {
+                            self.defaults_reach_a_cycle(target, expanding, settled)
+                        })
+                });
+                if cycles {
+                    break;
+                }
+            }
+        }
+        expanding.shift_remove(&def);
+        if !cycles {
+            settled.insert(def);
+        }
+        cycles
     }
 
     /// The fields of the struct `def` declares.

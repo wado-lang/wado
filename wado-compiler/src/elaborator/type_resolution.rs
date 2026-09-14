@@ -632,7 +632,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some(out)
     }
 
-    /// Whether every default `def` declares names only parameters to its left.
+    /// Whether `def`'s declared defaults can be expanded at all: each names
+    /// only parameters to its left, and the walk they set off terminates.
     ///
     /// One naming a parameter no argument has settled yet would leak the
     /// parameter itself into the instantiation. Checked once per declaration:
@@ -648,6 +649,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return true;
         };
+        if !self.type_lookup().type_param_defaults_terminate(def) {
+            let name = self.tysys.resolutions.defs().name(def).to_string();
+            let span = params
+                .iter()
+                .filter_map(|p| p.default.as_ref())
+                .map(ast::Type::span)
+                .next()
+                .unwrap_or_default();
+            let _ = self.emit(TypeError::RecursiveTypeParamDefault { name, span });
+            self.checked_type_param_defaults.insert(def, false);
+            return false;
+        }
         let mut ordered = true;
         for slot in 0..params.len() {
             let Some(default) = params[slot].default.clone() else {
@@ -687,6 +700,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slot: usize,
         settled: &[TypeId],
     ) -> Option<TypeId> {
+        // Asked here rather than by each caller: an ill-ordered declaration
+        // answers nothing, and the one diagnostic that names why belongs to it
+        // however the application reached it.
+        if !self.type_param_defaults_are_ordered(def) {
+            return None;
+        }
         let params = self.type_lookup().declared_generic_params(def)?;
         let default = params.get(slot)?.default.clone()?;
         let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();

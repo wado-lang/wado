@@ -33,18 +33,19 @@ test {
     info(`starting up`);
 
     // An installed sink takes over for its scope. `CaptureSink` is the one a
-    // test reads back; `TextSink` and `JsonSink` write. The events asserted on
-    // are at `Warn`, since `wado test` compiles the threshold down to it.
+    // test reads back; `TextSink` and `JsonSink` write. The event asserted on is
+    // at `Error`, the level no build threshold folds away, so what this reads
+    // back does not depend on how the build was configured.
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
         in_span(&span(Level::Info, `request`), || {
-            warn(`disk almost full`, { free_bytes: 7 });
+            error(`disk full`, { free_bytes: 0 });
         });
     };
 
     assert sink.events.len() == 1;
-    assert sink.events[0].message == "disk almost full";
-    assert sink.events[0].meta.level matches { Warn };
+    assert sink.events[0].message == "disk full";
+    assert sink.events[0].meta.level matches { Error };
     assert sink.events[0].parent matches { Some(1) };
 }
 
