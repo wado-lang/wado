@@ -58,18 +58,37 @@ fn example() {
 
 ### An initializer performs no effect
 
-An initializer runs at module instantiation. No handler is installed then, and
-the order among initializers is the dependency order, not one the program wrote.
-An effect performed there has no semantics to give it, so it is a compile error:
+An initializer runs at module instantiation. Nothing is installed for it then,
+and the order among initializers is the dependency order, not one the program
+wrote. An effect that reaches out of the initializer has no semantics to give
+it, so it is a compile error:
 
 - calling a function that declares an effect,
-- dispatching an `interface` operation.
+- dispatching an operation no enclosing `with … do` installs a handler for.
 
 This is the rule default-value expressions already carry, so one checker answers
 for every position that must be pure, naming the position in the diagnostic.
 
-Installing a handler with `with … do` is rejected here too, but on narrower
-grounds. See the gap below.
+What the initializer discharges itself is not such an effect. `with E => h do`
+installs a handler for its body, so the operations the body dispatches are
+answered inside the initializer and the expression as a whole performs none:
+
+```wado
+global COUNTED: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: Counter::next()
+    }
+    break hold: 0
+};
+```
+
+The purity walk therefore tracks the same grants the effect checker does, and
+the dispatch desugaring reaches an initializer as it reaches a function body. An
+operation the installed handler does not cover is still an error.
+
+A purely-computational component's operation demands neither a handler nor a
+host capability, so it too belongs here.
 
 ### What a constant expression can hold
 
@@ -201,18 +220,6 @@ there rather than reasoning about it.
       admits. An aggregate or a sequence stays with the classifier that runs on
       the lowered Wasm value, because whether the builder sequence producing it
       collapsed is not knowable before the optimizer runs.
-
-## Known gaps
-
-- An initializer that installs its own handler is rejected, though it need not
-  be. In `with E => h do { E::op() }` the handler answers the operations its body
-  dispatches, so the expression performs no effect and the purity rule above does
-  not reach it. It is rejected for a narrower reason: the dispatch desugaring
-  walks function bodies only, so a handler install left in an initializer reaches
-  lowering undesugared. Closing this means desugaring initializers too, and
-  giving the purity walk the grant and discharge tracking the effect checker has,
-  so an operation the installed handler leaves out is still caught. Whether that
-  buys enough to be worth the complexity is open.
 
 ## Future work
 

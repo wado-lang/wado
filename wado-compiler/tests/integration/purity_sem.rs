@@ -14,9 +14,8 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 fn violations(source: &str) -> Vec<String> {
     reported(source)
         .into_iter()
-        .filter_map(|(_, impurity)| match impurity {
-            Impurity::Call(callee) => Some(callee),
-            Impurity::HandlerInstall => None,
+        .map(|(_, impurity)| match impurity {
+            Impurity::Call(callee) | Impurity::Dispatch(callee) => callee,
         })
         .collect()
 }
@@ -136,13 +135,15 @@ export fn run() {
     assert!(
         found
             .iter()
-            .any(|i| matches!(i, Impurity::Call(callee) if callee == "next")),
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
         "expected the operation `next` flagged in a global initializer, got {found:?}"
     );
 }
 
+/// The install discharges what its body dispatches, so the initializer as a
+/// whole performs no effect.
 #[test]
-fn handler_install_in_global_initializer_is_reported() {
+fn handler_install_in_global_initializer_is_not_reported() {
     let source = r#"
 interface Counter {
     fn next() -> i32 {
@@ -175,8 +176,58 @@ export fn run() {
 "#;
     let found = in_global(source);
     assert!(
-        found.iter().any(|i| matches!(i, Impurity::HandlerInstall)),
-        "expected the handler install flagged in a global initializer, got {found:?}"
+        found.is_empty(),
+        "a handler install discharges its own dispatches: {found:?}"
+    );
+}
+
+/// The grant covers the effect the `with` installs, and nothing else.
+#[test]
+fn unhandled_operation_under_a_handler_is_still_reported() {
+    let source = r#"
+interface Counter {
+    fn next() -> i32 { return 41; }
+}
+
+interface Clock {
+    fn now() -> i32 { return 7; }
+}
+
+struct Tally {
+    value: i32,
+}
+
+impl Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+global A: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: Counter::next() + Clock::now()
+    }
+    break hold: 0
+};
+
+export fn run() {
+    assert A == 18;
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "now")),
+        "expected `now` flagged: only `Counter` is installed, got {found:?}"
+    );
+    assert!(
+        !found
+            .iter()
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
+        "`next` is answered by the installed handler: {found:?}"
     );
 }
 

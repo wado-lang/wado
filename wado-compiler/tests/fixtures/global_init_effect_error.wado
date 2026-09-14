@@ -1,23 +1,12 @@
-// A global initializer runs before any handler is installed, in an order the
-// program does not choose, so performing an effect there is rejected.
-// See WEP: Global Variables.
+// An effect a global initializer does not itself discharge has no semantics
+// there: it runs before the program installs anything, in an order the program
+// does not choose. See WEP: Global Variables.
 
 use { println, Stdout } from "core:cli";
 
 interface Counter {
     fn next() -> i32 {
         return 41;
-    }
-}
-
-struct Tally {
-    value: i32,
-}
-
-impl Counter for Tally {
-    fn next(&mut self) -> i32 {
-        self.value += 1;
-        resume self.value
     }
 }
 
@@ -29,29 +18,18 @@ fn noisy() -> i32 with Stdout {
 // Calls a function that declares an effect.
 global FROM_EFFECTFUL_FN: i32 = noisy();
 
-// Dispatches an interface operation. Its default body does not make the
-// dispatch pure.
+// Dispatches a user-defined effect's operation, which a handler answers. Its
+// default body does not make the dispatch pure.
 global FROM_OPERATION: i32 = Counter::next();
 
-// Installs a handler. Not impure: the install answers the operation its body
-// dispatches. Rejected because only function bodies get the desugaring.
-global FROM_HANDLER: i32 = hold: {
-    let mut tally = Tally { value: 10 };
-    with Counter => &mut tally do {
-        break hold: Counter::next()
-    }
-    break hold: 0
-};
-
 export fn run() with Stdout {
-    println(`${FROM_EFFECTFUL_FN} ${FROM_OPERATION} ${FROM_HANDLER}`);
+    println(`${FROM_EFFECTFUL_FN} ${FROM_OPERATION}`);
 }
 
 __DATA__
 {
     "compile_error": "global initializer must be pure (no effects), but calls effectful function 'noisy'",
     "compile_errors_contains": [
-        "global initializer must be pure (no effects), but calls effectful function 'next'",
-        "global initializer cannot install an effect handler with `with ... do`"
+        "global initializer must be pure (no effects), but dispatches effect operation 'next', which needs an installed handler"
     ]
 }

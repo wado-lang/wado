@@ -318,12 +318,11 @@ pub global VERSION: i32 = 1;
 ```
 
 Any type is supported. Any pure expression (no effects) can be used as an
-initializer. An initializer runs at module initialization, before the program
-installs any handler and in an order it does not choose, so performing an effect
-there is an error: calling a function that declares one, or dispatching an
-`interface` operation. Installing a handler with `with … do` is also rejected,
-which [WEP: Global Variables](./wep-2026-01-27-global-variables.md) records as an
-open gap rather than a rule.
+initializer. An initializer runs at module initialization, with nothing
+installed for it and in an order it does not choose, so an effect that reaches
+out of it is an error: calling a function that declares one, or dispatching an
+operation no enclosing `with … do` handles. An initializer may install its own
+handler, which makes the operations its body dispatches pure.
 
 #### Mutability
 

@@ -112,11 +112,10 @@ impl PureContext {
 /// Why an expression that must be pure is rejected, as the diagnostic words it.
 #[derive(Debug, Clone)]
 pub enum Impurity {
-    /// The named callee declares an effect, or is an operation needing one.
+    /// The named callee declares an effect.
     Call(String),
-    /// `with E => h do { … }`. Not impure: the install discharges what its body
-    /// dispatches. Rejected because only function bodies get the desugaring.
-    HandlerInstall,
+    /// The named operation is dispatched with no handler installed to take it.
+    Dispatch(String),
 }
 
 /// Error from purity checking
@@ -136,9 +135,10 @@ impl From<PurityError> for Diagnostic {
             Impurity::Call(callee) => {
                 format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
             }
-            Impurity::HandlerInstall => {
-                format!("{noun} cannot install an effect handler with `with ... do`")
-            }
+            Impurity::Dispatch(op) => format!(
+                "{noun} must be pure (no effects), but dispatches effect operation '{op}', \
+                 which needs an installed handler"
+            ),
         };
         Diagnostic {
             severity: Severity::Error,
@@ -551,6 +551,97 @@ fn interface_at<'a>(
     let key = (defs.module(def).clone(), defs.name(def).to_string());
     let cm_fq = index.interface_cm_fq.get(&key)?;
     Some((key.0, key.1, cm_fq))
+}
+
+/// The effects `with E => h do` grants to its body.
+fn binding_granted_effects(
+    sem: &Semantics,
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    module_source: &ModuleSource,
+    binding: &EffectHandlerBinding,
+) -> Vec<EffectRef> {
+    // One fact per walk that reached the binding. A handler installed in a
+    // tuple `for-of` body is bound once per element, and an effect only some
+    // elements grant does not cover the body — so the grant is what every walk
+    // agrees on.
+    let mut granted: Option<Vec<EffectRef>> = None;
+    for facts in annotations
+        .into_iter()
+        .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
+    {
+        let walk: Vec<EffectRef> = facts
+            .effects
+            .iter()
+            .map(|entry| EffectRef::Concrete {
+                name: entry.name.clone(),
+                module_source: entry.module_source.clone(),
+            })
+            .filter(|effect| index.closure.contains_key(effect))
+            .collect();
+        granted = Some(match granted {
+            None => walk,
+            Some(prev) => prev.into_iter().filter(|e| walk.contains(e)).collect(),
+        });
+    }
+    if let Some(granted) = granted {
+        return granted;
+    }
+    binding
+        .effect
+        .as_ref()
+        .and_then(|ty| match ty {
+            ast::Type::Named(named) => effect_named_in(
+                &named.name,
+                module_source,
+                sem,
+                index.closure,
+                index.effect_by_name,
+            ),
+            _ => None,
+        })
+        .into_iter()
+        .collect()
+}
+
+/// What a direct `E::op()` call demands of its caller.
+enum Operation {
+    /// A user-defined effect: an installed handler answers the dispatch.
+    Handled(EffectRef),
+    /// A host-backed or component effect, with the effects it requires of the
+    /// caller — empty for a purely-computational component.
+    Requires(Vec<EffectRef>),
+}
+
+/// How an operation of the `interface` at `site` is resolved. `None` when the
+/// site names no interface.
+fn operation_at(sem: &Semantics, index: &EffectIndex, site: Option<AstId>) -> Option<Operation> {
+    // The callee names its interface's declaration; the site says which one
+    // that is, so a same-named local `interface` cannot stand in for it.
+    let (decl_module, name, cm_fq) = interface_at(sem, index, site)?;
+    let Some(fq) = cm_fq else {
+        return Some(Operation::Handled(EffectRef::Concrete {
+            name,
+            module_source: decl_module,
+        }));
+    };
+    if let Some(registry) = sem.cm_interface_registry()
+        && registry.is_component_interface(fq)
+    {
+        // Composition-relative: the imported interface is composed away, so its
+        // operations demand the dependency's own host-leaf capabilities.
+        let leaves = registry
+            .host_leaf_imports_for(fq)
+            .iter()
+            .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
+            .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
+            .collect();
+        return Some(Operation::Requires(leaves));
+    }
+    Some(Operation::Requires(vec![EffectRef::Concrete {
+        name,
+        module_source: decl_module,
+    }]))
 }
 
 /// The effect an `impl E for T` block handles, when `E` is one. Read off the
@@ -992,81 +1083,21 @@ impl SemEffectWalker<'_> {
         if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
             return Vec::new();
         }
-        // The callee names its interface's declaration; the site says which one
-        // that is, so a same-named local `interface` cannot stand in for it.
-        let Some((decl_module, name, cm_fq)) = interface_at(self.sem, self.index, receiver_site)
-        else {
-            return Vec::new();
-        };
-        // Only a host-backed effect (`#[cm]`) is a capability the caller must
-        // hold. A user-defined effect is resolved by the handler machinery, so
-        // its operations — including a handler's self-delegation — are not a
-        // direct-op requirement.
-        let Some(fq) = cm_fq else {
-            return Vec::new();
-        };
-        if let Some(registry) = self.sem.cm_interface_registry()
-            && registry.is_component_interface(fq)
-        {
-            // Composition-relative: the imported interface is composed away, so
-            // its operations demand the dependency's own host-leaf capabilities
-            // (empty for a purely-computational component).
-            return registry
-                .host_leaf_imports_for(fq)
-                .iter()
-                .filter(|leaf| !self.index.provided_import_fqs.contains(leaf.as_str()))
-                .filter_map(|leaf| self.index.effect_by_cm_fq.get(leaf).cloned())
-                .collect();
+        match operation_at(self.sem, self.index, receiver_site) {
+            // A handler resolves it, so it is not a direct-op requirement.
+            Some(Operation::Handled(_)) | None => Vec::new(),
+            Some(Operation::Requires(effects)) => effects,
         }
-        vec![EffectRef::Concrete {
-            name,
-            module_source: decl_module,
-        }]
     }
 
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
-        // One fact per walk that reached the binding. A handler installed in a
-        // tuple `for-of` body is bound once per element, and an effect only
-        // some elements grant does not cover the body — so the grant is what
-        // every walk agrees on.
-        let mut granted: Option<Vec<EffectRef>> = None;
-        for facts in self
-            .annotations
-            .into_iter()
-            .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
-        {
-            let walk: Vec<EffectRef> = facts
-                .effects
-                .iter()
-                .map(|entry| EffectRef::Concrete {
-                    name: entry.name.clone(),
-                    module_source: entry.module_source.clone(),
-                })
-                .filter(|effect| self.index.closure.contains_key(effect))
-                .collect();
-            granted = Some(match granted {
-                None => walk,
-                Some(prev) => prev.into_iter().filter(|e| walk.contains(e)).collect(),
-            });
-        }
-        if let Some(granted) = granted {
-            return granted;
-        }
-        binding
-            .effect
-            .as_ref()
-            .and_then(|ty| match ty {
-                ast::Type::Named(named) => effect_named_in(
-                    &named.name,
-                    &self.module_source,
-                    self.sem,
-                    self.index.closure,
-                    self.index.effect_by_name,
-                ),
-                _ => None,
-            })
-            .into_iter()
-            .collect()
+        binding_granted_effects(
+            self.sem,
+            self.annotations,
+            self.index,
+            &self.module_source,
+            binding,
+        )
     }
 
     /// Resolve `EffectRef::Param` effects to concrete effects by matching the
@@ -2557,8 +2588,9 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
             sem,
             annotations: state.module_semantics.get(src).map(|m| &m.types),
             index,
-            module: src.source_path(),
+            module_source: src,
             context: PureContext::DefaultValue,
+            granted: IndexSet::default(),
             out: &mut *out,
         };
         for item in &module.items {
@@ -2604,8 +2636,11 @@ struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
-    module: String,
+    module_source: &'a ModuleSource,
     context: PureContext,
+    /// Effects the enclosing `with … do` installs, which their operations
+    /// dispatch to rather than demanding of the position.
+    granted: IndexSet<EffectRef>,
     out: &'a mut Vec<PurityError>,
 }
 
@@ -2628,21 +2663,27 @@ impl PurityWalker<'_> {
             context: self.context,
             impurity,
             span,
-            module: self.module.clone(),
+            module: self.module_source.source_path(),
         });
     }
 
     fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
-        if !effects.is_empty() {
+        if effects.iter().any(|e| !self.granted.contains(e)) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }
 
-    /// Flags `Site::op(…)` when `site` names an `interface`. An operation
-    /// declares no `with` clause, so only the site says it needs a handler.
+    /// Flags `Site::op(…)` when the dispatch needs something the position does
+    /// not hold. An operation declares no `with` clause of its own, so nothing
+    /// but the site says so. A purely-computational component's operation needs
+    /// neither a handler nor an effect, and stays.
     fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
-        if interface_at(self.sem, self.index, Some(site)).is_some() {
-            self.flag(Impurity::Call(op.to_string()), span);
+        match operation_at(self.sem, self.index, Some(site)) {
+            Some(Operation::Handled(effect)) if !self.granted.contains(&effect) => {
+                self.flag(Impurity::Dispatch(op.to_string()), span);
+            }
+            Some(Operation::Requires(effects)) => self.flag_if_effectful(&effects, op, span),
+            Some(Operation::Handled(_)) | None => {}
         }
     }
 }
@@ -2705,9 +2746,29 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::WithHandler(with_handler) => {
-                // The body is left unwalked: this install answers for every
-                // operation it dispatches.
-                self.flag(Impurity::HandlerInstall, with_handler.span);
+                // The install discharges what its body dispatches, so the body
+                // walks under the grant. The handler expressions run outside it.
+                for binding in &with_handler.handlers {
+                    ast::walk_expr(self, &binding.handler);
+                }
+                let added: Vec<EffectRef> = with_handler
+                    .handlers
+                    .iter()
+                    .flat_map(|binding| {
+                        binding_granted_effects(
+                            self.sem,
+                            self.annotations,
+                            self.index,
+                            self.module_source,
+                            binding,
+                        )
+                    })
+                    .filter(|effect| self.granted.insert(effect.clone()))
+                    .collect();
+                ast::walk_block(self, &with_handler.body);
+                for effect in added {
+                    self.granted.shift_remove(&effect);
+                }
                 return;
             }
             _ => {}

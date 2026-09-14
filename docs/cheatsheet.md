@@ -171,9 +171,10 @@ fn example() {
 }
 ```
 
-An initializer must be pure: it runs before any handler is installed, so calling
-a function that declares an effect or dispatching an `interface` operation is a
-compile error. Installing a handler with `with … do` is rejected there too.
+An initializer must be pure: calling a function that declares an effect is a
+compile error, as is dispatching an operation no enclosing `with … do` handles.
+An initializer may install its own handler, which discharges what its body
+dispatches.
 
 ## Types
 
