@@ -30,7 +30,7 @@ fn watch(xs: &List<i32>) -> Watch with stores[xs] {
     return Watch { xs };
 }
 
-test "a let from a shared binding copies" {
+test "a let out of a place copies" {
     let mut h = Holder { xs: [1, 2] };
     let a = h.xs;
     let mut b = a;
@@ -40,12 +40,13 @@ test "a let from a shared binding copies" {
     assert b.len() == 3;
 }
 
-test "a struct literal built from a shared binding copies" {
+test "a struct literal out of a place copies" {
     let mut h = Holder { xs: [1, 2] };
     let a = h.xs;
     let mut w = Wrapper { inner: a };
     w.inner.push(3);
     assert h.xs.len() == 2;
+    assert a.len() == 2;
     assert w.inner.len() == 3;
 }
 

@@ -63,14 +63,6 @@ impl Place {
         }
     }
 
-    /// Whether this path names one location rather than a family of them. An
-    /// `Index` carries no subscript, so two equal paths under one may still be
-    /// different elements.
-    #[must_use]
-    pub fn names_one_location(&self) -> bool {
-        !self.selectors.contains(&Selector::Index)
-    }
-
     /// Whether every step this path takes is a field, so each `(owner, index)`
     /// along it is a key a caller can look a write up by. An `Index` or a
     /// `Variant` names no type of its own, and a `Field` past one answers for

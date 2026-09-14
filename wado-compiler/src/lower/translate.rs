@@ -347,10 +347,6 @@ struct FunctionTranslator<'a, 'p> {
     /// (WEP 2026-05-21 read-only-share): a read-only local bound from a
     /// projection whose storage is provably never mutated while it is live.
     share_eligible_locals: IndexSet<u32>,
-    /// The share-eligible locals whose source place was repointed, so the
-    /// binding holds the only reference to what the place gave up
-    /// ([`value_copy::last_use::Ownership::share_released`]).
-    share_released_locals: IndexSet<u32>,
     /// The root each reference local is taken over, so an immutable-root rule
     /// asks about the place that owns it rather than the reference.
     ref_targets: value_copy::last_use::RefTargets,
@@ -437,7 +433,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         };
         let move_eligible = ownership.move_eligible;
         let share_eligible_locals = ownership.share_eligible;
-        let share_released_locals = ownership.share_released;
         let moved_roots = if needs_copy_analysis {
             value_copy::last_use::compute_moved_roots(func, &move_eligible, func_moved_spans)
         } else {
@@ -469,7 +464,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_place_spans,
             hands_out_payload,
             share_eligible_locals,
-            share_released_locals,
             ref_targets,
             moved_roots,
             alias_components,
@@ -495,7 +489,6 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             move_eligible_place_spans: IndexSet::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
-            share_released_locals: IndexSet::default(),
             ref_targets: value_copy::last_use::RefTargets::default(),
             moved_roots: IndexSet::default(),
             alias_components: value_copy::last_use::AliasComponents::empty(),
@@ -721,9 +714,6 @@ impl FunctionTranslator<'_, '_> {
         if self.is_last_use_move(value) {
             return false;
         }
-        if self.reads_released_storage(value) {
-            return false;
-        }
         let oracle = value_copy::ownership::OwnedCalls::new(
             &self.base.value_copy.returns_owned,
             &self.base.value_copy.returns_self_projection,
@@ -755,18 +745,6 @@ impl FunctionTranslator<'_, '_> {
         }
         value_copy::analyze::source_root(value, &type_table, &self.ref_targets)
             .is_some_and(|root| !self.moved_roots.contains(&root))
-    }
-
-    /// Whether `value` reads a binding whose source place was repointed, so the
-    /// binding holds the only reference to what the place gave up: a new owner
-    /// minted out of it needs no copy. Asked at every wrap site, a match arm
-    /// binding included.
-    fn reads_released_storage(&self, value: &TirExpr) -> bool {
-        let value = value_copy::last_use::strip_casts(value);
-        matches!(
-            &value.kind,
-            TirExprKind::Local { index, .. } if self.share_released_locals.contains(index)
-        )
     }
 
     /// Whether `value` is a move rather than a copy: a whole-local read at its

@@ -15,11 +15,8 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 
-/// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, plus element types
-/// of `array_clone::<T>(...)` calls that codegen routes through the same helper.
-///
-/// Driven by the types the program names, never by the expressions it writes: a
-/// later pass mints temps but no new type, and `dce` drops an unused helper.
+/// Every `TypeId` the fold may wrap in `$value_copy$T(...)`, and the element
+/// types of the `array_clone::<T>(...)` calls codegen routes through it.
 pub fn collect_seed_types(project: &FlatPackage) -> IndexSet<TypeId> {
     let type_table = project.type_table.borrow();
     let mut walker = SeedWalker {

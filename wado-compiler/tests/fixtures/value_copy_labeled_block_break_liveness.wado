@@ -1,13 +1,17 @@
 // A `break LABEL` inside a labeled block resumes where that block ends. A walk
-// that cannot say where stops every local in the function from being final, so
-// a template string — one labeled block per interpolation — used to cost every
-// later argument a defensive copy.
+// that cannot say where stops every local in the function from being final, so a
+// template string — one labeled block per interpolation — used to cost every
+// argument the interpolation follows a defensive copy. `keeps` stores what it is
+// given, so that copy is owed unless `text`'s last use is seen as its last.
 
 use { println, Stdout } from "core:cli";
 
-fn unconfined(input: String) -> i32 {
-    let held = input.as_byte_slice();
-    return held.len();
+struct Keeper {
+    s: String,
+}
+
+fn keeps(input: String) -> Keeper {
+    return Keeper { s: input };
 }
 
 fn make() -> Result<String, i32> {
@@ -17,8 +21,8 @@ fn make() -> Result<String, i32> {
 export fn run() with Stdout {
     let produced = make();
     if let Ok(text) = produced {
-        let n = unconfined(text);
-        println(`${n}`);
+        let k = keeps(text);
+        println(`${k.s.len()}`);
     }
 }
 
@@ -26,6 +30,6 @@ __DATA__
 {
   "stdout": "7\n",
   "wir_scope": "/run",
-  "wir_expect:O0": ["n = \"value_copy_labeled_block_break_liveness.wado/unconfined\"(text)"],
+  "wir_expect:O0": ["k = \"value_copy_labeled_block_break_liveness.wado/keeps\"(text)"],
   "wir_not_expect:O0": ["$value_copy$"]
 }

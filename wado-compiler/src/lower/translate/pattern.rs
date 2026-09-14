@@ -640,7 +640,6 @@ impl<'a> PatternLowerer<'a> {
                 );
                 conditions.push(cond);
 
-                // Generate payload extraction for the arm body
                 if let Some(binding) = bindings.first() {
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -672,8 +671,6 @@ impl<'a> PatternLowerer<'a> {
                             ));
                         }
                         _ => {
-                            // For more complex payload patterns (e.g. tuple),
-                            // use lower_pattern_to_lets
                             self.lower_pattern_to_lets(
                                 binding,
                                 false,

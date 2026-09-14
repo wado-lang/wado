@@ -133,9 +133,6 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
-    /// The share-eligible locals holding the only reference to what a repointed
-    /// place gave up, so each hands that storage on. A share alone does not.
-    pub share_released: IndexSet<u32>,
 }
 
 /// Decide `func`'s moves and shares together, both being readings of the one
@@ -176,6 +173,7 @@ pub fn analyze_ownership(
         param_locals,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
+        alias_sites: Vec::new(),
         borrow_escaped: IndexMap::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
@@ -190,12 +188,12 @@ pub fn analyze_ownership(
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
+    a.resolve_alias_chains();
     a.resolve_pending_mut_aliases();
     a.propagate_escapes_to_referents(func, type_table);
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
-    // Move-eligible: an owned local that hands its storage on.
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
@@ -212,27 +210,12 @@ pub fn analyze_ownership(
     let place_move_bases: IndexSet<u32> = moved_places.iter().map(|(base, _, _)| *base).collect();
     let place_spans: IndexSet<Span> = moved_places.iter().map(|(_, _, span)| *span).collect();
 
-    let (share_eligible, released) = a.share_eligible(body, &place_move_bases);
-    // A released share owns what the place gave up, so it hands that storage on
-    // under a move's terms. A reference the source lent out outlives the rebind
-    // that freed it, so the source answers for that one thing — its own reads the
-    // rebind already put past this storage.
-    let share_released: IndexSet<u32> = released
-        .into_iter()
-        .filter(|idx| {
-            a.hands_on_storage(*idx)
-                && a.share_sources
-                    .get(idx)
-                    .is_some_and(|path| !a.borrow_escaped.contains_key(&path.root))
-        })
-        .collect();
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
             place_spans,
         },
-        share_eligible,
-        share_released,
+        share_eligible: a.share_eligible(body, &place_move_bases),
     }
 }
 
@@ -257,14 +240,6 @@ struct ShareInputs<'a> {
     place_move_bases: &'a IndexSet<u32>,
 }
 
-/// One binding's share decision. `released` travels down a chain of bindings;
-/// `eligible` is what the fold reads.
-#[derive(Clone, Copy, Default)]
-struct ShareVerdict {
-    eligible: bool,
-    released: bool,
-}
-
 /// Whether `m` can never change the value read at `read`. Establishes the
 /// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
@@ -282,10 +257,9 @@ fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
     disjoint(&m.path, read)
 }
 
-/// Whether `write` may name a place strictly inside the value `read` names:
-/// every selector `read` has, `write` may agree on, and `write` goes deeper. Two
-/// `Index` selectors carry no subscript, so this answers "may" and not "does" —
-/// it refuses a share, and nothing may grant one from it.
+/// Whether `write` may name a place strictly inside the value `read` names. Two
+/// `Index` selectors carry no subscript, so this answers "may", which is what
+/// refusing a share needs.
 fn write_may_reach_inside(write: &AccessPath, read: &AccessPath) -> bool {
     if write.selectors.len() <= read.selectors.len() {
         return false;
@@ -408,14 +382,9 @@ impl Analyzer<'_> {
             && !self.borrow_escaped.contains_key(&local)
     }
 
-    /// The read-only bindings that may alias the storage they were read out of,
-    /// and those of them whose source place was repointed afterwards. Every rule
-    /// below is stated in WEP 2026-05-21, _Sharing_.
-    fn share_eligible(
-        &self,
-        body: &TirBlock,
-        place_move_bases: &IndexSet<u32>,
-    ) -> (IndexSet<u32>, IndexSet<u32>) {
+    /// The read-only bindings that may alias the storage they were read out of.
+    /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
+    fn share_eligible(&self, body: &TirBlock, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
         let parents = self.alias_parents();
         let inputs = ShareInputs {
             at_write: self
@@ -433,20 +402,15 @@ impl Analyzer<'_> {
                 .collect(),
             place_move_bases,
         };
-        let mut decided: IndexMap<u32, ShareVerdict> = IndexMap::default();
+        let mut decided: IndexMap<u32, bool> = IndexMap::default();
         let mut deciding: IndexSet<u32> = IndexSet::default();
         for &local in self.share_sources.keys() {
             self.decide_share(local, &inputs, &mut decided, &mut deciding);
         }
-        let mut eligible: IndexSet<u32> = IndexSet::default();
-        let mut released: IndexSet<u32> = IndexSet::default();
-        for (local, verdict) in decided.into_iter().filter(|(_, v)| v.eligible) {
-            eligible.insert(local);
-            if verdict.released {
-                released.insert(local);
-            }
-        }
-        (eligible, released)
+        decided
+            .into_iter()
+            .filter_map(|(local, eligible)| eligible.then_some(local))
+            .collect()
     }
 
     /// One binding's verdict, memoized. Its root may itself be a binding, so a
@@ -455,14 +419,14 @@ impl Analyzer<'_> {
         &self,
         local: u32,
         inputs: &ShareInputs<'_>,
-        decided: &mut IndexMap<u32, ShareVerdict>,
+        decided: &mut IndexMap<u32, bool>,
         deciding: &mut IndexSet<u32>,
-    ) -> ShareVerdict {
+    ) -> bool {
         if let Some(&known) = decided.get(&local) {
             return known;
         }
         if !deciding.insert(local) {
-            return ShareVerdict::default();
+            return false;
         }
         let verdict = self.share_verdict(local, inputs, decided, deciding);
         deciding.swap_remove(&local);
@@ -474,49 +438,37 @@ impl Analyzer<'_> {
         &self,
         local: u32,
         inputs: &ShareInputs<'_>,
-        decided: &mut IndexMap<u32, ShareVerdict>,
+        decided: &mut IndexMap<u32, bool>,
         deciding: &mut IndexSet<u32>,
-    ) -> ShareVerdict {
+    ) -> bool {
         let Some(path) = self.share_sources.get(&local) else {
-            return ShareVerdict::default();
+            return false;
         };
-        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind
-        // is never itself a conflict. Every other mutation must be unreachable.
-        let mut released = false;
-        let mut share_safe = true;
-        for (m, r) in self.mutations.iter().zip(&inputs.at_write) {
-            // A release grants a new owner, so it must be the storage the
-            // binding read and not one that may be it: equal paths under an
-            // `Index` are two elements as readily as one.
-            let is_release = m.rebinds_place && m.path == *path && path.names_one_location();
-            if is_release && r.contains(&local) {
-                released = true;
-            }
-            if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
-                share_safe = false;
-            }
-        }
-        // A root that shares its own source owns nothing, so the rebind that
-        // freed the root freed this binding too.
-        let root = self.decide_share(path.root, inputs, decided, deciding);
-        let released = released || (root.eligible && root.released);
+        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
+        // the place is never itself a conflict. Every other mutation must be
+        // unreachable.
+        let share_safe = self
+            .mutations
+            .iter()
+            .zip(&inputs.at_write)
+            .all(|(m, r)| !r.contains(&local) || write_cannot_reach(m, path));
+        self.decide_share(path.root, inputs, decided, deciding);
         let root_given_away = inputs
             .consumed_reach
             .get(&path.root)
             .is_some_and(|reach| reach.contains(&local));
-        let moved_out = !released
-            && (self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local));
+        let moved_out =
+            self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
         // A borrowed source is written through whoever lent it, at a root the
         // scan above never looks at. A share skips the right-sizing a copy does,
         // so a binding whose own capacity is read keeps its copy.
-        let eligible = path.root != local
+        path.root != local
             && !path.through_borrow
             && !inputs.capacity_observed.contains(&local)
             && !moved_out
             && !self.is_mutated_root(local)
             && !root_given_away
-            && share_safe;
-        ShareVerdict { eligible, released }
+            && share_safe
     }
 
     /// The locals whose storage each local's value was read out of, so a write
@@ -764,6 +716,8 @@ struct Analyzer<'a> {
     param_locals: IndexSet<u32>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
+    /// Each binding, the root its value was read out of, and what is live there.
+    alias_sites: Vec<(u32, u32, IndexSet<u32>)>,
     /// Locals a reference outlives, by the fields it reaches. Such a local may
     /// be read through that reference after a move, so it stays copied.
     borrow_escaped: IndexMap<u32, FieldEscape>,
@@ -1027,13 +981,29 @@ impl Analyzer<'_> {
         self.walk_expr(expr, live, record);
     }
 
-    /// Record that `local` derives from `source`. Storage still live after the
-    /// binding is shared storage, and costs `local` its move.
+    /// Record that `local` derives from `source`, to be answered once the whole
+    /// chain each source root stands on is known.
     fn record_alias(&mut self, local: u32, source: &TirExpr, live: &IndexSet<u32>) {
-        if let Some(root) = alias_root(source)
-            && live.contains(&root)
-        {
-            self.aliases_live.insert(local);
+        if let Some(root) = alias_root(source) {
+            self.alias_sites.push((local, root, live.clone()));
+        }
+    }
+
+    /// Storage still readable after a binding is shared storage, and costs the
+    /// binding its move. A source root stands on its own chain — a match temp on
+    /// the place it was hoisted out of — so the whole chain answers, as it does
+    /// for a share.
+    fn resolve_alias_chains(&mut self) {
+        let parents = self.alias_parents();
+        for (local, root, live) in std::mem::take(&mut self.alias_sites) {
+            let mut source: IndexSet<u32> = IndexSet::default();
+            source.insert(root);
+            if readable_storage(&parents, &source)
+                .iter()
+                .any(|storage| live.contains(storage))
+            {
+                self.aliases_live.insert(local);
+            }
         }
     }
 
@@ -1466,12 +1436,12 @@ impl Analyzer<'_> {
                 self.walk_expr(guard, &mut arm_live, record);
             }
             // The binding holds its scrutinee's storage under a second name, so
-            // it aliases storage something still reads when a scrutinee local is
-            // live anywhere the binding is: after the match, or at a read the arm
-            // makes for itself.
-            if record && scrut_root.is_some_and(|r| arm_live.contains(&r)) {
+            // it aliases storage something still reads when the scrutinee's chain
+            // is live anywhere the binding is: after the match, or at a read the
+            // arm makes for itself.
+            if record && let Some(root) = scrut_root {
                 for b in binds {
-                    self.aliases_live.insert(*b);
+                    self.alias_sites.push((*b, root, arm_live.clone()));
                 }
             }
             self.kill_pattern(&arm.pattern, &mut arm_live);

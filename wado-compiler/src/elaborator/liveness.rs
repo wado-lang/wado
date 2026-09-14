@@ -573,9 +573,8 @@ impl LastUseAnalyzer<'_> {
             ast::Stmt::Loop(s) => self.walk_loop(&s.body, live, record),
             ast::Stmt::Match(m) => self.walk_match(m, live, record),
             ast::Stmt::Break(b) => {
-                // Reset to the target's exit set (the fall-through below a break
-                // is unreachable). No entry for it → keep every eligible local
-                // live, the safe over-approximation.
+                // The fall-through below a break is unreachable. No entry for the
+                // target → every eligible local stays live, the safe answer.
                 *live = self.exit_live(b.label.as_deref());
                 if let Some(value) = &b.value {
                     self.walk_expr(value, live, record);

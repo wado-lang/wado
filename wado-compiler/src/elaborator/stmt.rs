@@ -973,13 +973,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
     /// imports. A re-export is such a reach, so this asks the resolver rather
     /// than comparing `def`'s own module.
-    fn namespace_reaches_type(
-        &mut self,
-        alias: &str,
-        site: AstId,
-        span: Span,
-        def: DefId,
-    ) -> bool {
+    fn namespace_reaches_type(&mut self, alias: &str, site: AstId, span: Span, def: DefId) -> bool {
         if self.namespace_alias_source(alias, site).is_none() {
             return false;
         }

@@ -384,16 +384,8 @@ unobserved.
 
 Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
 a reference already taken out of `p.f` keeps what it has, and only a write
-_inside_ that storage disturbs it. And a place repointed after a binding read it
-hands that binding the only reference to what the place held — the `take` /
-`drain` / `snapshot` idiom — so the binding may leave the function though it was
-read out of a place the caller still owns. The release travels down a chain of
-bindings. A binding read out of one that shares its own source owns nothing
-either, so the rebind that freed the first freed both.
-
-A release grants, so it is read off the place the binding read and no other. A
-path carries no subscript: `xs[i] = v` names one element to the source and every
-element to a path comparison, so it releases nothing.
+_inside_ that storage disturbs it. A repoint is therefore never a conflict for a
+binding that read the place: the binding keeps its share across it.
 
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read out
@@ -407,11 +399,16 @@ it a share on move-eligibility alone costs a copy that defends nothing.
 
 A share licenses the binding and nothing built out of it. `let mut b = a` and
 `Wrapper { inner: a }` mint a second owner, which outlives the binding and may be
-written through, so each owes its copy though `a` shares. Only a released share is
-exempt, and only on a move's terms: every read of the binding final, and no other
-name for the storage still read. The release travelling down a chain frees each
-binding in it to leave the function, which is not the same as holding the only
-reference — `let c = a;` under a release still leaves `a` readable.
+written through, so each owes its copy though `a` shares. Only a move exempts
+them, and a move is proved of the binding itself, never inherited from what the
+binding was read out of.
+
+A source root stands on its own chain, so the whole chain answers whether a
+binding aliases storage something still reads. A match over a writable place is
+hoisted into a temp that dies at the match, and reading that temp alone calls the
+holder dead while it is still live — which moves an arm binding out from under
+it. The share side has always closed its live set over the chain; the move side
+reads the same closure.
 
 A `match` over a writable place is hoisted into a temp, and the fold decides that
 temp's copy for every binding under it. One wrap site answers for the whole arm:
@@ -476,16 +473,21 @@ types a program declares, since no expression rewrite introduces a type the
 program did not already name. Over-synthesis costs nothing — `dce` removes an
 unused helper — while a miss leaves the fold no helper to call.
 
-### Known gap: a release through an ancestor place
+### Known gap: the release that lets a binding leave the function
 
-`s = fresh()` gives up everything `s` held, `s.inner.tags` among it, so a binding
-read out of any depth under `s` holds the only reference to what it gave up. Only
-a repoint of the very place the binding read counts as a release, so such a
-binding keeps its share and a new owner minted from it still pays a copy.
+`let v = self.held; self.held = null;` gives `v` what the place held, so in
+principle `v` may be handed to a new owner with no copy — the `take` / `drain` /
+`snapshot` idiom. The compiler does not do this, and the predicate that once did
+was removed for being no proof: a repoint says nothing about _when_ it runs (one
+under an `if` that never executes licensed the elision) and nothing about a
+_second_ binding read out of the same place (both were licensed, so a write
+through one was observed through the other). `value_copy_release_is_not_a_proof`
+and `value_copy_new_owner_needs_a_proof` are those two programs.
 
-Closing it means recognizing a repoint whose path is a prefix of the one read,
-under the same rule that a subscript releases nothing. What it buys is the copies
-at those wrap sites, which nothing has measured.
+Closing it needs both halves of what was missing: the repoint must dominate every
+site that hands the binding on, and the place must have exactly one binding read
+out of it. The backward walk records a live set per write and no position, so
+domination is not a question it can answer today.
 
 ### Known gap: a borrowed projection behind a variant
 
@@ -645,11 +647,12 @@ Verified against the tree.
       source's later writes.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
-- [x] A place repointed after a binding read it releases that binding, and the
-      release travels down a chain of bindings. Pattern lowering runs ahead of
-      this walk and hoists a scrutinee into a temp, so an arm binding reads the
-      temp rather than the place: without the chain, `if let Some(v) = self.f {
-      self.f = null; return Ok(v); }` deep-copies what it just took.
+- [x] A repoint of a place costs a binding that read it nothing: the binding
+      keeps its share across it. Handing that binding on to a new owner is a
+      separate claim, and the gap above says what proving it would take.
+- [x] Whether a binding aliases storage something still reads is asked of the
+      whole chain its source stands on, so a match temp standing between the
+      binding and the holder does not read as the holder's death.
 - [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
       counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
 - [x] A closure costs its captures their move, their share and their
@@ -677,95 +680,40 @@ Verified against the tree.
       compute last-use liveness. Each kept a stack of exit sets that only loops
       pushed, so every such break fell back to _every_ local live. A template
       string lowers to a labeled block, so one interpolation anywhere in a
-      function retired its whole last-use set: 756 of the corpus's 4208 copies
-      were that one fallback in the TIR walk, most of them a whole-array copy of
-      a `String` handed to a callee that keeps it. The same fallback in the
-      source-level walk changes no fixture, templates not being labeled blocks
-      yet where it runs, and is fixed with it rather than left to rot.
+      function retired its whole last-use set — most often as a whole-array copy
+      of a `String` handed to a callee that keeps it. The source-level walk had
+      the same fallback. No fixture changes with it fixed, a template not being a
+      labeled block where that walk runs, and it is fixed here rather than left.
 - [x] A caller takes the whole `&mut` handle as written when the callee names a
       write it cannot re-root there. Re-rooting kept only the writes whose owner
       was the handle's own type and dropped the rest, so a callee writing through
       a variant payload reported nothing to its caller at all. Harmless only
       while a defensive copy stood in the way; the item above removed that copy
       and `value_copy_nested_write_through_payload` miscompiled.
-- [x] A wrap site skips its copy for a released share, not for any share. The two
-      were one set, so a second owner minted out of a plain share — `let mut b = a`,
-      `Wrapper { inner: a }` — aliased the place the binding was read out of and a
-      write through it landed there. The release is the licence, and it carries a
-      move's terms with it: every read of the binding final, and no other name for
-      the storage still read. The second half is what a chain needs, the release
-      travelling down one without making its root unreadable.
+- [x] A wrap site skips its copy for a move, never for a share. The two were one
+      set, so a second owner minted out of a share — `let mut b = a`,
+      `Wrapper { inner: a }` — aliased the place the binding was read out of, and a
+      write through it landed there.
 - [x] An arm binding aliases live storage when the scrutinee is live where _that
       arm_ reads it, decided from the live set the arm's own walk produced. One set
       merged over every arm made a sibling arm's read refuse this arm's share.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
-      depending on the temp. The temp exists for `labeled_block_fusion`, and
-      putting the copy on it makes which syntactic position a `match` sits in
-      part of whether the binding is defended.
+      depending on the temp pattern lowering hoists the scrutinee into. Which
+      syntactic position a `match` sits in is part of whether the binding is
+      defended, which it should not be. Finishing means the binding carries its
+      own path and the fold wraps it, with the corpus no worse off.
 
-      Two ways of giving the binding its own answer were written and measured
-      over the golden corpus. Both cost copies and neither saved any, so neither
-      is in the tree.
+      What blocks it is a write reached through a variant payload: `modref` keys
+      it by the payload's type while the call site keys by the handle's, so
+      giving the binding the deeper path files the write where no caller looks.
+      Two pieces close that — `Selector::Variant` carrying its owner, so a
+      variant step is a key as a field is, and `modref` speaking addressable
+      steps rather than fields, the vocabulary `disjoint` already uses.
 
-      Rewriting each binding into a `Let` over a projection of the scrutinee —
-      the form `let`-destructure already takes — costs 5, because it adds a wrap
-      site where the arm had none. `match self.p { P::A(xs) => { let ys = xs; …`
-      pays one copy today: the temp shares `self.p`, the binding names the temp's
-      payload, and `ys` takes the copy. Given its own `Let`, `xs` is refused a
-      share — `let ys = xs` consumes it, and a binding the fold moves out of
-      cannot share — so `xs` copies, and `ys` copies again because nothing tells
-      the second decision that the first made `xs` private.
-
-      Deepening the path instead of giving it a name adds no wrap site, and costs
-      9. `place::bind_pattern`'s variant arm pushes `Selector::Variant`, so the
-      binding names the payload inside the value the pattern tested, as a
-      `VariantPayload` read of it does; the release deepens with it, granting
-      itself to every read at or inside the rebound place rather than to the
-      rebound path alone. The e2e suite is green on it, and by count every site it
-      changes is a loss, all of them in the `&mut`-variant shapes
-      (`mut_ref_variant_element`, `ref_field_ref_variant`).
-
-      Those 9 are not the deepening's own cost. Traced, the two scrutinee temps in
-      `mut_ref_variant_element::run` go from share-eligible to not, and the one
-      input that changed is the arm binding's path depth inside the callee.
-      `rename(e: &mut Element)` writes `r.name` through the payload its arm
-      matched. With the binding at the scrutinee's own path, that write resolves to
-      `[Field { owner: Named, index: name }]` rooted at `e` — a chain that leaves
-      out the `Element` → `Named` step, because the binding is standing in for the
-      value it was matched out of. `modref` files the write under `Named`, and
-      `record_call_mutation` re-roots only the steps whose owner is the handle's
-      own type, so a call site holding `&mut Element` asks `steps_of(Element)`,
-      finds nothing, and records no mutation at all. Deepen the binding and the
-      chain carries the `Element` step, the write is filed where the call site
-      looks for it, and the share is refused.
-
-      So the 9 are the bill for a write the tree does not file. What blocks this
-      item is not where the decision is made: it is that a write reached through a
-      variant payload is keyed by the payload's type while its call site keys by
-      the handle's. Two pieces would close that — `Selector::Variant` carrying its
-      owner, so a variant step is a key the way a field is, and `modref` speaking
-      addressable steps rather than fields, which is the vocabulary `disjoint`
-      already uses for these same three steps. Both were written, and they leave
-      the count at 4202: filing the write correctly is what costs the 9.
-
-      The refusal was itself too strong in `run`, where the call precedes both
-      temps and the write is live across neither. What said otherwise was the
-      labeled-block liveness defect fixed below: the asserts' template blocks made
-      every local live at every point, so the temps read as live at the write. The
-      9 need re-measuring on the fixed liveness before this item is judged again.
-
-      Dropping the write was a hole, not a precision loss: with liveness fixed and
-      the defensive copy gone, `value_copy_nested_write_through_payload` miscompiled
-      — a value read out of a variant before the call saw the callee's write. A
-      caller now takes the whole handle as written whenever the callee names a write
-      it cannot re-root there, which is what `Writes` can say in its own vocabulary.
-      Recovering the precision is what the two pieces above are for.
-
-      An or-pattern is a trap for either attempt: its alternatives bind one local
-      between them but project different cases, so the local names only what they
-      agree on — the value the whole pattern matched. A path reading it as one
-      alternative's payload lets a write to another's be called disjoint.
-      `pattern_temp_no_alias` pins it.
+      An or-pattern is the trap for any attempt: its alternatives bind one local
+      but project different cases, so the local names only what they agree on —
+      the value the whole pattern matched. Reading it as one alternative's
+      payload lets a write to another's be called disjoint.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the
@@ -819,26 +767,26 @@ Verified against the tree.
       `extract` the verdict "projects `v`".
       It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
       `&fresh_local` is never owned, and the caller that would cash the verdict
-      asks exactly that question about its argument. Measured: the resolution on
-      its own leaves all 1768 WIR goldens byte-identical, and a case written to
-      exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
-      called with a fresh `Holder` — is byte-identical at `-O0` too.
+      asks exactly that question about its argument. The resolution on its own
+      leaves every WIR golden byte-identical, and a case written to exercise it —
+      `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
+      `Holder` — is byte-identical at `-O0` too.
 
-Measured and not worth closing:
+### Known gap: two imprecisions that cost nothing measured
 
-- The borrow a pattern-destructured field's path is marked with, for want of a
-  type saying whether that field borrows. It refuses those paths a share
-  outright, and answering it honestly buys nothing: every one of the 1768 WIR
-  goldens is byte-identical with the mark removed.
+A pattern-destructured field's path is marked as borrowing, because the pattern
+carries no type saying whether that field does. The mark refuses those paths a
+share outright. Closing it means carrying the field's type into the pattern;
+every WIR golden is byte-identical with the mark removed, so nothing measured
+pays for it.
 
-- Reading the wrap the fold has just decided as the freshness it creates. A copy
-  hands its target storage nothing else reaches, and ownedness is computed from a
-  local's source before any wrap site is chosen, so the fold never learns it. No
-  program reaches the imprecision: for a second read to pay a copy its move must
-  be refused, and a copied local aliases nothing, so only a read that is not the
-  last one refuses — and there the second copy is a second live object, which is
-  needed. It is what makes an _added_ wrap site cost two copies, which is why the
-  roadmap item above deepens a path instead of naming one.
+The fold does not read the wrap it has just decided as the freshness that wrap
+creates. A copy hands its target storage nothing else reaches, but ownedness is
+computed from a local's source before any wrap site is chosen. Closing it means
+feeding the fold's own decisions back into freshness. No program reaches the
+imprecision: for a second read to pay a copy its move must be refused, and a
+copied local aliases nothing, so only a read that is not the last one refuses —
+and there the second copy is a second live object, which is needed.
 
 ## Deferred: the `move` and `unique` keywords
 

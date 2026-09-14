@@ -1,7 +1,8 @@
-// WEP 2026-05-21 (Sharing): a place repointed after a binding read it hands that
-// binding the only reference to what the place held, so the binding needs no
-// defensive copy. The rule is about the storage, not about how the binding was
-// spelled, so a `match` arm's binding reads it exactly as a `let` does.
+// The `take` idiom pays its copy, in both spellings. A repoint of the place does
+// give the binding what the place held, but the compiler has no proof of it — no
+// ordering, and no count of the bindings read out of that place — so handing the
+// binding on copies. WEP 2026-05-21 states this as a known gap; these copies are
+// what closing it would remove, and what an unsound licence would remove early.
 
 struct Slot {
     held: Option<String>,
@@ -40,6 +41,6 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O0": ["$value_copy$core:prelude/string.wado/String\"("],
-    "wir_not_expect:O2": ["array_clone"]
+    "wir_expect:O0": ["$value_copy$core:prelude/string.wado/String\"("],
+    "wir_expect:O2": ["array_clone"]
 }

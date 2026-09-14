@@ -314,12 +314,43 @@ test "an or-pattern binding does not alias the payload of a &mut parameter" {
     assert or_arm_len(&mut q) == 2;
 }
 
+fn bump_q(slot: &mut W) {
+    if let W::Q(ys) = slot {
+        ys.push(7);
+    }
+}
+
+// A write *inside* one alternative's payload, which is what a path reading the
+// binding as that payload would call disjoint from the other's.
+fn or_arm_len_across_payload_write(slot: &mut W) -> i32 {
+    match *slot {
+        W::P(xs) | W::Q(xs) => {
+            bump_q(slot);
+            return xs.len();
+        }
+    }
+}
+
+test "an or-pattern binding does not alias either alternative's payload" {
+    let mut q = W::Q([1, 2]);
+    assert or_arm_len_across_payload_write(&mut q) == 2;
+    let mut p = W::P([1]);
+    assert or_arm_len_across_payload_write(&mut p) == 1;
+}
+
 test "an or-pattern binding does not alias a mut local" {
     let mut w = W::Q([1]);
     match w {
         W::P(xs) | W::Q(xs) => {
             w = W::P([9, 9]);
             assert xs.len() == 1;
+        }
+    }
+    let mut u = W::P([1, 2, 3]);
+    match u {
+        W::P(xs) | W::Q(xs) => {
+            u = W::Q([9]);
+            assert xs.len() == 3;
         }
     }
 }

@@ -10055,12 +10055,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         scrutinee_type: TypeId,
         case_name: &str,
     ) -> TirPattern {
-        // Peel references (match ergonomics): `if let None = rn` with
-        // `rn: &Option<T>` matches a nullary case through the reference.
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let (case_index, payload_type) = self.variant_case_index_and_payload(peeled, case_name);
+        // The head the cases come from: a reference peeled for match ergonomics
+        // (`if let None = rn`, `rn: &Option<T>`), and a newtype for its base's
+        // cases, as `scrutinee_has_variant_case` already asks.
+        let head = self.scrutinee_structure_head(scrutinee_type);
+        let (case_index, payload_type) = self.variant_case_index_and_payload(head, case_name);
         TirPattern::Variant {
-            enum_type: peeled,
+            enum_type: head,
             variant_name: case_name.to_string(),
             case_index: resolved_case_index(case_index, case_name),
             bindings: vec![],
@@ -10498,13 +10499,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A variant case's discriminant and its payload type, substituted with
-    /// `variant_type`'s type args. `None` where the type declares no such case,
-    /// which leaves the payload `UNKNOWN` with it.
-    ///
-    /// The one place a case name becomes a discriminant: every construct and
-    /// pattern reify builds takes the index from here, so nothing downstream
-    /// re-derives it from the name (WEP 2026-08-12).
+    /// A variant case's discriminant and payload type, substituted with
+    /// `variant_type`'s type args. The one place a name becomes an index
+    /// (WEP 2026-08-12); `None` where the type declares no such case.
     fn variant_case_index_and_payload(
         &self,
         variant_type: TypeId,
