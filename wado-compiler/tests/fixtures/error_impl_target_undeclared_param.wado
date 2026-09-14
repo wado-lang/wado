@@ -1,0 +1,27 @@
+// A name in the impl target is either a parameter the block declares or a type
+// the module does. One that is neither names nothing, and is reported at the
+// spelling rather than left to bind itself a slot two passes number differently.
+
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+impl<A> Mark for Pair<A, Undeclared> {
+    fn tag() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {
+    assert Pair::<i32, i32>::tag() == 1;
+}
+
+__DATA__
+{
+    "compile_error": "unknown type 'Undeclared' in the impl target"
+}

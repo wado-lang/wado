@@ -224,34 +224,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     .extend(param.bounds.clone());
             }
         }
-
-        // Unwrap reference for ref-type impls (impl Trait for &Container<T>)
-        let impl_inner_ty = match &impl_block.ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        if let ast::Type::Generic(generic) = impl_inner_ty {
-            for (i, arg) in generic.args.iter().enumerate() {
-                if let ast::Type::Named(named) = arg {
-                    let name = &named.name;
-                    if !self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                        && !self
-                            .tysys
-                            .is_known_type_name_in(&self.current_module_source, name)
-                    {
-                        let type_id = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(name.clone(), i as u32);
-                        self.annotate_ctx.trait_ctx.type_params.insert(
-                            name.clone(),
-                            scope::BinderInScope::undeclared(i as u32, type_id),
-                        );
-                    }
-                }
-            }
-        }
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

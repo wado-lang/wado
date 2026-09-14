@@ -15,7 +15,6 @@ use crate::elaborator::item::{
     register_method_compiler_item, register_trait_compiler_item,
     register_variant_case_compiler_item, register_variant_compiler_item,
 };
-use crate::elaborator::scope::param_decl;
 use crate::name::{FqTypeName, MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -362,42 +361,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .trait_ctx
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
-                    }
-                }
-
-                // Also collect type params from generic type: impl List<T> {...}
-                // The type args in List<T> are type parameters.
-                // For ref types (impl Trait for &Container<T>), unwrap the reference first.
-                let impl_inner_ty = match &impl_block.ty {
-                    ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-                    other => other,
-                };
-                if let ast::Type::Generic(generic) = impl_inner_ty {
-                    let offset = impl_block.type_params.len();
-                    for (i, arg) in generic.args.iter().enumerate() {
-                        if let ast::Type::Named(named) = arg {
-                            let name = &named.name;
-                            if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                                && !scope
-                                    .tysys
-                                    .is_known_type_name_in(&scope.current_module_source, name)
-                            {
-                                let index = (offset + i) as u32;
-                                let type_id = scope
-                                    .tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_type_param(name.clone(), index);
-                                scope.annotate_ctx.trait_ctx.type_params.insert(
-                                    name.clone(),
-                                    BinderInScope {
-                                        index,
-                                        type_id,
-                                        decl: param_decl(&impl_block.type_params, name),
-                                    },
-                                );
-                            }
-                        }
                     }
                 }
 
