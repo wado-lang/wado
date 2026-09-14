@@ -1021,7 +1021,9 @@ fn panic_message(payload: &dyn std::any::Any) -> String {
 struct Eligible {
     name: String,
     sites: usize,
-    shapes: Vec<&'static str>,
+    /// How many sites each surviving shape reached. A shape that lost a payload
+    /// the others kept reaches fewer than `sites`, which is the union.
+    shapes: IndexMap<&'static str, usize>,
     /// What the combinations that fell out were refused for. The source is a
     /// subject under the rest, so a drop is coverage lost, not an exclusion.
     dropped: Vec<String>,
@@ -1242,19 +1244,27 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         }
     }
 
-    let covered = all
-        .iter()
-        .filter(|site| {
-            alive
-                .iter()
-                .any(|(_, payload)| !(payload.render)(site).is_empty())
-        })
-        .count();
-    let shapes: IndexSet<&'static str> = alive.iter().map(|(shape, _)| shape.keyword).collect();
+    let covered = |keep: &dyn Fn(&Shape) -> bool| {
+        all.iter()
+            .filter(|site| {
+                alive
+                    .iter()
+                    .any(|(shape, payload)| keep(shape) && !(payload.render)(site).is_empty())
+            })
+            .count()
+    };
     Ok(Eligible {
         name,
-        sites: covered,
-        shapes: shapes.into_iter().collect(),
+        sites: covered(&|_| true),
+        shapes: alive
+            .iter()
+            .map(|(shape, _)| {
+                (
+                    shape.keyword,
+                    covered(&|other: &Shape| other.keyword == shape.keyword),
+                )
+            })
+            .collect(),
         dropped: refusals.into_lines(),
     })
 }
@@ -1401,7 +1411,10 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     Ok(Eligible {
         name,
         sites: sites.len(),
-        shapes: alive.iter().map(|shape| shape.keyword).collect(),
+        shapes: alive
+            .iter()
+            .map(|shape| (shape.keyword, sites.len()))
+            .collect(),
         dropped: refusals.into_lines(),
     })
 }
@@ -1728,7 +1741,12 @@ fn write_corpus(results: &Results) {
             "{} {} {}\n",
             eligible.name,
             eligible.sites,
-            eligible.shapes.join(",")
+            eligible
+                .shapes
+                .keys()
+                .copied()
+                .collect::<Vec<_>>()
+                .join(",")
         ));
     }
     std::fs::write(dir.join("corpus.txt"), &corpus).expect("cannot write corpus.txt");
@@ -1819,16 +1837,16 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
 fn per_shape(results: &Results) -> String {
     let mut out = String::from("\n=== guard shapes ===\n");
     for shape in &SHAPES {
-        let eligible: Vec<&Eligible> = results
+        let reached: Vec<usize> = results
             .eligible
             .iter()
-            .filter(|e| e.shapes.contains(&shape.keyword))
+            .filter_map(|e| e.shapes.get(shape.keyword).copied())
             .collect();
-        let sites: usize = eligible.iter().map(|e| e.sites).sum();
         out.push_str(&format!(
-            "{}: {} source(s) ({sites} sites)\n",
+            "{}: {} source(s) ({} sites)\n",
             shape.keyword,
-            eligible.len(),
+            reached.len(),
+            reached.iter().sum::<usize>(),
         ));
     }
     out
@@ -1942,6 +1960,24 @@ fn a_corpus_line_names_the_shapes_it_was_calibrated_for() {
     let source = Source::from_name("example/fizzbuzz.wado").with_shapes("while");
     let shapes: Vec<&str> = source.shapes.iter().map(|s| s.keyword).collect();
     assert_eq!(shapes, vec!["while"]);
+}
+
+/// A shape that lost a payload the other kept reaches fewer sites, and the
+/// report must not credit it with the union.
+#[test]
+fn the_shape_report_counts_each_shape_s_own_sites() {
+    let results = Results {
+        eligible: vec![Eligible {
+            name: "one.wado".to_string(),
+            sites: 10,
+            shapes: [("if", 10), ("while", 4)].into_iter().collect(),
+            dropped: Vec::new(),
+        }],
+        ..Results::default()
+    };
+    let report = per_shape(&results);
+    assert!(report.contains("if: 1 source(s) (10 sites)"), "{report}");
+    assert!(report.contains("while: 1 source(s) (4 sites)"), "{report}");
 }
 
 #[test]
