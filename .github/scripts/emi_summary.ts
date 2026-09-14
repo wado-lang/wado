@@ -8,11 +8,16 @@ import { join } from 'node:path';
 const root = process.argv[2] ?? 'shards';
 const dirs = existsSync(root) ? readdirSync(root).sort() : [];
 
+// The one section the summary leads with: findings are why a run fails.
+const FINDINGS = 'findings';
+
 type Stage = {
   total: { scanned: number; eligible: number; sites: number; excluded: number; findings: number };
   buckets: Map<string, number>;
   shapes: Map<string, { sources: number; sites: number }>;
-  findings: string[];
+  // Every other section's lines, concatenated across shards, so a section the
+  // report gains reaches the summary without being named here.
+  sections: Map<string, string[]>;
   missing: string[];
 };
 
@@ -26,7 +31,7 @@ function read(file: string): Stage {
     total: { scanned: 0, eligible: 0, sites: 0, excluded: 0, findings: 0 },
     buckets: new Map(),
     shapes: new Map(),
-    findings: [],
+    sections: new Map(),
     missing: [],
   };
   for (const dir of dirs) {
@@ -65,8 +70,10 @@ function read(file: string): Stage {
         }
         continue;
       }
-      if (section === 'findings' && line.trim() !== '') {
-        stage.findings.push(line);
+      if (section !== '' && line.trim() !== '') {
+        const lines = stage.sections.get(section) ?? [];
+        lines.push(line);
+        stage.sections.set(section, lines);
       }
     }
   }
@@ -84,6 +91,12 @@ function table(title: string, columns: string[], rows: string[][]): string[] {
     ...rows.map((row) => `| ${row.join(' | ')} |`),
     '',
   ];
+}
+
+// A section the summary has no table for, kept verbatim under its own heading.
+function verbatim(name: string, lines: string[]): string[] {
+  const heading = name.charAt(0).toUpperCase() + name.slice(1);
+  return [`### ${heading}`, '', '```', ...lines, '```', ''];
 }
 
 function render(title: string, stage: Stage): string[] {
@@ -107,8 +120,9 @@ function render(title: string, stage: Stage): string[] {
     ),
   );
 
-  if (stage.findings.length > 0) {
-    out.push('### Findings', '', '```', ...stage.findings, '```', '');
+  const findings = stage.sections.get(FINDINGS);
+  if (findings) {
+    out.push(...verbatim(FINDINGS, findings));
   }
   out.push(
     ...table(
@@ -122,6 +136,11 @@ function render(title: string, stage: Stage): string[] {
       [...stage.buckets].sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, `${n}`]),
     ),
   );
+  for (const [name, lines] of stage.sections) {
+    if (name !== FINDINGS) {
+      out.push(...verbatim(name, lines));
+    }
+  }
   if (stage.missing.length > 0) {
     out.push('### Shards that reported nothing', '', ...stage.missing.map((d) => `- ${d}`), '');
   }

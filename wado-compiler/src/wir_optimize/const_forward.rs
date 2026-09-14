@@ -557,10 +557,11 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
 }
 
 /// The locals whose own object `instr` puts in a container: a struct field, an
-/// array element or a global, each reachable by whatever reaches the container.
+/// array element, a table slot or a global, each reachable by whatever reaches
+/// the container.
 //
-// A store is a point in the flow, not a property of the local, so the facts it
-// held before its object went in still hold there.
+// Every instruction putting a value somewhere that outlives the statement
+// belongs here. A store is a point in the flow, so earlier facts still hold.
 fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::StructNew { fields, .. } => {
@@ -576,6 +577,8 @@ fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
         WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, names),
         WirInstr::StructSet { value, .. }
         | WirInstr::ArraySet { value, .. }
+        | WirInstr::ArrayFill { value, .. }
+        | WirInstr::TableSet { value, .. }
         | WirInstr::GlobalSet { value, .. } => collect_reference_locals(value, names),
         _ => {}
     }
@@ -1368,6 +1371,34 @@ mod tests {
             set_value(&body[3]),
             WirInstr::StructGet { .. },
             "the call reaches `b`'s object through the global and may mutate `b.f`"
+        );
+    }
+
+    // `array.fill` stores one object into every slot it covers, so the array
+    // holds it as surely as `array.set` would.
+    #[test]
+    fn an_array_fill_puts_the_local_s_object_in_the_array() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            WirInstr::ArrayFill {
+                type_id: outer_type_id(),
+                array: Box::new(struct_local_get("xs")),
+                offset: Box::new(WirInstr::I32Const(0)),
+                value: Box::new(struct_local_get("b")),
+                len: Box::new(WirInstr::I32Const(4)),
+            },
+            mutate_call(struct_local_get("xs")),
+            local_set("out", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[3]),
+            WirInstr::StructGet { .. },
+            "the call reaches `b`'s object through the filled array"
         );
     }
 
