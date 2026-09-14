@@ -279,6 +279,23 @@ fn collect_aliased_in_instr(
                 aliased.insert(name.clone());
             }
         }
+        // A container element takes the local's own object, so everything that
+        // reaches the container reaches it. A call is no part of this: the
+        // store outlives the call the container may have been built inside.
+        WirInstr::StructNew { fields, .. } => {
+            for field in fields {
+                collect_reference_locals(field, aliased);
+            }
+        }
+        WirInstr::ArrayNewFixed { elements, .. } => {
+            for element in elements {
+                collect_reference_locals(element, aliased);
+            }
+        }
+        WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, aliased),
+        WirInstr::StructSet { value, .. } | WirInstr::ArraySet { value, .. } => {
+            collect_reference_locals(value, aliased);
+        }
         _ => {}
     }
     // Recurse into children, propagating the suppression context.
@@ -564,12 +581,13 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
-/// The locals a call can reach through one argument: those whose own object it
-/// hands over, wherever in the argument the read of them sits.
+/// The locals whose own object `instr` hands over, wherever in it the read of
+/// them sits.
 //
-// A load hands over the field's pointee, not the base, and no fact recorded for
-// a non-`aliased` local is reachable from that pointee. A nested call inside the
-// argument is its own channel, reached by the walk that calls this.
+// A load hands over the field's pointee, not the base. Naming that pointee takes
+// a local whose object is in the container, and `collect_aliased_in_instr` marks
+// such a local `aliased`, which leaves it no fact to falsify. A nested call
+// inside `instr` is its own channel, reached by the caller's walk.
 fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::LocalGet { name, result_ty } => {
@@ -1048,20 +1066,43 @@ mod tests {
     }
 
     fn test_types() -> Vec<WirTypeDef> {
-        vec![WirTypeDef::Struct(WirStructType {
-            name: WirName {
-                fq: "test//S".to_string(),
-            },
-            fields: vec![WirField {
-                name: "f".to_string(),
-                ty: WirType::I32,
-                mutable: true,
-            }],
-            meta: WirMeta::default(),
-            generic_origin: None,
-            newtype_origin: None,
-            supertype: None,
-        })]
+        vec![
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    fq: "test//S".to_string(),
+                },
+                fields: vec![WirField {
+                    name: "f".to_string(),
+                    ty: WirType::I32,
+                    mutable: true,
+                }],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    fq: "test//Outer".to_string(),
+                },
+                fields: vec![WirField {
+                    name: "child".to_string(),
+                    ty: WirType::Ref {
+                        type_id: test_type_id(),
+                        nullable: false,
+                    },
+                    mutable: true,
+                }],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+        ]
+    }
+
+    fn outer_type_id() -> WirTypeId {
+        WirTypeId::new(1, "test//Outer".into())
     }
 
     fn struct_new(field_value: WirInstr) -> WirInstr {
@@ -1241,6 +1282,57 @@ mod tests {
     // must invalidate that local's facts. Runs with an empty aliased set,
     // modelling a callee without `stores` — the merge invalidation alone
     // must protect the read.
+    #[test]
+    fn a_field_that_holds_a_local_s_object_is_a_channel_to_it() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            local_set(
+                "a",
+                WirInstr::StructNew {
+                    type_id: outer_type_id(),
+                    fields: vec![struct_local_get("b")],
+                },
+            ),
+            local_set(
+                "out",
+                WirInstr::I32Add(
+                    Box::new(WirInstr::Call {
+                        func_id: WirFuncId::new(0, "test//mutate".into()),
+                        args: vec![WirInstr::StructGet {
+                            type_id: outer_type_id(),
+                            field_name: "child".to_string(),
+                            expr: Box::new(WirInstr::LocalGet {
+                                name: "a".to_string(),
+                                result_ty: WirType::Ref {
+                                    type_id: outer_type_id(),
+                                    nullable: false,
+                                },
+                            }),
+                            result_ty: WirType::Ref {
+                                type_id: test_type_id(),
+                                nullable: false,
+                            },
+                        }],
+                    }),
+                    Box::new(struct_get("b")),
+                ),
+            ),
+        ];
+
+        run_forward(&mut body, &types);
+
+        let WirInstr::I32Add(_, right) = set_value(&body[2]) else {
+            panic!("expected the add, got {:?}", set_value(&body[2]));
+        };
+        assert_matches!(
+            right.as_ref(),
+            WirInstr::StructGet { .. },
+            "the call is handed `b`'s own object through `a.child` and may mutate `b.f`"
+        );
+    }
+
     #[test]
     fn call_in_if_arm_invalidates() {
         let types = test_types();
