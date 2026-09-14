@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789413127687,
+  "lastUpdate": 1789414050891,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55981,6 +55981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5364985f8d3f42ac34b46f0aeceb0135a4009346"
         },
         "date": 1789413126804,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a8dfaad1325f7e591a04d7c3f52b4031ff34b726",
+          "message": "Merge pull request #2052 from wado-lang/gfx/emi-guard-shapes\n\nfix(compiler): two wrong-code bugs, from an EMI campaign widened to a loop guard and five levels",
+          "timestamp": "2026-09-15T03:56:01+09:00",
+          "tree_id": "7e2a9807cc2a83d4b814f04e3433d50b78991da5",
+          "url": "https://github.com/wado-lang/wado/commit/a8dfaad1325f7e591a04d7c3f52b4031ff34b726"
+        },
+        "date": 1789414050101,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
