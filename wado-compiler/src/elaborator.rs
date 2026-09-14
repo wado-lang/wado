@@ -174,11 +174,7 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
-    /// The declarations whose `= Default` type arguments are being expanded
-    /// right now. A default naming its own declaration (`struct Rec<T = Rec>`)
-    /// has no fixpoint, so one already on the walk is reported, not re-entered.
-    pub(super) expanding_type_param_defaults: hashmap::IndexSet<DefId>,
-    /// Whether each declaration's `= Default`s were found well-ordered, asked
+    /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
 }

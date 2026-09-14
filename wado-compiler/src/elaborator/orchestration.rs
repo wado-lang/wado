@@ -1449,7 +1449,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
             assoc_binding_stack: hashmap::IndexSet::default(),
-            expanding_type_param_defaults: hashmap::IndexSet::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }

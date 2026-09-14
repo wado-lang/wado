@@ -51,16 +51,10 @@ pub(crate) struct StructFieldInfo {
     pub(super) type_param_type_ids: Vec<TypeId>,
 }
 
-/// Where a qualified prefix's members live when the prefix names a newtype,
-/// paired with the type the prefix itself names. A newtype inherits its base's
-/// members and keeps its own identity, so `C::Green` on `type C = Color` reads
-/// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
-/// when the prefix names something that owns its members.
-/// Every named head `ty` reaches, as a reference site and its spelling.
-///
-/// The scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::`
-/// prefix is collected like any other and left to `declaration_at`, which
-/// answers `None` for a binder.
+/// Every named head `ty` reaches, as a reference site and its spelling. The
+/// scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::` prefix
+/// is collected like any other and left to `declaration_at`, which answers
+/// `None` for a binder.
 fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
     match ty {
         ast::Type::Named(named) => out.push((named.id, named.name.clone())),
@@ -94,6 +88,11 @@ fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
     }
 }
 
+/// Where a qualified prefix's members live when the prefix names a newtype,
+/// paired with the type the prefix itself names. A newtype inherits its base's
+/// members and keeps its own identity, so `C::Green` on `type C = Color` reads
+/// Color's cases and yields a `C` — the implicit `Color::Green as C`. `None`
+/// when the prefix names something that owns its members.
 pub(super) fn newtype_member_owner(
     lookup: &TypeLookup<'_>,
     tysys: &TypeSystem,
@@ -3057,25 +3056,21 @@ impl<'a> TypeLookup<'a> {
         if !expanding.insert(def) {
             return true;
         }
-        let mut cycles = false;
-        if let Some(params) = self.declared_generic_params(def) {
-            for param in params {
-                let Some(default) = &param.default else {
-                    continue;
-                };
+        let cycles = self
+            .declared_generic_params(def)
+            .into_iter()
+            .flatten()
+            .filter_map(|param| param.default.as_ref())
+            .any(|default| {
                 let mut heads = Vec::new();
                 collect_type_heads(default, &mut heads);
-                cycles = heads.into_iter().any(|(site, name)| {
+                heads.into_iter().any(|(site, name)| {
                     self.declaration_at(Some(site), &name)
                         .is_some_and(|target| {
                             self.defaults_reach_a_cycle(target, expanding, settled)
                         })
-                });
-                if cycles {
-                    break;
-                }
-            }
-        }
+                })
+            });
         expanding.shift_remove(&def);
         if !cycles {
             settled.insert(def);

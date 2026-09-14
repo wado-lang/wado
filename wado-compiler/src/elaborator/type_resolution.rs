@@ -614,24 +614,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved
     }
 
-    /// Run `body` while `def`'s declared defaults count as being expanded.
-    /// `None`, reported at `span`, when they already are: a default names `def`.
-    fn expanding_defaults_of<R>(
-        &mut self,
-        def: DefId,
-        span: Span,
-        body: impl FnOnce(&mut Self) -> R,
-    ) -> Option<R> {
-        if !self.expanding_type_param_defaults.insert(def) {
-            let name = self.tysys.resolutions.defs().name(def).to_string();
-            let _ = self.emit(TypeError::RecursiveTypeParamDefault { name, span });
-            return None;
-        }
-        let out = body(self);
-        self.expanding_type_param_defaults.shift_remove(&def);
-        Some(out)
-    }
-
     /// Whether `def`'s declared defaults can be expanded at all: each names
     /// only parameters to its left, and the walk they set off terminates.
     ///
@@ -656,7 +638,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .filter_map(|p| p.default.as_ref())
                 .map(ast::Type::span)
                 .next()
-                .unwrap_or_default();
+                .expect("a cycle through defaults needs a default");
             let _ = self.emit(TypeError::RecursiveTypeParamDefault { name, span });
             self.checked_type_param_defaults.insert(def, false);
             return false;
@@ -709,9 +691,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let params = self.type_lookup().declared_generic_params(def)?;
         let default = params.get(slot)?.default.clone()?;
         let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        let resolved = self.expanding_defaults_of(def, default.span(), |e| {
-            e.with_type_param_args(&names, settled, |e| e.resolve_type(&default))
-        })?;
+        let resolved = self.with_type_param_args(&names, settled, |e| e.resolve_type(&default));
         if resolved == TypeTable::ERROR || resolved == TypeTable::UNKNOWN {
             // Nothing else reports a default: no application writes it, so the
             // name that reached nothing is named at the declaration instead.
