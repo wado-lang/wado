@@ -2109,13 +2109,8 @@ fn resolve_returned_args<'e>(
     }
 }
 
-/// Parameter positions the reference produced by `expr` carries — the shared
-/// reference-flow used by both the escape walk and the return-provenance
-/// fixpoint. A value whose type cannot hold a reference carries nothing. Only
-/// `&place` roots at a parameter; reading a reference-typed field / element /
-/// deref yields a reference to a *separate* object, so it carries nothing. A
-/// cast preserves reference identity; an aggregate literal unions its fields; a
-/// call folds its arguments at the callee's return-provenance positions.
+/// Parameter positions the reference produced by `expr` carries. The shared
+/// reference-flow behind the escape walk and the return-provenance fixpoint.
 #[allow(clippy::too_many_arguments)]
 fn carries_of(
     expr: &Expr,
@@ -2141,10 +2136,8 @@ fn carries_of(
             carries,
         )
     };
-    // A member read hands out a reference of its own when the member's type
-    // spells one; a value member is copied and carries nothing. `spells_ref`
-    // rather than the gate above, which answers yes for an unsubstituted
-    // parameter no instantiation has filled in.
+    // `spells_ref` rather than the gate above, which answers yes for an
+    // unsubstituted parameter no instantiation has filled in.
     if let Some(base) = member_read_base(expr) {
         let spells_ref = expr_type_of(expr, sem).is_some_and(|t| tyctx.spells_ref(&sem.types, t));
         return if spells_ref {

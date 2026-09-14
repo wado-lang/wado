@@ -3849,13 +3849,13 @@ checks.
 Returns true if `index`, counted from the view's start, is 0, `len()`,
 or the start of a character.
 
-#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
 
 A sub-view over `[start, end)`, counted from this view's start.
 Panics if the range is out of bounds or either end is off a character
 boundary.
 
-#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
 
 A sub-view without bounds or UTF-8 boundary checks.
 
@@ -3864,15 +3864,15 @@ A sub-view without bounds or UTF-8 boundary checks.
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
 
-#### `pub fn as_bytes(&self) -> ByteSlice`
+#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
 
 The view's UTF-8 bytes.
 
-#### `pub fn chars(&self) -> StrCharIter`
+#### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
 Returns an iterator over the Unicode scalar values (chars) of the view.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
 
 Returns an iterator over the UTF-8 bytes of the view.
 
