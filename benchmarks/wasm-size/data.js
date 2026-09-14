@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789391827486,
+  "lastUpdate": 1789413127687,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55937,6 +55937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2a33ac547a0288b0dfefab9cba37b56387732662"
         },
         "date": 1789391827172,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5364985f8d3f42ac34b46f0aeceb0135a4009346",
+          "message": "Merge pull request #2056 from wado-lang/claude/package-gale-core-log-migration-183sb2\n\nfeat(gale): diagnostics through core:log, and one checked path for every type-parameter slot",
+          "timestamp": "2026-09-15T03:55:39+09:00",
+          "tree_id": "9904e268b277b59420e1f2e46b3e4ba795469806",
+          "url": "https://github.com/wado-lang/wado/commit/5364985f8d3f42ac34b46f0aeceb0135a4009346"
+        },
+        "date": 1789413126804,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
