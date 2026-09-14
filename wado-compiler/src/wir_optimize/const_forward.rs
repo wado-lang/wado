@@ -566,10 +566,14 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
-/// The locals a call can reach through one argument: those whose object the
-/// argument hands over, bare or loaded out of another. A load that yields a
-/// scalar (`h.n`, a packed element) hands over a copy and leaves its base
-/// unreachable, so what is known of that base still holds.
+/// The locals a call can mutate through one argument: those whose own object
+/// the argument hands over — a reference-typed read of the local, bare or
+/// wrapped, wherever in the argument it sits.
+///
+/// A field or element loaded out of a local hands over a *different* object.
+/// Nothing recorded about the local can be falsified through it: a fact is a
+/// numeric literal or "equals local X", and a local with a fact is not in
+/// `aliased`, so no object the callee can reach points back at it.
 ///
 /// A nested call inside the argument is its own mutation channel, invalidated
 /// when the walk that calls this reaches it.
@@ -580,22 +584,11 @@ fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
                 names.insert(name.clone());
             }
         }
-        WirInstr::StructGet {
-            expr, result_ty, ..
-        } => {
-            if result_ty.is_reference() {
-                collect_reference_locals(expr, names);
-            }
-        }
-        WirInstr::ArrayGet {
-            array, result_ty, ..
-        } => {
-            if result_ty.is_reference() {
-                collect_reference_locals(array, names);
-            }
-        }
-        // A packed read is an `i8`/`i16` widened to `i32` — a scalar, always.
-        WirInstr::ArrayGetS { .. } | WirInstr::ArrayGetU { .. } => {}
+        // A load hands over what the field or element points at, not the base.
+        WirInstr::StructGet { .. }
+        | WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. } => {}
         _ => instr.for_each_child(&mut |child| collect_reference_locals(child, names)),
     }
 }
