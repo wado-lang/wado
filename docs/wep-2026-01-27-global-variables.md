@@ -122,6 +122,23 @@ cannot evaluate, a value read out of mutable state, or a payload too large to
 inline as `array.new_fixed` — a long string literal lives in the data section
 and is materialized at run time, so no constant expression can denote it.
 
+### An initializer is a body, and a body is a function
+
+An initializer that needs to run code is a body: statements, locals, a
+`with … do`, calls to rewrite. Everything that walks bodies — template
+expansion, effect-dispatch desugaring, CM import binding, monomorphization —
+walks the module's functions. A body reachable any other way is a body those
+passes miss, one pass at a time, each miss its own bug.
+
+So reify puts it there. A global whose initializer is not a Wasm constant gets
+`$init$<NAME>`, a parameterless function returning the declared value, and the
+global's slot holds the placeholder. A global carries no locals of its own, so
+it cannot hold a body at all. Lowering splices those functions into the module's
+initialization function in dependency order and drops them.
+
+One classifier decides, at reify, and `Direct` means "the Wasm slot can hold
+this" at every phase after it.
+
 ### The decision is made on the value, not on the syntax
 
 Whether a global is direct is decided from what its initializer _evaluates to_,
@@ -133,7 +150,7 @@ is not a literal, but it evaluates to a sequence of constants, which is exactly
 an `array.new_fixed`. Deciding syntactically would defer it; deciding on the
 value does not.
 
-Deferral is therefore provisional: lowering defers anything that is not
+Deferral is therefore provisional: reify defers anything that is not
 syntactically constant, and a single classifier later promotes back everything
 the optimizer reduced to a constant expression. It runs once the value is
 lowered to its Wasm shape, because that is where variant representation and
@@ -145,8 +162,8 @@ value-snapshot entry below.
 
 ### The declared initializer is never replaced
 
-A global's recorded initializer is always the one the program declared. A
-deferred global carries its placeholder alongside, never instead.
+A deferred global holds a placeholder, and says so. Asking it for its declared
+value answers "assigned elsewhere", never the placeholder.
 
 This is the invariant the representation must preserve. Anything asking "what is
 this global's value" — constant folding, globalization, documentation — must get

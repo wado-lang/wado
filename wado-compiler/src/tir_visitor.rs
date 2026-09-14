@@ -884,6 +884,14 @@ pub fn shift_locals(expr: &mut TirExpr, offset: u32) {
     ShiftLocals { offset }.visit_expr(expr);
 }
 
+/// Renumber every local the statements name, for a frame starting at `offset`.
+pub fn shift_locals_in_stmts(stmts: &mut [TirStmt], offset: u32) {
+    let mut shift = ShiftLocals { offset };
+    for stmt in stmts {
+        shift.visit_stmt(stmt);
+    }
+}
+
 struct ShiftLocals {
     offset: u32,
 }

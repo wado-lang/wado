@@ -13,13 +13,13 @@ use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Sever
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-use crate::name::{FqTypeName, Receiver, global_name};
+use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
-    TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule, TirNewtype,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl, TypeId,
-    TypeTable,
+    TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLocal, TirModule,
+    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
+    TypeId, TypeTable,
 };
 
 use super::coercion::{
@@ -839,8 +839,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // analysis cannot see divergence through ambient `panic`.
                     // The optimize-time DCE removes genuinely pure dead globals
                     // instead. A dead global is still reported as a warning.
-                    if let Some(tir_global) = self.reify_global(global_decl) {
+                    if let Some((tir_global, init_fn)) = self.reify_global(global_decl) {
                         tir_module.globals.push(tir_global);
+                        if let Some(init_fn) = init_fn {
+                            tir_module.add_function(init_fn);
+                        }
                     }
                 }
                 Item::Enum(enum_decl) => {
@@ -1982,7 +1985,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// walks the initializer through a minimal `FunctionContext`.
     /// `is_nullable` is populated by the lower phase (kept `false` here,
     /// matching `Elaborator::resolve_global`).
-    fn reify_global(&mut self, global_decl: &ast::GlobalDecl) -> Option<TirGlobal> {
+    fn reify_global(
+        &mut self,
+        global_decl: &ast::GlobalDecl,
+    ) -> Option<(TirGlobal, Option<TirFunction>)> {
         // `annotate_module_decls` populates `current_module_globals` for every
         // global it sees before any per-item reify runs, so the lookup
         // never misses; reify is a pure read.
@@ -2000,18 +2006,67 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
         let initializer = self.reify_expr(&global_decl.initializer, &mut ctx, Some(ty));
         let param = self.reify_param_attr(global_decl);
+        let span = global_decl.span;
 
-        Some(TirGlobal {
-            name: global_decl.name.clone(),
+        let (init, init_fn) = self.split_global_initializer(
+            &global_decl.name,
             ty,
-            init: GlobalInit::Direct(initializer),
-            param,
-            wado_mutable: global_decl.mutable,
-            visibility: global_decl.visibility,
-            module_source: self.current_module_source.clone(),
-            span: global_decl.span,
-            locals: ctx.locals.clone(),
-        })
+            initializer,
+            std::mem::take(&mut ctx.locals),
+            span,
+        );
+        Some((
+            TirGlobal {
+                name: global_decl.name.clone(),
+                ty,
+                init,
+                param,
+                wado_mutable: global_decl.mutable,
+                visibility: global_decl.visibility,
+                module_source: self.current_module_source.clone(),
+                span,
+            },
+            init_fn,
+        ))
+    }
+
+    /// Split an initializer into what the Wasm slot can hold and what needs a
+    /// body. A body lives only in `module.functions`, so no later pass can walk
+    /// the module's functions and miss an initializer.
+    fn split_global_initializer(
+        &mut self,
+        name: &str,
+        ty: TypeId,
+        initializer: TirExpr,
+        locals: Vec<TirLocal>,
+        span: Span,
+    ) -> (GlobalInit<TirExpr>, Option<TirFunction>) {
+        if tir::is_constant_initializer(&initializer, &self.tysys.type_table.borrow()) {
+            assert!(
+                locals.is_empty(),
+                "a constant initializer allocates no local"
+            );
+            return (GlobalInit::Direct(initializer), None);
+        }
+        let placeholder = tir::placeholder_value(ty, &self.tysys.type_table.borrow(), span);
+        let body = TirBlock {
+            stmts: vec![TirStmt::new(
+                TirStmtKind::Return {
+                    value: Some(initializer),
+                },
+                span,
+            )],
+            span,
+        };
+        let init_fn = TirFunction::synthesized(
+            self.current_module_source.clone(),
+            global_init_function(name),
+            ty,
+            body,
+            locals,
+            span,
+        );
+        (GlobalInit::Deferred(placeholder), Some(init_fn))
     }
 
     /// Report a malformed attribute at the attribute's own span.

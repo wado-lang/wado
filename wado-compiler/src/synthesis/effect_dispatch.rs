@@ -445,7 +445,6 @@ fn synthesize_dispatch_global(
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        locals: Vec::new(),
     };
     let entry_module = project
         .tir_modules
@@ -1148,31 +1147,6 @@ fn lower_with_handler_dispatch_in_modules(
             let mut func = func_rc.borrow_mut();
             lower_with_handler_dispatch_in_func(&mut func, &env);
         }
-        for global in &mut module.globals {
-            lower_with_handler_dispatch_in_global(global, &env);
-        }
-    }
-}
-
-/// A global initializer is a body like any other: it may install a handler, and
-/// its locals run `0..locals.len()`, which is the frame the desugaring extends.
-fn lower_with_handler_dispatch_in_global(global: &mut TirGlobal, env: &DispatchEnv) {
-    let locals = std::mem::take(&mut global.locals);
-    let next_local = u32::try_from(locals.len()).expect("local count fits in u32");
-    let mut ctx = LowerCtx {
-        scopes: vec![LocalScope::Function { next_local, locals }],
-    };
-    lower_dispatch_in_expr(global.init.slot_expr_mut(), env, &mut ctx);
-    match ctx.scopes.pop().expect("global scope") {
-        LocalScope::Function { next_local, locals } => {
-            assert_eq!(
-                next_local as usize,
-                locals.len(),
-                "a global's locals are indexed by position"
-            );
-            global.locals = locals;
-        }
-        LocalScope::Closure { .. } => unreachable!("outermost scope must be a function frame"),
     }
 }
 
@@ -2503,6 +2477,7 @@ fn rewrite_call_sites_to_wrappers(
             type_table: module.type_table.clone(),
             entry_source: &entry_source,
         };
+        rewrite_calls_in_functions(&module.functions, &ctx);
         rewrite_calls_in_functions(&module.functions, &ctx);
         for global in &mut module.globals {
             rewrite_calls_in_expr(global.init.slot_expr_mut(), &ctx);

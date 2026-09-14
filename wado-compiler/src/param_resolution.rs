@@ -13,7 +13,12 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::wide_int_literal::create_literal;
-use crate::tir::{GlobalInit, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::module_source::ModuleSource;
+use crate::name::global_init_target;
+use crate::tir::{
+    GlobalInit, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
+    TypeTable,
+};
 use crate::token::Span;
 
 /// Severity for one class of param-resolution diagnostic, set per `wado`
@@ -119,6 +124,22 @@ pub fn resolve_params<H: CompilerHost>(
         }
     };
 
+    // A resolved parameter replaces the declared fallback wherever reify put
+    // it: in the slot when the fallback is a Wasm constant, in the global's
+    // initializer function otherwise.
+    let init_fns: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>> = flat
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let func = f.borrow();
+            let global = global_init_target(&func.name)?;
+            Some((
+                (func.module_source.clone(), global.to_string()),
+                Rc::clone(f),
+            ))
+        })
+        .collect();
+
     for global in &mut flat.globals {
         let Some(spec) = global.param.clone() else {
             continue;
@@ -159,8 +180,13 @@ pub fn resolve_params<H: CompilerHost>(
         if let Some(literal) =
             convert_builtin(trimmed, global.ty, &builtins, &type_table, global.span)
         {
-            // A resolved parameter is a literal, so the storage can hold it.
-            global.init = GlobalInit::Direct(literal);
+            match &mut global.init {
+                GlobalInit::Direct(slot) => *slot = literal,
+                GlobalInit::Deferred(_) => set_initializer_value(
+                    &init_fns[&(global.module_source.clone(), global.name.clone())],
+                    literal,
+                ),
+            }
         } else {
             let type_name = type_table.borrow().type_name(global.ty);
             let origin = match &from_env_name {
@@ -432,6 +458,22 @@ fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
     } else {
         None
     }
+}
+
+/// Replace what a global's initializer function returns, dropping the frame the
+/// declared fallback needed.
+fn set_initializer_value(init_fn: &Rc<RefCell<TirFunction>>, value: TirExpr) {
+    let span = value.span;
+    let mut func = init_fn.borrow_mut();
+    func.body = Some(TirBlock {
+        stmts: vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(value) },
+            span,
+        )],
+        span,
+    });
+    func.locals.clear();
+    func.local_count = 0;
 }
 
 #[cfg(test)]

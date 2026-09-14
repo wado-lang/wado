@@ -330,6 +330,23 @@ pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
 /// passes treat it as a root, so producer and consumers share this name.
 pub const MODULE_INIT_FUNCTION: &str = "$initialize_module";
 
+/// The function holding one global's initializer, minted by reify so that no
+/// initializer is a body outside `module.functions`. [`crate::lower::plan`]
+/// splices these into [`MODULE_INIT_FUNCTION`] and drops them.
+#[must_use]
+pub fn global_init_function(global: &str) -> String {
+    format!("{INTERNAL_PREFIX}init{INTERNAL_PREFIX}{global}")
+}
+
+/// The global a [`global_init_function`] initializes, or `None` for any other
+/// name.
+#[must_use]
+pub fn global_init_target(name: &str) -> Option<&str> {
+    name.strip_prefix(INTERNAL_PREFIX)?
+        .strip_prefix("init")?
+        .strip_prefix(INTERNAL_PREFIX)
+}
+
 /// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
 /// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
 /// over the latter still covers both.

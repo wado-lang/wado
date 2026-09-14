@@ -9,15 +9,14 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
-use crate::name::{MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
+use crate::name::{MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION, global_init_target};
 use crate::synthesis::common::builtin_call;
 use crate::tir;
 use crate::tir::{
-    FunctionKind, FunctionRef, GlobalInit, InlineHint, PrimitiveType, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionKind, FunctionRef, GlobalInit, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirGlobal, TirLocal, TirStmt, TirStmtKind, TypeTable,
 };
-use crate::tir_visitor::{TirRefVisitor, shift_locals};
+use crate::tir_visitor::{TirRefVisitor, shift_locals, shift_locals_in_stmts};
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -28,159 +27,46 @@ use crate::token::Span;
 // `build_initialize_modules` half combines them into the top-level
 // `$initialize_modules` aggregator.
 
-/// Whether the Wasm slot can hold this value directly, so the global needs no
-/// assignment from an initialization function.
-///
-/// Deliberately under-approximates what a constant expression can express: an
-/// aggregate only becomes a `struct.new` once the optimizer has collapsed the
-/// builder producing it, which is not knowable here. The classifier on the
-/// lowered Wasm value promotes back what this defers. Decidable here is what
-/// is already a value: a literal, and arithmetic over literals.
-fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
-    match &expr.kind {
-        TirExprKind::IntLiteral { .. }
-        | TirExprKind::FloatLiteral { .. }
-        | TirExprKind::BoolLiteral(_)
-        | TirExprKind::CharLiteral(_)
-        | TirExprKind::Unit
-        | TirExprKind::Null => true,
-        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
-        TirExprKind::Unary { op, expr: inner } => {
-            // Negation of literals is constant
-            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
-        }
-        TirExprKind::Binary { op, left, right } => {
-            matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
-                && is_wasm_width_int(expr.type_id, type_table)
-                && is_constant_initializer(left, type_table)
-                && is_constant_initializer(right, type_table)
-        }
-        _ => false,
-    }
+/// One global initializer, taken out of the `$init$` function reify put it
+/// in. A body lives only in `functions` until here, so no pass between reify
+/// and this one can walk the functions and miss an initializer.
+#[derive(Clone)]
+struct LazyInit {
+    global: String,
+    module_source: ModuleSource,
+    /// Statements the value depends on, in the frame `locals` describes.
+    prelude: Vec<TirStmt>,
+    value: TirExpr,
+    locals: Vec<TirLocal>,
 }
 
-/// An integer whose Wado width matches the Wasm operand it lowers to, so
-/// wrapping needs no masking. Wasm admits constant `add` / `sub` / `mul` on
-/// `i32` and `i64` only — never a narrower integer, and never a float.
-fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(type_id),
-        ResolvedType::Primitive(
-            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::I64 | PrimitiveType::U64
-        )
-    )
-}
-
-/// Create a default value expression for a type (used for lazy-initialized globals)
-fn default_value_for_type(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
-    match type_table.get(type_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8
-            | PrimitiveType::I16
-            | PrimitiveType::I32
-            | PrimitiveType::U8
-            | PrimitiveType::U16
-            | PrimitiveType::U32 => TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: 0,
-                    repr: "0".to_string(),
-                },
-                type_id,
-                span,
-            ),
-            PrimitiveType::I64 | PrimitiveType::U64 => TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: 0,
-                    repr: "0".to_string(),
-                },
-                type_id,
-                span,
-            ),
-            PrimitiveType::F32 => TirExpr::new(
-                TirExprKind::FloatLiteral {
-                    value: 0.0,
-                    repr: "0.0".to_string(),
-                },
-                type_id,
-                span,
-            ),
-            PrimitiveType::F64 => TirExpr::new(
-                TirExprKind::FloatLiteral {
-                    value: 0.0,
-                    repr: "0.0".to_string(),
-                },
-                type_id,
-                span,
-            ),
-            PrimitiveType::Bool => TirExpr::new(TirExprKind::BoolLiteral(false), type_id, span),
-            PrimitiveType::Char => TirExpr::new(TirExprKind::CharLiteral('\0'), type_id, span),
-            PrimitiveType::V128 => TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: 0,
-                    repr: "0".to_string(),
-                },
-                type_id,
-                span,
-            ),
-        },
-        ResolvedType::Unit => TirExpr::new(TirExprKind::Unit, type_id, span),
-        // For reference types (String, List, struct, etc.), use null
-        _ => TirExpr::new(TirExprKind::Null, type_id, span),
-    }
-}
-
-/// Extract non-constant global initializers into a per-module
-/// `$initialize_module` function, the globals keeping a default value in their
-/// place. Must run before `boxing`, the extracted code being able to contain the
-/// `&primitive` and closure expressions boxing rewrites; the top-level
-/// aggregator calling each one is built later by [`build_initialize_modules`].
+/// Take each global initializer out of its own function and into the module's
+/// `$initialize_module`, in dependency order. Must run before `boxing`, the
+/// extracted code being able to contain the `&primitive` and closure
+/// expressions boxing rewrites; the top-level aggregator calling each
+/// `$initialize_module` is built later by [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
-    let type_table = flat.type_table.borrow();
-
-    // Collect non-constant initializers with their indices for topological sorting
-    let mut lazy_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> =
-        Vec::new();
-
-    for (idx, global) in flat.globals.iter_mut().enumerate() {
-        if is_constant_initializer(global.init.slot_expr(), &type_table) {
-            continue;
-        }
-        // The declared value moves into the initialization function rather
-        // than being copied, so the global cannot claim a value it no longer
-        // holds.
-        let placeholder = default_value_for_type(global.ty, &type_table, global.span);
-        let GlobalInit::Direct(declared) =
-            std::mem::replace(&mut global.init, GlobalInit::Deferred(placeholder))
-        else {
-            panic!("a global is Direct until this pass defers it");
+    // Insertion order is preserved so cross-module sibling ordering matches the
+    // original global declaration order, which the aggregator then walks in
+    // entry-last order (see `build_initialize_modules`).
+    let mut by_module: IndexMap<ModuleSource, Vec<LazyInit>> = IndexMap::default();
+    flat.functions.retain(|func_rc| {
+        let mut func = func_rc.borrow_mut();
+        let Some(global) = global_init_target(&func.name).map(str::to_string) else {
+            return true;
         };
-        lazy_inits.push((
-            idx,
-            global.name.clone(),
-            global.module_source.clone(),
-            global.ty,
-            declared,
-            global.locals.clone(),
-        ));
-    }
-
-    drop(type_table);
-
-    // If no lazy initializers, nothing to do
-    if lazy_inits.is_empty() {
+        let init = take_initializer(&mut func, global);
+        by_module
+            .entry(func.module_source.clone())
+            .or_default()
+            .push(init);
+        false
+    });
+    if by_module.is_empty() {
         return Ok(());
     }
 
-    // Partition lazy inits by their owning module so each module gets
-    // its own `$initialize_module` function. Insertion order is
-    // preserved so cross-module sibling ordering matches the original
-    // global declaration order, which the aggregator then walks in
-    // entry-last order (see `build_initialize_modules`).
-    let mut by_module: IndexMap<ModuleSource, Vec<_>> = IndexMap::default();
-    for entry in lazy_inits {
-        by_module.entry(entry.2.clone()).or_default().push(entry);
-    }
-
+    // An initializer depends on every global the functions it calls read.
     let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
     for (module_source, module_inits) in by_module {
@@ -192,26 +78,56 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     Ok(())
 }
 
+/// Split a `$init$` function into the statements leading up to its value and
+/// the value itself. Reify emits `{ return <initializer>; }`, and a synthesis
+/// pass may hoist statements ahead of that return but never adds another.
+fn take_initializer(func: &mut TirFunction, global: String) -> LazyInit {
+    let mut stmts = func.body.take().expect("$init$ carries a body").stmts;
+    let Some(TirStmt {
+        kind: TirStmtKind::Return { value: Some(value) },
+        ..
+    }) = stmts.pop()
+    else {
+        panic!("a global initializer function ends in a return of its value");
+    };
+    assert!(
+        !stmts
+            .iter()
+            .any(|s| matches!(s.kind, TirStmtKind::Return { .. })),
+        "a global initializer returns once"
+    );
+    LazyInit {
+        global,
+        module_source: func.module_source.clone(),
+        prelude: stmts,
+        value,
+        locals: std::mem::take(&mut func.locals),
+    }
+}
+
+/// Assign every initializer to its global, in the order given, under one frame.
 fn build_module_init_function(
     module_source: ModuleSource,
-    sorted_inits: Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>,
+    sorted_inits: Vec<LazyInit>,
     span: Span,
 ) -> TirFunction {
     let mut init_stmts: Vec<TirStmt> = Vec::new();
     let mut merged_locals: Vec<TirLocal> = Vec::new();
 
-    for (_, name, gvs_module_source, _, mut initializer, locals) in sorted_inits {
-        let offset = u32::try_from(merged_locals.len()).unwrap();
-        if offset > 0 && !locals.is_empty() {
-            shift_locals(&mut initializer, offset);
+    for mut init in sorted_inits {
+        let offset = u32::try_from(merged_locals.len()).expect("local count fits in u32");
+        if offset > 0 && !init.locals.is_empty() {
+            shift_locals_in_stmts(&mut init.prelude, offset);
+            shift_locals(&mut init.value, offset);
         }
-        merged_locals.extend(locals);
+        merged_locals.extend(init.locals);
+        init_stmts.append(&mut init.prelude);
 
         let global_set = TirExpr::new(
             TirExprKind::GlobalVarSet {
-                module_source: gvs_module_source,
-                name,
-                value: Box::new(initializer),
+                module_source: init.module_source,
+                name: init.global,
+                value: Box::new(init.value),
             },
             TypeTable::UNIT,
             span,
@@ -219,47 +135,17 @@ fn build_module_init_function(
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
     }
 
-    let local_count = u32::try_from(merged_locals.len()).unwrap();
-    let init_body = TirBlock {
-        stmts: init_stmts,
-        span,
-    };
-
-    TirFunction {
+    TirFunction::synthesized(
         module_source,
-        def_id: None,
-        is_async: false,
-        name: MODULE_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Public,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(init_body),
+        MODULE_INIT_FUNCTION.to_string(),
+        TypeTable::UNIT,
+        TirBlock {
+            stmts: init_stmts,
+            span,
+        },
+        merged_locals,
         span,
-        local_count,
-        locals: merged_locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        declared_return_convention: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
+    )
 }
 
 /// What a function body reads and calls, in one walk.
@@ -423,10 +309,10 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
 ///
 /// Returns the initializers in an order where dependencies are initialized first.
 fn topological_sort_global_inits(
-    lazy_inits: &[(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)],
+    lazy_inits: &[LazyInit],
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
     errors: &dyn ErrorSink,
-) -> Result<Vec<(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)>, Bail> {
+) -> Result<Vec<LazyInit>, Bail> {
     if lazy_inits.len() <= 1 {
         return Ok(lazy_inits.to_vec());
     }
@@ -439,7 +325,7 @@ fn topological_sort_global_inits(
     let key_to_idx: IndexMap<(ModuleSource, String), usize> = lazy_inits
         .iter()
         .enumerate()
-        .map(|(i, (_, name, module_source, ..))| ((module_source.clone(), name.clone()), i))
+        .map(|(i, init)| ((init.module_source.clone(), init.global.clone()), i))
         .collect();
 
     // Build dependency graph: deps[i] = set of indices that i depends on.
@@ -453,7 +339,7 @@ fn topological_sort_global_inits(
 
     let scanned: Vec<InitRefs> = lazy_inits
         .iter()
-        .map(|(_, _, _, _, initializer, _)| collect_global_refs(initializer, reads_by_function))
+        .map(|init| collect_global_refs(&init.value, reads_by_function))
         .collect();
 
     // A reference written in the initializer is a definite dependency.
@@ -501,14 +387,18 @@ fn topological_sort_global_inits(
     }
 
     if sorted.len() < lazy_inits.len() {
-        let cycle: Vec<&(usize, String, ModuleSource, TypeId, TirExpr, Vec<TirLocal>)> = lazy_inits
+        let cycle: Vec<&LazyInit> = lazy_inits
             .iter()
             .enumerate()
             .filter(|(i, _)| in_degree[*i] > 0)
             .map(|(_, init)| init)
             .collect();
-        let names: Vec<&str> = cycle.iter().map(|(_, name, ..)| name.as_str()).collect();
-        let (_, _, module_source, _, initializer, _) = cycle[0];
+        let names: Vec<&str> = cycle.iter().map(|init| init.global.as_str()).collect();
+        let LazyInit {
+            module_source,
+            value: initializer,
+            ..
+        } = cycle[0];
         return Err(errors.fatal_in(
             module_source,
             Diagnostic {
@@ -615,7 +505,6 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        locals: Vec::new(),
     };
     flat.globals.push(init_flag_global);
 
