@@ -709,7 +709,10 @@ Verified against the tree.
       through the other. Both sides are compared as places rather than as root
       locals: asking only whether two chains share a root made each component of
       a destructured tuple a reader of its siblings, which cost the corpus five
-      copies. Carrying the selectors gives the corpus back every elision it had.
+      copies in `httpbin_*`. Carrying the selectors gives those back. One copy
+      elsewhere stays, in `parser_synth_id_collision_test`, where two bindings
+      read the whole of one place and one is still live — the shape the rule is
+      for, and the only elision in the corpus it takes.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp pattern lowering hoists the scrutinee into. Which
       syntactic position a `match` sits in is part of whether the binding is
