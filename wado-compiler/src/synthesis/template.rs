@@ -164,17 +164,21 @@ pub fn expand_templates(
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
         if let Some(ref mut body) = func.body {
-            let mut expander = TemplateExpander {
-                alloc: FuncLocalAlloc {
-                    next_index: local_count,
-                    new_locals: Vec::new(),
-                },
-                ctx: &ctx,
-            };
+            let mut expander = TemplateExpander::over(&ctx, local_count);
             TirOptVisitor::visit_block(&mut expander, body);
             func.local_count = expander.alloc.next_index;
             func.locals.extend(expander.alloc.new_locals);
         }
+    }
+    // A global initializer is reified with a local namespace of its own, so the
+    // function walk never reaches the templates in it. Expanding one makes the
+    // initializer non-constant, which `lower::plan::globals` already answers by
+    // deferring the global into `$initialize_module`.
+    for global in &mut module.globals {
+        let next_index = u32::try_from(global.locals.len()).expect("a local namespace fits u32");
+        let mut expander = TemplateExpander::over(&ctx, next_index);
+        TirOptVisitor::visit_expr(&mut expander, global.init.slot_expr_mut());
+        global.locals.extend(expander.alloc.new_locals);
     }
 }
 
@@ -398,6 +402,19 @@ impl FuncLocalAlloc {
 struct TemplateExpander<'a> {
     alloc: FuncLocalAlloc,
     ctx: &'a TemplateCtx<'a>,
+}
+
+impl<'a> TemplateExpander<'a> {
+    /// An expander over a namespace whose locals run `0..next_index`.
+    fn over(ctx: &'a TemplateCtx<'a>, next_index: u32) -> Self {
+        Self {
+            alloc: FuncLocalAlloc {
+                next_index,
+                new_locals: Vec::new(),
+            },
+            ctx,
+        }
+    }
 }
 
 impl TirOptVisitor for TemplateExpander<'_> {

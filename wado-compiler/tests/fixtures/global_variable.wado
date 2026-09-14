@@ -306,3 +306,25 @@ test "an Option global declared null keeps its None, whatever it wraps" {
     SCALAR_NONE_MUT = null;
     assert SCALAR_NONE_MUT matches { None };
 }
+
+global SITE: String = "https://wado-lang.org";
+global DOCS_URL: String = `${SITE}/docs`;
+global BLOG_URL: String = `${SITE}/blog`;
+global NO_HOLES: String = `plain`;
+global TAG: String = `v${ANSWER}`;
+global PADDED: String = `${ANSWER:05}`;
+global CORNER: GPoint = GPoint { x: 1, y: 2 };
+global CORNER_DEBUG: String = `${CORNER:?}`;
+global TAG_LEN: i32 = `v${ANSWER}`.len();
+
+test "a template-string initializer interpolates, like the same expression in a function body" {
+    // A template in a global reached pattern lowering unexpanded and hit an
+    // `unreachable!`, so deriving one global's value from another's was an ICE.
+    assert DOCS_URL == "https://wado-lang.org/docs";
+    assert BLOG_URL == "https://wado-lang.org/blog";
+    assert NO_HOLES == "plain";
+    assert TAG == "v42";
+    assert PADDED == "00042";
+    assert CORNER_DEBUG == "GPoint { x: 1, y: 2 }";
+    assert TAG_LEN == 3;
+}
