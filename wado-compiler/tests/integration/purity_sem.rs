@@ -1,12 +1,10 @@
-//! Tests for `check_default_purity_semantic` — the Semantics-based purity
-//! checker (Design B). Parameter defaults, struct-field defaults and global
-//! initializers must be pure: they may not call an effectful function, dispatch
-//! an interface operation, or install a handler. Runs on the LSP analysis
-//! result (no TIR), so violations surface even without reify.
+//! Tests for `check_purity_semantic` — the Semantics-based purity checker
+//! (Design B). It runs on the LSP analysis result (no TIR), so an effect in a
+//! default expression or a global initializer surfaces even without reify.
 
 use crate::common::InMemoryHost;
 use wado_compiler::semantics::semantics;
-use wado_compiler::{Impurity, PureContext, check_default_purity_semantic};
+use wado_compiler::{Impurity, PureContext, check_purity_semantic};
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
     tokio::runtime::Runtime::new().unwrap().block_on(future)
@@ -23,11 +21,20 @@ fn violations(source: &str) -> Vec<String> {
         .collect()
 }
 
+/// Purity violations reported against a global initializer.
+fn in_global(source: &str) -> Vec<Impurity> {
+    reported(source)
+        .into_iter()
+        .filter(|(context, _)| *context == PureContext::GlobalInitializer)
+        .map(|(_, impurity)| impurity)
+        .collect()
+}
+
 /// Every purity violation for `source`, with the position it was found in.
 fn reported(source: &str) -> Vec<(PureContext, Impurity)> {
     let host = InMemoryHost::new();
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
-    check_default_purity_semantic(&sem)
+    check_purity_semantic(&sem)
         .into_iter()
         .map(|e| (e.context, e.impurity))
         .collect()
@@ -101,13 +108,12 @@ export fn run() with Stdout {
     println(`${A}`);
 }
 "#;
-    let reported = reported(source);
+    let found = in_global(source);
     assert!(
-        reported.iter().any(
-            |(context, impurity)| *context == PureContext::GlobalInitializer
-                && matches!(impurity, Impurity::Call(callee) if callee == "noisy")
-        ),
-        "expected `noisy` flagged in a global initializer, got {reported:?}"
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == "noisy")),
+        "expected `noisy` flagged in a global initializer, got {found:?}"
     );
 }
 
@@ -126,13 +132,12 @@ export fn run() {
     assert A == 41;
 }
 "#;
-    let reported = reported(source);
+    let found = in_global(source);
     assert!(
-        reported.iter().any(
-            |(context, impurity)| *context == PureContext::GlobalInitializer
-                && matches!(impurity, Impurity::Call(callee) if callee == "next")
-        ),
-        "expected the operation `next` flagged in a global initializer, got {reported:?}"
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == "next")),
+        "expected the operation `next` flagged in a global initializer, got {found:?}"
     );
 }
 
@@ -168,13 +173,10 @@ export fn run() {
     assert A == 11;
 }
 "#;
-    let reported = reported(source);
+    let found = in_global(source);
     assert!(
-        reported.iter().any(
-            |(context, impurity)| *context == PureContext::GlobalInitializer
-                && matches!(impurity, Impurity::HandlerInstall)
-        ),
-        "expected the handler install flagged in a global initializer, got {reported:?}"
+        found.iter().any(|i| matches!(i, Impurity::HandlerInstall)),
+        "expected the handler install flagged in a global initializer, got {found:?}"
     );
 }
 
@@ -194,10 +196,10 @@ export fn run() {
     assert DOCS == "https://example.com/docs";
 }
 "#;
-    let reported = reported(source);
+    let found = reported(source);
     assert!(
-        reported.is_empty(),
-        "a pure global initializer must not be flagged: {reported:?}"
+        found.is_empty(),
+        "a pure global initializer must not be flagged: {found:?}"
     );
 }
 
@@ -217,9 +219,6 @@ export fn run() {
     assert x == 7;
 }
 "#;
-    assert!(
-        violations(source).is_empty(),
-        "a pure default must not be flagged: {:?}",
-        violations(source)
-    );
+    let v = violations(source);
+    assert!(v.is_empty(), "a pure default must not be flagged: {v:?}");
 }

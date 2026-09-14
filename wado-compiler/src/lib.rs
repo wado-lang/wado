@@ -106,8 +106,8 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-    DefaultPurityError, EffectError, Impurity, PureContext, SemanticDiagnostics, StoresError,
-    check_default_purity_semantic, check_effects_semantic, check_semantics, check_stores_semantic,
+    EffectError, Impurity, PureContext, PurityError, SemanticDiagnostics, StoresError,
+    check_effects_semantic, check_purity_semantic, check_semantics, check_stores_semantic,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -1063,7 +1063,7 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===
+    // === Phase 6b: Effect, Stores, and Purity Checks (Design B) ===
     // All three are produced from `Semantics` (AST + recorded facts), not the
     // emitted TIR, so they see every source function regardless of what reify
     // emits and share their logic with the LSP.

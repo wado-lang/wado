@@ -68,8 +68,8 @@ An effect performed there has no semantics to give it, so it is a compile error:
 This is the rule default-value expressions already carry, so one checker answers
 for every position that must be pure, naming the position in the diagnostic.
 
-Installing a handler with `with … do` is rejected here too, on narrower grounds —
-see the gap below.
+Installing a handler with `with … do` is rejected here too, but on narrower
+grounds. See the gap below.
 
 ### What a constant expression can hold
 
@@ -205,16 +205,14 @@ there rather than reasoning about it.
 ## Known gaps
 
 - An initializer that installs its own handler is rejected, though it need not
-  be. `with E => h do { E::op() }` discharges inside itself: the handler is
-  installed and the operations its body dispatches are answered by it, so the
-  expression as a whole performs no effect and the purity rule above does not
-  reach it. What rejects it is narrower — the dispatch desugaring
-  (`effect_dispatch::synthesize_post_check`) walks function bodies, so a
-  `WithHandler` left in an initializer reaches lowering undesugared. Closing this
-  means desugaring initializers too, and giving the purity walk the
-  grant/discharge tracking the effect checker has, so an operation the installed
-  handler does not cover is still caught. Whether that complexity is worth the
-  expressiveness is open.
+  be. In `with E => h do { E::op() }` the handler answers the operations its body
+  dispatches, so the expression performs no effect and the purity rule above does
+  not reach it. It is rejected for a narrower reason: the dispatch desugaring
+  walks function bodies only, so a handler install left in an initializer reaches
+  lowering undesugared. Closing this means desugaring initializers too, and
+  giving the purity walk the grant and discharge tracking the effect checker has,
+  so an operation the installed handler leaves out is still caught. Whether that
+  buys enough to be worth the complexity is open.
 
 ## Future work
 

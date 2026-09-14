@@ -1,9 +1,6 @@
-// A global initializer runs before the program does, at a point no handler is
-// installed and whose order among the other initializers the program does not
-// choose. Performing an effect there has no semantics to give it, so it is
-// rejected — the same rule the default-value position already carries. An
-// initializer that installs its own handler is the open case, rejected on
-// narrower grounds; see WEP: Global Variables.
+// A global initializer runs before any handler is installed, in an order the
+// program does not choose, so performing an effect there is rejected.
+// See WEP: Global Variables.
 
 use { println, Stdout } from "core:cli";
 
@@ -32,12 +29,12 @@ fn noisy() -> i32 with Stdout {
 // Calls a function that declares an effect.
 global FROM_EFFECTFUL_FN: i32 = noisy();
 
-// Dispatches an interface operation, with no handler installed to take it.
+// Dispatches an interface operation. Its default body does not make the
+// dispatch pure.
 global FROM_OPERATION: i32 = Counter::next();
 
-// Installs a handler. The install discharges the operation its body dispatches,
-// so this one is self-contained rather than impure — it is rejected because the
-// dispatch desugaring reaches function bodies only.
+// Installs a handler. Not impure: the install answers the operation its body
+// dispatches. Rejected because only function bodies get the desugaring.
 global FROM_HANDLER: i32 = hold: {
     let mut tally = Tally { value: 10 };
     with Counter => &mut tally do {
