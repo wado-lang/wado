@@ -5101,9 +5101,8 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
 Every reference parameter follows this rule, `self` included. A method that
 returns or stores `self` declares `with stores[self]`.
 
-What decides is whether the member read out of the parameter is itself a
-reference. A reference one reaches through a parameter still names what that
-parameter names, so handing it on hands the parameter's storage on:
+A reference member read out of a parameter still names what that parameter
+names, so returning it lets the caller's storage escape. Declare it:
 
 ```wado
 struct Cursor { chars: &Array<char>, pos: i32 }
@@ -5113,8 +5112,7 @@ fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
 }
 ```
 
-A value member is copied, and the copy names nothing the caller still reaches,
-so reading one out needs no declaration:
+A value member is copied, so nothing of the parameter escapes with it:
 
 ```wado
 fn name_of(p: &Person) -> String {   // `name` is a `String`

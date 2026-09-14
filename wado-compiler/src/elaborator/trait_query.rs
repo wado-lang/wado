@@ -2795,6 +2795,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .representation_head(base_type_id);
+        let inherited = (derive_id != base_type_id).then_some(derive_id);
         if !self.tysys.auto_derive_eligible_kind(derive_id) {
             return None;
         }
@@ -2820,11 +2821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: vec![false],
             param_defaults: vec![None],
             param_names: vec!["other".to_string()],
-            owner: if derive_id == base_type_id {
-                MethodOwner::Receiver
-            } else {
-                MethodOwner::InheritedFrom(derive_id)
-            },
+            owner: inherited.map_or(MethodOwner::Receiver, MethodOwner::InheritedFrom),
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
@@ -2863,10 +2860,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            impl_struct_name: if derive_id == base_type_id {
-                struct_name.to_string()
-            } else {
-                self.tysys.type_table.borrow().mangle_type_name(derive_id)
+            impl_struct_name: match inherited {
+                Some(id) => self.tysys.type_table.borrow().mangle_type_name(id),
+                None => struct_name.to_string(),
             },
             impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,

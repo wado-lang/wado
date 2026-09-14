@@ -531,12 +531,11 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
 
 /// The type a [`Selector::Field`] is keyed by. Minted here alone, so a callee
 /// recording a write and a caller looking it up cannot spell the key apart.
-/// Peels `Box<T>` along with `Ref`/`MutRef`: a callee's own `&mut T`
-/// parameter is never boxed, but a caller's address-taken local passed to it
-/// is, by the time this walk runs — the two must key the same write alike.
-/// A newtype names its base's storage, so the key is the representation head:
-/// `List<u8>::index_assign` records its write under `List`, and a handle typed
-/// `ByteList` must look it up there.
+/// `Box<T>` peels with `Ref`/`MutRef`, since a caller's address-taken local is
+/// boxed by the time this walk runs and the callee's `&mut T` never is. A
+/// newtype peels to its representation head, since it names its base's storage:
+/// `List<u8>::index_assign` records under `List`, and a `ByteList` handle must
+/// find it there.
 #[must_use]
 pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
     let peeled = type_table.peel_refs_and_box(base_type);

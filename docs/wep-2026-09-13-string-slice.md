@@ -45,6 +45,9 @@ What follows:
   receiver, so it declares `stores[self]` — the same shape `AsByteSlice` has.
   Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: &S)` carries no
   dispatch at `-O2`.
+- Every `StrSlice` method that returns another view declares `stores[self]` too.
+  A view holds its bytes in a reference field, and the spec's reference-storage
+  rule counts reading one out of the receiver as the receiver escaping.
 - The view must scalarize: a three-field struct built and read in one function
   leaves no `struct.new` behind. That is a property of the optimizer, so it is
   tested as one.
@@ -67,9 +70,9 @@ What follows:
 - [x] Add `AsStrSlice` with impls for `String` and `StrSlice`. Done when one
       generic signature accepts an owned string, a reference to one, and a
       subrange view.
-- [x] Migrate the standard library's `(text, start, end)` triples to `StrSlice`,
-      replacing the triple signatures rather than keeping both. Done when
-      `FromStr` names `from_str_slice` and no triple form remains.
+- [x] Migrate the parsing triples `(text, start, end)` to `StrSlice`, replacing
+      the triple signatures rather than keeping both. Done when `FromStr` names
+      `from_str_slice` and no parsing entry point takes a triple.
 
 ## Known gaps
 
@@ -79,7 +82,9 @@ What follows:
   fields would take the fields instead.
 - The `StrSlice` API surface is open: which of `String`'s methods it carries,
   which prelude traits it implements, and whether `String`'s own methods start
-  taking `impl AsStrSlice`.
+  taking `impl AsStrSlice`. `String::push_str_range_unchecked` still takes a
+  `(text, start, end)` triple for that reason, and Kiln's generated parsers
+  call it.
 - `StrSlice` carries no string search or comparison beyond `Eq` / `Ord`:
   `contains`, `starts_with`, `split` and the trims stay on `String`, so working
   on part of a string still copies it out for those. Closing it means porting

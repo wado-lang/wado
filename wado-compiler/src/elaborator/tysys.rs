@@ -321,10 +321,9 @@ impl TypeSystem {
     /// A newtype's representation head, named for a trait-impl lookup fallback,
     /// else the name and id given.
     ///
-    /// The head rather than one peel: a middle link of a chain writes no impl of
-    /// its own, or [`Self::own_impl_link`] would have stopped there first. A
-    /// `flags` type keeps its own id, which is why this asks for a newtype
-    /// rather than taking `representation_head` unconditionally.
+    /// The head rather than one peel: a middle link writes no impl of its own,
+    /// or [`Self::own_impl_link`] would have stopped there. Asking for a newtype
+    /// first leaves a `flags` type its own id, which carries its own impls.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
         if matches!(tt.get(type_id), ResolvedType::Newtype { .. }) {

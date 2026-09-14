@@ -649,11 +649,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // dispatched through `Position` declares `&Vec2`, and the
                     // operand is a `Position` over the same base.
                     let rhs_base = self.tysys.own_impl_link(right, trait_).unwrap_or_else(|| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .get_newtype_base(right)
-                            .unwrap_or(right)
+                        self.tysys.type_table.borrow().representation_head(right)
                     });
                     let rhs_class = ArgClass::Exact(rhs_base);
                     admitted = self.find_arithmetic_trait_impls(

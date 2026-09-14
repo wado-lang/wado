@@ -1,6 +1,6 @@
-//! Identity cast: `e as T` where `T` and `e`'s type share one representation
-//! head is `e`. Newtype erasure and monomorphization both leave such casts, and
-//! the wrapper hides the operand's shape from every rule that matches on one.
+//! Identity cast: `e as T` is `e` where the two types share one representation
+//! head. Erasure and monomorphization leave such casts, and the wrapper hides
+//! the operand's shape from every rule that matches on one.
 
 use crate::nir_arena::{ExprId, ExprKind};
 use crate::nir_engine::{Engine, Rule};

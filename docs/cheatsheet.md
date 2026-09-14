@@ -962,9 +962,8 @@ impl Node {
     }
 }
 
-// A reference reached through a parameter still names what the parameter
-// names, so handing it on hands the parameter on. A value member is copied
-// and needs no declaration.
+// A reference member read out of a parameter still names what the parameter
+// names, so returning it needs the declaration. A value member is copied.
 struct Cursor { chars: &Array<char>, pos: i32 }
 
 fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
