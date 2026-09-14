@@ -17,7 +17,7 @@ use crate::tir::{
     TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam,
     TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
@@ -564,10 +564,11 @@ impl ClosureLowerer {
                 });
             }
 
-            // Rewrite Capture→FieldAccess and shift every Local / Let /
-            // Binding index by 1 to make room for the synthetic `self`.
+            // Make room for the synthetic `self` first: the rewrite below
+            // introduces a `self` read at local 0, which no shift may move.
             let mut transformed_body = collected.body.clone();
-            ClosureBodyTransformer {
+            shift_locals(&mut transformed_body, 1);
+            CaptureRewriter {
                 captures: &collected.captures,
                 self_ref_type,
                 self_span: collected.span,
@@ -688,8 +689,7 @@ impl ClosureLowerer {
                 span: collected.span,
                 local_count,
                 locals,
-                // Shift to match `ClosureBodyTransformer`'s +1 on
-                // body-side Local indices.
+                // Shift to match the body's own `shift_locals` past `self`.
                 address_taken_locals: collected
                     .address_taken_locals
                     .iter()
@@ -1901,18 +1901,16 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
     }
 }
 
-/// In-place body transformer for the synthesised `$call` method: rewrites each
-/// `Capture` into a `self.$capture_<index>` field access and shifts every local
-/// index — reads, `Let`s, and pattern bindings alike — past the synthetic `self`.
-/// A nested `Closure` body has its own index namespace and is not recursed into,
-/// but its `captures[*].outer_index` names locals here, so those shift too.
-struct ClosureBodyTransformer<'a> {
+/// Rewrites each `Capture` in the synthesised `$call` body into a
+/// `self.$capture_<index>` field access. A nested `Closure`'s own `Capture`
+/// nodes name its captures, not these, so its body is not recursed into.
+struct CaptureRewriter<'a> {
     captures: &'a [TirCapture],
     self_ref_type: TypeId,
     self_span: Span,
 }
 
-impl TirMutVisitor for ClosureBodyTransformer<'_> {
+impl TirMutVisitor for CaptureRewriter<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         match &mut expr.kind {
             TirExprKind::Capture { index, .. } => {
@@ -1938,32 +1936,9 @@ impl TirMutVisitor for ClosureBodyTransformer<'_> {
                 expr.type_id = cap_type;
                 expr.span = span;
             }
-            TirExprKind::Local { index, .. } => {
-                *index += 1;
-            }
-            TirExprKind::Closure { captures, .. } => {
-                // The body is a separate namespace, but the captures read
-                // this one — see struct doc.
-                for capture in captures.iter_mut() {
-                    capture.outer_index += 1;
-                }
-            }
+            TirExprKind::Closure { .. } => {}
             _ => self.walk_expr(expr),
         }
-    }
-
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        if let TirStmtKind::Let { local_index, .. } = &mut stmt.kind {
-            *local_index += 1;
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern {
-            *local_index += 1;
-        }
-        self.walk_pattern(pattern);
     }
 }
 

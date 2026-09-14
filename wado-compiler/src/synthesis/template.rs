@@ -143,11 +143,8 @@ fn assert_formatter_layout(type_table: &TypeTable) {
     );
 }
 
-/// Expand all `TemplateString` nodes in a module.
-///
-/// Runs as part of the pre-mono synthesis phase. Template expansion emits
-/// trait method calls (`Display::fmt`, `Inspect::inspect`) that the monomorphizer
-/// subsequently resolves to concrete implementations.
+/// Expand every `TemplateString` in the module's bodies — function bodies and
+/// global initializers alike, both of which `reify` can put one in.
 pub fn expand_templates(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -164,17 +161,17 @@ pub fn expand_templates(
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
         if let Some(ref mut body) = func.body {
-            let mut expander = TemplateExpander {
-                alloc: FuncLocalAlloc {
-                    next_index: local_count,
-                    new_locals: Vec::new(),
-                },
-                ctx: &ctx,
-            };
+            let mut expander = TemplateExpander::over(local_count, &ctx);
             TirOptVisitor::visit_block(&mut expander, body);
             func.local_count = expander.alloc.next_index;
             func.locals.extend(expander.alloc.new_locals);
         }
+    }
+    for global in &mut module.globals {
+        let next_index = u32::try_from(global.locals.len()).unwrap();
+        let mut expander = TemplateExpander::over(next_index, &ctx);
+        expander.visit_expr(global.init.slot_expr_mut());
+        global.locals.extend(expander.alloc.new_locals);
     }
 }
 
@@ -400,6 +397,19 @@ struct TemplateExpander<'a> {
     ctx: &'a TemplateCtx<'a>,
 }
 
+impl<'a> TemplateExpander<'a> {
+    /// Expands into a body whose locals already run `0..next_index`.
+    fn over(next_index: u32, ctx: &'a TemplateCtx<'a>) -> Self {
+        Self {
+            alloc: FuncLocalAlloc {
+                next_index,
+                new_locals: Vec::new(),
+            },
+            ctx,
+        }
+    }
+}
+
 impl TirOptVisitor for TemplateExpander<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         // Closure bodies own an independent local-index namespace, so the
@@ -414,13 +424,8 @@ impl TirOptVisitor for TemplateExpander<'_> {
             ..
         } = &mut expr.kind
         {
-            let mut nested = TemplateExpander {
-                alloc: FuncLocalAlloc {
-                    next_index: (params.len() + body_locals.len()) as u32,
-                    new_locals: Vec::new(),
-                },
-                ctx: self.ctx,
-            };
+            let next_index = u32::try_from(params.len() + body_locals.len()).unwrap();
+            let mut nested = TemplateExpander::over(next_index, self.ctx);
             let changed = nested.visit_expr(body);
             // Surface the new synth locals on the closure so later passes
             // (pattern lowering, closure planning) see a `body_locals` that
