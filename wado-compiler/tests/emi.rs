@@ -1024,6 +1024,35 @@ struct Eligible {
     name: String,
     sites: usize,
     shapes: Vec<&'static str>,
+    /// What the combinations that fell out were refused for. The source is a
+    /// subject under the rest, so this is not an exclusion — but a shape that
+    /// drops silently is coverage lost without a word.
+    dropped: Vec<String>,
+}
+
+/// The refusals a source collected while at least one combination still stood.
+#[derive(Default)]
+struct Refusals(Vec<Excluded>);
+
+impl Refusals {
+    fn note(&mut self, excluded: Excluded) {
+        self.0.push(excluded);
+    }
+
+    /// The reason to report once nothing survived: the last refusal, which is
+    /// the verdict on the last combination standing.
+    fn into_reason(mut self) -> Excluded {
+        self.0
+            .pop()
+            .expect("a combination that dropped out left its reason")
+    }
+
+    fn into_lines(self) -> Vec<String> {
+        self.0
+            .iter()
+            .map(|e| format!("{} — {}", e.kind(), e.detail()))
+            .collect()
+    }
 }
 
 /// A mutant that misbehaved in a way an injection is not allowed to.
@@ -1194,7 +1223,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     if alive.is_empty() {
         return Err(Excluded::NoBindingInScope);
     }
-    let mut refused = None;
+    let mut refusals = Refusals::default();
     let path = &subject.path;
 
     for level in levels() {
@@ -1207,12 +1236,12 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             ) {
                 Ok(()) => survivors.push((shape, payload)),
                 Err(excluded) if is_finding(&excluded) => return Err(excluded),
-                Err(excluded) => refused = Some(excluded),
+                Err(excluded) => refusals.note(excluded),
             }
         }
         alive = survivors;
         if alive.is_empty() {
-            return Err(refused.expect("a combination that dropped out left its reason"));
+            return Err(refusals.into_reason());
         }
     }
 
@@ -1229,6 +1258,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         name,
         sites: covered,
         shapes: shapes.into_iter().collect(),
+        dropped: refusals.into_lines(),
     })
 }
 
@@ -1346,7 +1376,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     // A shape the source is no oracle for drops out alone: the campaign keeps
     // it under the shapes it does answer for, as it does for a payload.
     let mut alive: Vec<&Shape> = subject.shapes.clone();
-    let mut refused = None;
+    let mut refusals = Refusals::default();
 
     for level in levels() {
         let baseline = baseline(path, &canonical, &spec, level)?;
@@ -1362,12 +1392,12 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             match calibrate_once(path, &canonical, &spec, level, &baseline, shape, &sites) {
                 Ok(()) => survivors.push(shape),
                 Err(excluded) if is_calibration_finding(&excluded) => return Err(excluded),
-                Err(excluded) => refused = Some(excluded),
+                Err(excluded) => refusals.note(excluded),
             }
         }
         alive = survivors;
         if alive.is_empty() {
-            return Err(refused.expect("a shape that dropped out left its reason"));
+            return Err(refusals.into_reason());
         }
     }
 
@@ -1375,6 +1405,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         name,
         sites: sites.len(),
         shapes: alive.iter().map(|shape| shape.keyword).collect(),
+        dropped: refusals.into_lines(),
     })
 }
 
@@ -1704,6 +1735,7 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     ));
     report.push_str(&per_root(results, subjects));
     report.push_str(&per_shape(results));
+    report.push_str(&dropped(results));
 
     if !results.findings.is_empty() {
         report.push_str("\n=== findings ===\n");
@@ -1767,8 +1799,8 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
     out
 }
 
-/// How many sources each guard shape survived on, so a shape that costs its
-/// compile time without reaching anything is visible.
+/// What each guard shape survived on, so a shape that costs its compile time
+/// without reaching anything is visible.
 fn per_shape(results: &Results) -> String {
     let mut out = String::from("\n=== guard shapes ===\n");
     for shape in &SHAPES {
@@ -1785,6 +1817,24 @@ fn per_shape(results: &Results) -> String {
         ));
     }
     out
+}
+
+/// The combinations that fell out of a source the rest carried. The per-shape
+/// counts say a shape reached fewer sources; this says which, and why.
+fn dropped(results: &Results) -> String {
+    let lines: Vec<String> = results
+        .eligible
+        .iter()
+        .flat_map(|e| {
+            e.dropped
+                .iter()
+                .map(move |reason| format!("{}: {reason}\n", e.name))
+        })
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!("\n=== dropped combinations ===\n{}", lines.concat())
 }
 
 /// One line per site: offset, the line and column it lands on, the statement
