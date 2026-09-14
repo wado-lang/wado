@@ -403,17 +403,17 @@ written through, so each owes its copy though `a` shares. Only a move exempts
 them, and a move is proved of the binding itself, never inherited from what the
 binding was read out of.
 
-A source root stands on its own chain, so the whole chain answers whether a
-binding aliases storage something still reads. A match over a writable place is
-hoisted into a temp that dies at the match, and reading that temp alone calls the
-holder dead while it is still live — which moves an arm binding out from under
-it. The share side has always closed its live set over the chain; the move side
-reads the same closure.
-
 A `match` over a writable place is hoisted into a temp, and the fold decides that
 temp's copy for every binding under it. One wrap site answers for the whole arm:
 the bindings read the temp, so each is as defended as the temp is. A place nothing
 can write is matched where it lies, its bindings costing nothing.
+
+That temp dies at the match, so reading it alone calls the place it was hoisted
+out of dead while it is still live, which moves an arm binding out from under the
+holder. A source root stands on its own chain, and the whole chain answers instead
+— the share side always closed its live set that way, and the move side now reads
+the same closure. Both sides close over places rather than root locals, so two
+components of one aggregate are not readers of each other.
 
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
@@ -706,7 +706,10 @@ Verified against the tree.
       the taker's own side left a sibling binding read out of the same place
       invisible — it reaches the place from beside the taker, not above it — so
       two bindings both skipped their copy and a write through one was observed
-      through the other. It costs no elision the corpus records.
+      through the other. Both sides are compared as places rather than as root
+      locals: asking only whether two chains share a root made each component of
+      a destructured tuple a reader of its siblings, which cost the corpus five
+      copies. Carrying the selectors gives the corpus back every elision it had.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp pattern lowering hoists the scrutinee into. Which
       syntactic position a `match` sits in is part of whether the binding is
