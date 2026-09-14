@@ -1,0 +1,15 @@
+// A qualifier names a type, so the file must be able to see that type. Only the
+// prelude is in scope without a `use`. Comparing the written name against the
+// scrutinee's rendered name accepted this, and accepted a same-named local type
+// with it.
+
+use { pick } from "./sub/pattern_qualifier_needs_import.wado";
+
+test "an unimported type name does not qualify" {
+    assert pick(-1) matches { Err(Kind::Alpha) };
+}
+
+__DATA__
+{
+    "compile_error": "pattern mismatch: expected 'valid case of Kind', found 'Kind::Alpha'"
+}

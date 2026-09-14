@@ -1,0 +1,86 @@
+// Minting a second owner out of a binding needs a proof that the binding holds
+// the only reference to what it read. A repoint of the place is not one: it says
+// nothing about when it runs, or about a sibling binding read out of the same
+// place. Neither is a chain of owned-looking sources, where the holder the chain
+// ends at is still live.
+
+struct H {
+    held: Option<List<i32>>,
+}
+
+variant Held {
+    Full(List<i32>),
+    Empty,
+}
+
+struct HV {
+    held: Held,
+}
+
+impl HV {
+    fn count(&self) -> i32 {
+        if let Full(v) = self.held {
+            return v.len();
+        }
+        return 0;
+    }
+}
+
+fn make() -> HV {
+    return HV { held: Held::Full([1, 2]) };
+}
+
+// One repoint would license every binding read out of the place. The holder
+// arrives through `&mut`, so nothing under it is fresh and the move rule cannot
+// be what elides the copy.
+fn two_readers(h: &mut H) -> List<i32> {
+    if let Some(a) = h.held {
+        if let Some(b) = h.held {
+            h.held = null;
+            let mut x = a;
+            x.push(9);
+            return b;
+        }
+    }
+    return [];
+}
+
+test "a repoint does not license two arm bindings" {
+    let mut h = H { held: Option::Some([1, 2]) };
+    let b = two_readers(&mut h);
+    assert b.len() == 2;
+}
+
+// A repoint that does not execute would license all the same.
+fn maybe_repoint(h: &mut H, c: bool) -> i32 {
+    if let Some(a) = h.held {
+        if c {
+            h.held = null;
+        }
+        let mut x = a;
+        x.push(9);
+        return x.len();
+    }
+    return 0;
+}
+
+test "a repoint that never runs licenses no new owner" {
+    let mut h = H { held: Option::Some([1, 2]) };
+    assert maybe_repoint(&mut h, builtin::black_box(false)) == 3;
+    let Some(z) = h.held else { unreachable(); };
+    assert z.len() == 2;
+}
+
+// No repoint anywhere: an arm binding out of a field of a freshly built holder,
+// while the holder is still live.
+test "an arm binding out of a fresh holder is not its owner" {
+    let mut h = make();
+    let Full(a) = h.held else { unreachable(); };
+    let mut x = a;
+    x.push(9);
+    assert x.len() == 3;
+    assert h.count() == 2;
+}
+
+__DATA__
+{"test": {}}

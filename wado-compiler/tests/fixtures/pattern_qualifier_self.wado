@@ -1,0 +1,44 @@
+// `Self` qualifies a pattern wherever it names the scrutinee's type. It resolves
+// through a binder rather than a declaration site, so the qualifier check must
+// resolve the written name as a type, not look up a declaration by it.
+
+enum Color {
+    Red,
+    Green,
+}
+
+variant Shape {
+    Dot,
+    Line(i32),
+}
+
+impl Color {
+    fn is_red(&self) -> bool {
+        return match self {
+            Self::Red => true,
+            Self::Green => false,
+        };
+    }
+}
+
+impl Shape {
+    fn length(&self) -> i32 {
+        return match self {
+            Self::Dot => 0,
+            Self::Line(n) => *n,
+        };
+    }
+}
+
+test "an enum matches under Self" {
+    assert Color::Red.is_red();
+    assert !Color::Green.is_red();
+}
+
+test "a variant matches under Self" {
+    assert Shape::Dot.length() == 0;
+    assert Shape::Line(7).length() == 7;
+}
+
+__DATA__
+{"test": {}}

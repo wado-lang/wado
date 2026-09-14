@@ -3569,11 +3569,31 @@ impl TypeTable {
     /// to walk. Identity is *not* inherited — a newtype names itself through
     /// `Reflect` — so this never answers for a type's name.
     pub fn reflect_structure_head(&self, id: TypeId) -> TypeId {
-        let mut current = id;
-        while let ResolvedType::Newtype { base_type, .. } = self.get_unerased(current) {
-            current = *base_type;
-        }
-        current
+        self.newtype_chain(id)
+            .last()
+            .expect("a chain holds the type it starts at")
+    }
+
+    /// `id` and every type its newtype chain wraps, nearest first.
+    fn newtype_chain(&self, id: TypeId) -> impl Iterator<Item = TypeId> {
+        std::iter::successors(Some(id), |&current| match self.get_unerased(current) {
+            ResolvedType::Newtype { base_type, .. } => Some(*base_type),
+            _ => None,
+        })
+    }
+
+    /// The structure a match takes its cases from: references peeled for match
+    /// ergonomics, then newtypes, a newtype's cases being its base's.
+    pub fn scrutinee_structure_head(&self, id: TypeId) -> TypeId {
+        self.reflect_structure_head(self.peel_refs(id))
+    }
+
+    /// Every declaration on `id`'s newtype chain, its head's included: the names
+    /// that stand for one structure, so any of them names `id`'s cases.
+    pub fn structure_chain_defs(&self, id: TypeId) -> Vec<DefId> {
+        self.newtype_chain(self.peel_refs(id))
+            .filter_map(|t| self.nominal_def(t))
+            .collect()
     }
 
     /// The reflection kind `id` is, or `None` where reflection does not cover
@@ -5290,6 +5310,9 @@ pub enum TirPattern {
     Variant {
         enum_type: TypeId,
         variant_name: String,
+        /// Which case of `enum_type` this matches. Resolved where the pattern is
+        /// elaborated, so no consumer re-derives it from `variant_name`.
+        case_index: u32,
         bindings: Vec<TirPattern>,
         /// Payload type for the matched variant case (unit for no-payload cases)
         payload_type: TypeId,

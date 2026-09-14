@@ -653,3 +653,16 @@ one is named, the rendering where nothing declares the shape, so `i32` and `()`
 compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
+
+## Known gap: a pattern qualifier's type arguments are counted, not read
+
+`Maybe<i32>::Just` and `Maybe<String>::Just` both qualify a `Maybe<i32>`
+scrutinee. The qualifier itself resolves to a declaration and compares by
+`DefId`. The arguments written beside it are only counted, so any count that
+agrees is accepted. The count still earns its keep: a qualifier whose type
+declares no parameters takes none.
+
+Closing this means comparing each written argument against the scrutinee's. That
+needs a rule for a generic body first. There a type parameter stands where the
+scrutinee carries a concrete type, which is ordinary code, so rejecting it would
+be wrong.

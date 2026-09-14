@@ -1,0 +1,27 @@
+// A qualifier names a declaration on the scrutinee's own chain, not any name
+// that happens to reach the same structure. Two newtypes over one enum are
+// distinct types, so neither qualifies the other's cases.
+
+enum Color {
+    Red,
+    Green,
+}
+
+type C = Color;
+type D = Color;
+
+fn f(c: C) -> i32 {
+    return match c {
+        D::Red => 0,
+        D::Green => 1,
+    };
+}
+
+export fn run() {
+    let _ = f(Color::Green as C);
+}
+
+__DATA__
+{
+  "compile_error": "expected 'valid case of C', found 'D::Red'"
+}

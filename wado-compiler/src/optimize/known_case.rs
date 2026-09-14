@@ -52,20 +52,19 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     let Some(construct) = known_construct(engine, scrutinee) else {
         return false;
     };
-    let Some((case_index, case_name)) = construct_case(engine.body, construct) else {
+    let Some(case_index) = construct_case(engine.body, construct) else {
         return false;
     };
-    let case_name = case_name.to_owned();
     let ExprKind::Match { arms, .. } = &engine.body.exprs[id].kind else {
         return false;
     };
     let Some(head) = arms
         .iter()
-        .position(|arm| !refuses(engine.body, arm.pattern, &case_name))
+        .position(|arm| !refuses(engine.body, arm.pattern, case_index))
     else {
         return false;
     };
-    let certain = certain_arm(engine.body, &arms[head], &case_name).filter(|(bound, payload)| {
+    let certain = certain_arm(engine.body, &arms[head], case_index).filter(|(bound, payload)| {
         match bound {
             // A binding declared at another type is one match ergonomics
             // wrapped: the payload read would not fit it.
@@ -88,7 +87,7 @@ fn rewrite_match(engine: &mut Engine, id: ExprId, scrutinee: Operand) -> bool {
     }
     let kept: Vec<ArmData> = arms
         .iter()
-        .filter(|arm| !refuses(engine.body, arm.pattern, &case_name))
+        .filter(|arm| !refuses(engine.body, arm.pattern, case_index))
         .cloned()
         .collect();
     if kept.len() == arms.len() {
@@ -115,12 +114,12 @@ struct PayloadBinding {
 /// The payload binding an arm makes (`None` for one that binds nothing) and the
 /// payload's type, for an arm the case takes whatever the payload holds. A
 /// guard or a pattern that reads into the payload leaves the arm uncertain.
-fn certain_arm(body: &Body, arm: &ArmData, case: &str) -> Option<(Option<PayloadBinding>, TypeId)> {
+fn certain_arm(body: &Body, arm: &ArmData, case: u32) -> Option<(Option<PayloadBinding>, TypeId)> {
     if arm.guard.is_some() {
         return None;
     }
     let PatKind::Variant {
-        variant_name,
+        case_index,
         bindings,
         payload_type,
         ..
@@ -128,7 +127,7 @@ fn certain_arm(body: &Body, arm: &ArmData, case: &str) -> Option<(Option<Payload
     else {
         return None;
     };
-    if variant_name != case {
+    if *case_index != case {
         return None;
     }
     let bound = match (single_payload_binding(body, bindings)?, bindings.as_slice()) {
@@ -194,7 +193,7 @@ fn collapse_to_binding(
 /// The case index a value is known to hold.
 fn known_index(engine: &mut Engine, operand: Operand) -> Option<u32> {
     let construct = known_construct(engine, operand)?;
-    Some(construct_case(engine.body, construct)?.0)
+    construct_case(engine.body, construct)
 }
 
 /// The construction `operand` is known to read back: itself, or the one a
@@ -221,16 +220,11 @@ fn known_construct(engine: &mut Engine, operand: Operand) -> Option<ExprId> {
         .then_some(value)
 }
 
-fn construct_case(body: &Body, expr: ExprId) -> Option<(u32, &str)> {
-    let ExprKind::VariantConstruct {
-        case_index,
-        case_name,
-        ..
-    } = &body.exprs[expr].kind
-    else {
+fn construct_case(body: &Body, expr: ExprId) -> Option<u32> {
+    let ExprKind::VariantConstruct { case_index, .. } = &body.exprs[expr].kind else {
         return None;
     };
-    Some((*case_index, case_name))
+    Some(*case_index)
 }
 
 /// A fold reads the case out of the scrutinee and drops it, so nothing may
@@ -239,12 +233,12 @@ fn droppable(engine: &Engine, scrutinee: Operand) -> bool {
     is_pure_nontrapping_operand_typed(engine.body, scrutinee, engine.value_graph_type_table())
 }
 
-/// Whether `pattern` refuses every value of case `case`. Only a case name
+/// Whether `pattern` refuses every value of case `case`. Only a case pattern
 /// decides that; a binding, a wildcard, or a nested refutation may still match,
 /// so anything else is kept.
-fn refuses(body: &Body, pattern: PatId, case: &str) -> bool {
+fn refuses(body: &Body, pattern: PatId, case: u32) -> bool {
     match &body.pats[pattern].kind {
-        PatKind::Variant { variant_name, .. } => variant_name != case,
+        PatKind::Variant { case_index, .. } => *case_index != case,
         PatKind::Or(_) => {
             let mut all = true;
             body.for_each_child(NodeRef::Pat(pattern), |child| {

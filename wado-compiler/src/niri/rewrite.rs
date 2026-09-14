@@ -263,13 +263,13 @@ impl Interpreter<'_> {
             }
             Value::Variant {
                 type_id,
-                case_name,
+                case_index,
                 payload,
             } => self.write_variant(
                 sink,
                 existing,
                 *type_id,
-                case_name,
+                *case_index,
                 payload.as_deref(),
                 ty,
                 span,
@@ -452,15 +452,15 @@ impl Interpreter<'_> {
         )))
     }
 
-    /// A variant case and its payload. The case index and the payload's type are
-    /// the declaration's, which only the shape index names.
+    /// A variant case and its payload. The shape index answers for the payload's
+    /// type and for the name that spells the case the value holds.
     #[allow(clippy::too_many_arguments)]
     fn write_variant<S: EditSink>(
         &self,
         sink: &mut S,
         existing: Option<Operand>,
         type_id: TypeId,
-        case_name: &str,
+        case_index: u32,
         payload: Option<&Value>,
         ty: TypeId,
         span: Span,
@@ -468,15 +468,15 @@ impl Interpreter<'_> {
         if ty != type_id {
             return None;
         }
-        let case = self.facts.shapes?.case(type_id, case_name)?;
+        let (case_name, case) = self.facts.shapes?.case_at(type_id, case_index)?;
         let previous = match existing.and_then(Operand::as_expr) {
             Some(e) => match &sink.body().exprs[e].kind {
                 ExprKind::VariantConstruct {
                     variant_type,
-                    case_index,
+                    case_index: held,
                     payload,
                     ..
-                } if *variant_type == type_id && *case_index == case.index => Some(*payload),
+                } if *variant_type == type_id && *held == case_index => Some(*payload),
                 _ => None,
             },
             None => None,
@@ -493,7 +493,7 @@ impl Interpreter<'_> {
         Some(Operand::Expr(sink.alloc_expr(
             ExprKind::VariantConstruct {
                 variant_type: type_id,
-                case_index: case.index,
+                case_index,
                 case_name: case_name.to_string(),
                 payload: written,
             },

@@ -135,16 +135,16 @@ impl Interpreter<'_> {
                 _ => PatternMatch::Unknown,
             },
             PatKind::Variant {
-                variant_name,
+                case_index,
                 bindings,
                 ..
-            } => self.variant_matches(body, value, variant_name, bindings, binds),
+            } => self.variant_matches(body, value, *case_index, bindings, binds),
             PatKind::Tuple(_, _) => PatternMatch::Unknown,
         }
     }
 
-    /// Whether a variant value holds the case `variant_name` spells, binding
-    /// what its sub-patterns name.
+    /// Whether a variant value holds case `case_index`, binding what its
+    /// sub-patterns name.
     ///
     /// A payload the value does not carry where the pattern binds one is
     /// `Unknown`, not `No`: the case matched, and committing the arm without
@@ -153,17 +153,19 @@ impl Interpreter<'_> {
         &self,
         body: &Body,
         value: &Value,
-        variant_name: &str,
+        case_index: u32,
         bindings: &[PatId],
         binds: &mut PatBindings,
     ) -> PatternMatch {
         let Value::Variant {
-            case_name, payload, ..
+            case_index: held,
+            payload,
+            ..
         } = value
         else {
             return PatternMatch::Unknown;
         };
-        if &**case_name != variant_name {
+        if *held != case_index {
             return PatternMatch::No;
         }
         match bindings {

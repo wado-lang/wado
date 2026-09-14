@@ -1,0 +1,21 @@
+// A real namespace alias qualifies a case only when the scrutinee's type is
+// reachable through it. This one imports a module that declares no `Maybe`, so
+// the prefix names a namespace and still reaches nothing.
+use unrelated from "./sub/pattern_qualifier_unrelated.wado";
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+export fn run() {
+    let m: Maybe<i32> = Maybe::Just(1);
+    let seen = unrelated::Other::Something(1);
+    assert seen matches { Something(_) };
+    assert !(m matches { unrelated::Nothing });
+}
+
+__DATA__
+{
+  "compile_error": "found 'unrelated::Nothing'"
+}

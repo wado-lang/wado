@@ -16,7 +16,7 @@ use crate::name::{
     VARIANT_DISCRIMINANT_FIELD, variant_payload_field, wir_type_key, wir_variant_case_key,
 };
 use crate::nir_arena::{ArmData, BlockId, Body, ExprKind, Operand, PatId, PatKind};
-use crate::wir::{WirTypeDef, WirVariantType};
+use crate::wir::{WirTypeDef, WirVariantCase, WirVariantType};
 use crate::wir_build::translate::ref_binding_needs_boxing;
 use crate::wir_build::types::generic_instance_name;
 use std::assert_matches;
@@ -42,23 +42,6 @@ fn bool_if(
         result,
         then_body,
         else_body: Some(else_body),
-    }
-}
-
-/// Case enumeration for a variant or enum scrutinee, used to check whether a
-/// set of match arms exhaustively covers every case.
-struct CaseIndexer {
-    /// Case names in declaration order — present for variants so `Variant`
-    /// patterns can be mapped to indices by name. `None` for enums, which
-    /// carry their case index directly on the pattern.
-    names: Option<Vec<String>>,
-    /// Total number of cases in the scrutinee type.
-    total: usize,
-}
-
-impl CaseIndexer {
-    fn by_name(&self, case_name: &str) -> Option<usize> {
-        self.names.as_ref()?.iter().position(|n| n == case_name)
     }
 }
 
@@ -536,15 +519,14 @@ impl FunctionTranslator<'_, '_> {
             return false;
         }
 
-        let Some(index_of) = self.case_indexer(scrut_type) else {
+        let Some(total_cases) = self.total_cases(scrut_type) else {
             return false;
         };
-        let total_cases = index_of.total;
 
         let mut seen = vec![false; total_cases];
         let mut covered = 0usize;
         for arm in arms {
-            if !self.arm_pattern_covers_cases(arm.pattern, &index_of, &mut seen, &mut covered) {
+            if !self.arm_pattern_covers_cases(arm.pattern, &mut seen, &mut covered) {
                 return false;
             }
         }
@@ -558,24 +540,17 @@ impl FunctionTranslator<'_, '_> {
     fn arm_pattern_covers_cases(
         &self,
         pattern: PatId,
-        index_of: &CaseIndexer,
         seen: &mut [bool],
         covered: &mut usize,
     ) -> bool {
         match &self.body.pats[pattern].kind {
-            PatKind::Variant { variant_name, .. } => {
-                let Some(i) = index_of.by_name(variant_name) else {
-                    return false;
-                };
-                self.record_case(i, seen, covered)
-            }
-            PatKind::Enum { case_index, .. } => {
+            PatKind::Variant { case_index, .. } | PatKind::Enum { case_index, .. } => {
                 self.record_case(*case_index as usize, seen, covered)
             }
             PatKind::Or(alts) => alts
                 .clone()
                 .iter()
-                .all(|alt| self.arm_pattern_covers_cases(*alt, index_of, seen, covered)),
+                .all(|alt| self.arm_pattern_covers_cases(*alt, seen, covered)),
             _ => false,
         }
     }
@@ -589,12 +564,11 @@ impl FunctionTranslator<'_, '_> {
         true
     }
 
-    /// Resolve the scrutinee type to a list of case names (variant) or a bare
-    /// count (enum). Returns `None` for any type that isn't a concrete variant
-    /// or enum the compiler can enumerate here.
-    fn case_indexer(&self, scrut_type: TypeId) -> Option<CaseIndexer> {
+    /// How many cases the scrutinee type declares. `None` for any type that
+    /// isn't a concrete variant or enum the compiler can enumerate here.
+    fn total_cases(&self, scrut_type: TypeId) -> Option<usize> {
         match self.type_table.get(scrut_type) {
-            ResolvedType::Variant { def } => self.variant_case_indexer(
+            ResolvedType::Variant { def } => self.variant_total_cases(
                 self.type_table.def_name(*def),
                 self.type_table.def_module(*def),
             ),
@@ -604,7 +578,7 @@ impl FunctionTranslator<'_, '_> {
                     self.type_table.def_name(*def),
                     type_args,
                 );
-                self.variant_case_indexer(&mangled, self.type_table.def_module(*def))
+                self.variant_total_cases(&mangled, self.type_table.def_module(*def))
             }
             ResolvedType::Enum { def } => self
                 .ctx
@@ -615,30 +589,22 @@ impl FunctionTranslator<'_, '_> {
                     e.name == self.type_table.def_name(*def)
                         && e.module_source == *self.type_table.def_module(*def)
                 })
-                .map(|e| CaseIndexer {
-                    names: None,
-                    total: e.cases.len(),
-                }),
+                .map(|e| e.cases.len()),
             _ => None,
         }
     }
 
-    fn variant_case_indexer(
+    fn variant_total_cases(
         &self,
         variant_name: &str,
         module_source: &ModuleSource,
-    ) -> Option<CaseIndexer> {
+    ) -> Option<usize> {
         let fq = wir_type_key(module_source, variant_name);
         let variant_type_id = self.ctx.type_map.get(&fq)?;
         let WirTypeDef::Variant(vt) = &self.ctx.types[variant_type_id.index() as usize] else {
             return None;
         };
-        let names: Vec<String> = vt.cases.iter().map(|c| c.name.clone()).collect();
-        let total = names.len();
-        Some(CaseIndexer {
-            names: Some(names),
-            total,
-        })
+        Some(vt.cases.len())
     }
 
     /// Key of the WIR variant type a scrutinee lowers to. A variant arrives
@@ -678,6 +644,34 @@ impl FunctionTranslator<'_, '_> {
             panic!("[WIR] `{key}` is registered as a non-variant WIR type");
         };
         (key, vt)
+    }
+
+    /// The WIR case at the index the elaborator resolved.
+    #[track_caller]
+    fn variant_case_at(&self, type_id: TypeId, case_index: u32) -> (String, &WirVariantCase) {
+        let (variant_key, vt) = self.variant_def(type_id);
+        let Some(case) = vt.cases.get(case_index as usize) else {
+            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
+        };
+        (variant_key, case)
+    }
+
+    /// The same case, with the name the source wrote checked against it. WIR
+    /// takes the index as the identity and the name as a spelling of it.
+    #[track_caller]
+    fn variant_case(
+        &self,
+        type_id: TypeId,
+        case_index: u32,
+        case_name: &str,
+    ) -> (String, &WirVariantCase) {
+        let (variant_key, case) = self.variant_case_at(type_id, case_index);
+        assert_eq!(
+            case.name, case_name,
+            "[WIR] variant `{variant_key}` case {case_index} is `{}`, not `{case_name}`",
+            case.name
+        );
+        (variant_key, case)
     }
 
     /// The WIR struct type of a variant's payload-carrying case.
@@ -733,21 +727,21 @@ impl FunctionTranslator<'_, '_> {
                     Box::new(WirInstr::I32Const(*case_index as i32)),
                 )
             }
-            PatKind::Variant { variant_name, .. } => {
+            PatKind::Variant {
+                variant_name,
+                case_index,
+                ..
+            } => {
                 let scrut_get = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                     result_ty: self.wir_type(scrut_type),
                 };
 
-                let (variant_key, vt) = self.variant_def(scrut_type);
-                let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) else {
-                    panic!("[WIR] variant `{variant_key}` has no case `{variant_name}`");
-                };
-                let case_index = case.index as i32;
+                let (variant_key, case) = self.variant_case(scrut_type, *case_index, variant_name);
                 if case.payload.is_empty() {
                     WirInstr::I32Eq(
                         Box::new(self.variant_discriminant(scrut_type, scrut_get)),
-                        Box::new(WirInstr::I32Const(case_index)),
+                        Box::new(WirInstr::I32Const(*case_index as i32)),
                     )
                 } else {
                     WirInstr::RefTest {
@@ -915,6 +909,7 @@ impl FunctionTranslator<'_, '_> {
             }
             PatKind::Variant {
                 variant_name,
+                case_index,
                 bindings,
                 enum_type,
                 payload_type,
@@ -923,10 +918,7 @@ impl FunctionTranslator<'_, '_> {
                     return;
                 }
 
-                let (variant_key, vt) = self.variant_def(*enum_type);
-                let Some(case) = vt.cases.iter().find(|c| c.name == *variant_name) else {
-                    panic!("[WIR] variant `{variant_key}` has no case `{variant_name}`");
-                };
+                let (variant_key, case) = self.variant_case(*enum_type, *case_index, variant_name);
                 // A unit case carries no payload struct, so its bindings can only
                 // be unit-typed — and unit has no Wasm local to bind.
                 let case_has_payload = !case.payload.is_empty();
@@ -1309,15 +1301,7 @@ impl FunctionTranslator<'_, '_> {
         payload: Option<Operand>,
         result_type: TypeId,
     ) -> WirInstr {
-        let (variant_key, vt) = self.variant_def(variant_type);
-        let Some(case) = vt.cases.get(case_index as usize) else {
-            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
-        };
-        assert_eq!(
-            case.name, case_name,
-            "[WIR] variant `{variant_key}` case {case_index} is `{}`, not `{case_name}`",
-            case.name
-        );
+        let (variant_key, case) = self.variant_case(variant_type, case_index, case_name);
         let struct_type_id = if case.payload.is_empty() {
             self.ref_type_id(result_type)
         } else {
@@ -1336,10 +1320,7 @@ impl FunctionTranslator<'_, '_> {
         let val = self.translate_operand(inner);
         let inner_ty = self.operand_type_id(inner);
 
-        let (variant_key, vt) = self.variant_def(inner_ty);
-        let Some(case) = vt.cases.get(case_index as usize) else {
-            panic!("[WIR] variant `{variant_key}` has no case at index {case_index}");
-        };
+        let (variant_key, case) = self.variant_case_at(inner_ty, case_index);
         if case.payload.is_empty() {
             WirInstr::I32Eq(
                 Box::new(self.variant_discriminant(inner_ty, val)),

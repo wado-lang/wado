@@ -3856,12 +3856,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
 
-        let some_case_name = self
-            .tysys
-            .type_table
-            .borrow()
-            .compiler_variant_case_name(CompilerItem::OptionSome)
-            .to_string();
+        let (some_case_name, some_case_index) = {
+            let tt = self.tysys.type_table.borrow();
+            let (_, _, name, index) = tt.compiler_variant_case(CompilerItem::OptionSome);
+            (name.to_string(), index)
+        };
 
         ctx.enter_scope();
         let binding_pattern = self.reify_pattern(&for_of.binding, info.item_type, ctx);
@@ -3871,6 +3870,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let some_pattern = TirPattern::Variant {
             enum_type: option_type,
             variant_name: some_case_name,
+            case_index: some_case_index,
             bindings: vec![binding_pattern],
             payload_type: info.item_type,
         };
@@ -6098,18 +6098,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         use crate::tir::{TirBlock, TirExprKind, TirMatchArm, TirPattern, TirStmtKind, TypeTable};
 
         let inner_type = inner.type_id;
-        let (some_type, some_name, none_name) = {
+        let (some_type, some_name, some_index, none_name, none_index) = {
             let tt = self.tysys.type_table.borrow();
             let some_type = tt.as_option(inner_type).unwrap();
             let items = tt.compiler_items();
+            let (_, _, some_n, some_i) = items.require_variant_case(CompilerItem::OptionSome);
+            let (_, _, none_n, none_i) = items.require_variant_case(CompilerItem::OptionNone);
             (
                 some_type,
-                items
-                    .variant_case_name(CompilerItem::OptionSome)
-                    .to_string(),
-                items
-                    .variant_case_name(CompilerItem::OptionNone)
-                    .to_string(),
+                some_n.to_string(),
+                some_i,
+                none_n.to_string(),
+                none_i,
             )
         };
 
@@ -6120,6 +6120,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
                 variant_name: some_name,
+                case_index: some_index,
                 bindings: vec![TirPattern::Binding {
                     name: "$qm_v".to_string(),
                     local_index: v_local,
@@ -6143,6 +6144,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
                 variant_name: none_name,
+                case_index: none_index,
                 bindings: vec![],
                 payload_type: TypeTable::UNIT,
             },
@@ -6221,18 +6223,19 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let v_local = ctx.add_local("$qm_v".to_string(), ok_type, false, None);
         let e_local = ctx.add_local("$qm_e".to_string(), inner_err_type, false, None);
 
-        let (ok_name, err_name, err_index) = {
+        let (ok_name, ok_index, err_name, err_index) = {
             let tt = self.tysys.type_table.borrow();
             let items = tt.compiler_items();
-            let (_, _, ok_n, _ok_i) = items.require_variant_case(CompilerItem::ResultOk);
+            let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
             let (_, _, err_n, err_i) = items.require_variant_case(CompilerItem::ResultErr);
-            (ok_n.to_string(), err_n.to_string(), err_i)
+            (ok_n.to_string(), ok_i, err_n.to_string(), err_i)
         };
 
         let ok_arm = TirMatchArm {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
                 variant_name: ok_name,
+                case_index: ok_index,
                 bindings: vec![TirPattern::Binding {
                     name: "$qm_v".to_string(),
                     local_index: v_local,
@@ -6280,6 +6283,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             pattern: TirPattern::Variant {
                 enum_type: inner_type,
                 variant_name: err_name,
+                case_index: err_index,
                 bindings: vec![TirPattern::Binding {
                     name: "$qm_e".to_string(),
                     local_index: e_local,
@@ -7662,7 +7666,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
         recorded_type: TypeId,
     ) -> TirExpr {
-        use crate::tir::{CallArg, ResolvedType, TirExprKind, TypeId};
+        use crate::tir::{CallArg, TirExprKind};
 
         // Reuse the static-method `FunctionRef` annotate resolved
         // (mangled name + `cm_name` for CM binding synthesis). reify's
@@ -7717,28 +7721,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (line 1105+ / 1173+ in method_call.rs), so `recorded_type` is
         // always the variant instance and reify reads it directly.
         let variant_type = recorded_type;
-        let variant_type_args: Vec<TypeId> =
-            match self.tysys.type_table.borrow().get(recorded_type).clone() {
-                ResolvedType::GenericInstance { type_args, .. } => type_args,
-                _ => Vec::new(),
-            };
-        if let Some(variant_info) = self
-            .tysys
-            .type_def(recorded_type)
-            .and_then(|def| self.type_lookup().variant_cases_of(def))
-            .cloned()
-            && let Some((case_index, case_data)) = variant_info
-                .cases
-                .iter()
-                .enumerate()
-                .find(|(_, c)| c.name == static_call.method)
-                .map(|(i, c)| (i, c.clone()))
-        {
-            let payload_type = self.get_variant_case_payload_type(
-                self.tysys.type_def(recorded_type),
-                &static_call.method,
-                &variant_type_args,
-            );
+        let (case_index, payload_type) =
+            self.variant_case_index_and_payload(recorded_type, &static_call.method);
+        if let Some(case_index) = case_index {
             let payload = static_call
                 .args
                 .first()
@@ -7746,8 +7731,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(
                 TirExprKind::VariantConstruct {
                     variant_type,
-                    case_index: case_index as u32,
-                    case_name: case_data.name,
+                    case_index,
+                    case_name: static_call.method.clone(),
                     payload,
                 },
                 variant_type,
@@ -10105,14 +10090,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         newtype_member_owner(&lookup, &self.tysys, def)
     }
 
-    /// Whose cases a pattern names: the scrutinee's structure, with references
-    /// and newtype links peeled. A newtype inherits its base's cases (WEP
-    /// 2026-01-29), so `match c { Color::Green => … }` holds for a `C` too —
-    /// reading the identity here dropped an enum into the variant branch, and
-    /// WIR build then had a variant pattern over an `Enum`.
+    /// Whose cases a pattern names — see [`TypeTable::scrutinee_structure_head`].
     pub(super) fn scrutinee_structure_head(&self, scrutinee_type: TypeId) -> TypeId {
-        let tt = self.tysys.type_table.borrow();
-        tt.reflect_structure_head(tt.peel_refs(scrutinee_type))
+        self.tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type)
     }
 
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
@@ -10161,19 +10144,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         scrutinee_type: TypeId,
         case_name: &str,
     ) -> TirPattern {
-        use crate::tir::ResolvedType;
-        // Peel references (match ergonomics): `if let None = rn` with
-        // `rn: &Option<T>` matches a nullary case through the reference.
-        let peeled = self.tysys.type_table.borrow().peel_refs(scrutinee_type);
-        let type_args = match self.tysys.type_table.borrow().get(peeled).clone() {
-            ResolvedType::GenericInstance { type_args, .. } => type_args,
-            _ => Vec::<TypeId>::new(),
-        };
-        let payload_type =
-            self.get_variant_case_payload_type(self.tysys.type_def(peeled), case_name, &type_args);
+        // The head the cases come from, peeled the way `scrutinee_has_variant_case`
+        // already asks: references for match ergonomics, then newtypes.
+        let head = self.scrutinee_structure_head(scrutinee_type);
+        let (case_index, payload_type) = self.variant_case_index_and_payload(head, case_name);
         TirPattern::Variant {
-            enum_type: peeled,
+            enum_type: head,
             variant_name: case_name.to_string(),
+            case_index: resolved_case_index(case_index, case_name),
             bindings: vec![],
             payload_type,
         }
@@ -10413,6 +10391,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return const_pat;
                 }
 
+                // `ns::NAME` naming an immutable global the namespace exports
+                // is a constant-value pattern, as the bare `NAME` is.
+                if bindings.is_empty()
+                    && let Some(alias) = self
+                        .sem
+                        .imports
+                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
+                    && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)
+                {
+                    return const_pat;
+                }
+
                 // Variant patterns appear in `match Some(x) { Some(v) => …
                 // }` etc. The case's payload type lives on
                 // `tysys.all_variant_cases`; reify reads it to give
@@ -10445,19 +10435,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // underlying `Option<T>` rather than falling to the
                 // unknown-payload `_` arm.
                 let peeled_scrutinee = self.scrutinee_structure_head(scrutinee_type);
-                let payload_type = {
-                    use crate::tir::ResolvedType;
-                    let type_args =
-                        match self.tysys.type_table.borrow().get(peeled_scrutinee).clone() {
-                            ResolvedType::GenericInstance { type_args, .. } => type_args,
-                            _ => Vec::<TypeId>::new(),
-                        };
-                    self.get_variant_case_payload_type(
-                        self.tysys.type_def(peeled_scrutinee),
-                        &case_name,
-                        &type_args,
-                    )
-                };
+                let (case_index, payload_type) =
+                    self.variant_case_index_and_payload(peeled_scrutinee, &case_name);
 
                 // Match ergonomics: a reference scrutinee (`self: &Option<T>`)
                 // gives the payload binding the reference kind, so `v` is `&T`
@@ -10469,9 +10448,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .iter()
                     .map(|p| self.reify_pattern(p, binding_scrutinee, ctx))
                     .collect();
+                let case_index = resolved_case_index(case_index, &case_name);
                 TirPattern::Variant {
                     enum_type: peeled_scrutinee,
                     variant_name: case_name,
+                    case_index,
                     bindings: sub_patterns,
                     payload_type,
                 }
@@ -10618,34 +10599,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// Look up a variant case's payload type, substituted with the
-    /// scrutinee's type args. Reify-side mirror of the elaborator's
-    /// `Elaborator::get_variant_case_payload_type`; the lookup walks
-    /// `tysys.all_variant_cases` and the local-module override map
-    /// via [`TypeLookup`], so the same `TypeId` annotate produced
-    /// lands on the reified pattern.
-    fn get_variant_case_payload_type(
+    /// A variant case's discriminant and payload type, substituted with
+    /// `variant_type`'s type args. `None` where the type declares no such case.
+    fn variant_case_index_and_payload(
         &self,
-        variant: Option<DefId>,
+        variant_type: TypeId,
         case_name: &str,
-        type_args: &[TypeId],
-    ) -> TypeId {
-        let (payload, type_param_indices): (TypeId, Vec<u32>) = {
+    ) -> (Option<u32>, TypeId) {
+        let type_args = match self.tysys.type_table.borrow().get(variant_type).clone() {
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
+            _ => Vec::new(),
+        };
+        let (case_index, payload, type_param_indices): (u32, TypeId, Vec<u32>) = {
             let lookup = self.type_lookup();
-            let Some(variant_info) = variant.and_then(|def| lookup.variant_cases_of(def)) else {
-                return TypeTable::UNKNOWN;
+            let Some(variant_info) = self
+                .tysys
+                .type_def(variant_type)
+                .and_then(|def| lookup.variant_cases_of(def))
+            else {
+                return (None, TypeTable::UNKNOWN);
             };
-            let Some(case_data) = variant_info.cases.iter().find(|c| c.name == case_name) else {
-                return TypeTable::UNKNOWN;
+            let Some((case_index, case_data)) = variant_info
+                .cases
+                .iter()
+                .enumerate()
+                .find(|(_, c)| c.name == case_name)
+            else {
+                return (None, TypeTable::UNKNOWN);
             };
             // Extract the variant decl's type-param indices so the
             // substitution map below is keyed by `index` — matching
             // `TypeTable::substitute_type_params`.
             let indices: Vec<u32> = (0..variant_info.type_param_type_ids.len() as u32).collect();
-            (case_data.payload, indices)
+            let case_index = u32::try_from(case_index).expect("case index fits u32");
+            (case_index, case_data.payload, indices)
         };
         if type_args.is_empty() {
-            return payload;
+            return (Some(case_index), payload);
         }
         // Map TypeParam{index} → concrete `type_args[index]`. Recurse
         // through containers (`Ref`, `BuiltinArray`, `GenericInstance`,
@@ -10655,10 +10645,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .zip(type_args.iter())
             .map(|(&idx, &t)| (idx, t))
             .collect();
-        self.tysys
+        let payload = self
+            .tysys
             .type_table
             .borrow_mut()
-            .substitute_type_params(payload, &substitution)
+            .substitute_type_params(payload, &substitution);
+        (Some(case_index), payload)
     }
 }
 
@@ -11195,6 +11187,14 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
         } else {
             None
         }
+    })
+}
+
+/// The discriminant a variant pattern matches. Pattern resolution rejects a case
+/// the scrutinee does not declare, so reify only ever sees one it resolved.
+fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
+    case_index.unwrap_or_else(|| {
+        unreachable!("reify does not run on a pattern naming no case: `{case_name}`")
     })
 }
 

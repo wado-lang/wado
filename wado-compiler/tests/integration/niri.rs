@@ -2738,7 +2738,7 @@ fn reduce_local_leaves_variant_match_alone() {
         local_expr(0, scrut_ty),
         vec![
             arm(
-                variant_pat(scrut_ty, "Some", vec![wildcard_pat()], TypeTable::I32),
+                variant_pat(scrut_ty, "Some", 0, vec![wildcard_pat()], TypeTable::I32),
                 bool_lit(true),
             ),
             arm(wildcard_pat(), bool_lit(false)),
@@ -3208,6 +3208,7 @@ fn enum_pat(enum_type: TypeId, case_name: &str, case_index: u32) -> PatBuild {
 fn variant_pat(
     enum_type: TypeId,
     variant_name: &str,
+    case_index: u32,
     bindings: Vec<PatBuild>,
     payload_type: TypeId,
 ) -> PatBuild {
@@ -3219,6 +3220,7 @@ fn variant_pat(
             PatKind::Variant {
                 enum_type,
                 variant_name: variant_name.clone(),
+                case_index,
                 bindings,
                 payload_type,
             },

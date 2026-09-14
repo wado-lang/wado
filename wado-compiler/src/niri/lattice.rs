@@ -217,7 +217,7 @@ impl Interpreter<'_> {
         &self,
         body: &Body,
         type_id: TypeId,
-        case_name: &str,
+        case_index: u32,
         payload: Option<Operand>,
     ) -> Lattice {
         let payload = match payload {
@@ -230,7 +230,7 @@ impl Interpreter<'_> {
         };
         Lattice::Const(Value::Variant {
             type_id,
-            case_name: case_name.into(),
+            case_index,
             payload,
         })
     }
@@ -309,10 +309,10 @@ impl Interpreter<'_> {
             }),
             ExprKind::VariantConstruct {
                 variant_type,
-                case_name,
+                case_index,
                 payload,
                 ..
-            } => self.variant_lattice(body, *variant_type, case_name, *payload),
+            } => self.variant_lattice(body, *variant_type, *case_index, *payload),
             ExprKind::Index { expr: inner, index } => self.index_lattice(body, *inner, *index),
             ExprKind::Call { .. } => self.try_ctfe_builtin_fold(body, e),
             ExprKind::Unary {

@@ -2591,18 +2591,21 @@ fn splice_pat(caller: &mut Body, callee: &Body, pid: PatId, ctx: &InlineCtx) -> 
         PatKind::Variant {
             enum_type,
             variant_name,
+            case_index,
             bindings,
             payload_type,
         } => {
-            let (et, vn, bs, pt) = (
+            let (et, vn, ci, bs, pt) = (
                 *enum_type,
                 variant_name.clone(),
+                *case_index,
                 bindings.clone(),
                 *payload_type,
             );
             PatKind::Variant {
                 enum_type: et,
                 variant_name: vn,
+                case_index: ci,
                 bindings: bs
                     .into_iter()
                     .map(|p| splice_pat(caller, callee, p, ctx))

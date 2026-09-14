@@ -1,0 +1,61 @@
+// Storage read out of one place can be handed to at most one new owner. A
+// second binding read out of the same place is a reader the hand-over has to
+// see, and it reaches the place from the side rather than from above: closing
+// only the taker's own chain upward left every shape below eliding both copies,
+// so a write through one was observed through the other.
+
+struct Holder {
+    xs: List<i32>,
+}
+
+struct Inner {
+    g: i32,
+}
+
+struct Pair {
+    f: Inner,
+}
+
+struct Held {
+    x: Inner,
+}
+
+fn grow(z: &mut List<i32>) {
+    z.push(3);
+}
+
+test "two reads of one place" {
+    let h = Holder { xs: [1, 2] };
+    let a = h.xs;
+    let mut b = h.xs;
+    b.push(3);
+    assert a.len() == 2;
+}
+
+test "a whole-local move alongside a place move" {
+    let h = Holder { xs: [1, 2] };
+    let c = h.xs;
+    let a = h.xs;
+    let mut b = a;
+    b.push(3);
+    assert c.len() == 2;
+}
+
+test "the mutation arrives through a &mut argument" {
+    let h = Holder { xs: [1, 2] };
+    let y = h.xs;
+    let mut z = h.xs;
+    grow(&mut z);
+    assert y.len() == 2;
+}
+
+test "the place move sits at a struct literal" {
+    let p = Pair { f: Inner { g: 1 } };
+    let a = p.f;
+    let mut w = Held { x: p.f };
+    w.x.g = 99;
+    assert a.g == 1;
+}
+
+__DATA__
+{"test": {}}

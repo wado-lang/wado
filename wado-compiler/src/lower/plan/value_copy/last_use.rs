@@ -173,6 +173,7 @@ pub fn analyze_ownership(
         param_locals,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
+        alias_sites: Vec::new(),
         borrow_escaped: IndexMap::default(),
         let_sources: IndexMap::default(),
         match_sources: Vec::new(),
@@ -187,42 +188,38 @@ pub fn analyze_ownership(
     };
     let mut live = IndexSet::default();
     a.walk_block(body, &mut live, true);
-    a.resolve_pending_mut_aliases();
+    let paths = a.alias_paths();
+    a.resolve_alias_chains(&paths);
+    a.resolve_pending_mut_aliases(&paths);
     a.propagate_escapes_to_referents(func, type_table);
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
-    // Move-eligible: an owned local whose every value-read is final, aliasing
-    // nothing still live at its binding, and outlived by no reference. A
-    // transient borrow is a use, never a block, so a builder still hands off
-    // what it mutated in place.
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
-        .filter(|idx| {
-            !a.non_final.contains(idx)
-                && !a.aliases_live.contains(idx)
-                && !a.borrow_escaped.contains_key(idx)
-        })
+        .filter(|idx| a.hands_on_storage(*idx))
         .collect();
 
-    let moved_places: Vec<&(u32, Option<u32>, Span)> = a
+    let moved_places: Vec<&PlaceMove> = a
         .place_cands
         .iter()
-        .filter(|(base, top, _)| {
-            fresh.contains(base) && !a.aliases_live.contains(base) && !a.place_escaped(*base, *top)
+        .filter(|site| {
+            fresh.contains(&site.base)
+                && !a.aliases_live.contains(&site.base)
+                && !a.place_escaped(site.base, site.top)
+                && !storage_shared(&paths, site.base, site.top, None, &site.live)
         })
         .collect();
-    let place_move_bases: IndexSet<u32> = moved_places.iter().map(|(base, _, _)| *base).collect();
-    let place_spans: IndexSet<Span> = moved_places.iter().map(|(_, _, span)| *span).collect();
+    let place_move_bases: IndexSet<u32> = moved_places.iter().map(|site| site.base).collect();
+    let place_spans: IndexSet<Span> = moved_places.iter().map(|site| site.span).collect();
 
-    let share_eligible = a.share_eligible(body, &place_move_bases);
     Ownership {
         move_eligible: MoveEligible {
             locals: owned,
             place_spans,
         },
-        share_eligible,
+        share_eligible: a.share_eligible(body, &paths, &place_move_bases),
     }
 }
 
@@ -238,6 +235,61 @@ struct Mutation {
     live: IndexSet<u32>,
 }
 
+/// A materialization that may take its aggregate's storage rather than copy it,
+/// and the locals live where it runs.
+struct PlaceMove {
+    base: u32,
+    /// The one selector the materialization reaches through, `None` for the
+    /// whole aggregate.
+    top: Option<u32>,
+    span: Span,
+    live: IndexSet<u32>,
+}
+
+/// What every share decision in one body reads, computed once.
+struct ShareInputs<'a> {
+    /// The storage each mutation's live set can still read, in `mutations` order.
+    at_write: Vec<IndexSet<u32>>,
+    capacity_observed: IndexSet<u32>,
+    consumed_reach: IndexMap<u32, IndexSet<u32>>,
+    place_move_bases: &'a IndexSet<u32>,
+}
+
+/// Whether the storage at `root`, narrowed to the field `top` names, is
+/// reachable through one of `readers` too: two chains that meet share storage,
+/// whichever end is walked. `taker` is the binding being handed that storage,
+/// which is not a second reader of it.
+fn storage_shared(
+    paths: &IndexMap<u32, Vec<AccessPath>>,
+    root: u32,
+    top: Option<u32>,
+    taker: Option<u32>,
+    readers: &IndexSet<u32>,
+) -> bool {
+    let mut others = readers.clone();
+    if let Some(taker) = taker {
+        others.swap_remove(&taker);
+    }
+    let source = readable_paths(paths, &std::iter::once(root).collect());
+    let reads = readable_paths(paths, &others);
+    source
+        .iter()
+        .any(|s| reads.iter().any(|r| paths_overlap(s, top, r)))
+}
+
+/// Whether `reader` reaches the storage `source` names, narrowed to the field
+/// `top` names. A path that stops short of the other reaches through it.
+fn paths_overlap(source: &AccessPath, top: Option<u32>, reader: &AccessPath) -> bool {
+    if source.root != reader.root || disjoint(source, reader) {
+        return false;
+    }
+    let Some(top) = top else { return true };
+    match reader.selectors.get(source.selectors.len()) {
+        Some(Selector::Field { index, .. }) => *index == top,
+        _ => true,
+    }
+}
+
 /// Whether `m` can never change the value read at `read`. Establishes the
 /// common root [`disjoint`] assumes.
 fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
@@ -250,14 +302,15 @@ fn write_cannot_reach(m: &Mutation, read: &AccessPath) -> bool {
         return true;
     }
     if m.rebinds_place {
-        return !writes_inside(&m.path, read);
+        return !write_may_reach_inside(&m.path, read);
     }
     disjoint(&m.path, read)
 }
 
-/// Whether `write` names a place strictly inside the value `read` names: every
-/// selector `read` has, `write` may agree on, and `write` goes deeper.
-fn writes_inside(write: &AccessPath, read: &AccessPath) -> bool {
+/// Whether `write` may name a place strictly inside the value `read` names. Two
+/// `Index` selectors carry no subscript, so this answers "may", which is what
+/// refusing a share needs.
+fn write_may_reach_inside(write: &AccessPath, read: &AccessPath) -> bool {
     if write.selectors.len() <= read.selectors.len() {
         return false;
     }
@@ -371,92 +424,111 @@ impl Analyzer<'_> {
         fresh
     }
 
+    /// Whether `local` may hand its storage to a new owner: every read of it
+    /// final, aliasing nothing still read, and outlived by no reference.
+    fn hands_on_storage(&self, local: u32) -> bool {
+        !self.non_final.contains(&local)
+            && !self.aliases_live.contains(&local)
+            && !self.borrow_escaped.contains_key(&local)
+    }
+
     /// The read-only bindings that may alias the storage they were read out of.
     /// Every rule below is stated in WEP 2026-05-21, _Sharing_.
-    fn share_eligible(&self, body: &TirBlock, place_move_bases: &IndexSet<u32>) -> IndexSet<u32> {
-        let parents = self.alias_parents();
-        let at_write: Vec<IndexSet<u32>> = self
-            .mutations
-            .iter()
-            .map(|m| readable_storage(&parents, &m.live))
-            .collect();
-        let capacity_observed = capacity_observed_locals(body, self.type_table);
-        // What each consumed root's storage reaches, computed once per root
-        // rather than once per `share_sources` entry rooted there.
-        let consumed_reach: IndexMap<u32, IndexSet<u32>> = self
-            .consumed
-            .iter()
-            .map(|(&root, at)| (root, readable_storage(&parents, at)))
-            .collect();
+    fn share_eligible(
+        &self,
+        body: &TirBlock,
+        paths: &IndexMap<u32, Vec<AccessPath>>,
+        place_move_bases: &IndexSet<u32>,
+    ) -> IndexSet<u32> {
+        let inputs = ShareInputs {
+            at_write: self
+                .mutations
+                .iter()
+                .map(|m| readable_storage(paths, &m.live))
+                .collect(),
+            capacity_observed: capacity_observed_locals(body, self.type_table),
+            // What each consumed root's storage reaches, computed once per root
+            // rather than once per `share_sources` entry rooted there.
+            consumed_reach: self
+                .consumed
+                .iter()
+                .map(|(&root, at)| (root, readable_storage(paths, at)))
+                .collect(),
+            place_move_bases,
+        };
         self.share_sources
-            .iter()
-            .filter_map(|(&local, path)| {
-                if path.root == local {
-                    return None;
-                }
-                // A borrowed source is written through whoever lent it, at a
-                // root the scan below never looks at.
-                if path.through_borrow {
-                    return None;
-                }
-                // A `List` / `String` copy right-sizes its backing storage to
-                // the current length (WEP 2026-05-21, capacity is not part of
-                // the value but is still observable): sharing skips that only
-                // where this binding's own capacity is actually read — a copy
-                // this binding never observes need not right-size at all.
-                if capacity_observed.contains(&local) {
-                    return None;
-                }
-                // `let r = p; p = x;` leaves `r` holding what `p` gave up: a
-                // rebind repoints `p`'s slot rather than writing the old
-                // storage in place, so it is never itself a conflict — only
-                // every OTHER mutation, live where `local` could read it, must
-                // be unreachable from `local`'s path.
-                let mut released = false;
-                let mut share_safe = true;
-                for (m, r) in self.mutations.iter().zip(&at_write) {
-                    let is_release = m.rebinds_place && m.path == *path;
-                    if is_release && r.contains(&local) {
-                        released = true;
-                    }
-                    if !is_release && r.contains(&local) && !write_cannot_reach(m, path) {
-                        share_safe = false;
-                    }
-                }
-                let root_given_away = consumed_reach
-                    .get(&path.root)
-                    .is_some_and(|reach| reach.contains(&local));
-                let moved_out = !released
-                    && (self.consumed.contains_key(&local) || place_move_bases.contains(&local));
-                if moved_out || self.is_mutated_root(local) || root_given_away || !share_safe {
-                    return None;
-                }
-                Some(local)
-            })
+            .keys()
+            .copied()
+            .filter(|&local| self.share_verdict(local, &inputs))
             .collect()
     }
 
-    /// The locals whose storage each local's value was read out of, so a write
-    /// stays observable through a binding after the local it was read from dies.
-    fn alias_parents(&self) -> IndexMap<u32, Vec<u32>> {
-        let mut parents: IndexMap<u32, Vec<u32>> = IndexMap::default();
-        let mut edge = |child: u32, root: u32| parents.entry(child).or_default().push(root);
+    /// One binding's verdict. Each rests on facts the walk already has, so a
+    /// chain needs no order: every binding on it answers for itself.
+    fn share_verdict(&self, local: u32, inputs: &ShareInputs<'_>) -> bool {
+        let Some(path) = self.share_sources.get(&local) else {
+            return false;
+        };
+        // `let r = p; p = x;` leaves `r` holding what `p` gave up, so a rebind of
+        // the place is never itself a conflict. Every other mutation must be
+        // unreachable.
+        let share_safe = self
+            .mutations
+            .iter()
+            .zip(&inputs.at_write)
+            .all(|(m, r)| !r.contains(&local) || write_cannot_reach(m, path));
+        let root_given_away = inputs
+            .consumed_reach
+            .get(&path.root)
+            .is_some_and(|reach| reach.contains(&local));
+        let moved_out =
+            self.consumed.contains_key(&local) || inputs.place_move_bases.contains(&local);
+        // A borrowed source is written through whoever lent it, at a root the
+        // scan above never looks at. A share skips the right-sizing a copy does,
+        // so a binding whose own capacity is read keeps its copy.
+        path.root != local
+            && !path.through_borrow
+            && !inputs.capacity_observed.contains(&local)
+            && !moved_out
+            && !self.is_mutated_root(local)
+            && !root_given_away
+            && share_safe
+    }
+
+    /// The places each local's value was read out of, so a write stays
+    /// observable through a binding after the local it was read from dies.
+    fn alias_paths(&self) -> IndexMap<u32, Vec<AccessPath>> {
+        let mut paths: IndexMap<u32, Vec<AccessPath>> = IndexMap::default();
+        let mut edge = |child: u32, path: AccessPath| paths.entry(child).or_default().push(path);
         for (local, sources) in &self.let_sources {
-            for root in sources.iter().filter_map(alias_root) {
-                edge(*local, root);
+            for source in sources {
+                if let Some(path) = self.read_place(source) {
+                    edge(*local, path);
+                }
             }
         }
         for (binding, scrut) in &self.match_sources {
-            if let Some(root) = alias_root(scrut) {
-                edge(*binding, root);
+            if let Some(path) = self.read_place(scrut) {
+                edge(*binding, path);
             }
         }
         // The resolved root reaches where the syntax stops, and covers the
         // `skip_value_copy` binding `let_sources` leaves out.
         for (local, path) in &self.share_sources {
-            edge(*local, path.root);
+            edge(*local, path.clone());
         }
-        parents
+        paths
+    }
+
+    /// The place an alias edge reads, as far as the selectors can be trusted: a
+    /// chain through a borrow ends in storage its root only lends, so it names
+    /// the whole root instead.
+    fn read_place(&self, source: &TirExpr) -> Option<AccessPath> {
+        match self.source_path(source) {
+            Some(path) if !path.through_borrow => Some(path),
+            Some(path) => Some(AccessPath::local(path.root)),
+            None => alias_root(source).map(AccessPath::local),
+        }
     }
 
     /// Record what a call writes through one `&mut` handle, receiver or not: the
@@ -473,7 +545,7 @@ impl Analyzer<'_> {
             self.record_mutation(handle, live);
             return;
         };
-        if writes.is_opaque() || writes.writes_whole(owner) {
+        if writes.is_opaque() || !writes.re_rootable_at(owner) {
             self.record_mutation(handle, live);
             return;
         }
@@ -575,19 +647,40 @@ impl Analyzer<'_> {
     }
 }
 
-/// The storage a live set can still read: each live local, and everything its
-/// value was taken out of. Closed over `parents`, so a cycle settles.
-fn readable_storage(parents: &IndexMap<u32, Vec<u32>>, live: &IndexSet<u32>) -> IndexSet<u32> {
-    let mut out: IndexSet<u32> = IndexSet::default();
-    let mut work: Vec<u32> = live.iter().copied().collect();
-    while let Some(local) = work.pop() {
-        if !out.insert(local) {
+/// The locals holding storage a live set can still read, for a caller that asks
+/// no finer than a whole local.
+fn readable_storage(paths: &IndexMap<u32, Vec<AccessPath>>, live: &IndexSet<u32>) -> IndexSet<u32> {
+    readable_paths(paths, live)
+        .into_iter()
+        .map(|p| p.root)
+        .collect()
+}
+
+/// The places a live set can still read: each live local as a whole, and every
+/// place its value was taken out of, the walked selectors carried along. A chain
+/// longer than [`PATH_DEPTH`] keeps the shorter place, which widens it.
+fn readable_paths(paths: &IndexMap<u32, Vec<AccessPath>>, live: &IndexSet<u32>) -> Vec<AccessPath> {
+    let mut out: Vec<AccessPath> = Vec::new();
+    let mut work: Vec<AccessPath> = live.iter().map(|&l| AccessPath::local(l)).collect();
+    while let Some(place) = work.pop() {
+        if out.contains(&place) {
             continue;
         }
-        work.extend(parents.get(&local).into_iter().flatten().copied());
+        for source in paths.get(&place.root).into_iter().flatten() {
+            let mut up = source.clone();
+            if up.selectors.len() + place.selectors.len() <= PATH_DEPTH {
+                up.selectors.extend(place.selectors.iter().copied());
+            }
+            work.push(up);
+        }
+        out.push(place);
     }
     out
 }
+
+/// How far a composed alias path is carried before it widens to its prefix. A
+/// cycle of alias edges would otherwise grow one without end.
+const PATH_DEPTH: usize = 16;
 
 /// Collect every local mentioned anywhere in `expr`.
 fn collect_local_roots(expr: &TirExpr, out: &mut IndexSet<u32>) {
@@ -681,6 +774,8 @@ struct Analyzer<'a> {
     param_locals: IndexSet<u32>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
+    /// Each binding, the root its value was read out of, and what is live there.
+    alias_sites: Vec<(u32, u32, IndexSet<u32>)>,
     /// Locals a reference outlives, by the fields it reaches. Such a local may
     /// be read through that reference after a move, so it stays copied.
     borrow_escaped: IndexMap<u32, FieldEscape>,
@@ -693,7 +788,7 @@ struct Analyzer<'a> {
     all_locals: IndexSet<u32>,
     /// Place-level move sites `(root, top-level field, span)` found at literals,
     /// filtered after the walk. A `None` field is a whole-value materialization.
-    place_cands: Vec<(u32, Option<u32>, Span)>,
+    place_cands: Vec<PlaceMove>,
     /// Locals bound by a `skip_value_copy` `let` — storage handed over by the
     /// binding's producer, so owned without a source to prove it.
     declared_owned: IndexSet<u32>,
@@ -944,61 +1039,35 @@ impl Analyzer<'_> {
         self.walk_expr(expr, live, record);
     }
 
-    /// Record that `local` derives from `source`. Storage still live after the
-    /// binding is shared storage, and costs `local` its move.
+    /// Record that `local` derives from `source`, to be answered once the whole
+    /// chain each source root stands on is known.
     fn record_alias(&mut self, local: u32, source: &TirExpr, live: &IndexSet<u32>) {
-        if let Some(root) = alias_root(source)
-            && live.contains(&root)
-        {
-            self.aliases_live.insert(local);
+        if let Some(root) = alias_root(source) {
+            self.alias_sites.push((local, root, live.clone()));
+        }
+    }
+
+    /// Storage still readable after a binding is shared storage, and costs the
+    /// binding its move. Both ends stand on their own chain — a match temp on
+    /// the place it was hoisted out of, a sibling binding read out of the same
+    /// place — so the whole chain answers on each side.
+    fn resolve_alias_chains(&mut self, paths: &IndexMap<u32, Vec<AccessPath>>) {
+        for (local, root, live) in std::mem::take(&mut self.alias_sites) {
+            if storage_shared(paths, root, None, Some(local), &live) {
+                self.aliases_live.insert(local);
+            }
         }
     }
 
     /// Resolve the deferred sibling-alias checks: a by-value argument aliasing
     /// storage its own call mutates keeps its copy.
-    fn resolve_pending_mut_aliases(&mut self) {
-        let mut scrut_roots: IndexMap<u32, Vec<u32>> = IndexMap::default();
-        for (binding, scrut) in &self.match_sources {
-            if let Some(r) = alias_root(scrut) {
-                scrut_roots.entry(*binding).or_default().push(r);
-            }
-        }
-        let pending = std::mem::take(&mut self.pending_mut_alias);
-        for (arg, mut_roots) in pending {
-            let mut seen = IndexSet::default();
-            if self.local_aliases(arg, &mut_roots, &scrut_roots, &mut seen) {
+    fn resolve_pending_mut_aliases(&mut self, paths: &IndexMap<u32, Vec<AccessPath>>) {
+        for (arg, mut_roots) in std::mem::take(&mut self.pending_mut_alias) {
+            let targets: IndexSet<u32> = mut_roots.into_iter().collect();
+            if storage_shared(paths, arg, None, None, &targets) {
                 self.aliases_live.insert(arg);
             }
         }
-    }
-
-    /// Whether `local` transitively shares storage with one of `targets`, over
-    /// the match-scrutinee and `let`-source edges. A fresh rvalue ends a chain.
-    fn local_aliases(
-        &self,
-        local: u32,
-        targets: &[u32],
-        scrut_roots: &IndexMap<u32, Vec<u32>>,
-        seen: &mut IndexSet<u32>,
-    ) -> bool {
-        if targets.contains(&local) {
-            return true;
-        }
-        if !seen.insert(local) {
-            return false;
-        }
-        let via_match = scrut_roots.get(&local).into_iter().flatten().copied();
-        let via_let = self
-            .let_sources
-            .get(&local)
-            .into_iter()
-            .flatten()
-            .filter_map(alias_root);
-        via_match
-            .chain(via_let)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .any(|r| self.local_aliases(r, targets, scrut_roots, seen))
     }
 
     /// Keep the copy of a by-value argument aliasing storage the same call
@@ -1069,7 +1138,12 @@ impl Analyzer<'_> {
                 continue;
             }
             for (top, span) in sites {
-                self.place_cands.push((*base, *top, *span));
+                self.place_cands.push(PlaceMove {
+                    base: *base,
+                    top: *top,
+                    span: *span,
+                    live: live_out.clone(),
+                });
             }
         }
     }
@@ -1249,6 +1323,10 @@ impl Analyzer<'_> {
                 self.walk_expr(value, live, record);
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
+                assert!(
+                    alias_root(value).is_none(),
+                    "a destructured place lowers to one `Let` per binding"
+                );
                 self.kill_pattern(pattern, live);
                 self.walk_expr(value, live, record);
             }
@@ -1284,19 +1362,32 @@ impl Analyzer<'_> {
                 *live = self.continue_live();
             }
             TirStmtKind::LabeledBlock { label, block } => {
-                self.exits.push(Exit {
-                    label: Some(label.clone()),
-                    live: live.clone(),
-                    continue_live: None,
-                });
-                self.walk_block(block, live, record);
-                self.exits.pop();
+                self.walk_labeled_block(label, block, live, record);
             }
             TirStmtKind::TaskReturn { value } => {
                 self.walk_persisting(value, live, record);
             }
             TirStmtKind::VariadicForOf { .. } => unreachable!("filtered by has_unsupported_form"),
         }
+    }
+
+    /// A labeled block, in statement or expression position. A `break LABEL`
+    /// inside resumes where the block ends, which only an entry on the stack
+    /// says; without one [`Analyzer::exit_live`] falls back to every local.
+    fn walk_labeled_block(
+        &mut self,
+        label: &str,
+        block: &TirBlock,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
+        self.exits.push(Exit {
+            label: Some(label.to_string()),
+            live: live.clone(),
+            continue_live: None,
+        });
+        self.walk_block(block, live, record);
+        self.exits.pop();
     }
 
     /// A loop's live-in is the least fixpoint of its body over the back-edge.
@@ -1340,28 +1431,43 @@ impl Analyzer<'_> {
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
-        // `live` is the match's live-out, so a binding aliases live storage
-        // exactly when a scrutinee local is live here.
         let after = live.clone();
-        if record {
-            let scrut_aliases_live = alias_root(scrut).is_some_and(|r| after.contains(&r));
-            for arm in arms {
-                let mut binds: IndexSet<u32> = IndexSet::default();
+        let scrut_root = alias_root(scrut);
+        let arm_binds: Vec<IndexSet<u32>> = arms
+            .iter()
+            .map(|arm| {
+                let mut binds = IndexSet::default();
                 analyze::collect_pattern_bindings(&arm.pattern, &mut binds);
-                for b in &binds {
+                binds
+            })
+            .collect();
+        if record {
+            for binds in &arm_binds {
+                for b in binds {
                     self.match_sources.push((*b, scrut.clone()));
-                    if scrut_aliases_live {
-                        self.aliases_live.insert(*b);
+                    // An arm binding is its scrutinee's storage under a second
+                    // name, so the share rule reads the path the resolver gives.
+                    if let Some(Names::Place(path)) = self.resolver.binding(*b) {
+                        self.share_sources.insert(*b, path);
                     }
                 }
             }
         }
         let mut merged: IndexSet<u32> = IndexSet::default();
-        for arm in arms {
+        for (arm, binds) in arms.iter().zip(&arm_binds) {
             let mut arm_live = after.clone();
             self.walk_expr(&arm.body, &mut arm_live, record);
             if let Some(guard) = &arm.guard {
                 self.walk_expr(guard, &mut arm_live, record);
+            }
+            // The binding holds its scrutinee's storage under a second name, so
+            // it aliases storage something still reads when the scrutinee's chain
+            // is live anywhere the binding is: after the match, or at a read the
+            // arm makes for itself.
+            if record && let Some(root) = scrut_root {
+                for b in binds {
+                    self.alias_sites.push((*b, root, arm_live.clone()));
+                }
             }
             self.kill_pattern(&arm.pattern, &mut arm_live);
             merged = union(&merged, &arm_live);
@@ -1464,8 +1570,9 @@ impl Analyzer<'_> {
                 *live = union(&then_live, &else_live);
                 self.walk_expr(condition, live, record);
             }
-            TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-                self.walk_block(block, live, record);
+            TirExprKind::Block(block) => self.walk_block(block, live, record),
+            TirExprKind::LabeledBlock { label, block, .. } => {
+                self.walk_labeled_block(label, block, live, record);
             }
             TirExprKind::Call {
                 func,
