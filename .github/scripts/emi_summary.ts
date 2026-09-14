@@ -42,36 +42,50 @@ function read(file: string): Stage {
     stage.total.excluded += count(text, /^excluded: (\d+)$/m);
     stage.total.findings += count(text, /^findings: (\d+)$/m);
 
-    let inFindings = false;
-    let inShapes = false;
+    let section = '';
     for (const line of text.split('\n')) {
-      const header = line.match(/^=== (.+?) \((\d+)\) ===$/);
-      if (header) {
-        stage.buckets.set(header[1], (stage.buckets.get(header[1]) ?? 0) + Number(header[2]));
-        inFindings = false;
-        inShapes = false;
+      const counted = line.match(/^=== (.+?) \((\d+)\) ===$/);
+      if (counted) {
+        stage.buckets.set(counted[1], (stage.buckets.get(counted[1]) ?? 0) + Number(counted[2]));
+        section = '';
         continue;
       }
       if (line.startsWith('=== ')) {
-        inFindings = line === '=== findings ===';
-        inShapes = line === '=== guard shapes ===';
+        section = line.slice(4, -4).trim();
         continue;
       }
-      const shape = inShapes ? line.match(/^(\S+): (\d+) source\(s\) \((\d+) sites\)$/) : null;
-      if (shape) {
-        const seen = stage.shapes.get(shape[1]) ?? { sources: 0, sites: 0 };
-        stage.shapes.set(shape[1], {
-          sources: seen.sources + Number(shape[2]),
-          sites: seen.sites + Number(shape[3]),
-        });
+      if (section === 'guard shapes') {
+        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) sites\)$/);
+        if (shape) {
+          const seen = stage.shapes.get(shape[1]) ?? { sources: 0, sites: 0 };
+          stage.shapes.set(shape[1], {
+            sources: seen.sources + Number(shape[2]),
+            sites: seen.sites + Number(shape[3]),
+          });
+        }
         continue;
       }
-      if (inFindings && line.trim() !== '') {
+      if (section === 'findings' && line.trim() !== '') {
         stage.findings.push(line);
       }
     }
   }
   return stage;
+}
+
+// A Markdown table, headed when title says so, and nothing at all when there
+// are no rows.
+function table(title: string, columns: string[], rows: string[][]): string[] {
+  if (rows.length === 0) {
+    return [];
+  }
+  return [
+    ...(title ? [`### ${title}`, ''] : []),
+    `| ${columns.join(' | ')} |`,
+    `| ${columns.map(() => '---').join(' | ')} |`,
+    ...rows.map((row) => `| ${row.join(' | ')} |`),
+    '',
+  ];
 }
 
 function render(title: string, stage: Stage): string[] {
@@ -82,30 +96,34 @@ function render(title: string, stage: Stage): string[] {
       '',
     );
   }
-  out.push('| Metric | Value |', '| --- | --- |');
-  out.push(`| sources scanned | ${stage.total.scanned} |`);
-  out.push(`| eligible | ${stage.total.eligible} (${stage.total.sites} injection sites) |`);
-  out.push(`| excluded | ${stage.total.excluded} |`);
-  out.push(`| findings | ${stage.total.findings} |`);
-  out.push('');
+  out.push(
+    ...table(
+      '',
+      ['Metric', 'Value'],
+      [
+        ['sources scanned', `${stage.total.scanned}`],
+        ['eligible', `${stage.total.eligible} (${stage.total.sites} injection sites)`],
+        ['excluded', `${stage.total.excluded}`],
+        ['findings', `${stage.total.findings}`],
+      ],
+    ),
+  );
 
   if (stage.findings.length > 0) {
     out.push('### Findings', '', '```', ...stage.findings, '```', '');
   }
-  if (stage.shapes.size > 0) {
-    out.push('### Guard shapes', '', '| Shape | Sources | Sites |', '| --- | --- | --- |');
-    for (const [name, { sources, sites }] of stage.shapes) {
-      out.push(`| ${name} | ${sources} | ${sites} |`);
-    }
-    out.push('');
-  }
-  if (stage.buckets.size > 0) {
-    out.push('### Exclusions', '', '| Reason | Count |', '| --- | --- |');
-    for (const [name, n] of [...stage.buckets].sort((a, b) => b[1] - a[1])) {
-      out.push(`| ${name} | ${n} |`);
-    }
-    out.push('');
-  }
+  out.push(
+    ...table(
+      'Guard shapes',
+      ['Shape', 'Sources', 'Sites'],
+      [...stage.shapes].map(([name, { sources, sites }]) => [name, `${sources}`, `${sites}`]),
+    ),
+    ...table(
+      'Exclusions',
+      ['Reason', 'Count'],
+      [...stage.buckets].sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, `${n}`]),
+    ),
+  );
   if (stage.missing.length > 0) {
     out.push('### Shards that reported nothing', '', ...stage.missing.map((d) => `- ${d}`), '');
   }

@@ -27,6 +27,7 @@ use wado_compiler::ast::{
     Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
+use wado_compiler::trace::parse_env_list;
 use wado_compiler::{CompilerOptions, OptLevel};
 
 /// The levels both stages compare a mutant against its own baseline at. Each
@@ -56,9 +57,11 @@ fn selected<T: Copy>(
     named: impl Fn(T) -> &'static str,
     kind: &str,
 ) -> Vec<T> {
-    spec.split(',')
+    let wanted = parse_env_list(Some(spec));
+    assert!(!wanted.is_empty(), "`{spec}` names no {kind}");
+    wanted
+        .iter()
         .map(|wanted| {
-            let wanted = wanted.trim();
             table
                 .iter()
                 .copied()
@@ -1030,6 +1033,21 @@ struct Finding {
     detail: String,
 }
 
+/// What the program did before any injection, at one level. A source that does
+/// not run here answers for nothing, whichever stage asked.
+fn baseline(
+    path: &Path,
+    canonical: &str,
+    spec: &Spec,
+    level: OptLevel,
+) -> Result<Outcome, Excluded> {
+    match evaluate(path, canonical, spec, level) {
+        Evaluation::Ran(outcome) => Ok(outcome),
+        Evaluation::CompileError(detail) => Err(Excluded::BaselineCompileFailed { level, detail }),
+        Evaluation::Crashed(detail) => Err(Excluded::BaselineUnhealthy { level, detail }),
+    }
+}
+
 /// Re-run the baseline: reached only on a divergence, so a source whose own
 /// output moves is not charged to the guard.
 fn baseline_moved(
@@ -1180,15 +1198,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let path = &subject.path;
 
     for level in levels() {
-        let baseline = match evaluate(path, &canonical, &spec, level) {
-            Evaluation::Ran(outcome) => outcome,
-            Evaluation::CompileError(detail) => {
-                return Err(Excluded::BaselineCompileFailed { level, detail });
-            }
-            Evaluation::Crashed(detail) => {
-                return Err(Excluded::BaselineUnhealthy { level, detail });
-            }
-        };
+        let baseline = baseline(path, &canonical, &spec, level)?;
         let mut survivors = Vec::new();
         for (shape, payload) in alive {
             let sites = sites_for(&all, payload);
@@ -1339,15 +1349,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     let mut refused = None;
 
     for level in levels() {
-        let baseline = match evaluate(path, &canonical, &spec, level) {
-            Evaluation::Ran(outcome) => outcome,
-            Evaluation::CompileError(detail) => {
-                return Err(Excluded::BaselineCompileFailed { level, detail });
-            }
-            Evaluation::Crashed(detail) => {
-                return Err(Excluded::BaselineUnhealthy { level, detail });
-            }
-        };
+        let baseline = baseline(path, &canonical, &spec, level)?;
         if baseline.test_failed {
             return Err(Excluded::BaselineUnhealthy {
                 level,
@@ -1664,8 +1666,8 @@ fn mutate_corpus() {
 }
 
 fn out_dir() -> PathBuf {
-    std::env::var("WADO_EMI_OUT").map_or_else(
-        |_| Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/emi"),
+    selection("WADO_EMI_OUT").map_or_else(
+        || Path::new(env!("CARGO_MANIFEST_DIR")).join("../target/emi"),
         PathBuf::from,
     )
 }

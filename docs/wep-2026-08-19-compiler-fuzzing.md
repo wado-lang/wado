@@ -81,9 +81,9 @@ A fixture must be a valid oracle before it can be a subject. Calibration injects
 an empty guard of each shape everywhere and keeps the fixtures whose observable
 behaviour is unmoved; one that moves observes something an injection perturbs —
 a column, an allocation address, a generated test-export name — and is recorded
-with that reason rather than silently dropped. It is a shape at a time, so the
-corpus records which shapes each source answers for and the mutation stage runs
-only those.
+with that reason rather than silently dropped. It judges one shape at a time.
+The corpus records which shapes each source answers for, and the mutation stage
+runs only those.
 
 A fixture whose own output moves between runs of the same program is a separate
 case, and conflating it with a guard's doing is how a campaign learns to cry
@@ -115,7 +115,7 @@ Work is sharded so every run covers the whole corpus, and findings fail the run.
 ## Roadmap
 
 Ordered by yield per cost. Each run reports the corpus it drew and the sites
-each payload reached.
+each shape and payload reached.
 
 - [x] Opaque read payload. Its first full run found three bugs: two colliding
       mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
@@ -126,13 +126,12 @@ each payload reached.
       read payload.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
-- [x] `while builtin::black_box(false) { … }` as a second guard shape. A shape
-      is calibrated for and dropped on its own, as a payload is, and
-      `corpus.txt` carries the shapes each source answers for.
+- [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
+      is calibrated for each shape and loses one at a time, as it does a
+      payload.
 - [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
       `O2` is what a release build and `wado test` run, and it was not covered.
-      `WADO_EMI_LEVELS` trades levels for corpus in a run that has to fit a
-      given time.
+      `WADO_EMI_LEVELS` trades levels for corpus when a run has a time budget.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
       stdlib's own tests under `O3`, which nothing else does — `wado test` runs
       them at `O2` — and the baselines that failed there were two wrong-code
