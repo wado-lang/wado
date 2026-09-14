@@ -143,12 +143,8 @@ fn assert_formatter_layout(type_table: &TypeTable) {
     );
 }
 
-/// Expand every `TemplateString` in a module's bodies — function bodies and
+/// Expand every `TemplateString` in the module's bodies — function bodies and
 /// global initializers alike, both of which `reify` can put one in.
-///
-/// Runs as part of the pre-mono synthesis phase. Template expansion emits
-/// trait method calls (`Display::fmt`, `Inspect::inspect`) that the monomorphizer
-/// subsequently resolves to concrete implementations.
 pub fn expand_templates(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,

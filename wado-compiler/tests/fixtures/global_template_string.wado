@@ -17,9 +17,9 @@ struct Point { x: i32, y: i32 }
 global ORIGIN: Point = Point { x: 3, y: 4 };
 global SHOWN: String = `${ORIGIN:?}`;
 
-// The expansion mints locals in the initializer, and every initializer is
-// merged into one `$initialize_module` with its locals renumbered. Two of them
-// carrying locals is what exercises that renumbering.
+// The expansion mints locals in the initializer. Every initializer is merged
+// into one `$initialize_module`, its locals renumbered past the ones already
+// there, so two of them carrying locals is what puts that renumbering to work.
 global CHECKED: i32 = check: {
     let n = 7;
     assert n > 0;
@@ -32,8 +32,15 @@ global LABELLED: String = build: {
 };
 
 // A closure body owns its own local namespace, so the template locals belong
-// to it rather than to the enclosing initializer.
-global RENDER: fn(i32) -> String = |n: i32| `[${n}]`;
+// to it rather than to the enclosing initializer. Its captures are the
+// exception. They name locals out in the initializer, so they are renumbered
+// with it. A capture left behind reads another initializer's local, and the
+// module then fails Wasm validation.
+global CAPTURING: fn() -> String = hold: {
+    let tag = "n";
+    let n = 12;
+    break hold: || `${tag}=${n}`
+};
 
 test "a template hole reading another global" {
     assert DOCS == "https://example.com/docs";
@@ -55,6 +62,6 @@ test "an assert inside a global initializer" {
     assert LABELLED == "n=14";
 }
 
-test "a template inside a closure in a global initializer" {
-    assert RENDER(5) == "[5]";
+test "a closure capturing its own initializer's locals" {
+    assert CAPTURING() == "n=12";
 }

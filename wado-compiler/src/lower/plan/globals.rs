@@ -14,10 +14,10 @@ use crate::synthesis::common::builtin_call;
 use crate::tir;
 use crate::tir::{
     FunctionKind, FunctionRef, GlobalInit, InlineHint, PrimitiveType, ResolvedType, TirBinaryOp,
-    TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
+use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -203,7 +203,7 @@ fn build_module_init_function(
     for (_, name, gvs_module_source, _, mut initializer, locals) in sorted_inits {
         let offset = u32::try_from(merged_locals.len()).unwrap();
         if offset > 0 && !locals.is_empty() {
-            RenumberLocals { offset }.visit_expr(&mut initializer);
+            shift_locals(&mut initializer, offset);
         }
         merged_locals.extend(locals);
 
@@ -525,46 +525,6 @@ fn topological_sort_global_inits(
     }
 
     Ok(sorted)
-}
-
-/// Shifts every local index in one global's initializer, so several of them
-/// can share `$initialize_module`'s local namespace.
-///
-/// The walk goes through [`TirMutVisitor`], which is exhaustive over
-/// `TirExprKind`: a hand-written one misses whichever node kind arrives next,
-/// and an index left behind aliases another initializer's local.
-struct RenumberLocals {
-    offset: u32,
-}
-
-impl TirMutVisitor for RenumberLocals {
-    fn visit_expr(&mut self, expr: &mut TirExpr) {
-        match &mut expr.kind {
-            TirExprKind::Local { index, .. } => *index += self.offset,
-            // A closure body numbers its locals from its own zero, so the
-            // enclosing namespace's offset does not apply inside one.
-            TirExprKind::Closure { .. } => {}
-            _ => self.walk_expr(expr),
-        }
-    }
-
-    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
-        match &mut stmt.kind {
-            TirStmtKind::Let { local_index, .. } => *local_index += self.offset,
-            TirStmtKind::VariadicForOf { .. } => {
-                unreachable!("VariadicForOf should be expanded during monomorphization")
-            }
-            _ => {}
-        }
-        self.walk_stmt(stmt);
-    }
-
-    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
-        if let TirPattern::Binding { local_index, .. } = pattern {
-            *local_index += self.offset;
-        }
-        self.walk_pattern(pattern);
-    }
 }
 
 /// Order the per-module initializers so each runs after the modules whose
