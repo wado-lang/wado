@@ -391,7 +391,7 @@ impl<'a> Resolver<'a> {
                 fields,
                 ..
             } => {
-                let owner = self.type_table.peel_refs(*struct_type);
+                let owner = field_owner(*struct_type, self.type_table);
                 for field in fields {
                     let nested = match base {
                         Names::Place(place) => {
@@ -534,9 +534,13 @@ pub fn place_root(expr: &TirExpr) -> Option<u32> {
 /// Peels `Box<T>` along with `Ref`/`MutRef`: a callee's own `&mut T`
 /// parameter is never boxed, but a caller's address-taken local passed to it
 /// is, by the time this walk runs — the two must key the same write alike.
+/// A newtype names its base's storage, so the key is the representation head:
+/// `List<u8>::index_assign` records its write under `List`, and a handle typed
+/// `ByteList` must look it up there.
 #[must_use]
 pub fn field_owner(base_type: TypeId, type_table: &TypeTable) -> TypeId {
-    type_table.peel_refs_and_box(base_type)
+    let peeled = type_table.peel_refs_and_box(base_type);
+    type_table.peel_refs_and_box(type_table.representation_head(peeled))
 }
 
 /// A name for storage someone else owns, as the type table spells it here —

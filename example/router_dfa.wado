@@ -104,6 +104,7 @@ impl DfaRouter {
     pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
         let mut params = TreeMap::<String, String>::new();
         let plen = path.len();
+        let view = path.as_str_slice();
         // Skip leading '/' if any.
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
@@ -118,10 +119,8 @@ impl DfaRouter {
             }
             // Try literal first via byte-range binary search (no allocation).
             // On miss fall back to param, then wildcard.
-            let target = bsearch_target_by_bytes(
-                &self.states[state].literals,
-                &path.as_str_slice().sub_unchecked(pos, end),
-            );
+            let target =
+                bsearch_target_by_bytes(&self.states[state].literals, &view.sub_unchecked(pos, end));
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
