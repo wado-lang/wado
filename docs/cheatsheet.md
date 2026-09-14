@@ -414,6 +414,11 @@ let name = match c {
     Green => "green",
     Blue => "blue",
 };
+
+// A case may also be written under a qualifier: the scrutinee's type
+// (`Color::Red`), `Self` inside an `impl`, any name on the scrutinee's newtype
+// chain, or a namespace the type is reachable through (`hue::Red`). The name
+// must be imported — only the prelude is in scope without a `use`.
 ```
 
 ### Variants
@@ -653,7 +658,8 @@ let grade = match score {
 };
 
 // Constant patterns: an immutable global or associated const matches by
-// value, not a binding. TK_FOO/TK_BAR are `global`s.
+// value, not a binding. TK_FOO/TK_BAR are `global`s, and a namespace prefix
+// reaches one the same way (`tok::TK_FOO`).
 let kind = match token {
     TK_FOO | TK_BAR => "keyword",
     i32::MAX        => "max",
