@@ -1722,30 +1722,44 @@ impl TypeRefCtx {
             return b;
         }
         let mut visited = TypeSet::default();
-        let r = self.walk(tt, type_id, &mut visited);
+        let r = self.walk(tt, type_id, &[], &mut visited);
         self.memo.borrow_mut().insert(type_id, r);
         r
     }
 
-    fn walk(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+    /// `args` fills the slots of the instance whose member is being walked, so a
+    /// slot a member buries (`List<T>`'s `Array<T>`) answers for the instance at
+    /// hand rather than for every `T`.
+    fn walk(
+        &self,
+        tt: &TypeTable,
+        type_id: TypeId,
+        args: &[TypeId],
+        visited: &mut TypeSet,
+    ) -> bool {
         if !visited.insert(type_id) {
             return false;
         }
         match tt.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
-            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
+            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => {
+                self.walk(tt, *t, args, visited)
+            }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.walk(tt, *t, visited))
+                type_args.iter().any(|t| self.walk(tt, *t, args, visited))
                     || self.members_hold_ref(tt, type_id, visited)
             }
-            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
+            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, args, visited),
             ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
                 self.members_hold_ref(tt, type_id, visited)
             }
             ResolvedType::Function { .. } => false,
-            ResolvedType::TypeParam { .. }
-            | ResolvedType::TypePack { .. }
+            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
+                Some(&arg) => self.walk(tt, arg, &[], visited),
+                None => true,
+            },
+            ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -1762,9 +1776,10 @@ impl TypeRefCtx {
     /// Whether a declared member holds a reference. A generic instance is asked
     /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
     fn members_hold_ref(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+        let args = tt.nominal_type_args(type_id).unwrap_or_default();
         self.members
             .of(type_id, tt)
-            .any(|t| self.walk(tt, t, visited))
+            .any(|t| self.walk(tt, t, &args, visited))
     }
 }
 
