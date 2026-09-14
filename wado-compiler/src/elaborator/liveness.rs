@@ -1150,24 +1150,14 @@ fn has_export_attr(func: &Function) -> bool {
     func.attrs.iter().any(|attr| attr.name == "export")
 }
 
-/// True if `args` name the `dead_code` lint, as in `allow(dead_code)`.
-fn args_name_dead_code(args: &[ast::AttrArg]) -> bool {
-    args.iter()
-        .any(|arg| matches!(arg, ast::AttrArg::Ident(name) if name == "dead_code"))
-}
-
 /// `#[allow(dead_code)]` on an item waives its unused / test-only lint.
 fn attrs_allow_dead_code(attrs: &[ast::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
+    ast::attrs_allow(attrs, ast::lint::DEAD_CODE)
 }
 
 /// `#![allow(dead_code)]` at the top of a module waives the lint for every item.
 fn inner_attrs_allow_dead_code(attrs: &[ast::InnerAttribute]) -> bool {
-    attrs
-        .iter()
-        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
+    ast::inner_attrs_allow(attrs, ast::lint::DEAD_CODE)
 }
 
 #[cfg(test)]

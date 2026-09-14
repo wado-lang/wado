@@ -466,6 +466,44 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     out
 }
 
+/// Source-level `ShadowedName` warnings: every binder the resolution pass found
+/// taking a name that already reached a declaration or an enclosing binder.
+/// Stdlib modules are left alone, as the unused lints leave them.
+pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+    use crate::compiler_host::{Code, DiagnosticSpan};
+    use crate::elaborator::liveness::is_user_authored;
+    use crate::resolve::Shadowed;
+
+    let Some(resolutions) = sem.resolutions() else {
+        return Vec::new();
+    };
+    let defs = resolutions.defs();
+    resolutions
+        .shadowings()
+        .iter()
+        .filter(|s| is_user_authored(&s.module))
+        .map(|shadowing| {
+            let what = match shadowing.shadowed {
+                Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
+                Shadowed::Binder => "a binding of the same name".to_string(),
+            };
+            Diagnostic {
+                severity: Severity::Warning,
+                code: Code::ShadowedName,
+                message: format!(
+                    "`{}` shadows {what}; rename it, or mark the binder \
+                     `#[allow(shadowed_name)]` if that is deliberate",
+                    shadowing.name
+                ),
+                span: Some(DiagnosticSpan::from_span(
+                    &shadowing.span,
+                    Some(shadowing.module.source_path().as_str()),
+                )),
+            }
+        })
+        .collect()
+}
+
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record (Kiln WEP revision 3). A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -1052,7 +1090,10 @@ fn compile_after_load<H: CompilerHost>(
     // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
-        for diag in unused_diagnostics(&sem, is_test_world) {
+        for diag in unused_diagnostics(&sem, is_test_world)
+            .into_iter()
+            .chain(shadowing_diagnostics(&sem))
+        {
             match diag.span {
                 Some(span) => logger.warn_at(diag.code, diag.message, span),
                 None => logger.warn(diag.code, diag.message),

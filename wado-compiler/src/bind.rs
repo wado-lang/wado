@@ -113,7 +113,7 @@ impl From<BindError> for Diagnostic {
 /// shadowing (e.g., `let x = x + 1`). The walk skips closure bodies when
 /// a parameter shadows `name`, since that `name` refers to the parameter
 /// rather than the outer variable.
-fn expr_references_var(expr: &Expr, name: &str) -> bool {
+pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
     match expr {
         Expr::Ident(ident) => ident.name == name,
 

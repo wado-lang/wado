@@ -1,0 +1,26 @@
+// A type parameter binds its name for the whole item, so `<i32>` declares a
+// parameter named `i32` rather than naming the primitive — the mistake that
+// broke `opt_const_forward_ref_in_block_arg.wado` on main, with no diagnostic
+// at the declaration to say so.
+
+fn keep<i32>(v: i32) -> i32 {
+    return v;
+}
+
+fn identity<List>(v: List) -> List {
+    return v;
+}
+
+export fn run() {
+    let _ = keep(1);
+    let _ = identity(2);
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": [
+        "`i32` shadows",
+        "`List` shadows"
+    ]
+}

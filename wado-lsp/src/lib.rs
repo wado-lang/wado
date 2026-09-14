@@ -703,6 +703,7 @@ impl Engine {
             out.extend(
                 wado_compiler::unused_diagnostics(&snapshot.sem, false)
                     .iter()
+                    .chain(wado_compiler::shadowing_diagnostics(&snapshot.sem).iter())
                     .filter_map(&convert),
             );
         }

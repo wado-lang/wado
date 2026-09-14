@@ -261,6 +261,32 @@ let x = 2;  // Error: cannot redeclare 'x' in the same scope
 let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
 ```
 
+#### The `shadowed_name` Lint
+
+A binder that takes a name already reaching a known symbol is legal and warns.
+It covers every binder — `let`, a parameter, a closure parameter, a type
+parameter, a pattern binding, a local item — and every kind of symbol a name
+can reach, across namespaces: a function, a global, a type, a trait, a case, an
+outer binding. The derived same-scope `let` above is the one exemption, since
+the language already sanctions it.
+
+```wado
+fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
+fn keep<i32>(v: i32) { }       // warns: `i32` shadows the builtin type of the same name
+let println = 1;               // warns: `println` shadows the function of the same name
+```
+
+Mark the binder `#[allow(shadowed_name)]` where the shadowing is deliberate, or
+the module `#![allow(shadowed_name)]`:
+
+```wado
+fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
+```
+
+A bare identifier pattern is exempt where the name reaches a case or a
+`global`: such a pattern matches by value rather than binding, and which it
+does depends on the scrutinee's type.
+
 ### Local Item Definitions
 
 `struct` and `type` (newtype) may be declared inside a function or method

@@ -3584,3 +3584,24 @@ fn test_format_keeps_an_attribute_identifier_value_unquoted() {
     );
     assert_format_preserves_ast(source);
 }
+
+/// A binder carries `#[allow(...)]`, so every binder position round-trips it:
+/// a type parameter, a parameter, a closure parameter, and a `let`.
+#[test]
+fn test_format_keeps_an_attribute_on_a_binder() {
+    let source = concat!(
+        "fn identity<#[allow(shadowed_name)] List>(v: List) -> List {\n",
+        "    return v;\n",
+        "}\n",
+        "\n",
+        "fn twice(#[allow(shadowed_name)] String: i32) -> i32 {\n",
+        "    #[allow(shadowed_name)]\n",
+        "    let println = 2;\n",
+        "    let f = |#[allow(shadowed_name)] print: i32| print * println;\n",
+        "    return f(String);\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}

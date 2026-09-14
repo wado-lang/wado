@@ -464,6 +464,37 @@ impl Parser {
         }
     }
 
+    /// True at the `#` of an attribute (`#[…]`), as opposed to a compile-time
+    /// literal (`#file`).
+    fn at_attribute(&self) -> bool {
+        self.check(&TokenKind::Hash) && matches!(self.peek_nth(1).kind, TokenKind::LBracket)
+    }
+
+    /// The token after the attributes at the current position, so a statement
+    /// can dispatch on what they decorate without consuming them.
+    fn kind_after_attributes(&self) -> &TokenKind {
+        let mut at = 0;
+        while matches!(self.peek_nth(at).kind, TokenKind::Hash)
+            && matches!(self.peek_nth(at + 1).kind, TokenKind::LBracket)
+        {
+            at += 1;
+            let mut depth = 0;
+            loop {
+                match self.peek_nth(at).kind {
+                    TokenKind::LBracket => depth += 1,
+                    TokenKind::RBracket => depth -= 1,
+                    TokenKind::Eof => return &self.peek_nth(at).kind,
+                    _ => {}
+                }
+                at += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+        }
+        &self.peek_nth(at).kind
+    }
+
     /// True when the current token is a visibility modifier (`pub`/
     /// `internal`/`export`) immediately followed by a local-item-start
     /// keyword — e.g. `pub struct` or `internal type Foo` in block/statement
@@ -1869,6 +1900,7 @@ impl Parser {
 
     fn parse_param(&mut self) -> ParseResult<Param> {
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
         let start_span = self.peek().span;
 
         // Handle &self and &mut self for methods
@@ -1901,6 +1933,7 @@ impl Parser {
                 };
                 return Ok(Param {
                     id,
+                    attrs,
                     name: "self".to_string(),
                     name_span: self_span,
                     ty,
@@ -1946,6 +1979,7 @@ impl Parser {
             });
             return Ok(Param {
                 id,
+                attrs,
                 name: "self".to_string(),
                 name_span: self_span,
                 ty: self_type,
@@ -1979,6 +2013,7 @@ impl Parser {
         // parameter that stops short loses everything past that point.
         Ok(Param {
             id,
+            attrs,
             name,
             name_span,
             ty,
@@ -2253,6 +2288,18 @@ impl Parser {
             ));
         }
 
+        // `#[allow(...)] let x = …`: the attributes belong to the binding, so
+        // the `let` path reads them rather than the expression path, where a
+        // `#` starts a compile-time literal.
+        if self.at_attribute()
+            && matches!(
+                self.kind_after_attributes(),
+                TokenKind::Let | TokenKind::Reactive
+            )
+        {
+            return self.parse_let_stmt();
+        }
+
         match self.peek_kind() {
             TokenKind::Let | TokenKind::Reactive => self.parse_let_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
@@ -2382,6 +2429,7 @@ impl Parser {
         // outermost-first parser (`parse_block`, `parse_function`,
         // `parse_match_arm`, …).
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
 
         let is_reactive = if self.check(&TokenKind::Reactive) {
             self.advance();
@@ -2448,6 +2496,7 @@ impl Parser {
 
         Ok(Stmt::Let(LetStmt {
             id,
+            attrs,
             pattern,
             name_span,
             is_mut,
@@ -4765,6 +4814,7 @@ impl Parser {
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
             true
@@ -4789,6 +4839,7 @@ impl Parser {
         };
         Ok(ClosureParam {
             id,
+            attrs,
             name,
             name_span,
             ty,
@@ -5045,6 +5096,7 @@ impl Parser {
         let mut params = Vec::new();
 
         while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+            let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
             // Parse effect parameter: `effect E`
@@ -5097,6 +5149,7 @@ impl Parser {
 
             params.push(GenericParam {
                 id: self.alloc_ast_id(),
+                attrs,
                 name,
                 name_span,
                 is_effect,
@@ -5826,6 +5879,7 @@ impl Parser {
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(GenericParam {
                         id: self.alloc_ast_id(),
+                        attrs: Vec::new(),
                         name: param_name.clone(),
                         name_span: param_name_span,
                         is_effect: false,

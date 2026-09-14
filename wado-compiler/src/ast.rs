@@ -1043,6 +1043,22 @@ pub fn for_each_pattern_binding(pat: &Pattern, f: &mut impl FnMut(AstId)) {
     Bindings(f).visit_pattern(pat);
 }
 
+/// Every name a pattern binds, with the span of the identifier that binds it.
+pub fn for_each_pattern_name(pat: &Pattern, f: &mut impl FnMut(&str, Span)) {
+    struct Names<'a, F>(&'a mut F);
+
+    impl<F: FnMut(&str, Span)> AstVisitor for Names<'_, F> {
+        fn visit_pattern(&mut self, pat: &Pattern) {
+            if let Pattern::Ident { name, span, .. } | Pattern::MutIdent { name, span, .. } = pat {
+                (self.0)(name, *span);
+            }
+            walk_pattern(self, pat);
+        }
+    }
+
+    Names(f).visit_pattern(pat);
+}
+
 /// Walk a declaration's type parameters: each binder's own id, then the
 /// reference sites inside its bounds. A bound names a trait and its associated
 /// types, so it is a reference site like any other and must be reachable by an
@@ -1302,6 +1318,52 @@ impl Item {
             Item::Use(_) | Item::Impl(_) | Item::World(_) | Item::Test(_) | Item::Error(_) => None,
         }
     }
+
+    /// The span of the item's own name, or its whole span where it writes none.
+    pub fn name_span(&self) -> Span {
+        match self {
+            Item::Function(d) => d.name_span,
+            Item::Struct(d) => d.name_span,
+            Item::Enum(d) => d.name_span,
+            Item::Variant(d) => d.name_span,
+            Item::Flags(d) => d.name_span,
+            Item::Newtype(d) => d.name_span,
+            Item::Trait(d) => d.name_span,
+            Item::Interface(d) => d.name_span,
+            Item::Global(d) => d.name_span,
+            Item::BuiltinTypeDecl(d) => d.name_span,
+            Item::Resource(_)
+            | Item::TupleTypeDecl(_)
+            | Item::Use(_)
+            | Item::Impl(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Error(_) => self.span(),
+        }
+    }
+
+    /// The attributes written before the item.
+    pub fn attrs(&self) -> &[Attribute] {
+        match self {
+            Item::Function(d) => &d.attrs,
+            Item::Struct(d) => &d.attrs,
+            Item::Enum(d) => &d.attrs,
+            Item::Variant(d) => &d.attrs,
+            Item::Newtype(d) => &d.attrs,
+            Item::Trait(d) => &d.attrs,
+            Item::Interface(d) => &d.attrs,
+            Item::Resource(d) => &d.attrs,
+            Item::TupleTypeDecl(d) => &d.attrs,
+            Item::Global(d) => &d.attributes,
+            Item::Flags(d) => d.attributes.as_deref().unwrap_or_default(),
+            Item::BuiltinTypeDecl(_)
+            | Item::Use(_)
+            | Item::Impl(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Error(_) => &[],
+        }
+    }
 }
 
 /// Placeholder for a token run that failed to parse as an item. See [`Item::Error`].
@@ -1435,6 +1497,37 @@ pub struct Attribute {
     /// world, ...) participates in the Component Model boundary in some form.
     pub cm_boundary: Option<CmBoundary>,
     pub span: Span,
+}
+
+/// The lint names `#[allow(...)]` takes.
+pub mod lint {
+    /// A binder taking a name that already reaches something.
+    pub const SHADOWED_NAME: &str = "shadowed_name";
+    /// An item nothing reaches from the export boundary.
+    pub const DEAD_CODE: &str = "dead_code";
+}
+
+/// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow
+/// attribute, so every lint honours it the same way.
+#[must_use]
+pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+}
+
+/// [`attrs_allow`] for a module's `#![allow(...)]`, which waives the lint for
+/// the whole file.
+#[must_use]
+pub fn inner_attrs_allow(attrs: &[InnerAttribute], lint: &str) -> bool {
+    attrs
+        .iter()
+        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+}
+
+fn args_name(args: &[AttrArg], lint: &str) -> bool {
+    args.iter()
+        .any(|arg| matches!(arg, AttrArg::Ident(name) if name == lint))
 }
 
 impl Attribute {
@@ -2099,6 +2192,8 @@ pub enum SelfKind {
 #[derive(Debug, Clone)]
 pub struct Param {
     pub id: AstId,
+    /// `#[allow(...)]` and anything else written before the parameter.
+    pub attrs: Vec<Attribute>,
     pub name: String,
     /// Span of the parameter name identifier (or `self` token for self params).
     pub name_span: Span,
@@ -2183,6 +2278,8 @@ pub struct AssertStmt {
 #[derive(Debug, Clone)]
 pub struct LetStmt {
     pub id: AstId,
+    /// `#[allow(...)]` and anything else written before the `let`.
+    pub attrs: Vec<Attribute>,
     pub pattern: Pattern,
     /// Span of the pattern's leading token: exactly the identifier for
     /// `Ident`/`MutIdent` patterns, or the opening delimiter/constructor for
@@ -3205,6 +3302,8 @@ pub struct ClosureExpr {
 #[derive(Debug, Clone)]
 pub struct ClosureParam {
     pub id: AstId,
+    /// `#[allow(...)]` and anything else written before the parameter.
+    pub attrs: Vec<Attribute>,
     pub name: String,
     /// Span of the closure parameter name identifier.
     pub name_span: Span,
@@ -3550,6 +3649,8 @@ pub struct TraitBound {
 #[derive(Debug, Clone)]
 pub struct GenericParam {
     pub id: AstId,
+    /// `#[allow(...)]` and anything else written before the parameter.
+    pub attrs: Vec<Attribute>,
     pub name: String,
     /// Span of the type parameter name identifier.
     pub name_span: Span,

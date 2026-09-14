@@ -121,6 +121,24 @@ When the user might have intended to reassign instead of redeclare:
   hint: shadowing is allowed when the new value is derived from the old one (e.g., `let x = x + 1`)
 ```
 
+### The `shadowed_name` Lint
+
+The rule above governs one shape, the same-scope `let`. Every other binder may
+take a name that already reaches a known symbol, which is legal and warns under
+`shadowed_name`: a parameter, a closure parameter, a type parameter, a pattern
+binding, a local item, and a `let` in an inner block. The symbol may be of any
+kind and may sit in any namespace — a function, a global, a type, a trait, a
+case, an outer binding — because the confusion the lint names is about the
+reader, not about which namespace answers. The derived same-scope `let` is the
+one exemption, since this WEP sanctions it.
+
+`#[allow(shadowed_name)]` on the binder waives it, and
+`#![allow(shadowed_name)]` waives it for a module.
+
+A bare identifier pattern is exempt where the name reaches a case or a
+`global`. Such a pattern matches by value rather than binding, and which it
+does depends on the scrutinee's type — which the resolution pass does not have.
+
 ## Alternatives Considered
 
 ### Allow All Same-Scope Shadowing (Rust-style)

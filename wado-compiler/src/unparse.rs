@@ -896,6 +896,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_param(&mut self, param: &Param) {
+        self.emit_inline_attrs(&param.attrs);
         if let Some(self_form) = self_param_shorthand(param) {
             self.output.push_str(self_form);
             return;
@@ -1004,6 +1005,7 @@ impl<'a> Unparser<'a> {
             return;
         }
         self.delimited("<", ">", params, |s, param| {
+            s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
             s.output.push_str(&param.name);
@@ -1448,7 +1450,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_let(&mut self, l: &LetStmt) {
-        self.write_indent();
+        self.emit_outer_attrs(&l.attrs);
         // `reactive` is a prefix keyword that must precede `let` (the parser
         // accepts `reactive let ...`, not `let reactive ...`), so emit it
         // before the `let` keyword to keep the formatted output reparseable.
@@ -2553,6 +2555,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_closure(&mut self, c: &ClosureExpr) {
         self.delimited("|", "| ", &c.params, |s, param| {
+            s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_mut, "mut ");
             s.output.push_str(&param.name);
             if let Some(ty) = &param.ty {
@@ -2767,6 +2770,14 @@ impl<'a> Unparser<'a> {
     /// Emit each outer attribute on its own indented line, then write the indent
     /// for the line that follows. Replaces the `write_indent + for attr {...}` prologue
     /// shared by every item and member declaration.
+    /// Attributes on a binder written mid-line — a parameter, a `let`.
+    fn emit_inline_attrs(&mut self, attrs: &[Attribute]) {
+        for attr in attrs {
+            self.unparse_attribute(attr);
+            self.output.push(' ');
+        }
+    }
+
     fn emit_outer_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             self.write_indent();

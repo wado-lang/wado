@@ -150,6 +150,7 @@ pub fn inject_kiln_request_adapter(
     };
     let param = |module: &mut Module, name: &str, ty: Type| Param {
         id: module.alloc_ast_id(),
+        attrs: Vec::new(),
         name: name.to_string(),
         name_span: span,
         ty,
@@ -224,6 +225,7 @@ pub fn inject_kiln_request_adapter(
     }));
     let let_stmt = Stmt::Let(LetStmt {
         id: module.alloc_ast_id(),
+        attrs: Vec::new(),
         pattern: Pattern::Ident {
             id: module.alloc_ast_id(),
             name: param_name,
