@@ -374,17 +374,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .into_string(),
                     )
                 }
+                // No written impl answers, so the derivation the representation
+                // carries does — named by that head, not by one peel, which on a
+                // chain (`type B = A; type A = Point`) lands on another newtype.
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
-                        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                            Some(tt.fq_base_type_name(*base_type).into_string())
-                        }
-                        // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
-                        // needs the same Variant-dispatch path as a direct
-                        // `ResolvedType::Variant` comparison above.
-                        ResolvedType::Variant { .. } => {
+                        ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
                         _ => None,
@@ -397,8 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let lookup_type_id = if let Some(link) = comparison_impl_link {
                     link
                 } else {
-                    let tt = self.tysys.type_table.borrow();
-                    tt.get_newtype_base(left).unwrap_or(left)
+                    self.tysys.type_table.borrow().representation_head(left)
                 };
 
                 // Handle Eq trait (== and !=)
