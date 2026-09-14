@@ -477,17 +477,19 @@ unused helper — while a miss leaves the fold no helper to call.
 
 `let v = self.held; self.held = null;` gives `v` what the place held, so in
 principle `v` may be handed to a new owner with no copy — the `take` / `drain` /
-`snapshot` idiom. The compiler does not do this, and the predicate that once did
-was removed for being no proof: a repoint says nothing about _when_ it runs (one
-under an `if` that never executes licensed the elision) and nothing about a
-_second_ binding read out of the same place (both were licensed, so a write
-through one was observed through the other). `value_copy_release_is_not_a_proof`
+`snapshot` idiom. The compiler copies instead.
+
+A repoint of the place is not the proof this needs. It says nothing about _when_
+it runs, so one under an `if` that never executes would license the elision, and
+nothing about a _second_ binding read out of the same place, where a write
+through one is observed through the other. `value_copy_release_is_not_a_proof`
 and `value_copy_new_owner_needs_a_proof` are those two programs.
 
-Closing it needs both halves of what was missing: the repoint must dominate every
-site that hands the binding on, and the place must have exactly one binding read
-out of it. The backward walk records a live set per write and no position, so
-domination is not a question it can answer today.
+The second half is answered: a hand-over is refused when any other chain reaches
+the storage it takes (`value_copy_two_readers_of_one_place`), which is the
+sibling case stated as a rule rather than a count. The first half is not. The
+backward walk records a live set per write and no position, so which repoints
+dominate a site is not a question it can answer today.
 
 ### Known gap: a borrowed projection behind a variant
 
@@ -682,8 +684,9 @@ Verified against the tree.
       string lowers to a labeled block, so one interpolation anywhere in a
       function retired its whole last-use set — most often as a whole-array copy
       of a `String` handed to a callee that keeps it. The source-level walk had
-      the same fallback. No fixture changes with it fixed, a template not being a
-      labeled block where that walk runs, and it is fixed here rather than left.
+      the same fallback, and is fixed here rather than left. No fixture changes
+      with that half fixed: a template is not a labeled block where that walk
+      runs.
 - [x] A caller takes the whole `&mut` handle as written when the callee names a
       write it cannot re-root there. Re-rooting kept only the writes whose owner
       was the handle's own type and dropped the rest, so a callee writing through
@@ -697,6 +700,13 @@ Verified against the tree.
 - [x] An arm binding aliases live storage when the scrutinee is live where _that
       arm_ reads it, decided from the live set the arm's own walk produced. One set
       merged over every arm made a sibling arm's read refuse this arm's share.
+- [x] Storage is handed over only when no other chain reaches it. One predicate
+      answers at every hand-over site, and closes the chain on both sides: the
+      storage being taken, and everything live where it is taken. Closing only
+      the taker's own side left a sibling binding read out of the same place
+      invisible — it reaches the place from beside the taker, not above it — so
+      two bindings both skipped their copy and a write through one was observed
+      through the other. It costs no elision the corpus records.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp pattern lowering hoists the scrutinee into. Which
       syntactic position a `match` sits in is part of whether the binding is
@@ -772,21 +782,25 @@ Verified against the tree.
       `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
       `Holder` — is byte-identical at `-O0` too.
 
-### Known gap: two imprecisions that cost nothing measured
+### Known gap: a destructured field's path is assumed to borrow
 
 A pattern-destructured field's path is marked as borrowing, because the pattern
-carries no type saying whether that field does. The mark refuses those paths a
-share outright. Closing it means carrying the field's type into the pattern;
-every WIR golden is byte-identical with the mark removed, so nothing measured
+carries no type saying whether that field does, and the mark refuses those paths
+a share outright. Closing it means carrying the field's type into the pattern.
+Every WIR golden is byte-identical with the mark removed, so nothing measured
 pays for it.
 
-The fold does not read the wrap it has just decided as the freshness that wrap
-creates. A copy hands its target storage nothing else reaches, but ownedness is
-computed from a local's source before any wrap site is chosen. Closing it means
-feeding the fold's own decisions back into freshness. No program reaches the
-imprecision: for a second read to pay a copy its move must be refused, and a
-copied local aliases nothing, so only a read that is not the last one refuses —
-and there the second copy is a second live object, which is needed.
+### Known gap: freshness does not read the fold's own wraps
+
+A copy hands its target storage nothing else reaches, but ownedness is computed
+from a local's source before any wrap site is chosen, so the fold does not read
+the wrap it has just decided as the freshness that wrap creates. Closing it means
+feeding the fold's own decisions back into freshness.
+
+No program reaches the imprecision. For a second read to pay a copy its move must
+be refused, and a copied local aliases nothing, so only a read that is not the
+last one refuses — and there the second copy is a second live object, which is
+needed.
 
 ## Deferred: the `move` and `unique` keywords
 

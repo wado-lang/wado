@@ -9999,14 +9999,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         newtype_member_owner(&lookup, &self.tysys, def)
     }
 
-    /// Whose cases a pattern names: the scrutinee's structure, with references
-    /// and newtype links peeled. A newtype inherits its base's cases (WEP
-    /// 2026-01-29), so `match c { Color::Green => … }` holds for a `C` too —
-    /// reading the identity here dropped an enum into the variant branch, and
-    /// WIR build then had a variant pattern over an `Enum`.
+    /// Whose cases a pattern names — see [`TypeTable::scrutinee_structure_head`].
     pub(super) fn scrutinee_structure_head(&self, scrutinee_type: TypeId) -> TypeId {
-        let tt = self.tysys.type_table.borrow();
-        tt.reflect_structure_head(tt.peel_refs(scrutinee_type))
+        self.tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type)
     }
 
     /// Discriminant index of `case_name` when `scrutinee_type` is an enum that
@@ -10500,8 +10498,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A variant case's discriminant and payload type, substituted with
-    /// `variant_type`'s type args. The one place a name becomes an index
-    /// (WEP 2026-08-12); `None` where the type declares no such case.
+    /// `variant_type`'s type args. Where a pattern's case name becomes the index
+    /// every later phase carries; `None` where the type declares no such case.
     fn variant_case_index_and_payload(
         &self,
         variant_type: TypeId,

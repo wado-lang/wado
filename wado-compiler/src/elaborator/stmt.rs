@@ -878,7 +878,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .reflect_structure_head(type_id);
+            .scrutinee_structure_head(type_id);
         let resolved = self.tysys.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Enum { .. } => self
@@ -901,29 +901,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return true;
         };
-        // Both names qualify a pattern on a newtype: `C::Green` and
-        // `Color::Green` where `type C = Color`.
         let base_type = self
             .tysys
             .type_table
             .borrow()
-            .reflect_structure_head(scrutinee_type);
-        let (base_def, scrutinee_arg_len) = {
-            let table = self.tysys.type_table.borrow();
-            let arg_len = match table.get(base_type) {
-                ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
-                ResolvedType::GenericInstance { type_args, .. } => Some(type_args.len()),
-                _ => return false,
-            };
-            let def = table
-                .nominal_def(base_type)
-                .expect("a nominal type names a declaration");
-            (def, arg_len)
+            .scrutinee_structure_head(scrutinee_type);
+        let scrutinee_arg_len = match self.tysys.type_table.borrow().get(base_type) {
+            ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.len()),
+            _ => return false,
         };
-        let newtype_def = self.tysys.type_table.borrow().nominal_def(scrutinee_type);
+        // Every name on the chain qualifies the same cases: `C::Green`,
+        // `E::Green` and `Color::Green` where `type C = Color; type E = C`.
+        let chain_defs = self
+            .tysys
+            .type_table
+            .borrow()
+            .structure_chain_defs(scrutinee_type);
         let names_scrutinee = |elab: &mut Self, q: &Type| {
             elab.qualifier_def(q)
-                .is_some_and(|def| def == base_def || Some(def) == newtype_def)
+                .is_some_and(|def| chain_defs.contains(&def))
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
         // writes must agree.
@@ -934,10 +931,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // `ns::Case` parses as a `Named("ns")` qualifier plus the bare
                     // `Case`, so a prefix naming no type names a module. It licenses
                     // the case when the scrutinee's type is reachable through it.
-                    || self.namespace_reaches_type(&t.name, t.id, t.span, base_def)
-                    || newtype_def.is_some_and(|def| {
-                        self.namespace_reaches_type(&t.name, t.id, t.span, def)
-                    })
+                    || chain_defs
+                        .iter()
+                        .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
             }
             Type::Generic(g) => arity_agrees(g.args.len()) && names_scrutinee(self, qualifier),
             Type::NamespacedGeneric(ns) => {
@@ -954,32 +950,44 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declaration a written qualifier means, resolved as a type: `Self`, a
-    /// type parameter, an import alias, a namespace member. `None` where it
-    /// names no type, a bare namespace prefix among them.
+    /// The declaration a written qualifier means: an import alias, a namespace
+    /// member, `Self`, a type parameter. `None` where it names no declaration, a
+    /// bare namespace prefix among them.
+    ///
+    /// The resolve pass answers first, since a generic newtype has a declaration
+    /// and no instantiated type until a use names its arguments.
     fn qualifier_def(&mut self, qualifier: &Type) -> Option<DefId> {
-        let resolved = match qualifier {
-            Type::Named(t) => self.resolve_named_type(t.id, &t.name, t.span, false),
-            Type::Generic(g) => self.resolve_named_type(g.id, &g.name, g.span, false),
-            Type::NamespacedGeneric(ns) => {
-                let member = namespace_member_alias(&ns.namespace, &ns.name);
-                self.resolve_named_type(ns.id, &member, ns.span, false)
-            }
+        let (site, span, name) = match qualifier {
+            Type::Named(t) => (t.id, t.span, t.name.clone()),
+            Type::Generic(g) => (g.id, g.span, g.name.clone()),
+            Type::NamespacedGeneric(ns) => (
+                ns.id,
+                ns.span,
+                namespace_member_alias(&ns.namespace, &ns.name),
+            ),
             _ => return None,
         };
+        if let Some(def) = self.type_lookup().declaration_at(Some(site), &name) {
+            return Some(def);
+        }
+        let resolved = self.resolve_named_type(site, &name, span, false);
         self.tysys.type_table.borrow().nominal_def(resolved)
     }
 
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
     /// imports. A re-export is such a reach, so this asks the resolver rather
     /// than comparing `def`'s own module.
+    ///
+    /// The member alias is assembled here, so no source segment spells it and the
+    /// lookup carries no site: a recorded resolution would answer for the
+    /// qualifier instead.
     fn namespace_reaches_type(&mut self, alias: &str, site: AstId, span: Span, def: DefId) -> bool {
         if self.namespace_alias_source(alias, site).is_none() {
             return false;
         }
         let name = self.tysys.type_table.borrow().def_name(def).to_string();
         let member = namespace_member_alias(alias, &name);
-        let resolved = self.resolve_named_type(site, &member, span, false);
+        let resolved = self.resolve_unsited_type_name(&member, span);
         self.tysys.type_table.borrow().nominal_def(resolved) == Some(def)
     }
 
@@ -1795,21 +1803,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.record_reference_to_def(*id, case_data.ast_id);
                 }
 
-                // Each variant case has exactly one payload type.
-                // Determine the payload type for the variant case.
-                let scrutinee_decl = self.tysys.type_def(scrutinee_type);
+                // The cases belong to the structure the scrutinee wraps, so the
+                // declaration asked for the payload type is that structure's.
+                let scrutinee_decl = self.tysys.type_def(base_type);
                 let payload_type: TypeId = match &resolved_type {
                     // Non-generic variant
-                    ResolvedType::Variant { .. } => {
-                        scrutinee_decl.map_or(TypeTable::UNKNOWN, |def| {
-                            self.get_variant_case_payload_type(
-                                def,
-                                normalized_variant_name,
-                                &[],
-                                *span,
-                            )
-                        })
-                    }
+                    ResolvedType::Variant { .. } => self.get_variant_case_payload_type(
+                        scrutinee_decl.expect("a variant answers with its declaration"),
+                        normalized_variant_name,
+                        &[],
+                        *span,
+                    ),
                     // Generic variant instantiation
                     ResolvedType::GenericInstance { type_args, .. } => {
                         // Check if this is a variant (not a struct)

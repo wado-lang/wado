@@ -1,0 +1,26 @@
+// Match ergonomics present a `&T` scrutinee as its `T`, so coverage is asked of
+// the same structure the arms are resolved against. Asking it of the reference
+// left every match through one unchecked, to trap at runtime on the case no arm
+// covers — and `&self` is the common way to write this.
+
+variant Shape {
+    Circle(f64),
+    Rectangle([f64, f64]),
+    Point,
+}
+
+fn area(s: &Shape) -> f64 {
+    return match s {
+        Circle(r) => *r,
+        Point => 0.0,
+    };
+}
+
+export fn run() {
+    let _ = area(&Shape::Point);
+}
+
+__DATA__
+{
+  "compile_error": "non-exhaustive match: missing case `Rectangle`"
+}

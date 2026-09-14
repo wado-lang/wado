@@ -151,12 +151,12 @@ fn const_identity_eq(a: &Value, b: &Value) -> bool {
         (
             Value::Variant {
                 type_id: at,
-                case_name: ac,
+                case_index: ac,
                 payload: ap,
             },
             Value::Variant {
                 type_id: bt,
-                case_name: bc,
+                case_index: bc,
                 payload: bp,
             },
         ) => {
@@ -218,11 +218,11 @@ fn const_identity_hash<H: std::hash::Hasher>(v: &Value, state: &mut H) {
         }
         Value::Variant {
             type_id,
-            case_name,
+            case_index,
             payload,
         } => {
             type_id.hash(state);
-            case_name.hash(state);
+            case_index.hash(state);
             match payload {
                 Some(p) => const_identity_hash(p, state),
                 None => 0u8.hash(state),

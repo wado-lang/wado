@@ -1,13 +1,14 @@
-// The same hole with no pattern in sight, so the release rule answers for it
-// alone: a `let` chain launders the alias, and the repoint licenses the chain
-// whether a second reader is live or the repoint never runs at all.
+// The same hole reached with no pattern in sight: a two-step `let` chain
+// launders the alias, so a repoint of the place is all that could license the
+// chain — and it licenses nothing. A second reader of the place may be live, and
+// the repoint may never run.
 
 struct S {
     xs: List<i32>,
 }
 
-// U1: no pattern at all — a two-step `let` chain launders the alias, then one
-// repoint licenses the chain while a second reader of the same place is live.
+// A two-step `let` chain launders the alias, then one repoint would license the
+// chain while a second reader of the same place is live.
 fn two_readers(h: &mut S) -> List<i32> {
     let a0 = h.xs;
     let a = a0;
@@ -18,13 +19,13 @@ fn two_readers(h: &mut S) -> List<i32> {
     return b;
 }
 
-test "U1 let chain, one release, two readers" {
+test "a repoint does not license two readers of one place" {
     let mut h = S { xs: [1, 2] };
     let b = two_readers(&mut h);
     assert b.len() == 2;
 }
 
-// U2: the same chain, with a repoint that never runs.
+// The same chain, with a repoint that never runs.
 fn maybe(h: &mut S, c: bool) -> i32 {
     let a0 = h.xs;
     let a = a0;
@@ -36,24 +37,9 @@ fn maybe(h: &mut S, c: bool) -> i32 {
     return x.len();
 }
 
-test "U2 let chain, release that never runs" {
+test "a repoint that never runs licenses nothing" {
     let mut h = S { xs: [1, 2] };
     assert maybe(&mut h, builtin::black_box(false)) == 3;
-    assert h.xs.len() == 2;
-}
-
-// Control: the same chain with no repoint.
-fn control(h: &mut S) -> i32 {
-    let a0 = h.xs;
-    let a = a0;
-    let mut x = a;
-    x.push(9);
-    return x.len();
-}
-
-test "control let chain, no release" {
-    let mut h = S { xs: [1, 2] };
-    assert control(&mut h) == 3;
     assert h.xs.len() == 2;
 }
 

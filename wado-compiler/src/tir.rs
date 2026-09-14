@@ -3535,6 +3535,26 @@ impl TypeTable {
         current
     }
 
+    /// The structure a match takes its cases from: references peeled for match
+    /// ergonomics, then newtypes, a newtype's cases being its base's.
+    pub fn scrutinee_structure_head(&self, id: TypeId) -> TypeId {
+        self.reflect_structure_head(self.peel_refs(id))
+    }
+
+    /// Every declaration on `id`'s newtype chain, its head's included: the names
+    /// that stand for one structure, so any of them names `id`'s cases.
+    pub fn structure_chain_defs(&self, id: TypeId) -> Vec<DefId> {
+        let mut defs = Vec::new();
+        let mut current = self.peel_refs(id);
+        loop {
+            defs.extend(self.nominal_def(current));
+            match self.get_unerased(current) {
+                ResolvedType::Newtype { base_type, .. } => current = *base_type,
+                _ => return defs,
+            }
+        }
+    }
+
     /// The reflection kind `id` is, or `None` where reflection does not cover
     /// it: the one answer to which `Reflect*` the compiler synthesizes for a
     /// type, and so to which kind bound can hold for it. A `GenericInstance`

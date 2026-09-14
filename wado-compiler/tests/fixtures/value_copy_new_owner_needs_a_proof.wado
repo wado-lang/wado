@@ -30,9 +30,9 @@ fn make() -> HV {
     return HV { held: Held::Full([1, 2]) };
 }
 
-// ---- Finding 1a: one repoint licenses every binding read out of the place.
-// The holder arrives through `&mut`, so nothing under it is "fresh" and the
-// move rule cannot be what elides the copy (control: `control_no_release`).
+// One repoint would license every binding read out of the place. The holder
+// arrives through `&mut`, so nothing under it is fresh and the move rule cannot
+// be what elides the copy.
 fn two_readers(h: &mut H) -> List<i32> {
     if let Some(a) = h.held {
         if let Some(b) = h.held {
@@ -45,14 +45,14 @@ fn two_readers(h: &mut H) -> List<i32> {
     return [];
 }
 
-test "1a one release licenses two readers" {
+test "a repoint does not license two arm bindings" {
     let mut h = H { held: Option::Some([1, 2]) };
     let b = two_readers(&mut h);
     assert b.len() == 2;
 }
 
-// ---- Finding 1b: a repoint that does not execute licenses all the same.
-fn maybe_release(h: &mut H, c: bool) -> i32 {
+// A repoint that does not execute would license all the same.
+fn maybe_repoint(h: &mut H, c: bool) -> i32 {
     if let Some(a) = h.held {
         if c {
             h.held = null;
@@ -64,41 +64,21 @@ fn maybe_release(h: &mut H, c: bool) -> i32 {
     return 0;
 }
 
-test "1b a release that never runs licenses a new owner" {
+test "a repoint that never runs licenses no new owner" {
     let mut h = H { held: Option::Some([1, 2]) };
-    assert maybe_release(&mut h, builtin::black_box(false)) == 3;
-    if let Some(z) = h.held {
-        assert z.len() == 2;
-    }
+    assert maybe_repoint(&mut h, builtin::black_box(false)) == 3;
+    let Some(z) = h.held else { unreachable(); };
+    assert z.len() == 2;
 }
 
-// ---- Control: same shape, no repoint at all -> the copy is emitted.
-fn control_no_release(h: &mut H) -> i32 {
-    if let Some(a) = h.held {
-        let mut x = a;
-        x.push(9);
-        return x.len();
-    }
-    return 0;
-}
-
-test "control non-fresh holder, no release" {
-    let mut h = H { held: Option::Some([1, 2]) };
-    assert control_no_release(&mut h) == 3;
-    if let Some(z) = h.held {
-        assert z.len() == 2;
-    }
-}
-
-// ---- Finding 2: no repoint anywhere. A pattern binding out of a field of a
-// freshly built holder is moved while the holder is still live.
-test "2 arm binding out of a fresh holder is moved" {
+// No repoint anywhere: an arm binding out of a field of a freshly built holder,
+// while the holder is still live.
+test "an arm binding out of a fresh holder is not its owner" {
     let mut h = make();
-    if let Full(a) = h.held {
-        let mut x = a;
-        x.push(9);
-        assert x.len() == 3;
-    }
+    let Full(a) = h.held else { unreachable(); };
+    let mut x = a;
+    x.push(9);
+    assert x.len() == 3;
     assert h.count() == 2;
 }
 

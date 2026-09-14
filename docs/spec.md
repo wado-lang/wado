@@ -891,14 +891,24 @@ match customer {
 
 #### Qualified Patterns
 
-A case may be written under the type that declares it: `Color::Green`. Any name
-that resolves to the scrutinee's type qualifies its cases — an import alias
-(`M::Nothing` under `use { Maybe as M }`), a namespace prefix
-(`dep::Maybe::Nothing`), `Self` inside an `impl`, and a newtype's own name
-(`C::Green` where `type C = Color`), a newtype's cases being its base's.
+A case may be written under the type that declares it: `Color::Green`. Two kinds
+of qualifier reach the same cases.
+
+The first is a name that resolves to the scrutinee's type. An import alias
+(`M::Nothing` under `use { Maybe as M }`), `Self` inside an `impl`, and a
+namespace-qualified type (`dep::Maybe::Nothing`) all qualify. So does any name on
+the scrutinee's newtype chain, a newtype's cases being its base's: with
+`type C = Color`, both `C::Green` and `Color::Green` qualify. A second newtype
+over the same base does not, being a distinct type.
+
+The second is a namespace prefix the scrutinee's type is reachable through, such
+as `h::Green` under `use h from "./hue.wado"`. That prefix names a module rather
+than a type.
 
 Only a bare identifier can bind. A qualified path that names neither a case nor
-an associated constant is an error, never a variable of that name.
+an associated constant is an error, never a variable of that name. A
+namespace-qualified `global` is such an error, though a bare one matches by
+value.
 
 #### Constant Patterns
 
