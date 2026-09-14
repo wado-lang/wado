@@ -215,18 +215,14 @@ pub variant DiagnosticKind {
 
 /// The level a build reports `kind` at, or `null` for one it does not report.
 ///
-/// A kind warns when the parser an author gets is not the one the grammar
-/// describes: something was skipped or not run as written. `OverlapTournament`
-/// is sound and usually intended, so it is advisory. Being advisory is what
-/// lets a default build stay quiet while it fires on most real grammars.
+/// `Warn` means the parser an author gets is not the one the grammar describes.
+/// `OverlapTournament` is sound and usually intended, so it is `Info`: it fires
+/// on most real grammars, and a default run stays quiet.
 ///
-/// `OptionalScanGuardFallback` describes a shape, not a mistake: every `e?`
-/// whose body leads with a rule reference resolves that way, and most cannot
-/// be rewritten token-led (`expression?`, `param_list?`). It outnumbers the
-/// kinds that do name something to fix by about five to one on a real grammar,
-/// which buries them. So it stays in `gale dump`'s prediction report, where
-/// "what is prediction doing here" is the question being asked, and off a
-/// build entirely.
+/// `OptionalScanGuardFallback` describes a shape, not a mistake — every `e?`
+/// whose body leads with a rule reference resolves that way, and most cannot be
+/// rewritten token-led. It stays in `gale dump`'s prediction report, where
+/// prediction is the question being asked, and off a build entirely.
 pub fn diagnostic_level(kind: &DiagnosticKind) -> Option<Level> {
     return match *kind {
         OptionalScanGuardFallback => null,

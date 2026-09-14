@@ -22,7 +22,6 @@ use {
     TextSink,
     WallClock,
     current,
-    debug,
     enabled,
     error,
     event,
@@ -33,8 +32,6 @@ use {
     parse_directives,
     set_log_level,
     span,
-    trace,
-    warn,
 } from "core:log";
 use { Value } from "core:value";
 use { TreeMap } from "core:collections";
@@ -126,10 +123,11 @@ test "levels are ordered by declaration" {
 // below `Warn` to reach the tier under test.
 
 test "tier 2 reports the level it was set to" {
+    let prev = log_level();
     set_log_level(Level::Error);
     assert log_level() matches { Error };
-    set_log_level(Level::Trace);
-    assert log_level() matches { Trace };
+    set_log_level(prev);
+    assert log_level() == prev;
 }
 
 // === Spans ===

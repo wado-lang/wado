@@ -2,12 +2,6 @@
 //! must import no WASI interface, the sandbox guarantee (WEP 2026-04-12) resting
 //! on the generator being deterministic. `run_generator`'s runtime link refuses
 //! any `wasi:*` CM import as depth.
-//!
-//! Two checks, because a source `use` and an emitted import are not the same
-//! set. [`check_loaded`] reads the `use` the author wrote, so it blames that
-//! span; [`check_cm_imports`] reads the import plan, the first place a `core:*`
-//! module reaching WASI on the generator's behalf is visible (`core:jwt` and
-//! `core:uuid` do, through `SystemClock`).
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
@@ -32,9 +26,8 @@ pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 /// the CM lift/lower falls back to an i32 handle. Add a new shared type here.
 pub const KILN_SHARED_TYPE_NAMES: &[&str] = &["InputFile", "OutputFile", "Response", "Error"];
 
-/// Run the Kiln generator import-refusal check against every loaded
-/// module. Returns the count of rejected `use` sites; zero means the
-/// generator passed.
+/// Reject the WASI interfaces the author's own `use` names, blaming that span.
+/// Returns the count of rejected sites; zero means the generator passed.
 pub fn check_loaded<H: CompilerHost>(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -55,8 +48,9 @@ pub fn check_loaded<H: CompilerHost>(
     count
 }
 
-/// Reject the WASI interfaces a generator's component would ask the Kiln linker
-/// to provide. Returns the count; zero means the generator links.
+/// Reject the WASI interfaces the planned imports ask the Kiln linker for,
+/// which is where a `core:*` module reaching WASI on the generator's behalf
+/// first shows. Returns the count; zero means the generator links.
 pub fn check_cm_imports<H: CompilerHost>(
     is_generator_world: bool,
     import_plan: &[ImportEntry],

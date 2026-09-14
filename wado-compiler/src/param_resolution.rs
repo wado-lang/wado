@@ -69,9 +69,8 @@ impl Default for ParamPolicy {
 pub struct ParamInputs {
     /// `-D NAME=value`, the highest-priority source.
     pub overrides: IndexMap<String, String>,
-    /// The embedding tool's fallbacks for a library's parameter, below
-    /// `overrides` and `from_env`. Never a user's typo, so one naming no
-    /// declaration is silent where an `overrides` entry is `unknown`.
+    /// The embedding tool's fallbacks, below `overrides` and `from_env`. Never
+    /// a user's typo, so one naming no declaration is silent.
     pub defaults: IndexMap<String, String>,
     pub policy: ParamPolicy,
 }
@@ -85,11 +84,8 @@ enum OverrideSource {
 }
 
 impl OverrideSource {
-    /// What to name as the value's origin, or `None` for one the user did not
-    /// supply. A host default aimed at another library's parameter can land on
-    /// a same-named declaration of an unrelated type, and blaming that
-    /// declaration for a string the tool injected reports a fault nobody wrote
-    /// — the reason such a default is exempt from `unknown` too.
+    /// What to name as the value's origin, or `None` for a host default: it can
+    /// land on an unrelated same-named declaration, and no user wrote it.
     fn blamed_origin(&self, name: &str) -> Option<String> {
         match self {
             Self::Cli => Some(format!("parameter {name}")),

@@ -3015,10 +3015,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                let receiver = s.tysys.fq_receiver_of_impl(
-                    base_type_id,
-                    s.impl_is_concrete_instantiation(&impl_ty),
-                );
+                let receiver = s
+                    .tysys
+                    .fq_receiver_of_impl(base_type_id, s.impl_is_concrete_instantiation(&impl_ty));
 
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,

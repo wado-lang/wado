@@ -67,7 +67,7 @@ Each declaration resolves independently, highest priority first:
 3. A host default (`CompilerOptions::params.defaults`)
 4. The initializer expression
 
-A higher source short-circuits the lower ones. Overrides (1, 2, 3) are strings, converted to the declared type (see [Conversion](#conversion)); a failed conversion is handled per the [Resolution Policy](#resolution-policy), not automatically fatal. The initializer (4) is type-checked as written and takes effect whenever no override resolves or a conversion is rejected.
+A higher source short-circuits the lower ones. Sources 1 to 3 are strings, converted to the declared type (see [Conversion](#conversion)); a failed conversion is handled per the [Resolution Policy](#resolution-policy), not automatically fatal. The initializer (4) is type-checked as written and takes effect whenever no other source resolves or a conversion is rejected.
 
 A host default is the embedding tool's own fallback for a library's parameter, not a name a user typed. `wado test` quiets `core:log`'s `log.level` this way. It therefore sits below the two sources the user controls, and one matching no declaration is silent rather than `--param-unknown`: the program being compiled need not import the library the default was aimed at.
 

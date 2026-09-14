@@ -948,9 +948,8 @@ fn gen_trace_gate(w: &mut CodeWriter) {
 /// They hold the indentation, the lookahead rendering and the `core:log` call.
 ///
 /// Keeping the call out of the emit sites is what stops a generated template
-/// from nesting inside the emitter's own. Each helper opens with
-/// `gen_trace_gate` rather than leaning on the one inside `trace`, because the
-/// padded message and the lookahead token are built before the call.
+/// from nesting inside the emitter's own. Each helper opens its own
+/// `gen_trace_gate`, since it builds the padded message before calling `trace`.
 pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.line(&"fn trace_pad(depth: i32) -> String {");
     w.indent();

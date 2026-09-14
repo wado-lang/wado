@@ -14,9 +14,9 @@ version = "0.1.0"
 # `lib/core/allocator.wado` is `#![wasm_module("mem")]`: its code lands in
 # `mem`, leaving no component to emit, so an entry declaring one is rejected.
 #
-# `lib/core/log_level_test.wado` asserts on events below `Warn`, which the
-# `-D log.level=warn` `wado test` builds with compiles away. `mise run
-# test-log-levels` names it with a tier-1 level that admits them.
+# `lib/core/log_level_test.wado` and `lib/core/log_warn_test.wado` each assert
+# on a tier-1 threshold that the discovery build does not set. `mise run
+# test-log-levels` runs them with the `-D log.level` each one needs.
 exclude = [
     "tests/**",
     "lib/core/prelude/**",

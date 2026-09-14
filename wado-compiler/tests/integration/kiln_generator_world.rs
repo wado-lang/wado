@@ -221,14 +221,10 @@ fn generator_importing_wasi_clocks_is_rejected() {
 
 /// A generator reaching a `core:*` module that itself imports WASI must not
 /// pick up that import: the Kiln linker offers only `core:kiln/kiln-host`, so a
-/// `wasi:*` interface carrying a function fails instantiation. The `use`-site
-/// check cannot see this — `core:log` is not a `wasi:` import at the source
-/// level — so the guarantee is asserted on the emitted component.
+/// `wasi:*` interface carrying a function fails instantiation.
 ///
-/// `core:log` selects its timestamp by type parameter for exactly this reason:
-/// the default `TextSink` is over `NoClock`, which monomorphizes to code that
-/// never reads a clock. A runtime flag left the call reachable, and the
-/// `wasi:clocks` import with it.
+/// `core:log` is no `wasi:` import at the source level, so the `use`-site check
+/// cannot see this and the guarantee is asserted on the emitted component.
 const CORE_LOG_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { info } from "core:log";
@@ -269,10 +265,9 @@ fn generator_using_core_log_adds_no_wasi_import() {
     );
 }
 
-/// Opting into a stamped sink is how a generator picks up WASI without writing a
-/// `wasi:` import: `WallClock::now()` is `#[ambient]`, so nothing in the
-/// generator's own source names the clock, and `check_loaded` sees nothing to
-/// refuse. The import plan does.
+/// Opting into a stamped sink picks up WASI without writing a `wasi:` import:
+/// `WallClock::now()` is `#[ambient]`, so nothing in the generator's source
+/// names the clock and only the import plan sees it.
 const WALL_CLOCK_SINK_GENERATOR: &str = r#"
 use { Request, Response, Error } from "core:kiln";
 use { Log, TextSink, WallClock, info } from "core:log";

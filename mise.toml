@@ -235,13 +235,12 @@ description = "Run the core:log tier tests at one optimization level, each file 
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
-# A test must survive any ambient WADO_LOG_LEVEL, so a test that needs a
-# particular tier-1 level names it with `-D` here rather than inheriting one.
-# Those files are excluded from discovery (`[test].exclude` in
-# `wado-compiler/wado.toml`); an explicit path bypasses that exclusion.
+# Each file names the tier-1 level it needs with `-D`, so no ambient
+# WADO_LOG_LEVEL can decide what its assertions see. Discovery excludes them
+# (`[test].exclude` in `wado-compiler/wado.toml`); an explicit path gets in.
 #
-# Tier 1 folds in the optimizer, so which level runs decides what the assertions
-# see — hence a level argument, like `test-stdlib`.
+# Tier 1 folds in the optimizer, so the optimization level matters here as it
+# does to `test-stdlib`.
 level="${1:-O2}"
 case "${level}" in
     O0 | O1 | O2 | O3 | Os) ;;

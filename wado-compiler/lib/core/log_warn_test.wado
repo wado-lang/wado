@@ -1,11 +1,7 @@
-// Tests whose assertions need a level the build threshold rejects. They hold
-// only where tier 1 is `warn`.
-//
-// A test must survive any ambient `WADO_LOG_LEVEL`, so this file names the
-// threshold it needs rather than inheriting one: it is excluded from discovery
-// (`[test].exclude` in `wado.toml`) and run by `mise run test-log-levels` with
-// `-D log.level=warn`. Its sibling `log_level_test.wado` does the same at
-// `trace`, and `log_test.wado` holds every test whose level is incidental.
+// Tests whose assertions need a level the build threshold rejects, so they
+// hold only where tier 1 is `warn`. `mise run test-log-levels` runs this file
+// at `-D log.level=warn`; `log_test.wado` holds every test whose level is
+// incidental.
 
 use { CaptureSink, Level, Log, debug, enabled, info, trace, warn } from "core:log";
 

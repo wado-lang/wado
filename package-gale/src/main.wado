@@ -89,9 +89,8 @@ fn usage() with Stderr {
 /// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,
 /// defaulting to `Warn` so a hand-run build reports what a Kiln build reports.
 ///
-/// Tier 1 is a ceiling this cannot raise: a build that already compiled the
-/// `info` calls away stays quiet whatever is asked for here. `wado compile -D
-/// log.level=trace` is what moves the ceiling.
+/// Tier 1 is a ceiling this cannot raise; `wado compile -D log.level=trace`
+/// moves that one.
 fn apply_log_level(spec: &Option<String>) with (Stderr, Exit) {
     let Some(name) = *spec else {
         set_log_level(Level::Warn);

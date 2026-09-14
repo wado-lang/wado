@@ -62,8 +62,9 @@ test "a variant takes its declared default" {
 
 // A default is a type the declaration wrote, so it never means what the use
 // site happens to call the same name. The newtype path resolved its base and
-// its defaults at the use site, which made `Aliased` inside `shadowed` stand for
-// the function's own `Zero`.
+// its defaults at the use site, which made `Aliased` inside `shadowed` stand
+// for the function's own `Zero`. `struct_literal_phantom_slot` covers the
+// struct and variant paths.
 trait Mark {
     fn tag() -> i32;
 }
@@ -100,14 +101,9 @@ fn make_aliased() -> Aliased {
     return Marked { m: Zero {} } as Aliased;
 }
 
-fn make_marked() -> Marked {
-    return Marked { m: Zero {} };
-}
-
 fn shadowed<Zero: Mark>(_p: Zero) -> i32 {
     let a: Aliased = make_aliased();
-    let s: Marked = make_marked();
-    return a.which() + s.which();
+    return a.which();
 }
 
 test "a newtype takes its declared default" {
@@ -148,8 +144,8 @@ test "a field type takes the same defaults" {
     assert h.b.b == "s";
 }
 
-test "a default is not the use site's parameter of the same name" {
-    assert shadowed(One {}) == 20;
+test "a newtype's default is not the use site's parameter of the same name" {
+    assert shadowed(One {}) == 10;
 }
 
 __DATA__
