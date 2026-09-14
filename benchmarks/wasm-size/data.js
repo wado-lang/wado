@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789340182561,
+  "lastUpdate": 1789382808512,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55761,6 +55761,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/b857806bc46ef16fc6e791a311de0622480c641d"
         },
         "date": 1789340181747,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d1e169aa9a610e5f0ff688480105cf192347d89",
+          "message": "Merge pull request #2053 from wado-lang/claude/friendly-goldberg-fmo6d5\n\nfix(compiler): a global initializer is a body — templates expand in one, and its closures' captures move with it",
+          "timestamp": "2026-09-14T19:30:14+09:00",
+          "tree_id": "2a06af464d4a4025048336bead3c81fa2ac9f625",
+          "url": "https://github.com/wado-lang/wado/commit/1d1e169aa9a610e5f0ff688480105cf192347d89"
+        },
+        "date": 1789382808204,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
