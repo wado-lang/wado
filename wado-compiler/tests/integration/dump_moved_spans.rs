@@ -3,8 +3,7 @@
 //! `Package::moved_local_spans`, so every last use lowered as a
 //! defensive `$value_copy$` the real compilation never emits.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 const SOURCE: &str = r#"

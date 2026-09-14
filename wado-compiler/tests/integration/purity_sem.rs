@@ -2,8 +2,7 @@
 //! (Design B). It runs on the LSP analysis result (no TIR), so an effect in a
 //! default expression or a global initializer surfaces even without reify.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::semantics;
 use wado_compiler::{Impurity, PureContext, check_purity_semantic};
 

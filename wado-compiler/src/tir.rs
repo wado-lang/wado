@@ -5653,12 +5653,8 @@ impl<E> GlobalInit<E> {
     }
 }
 
-/// Whether the Wasm slot can hold this value directly, so the global needs no
-/// assignment from an initialization function.
-///
-/// Under-approximates on purpose: whether the builder producing an aggregate
-/// collapses is not knowable here, so the classifier on the lowered Wasm value
-/// promotes back what this defers.
+/// Whether the Wasm slot can hold this value directly. Under-approximates: the
+/// classifier on the lowered Wasm value promotes back what this defers.
 #[must_use]
 pub fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     match &expr.kind {
@@ -5683,8 +5679,7 @@ pub fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
 }
 
 /// An integer whose Wado width matches the Wasm operand it lowers to, so
-/// wrapping needs no masking. Wasm admits constant `add` / `sub` / `mul` on
-/// `i32` and `i64` only — never a narrower integer, and never a float.
+/// wrapping needs no masking. Wasm folds `add` / `sub` / `mul` on these alone.
 fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(
         type_table.get(type_id),

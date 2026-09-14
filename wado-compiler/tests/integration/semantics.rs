@@ -1,7 +1,6 @@
 //! Tests for the LSP-friendly `semantics` entry point.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use std::assert_matches;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::{Semantics, semantics};

@@ -4,8 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// `map` takes `f: fn(Self::Item) -> U`, so elaborating this call instantiates

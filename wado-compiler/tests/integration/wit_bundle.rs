@@ -7,8 +7,7 @@
 //! and the embedded `component-type` section is additive full-fidelity metadata
 //! decodable as a standalone WIT package.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
 use wado_compiler::wit_emit;

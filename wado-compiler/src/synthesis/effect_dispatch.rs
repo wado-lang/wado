@@ -2478,10 +2478,6 @@ fn rewrite_call_sites_to_wrappers(
             entry_source: &entry_source,
         };
         rewrite_calls_in_functions(&module.functions, &ctx);
-        rewrite_calls_in_functions(&module.functions, &ctx);
-        for global in &mut module.globals {
-            rewrite_calls_in_expr(global.init.slot_expr_mut(), &ctx);
-        }
     }
 }
 

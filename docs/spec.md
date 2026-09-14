@@ -318,11 +318,12 @@ pub global VERSION: i32 = 1;
 ```
 
 Any type is supported. Any pure expression (no effects) can be used as an
-initializer. An initializer runs at module initialization, with nothing
-installed for it and in an order it does not choose, so an effect that reaches
-out of it is an error: calling a function that declares one, or dispatching an
-operation no enclosing `with … do` handles. An initializer may install its own
-handler, which makes the operations its body dispatches pure.
+initializer. An initializer runs at module initialization, with no handler
+installed for it and in an order it does not choose. Nothing can answer an
+effect that reaches out of it, so two things are errors: calling a function that
+declares an effect, and dispatching an operation no enclosing `with … do`
+handles. An initializer may install its own handler, which makes the operations
+its body dispatches pure.
 
 #### Mutability
 

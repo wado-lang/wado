@@ -351,6 +351,10 @@ pub fn global_init_target(name: &str) -> Option<&str> {
 /// over the latter still covers both.
 pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
 
+/// The global [`MODULES_INIT_FUNCTION`] sets once, so a second entry into the
+/// component re-runs no initializer.
+pub const MODULES_INIT_FLAG: &str = "$modules_initialized";
+
 /// Prefix the const-object globalization pass stamps on the globals it hoists
 /// constant aggregates into (`$const_obj_0`, …). It both mints and rescans
 /// these names, so the prefix lives here rather than as a repeated literal.

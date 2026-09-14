@@ -7,8 +7,7 @@
 //! punched holes the snapshot still referenced. Unparsing `struct Holder<T>`'s
 //! `payload: T` field then panicked with "`TypeId`(..) not found in `TypeTable`".
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
 
 const SOURCE: &str = r#"

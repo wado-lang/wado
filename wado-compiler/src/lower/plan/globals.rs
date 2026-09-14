@@ -9,33 +9,41 @@ use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
-use crate::name::{MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION, global_init_target};
-use crate::synthesis::common::builtin_call;
-use crate::tir;
-use crate::tir::{
-    FunctionKind, FunctionRef, GlobalInit, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirGlobal, TirLocal, TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
+use crate::name::{
+    MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_target,
 };
-use crate::tir_visitor::{TirRefVisitor, shift_locals_in_stmts};
+use crate::synthesis::common::builtin_call;
+use crate::tir::{
+    FunctionRef, GlobalInit, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal,
+    TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
+};
+use crate::tir_visitor::{TirRefVisitor, shift_locals};
 use crate::token::Span;
 
-// `extract` and `build_initialize_modules` are the two halves of
-// the global-initializer planner. They run at different points in
-// `super::plan` (extract before boxing, build_initialize_modules
-// after closure), so they cannot share a single entry point. The
-// `extract` half emits per-module init functions; the
-// `build_initialize_modules` half combines them into the top-level
-// `$initialize_modules` aggregator.
-
 /// One global initializer, taken out of the `$init$` function reify put it in.
-/// A body lives only in `functions` until here, so no pass between reify and
-/// this one can walk the functions and miss an initializer.
+/// It lives only in `functions` until here, so no pass between reify and this
+/// one can walk the functions and miss an initializer.
 struct LazyInit {
     global: String,
     module_source: ModuleSource,
-    /// `{ return <initializer>; }`, in the frame `locals` describes.
-    body: TirBlock,
+    /// What the global is assigned, in the frame `locals` describes.
+    value: TirExpr,
     locals: Vec<TirLocal>,
+}
+
+/// The value a `$init$` function returns. Reify writes the one return, and
+/// every pass since rewrote expressions within it.
+fn returned_value(body: TirBlock) -> TirExpr {
+    let mut stmts = body.stmts;
+    assert_eq!(stmts.len(), 1, "a global initializer is a single statement");
+    let Some(TirStmt {
+        kind: TirStmtKind::Return { value: Some(value) },
+        ..
+    }) = stmts.pop()
+    else {
+        panic!("a global initializer returns its value");
+    };
+    value
 }
 
 /// Take each global initializer out of its own function and into the module's
@@ -70,7 +78,7 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         let init = LazyInit {
             global,
             module_source: func.module_source.clone(),
-            body: func.body.take().expect("$init$ carries a body"),
+            value: returned_value(func.body.take().expect("$init$ carries a body")),
             locals: std::mem::take(&mut func.locals),
         };
         by_module
@@ -103,36 +111,6 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     Ok(())
 }
 
-/// Turn `{ return <value>; }` into the statement assigning `<value>` to the
-/// global. Reify writes the one return, and every pass since rewrote
-/// expressions within it, so the shape here is the shape reify wrote.
-fn assign_to_global(
-    body: TirBlock,
-    module_source: ModuleSource,
-    name: String,
-    span: Span,
-) -> TirStmt {
-    let mut stmts = body.stmts;
-    assert_eq!(stmts.len(), 1, "a global initializer is a single statement");
-    let Some(TirStmt {
-        kind: TirStmtKind::Return { value: Some(value) },
-        ..
-    }) = stmts.pop()
-    else {
-        panic!("a global initializer returns its value");
-    };
-    let global_set = TirExpr::new(
-        TirExprKind::GlobalVarSet {
-            module_source,
-            name,
-            value: Box::new(value),
-        },
-        TypeTable::UNIT,
-        span,
-    );
-    TirStmt::new(TirStmtKind::Expr(global_set), span)
-}
-
 /// Assign every initializer to its global, in the order given, under one frame.
 fn build_module_init_function(
     module_source: ModuleSource,
@@ -146,15 +124,24 @@ fn build_module_init_function(
         let LazyInit {
             global,
             module_source,
-            mut body,
+            mut value,
             locals,
         } = init;
         let offset = u32::try_from(merged_locals.len()).expect("local count fits in u32");
         if offset > 0 && !locals.is_empty() {
-            shift_locals_in_stmts(&mut body.stmts, offset);
+            shift_locals(&mut value, offset);
         }
         merged_locals.extend(locals);
-        init_stmts.push(assign_to_global(body, module_source, global, span));
+        let global_set = TirExpr::new(
+            TirExprKind::GlobalVarSet {
+                module_source,
+                name: global,
+                value: Box::new(value),
+            },
+            TypeTable::UNIT,
+            span,
+        );
+        init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
     }
 
     TirFunction::synthesized(
@@ -233,8 +220,6 @@ fn function_key(module_source: &ModuleSource, name: &str) -> String {
 fn global_reads_by_function(
     functions: &[Rc<RefCell<TirFunction>>],
 ) -> IndexMap<String, IndexSet<(ModuleSource, String)>> {
-    use crate::tir_visitor::TirRefVisitor;
-
     let mut reads: IndexMap<String, IndexSet<(ModuleSource, String)>> = IndexMap::default();
     let mut callees: IndexMap<String, IndexSet<String>> = IndexMap::default();
     for func_rc in functions {
@@ -286,13 +271,11 @@ struct InitRefs {
 }
 
 fn collect_global_refs(
-    body: &TirBlock,
+    value: &TirExpr,
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
 ) -> InitRefs {
-    use crate::tir_visitor::TirRefVisitor;
-
     let mut scan = BodyReads::default();
-    scan.visit_block(body);
+    scan.visit_expr(value);
     let mut refs = InitRefs {
         direct: scan.globals,
         via_calls: IndexSet::default(),
@@ -360,7 +343,7 @@ fn topological_sort_global_inits(
 
     let scanned: Vec<InitRefs> = lazy_inits
         .iter()
-        .map(|init| collect_global_refs(&init.body, reads_by_function))
+        .map(|init| collect_global_refs(&init.value, reads_by_function))
         .collect();
 
     // A reference written in the initializer is a definite dependency.
@@ -417,7 +400,7 @@ fn topological_sort_global_inits(
         let names: Vec<&str> = cycle.iter().map(|init| init.global.as_str()).collect();
         let LazyInit {
             module_source,
-            body,
+            value,
             ..
         } = cycle[0];
         return Err(errors.fatal_in(
@@ -430,7 +413,7 @@ fn topological_sort_global_inits(
                      another has not been given yet, so none can go first.",
                     names.join(", ")
                 ),
-                span: Some(DiagnosticSpan::from_span(&body.span, None)),
+                span: Some(DiagnosticSpan::from_span(&value.span, None)),
             },
         ));
     }
@@ -488,13 +471,11 @@ fn sort_modules_by_dependency(
     *modules = ordered;
 }
 
-/// Generate `$initialize_modules` for a `FlatPackage`.
-/// Generate the top-level `$initialize_modules` aggregator. Must run
-/// after all per-module init functions exist (i.e. after [`extract`]).
+/// Build the top-level aggregator calling every module's
+/// `$initialize_module`. Must run after [`extract`] has created them.
 pub fn build_initialize_modules(flat: &mut FlatPackage) {
     let entry_source = flat.entry_module_source.clone();
 
-    // Collect distinct module sources that have $initialize_module function
     let mut modules_with_init: Vec<ModuleSource> = Vec::new();
     let mut seen = IndexSet::default();
     for func_rc in &flat.functions {
@@ -512,9 +493,8 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
 
     let span = Span::new(0, 0, 1, 1);
 
-    // Create $modules_initialized flag global
     let init_flag_global = TirGlobal {
-        name: "$modules_initialized".to_string(),
+        name: MODULES_INIT_FLAG.to_string(),
         ty: TypeTable::BOOL,
         init: GlobalInit::Direct(TirExpr::new(
             TirExprKind::BoolLiteral(false),
@@ -529,14 +509,12 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
     };
     flat.globals.push(init_flag_global);
 
-    // Build $initialize_modules function body
     let mut init_stmts: Vec<TirStmt> = Vec::new();
 
-    // Check flag: if $modules_initialized { return; }
     let flag_check = TirExpr::new(
         TirExprKind::GlobalVarGet {
             module_source: entry_source.clone(),
-            name: "$modules_initialized".to_string(),
+            name: MODULES_INIT_FLAG.to_string(),
         },
         TypeTable::BOOL,
         span,
@@ -565,7 +543,6 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         span,
     ));
 
-    // Call each module's $initialize_module
     for module_source in &modules_with_init {
         let call = TirExpr::new(
             TirExprKind::Call {
@@ -585,11 +562,10 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         init_stmts.push(TirStmt::new(TirStmtKind::Expr(call), span));
     }
 
-    // Set flag: $modules_initialized = true;
     let set_flag = TirExpr::new(
         TirExprKind::GlobalVarSet {
             module_source: entry_source.clone(),
-            name: "$modules_initialized".to_string(),
+            name: MODULES_INIT_FLAG.to_string(),
             value: Box::new(TirExpr::new(
                 TirExprKind::BoolLiteral(true),
                 TypeTable::BOOL,
@@ -606,47 +582,17 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         span,
     };
 
-    let init_modules_func = TirFunction {
-        module_source: entry_source.clone(),
-        def_id: None,
-        is_async: false,
-        name: MODULES_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Private,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(init_body),
+    let init_modules_func = TirFunction::synthesized(
+        entry_source.clone(),
+        MODULES_INIT_FUNCTION.to_string(),
+        TypeTable::UNIT,
+        init_body,
+        Vec::new(),
         span,
-        local_count: 0,
-        locals: Vec::new(),
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: false,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        benign_effects: Vec::new(),
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        declared_return_convention: None,
-        kind: FunctionKind::Regular,
-
-        return_abi: tir::ReturnAbi::default(),
-    };
-
+    );
     flat.functions
         .push(Rc::new(RefCell::new(init_modules_func)));
 
-    // Inject call to $initialize_modules at the start of entry point functions
     let init_call = TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {

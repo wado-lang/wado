@@ -4,8 +4,7 @@
 //! Each case asserts the rendered WIT text and re-parses it with `wit-parser`
 //! to confirm the output is syntactically valid WIT.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::{OptLevel, dump_with_host_and_world};

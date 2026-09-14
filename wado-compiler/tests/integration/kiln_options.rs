@@ -1,7 +1,6 @@
 //! Tests for [`wado_compiler::kiln::extract_options_descriptor`].
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use std::assert_matches;
 use wado_compiler::ModuleSource;
 use wado_compiler::kiln::{CanonicalValue, OptionsType, extract_options_descriptor};

@@ -2,8 +2,7 @@
 //! from `wado dump --assert-plan`. Every shape `SOURCE` covers captures an
 //! operand, so `EXPECTED_EMPTY` is empty; a shape that stops is a regression.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 const SOURCE: &str = r#"

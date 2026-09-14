@@ -8,8 +8,7 @@
 //! only through a positional format (`core:args`), so they are verified here
 //! against the monomorphized TIR rather than at runtime.
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 /// Monomorphized TIR text for `source`.

@@ -3,8 +3,7 @@
 //! parameter that escapes without a `stores[...]` declaration is reported even
 //! when the function is never called (immune to dead-code gating).
 
-use crate::common::InMemoryHost;
-use crate::common::block_on;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::check_stores_semantic;
 use wado_compiler::semantics::semantics;
 
