@@ -2615,13 +2615,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         None
     }
 
-    /// The fq receiver name for an indexing-trait dispatch on `matched_type_id`
-    /// — the `TypeId` [`Self::index_lookup_or_newtype_base`] reports alongside
-    /// the impl it found.
-    pub(super) fn fq_index_receiver(&self, matched_type_id: TypeId) -> FqTypeName {
-        self.tysys.fq_receiver_head(matched_type_id)
-    }
-
     /// Find an `IndexRef` impl for a type. `expected_index_type` disambiguates
     /// overloaded impls (so a `Range` subscript does not match an `IndexRef<i32>`);
     /// `None` matches by container name alone.
@@ -3022,6 +3015,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
+                let receiver = s
+                    .tysys
+                    .fq_receiver_of_impl(base_type_id, s.impl_is_concrete_instantiation(&impl_ty));
+
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
                     output_type: assoc_type,
@@ -3029,6 +3026,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     trait_name,
                     impl_module_source: impl_source,
                     index_type,
+                    receiver,
                 })
             },
         )
@@ -3213,7 +3211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids,
             impl_module,
-            from_concrete_impl: _,
+            from_concrete_impl,
             param_defaults: method_param_defaults,
             param_names: method_param_names,
             consumes_self: _,
@@ -3247,7 +3245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_call.span,
         );
 
-        let container_fq = self.tysys.fq_receiver_head(base_type_id);
+        let container_fq = index_mut_info.receiver.clone();
         let mangled_index_mut_name = MethodName::format_local(
             &container_fq,
             Some(&index_mut_info.trait_name),
@@ -3337,7 +3335,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
-        let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
+        let output_fq = self
+            .tysys
+            .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
         let mangled_method_name =
             MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 

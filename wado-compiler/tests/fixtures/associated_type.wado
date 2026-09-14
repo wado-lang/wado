@@ -23,7 +23,7 @@ struct MutableBox {
     value: i32,
 }
 
-impl<i32> IndexAssign<i32> for MutableBox {
+impl IndexAssign<i32> for MutableBox {
     type Output = i32;
 
     fn index_assign(&mut self, _index: i32, value: Self::Output) {
@@ -46,7 +46,7 @@ struct CounterBox {
 }
 
 // `Counter` is a reference type, so the mutable access hands out `&mut`.
-impl<i32> IndexRefMut<i32> for CounterBox {
+impl IndexRefMut<i32> for CounterBox {
     type Output = Counter;
 
     fn index_ref_mut(&mut self, _index: i32) -> &mut Self::Output {
@@ -59,7 +59,7 @@ struct ValueBox {
 }
 
 // A scalar element is read by value, not by `&i32`.
-impl<i32> IndexValue<i32> for ValueBox {
+impl IndexValue<i32> for ValueBox {
     type Output = i32;
 
     fn index_value(&self, _index: i32) -> Self::Output {

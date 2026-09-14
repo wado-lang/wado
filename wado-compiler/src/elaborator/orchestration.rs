@@ -45,8 +45,6 @@ use crate::elaborator::solver_bridge::SolverBridge;
 use crate::elaborator::trait_env::{
     ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of,
 };
-use crate::elaborator::type_resolution::substitute_type_params;
-use crate::elaborator::types::{BoundRef, type_param_defaults_of};
 use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -431,23 +429,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 match item {
                     Item::Struct(struct_decl) => {
                         // Insert with empty fields first - will be populated in second sub-pass
-                        // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds
-                                        .iter()
-                                        .map(|b| BoundRef {
-                                            name: b.name.clone(),
-                                            site: b.id,
-                                        })
-                                        .collect(),
-                                )
-                            })
-                            .collect();
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
                             all_struct_fields.insert(
                                 def,
@@ -458,11 +439,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
-                                    type_param_bounds,
+                                    type_params: struct_decl.type_params.clone(),
                                     type_param_type_ids: Vec::new(), // filled in second pass
-                                    type_param_defaults: type_param_defaults_of(
-                                        &struct_decl.type_params,
-                                    ),
                                 },
                             );
                         }
@@ -478,11 +456,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Variant(variant_decl) => {
                         // Insert with empty cases first - will be populated in second sub-pass
-                        let type_params: Vec<String> = variant_decl
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
                         if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
                             all_variant_cases.insert(
                                 def,
@@ -490,12 +463,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params,
+                                    type_params: variant_decl.type_params.clone(),
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
-                                    type_param_defaults: type_param_defaults_of(
-                                        &variant_decl.type_params,
-                                    ),
                                 },
                             );
                         }
@@ -730,19 +700,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_newtypes.insert(def, newtype_id);
                         newly_resolved = true;
                     } else if !all_generic_newtypes.contains_key(&def) {
-                        let type_params = newtype_decl
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                type_params,
+                                type_params: newtype_decl.type_params.clone(),
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: type_param_defaults_of(
-                                    &newtype_decl.type_params,
-                                ),
                             },
                         );
                         newly_resolved = true;
@@ -837,23 +799,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }
-                        // Extract type parameter bounds
-                        let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| {
-                                (
-                                    p.name.clone(),
-                                    p.bounds
-                                        .iter()
-                                        .map(|b| BoundRef {
-                                            name: b.name.clone(),
-                                            site: b.id,
-                                        })
-                                        .collect(),
-                                )
-                            })
-                            .collect();
                         // Collect TypeIds for struct's own type params in declaration order.
                         // This allows infer_struct_type_args to fill phantom type params
                         // that don't appear in any field (e.g., D in struct DirMap<D, V>).
@@ -880,9 +825,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_param_bounds,
+                            type_params: struct_decl.type_params.clone(),
                             type_param_type_ids,
-                            type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
                         };
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
                             all_struct_fields.insert(def, info);
@@ -909,17 +853,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                         } else {
                             // Generic newtype: store definition for lazy instantiation
-                            let type_params = newtype_decl
-                                .type_params
-                                .iter()
-                                .map(|p| p.name.clone())
-                                .collect();
                             let info = GenericNewtypeInfo {
-                                type_params,
+                                type_params: newtype_decl.type_params.clone(),
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: type_param_defaults_of(
-                                    &newtype_decl.type_params,
-                                ),
                             };
                             if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
                                 all_generic_newtypes.insert(def, info);
@@ -928,7 +864,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     Item::Variant(variant_decl) => {
                         // Resolve variant case field types
-                        let type_params: Vec<String> = variant_decl
+                        let type_param_names: Vec<String> = variant_decl
                             .type_params
                             .iter()
                             .map(|p| p.name.clone())
@@ -944,7 +880,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
                                     &lookup,
-                                    &type_params,
+                                    &type_param_names,
                                 )
                             } else {
                                 // Unit variant: payload is unit type
@@ -956,7 +892,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: case.id,
                             });
                         }
-                        let type_param_type_ids: Vec<TypeId> = type_params
+                        let type_param_type_ids: Vec<TypeId> = type_param_names
                             .iter()
                             .enumerate()
                             .map(|(i, name)| {
@@ -972,12 +908,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params,
+                                    type_params: variant_decl.type_params.clone(),
                                     cases,
                                     type_param_type_ids,
-                                    type_param_defaults: type_param_defaults_of(
-                                        &variant_decl.type_params,
-                                    ),
                                 },
                             );
                         }
@@ -1516,6 +1449,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
             assoc_binding_stack: hashmap::IndexSet::default(),
+            checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }
 
@@ -3466,11 +3400,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         return TypeTable::UNKNOWN;
                     };
                     if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                        let concrete_base = substitute_type_params(
-                            &gn_info.base_type_ast,
-                            &gn_info.type_params,
-                            &generic.args,
-                        );
+                        let concrete_base = gn_info.base_instantiated(args);
                         let base_type_id = Self::resolve_type_static_with_params(
                             &concrete_base,
                             type_table,

@@ -14,7 +14,8 @@ use {
 } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
 use { collect_literal_tokens } from "./lexer_gen.wado";
-use { build_diagnostics } from "./gir.wado";
+use { diagnostic_level } from "./gir.wado";
+use { Level, event, set_log_level } from "core:log";
 use { render_dump, render_atn_dump } from "./dump.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 
@@ -24,6 +25,7 @@ use { render_lexer_dump } from "./lexer_dump.wado";
 // dropped). `name_policy` lower-cases the wire tags (`gen` / `dump`).
 struct GenArgs {
     trace: bool = false,
+    log_level: Option<String> = null,
     output: Option<String> = null,
     #[wire(positional)]
     grammars: List<String> = [],
@@ -33,6 +35,7 @@ impl Deserialize for GenArgs;
 struct DumpArgs {
     atn: bool = false,
     lexer: bool = false,
+    log_level: Option<String> = null,
     #[wire(positional)]
     grammars: List<String> = [],
 }
@@ -49,9 +52,11 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     let argv = args();
     match parse::<Command>(argv) {
         Ok(Command::Gen(g)) => {
+            apply_log_level(&g.log_level);
             cmd_gen(g.grammars, &g.output, g.trace);
         },
         Ok(Command::Dump(d)) => {
+            apply_log_level(&d.log_level);
             cmd_dump(d.grammars, d.atn, d.lexer);
         },
         Err(e) => {
@@ -74,8 +79,30 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 }
 
 fn usage() with Stderr {
-    eprintln("Usage: gale gen [--trace] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]");
-    eprintln("       gale dump [--atn | --lexer] <grammar.g4> [grammar2.g4 ...]");
+    eprintln(
+        "Usage: gale gen [--trace] [--log-level <level>] [--output <file>] <grammar.g4> [grammar2.g4 ...] [highlights.scm]",
+    );
+    eprintln("       gale dump [--atn | --lexer] [--log-level <level>] <grammar.g4> [grammar2.g4 ...]");
+    eprintln("       <level> is trace, debug, info, warn or error (default warn)");
+}
+
+/// Set the process-wide threshold (`core:log` tier 2) from `--log-level`,
+/// defaulting to `Warn` so a hand-run build reports what a Kiln build reports.
+///
+/// Tier 1 is a ceiling this cannot raise; `wado compile -D log.level=trace`
+/// moves that one.
+fn apply_log_level(spec: &Option<String>) with (Stderr, Exit) {
+    let Some(name) = *spec else {
+        set_log_level(Level::Warn);
+        return;
+    };
+    match Level::from_str_lenient(&name) {
+        Ok(level) => set_log_level(level),
+        Err(_) => {
+            eprintln(`gale: unknown --log-level '${name}' (trace, debug, info, warn, error)`);
+            exit(1);
+        },
+    }
 }
 
 fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdout, Stderr, Preopens, Exit) {
@@ -121,11 +148,14 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
     // Generate once and surface the prediction-strategy diagnostics the
     // single lowering raised. `generate` runs `normalize_caches` and lowers
     // internally (matching `cmd_dump`), so there is no separate diagnostic
-    // pass to keep in sync. Warnings are advisory; generation still
-    // proceeds and must succeed.
+    // pass to keep in sync. Every kind is advisory; generation still
+    // proceeds and must succeed. The level decides what a default run shows —
+    // see `gir::diagnostic_level`.
     let generated = generate(&mut merged, &options);
-    for let d of &build_diagnostics(&generated.diagnostics) {
-        eprintln(`gale: warning: ${d.owner.label()}: ${d.message}`);
+    for let d of &generated.diagnostics {
+        if let Some(level) = diagnostic_level(&d.kind) {
+            event(level, d.message, { owner: d.owner.label() });
+        }
     }
 
     match *output {

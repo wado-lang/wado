@@ -174,33 +174,18 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
+    /// Whether each declaration's `= Default`s can be expanded at all, asked
+    /// once: the declaration is ill-formed, not the application reaching it.
+    pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
 }
 
 impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
-    /// Register an `impl` block's own type parameters into this scope,
-    /// numbering them into the positional slots the block's methods
-    /// resolve against.
-    ///
-    /// Shared by the decl pass (which records each method's canonical
-    /// signature) and the body walk, so both see the same slots.
+    /// Bind an `impl` block's type parameters to the slots its methods resolve
+    /// against. The decl pass and the body walk share it, so both see one
+    /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        let mut actual_idx = 0u32;
-        for param in &impl_block.type_params {
-            if self
-                .tysys
-                .is_known_type_name_in(&self.current_module_source, &param.name)
-            {
-                // Concrete type in explicit params (e.g., `impl<i32, T>`): skip
-                if !param.bounds.is_empty() {
-                    self.annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .entry(param.name.clone())
-                        .or_default()
-                        .extend(param.bounds.clone());
-                }
-                continue;
-            }
+        for (slot, param) in impl_block.type_params.iter().enumerate() {
+            let slot = slot as u32;
             if !self
                 .annotate_ctx
                 .trait_ctx
@@ -211,16 +196,16 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_pack(param.name.clone(), actual_idx)
+                        .make_type_pack(param.name.clone(), slot)
                 } else {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_param(param.name.clone(), actual_idx)
+                        .make_type_param(param.name.clone(), slot)
                 };
                 self.annotate_ctx.trait_ctx.type_params.insert(
                     param.name.clone(),
-                    scope::BinderInScope::declared(actual_idx, type_id, param.id),
+                    scope::BinderInScope::declared(slot, type_id, param.id),
                 );
             }
             if !param.bounds.is_empty() {
@@ -230,35 +215,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     .entry(param.name.clone())
                     .or_default()
                     .extend(param.bounds.clone());
-            }
-            actual_idx += 1;
-        }
-
-        // Unwrap reference for ref-type impls (impl Trait for &Container<T>)
-        let impl_inner_ty = match &impl_block.ty {
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-            other => other,
-        };
-        if let ast::Type::Generic(generic) = impl_inner_ty {
-            for (i, arg) in generic.args.iter().enumerate() {
-                if let ast::Type::Named(named) = arg {
-                    let name = &named.name;
-                    if !self.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                        && !self
-                            .tysys
-                            .is_known_type_name_in(&self.current_module_source, name)
-                    {
-                        let type_id = self
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(name.clone(), i as u32);
-                        self.annotate_ctx.trait_ctx.type_params.insert(
-                            name.clone(),
-                            scope::BinderInScope::undeclared(i as u32, type_id),
-                        );
-                    }
-                }
             }
         }
     }
@@ -2249,13 +2205,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             )
         });
 
-        // Register type parameters from impl block's generic type FIRST
-        // e.g., impl IndexValue<i32> for Triple<T> needs T registered
-
-        // Register explicit type params from impl<T: Bound> declarations,
-        // skipping concrete types (e.g., `impl<i32, T>` — skip "i32").
-        // This handles both `impl<T> Trait for Struct<T>` and
-        // `impl<T: Bound> OtherTrait for T` (T is the impl type directly).
         let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
         scope.register_impl_block_params(impl_block);
         // The node the registration above bound the receiver to, so a method
@@ -2273,8 +2222,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
-        // Set up associated type bindings for trait implementations
-        // This now works because type params (like T) are registered above
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         if impl_block.trait_type.is_some() {
             // Resolve the target type for registering associated type resolutions

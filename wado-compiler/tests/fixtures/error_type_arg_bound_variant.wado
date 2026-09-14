@@ -1,0 +1,31 @@
+// A `variant` and a generic newtype enforce their declared bounds like a
+// `struct`. Each kind used to keep its own projection of the declaration, and
+// only the struct one was ever checked.
+
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Bag {
+    v: i32,
+}
+
+variant Maybe<T: Mark> {
+    Just(T),
+    Nothing,
+}
+
+type Tagged<T: Mark> = i32;
+
+export fn run() {
+    let m: Maybe<Bag> = Maybe::Nothing;
+    let t: Tagged<Bag> = 1;
+    assert t == 1;
+    assert m matches { Nothing };
+}
+
+__DATA__
+{
+    "compile_error": "type 'Bag' does not implement trait 'Mark' required by bound on 'T'",
+    "compile_error_count": 2
+}

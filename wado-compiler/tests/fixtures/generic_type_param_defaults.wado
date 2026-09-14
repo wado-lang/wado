@@ -60,6 +60,52 @@ test "a variant takes its declared default" {
     assert s matches { Slot::Full(3) };
 }
 
+// A default is a type the declaration wrote, so it never means what the use
+// site happens to call the same name. The newtype path resolved its base and
+// its defaults at the use site, which made `Aliased` inside `shadowed` stand
+// for the function's own `Zero`. `struct_literal_phantom_slot` covers the
+// struct and variant paths.
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Zero {}
+
+impl Mark for Zero {
+    fn tag() -> i32 {
+        return 10;
+    }
+}
+
+struct One {}
+
+impl Mark for One {
+    fn tag() -> i32 {
+        return 20;
+    }
+}
+
+struct Marked<M: Mark = Zero> {
+    m: M,
+}
+
+impl<M: Mark> Marked<M> {
+    fn which(&self) -> i32 {
+        return M::tag();
+    }
+}
+
+type Aliased<M: Mark = Zero> = Marked<M>;
+
+fn make_aliased() -> Aliased {
+    return Marked { m: Zero {} } as Aliased;
+}
+
+fn shadowed<Zero: Mark>(_p: Zero) -> i32 {
+    let a: Aliased = make_aliased();
+    return a.which();
+}
+
 test "a newtype takes its declared default" {
     let w = Point { x: 1 } as Wrapped;
     assert w.x == 1;
@@ -96,6 +142,10 @@ test "a field type takes the same defaults" {
     };
     assert h.p.a == 5;
     assert h.b.b == "s";
+}
+
+test "a newtype's default is not the use site's parameter of the same name" {
+    assert shadowed(One {}) == 10;
 }
 
 __DATA__

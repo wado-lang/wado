@@ -1,0 +1,35 @@
+// A type annotation enforces the same bounds a call does. The associated-type
+// half of a bound used to go unasked here, so `Holder<Bag>` was accepted with
+// `Bag::Item` the wrong type.
+
+trait Collect {
+    type Item;
+
+    fn one(&self) -> Self::Item;
+}
+
+struct Bag {
+    v: i32,
+}
+
+impl Collect for Bag {
+    type Item = String;
+    fn one(&self) -> Self::Item {
+        return "x";
+    }
+}
+
+struct Holder<T: Collect<Item = i32>> {
+    t: T,
+}
+
+export fn run() {
+    let h: Holder<Bag> = Holder { t: Bag { v: 1 } };
+    assert h.t.v == 1;
+}
+
+__DATA__
+{
+    "compile_error": "type 'Bag' does not satisfy the associated type 'Collect::Item = i32': it is 'String'",
+    "compile_error_count": 2
+}

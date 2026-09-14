@@ -230,6 +230,29 @@ fi
 ./scripts/exclusive.sh test-stdlib cargo run -p wado-cli -- test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
+[tasks.test-log-levels]
+description = "Run the core:log tier tests at one optimization level, each file at the tier-1 level it needs"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# Each file names the tier-1 level it needs with `-D`, so no ambient
+# WADO_LOG_LEVEL can decide what its assertions see. Discovery excludes them
+# (`[test].exclude` in `wado-compiler/wado.toml`); an explicit path gets in.
+#
+# Tier 1 folds in the optimizer, so the optimization level matters here as it
+# does to `test-stdlib`.
+level="${1:-O2}"
+case "${level}" in
+    O0 | O1 | O2 | O3 | Os) ;;
+    *)
+        echo "error: unknown optimization level '${level}' (expected O0, O1, O2, O3 or Os)" >&2
+        exit 1
+        ;;
+esac
+cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+cargo run -p wado-cli -- test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
+"""
+
 [tasks.test-hooks]
 description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"

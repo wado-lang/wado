@@ -1,8 +1,8 @@
 //! Compile-time parameter resolution (`#[param]`, WEP 2026-04-26), between link
-//! and monomorphize: resolve each global's override — `-D NAME=value` first,
-//! then its `from_env` variable — and replace the initializer with the converted
-//! literal. Conversion is native Rust matching `LenientFromStr`, isolated in
-//! `convert_builtin` so a future wasm-CTFE path replaces only that boundary.
+//! and monomorphize: resolve each global against [`ParamInputs`] and replace the
+//! initializer with the converted literal. Conversion is native Rust matching
+//! `LenientFromStr`, isolated in `convert_builtin` so a future wasm-CTFE path
+//! replaces only that boundary.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -63,16 +63,53 @@ impl Default for ParamPolicy {
     }
 }
 
-/// Resolve every `#[param]` global in `flat` against `overrides` / env / policy.
+/// What one `wado` invocation feeds parameter resolution: the user's `-D`, the
+/// host's own fallbacks, and the policy for each diagnostic class.
+#[derive(Debug, Clone, Default)]
+pub struct ParamInputs {
+    /// `-D NAME=value`, the highest-priority source.
+    pub overrides: IndexMap<String, String>,
+    /// The embedding tool's fallbacks, below `overrides` and `from_env`. Never
+    /// a user's typo, so one naming no declaration is silent.
+    pub defaults: IndexMap<String, String>,
+    pub policy: ParamPolicy,
+}
+
+/// Which source supplied a parameter's value, and so who a diagnostic about it
+/// would be addressed to.
+enum OverrideSource {
+    Cli,
+    Env(String),
+    HostDefault,
+}
+
+impl OverrideSource {
+    /// What to name as the value's origin, or `None` for a host default: it can
+    /// land on an unrelated same-named declaration, and no user wrote it.
+    fn blamed_origin(&self, name: &str) -> Option<String> {
+        match self {
+            Self::Cli => Some(format!("parameter {name}")),
+            Self::Env(env) => Some(format!("environment variable {env}")),
+            Self::HostDefault => None,
+        }
+    }
+}
+
+/// Resolve every `#[param]` global in `flat` against `params`, in the order
+/// `overrides` / `from_env` / `defaults` / initializer.
 ///
 /// Returns `Err(Bail)` if any diagnostic was emitted at `error` level.
 pub fn resolve_params<H: CompilerHost>(
     flat: &mut FlatPackage,
-    overrides: &IndexMap<String, String>,
-    policy: &ParamPolicy,
+    params: &ParamInputs,
     file: &str,
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
+    let ParamInputs {
+        overrides,
+        defaults,
+        policy,
+    } = params;
     // Nothing to resolve and no stray `-D` to flag — skip the type-table work.
     if overrides.is_empty() && flat.globals.iter().all(|g| g.param.is_none()) {
         return Ok(());
@@ -136,12 +173,19 @@ pub fn resolve_params<H: CompilerHost>(
             continue;
         }
 
-        // `-D` takes precedence over `from_env`.
-        let (raw, from_env_name) = match overrides.get(&spec.name) {
-            Some(value) => (Some(value.clone()), None),
-            None => match &spec.from_env {
-                Some(env) => (logger.host().env_var(env), Some(env.clone())),
-                None => (None, None),
+        // `-D` takes precedence over `from_env`, and both over a host default.
+        let from_env = spec
+            .from_env
+            .as_ref()
+            .and_then(|env| logger.host().env_var(env).map(|v| (v, env.clone())));
+        let (raw, source) = match overrides.get(&spec.name) {
+            Some(value) => (Some(value.clone()), OverrideSource::Cli),
+            None => match from_env {
+                Some((value, env)) => (Some(value), OverrideSource::Env(env)),
+                None => (
+                    defaults.get(&spec.name).cloned(),
+                    OverrideSource::HostDefault,
+                ),
             },
         };
 
@@ -161,12 +205,8 @@ pub fn resolve_params<H: CompilerHost>(
         {
             // A resolved parameter is a literal, so the storage can hold it.
             global.init = GlobalInit::Direct(literal);
-        } else {
+        } else if let Some(origin) = source.blamed_origin(&spec.name) {
             let type_name = type_table.borrow().type_name(global.ty);
-            let origin = match &from_env_name {
-                Some(env) => format!("environment variable {env}"),
-                None => format!("parameter {}", spec.name),
-            };
             emit(
                 policy.invalid,
                 Code::ParamInvalid,

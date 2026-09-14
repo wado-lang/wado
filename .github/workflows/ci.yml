@@ -116,6 +116,9 @@ jobs:
       - run: cargo test --locked -p wado-compiler --test e2e -- "fixture_test_${LEVEL,,}"
       - run: mise run test-stdlib "$LEVEL"
 
+      # Tier 1 is an optimizer fold, so these run at every level like the stdlib.
+      - run: mise run test-log-levels "$LEVEL"
+
   test-wado:
     name: Test (Wado)
     needs: changes

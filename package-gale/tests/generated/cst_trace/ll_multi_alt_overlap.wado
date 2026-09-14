@@ -1,6 +1,6 @@
 #![generated(by = "gale", sources = ["tests/grammars/ll_multi_alt_overlap.g4"])]
 
-use { log_stderr } from "core:rt";
+use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from "core:log";
 
 pub struct Span {
     pub start: i32,
@@ -1534,31 +1534,48 @@ fn trace_tok(p: &Parser) -> String {
     return `'${p.tokens.token_text(p.pos)}'`;
 }
 
+global TRACE_TARGET: String = "gale.trace";
+
+pub fn trace_to_stderr<T, effect E>(mut body: fn mut() -> T with E) -> T with E {
+    let mut sink = TextSink { seq: false };
+    let prev = log_level();
+    set_log_level(Level::Trace);
+    let out = with Log => &mut sink do { body() };
+    set_log_level(prev);
+    return out;
+}
+
 fn trace_enter(p: &Parser, rule: &String) {
-    log_stderr(`${trace_pad(p.trace_depth)}enter ${*rule} @${p.pos} ${trace_tok(p)}`);
+    if !enabled(Level::Trace) { return; }
+    trace(`${trace_pad(p.trace_depth)}enter ${*rule} @${p.pos} ${trace_tok(p)}`, { rule: *rule, pos: p.pos }, TRACE_TARGET);
 }
 
 fn trace_ok(p: &Parser, rule: &String) {
-    log_stderr(`${trace_pad(p.trace_depth)}ok ${*rule}`);
+    if !enabled(Level::Trace) { return; }
+    trace(`${trace_pad(p.trace_depth)}ok ${*rule}`, { rule: *rule }, TRACE_TARGET);
 }
 
 fn trace_fail(p: &Parser, rule: &String, msg: &String) {
-    log_stderr(`${trace_pad(p.trace_depth)}FAIL ${*rule}: ${*msg}`);
+    if !enabled(Level::Trace) { return; }
+    trace(`${trace_pad(p.trace_depth)}FAIL ${*rule}: ${*msg}`, { rule: *rule, reason: *msg }, TRACE_TARGET);
 }
 
 fn trace_pick(p: &Parser, rule: &String, alt: i32) {
-    if alt < 0 { log_stderr(`${trace_pad(p.trace_depth)}  pick ${*rule}: no alt matched`); }
-    else { log_stderr(`${trace_pad(p.trace_depth)}  pick ${*rule} alt#${alt}`); }
+    if !enabled(Level::Trace) { return; }
+    if alt < 0 { trace(`${trace_pad(p.trace_depth)}  pick ${*rule}: no alt matched`, { rule: *rule, alt }, TRACE_TARGET); }
+    else { trace(`${trace_pad(p.trace_depth)}  pick ${*rule} alt#${alt}`, { rule: *rule, alt }, TRACE_TARGET); }
 }
 
 fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32) {
+    if !enabled(Level::Trace) { return; }
     let r = if end < 0 { String::from("fail") } else { `-> @${end}` };
-    log_stderr(`${trace_pad(p.trace_depth)}  scan ${*rule} alt#${alt}: ${r}`);
+    trace(`${trace_pad(p.trace_depth)}  scan ${*rule} alt#${alt}: ${r}`, { rule: *rule, alt, end }, TRACE_TARGET);
 }
 
 fn trace_try(p: &Parser, rule: &String, alt: i32, ok: bool) {
+    if !enabled(Level::Trace) { return; }
     let r = if ok { String::from("ok") } else { String::from("rewind") };
-    log_stderr(`${trace_pad(p.trace_depth)}  try ${*rule} alt#${alt}: ${r}`);
+    trace(`${trace_pad(p.trace_depth)}  try ${*rule} alt#${alt}: ${r}`, { rule: *rule, alt, ok }, TRACE_TARGET);
 }
 
 fn scan_r(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {

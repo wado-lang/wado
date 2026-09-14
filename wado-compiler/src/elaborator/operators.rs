@@ -739,20 +739,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         origin,
                     );
                 }
-                // A type parameter reaches its operator only through a bound,
-                // so say so here rather than at WIR build.
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name: self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(item)
-                        .to_string(),
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span,
-                });
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(item)
+                    .to_string();
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
         }
@@ -805,18 +799,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             if let ResolvedType::TypeParam { name, .. } = &left_type {
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name: self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(shift_item)
-                        .to_string(),
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span,
-                });
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(shift_item)
+                    .to_string();
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
             // Get struct name for trait lookup
@@ -1176,16 +1166,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(unary.id),
                 );
             }
-            // A type parameter reaches its operator only through a bound, so
-            // say so here rather than at WIR build.
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name,
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span: unary.span,
-                });
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, unary.span);
                 return TypeTable::ERROR;
             }
             let struct_name = match &operand_resolved {
@@ -1451,7 +1434,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Elaborator::find_index_assign_trait_impl,
                     );
-                    if let Some((trait_info, matched_type_id)) = assign_info {
+                    if let Some((trait_info, _)) = assign_info {
                         if let Some(key_type) = trait_info.index_type
                             && key_type != index_type
                         {
@@ -1471,7 +1454,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(value_type, trait_info.output_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let receiver = self.fq_index_receiver(matched_type_id);
+                        let receiver = trait_info.receiver.clone();
                         let mangled_method_name = MethodName::format_local(
                             &receiver,
                             Some(&trait_info.trait_name),
