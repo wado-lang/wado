@@ -1,0 +1,18 @@
+// A qualifier's namespace prefix must name the module the scrutinee's cases come
+// from. A prefix that names nothing used to fall back to a bare-name lookup, so
+// any prefix at all was accepted.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+export fn run() {
+    let m: Maybe<i32> = Maybe::Just(1);
+    assert !(m matches { bogus::Maybe::Nothing });
+}
+
+__DATA__
+{
+  "compile_error": "pattern mismatch: expected 'valid case of Maybe<i32>', found 'bogus::Maybe::Nothing'"
+}

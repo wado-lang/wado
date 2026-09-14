@@ -864,8 +864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether `case_name`, written under `qualifier`, is a case the scrutinee
-    /// offers. A newtype's cases are its base's, so this asks the structure the
-    /// scrutinee wraps, as pattern resolution does.
+    /// offers. A newtype's cases are its base's.
     pub(super) fn is_known_case_of_type(
         &mut self,
         type_id: TypeId,
@@ -892,11 +891,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether a written pattern qualifier names the type the scrutinee takes
-    /// its cases from. An import alias, a namespace prefix and a newtype's own
-    /// name are other names for the same declaration, so this compares
-    /// declarations; a qualifier need not restate the scrutinee's type
-    /// arguments, but any it writes must agree.
+    /// Whether a written pattern qualifier names the type the scrutinee takes its
+    /// cases from, by declaration rather than by the name written.
     pub(super) fn pattern_qualifier_matches_scrutinee(
         &mut self,
         scrutinee_type: TypeId,
@@ -905,8 +901,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(qualifier) = qualifier else {
             return true;
         };
-        // A newtype's cases are its base's, so both names qualify a pattern on
-        // one: `C::Green` and `Color::Green` where `type C = Color`.
+        // Both names qualify a pattern on a newtype: `C::Green` and
+        // `Color::Green` where `type C = Color`.
         let base_type = self
             .tysys
             .type_table
@@ -924,53 +920,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .expect("a nominal type names a declaration");
             (def, table.def_module(def).clone(), arg_len)
         };
-        let (site, head, written_args) = match qualifier {
-            Type::Named(t) => (t.id, t.name.as_str(), None),
-            Type::Generic(g) => (g.id, g.name.as_str(), Some(g.args.len())),
-            Type::NamespacedGeneric(ns) => (
-                ns.id,
-                ns.name.as_str(),
-                (!ns.args.is_empty()).then(|| ns.args.len()),
-            ),
+        let newtype_def = self.tysys.type_table.borrow().nominal_def(scrutinee_type);
+        let names_scrutinee = |elab: &mut Self, site, head: &str, span| {
+            elab.qualifier_def(site, head, span)
+                .is_some_and(|def| def == base_def || Some(def) == newtype_def)
+        };
+        // A qualifier need not restate the scrutinee's type arguments, but any it
+        // writes must agree.
+        let arity_agrees = |written: usize| scrutinee_arg_len.is_none_or(|n| n == written);
+        match qualifier {
+            Type::Named(t) => {
+                names_scrutinee(self, t.id, &t.name, t.span)
+                    // `h::Case` parses as a `Named("h")` qualifier plus the bare
+                    // `Case`, so a prefix that names no type names the case's
+                    // source module. The case lookup validates the rest.
+                    || self
+                        .namespace_alias_source(&t.name, t.id)
+                        .is_some_and(|m| m == base_module)
+            }
+            Type::Generic(g) => {
+                arity_agrees(g.args.len()) && names_scrutinee(self, g.id, &g.name, g.span)
+            }
+            // `h::Type::Case` names both a module and a type in it, and each
+            // half answers for itself: a prefix naming another module reaches
+            // this declaration only by the head resolving somewhere else.
+            Type::NamespacedGeneric(ns) => {
+                (ns.args.is_empty() || arity_agrees(ns.args.len()))
+                    && self
+                        .namespace_alias_source(&ns.namespace, ns.id)
+                        .is_some_and(|m| m == base_module)
+                    && names_scrutinee(self, ns.id, &ns.name, ns.name_span)
+            }
             Type::Function(_)
             | Type::Tuple(_)
             | Type::Reference(_)
             | Type::MutReference(_)
             | Type::TypePackSpread(_, _)
             | Type::Infer(_)
-            | Type::Error(_) => return false,
-        };
-        if let Some(written) = written_args
-            && scrutinee_arg_len.is_some_and(|n| n != written)
-        {
-            return false;
+            | Type::Error(_) => false,
         }
-        let newtype_def = self.tysys.type_table.borrow().nominal_def(scrutinee_type);
-        if let Some(qualifier_def) = self.type_decl_at(Some(site), head)
-            && (qualifier_def == base_def || Some(qualifier_def) == newtype_def)
-        {
-            return true;
-        }
-        // A prefix that resolves to no type names the case's source module
-        // instead: `h::Case` parses as a `Named("h")` qualifier plus the bare
-        // `Case`, and `h::Type::Case` as a namespaced qualifier. Accept it iff
-        // the namespace resolves to the scrutinee's defining module, leaving
-        // the case lookup to validate the rest.
-        let namespace = match qualifier {
-            Type::Named(t) => Some(t.name.as_str()),
-            Type::NamespacedGeneric(ns) => self
-                .tysys
-                .type_table
-                .borrow()
-                .nominal_head(base_type)
-                .is_some_and(|(name, _)| name == head)
-                .then_some(ns.namespace.as_str()),
-            _ => None,
-        };
-        namespace.is_some_and(|alias| {
-            self.namespace_alias_source(alias, site)
-                .is_some_and(|m| m == base_module)
-        })
+    }
+
+    /// The declaration a written type name means, `Self` and a type parameter
+    /// included. `None` where it names no type, a namespace prefix among them.
+    fn qualifier_def(&mut self, site: AstId, name: &str, span: Span) -> Option<DefId> {
+        let resolved = self.resolve_named_type(site, name, span, false);
+        self.tysys.type_table.borrow().nominal_def(resolved)
     }
 
     fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
@@ -1673,36 +1668,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
-                    // Only a bare identifier falls back to a binding. A qualified
-                    // path is a case or an associated constant and nothing else —
-                    // no Wado variable is spelled `V::Nope` — so naming neither is
-                    // an error here rather than a binding WIR later trips over.
-                    if variant_qualifier.is_some() || normalized_variant_name.contains("::") {
-                        let _ = self.emit(TypeError::PatternTypeMismatch {
-                            expected: format!(
-                                "valid case of {}",
-                                self.tysys.type_table.borrow().type_name(scrutinee_type)
-                            ),
-                            found: qualified_variant_name,
-                            span: *span,
-                        });
-                        return Vec::new();
-                    }
-                    let binding_type = self.pattern_binding_type(
-                        &qualified_variant_name,
-                        scrutinee_type,
-                        ref_binding,
-                        *span,
-                    );
-                    let index =
-                        ctx.add_local(qualified_variant_name.clone(), binding_type, false, None);
-                    return vec![(qualified_variant_name, index, binding_type)];
+                    // A case pattern is written `V::Case`, `Case(x)` or `Case()`,
+                    // none of which a variable can be spelled as — a bare `x`
+                    // reaches the `Ident` arm above and only delegates here once
+                    // it is a case. So naming neither a case nor an associated
+                    // constant is an error, not a binding WIR later trips over.
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected: format!(
+                            "valid case of {}",
+                            self.tysys.type_table.borrow().type_name(scrutinee_type)
+                        ),
+                        found: qualified_variant_name,
+                        span: *span,
+                    });
+                    return Vec::new();
                 }
 
-                // A newtype's cases are its base's, so classify by the structure
-                // the scrutinee wraps rather than by its identity. The qualifier
-                // is asked of the written type, which a newtype's own name also
-                // qualifies.
+                // Classify by the structure the scrutinee wraps, while the
+                // qualifier is asked of the written type: a newtype's own name
+                // qualifies its base's cases.
                 let base_type = self
                     .tysys
                     .type_table

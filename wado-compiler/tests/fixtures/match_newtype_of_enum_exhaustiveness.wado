@@ -1,0 +1,27 @@
+// A newtype's cases are its base's, so coverage is asked of the structure the
+// scrutinee wraps. Reading the newtype's own identity left the match unchecked,
+// and the missing case trapped at runtime instead.
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+type C = Color;
+
+fn f(c: C) -> i32 {
+    return match c {
+        Red => 1,
+        Green => 2,
+    };
+}
+
+export fn run() {
+    assert f(Color::Blue as C) == 1;
+}
+
+__DATA__
+{
+  "compile_error": "non-exhaustive match: missing case `Blue`"
+}

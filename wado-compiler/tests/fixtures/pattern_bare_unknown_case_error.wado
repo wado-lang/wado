@@ -1,0 +1,21 @@
+// A bare `Name(...)` in a pattern can only be a case: no variable is spelled
+// with a payload. Naming a case the scrutinee does not declare is an error —
+// it used to reach reify with no case index and panic the compiler.
+
+variant V {
+    A(i32),
+    B,
+}
+
+export fn run() {
+    let v = V::A(1);
+    match v {
+        Nope() => (),
+        _ => (),
+    };
+}
+
+__DATA__
+{
+  "compile_error": "pattern mismatch: expected 'valid case of V', found 'Nope'"
+}

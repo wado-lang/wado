@@ -2806,6 +2806,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
+        // A newtype's cases are its base's, so coverage is asked of the structure
+        // the scrutinee wraps, as pattern resolution asks it. Reading the identity
+        // instead left a match on a newtype-of-enum unchecked.
+        let scrutinee_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(scrutinee_type);
+
         // Classify each arm pattern once (shape only), pairing it with whether
         // the arm is guardless (guarded arms never contribute to coverage).
         let classified: Vec<(bool, ExhPattern)> = arms
