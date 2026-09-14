@@ -472,10 +472,11 @@ fn "default_field.wado/$test_3_a_defaulted_field_survives_a_ref_binding_on_a_var
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_11: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let e: ref "default_field.wado//Elem";
     let f_19: ref "default_field.wado//Payload";
     let v: ref "core:prelude/string.wado//String";
@@ -494,28 +495,26 @@ fn "default_field.wado/$test_3_a_defaulted_field_survives_a_ref_binding_on_a_var
     if @likely(ref.test "default_field.wado//Elem::A"(n)) {
         f_1 = ref.cast "default_field.wado//Elem::A"(n).payload_0;
         $v0 = f_1.cache;
-        $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: block -> bool {
-            self_11 = $v0.used;
-            if self_11 != 1 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0: 0;
+        $cond = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a = $v0.repr;
+            a_end = $v0.used;
+            b = global:default_field.wado::$const_obj_34;
+            len = a_end - 0;
+            if len != 1 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_3: block -> bool {
-                haystack = $v0.repr;
-                needle = global:default_field.wado::$const_obj_34;
-                j = 0;
-                b4: block {
-                    l5: loop {
-                        break_if b4 j >= self_11;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_3: 0;
-                        }
-                        j = j + 1;
-                        continue l5;
-                    };
+            i = 0;
+            b4: block {
+                l5: loop {
+                    break_if b4 i >= len;
+                    if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i = i + 1;
+                    continue l5;
                 };
-                break $inline_bytes_match_at_3: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
         if @unlikely($cond == 0) {
             cold_path;
@@ -556,50 +555,20 @@ fn "default_field.wado/$test_6_a_declared_field_default_makes_the_field_optional
         $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
             a = $v0_2.repr;
             a_end = $v0_2.used;
-            b = global:default_field_serde_default.wado::$const_obj_30;
+            b = global:default_field.wado::$const_obj_44;
             len = a_end - 0;
             if len != 9 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
             i = 0;
-            b2: block {
-                l3: loop {
-                    break_if b2 i >= len;
+            b11: block {
+                l12: loop {
+                    break_if b11 i >= len;
                     if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                     }
                     i = i + 1;
-                    continue l3;
-||||||| 67772ea90:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0_2.repr;
-                needle = global:default_field_serde_default.wado::$const_obj_30;
-                j = 0;
-                b2: block {
-                    l3: loop {
-                        break_if b2 j >= self_21;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l3;
-                    };
-=======
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0_2.repr;
-                needle = global:default_field.wado::$const_obj_44;
-                j = 0;
-                b11: block {
-                    l12: loop {
-                        break_if b11 j >= self_21;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l12;
-                    };
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/default_field.wir.wado
+                    continue l12;
                 };
             };
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
@@ -655,50 +624,20 @@ fn "default_field.wado/$test_7_a_provided_field_overrides_its_declared_default_o
         $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
             a = $v0_2.repr;
             a_end = $v0_2.used;
-            b = global:default_field_serde_default.wado::$const_obj_40;
+            b = global:default_field.wado::$const_obj_54;
             len = a_end - 0;
             if len != 11 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
             }
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
             i = 0;
-            b10: block {
-                l11: loop {
-                    break_if b10 i >= len;
+            b20: block {
+                l21: loop {
+                    break_if b20 i >= len;
                     if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                     }
                     i = i + 1;
-                    continue l11;
-||||||| 67772ea90:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0_2.repr;
-                needle = global:default_field_serde_default.wado::$const_obj_40;
-                j = 0;
-                b10: block {
-                    l11: loop {
-                        break_if b10 j >= self_21;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l11;
-                    };
-=======
-            $inline_bytes_match_at_4: block -> bool {
-                haystack = $v0_2.repr;
-                needle = global:default_field.wado::$const_obj_54;
-                j = 0;
-                b20: block {
-                    l21: loop {
-                        break_if b20 j >= self_21;
-                        if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                            break $inline_bytes_match_at_4: 0;
-                        }
-                        j = j + 1;
-                        continue l21;
-                    };
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/default_field.wir.wado
+                    continue l21;
                 };
             };
             break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
@@ -1563,13 +1502,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0"(low, high) {
     let f_72: ref "core:prelude/format.wado//Formatter";
     let new_used_82: i32;
     let start_83: i32;
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; $local_4.used = 62; self_14 = $local_4.repr; builtin::array_copy<u8>(self_14, 0, global:core:json::$const_obj_48, 0, 20); self_18 = $local_4.repr; builtin::array_copy<u8>(self_18, 0 + 20, global:core:prelude/primitive.wado::$const_obj_57, 0, 10); self_22 = $local_4.repr; builtin::array_copy<u8>(self_22, 0 + 30, global:core:json::$const_obj_46, 0, 4); self_26 = $local_4.repr; builtin::array_copy<u8>(self_26, 0 + 34, global:core:prelude/primitive.wado::$const_obj_55, 0, 27); self_30 = $local_4.repr; builtin::array_copy<u8>(self_30, 0 + 61, global:core:json::$const_obj_44, 0, 1); $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 }; f_36 = $local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(925, f_36); new_used_41 = $local_4.used + 29; if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
-||||||| 67772ea90:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; $local_4.used = 62; self_14 = $local_4.repr; builtin::array_copy<u8>(self_14, 0, global:core:json::$const_obj_48, 0, 20); self_18 = $local_4.repr; builtin::array_copy<u8>(self_18, 0 + 20, global:core:prelude/primitive.wado::$const_obj_57, 0, 10); self_22 = $local_4.repr; builtin::array_copy<u8>(self_22, 0 + 30, global:core:json::$const_obj_46, 0, 4); self_26 = $local_4.repr; builtin::array_copy<u8>(self_26, 0 + 34, global:core:prelude/primitive.wado::$const_obj_55, 0, 27); self_30 = $local_4.repr; builtin::array_copy<u8>(self_30, 0 + 61, global:core:json::$const_obj_44, 0, 1); $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 }; f_36 = $local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(927, f_36); new_used_41 = $local_4.used + 29; if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
-=======
-    "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; $local_4.used = 62; self_14 = $local_4.repr; builtin::array_copy<u8>(self_14, 0, global:core:json::$const_obj_263, 0, 20); self_18 = $local_4.repr; builtin::array_copy<u8>(self_18, 0 + 20, global:core:prelude/primitive.wado::$const_obj_272, 0, 10); self_22 = $local_4.repr; builtin::array_copy<u8>(self_22, 0 + 30, global:core:json::$const_obj_261, 0, 4); self_26 = $local_4.repr; builtin::array_copy<u8>(self_26, 0 + 34, global:core:prelude/primitive.wado::$const_obj_270, 0, 27); self_30 = $local_4.repr; builtin::array_copy<u8>(self_30, 0 + 61, global:core:json::$const_obj_259, 0, 1); $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 }; f_36 = $local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(927, f_36); new_used_41 = $local_4.used + 29; if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/default_field.wir.wado
+    "core:rt/panic"($local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(142), used: 0 }; $local_4.used = 62; self_14 = $local_4.repr; builtin::array_copy<u8>(self_14, 0, global:core:json::$const_obj_263, 0, 20); self_18 = $local_4.repr; builtin::array_copy<u8>(self_18, 0 + 20, global:core:prelude/primitive.wado::$const_obj_272, 0, 10); self_22 = $local_4.repr; builtin::array_copy<u8>(self_22, 0 + 30, global:core:json::$const_obj_261, 0, 4); self_26 = $local_4.repr; builtin::array_copy<u8>(self_26, 0 + 34, global:core:prelude/primitive.wado::$const_obj_270, 0, 27); self_30 = $local_4.repr; builtin::array_copy<u8>(self_30, 0 + 61, global:core:json::$const_obj_259, 0, 1); $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 }; f_36 = $local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(925, f_36); new_used_41 = $local_4.used + 29; if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, new_used_41);
     }; start_42 = $local_4.used; $local_4.used = new_used_41; self_44 = $local_4.repr; builtin::array_copy<u8>(self_44, start_42, global:core:prelude/primitive.wado::$const_obj_268, 0, 24); self_48 = $local_4.repr; builtin::array_copy<u8>(self_48, start_42 + 24, global:core:prelude/primitive.wado::$const_obj_267, 0, 5); $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 }; f_54 = $local_5; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(low, f_54); new_used_59 = $local_4.used + 7; if @unlikely(new_used_59 > builtin::array_len($local_4.repr)) {
@@ -2111,22 +2044,10 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     $licm_input_13 = self.input;
     $licm_repr_14 = $licm_input_13.repr;
     $licm_start_15 = $licm_input_13.start;
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    b182: block {
-        l183: loop {
-            break_if b182 i >= 4;
-            c_4 = builtin::array_get_value<u8>($licm_repr_14, $licm_start_15 + ($licm_pos_12 + i));
-||||||| 67772ea90:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    b182: block {
-        l183: loop {
-            break_if b182 i >= 4;
-            c_4 = builtin::array_get_value<u8>($licm_repr_14, $licm_start_15 + ($licm_pos_12 + i)) & 255;
-=======
     b201: block {
         l202: loop {
             break_if b201 i >= 4;
-            c_4 = builtin::array_get_value<u8>($licm_repr_14, $licm_start_15 + ($licm_pos_12 + i)) & 255;
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/default_field.wir.wado
+            c_4 = builtin::array_get_value<u8>($licm_repr_14, $licm_start_15 + ($licm_pos_12 + i));
             if @unlikely((if (if (c_4 - 48) <u 10 -> i32 {
                 1;
             } else {
@@ -4874,17 +4795,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-<<<<<<< HEAD:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_118, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_574, digit_count_4);
     self_14 = f.buf;
     arr = self_14.repr;
-||||||| 67772ea90:wado-compiler/tests/generated/fixtures/default_field_serde_default.wir.wado
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_118, digit_count_4);
-    arr = f.buf.repr;
-=======
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_574, digit_count_4);
-    arr = f.buf.repr;
->>>>>>> origin/main:wado-compiler/tests/generated/fixtures/default_field.wir.wado
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

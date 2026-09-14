@@ -185,10 +185,6 @@ omission goes in Decision.
 - [Static Call Resolution — One Walk, Four Answers](./wep-2026-09-06-static-call-resolution.md)
 - [Package File Exports — Assets and Submodules as API](./wep-2026-09-06-package-file-exports.md)
 - [Whole-File I/O (`core:fs`)](./wep-2026-09-12-core-fs.md)
-<<<<<<< HEAD
-- [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)
-||||||| 67772ea90
-=======
 - [Declared Absence](./wep-2026-09-13-declared-absence.md)
 - [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
->>>>>>> origin/main
+- [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)
