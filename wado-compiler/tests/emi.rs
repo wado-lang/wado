@@ -1553,15 +1553,16 @@ fn corpus_subjects() -> Vec<Source> {
 /// How many sources to work on at once.
 ///
 /// A worker holds one whole compile in memory, and the stdlib's modules peak
-/// around a gigabyte each, so a core count alone oversubscribes a machine with
-/// more cores than spare gigabytes — the OOM killer takes the run down hours
-/// in. Memory is the second bound, and the smaller one decides.
+/// well past a gigabyte each, so a core count alone oversubscribes a machine
+/// with more cores than spare memory — the OOM killer takes the run down hours
+/// in. Two gigabytes a worker is what the stdlib's peaks asked for here.
 fn jobs() -> usize {
     if let Some(jobs) = selection("WADO_EMI_JOBS") {
         return jobs.parse().expect("WADO_EMI_JOBS must be a number");
     }
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get().saturating_sub(1));
-    cores.min(available_gigabytes().unwrap_or(cores)).max(1)
+    let by_memory = available_gigabytes().map_or(cores, |gigabytes| gigabytes / 2);
+    cores.min(by_memory).max(1)
 }
 
 /// The memory a worker may be given, in whole gigabytes. `None` where the
