@@ -122,6 +122,10 @@ cannot evaluate, a value read out of mutable state, or a payload too large to
 inline as `array.new_fixed` — a long string literal lives in the data section
 and is materialized at run time, so no constant expression can denote it.
 
+Two steps put a value in the slot, and both finish before the module is emitted:
+the syntactic classifier below, which runs at every optimization level, and the
+promotion on the lowered Wasm value, which takes back what the optimizer folded.
+
 ### An initializer is a body, and a body is a function
 
 An initializer that needs to run code is a body: statements, locals, a
@@ -137,7 +141,10 @@ it cannot hold a body at all. Lowering splices those functions into the module's
 initialization function in dependency order and drops them.
 
 One classifier decides, at reify, and `Direct` means "the Wasm slot can hold
-this" at every phase after it.
+this" at every phase after it. Deciding that early is safe because the
+classification cannot change on the way: nothing folds a constant at the typed
+IR, and nothing turns a literal into code. Lowering asserts it rather than
+trusting it.
 
 ### The decision is made on the value, not on the syntax
 

@@ -14,7 +14,7 @@ use crate::synthesis::common::builtin_call;
 use crate::tir;
 use crate::tir::{
     FunctionKind, FunctionRef, GlobalInit, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction,
-    TirGlobal, TirLocal, TirStmt, TirStmtKind, TypeTable,
+    TirGlobal, TirLocal, TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals, shift_locals_in_stmts};
 use crate::token::Span;
@@ -46,6 +46,21 @@ struct LazyInit {
 /// expressions boxing rewrites; the top-level aggregator calling each
 /// `$initialize_module` is built later by [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
+    // Reify classified these, and the classification has to survive the passes
+    // in between for the slot to hold what it holds: nothing folds a constant
+    // at TIR, and nothing turns a literal into code.
+    {
+        let type_table = flat.type_table.borrow();
+        for global in &flat.globals {
+            assert!(
+                global.init.is_deferred()
+                    || is_constant_initializer(global.init.slot_expr(), &type_table),
+                "a Direct global stays a Wasm constant: {}",
+                global.name
+            );
+        }
+    }
+
     // Insertion order is preserved so cross-module sibling ordering matches the
     // original global declaration order, which the aggregator then walks in
     // entry-last order (see `build_initialize_modules`).
