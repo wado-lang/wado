@@ -629,12 +629,8 @@ impl<'a> WirContext<'a> {
         func_id
     }
 
-    /// A non-nullable reference to a registered WIR type.
     fn ref_to(type_id: &WirTypeId) -> WirType {
-        WirType::Ref {
-            type_id: type_id.clone(),
-            nullable: false,
-        }
+        WirType::non_null_ref(type_id.clone())
     }
 
     /// Find a registered tuple whose elements have the same WIR types as

@@ -56,8 +56,8 @@ an injection could move, and is not drawn at all.
 These are the two knobs, and they are ordered by the analysis family each
 attacks rather than by novelty.
 
-Guard shape decides what the surrounding control flow looks like: a branch (`if`)
-or a loop (`while`), the latter aimed at the loop passes.
+Guard shape decides what the surrounding control flow looks like: a branch
+(`if`) or a loop (`while`). Only the loop reaches the loop passes.
 
 Payload decides what the dead region does to the live program:
 
@@ -71,17 +71,19 @@ Payload decides what the dead region does to the live program:
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
-Each payload is its own subject, injected alone against the same baseline: a
-fixture the compiler refuses one payload at stays in the campaign under the
-others.
+Each combination of the two is its own subject, injected alone against the same
+baseline: a fixture the compiler refuses one payload or one shape at stays in
+the campaign under the others.
 
 ### Calibration precedes mutation
 
 A fixture must be a valid oracle before it can be a subject. Calibration injects
-an empty guard everywhere and keeps the fixtures whose observable behaviour is
-unmoved; one that moves observes something an injection perturbs — a column, an
-allocation address, a generated test-export name — and is recorded with that
-reason rather than silently dropped.
+an empty guard of each shape everywhere and keeps the fixtures whose observable
+behaviour is unmoved; one that moves observes something an injection perturbs —
+a column, an allocation address, a generated test-export name — and is recorded
+with that reason rather than silently dropped. It judges one shape at a time.
+The corpus records which shapes each source answers for, and the mutation stage
+runs only those.
 
 A fixture whose own output moves between runs of the same program is a separate
 case, and conflating it with a guard's doing is how a campaign learns to cry
@@ -113,7 +115,7 @@ Work is sharded so every run covers the whole corpus, and findings fail the run.
 ## Roadmap
 
 Ordered by yield per cost. Each run reports the corpus it drew and the sites
-each payload reached.
+each shape and payload reached.
 
 - [x] Opaque read payload. Its first full run found three bugs: two colliding
       mangled names (`&&T` spelled as `&T`, a generic newtype spelled without
@@ -121,11 +123,23 @@ each payload reached.
       holds the value.
 - [ ] Retry a payload the compiler refuses without the bindings the error
       names. A resource binding whose read is a move costs a fixture the whole
-      read payload.
+      read payload; the report names each one under `dropped combinations`, so
+      the cost of leaving this undone is on the page.
 - [ ] Recompile determinism as a second oracle: compile each fixture twice and
       compare the Wasm byte for byte. Catches what no output comparison can see.
-- [ ] `while builtin::black_box(false) { … }` as a second guard shape.
-- [ ] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
+- [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
+      is calibrated for each shape and loses one at a time, as it does a
+      payload. The loop's own value block puts a reference in a call argument,
+      which is the shape the `O2` bug below needed.
+- [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
+      `O2` is what a release build and `wado test` run, and it was not covered.
+      `WADO_EMI_LEVELS` trades levels for corpus when a run has a time budget.
+      The first run of the two found a wrong-code bug at each of the new
+      levels: at `O1` a stale local type in the value pool, which emitted a
+      `struct.get` of one struct type on another; at `O2` a field constant
+      forwarded over the mutation a callee made through a reference, which
+      turned an assertion into an unconditional trap. Both were invisible at
+      `O0` and `O3`.
 - [x] Draw the corpus from the stdlib and `example/` too. Its first run put the
       stdlib's own tests under `O3`, which nothing else does — `wado test` runs
       them at `O2` — and the baselines that failed there were two wrong-code
