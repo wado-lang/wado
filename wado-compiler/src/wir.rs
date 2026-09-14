@@ -727,6 +727,14 @@ pub enum WirType {
 }
 
 impl WirType {
+    /// A non-nullable reference to a registered WIR type.
+    pub fn non_null_ref(type_id: WirTypeId) -> Self {
+        Self::Ref {
+            type_id,
+            nullable: false,
+        }
+    }
+
     /// Returns a non-nullable version of this type.
     /// Only affects `Ref` and `AbstractRef` variants; other types are returned unchanged.
     pub fn as_nonnull(self) -> Self {

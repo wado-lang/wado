@@ -242,29 +242,28 @@ fn collect_aliased_in_instr(
                     None => true,
                 };
                 if stores_param {
-                    // Callee may store this reference — mark all locals as aliased.
                     collect_reference_locals(arg, aliased);
                 }
-                // Recurse into sub-expressions (nested calls get their own analysis).
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, !stores_param);
             }
-            return; // Skip default for_each_child — args handled above.
-        }
-        // Indirect calls: conservative (unknown callee).
-        WirInstr::CallRef { func_ref, args, .. } => {
-            for arg in args {
-                collect_reference_locals(arg, aliased);
-                collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
-            }
-            collect_aliased_in_instr(func_ref, aliased, functions, defined_func_base, false);
             return;
         }
-        WirInstr::CallIndirect { index, args, .. } => {
+        // An unknown callee stores every argument for all this can tell.
+        WirInstr::CallRef {
+            func_ref: callee,
+            args,
+            ..
+        }
+        | WirInstr::CallIndirect {
+            index: callee,
+            args,
+            ..
+        } => {
             for arg in args {
                 collect_reference_locals(arg, aliased);
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
             }
-            collect_aliased_in_instr(index, aliased, functions, defined_func_base, false);
+            collect_aliased_in_instr(callee, aliased, functions, defined_func_base, false);
             return;
         }
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
@@ -276,7 +275,6 @@ fn collect_aliased_in_instr(
         }
         _ => {}
     }
-    // Recurse into children, propagating the suppression context.
     instr.for_each_child(&mut |child| {
         collect_aliased_in_instr(
             child,
@@ -388,7 +386,6 @@ impl<'a> FieldKnowledge<'a> {
             if name == local_name {
                 return false;
             }
-            // If the stored value references the reassigned local, invalidate it
             if let WirInstr::LocalGet { name: source, .. } = val
                 && source == local_name
             {
@@ -1060,10 +1057,7 @@ mod tests {
     fn struct_local_get(name: &str) -> WirInstr {
         WirInstr::LocalGet {
             name: name.to_string(),
-            result_ty: WirType::Ref {
-                type_id: test_type_id(),
-                nullable: false,
-            },
+            result_ty: WirType::non_null_ref(test_type_id()),
         }
     }
 
@@ -1093,10 +1087,7 @@ mod tests {
                 },
                 fields: vec![WirField {
                     name: "child".to_string(),
-                    ty: WirType::Ref {
-                        type_id: test_type_id(),
-                        nullable: false,
-                    },
+                    ty: WirType::non_null_ref(test_type_id()),
                     mutable: true,
                 }],
                 meta: WirMeta::default(),
@@ -1124,6 +1115,44 @@ mod tests {
             field_name: "f".to_string(),
             expr: Box::new(struct_local_get(local)),
             result_ty: WirType::I32,
+        }
+    }
+
+    /// An `Outer` holding `child`'s object, and a read of the field back out.
+    fn outer_new(child: WirInstr) -> WirInstr {
+        WirInstr::StructNew {
+            type_id: outer_type_id(),
+            fields: vec![child],
+        }
+    }
+
+    fn outer_child_get(local: &str) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: outer_type_id(),
+            field_name: "child".to_string(),
+            expr: Box::new(outer_local_get(local)),
+            result_ty: WirType::non_null_ref(test_type_id()),
+        }
+    }
+
+    fn outer_local_get(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::non_null_ref(outer_type_id()),
+        }
+    }
+
+    fn test_global() -> WirName {
+        WirName {
+            fq: "test//g".to_string(),
+        }
+    }
+
+    /// A call to a function that may mutate through what it is handed.
+    fn mutate_call(arg: WirInstr) -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, "test//mutate".into()),
+            args: vec![arg],
         }
     }
 
@@ -1292,34 +1321,11 @@ mod tests {
 
         let mut body = vec![
             local_set("b", struct_new(WirInstr::I32Const(7))),
-            local_set(
-                "a",
-                WirInstr::StructNew {
-                    type_id: outer_type_id(),
-                    fields: vec![struct_local_get("b")],
-                },
-            ),
+            local_set("a", outer_new(struct_local_get("b"))),
             local_set(
                 "out",
                 WirInstr::I32Add(
-                    Box::new(WirInstr::Call {
-                        func_id: WirFuncId::new(0, "test//mutate".into()),
-                        args: vec![WirInstr::StructGet {
-                            type_id: outer_type_id(),
-                            field_name: "child".to_string(),
-                            expr: Box::new(WirInstr::LocalGet {
-                                name: "a".to_string(),
-                                result_ty: WirType::Ref {
-                                    type_id: outer_type_id(),
-                                    nullable: false,
-                                },
-                            }),
-                            result_ty: WirType::Ref {
-                                type_id: test_type_id(),
-                                nullable: false,
-                            },
-                        }],
-                    }),
+                    Box::new(mutate_call(outer_child_get("a"))),
                     Box::new(struct_get("b")),
                 ),
             ),
@@ -1346,23 +1352,13 @@ mod tests {
         let mut body = vec![
             local_set("b", struct_new(WirInstr::I32Const(7))),
             WirInstr::GlobalSet {
-                name: WirName {
-                    fq: "test//g".to_string(),
-                },
+                name: test_global(),
                 value: Box::new(struct_local_get("b")),
             },
-            WirInstr::Call {
-                func_id: WirFuncId::new(0, "test//mutate".into()),
-                args: vec![WirInstr::GlobalGet {
-                    name: WirName {
-                        fq: "test//g".to_string(),
-                    },
-                    result_ty: WirType::Ref {
-                        type_id: test_type_id(),
-                        nullable: false,
-                    },
-                }],
-            },
+            mutate_call(WirInstr::GlobalGet {
+                name: test_global(),
+                result_ty: WirType::non_null_ref(test_type_id()),
+            }),
             local_set("out", struct_get("b")),
         ];
 
@@ -1375,8 +1371,6 @@ mod tests {
         );
     }
 
-    // The store is a point in the flow, not a property of the local: a read
-    // between construction and escape still folds.
     #[test]
     fn a_fact_holds_until_its_local_s_object_goes_into_a_container() {
         let types = test_types();
@@ -1384,23 +1378,8 @@ mod tests {
         let mut body = vec![
             local_set("b", struct_new(WirInstr::I32Const(7))),
             local_set("early", struct_get("b")),
-            local_set(
-                "a",
-                WirInstr::StructNew {
-                    type_id: outer_type_id(),
-                    fields: vec![struct_local_get("b")],
-                },
-            ),
-            WirInstr::Call {
-                func_id: WirFuncId::new(0, "test//mutate".into()),
-                args: vec![WirInstr::LocalGet {
-                    name: "a".to_string(),
-                    result_ty: WirType::Ref {
-                        type_id: outer_type_id(),
-                        nullable: false,
-                    },
-                }],
-            },
+            local_set("a", outer_new(struct_local_get("b"))),
+            mutate_call(outer_local_get("a")),
             local_set("late", struct_get("b")),
         ];
 
@@ -1427,10 +1406,7 @@ mod tests {
             WirInstr::If {
                 condition: Box::new(local_get("c")),
                 result: None,
-                then_body: vec![WirInstr::Call {
-                    func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![struct_local_get("a")],
-                }],
+                then_body: vec![mutate_call(struct_local_get("a"))],
                 else_body: None,
             },
             local_set("out", struct_get("a")),
@@ -1458,13 +1434,7 @@ mod tests {
 
         let mut body = vec![
             local_set("a", struct_new(WirInstr::I32Const(1))),
-            local_set(
-                "s",
-                WirInstr::Call {
-                    func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![struct_local_get("a")],
-                },
-            ),
+            local_set("s", mutate_call(struct_local_get("a"))),
             local_set("out", struct_get("a")),
         ];
 

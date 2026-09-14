@@ -1244,26 +1244,22 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         }
     }
 
-    let covered = |keep: &dyn Fn(&Shape) -> bool| {
+    let covered = |only: Option<&str>| {
         all.iter()
             .filter(|site| {
-                alive
-                    .iter()
-                    .any(|(shape, payload)| keep(shape) && !(payload.render)(site).is_empty())
+                alive.iter().any(|(shape, payload)| {
+                    only.is_none_or(|keyword| shape.keyword == keyword)
+                        && !(payload.render)(site).is_empty()
+                })
             })
             .count()
     };
     Ok(Eligible {
         name,
-        sites: covered(&|_| true),
+        sites: covered(None),
         shapes: alive
             .iter()
-            .map(|(shape, _)| {
-                (
-                    shape.keyword,
-                    covered(&|other: &Shape| other.keyword == shape.keyword),
-                )
-            })
+            .map(|(shape, _)| (shape.keyword, covered(Some(shape.keyword))))
             .collect(),
         dropped: refusals.into_lines(),
     })
