@@ -1,0 +1,31 @@
+// A reference impl buckets by kind, so the chain cannot say which link it sits
+// on. The newtype inherits it all the same, and the signature re-types to the
+// receiver the way a value impl's does — `other` takes a `&Outer`.
+
+use { println, Stdout } from "core:cli";
+
+struct Inner {
+    v: i32,
+}
+
+type Outer = Inner;
+
+trait Merge {
+    fn merge(&self, other: &Inner) -> i32;
+}
+
+impl Merge for &Inner {
+    fn merge(&self, other: &Inner) -> i32 {
+        return self.v + other.v;
+    }
+}
+
+export fn run() with Stdout {
+    let a = Inner { v: 1 } as Outer;
+    let b = Inner { v: 2 } as Outer;
+
+    println(`${(&a).merge(&b)}`);
+}
+
+__DATA__
+{"stdout": "3\n"}

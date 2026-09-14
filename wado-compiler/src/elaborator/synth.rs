@@ -747,8 +747,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             && !found.is_blanket_ref_impl
         {
+            let owner = found.owner_for(base, &self.tysys.type_table.borrow());
             let info = found.method_info;
-            return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));
+            return Some(self.return_type_for_receiver(info.return_type, owner, receiver));
         }
         if let Some(info) = self.lookup_method_info(receiver, method) {
             return Some(self.return_type_for_receiver(info.return_type, info.owner, receiver));

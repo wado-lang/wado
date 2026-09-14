@@ -20,7 +20,7 @@ use {
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { List } from "core:prelude/list.wado";
-use { write_seq_inspect } from "core:prelude/array.wado";
+use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
 use { panic } from "core:rt";
@@ -231,44 +231,13 @@ impl<T> IndexValue<RangeInclusive<i32>> for Slice<T> {
 // a slice means.
 impl<T: Eq> Eq for Slice<T> {
     pub fn eq(&self, other: &Self) -> bool {
-        let len = self.end - self.start;
-        if len != other.end - other.start {
-            return false;
-        }
-        for let mut i = 0; i < len; i += 1 {
-            if builtin::array_get_value(self.repr, self.start + i) != builtin::array_get_value(
-                other.repr,
-                other.start + i,
-            ) {
-                return false;
-            }
-        }
-        return true;
+        return seq_eq(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }
 
 impl<T: Ord> Ord for Slice<T> {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let len = self.end - self.start;
-        let other_len = other.end - other.start;
-        let min_len = i32::min(len, other_len);
-        for let mut i = 0; i < min_len; i += 1 {
-            let a = builtin::array_get_value(self.repr, self.start + i);
-            let b = builtin::array_get_value(other.repr, other.start + i);
-            if a < b {
-                return Ordering::Less;
-            }
-            if a > b {
-                return Ordering::Greater;
-            }
-        }
-        if len < other_len {
-            return Ordering::Less;
-        }
-        if len > other_len {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }
 

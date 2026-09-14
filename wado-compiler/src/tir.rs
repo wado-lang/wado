@@ -2317,15 +2317,22 @@ impl TypeTable {
     /// there is no fused name for a declaration lookup to mistake for one.
     #[must_use]
     pub fn struct_rendered_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
-        let decl_name = self.struct_head_name(head);
-        if type_args.is_empty() {
-            return decl_name;
-        }
+        self.rendered_name(&self.struct_head_name(head), type_args)
+    }
+
+    /// The rendered spelling of an instantiation of `def`: the sibling of
+    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
+    #[must_use]
+    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
+        self.rendered_name(&self.decl_render_name(def), type_args)
+    }
+
+    fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
         let args: Vec<String> = type_args
             .iter()
             .map(|&a| self.mangle_type_arg_for_generic(a))
             .collect();
-        mangle_generic_name(&decl_name, &args)
+        mangle_generic_name(decl_name, &args)
     }
 
     /// Intern the instantiation of `def` with `type_args`, deriving its
@@ -3516,7 +3523,10 @@ impl TypeTable {
         let ids: Vec<TypeId> = self.iter_type_ids().collect();
         for id in ids {
             let redirect = match self.types.get(id).unwrap() {
-                ResolvedType::Newtype { .. } => Some(self.representation_head(id)),
+                ResolvedType::Newtype { .. } => {
+                    let head = self.representation_head(id);
+                    Some(self.monomorphized_struct(head).unwrap_or(head))
+                }
                 ResolvedType::Flags { .. } => Some(TypeTable::U32),
                 _ => None,
             };
@@ -3526,6 +3536,23 @@ impl TypeTable {
         }
     }
 
+    /// The monomorphized `Struct` an instantiation of `def` became, when the run
+    /// made one. Monomorphization registers each one under this spelling.
+    pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
+        let name = self.generic_rendered_name(def, type_args);
+        self.find_struct_by_name(&name, self.def_module(def))
+    }
+
+    /// The monomorphized `Struct` a `GenericInstance` became. Monomorphization
+    /// rewrites the sites its walk reaches; a newtype base it never reached
+    /// still spells the instance, and a value of the newtype carries the struct.
+    pub fn monomorphized_struct(&self, id: TypeId) -> Option<TypeId> {
+        let ResolvedType::GenericInstance { def, type_args } = self.types.get(id)? else {
+            return None;
+        };
+        self.monomorphized_struct_of(*def, type_args)
+    }
+
     /// Get the base type if this is a newtype, or None otherwise
     pub fn get_newtype_base(&self, id: TypeId) -> Option<TypeId> {
         if let ResolvedType::Newtype { base_type, .. } = self.get(id) {
@@ -3533,6 +3560,13 @@ impl TypeTable {
         } else {
             None
         }
+    }
+
+    /// A newtype's representation head, or `None` for anything else. The head
+    /// rather than one peel, which on a chain lands on another newtype.
+    #[must_use]
+    pub fn newtype_representation(&self, id: TypeId) -> Option<TypeId> {
+        matches!(self.get(id), ResolvedType::Newtype { .. }).then(|| self.representation_head(id))
     }
 
     /// The first link of `id`'s newtype chain that `owns` accepts, outermost
@@ -3556,6 +3590,14 @@ impl TypeTable {
                 _ => return None,
             }
         }
+    }
+
+    /// Whether `link` is a base anywhere in `id`'s newtype chain, rather than
+    /// one peel down, which a longer chain steps past.
+    #[must_use]
+    pub fn newtype_chain_reaches(&self, id: TypeId, link: TypeId) -> bool {
+        self.newtype_link_owning(id, |tid| self.get_newtype_base(tid) == Some(link))
+            .is_some()
     }
 
     /// The declaration a newtype inherits from: its chain peeled to what it

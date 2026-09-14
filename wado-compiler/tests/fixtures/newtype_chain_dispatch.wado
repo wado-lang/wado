@@ -1,0 +1,49 @@
+// Every dispatch a newtype inherits reaches its representation head, not the
+// link one peel down — which on a chain is another newtype, carrying nothing.
+
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+impl Add for Point {
+    type Output = Point;
+
+    fn add(&self, rhs: &Point) -> Point {
+        return Point { x: self.x + rhs.x, y: self.y + rhs.y };
+    }
+}
+
+impl Display for Point {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&`(${self.x},${self.y})`);
+    }
+}
+
+type Loc = Point;
+type Way = Loc;
+
+type Ints = List<i32>;
+type MoreInts = Ints;
+
+export fn run() with Stdout {
+    // Auto-derived `Eq` / `Ord`, through the operators and through `cmp`.
+    let a: Way = Point { x: 1, y: 0 } as Way;
+    let b: Way = Point { x: 2, y: 0 } as Way;
+    assert a < b;
+    assert a != b;
+    assert a == a;
+    assert a.cmp(&b) == Ordering::Less;
+
+    // A written impl on the head.
+    println(`${a + b}`);
+
+    // Literal construction and the index operators, over a generic instance.
+    let mut v: MoreInts = [1, 2, 3] as MoreInts;
+    assert v[0] == 1;
+    v[0] = 9;
+    assert v[0] == 9;
+    assert v.len() == 3;
+}
+
+__DATA__
+{"stdout": "(3,0)\n"}

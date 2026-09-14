@@ -1,0 +1,20 @@
+// The class the narrowed-view cases are instances of: a reference member read
+// out of a reference parameter still names what that parameter names.
+
+struct Cursor {
+    chars: &Array<char>,
+    pos: i32,
+}
+
+fn rebase(c: &Cursor, at: i32) -> Cursor {
+    return Cursor { chars: c.chars, pos: at };
+}
+
+export fn run() {
+    let chars: Array<char> = ['a', 'b'];
+    let c = Cursor { chars: &chars, pos: 0 };
+    assert rebase(&c, 1).pos == 1;
+}
+
+__DATA__
+{ "compile_error": "returning reference parameter 'c' requires `stores[c]` declaration" }

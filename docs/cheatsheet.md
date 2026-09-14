@@ -205,6 +205,11 @@ Result<T, E>            // result type
 
 Newtypes are distinct types that inherit methods/operators/traits from the base type, require explicit `as` cast, and have zero runtime cost.
 
+A newtype does not carry an invariant of its own: `as` converts both ways for
+free, so it admits exactly what its base admits. An invariant the base lacks
+(UTF-8 bytes, non-empty, normalized) needs a `struct` with a private field and
+a checked constructor.
+
 See [WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md).
 
 ```wado
@@ -305,6 +310,25 @@ builder.push_str(&", World!");
 for let c of "hello".chars() {
     println(`${c}`);
 }
+```
+
+A `StrSlice` views part of a string without copying it. Its ends are always on
+character boundaries, which is why it is a `struct` and not a newtype over
+`ByteSlice`. `AsStrSlice` lets one signature take an owned `String`, a
+reference to one, or a view of one — Wado's answer to Rust's `AsRef<str>`. See
+[WEP: String Views](./wep-2026-09-13-string-slice.md).
+
+```wado
+let v = "banana".as_str_slice();
+let part = v.sub(1, 4);          // "ana"; panics off a character boundary
+part.len();                      // 3, in bytes
+part.to_string();                // copies out, here and only here
+for let c of part.chars() { ... }
+
+fn byte_len<S: AsStrSlice>(s: &S) -> i32 {
+    return s.as_str_slice().len();
+}
+byte_len(&"banana");             // a String, a &String, or a StrSlice
 ```
 
 Tagged templates (see [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
@@ -985,10 +1009,16 @@ impl Node {
     }
 }
 
-// A reference reached through a parameter is a different reference: copying
-// it out is not that parameter escaping.
-fn rebase(c: &Cursor, at: i32) -> Cursor {
+// A reference member read out of a parameter still names what the parameter
+// names, so returning it needs the declaration. A value member is copied.
+struct Cursor { chars: &Array<char>, pos: i32 }
+
+fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
     return Cursor { chars: c.chars, pos: at };
+}
+
+fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
+    return p.name;
 }
 ```
 
@@ -1096,12 +1126,12 @@ trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
 
-// For parsing a value from a string. `from_str_range` is the required
-// fundamental operation; `from_str` is defaulted to call it with the full
-// string. Implementors only write the efficient range version.
+// For parsing a value from a string. `from_str_slice` is the required
+// fundamental operation, so parsing a field out of a larger buffer allocates
+// no substring; `from_str` is defaulted to view the whole string.
 pub trait FromStr {
     type Err;
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>;
+    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
     fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
 }
 
@@ -1196,7 +1226,7 @@ f64::from_str(&"3.14")                  // Result<f64, ParseFloatError>
 i32::from_str(&"42")                    // Result<i32, ParseIntError>
 i32::from_str_hex(&"ff")                // Result<i32, ParseIntError> (radix 16)
 i32::from_str_radix(&"1010", 2)         // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str_range(&"xyz42abc", 3, 5)  // parse a byte range without substring alloc
+i32::from_str_slice(&"xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi

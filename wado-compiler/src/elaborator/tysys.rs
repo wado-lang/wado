@@ -340,11 +340,14 @@ impl TypeSystem {
         }
     }
 
-    /// A newtype's base name and `TypeId` for a trait-impl lookup fallback,
+    /// A newtype's representation head, named for a trait-impl lookup fallback,
     /// else the name and id given.
+    ///
+    /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
+    /// have stopped there.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
-        if let Some(base_id) = tt.get_newtype_base(type_id) {
+        if let Some(base_id) = tt.newtype_representation(type_id) {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {

@@ -41,7 +41,7 @@ const DISCARDED_RESULT_SOURCE: &str = r#"
 use { println, Stdout } from "core:cli";
 
 fn parse_scalar<T: FromStr>(s: &String) -> Result<T, i32> {
-    return match T::from_str_range(s, 0, 3) {
+    return match T::from_str_slice(&s.as_str_slice().sub(0, 3)) {
         Ok(v) => Result::Ok(v),
         Err(_) => Result::Err(-1),
     };

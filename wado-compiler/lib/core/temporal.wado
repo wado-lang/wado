@@ -257,7 +257,7 @@ fn try_fixed_offset(zone: &String) -> Option<i64> {
     if *zone == "UTC" {
         return Option::Some(0);
     }
-    if let Ok(offset) = parse_zone_designator(zone, 0, zone.len()) {
+    if let Ok(offset) = parse_zone_designator(&zone.as_str_slice(), 0) {
         return Option::Some(offset);
     }
     return Option::None;
@@ -444,7 +444,7 @@ impl Instant {
     /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
     /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
     pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
-        return Result::Ok(parse_iso_zoned(&text, 0, text.len())?.instant);
+        return Result::Ok(parse_iso_zoned(&text.as_str_slice())?.instant);
     }
 
     /// RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
@@ -465,15 +465,15 @@ impl Instant {
     /// two-digit year pivots at 70), and asctime (`"Sun Nov  6 08:49:37 1994"`).
     /// The weekday is advisory and is not checked against the date.
     pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError> {
-        let end = text.len();
+        let view = text.as_str_slice();
         let comma = index_of_byte(&text, b',');
         if comma < 0 {
-            return parse_asctime(&text, end);
+            return parse_asctime(&view);
         }
-        if comma + 4 < end && text.get_byte_unchecked(comma + 4) == b'-' {
-            return parse_rfc850_date(&text, comma, end);
+        if comma + 4 < view.len() && view.get_byte_unchecked(comma + 4) == b'-' {
+            return parse_rfc850_date(&view, comma);
         }
-        return parse_imf_fixdate(&text, comma, end);
+        return parse_imf_fixdate(&view, comma);
     }
 
     /// Interpret this instant in `time_zone`, the zoned view of the same moment
@@ -485,16 +485,16 @@ impl Instant {
 impl FromStr for Instant {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError> {
-        return Result::Ok(parse_iso_zoned(s, start, end)?.instant);
+    fn from_str_slice(s: &StrSlice) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(s)?.instant);
     }
 }
 
 impl FromStr for ZonedDateTime {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
-        return parse_iso_zoned(s, start, end);
+    fn from_str_slice(s: &StrSlice) -> Result<ZonedDateTime, DeserializeError> {
+        return parse_iso_zoned(s);
     }
 }
 
@@ -528,7 +528,7 @@ impl ZonedDateTime {
     /// rejected); malformed or out-of-range input returns a `DeserializeError`
     /// carrying the byte offset of the problem.
     pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError> {
-        return parse_iso_zoned(&text, 0, text.len());
+        return parse_iso_zoned(&text.as_str_slice());
     }
 
     /// The exact instant, dropping the zone (`Temporal.ZonedDateTime.toInstant`).
@@ -1013,23 +1013,24 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
     return era * 146097 + doe - 719468;
 }
 
-/// Parse an RFC 3339 / ISO 8601 timestamp in `text[start..<end]`. The shared
-/// engine behind `ZonedDateTime::parse_rfc3339`, `Instant::parse_rfc3339`, and
-/// both `FromStr` impls.
-fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError> {
-    let mut i = start;
+/// Parse an RFC 3339 / ISO 8601 timestamp. The shared engine behind
+/// `ZonedDateTime::parse_rfc3339`, `Instant::parse_rfc3339`, and both
+/// `FromStr` impls.
+fn parse_iso_zoned(text: &StrSlice) -> Result<ZonedDateTime, DeserializeError> {
+    let end = text.len();
+    let mut i = 0;
 
-    let [year, year_end] = parse_iso_year(text, i, end)?;
+    let [year, year_end] = parse_iso_year(text, i)?;
     i = year_end;
 
-    i = expect_byte(text, i, end, b'-')?;
-    let month = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i, b'-')?;
+    let month = read_digits(text, i, 2)?;
     if month < 1 || month > 12 {
         return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
     }
     i += 2;
-    i = expect_byte(text, i, end, b'-')?;
-    let day = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i, b'-')?;
+    let day = read_digits(text, i, 2)?;
     if day < 1 || day > days_in_month_value(year, month) {
         return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
     }
@@ -1044,19 +1045,19 @@ fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime,
     }
     i += 1;
 
-    let hour = read_digits(text, i, end, 2)?;
+    let hour = read_digits(text, i, 2)?;
     if hour > 23 {
         return Result::Err(DeserializeError::invalid_value("hour out of range", i as i64));
     }
     i += 2;
-    i = expect_byte(text, i, end, b':')?;
-    let minute = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i, b':')?;
+    let minute = read_digits(text, i, 2)?;
     if minute > 59 {
         return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
     }
     i += 2;
-    i = expect_byte(text, i, end, b':')?;
-    let parsed_second = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i, b':')?;
+    let parsed_second = read_digits(text, i, 2)?;
     if parsed_second > 60 {
         return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
     }
@@ -1067,12 +1068,12 @@ fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime,
 
     let mut nanoseconds: i64 = 0;
     if i < end && text.get_byte_unchecked(i) == b'.' {
-        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1)?;
         nanoseconds = fraction;
         i = after;
     }
 
-    let offset = parse_zone_designator(text, i, end)?;
+    let offset = parse_zone_designator(text, i)?;
 
     let days = days_from_civil(year, month, day);
     let local_seconds = days * 86400 + hour * 3600 + minute * 60 + second;
@@ -1082,18 +1083,20 @@ fn parse_iso_zoned(text: &String, start: i32, end: i32) -> Result<ZonedDateTime,
     });
 }
 
-/// Require byte `byte` at index `i` of `text[..<end]`, returning the next index,
+/// Require byte `byte` at index `i` of `text`, returning the next index,
 /// or a `DeserializeError` on mismatch or end of input.
-fn expect_byte(text: &String, i: i32, end: i32, byte: u8) -> Result<i32, DeserializeError> {
+fn expect_byte(text: &StrSlice, i: i32, byte: u8) -> Result<i32, DeserializeError> {
+    let end = text.len();
     if i >= end || text.get_byte_unchecked(i) != byte {
         return Result::Err(DeserializeError::malformed(`expected '${byte as char}'`, i as i64));
     }
     return Result::Ok(i + 1);
 }
 
-/// Read exactly `count` ASCII digits at index `i` of `text[..<end]` as an integer,
+/// Read exactly `count` ASCII digits at index `i` of `text` as an integer,
 /// erroring if any of them is missing or non-numeric.
-fn read_digits(text: &String, i: i32, end: i32, count: i32) -> Result<i64, DeserializeError> {
+fn read_digits(text: &StrSlice, i: i32, count: i32) -> Result<i64, DeserializeError> {
+    let end = text.len();
     if i + count > end {
         return Result::Err(DeserializeError::malformed(`expected ${count} digits`, i as i64));
     }
@@ -1113,15 +1116,16 @@ fn read_digits(text: &String, i: i32, end: i32, count: i32) -> Result<i64, Deser
 /// Parse the ISO 8601 year at index `i` — exactly four digits, or a sign
 /// followed by exactly six (the expanded form) — returning the year and the
 /// index just past it. `-000000` is the one expanded year ISO 8601 forbids.
-fn parse_iso_year(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+fn parse_iso_year(text: &StrSlice, i: i32) -> Result<[i64, i32], DeserializeError> {
+    let end = text.len();
     if i >= end {
         return Result::Err(DeserializeError::eof(i as i64));
     }
     let sign = text.get_byte_unchecked(i);
     if sign != b'+' && sign != b'-' {
-        return Result::Ok([read_digits(text, i, end, 4)?, i + 4]);
+        return Result::Ok([read_digits(text, i, 4)?, i + 4]);
     }
-    let magnitude = read_digits(text, i + 1, end, 6)?;
+    let magnitude = read_digits(text, i + 1, 6)?;
     if sign == b'-' {
         if magnitude == 0 {
             return Result::Err(DeserializeError::invalid_value("year -000000 is not an ISO 8601 year", i as i64));
@@ -1131,10 +1135,11 @@ fn parse_iso_year(text: &String, i: i32, end: i32) -> Result<[i64, i32], Deseria
     return Result::Ok([magnitude, i + 7]);
 }
 
-/// Parse the mandatory RFC 3339 zone designator in `text[start..<end]` into a
+/// Parse the mandatory RFC 3339 zone designator at index `start` of `text` into a
 /// signed second offset: `"Z"`/`"z"` yields 0, `±hh:mm` its offset. Errors on an
 /// absent, malformed, or out-of-range offset.
-fn parse_zone_designator(text: &String, start: i32, end: i32) -> Result<i64, DeserializeError> {
+fn parse_zone_designator(text: &StrSlice, start: i32) -> Result<i64, DeserializeError> {
+    let end = text.len();
     let span = end - start;
     if span == 1 {
         let c = text.get_byte_unchecked(start);
@@ -1357,7 +1362,7 @@ fn imf_month_name(month: i64) -> String {
 }
 
 /// The month a three-letter RFC 7231 abbreviation names, or `-1`.
-fn imf_month_number(text: &String, i: i32) -> i64 {
+fn imf_month_number(text: &StrSlice, i: i32) -> i64 {
     let names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     let mut month: i64 = 1;
     for let name of names {
@@ -1401,7 +1406,7 @@ impl Duration {
     /// signed. A fraction is allowed on the last time component present and
     /// spills into the components below it, so `"PT1.5H"` is `PT1H30M`.
     pub fn parse(text: String) -> Result<Duration, DeserializeError> {
-        return parse_iso_duration(&text, 0, text.len());
+        return parse_iso_duration(&text.as_str_slice());
     }
 
     /// The sign of the largest non-zero component: `1`, `-1`, or `0` when every
@@ -1650,8 +1655,8 @@ impl Serialize for Duration {
 impl FromStr for Duration {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
-        return parse_iso_duration(s, start, end);
+    fn from_str_slice(s: &StrSlice) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(s);
     }
 }
 
@@ -1719,9 +1724,10 @@ fn duration_from_nanoseconds(total: i128, largest_unit: Unit) -> Duration {
     return out;
 }
 
-/// Parse an ISO 8601 duration in `text[start..<end]`.
-fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, DeserializeError> {
-    let mut i = start;
+/// Parse an ISO 8601 duration.
+fn parse_iso_duration(text: &StrSlice) -> Result<Duration, DeserializeError> {
+    let end = text.len();
+    let mut i = 0;
     let mut sign: i64 = 1;
     if i < end && (text.get_byte_unchecked(i) == b'+' || text.get_byte_unchecked(i) == b'-') {
         if text.get_byte_unchecked(i) == b'-' {
@@ -1743,7 +1749,7 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
         if byte == b'T' || byte == b't' {
             break;
         }
-        let [value, after] = read_duration_number(text, i, end)?;
+        let [value, after] = read_duration_number(text, i)?;
         if after >= end {
             return Result::Err(DeserializeError::eof(after as i64));
         }
@@ -1772,8 +1778,8 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
                     i as i64,
                 ));
             }
-            let [value, after_number] = read_duration_number(text, i, end)?;
-            let [fraction_nanoseconds, after] = read_duration_fraction(text, after_number, end)?;
+            let [value, after_number] = read_duration_number(text, i)?;
+            let [fraction_nanoseconds, after] = read_duration_fraction(text, after_number)?;
             if after >= end {
                 return Result::Err(DeserializeError::eof(after as i64));
             }
@@ -1816,7 +1822,8 @@ fn parse_iso_duration(text: &String, start: i32, end: i32) -> Result<Duration, D
 
 /// Read the leading run of digits at `i`, returning the value and the index just
 /// past it.
-fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+fn read_duration_number(text: &StrSlice, i: i32) -> Result<[i64, i32], DeserializeError> {
+    let end = text.len();
     let mut j = i;
     let mut value: i64 = 0;
     while j < end && text.get_byte_unchecked(j).is_ascii_digit() {
@@ -1831,17 +1838,19 @@ fn read_duration_number(text: &String, i: i32, end: i32) -> Result<[i64, i32], D
 
 /// Read an optional `.`/`,` fraction at `i` as a nine-digit nanosecond scale,
 /// returning it and the index just past it. Absent, it reads as zero and `i`.
-fn read_duration_fraction(text: &String, i: i32, end: i32) -> Result<[i128, i32], DeserializeError> {
+fn read_duration_fraction(text: &StrSlice, i: i32) -> Result<[i128, i32], DeserializeError> {
+    let end = text.len();
     if i >= end || text.get_byte_unchecked(i) != b'.' && text.get_byte_unchecked(i) != b',' {
         return Result::Ok([0, i]);
     }
-    let [nanoseconds, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+    let [nanoseconds, after] = read_fraction_nanoseconds(text, i + 1)?;
     return Result::Ok([nanoseconds as i128, after]);
 }
 
 /// Read the run of digits at `i` as a nanosecond count — the first digit is a
 /// tenth of a second — truncating past the ninth. Errors on no digit at all.
-fn read_fraction_nanoseconds(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
+fn read_fraction_nanoseconds(text: &StrSlice, i: i32) -> Result<[i64, i32], DeserializeError> {
+    let end = text.len();
     let mut j = i;
     let mut scale: i64 = 100_000_000;
     let mut value: i64 = 0;
@@ -1982,17 +1991,17 @@ impl Deserialize for Duration {
 }
 
 /// `"Sun, 06 Nov 1994 08:49:37 GMT"`.
-fn parse_imf_fixdate(text: &String, comma: i32, end: i32) -> Result<Instant, DeserializeError> {
+fn parse_imf_fixdate(text: &StrSlice, comma: i32) -> Result<Instant, DeserializeError> {
     let mut i = comma + 1;
-    i = expect_byte(text, i, end, b' ')?;
-    let day = read_digits(text, i, end, 2)?;
-    i = expect_byte(text, i + 2, end, b' ')?;
-    let month = read_month_name(text, i, end)?;
-    i = expect_byte(text, i + 3, end, b' ')?;
-    let year = read_digits(text, i, end, 4)?;
-    i = expect_byte(text, i + 4, end, b' ')?;
-    let [second_of_day, after] = read_clock_time(text, i, end)?;
-    expect_gmt(text, after, end)?;
+    i = expect_byte(text, i, b' ')?;
+    let day = read_digits(text, i, 2)?;
+    i = expect_byte(text, i + 2, b' ')?;
+    let month = read_month_name(text, i)?;
+    i = expect_byte(text, i + 3, b' ')?;
+    let year = read_digits(text, i, 4)?;
+    i = expect_byte(text, i + 4, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, i)?;
+    expect_gmt(text, after)?;
     return civil_instant(year, month, day, second_of_day, after);
 }
 
@@ -2000,50 +2009,47 @@ fn parse_imf_fixdate(text: &String, comma: i32, end: i32) -> Result<Instant, Des
 /// two-digit year more than 50 years ahead be read as the past year with those
 /// digits; with no clock to compare against, this pivots at 70 — `70..=99` is
 /// 1970s onward, `00..=69` is 2000s onward.
-fn parse_rfc850_date(text: &String, comma: i32, end: i32) -> Result<Instant, DeserializeError> {
+fn parse_rfc850_date(text: &StrSlice, comma: i32) -> Result<Instant, DeserializeError> {
     let mut i = comma + 1;
-    i = expect_byte(text, i, end, b' ')?;
-    let day = read_digits(text, i, end, 2)?;
-    i = expect_byte(text, i + 2, end, b'-')?;
-    let month = read_month_name(text, i, end)?;
-    i = expect_byte(text, i + 3, end, b'-')?;
-    let two_digit_year = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i, b' ')?;
+    let day = read_digits(text, i, 2)?;
+    i = expect_byte(text, i + 2, b'-')?;
+    let month = read_month_name(text, i)?;
+    i = expect_byte(text, i + 3, b'-')?;
+    let two_digit_year = read_digits(text, i, 2)?;
     let year = if two_digit_year >= 70 { 1900 + two_digit_year } else { 2000 + two_digit_year };
-    i = expect_byte(text, i + 2, end, b' ')?;
-    let [second_of_day, after] = read_clock_time(text, i, end)?;
-    expect_gmt(text, after, end)?;
+    i = expect_byte(text, i + 2, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, i)?;
+    expect_gmt(text, after)?;
     return civil_instant(year, month, day, second_of_day, after);
 }
 
 /// The obsolete `"Sun Nov  6 08:49:37 1994"`. Fixed width at 24, with the day
 /// space-padded rather than zero-padded.
-fn parse_asctime(text: &String, end: i32) -> Result<Instant, DeserializeError> {
+fn parse_asctime(text: &StrSlice) -> Result<Instant, DeserializeError> {
+    let end = text.len();
     if end != 24 {
         return Result::Err(DeserializeError::malformed("expected an HTTP-date", 0));
     }
-    expect_byte(text, 3, end, b' ')?;
-    let month = read_month_name(text, 4, end)?;
-    expect_byte(text, 7, end, b' ')?;
-    let day = if text.get_byte_unchecked(8) == b' ' {
-        read_digits(text, 9, end, 1)?;
-    } else {
-        read_digits(text, 8, end, 2)?;
-    };
-    expect_byte(text, 10, end, b' ')?;
-    let [second_of_day, after] = read_clock_time(text, 11, end)?;
-    expect_byte(text, after, end, b' ')?;
-    let year = read_digits(text, 20, end, 4)?;
+    expect_byte(text, 3, b' ')?;
+    let month = read_month_name(text, 4)?;
+    expect_byte(text, 7, b' ')?;
+    let day = if text.get_byte_unchecked(8) == b' ' { read_digits(text, 9, 1)? } else { read_digits(text, 8, 2)? };
+    expect_byte(text, 10, b' ')?;
+    let [second_of_day, after] = read_clock_time(text, 11)?;
+    expect_byte(text, after, b' ')?;
+    let year = read_digits(text, 20, 4)?;
     return civil_instant(year, month, day, second_of_day, 0);
 }
 
 /// Read `hh:mm:ss` at `i`, returning the second of the day and the index just
 /// past it.
-fn read_clock_time(text: &String, i: i32, end: i32) -> Result<[i64, i32], DeserializeError> {
-    let hour = read_digits(text, i, end, 2)?;
-    let mut j = expect_byte(text, i + 2, end, b':')?;
-    let minute = read_digits(text, j, end, 2)?;
-    j = expect_byte(text, j + 2, end, b':')?;
-    let second = read_digits(text, j, end, 2)?;
+fn read_clock_time(text: &StrSlice, i: i32) -> Result<[i64, i32], DeserializeError> {
+    let hour = read_digits(text, i, 2)?;
+    let mut j = expect_byte(text, i + 2, b':')?;
+    let minute = read_digits(text, j, 2)?;
+    j = expect_byte(text, j + 2, b':')?;
+    let second = read_digits(text, j, 2)?;
     if hour > 23 || minute > 59 || second > 60 {
         return Result::Err(DeserializeError::invalid_value("clock time out of range", i as i64));
     }
@@ -2052,7 +2058,8 @@ fn read_clock_time(text: &String, i: i32, end: i32) -> Result<[i64, i32], Deseri
 }
 
 /// Read a three-letter English month abbreviation at `i`.
-fn read_month_name(text: &String, i: i32, end: i32) -> Result<i64, DeserializeError> {
+fn read_month_name(text: &StrSlice, i: i32) -> Result<i64, DeserializeError> {
+    let end = text.len();
     if i + 3 > end {
         return Result::Err(DeserializeError::eof(i as i64));
     }
@@ -2064,11 +2071,12 @@ fn read_month_name(text: &String, i: i32, end: i32) -> Result<i64, DeserializeEr
 }
 
 /// Require the trailing `GMT` an HTTP-date's two dated forms end with.
-fn expect_gmt(text: &String, i: i32, end: i32) -> Result<(), DeserializeError> {
-    let mut j = expect_byte(text, i, end, b' ')?;
-    j = expect_byte(text, j, end, b'G')?;
-    j = expect_byte(text, j, end, b'M')?;
-    j = expect_byte(text, j, end, b'T')?;
+fn expect_gmt(text: &StrSlice, i: i32) -> Result<(), DeserializeError> {
+    let end = text.len();
+    let mut j = expect_byte(text, i, b' ')?;
+    j = expect_byte(text, j, b'G')?;
+    j = expect_byte(text, j, b'M')?;
+    j = expect_byte(text, j, b'T')?;
     if j != end {
         return Result::Err(DeserializeError::malformed("trailing characters", j as i64));
     }
@@ -2187,7 +2195,7 @@ impl PlainDate {
 
     /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
     pub fn parse(text: String) -> Result<PlainDate, DeserializeError> {
-        return PlainDate::from_str_range(&text, 0, text.len());
+        return PlainDate::from_str_slice(&text.as_str_slice());
     }
 
     /// Days since 1970-01-01, negative before it.
@@ -2344,7 +2352,7 @@ impl PlainTime {
 
     /// Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
     pub fn parse(text: String) -> Result<PlainTime, DeserializeError> {
-        return PlainTime::from_str_range(&text, 0, text.len());
+        return PlainTime::from_str_slice(&text.as_str_slice());
     }
 
     /// Whether every component is in the range the ISO 8601 clock allows.
@@ -2459,7 +2467,7 @@ impl PlainDateTime {
     /// Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
     /// the separator and no offset.
     pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError> {
-        return PlainDateTime::from_str_range(&text, 0, text.len());
+        return PlainDateTime::from_str_slice(&text.as_str_slice());
     }
 
     /// Move forward by `duration`: the date components first, constraining a
@@ -2541,7 +2549,7 @@ impl PlainYearMonth {
 
     /// Parse `YYYY-MM`.
     pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError> {
-        return PlainYearMonth::from_str_range(&text, 0, text.len());
+        return PlainYearMonth::from_str_slice(&text.as_str_slice());
     }
 
     /// Number of days in this month, `28..=31`.
@@ -2634,7 +2642,7 @@ impl PlainMonthDay {
 
     /// Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
     pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError> {
-        return PlainMonthDay::from_str_range(&text, 0, text.len());
+        return PlainMonthDay::from_str_slice(&text.as_str_slice());
     }
 
     /// Land this month-day in `year`, clamping February 29 to the 28th outside
@@ -2661,15 +2669,15 @@ impl Display for PlainMonthDay {
 }
 
 /// Parse `YYYY-MM-DD` at `start`, returning the date and the index just past it.
-fn parse_iso_date(text: &String, start: i32, end: i32) -> Result<[PlainDate, i32], DeserializeError> {
-    let [year, after_year] = parse_iso_year(text, start, end)?;
-    let mut i = expect_byte(text, after_year, end, b'-')?;
-    let month = read_digits(text, i, end, 2)?;
+fn parse_iso_date(text: &StrSlice, start: i32) -> Result<[PlainDate, i32], DeserializeError> {
+    let [year, after_year] = parse_iso_year(text, start)?;
+    let mut i = expect_byte(text, after_year, b'-')?;
+    let month = read_digits(text, i, 2)?;
     if month < 1 || month > 12 {
         return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
     }
-    i = expect_byte(text, i + 2, end, b'-')?;
-    let day = read_digits(text, i, end, 2)?;
+    i = expect_byte(text, i + 2, b'-')?;
+    let day = read_digits(text, i, 2)?;
     if day < 1 || day > days_in_month_value(year, month) {
         return Result::Err(DeserializeError::invalid_value("day out of range", i as i64));
     }
@@ -2681,13 +2689,14 @@ fn parse_iso_date(text: &String, start: i32, end: i32) -> Result<[PlainDate, i32
 
 /// Parse `hh:mm[:ss[.fraction]]` at `start`, returning the time and the index
 /// just past it. A leap second is constrained to `:59`, as in a timestamp.
-fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32], DeserializeError> {
-    let hour = read_digits(text, start, end, 2)?;
+fn parse_iso_time(text: &StrSlice, start: i32) -> Result<[PlainTime, i32], DeserializeError> {
+    let end = text.len();
+    let hour = read_digits(text, start, 2)?;
     if hour > 23 {
         return Result::Err(DeserializeError::invalid_value("hour out of range", start as i64));
     }
-    let mut i = expect_byte(text, start + 2, end, b':')?;
-    let minute = read_digits(text, i, end, 2)?;
+    let mut i = expect_byte(text, start + 2, b':')?;
+    let minute = read_digits(text, i, 2)?;
     if minute > 59 {
         return Result::Err(DeserializeError::invalid_value("minute out of range", i as i64));
     }
@@ -2699,7 +2708,7 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
         ]);
     }
     i += 1;
-    let parsed_second = read_digits(text, i, end, 2)?;
+    let parsed_second = read_digits(text, i, 2)?;
     if parsed_second > 60 {
         return Result::Err(DeserializeError::invalid_value("second out of range", i as i64));
     }
@@ -2707,7 +2716,7 @@ fn parse_iso_time(text: &String, start: i32, end: i32) -> Result<[PlainTime, i32
     i += 2;
     let mut nanoseconds: i64 = 0;
     if i < end && text.get_byte_unchecked(i) == b'.' {
-        let [fraction, after] = read_fraction_nanoseconds(text, i + 1, end)?;
+        let [fraction, after] = read_fraction_nanoseconds(text, i + 1)?;
         nanoseconds = fraction;
         i = after;
     }
@@ -2801,8 +2810,9 @@ impl Deserialize for PlainDate {
 impl FromStr for PlainDate {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDate, DeserializeError> {
-        let [date, after] = parse_iso_date(s, start, end)?;
+    fn from_str_slice(s: &StrSlice) -> Result<PlainDate, DeserializeError> {
+        let end = s.len();
+        let [date, after] = parse_iso_date(s, 0)?;
         require_end(after, end)?;
         return Result::Ok(date);
     }
@@ -2873,8 +2883,9 @@ impl Deserialize for PlainTime {
 impl FromStr for PlainTime {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainTime, DeserializeError> {
-        let [time, after] = parse_iso_time(s, start, end)?;
+    fn from_str_slice(s: &StrSlice) -> Result<PlainTime, DeserializeError> {
+        let end = s.len();
+        let [time, after] = parse_iso_time(s, 0)?;
         require_end(after, end)?;
         return Result::Ok(time);
     }
@@ -2948,8 +2959,9 @@ impl Deserialize for PlainDateTime {
 impl FromStr for PlainDateTime {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDateTime, DeserializeError> {
-        let [date, after_date] = parse_iso_date(s, start, end)?;
+    fn from_str_slice(s: &StrSlice) -> Result<PlainDateTime, DeserializeError> {
+        let end = s.len();
+        let [date, after_date] = parse_iso_date(s, 0)?;
         if after_date >= end {
             return Result::Err(DeserializeError::eof(after_date as i64));
         }
@@ -2957,7 +2969,7 @@ impl FromStr for PlainDateTime {
         if separator != b'T' && separator != b't' && separator != b' ' {
             return Result::Err(DeserializeError::malformed("expected a date/time separator", after_date as i64));
         }
-        let [time, after] = parse_iso_time(s, after_date + 1, end)?;
+        let [time, after] = parse_iso_time(s, after_date + 1)?;
         require_end(after, end)?;
         return Result::Ok(PlainDateTime { date: date, time: time });
     }
@@ -3031,10 +3043,11 @@ impl Deserialize for PlainYearMonth {
 impl FromStr for PlainYearMonth {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainYearMonth, DeserializeError> {
-        let [year, after_year] = parse_iso_year(s, start, end)?;
-        let i = expect_byte(s, after_year, end, b'-')?;
-        let month = read_digits(s, i, end, 2)?;
+    fn from_str_slice(s: &StrSlice) -> Result<PlainYearMonth, DeserializeError> {
+        let end = s.len();
+        let [year, after_year] = parse_iso_year(s, 0)?;
+        let i = expect_byte(s, after_year, b'-')?;
+        let month = read_digits(s, i, 2)?;
         if month < 1 || month > 12 {
             return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
         }
@@ -3111,17 +3124,18 @@ impl Deserialize for PlainMonthDay {
 impl FromStr for PlainMonthDay {
     type Err = DeserializeError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainMonthDay, DeserializeError> {
-        let mut i = start;
-        if start + 2 <= end && s.get_byte_unchecked(start) == b'-' && s.get_byte_unchecked(start + 1) == b'-' {
-            i = start + 2;
+    fn from_str_slice(s: &StrSlice) -> Result<PlainMonthDay, DeserializeError> {
+        let end = s.len();
+        let mut i = 0;
+        if end >= 2 && s.get_byte_unchecked(0) == b'-' && s.get_byte_unchecked(1) == b'-' {
+            i = 2;
         }
-        let month = read_digits(s, i, end, 2)?;
+        let month = read_digits(s, i, 2)?;
         if month < 1 || month > 12 {
             return Result::Err(DeserializeError::invalid_value("month out of range", i as i64));
         }
-        let j = expect_byte(s, i + 2, end, b'-')?;
-        let day = read_digits(s, j, end, 2)?;
+        let j = expect_byte(s, i + 2, b'-')?;
+        let day = read_digits(s, j, 2)?;
         // A leap year is the yardstick: 02-29 is a real month-day.
         if day < 1 || day > days_in_month_value(2024, month) {
             return Result::Err(DeserializeError::invalid_value("day out of range", j as i64));

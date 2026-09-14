@@ -8,7 +8,7 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 use { Display, Inspect } from "core:prelude/traits.wado";
-use { String, StrCharIter } from "core:prelude/string.wado";
+use { String, StrCharIter, StrSlice, is_char_start } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
 
@@ -223,13 +223,12 @@ impl Formatter {
         }
     }
 
-    /// Characters — not bytes — in `buf[start_pos..]`: every byte that is not a
-    /// UTF-8 continuation byte starts one.
+    /// Characters — not bytes — in `buf[start_pos..]`.
     fn count_chars_from(&self, start_pos: i32) -> i32 {
         let end = self.buf.len();
         let mut count = 0;
         for let mut i = start_pos; i < end; i += 1 {
-            if self.buf.get_byte_unchecked(i) & 0xc0 != 0x80 {
+            if is_char_start(self.buf.get_byte_unchecked(i)) {
                 count += 1;
             }
         }
@@ -471,6 +470,20 @@ impl Inspect for String {
         if truncated {
             f.write_str(&"...");
         }
+    }
+}
+
+// A view renders as the text it views, so both traits copy it out and defer to
+// `String`'s. Placed here for the same reason `impl Display for String` is.
+impl Display for StrSlice {
+    pub fn fmt(&self, f: &mut Formatter) {
+        self.to_string().fmt(f);
+    }
+}
+
+impl Inspect for StrSlice {
+    pub fn inspect(&self, f: &mut Formatter) {
+        self.to_string().inspect(f);
     }
 }
 
