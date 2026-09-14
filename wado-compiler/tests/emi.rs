@@ -1026,7 +1026,7 @@ struct Eligible {
     shapes: IndexMap<&'static str, usize>,
     /// What the combinations that fell out were refused for. The source is a
     /// subject under the rest, so a drop is coverage lost, not an exclusion.
-    dropped: Vec<String>,
+    dropped: Vec<Excluded>,
 }
 
 /// The refusals a source collected while at least one combination still stood.
@@ -1046,19 +1046,14 @@ impl Refusals {
             .expect("a combination that dropped out left its reason")
     }
 
-    fn into_lines(self) -> Vec<String> {
+    fn into_inner(self) -> Vec<Excluded> {
         self.0
-            .iter()
-            .map(|e| format!("{} — {}", e.kind(), e.detail()))
-            .collect()
     }
 }
 
-/// A mutant that misbehaved in a way an injection is not allowed to.
-struct Finding {
-    name: String,
-    kind: &'static str,
-    detail: String,
+/// One report line: what the source was, and what it was refused for.
+fn refusal_line(name: &str, excluded: &Excluded) -> String {
+    format!("{name} ({}) {}\n", excluded.kind(), excluded.detail())
 }
 
 /// What the program did before any injection, at one level. A source that does
@@ -1261,7 +1256,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .iter()
             .map(|(shape, _)| (shape.keyword, covered(Some(shape.keyword))))
             .collect(),
-        dropped: refusals.into_lines(),
+        dropped: refusals.into_inner(),
     })
 }
 
@@ -1411,7 +1406,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .iter()
             .map(|shape| (shape.keyword, sites.len()))
             .collect(),
-        dropped: refusals.into_lines(),
+        dropped: refusals.into_inner(),
     })
 }
 
@@ -1585,7 +1580,7 @@ fn available_gigabytes() -> Option<usize> {
 struct Results {
     eligible: Vec<Eligible>,
     excluded: Vec<(String, Excluded)>,
-    findings: Vec<Finding>,
+    findings: Vec<(String, Excluded)>,
 }
 
 /// Silences the panic hook for as long as it is alive.
@@ -1655,11 +1650,7 @@ fn campaign(
                     match outcome {
                         Ok(eligible) => results.eligible.push(eligible),
                         Err(excluded) if is_finding(&excluded) => {
-                            results.findings.push(Finding {
-                                name,
-                                kind: excluded.kind(),
-                                detail: excluded.detail(),
-                            });
+                            results.findings.push((name, excluded));
                         }
                         Err(excluded) => results.excluded.push((name, excluded)),
                     }
@@ -1675,7 +1666,7 @@ fn campaign(
     let mut results = results.into_inner().expect("results lock");
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));
     results.excluded.sort_by(|a, b| a.0.cmp(&b.0));
-    results.findings.sort_by(|a, b| a.name.cmp(&b.name));
+    results.findings.sort_by(|(a, _), (b, _)| a.cmp(b));
     results
 }
 
@@ -1768,11 +1759,8 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
 
     if !results.findings.is_empty() {
         report.push_str("\n=== findings ===\n");
-        for finding in &results.findings {
-            report.push_str(&format!(
-                "{} ({}) {}\n",
-                finding.name, finding.kind, finding.detail
-            ));
+        for (name, excluded) in &results.findings {
+            report.push_str(&refusal_line(name, excluded));
         }
     }
 
@@ -1818,7 +1806,7 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             .iter()
             .filter(|(name, _)| drawn(name))
             .count();
-        let findings = results.findings.iter().filter(|f| drawn(&f.name)).count();
+        let findings = results.findings.iter().filter(|(n, _)| drawn(n)).count();
         out.push_str(&format!(
             "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s)\n",
             root.name(),
@@ -1857,7 +1845,7 @@ fn dropped(results: &Results) -> String {
         .flat_map(|e| {
             e.dropped
                 .iter()
-                .map(move |reason| format!("{}: {reason}\n", e.name))
+                .map(move |excluded| refusal_line(&e.name, excluded))
         })
         .collect();
     if lines.is_empty() {
