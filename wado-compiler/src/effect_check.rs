@@ -93,10 +93,37 @@ impl From<StoresError> for Diagnostic {
     }
 }
 
-/// Error from default-value purity checking
+/// A position whose expression must be pure, as it names itself in the
+/// diagnostic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PureContext {
+    DefaultValue,
+    GlobalInitializer,
+}
+
+impl PureContext {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::DefaultValue => "default value expression",
+            Self::GlobalInitializer => "global initializer",
+        }
+    }
+}
+
+/// What made an expression impure, as the diagnostic words it.
+#[derive(Debug, Clone)]
+pub enum Impurity {
+    /// The named callee declares an effect, or is an operation needing one.
+    Call(String),
+    /// `with E => h do { … }`, which writes the dispatch global.
+    HandlerInstall,
+}
+
+/// Error from purity checking of an expression that must have no effects
 #[derive(Debug, Clone)]
 pub struct DefaultPurityError {
-    pub callee: String,
+    pub context: PureContext,
+    pub impurity: Impurity,
     pub span: Span,
     pub module: String,
 }
@@ -104,12 +131,16 @@ pub struct DefaultPurityError {
 impl From<DefaultPurityError> for Diagnostic {
     fn from(e: DefaultPurityError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let cause = match &e.impurity {
+            Impurity::Call(callee) => format!("calls effectful function '{callee}'"),
+            Impurity::HandlerInstall => "installs an effect handler".to_string(),
+        };
         Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
             message: format!(
-                "default value expression must be pure (no effects), but calls effectful function '{}'",
-                e.callee
+                "{} must be pure (no effects), but {cause}",
+                e.context.noun()
             ),
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
@@ -2518,7 +2549,15 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
                 out: &mut Vec<DefaultPurityError>| {
         for param in params {
             if let Some(default) = &param.default {
-                purity_walk_default(sem, annotations, index, module, default, out);
+                purity_walk(
+                    sem,
+                    annotations,
+                    index,
+                    module,
+                    PureContext::DefaultValue,
+                    default,
+                    out,
+                );
             }
         }
     };
@@ -2555,22 +2594,44 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<Default
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            purity_walk_default(sem, annotations, index, src, default, out);
+                            purity_walk(
+                                sem,
+                                annotations,
+                                index,
+                                src,
+                                PureContext::DefaultValue,
+                                default,
+                                out,
+                            );
                         }
                     }
                 }
+                // An initializer runs at module initialization, before the
+                // program installs any handler and in an order it does not
+                // choose, so an effect performed there has no semantics to give
+                // it.
+                Item::Global(global) => purity_walk(
+                    sem,
+                    annotations,
+                    index,
+                    src,
+                    PureContext::GlobalInitializer,
+                    &global.initializer,
+                    out,
+                ),
                 _ => {}
             }
         }
     }
 }
 
-fn purity_walk_default(
+fn purity_walk(
     sem: &Semantics,
     annotations: Option<&TypeAnnotations>,
     index: &EffectIndex,
     module: &ModuleSource,
-    default: &Expr,
+    context: PureContext,
+    expr: &Expr,
     out: &mut Vec<DefaultPurityError>,
 ) {
     let mut walker = PurityWalker {
@@ -2578,30 +2639,53 @@ fn purity_walk_default(
         annotations,
         index,
         module: module.source_path(),
+        context,
         out,
     };
-    walker.visit_expr(default);
+    walker.visit_expr(expr);
 }
 
-/// Walks a default expression flagging any call to an effectful function (or an
-/// effect-handler install), which would make the default impure.
+/// Walks an expression that must be pure, flagging any call to an effectful
+/// function (or an effect-handler install).
 struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
     module: String,
+    context: PureContext,
     out: &'a mut Vec<DefaultPurityError>,
 }
 
 impl PurityWalker<'_> {
+    fn flag(&mut self, impurity: Impurity, span: Span) {
+        self.out.push(DefaultPurityError {
+            context: self.context,
+            impurity,
+            span,
+            module: self.module.clone(),
+        });
+    }
+
     fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
         if !effects.is_empty() {
-            self.out.push(DefaultPurityError {
-                callee: callee.to_string(),
-                span,
-                module: self.module.clone(),
-            });
+            self.flag(Impurity::Call(callee.to_string()), span);
         }
+    }
+
+    /// Whether the name at `site` is an `interface`, making `Site::op(…)` an
+    /// operation dispatch rather than a plain static call. An operation declares
+    /// no `with` clause of its own, so nothing in its signature says it performs
+    /// an effect — yet dispatching one is exactly what needs a handler.
+    fn site_names_interface(&self, site: Option<AstId>) -> bool {
+        let Some(resolutions) = self.sem.resolutions() else {
+            return false;
+        };
+        let Some(def) = site.and_then(|site| resolutions.declared(site)) else {
+            return false;
+        };
+        let defs = resolutions.defs();
+        let key = (defs.module(def).clone(), defs.name(def).to_string());
+        self.index.interface_cm_fq.contains_key(&key)
     }
 }
 
@@ -2609,6 +2693,14 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
+                // `E::op()` parses as a path callee, so the interface is the
+                // path's first segment.
+                if let Expr::Ident(ident) = &call.callee
+                    && self.site_names_interface(ident.segments.first().map(|seg| seg.id))
+                {
+                    let op = ident.name.rsplit("::").next().unwrap_or(&ident.name);
+                    self.flag(Impurity::Call(op.to_string()), call.span);
+                }
                 let free = if let Expr::Ident(ident) = &call.callee {
                     self.sem
                         .referenced_symbol(ident.id)
@@ -2640,6 +2732,11 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
+                if let ast::Type::Named(named) = &static_call.target_type
+                    && self.site_names_interface(Some(named.id))
+                {
+                    self.flag(Impurity::Call(static_call.method.clone()), static_call.span);
+                }
                 let func_refs: Vec<FunctionRef> = self
                     .annotations
                     .into_iter()
@@ -2652,12 +2749,8 @@ impl AstVisitor for PurityWalker<'_> {
                 }
             }
             Expr::WithHandler(with_handler) => {
-                // Installing a handler touches the dispatch global — impure.
-                self.out.push(DefaultPurityError {
-                    callee: "<with-handler>".to_string(),
-                    span: with_handler.span,
-                    module: self.module.clone(),
-                });
+                // Installing a handler writes the dispatch global — impure.
+                self.flag(Impurity::HandlerInstall, with_handler.span);
             }
             _ => {}
         }

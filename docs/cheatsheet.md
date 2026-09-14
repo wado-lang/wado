@@ -163,12 +163,17 @@ global PI: f64 = 3.14159;           // immutable
 global mut counter: i32 = 0;        // mutable
 pub global VERSION: i32 = 1;        // accessible from other modules
 global DOUBLED: i32 = 21 * 2;       // expressions allowed
+global GREETING: String = `v${VERSION}`;  // template strings too
 
 fn example() {
     println(`${PI}`);                // read global
     counter = counter + 1;          // write mutable global
 }
 ```
+
+An initializer must be pure: it runs before any handler is installed, so calling
+a function that declares an effect, dispatching an `interface` operation, or
+installing one with `with … do` is a compile error.
 
 ## Types
 
