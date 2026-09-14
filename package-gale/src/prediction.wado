@@ -332,13 +332,13 @@ struct SllConfig {
     return_stack: List<SllReturn>,
 }
 
-fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> with stores[elements] {
+fn push_return(stack: &List<SllReturn>, elements: &List<Element>, pos: i32) -> List<SllReturn> with stores[stack, elements] {
     let mut new_stack = *stack;
     new_stack.push(SllReturn { elements, pos });
     return new_stack;
 }
 
-fn pop_return(c: &SllConfig) -> SllConfig {
+fn pop_return(c: &SllConfig) -> SllConfig with stores[c] {
     let last_idx = c.return_stack.len() - 1;
     let ret = &c.return_stack[last_idx];
     let mut new_stack: List<SllReturn> = [];
@@ -432,7 +432,7 @@ fn sll_step(c: &SllConfig, pos: i32) -> List<SllConfig> {
 /// Move `c` past the `Repeat` at `at` on `token`, which its body admits: a
 /// single-token body is stepped past, a multi-token one walked into
 /// (invariant 6), and one that cannot be walked turns the config opaque.
-fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> {
+fn walk_repeat(c: &SllConfig, at: i32, token: i32, ctx: &mut GenContext, inline_depth: i32) -> List<SllConfig> with stores[c] {
     let Repeat(rep) = &c.elements[at] else {
         panic("walk_repeat: not a repeat");
     };
