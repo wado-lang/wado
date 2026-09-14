@@ -131,8 +131,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// to the variables it commits to. A variable nobody kept then reports
     /// nothing.
     pub(super) fn mint_infer_var(&mut self) -> TypeId {
+        self.mint_infer_var_for(None)
+    }
+
+    /// [`Self::mint_infer_var`] for a named slot, which a diagnostic renders
+    /// the variable as.
+    pub(super) fn mint_infer_var_named(&mut self, slot_name: &str) -> TypeId {
+        self.mint_infer_var_for(Some(slot_name))
+    }
+
+    fn mint_infer_var_for(&mut self, slot_name: Option<&str>) -> TypeId {
         let var = InferVarId(self.infer_holes.solutions.len() as u32);
-        let hole = self.tysys.type_table.borrow_mut().make_infer_var(var);
+        let hole = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let hole = tt.make_infer_var(var);
+            tt.set_infer_var_name(var, slot_name.map(str::to_string));
+            hole
+        };
         assert!(
             self.infer_holes.solutions.insert(hole, None).is_none(),
             "inference variable {var} minted twice"
@@ -295,6 +310,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Solve holes in `holey` by unifying against `expected`. A binding is taken
     /// only when hole-free — a hole must resolve to a concrete type, not another.
     pub(super) fn solve_infer_holes_against(&mut self, holey: TypeId, expected: TypeId) {
+        self.solve_holes_against(holey, expected, None);
+    }
+
+    /// [`Self::solve_infer_holes_against`] restricted to `own`, the variables the
+    /// asking site minted. Someone else's hole has its own sink, so a wrong
+    /// answer pinned here would stand.
+    pub(super) fn solve_own_infer_holes_against(
+        &mut self,
+        holey: TypeId,
+        expected: TypeId,
+        own: &[TypeId],
+    ) {
+        self.solve_holes_against(holey, expected, Some(own));
+    }
+
+    /// The body of the two above: `None` takes every binding, `Some` only those
+    /// variables'.
+    fn solve_holes_against(&mut self, holey: TypeId, expected: TypeId, own: Option<&[TypeId]>) {
         if !self.type_has_infer_hole(holey) {
             return;
         }
@@ -305,12 +338,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let usable: Vec<(TypeId, TypeId)> = bindings
             .into_iter()
+            .filter(|&(hole, _)| own.is_none_or(|own| own.contains(&hole)))
             .filter(|&(_, concrete)| self.is_usable_answer(concrete))
             .collect();
         for (hole, concrete) in usable {
             if let Some(slot @ None) = self.infer_holes.solutions.get_mut(&hole) {
                 *slot = Some(concrete);
             }
+        }
+    }
+
+    /// Pin a hole the argument carried in (`let v = gen()?; foo(v)`) against
+    /// its parameter type. A no-op unless the hole may pin here.
+    pub(super) fn pin_arg_hole_against(&mut self, arg: &mut TypeId, expected: TypeId) {
+        if self.type_has_infer_hole(*arg) && self.hole_pinnable_against(expected) {
+            self.solve_infer_holes_against(*arg, expected);
+            *arg = self.apply_infer_holes(*arg);
         }
     }
 
@@ -475,8 +518,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Every body fact kind that can hold a `TypeId` has one substitution
-    /// below; the module's own walk and each unrolled tuple `for-of` element
-    /// hold the same kinds and sweep through the same list.
+    /// below; the module's own walk, each unrolled tuple `for-of` element and
+    /// each default-argument walk hold the same kinds and sweep through the
+    /// same list.
     fn sweep_body_facts(
         tt: &mut TypeTable,
         facts: &mut BodyFacts,
@@ -525,6 +569,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         for call in facts.literal_conversions.values_mut() {
             sub_literal_from_call(tt, call, subst);
+        }
+        // A call's omitted arguments produced facts of their own, and one of
+        // those may itself be a defaulted call. Swept here rather than beside
+        // the caller's walk, so reaching a walk reaches everything under it.
+        for overlay in facts.default_overlays.values_mut() {
+            Self::sweep_body_facts(tt, overlay, subst);
         }
     }
 }

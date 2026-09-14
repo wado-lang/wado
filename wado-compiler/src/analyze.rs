@@ -5,8 +5,11 @@
 //! 2. Import validation
 //! 3. Name resolution (binding identifiers to their definitions)
 
-use crate::ast::{AstId, Item, Module, UseDecl, UseItem, Visibility, WorldExport};
-use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::ast::{
+    AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
+    for_each_function,
+};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::loader::{resolve_wasm_asset_path, wasm_asset_kind_from_attrs};
@@ -60,6 +63,55 @@ use crate::symbol::{
 };
 use crate::token::Span;
 
+/// Whether a module's functions may omit a body without naming what backs it.
+fn allows_bodyless_functions(module_source: &ModuleSource) -> bool {
+    match module_source {
+        ModuleSource::Core { name } => name.as_str() == "builtin",
+        ModuleSource::Binding { .. } | ModuleSource::Wasm { .. } => true,
+        ModuleSource::Local { .. }
+        | ModuleSource::Dependency { .. }
+        | ModuleSource::Remote { .. }
+        | ModuleSource::EntryPoint { .. }
+        | ModuleSource::Redirected { .. } => false,
+    }
+}
+
+/// What is wrong with the function `site` declares, if anything.
+fn declaration_fault(
+    site: FunctionSite<'_>,
+    func: &Function,
+    module_source: &ModuleSource,
+) -> Option<AnalyzeError> {
+    if let Some(attr) = func.unavailable_attr() {
+        let fault = if !site.allows_unavailable() {
+            UnavailableFault::Placement
+        } else if func.body.is_some() {
+            UnavailableFault::HasBody
+        } else if func.is_export {
+            UnavailableFault::Exported
+        } else if attr.unavailable_reason().is_none_or(str::is_empty) {
+            UnavailableFault::NoReason
+        } else {
+            return None;
+        };
+        return Some(AnalyzeError::MalformedUnavailable {
+            fault,
+            span: func.name_span,
+        });
+    }
+    if !site.needs_body()
+        || func.body.is_some()
+        || func.is_cm_import()
+        || allows_bodyless_functions(module_source)
+    {
+        return None;
+    }
+    Some(AnalyzeError::MissingFunctionBody {
+        name: func.name.clone(),
+        span: func.name_span,
+    })
+}
+
 /// Error that can occur during analysis
 #[derive(Debug, Clone)]
 pub enum AnalyzeError {
@@ -93,6 +145,10 @@ pub enum AnalyzeError {
         span: Span,
         declared: Span,
     },
+    /// A function declared without a body where nothing supplies one.
+    MissingFunctionBody { name: String, span: Span },
+    /// An `#[unavailable]` that cannot report what it was written to report.
+    MalformedUnavailable { fault: UnavailableFault, span: Span },
     /// Undefined symbol reference
     UndefinedSymbol { name: String, span: Span },
     /// Invalid module path (not a valid URI reference)
@@ -123,154 +179,42 @@ pub enum AnalyzeError {
     },
 }
 
-impl std::fmt::Display for AnalyzeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+/// What is wrong with an `#[unavailable]` declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnavailableFault {
+    /// The declaration keeps a body, which the attribute stands in for.
+    HasBody,
+    /// No reason, or an empty one.
+    NoReason,
+    /// Written where the attribute is not placed.
+    Placement,
+    /// Written on an `export fn`, which promises the boundary a function.
+    Exported,
+}
+
+impl UnavailableFault {
+    fn message(self) -> &'static str {
         match self {
-            AnalyzeError::ModuleNotFound {
-                module_source,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: module not found: '{}'",
-                    span.line, span.column, module_source
-                )
+            Self::HasBody => {
+                "`#[unavailable]` replaces a body; this declaration has one, so remove one of them"
             }
-            AnalyzeError::ImportNotFound {
-                module_source,
-                name,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: symbol '{}' not found in module '{}'",
-                    span.line, span.column, name, module_source
-                )
+            Self::NoReason => {
+                "`#[unavailable]` needs a reason, as `#[unavailable(\"write `x` instead\")]`"
             }
-            AnalyzeError::DuplicateDefinition { name, span, first } => {
-                write!(
-                    f,
-                    "{}:{}: duplicate definition '{}' (first defined at {}:{})",
-                    span.line, span.column, name, first.line, first.column
-                )
+            Self::Placement => {
+                "`#[unavailable]` belongs on a module function, an `impl` method, or a trait method"
             }
-            AnalyzeError::ImportShadowsDefinition {
-                name,
-                span,
-                declared,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: import of '{}' collides with the declaration at {}:{}",
-                    span.line, span.column, name, declared.line, declared.column
-                )
-            }
-            AnalyzeError::UndefinedSymbol { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: undefined symbol '{}'",
-                    span.line, span.column, name
-                )
-            }
-            AnalyzeError::InvalidModulePath {
-                path,
-                message,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: invalid module path '{}': {}",
-                    span.line, span.column, path, message
-                )
-            }
-            AnalyzeError::PreludeTypeCollision { name, span } => {
-                write!(
-                    f,
-                    "{}:{}: type '{}' conflicts with prelude type of the same name",
-                    span.line, span.column, name
-                )
-            }
-            AnalyzeError::SymbolNotVisible {
-                name,
-                module_source,
-                visibility,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    symbol_not_visible_message(name, module_source, *visibility)
-                )
-            }
-            AnalyzeError::ReExportWidensVisibility {
-                name,
-                module_source,
-                source_visibility,
-                reexport_visibility,
-                span,
-            } => {
-                write!(
-                    f,
-                    "{}:{}: {}",
-                    span.line,
-                    span.column,
-                    reexport_widens_message(
-                        name,
-                        module_source,
-                        *source_visibility,
-                        *reexport_visibility
-                    )
-                )
+            Self::Exported => {
+                "`export` lowers a function at the component boundary; an `#[unavailable]` one has none to lower"
             }
         }
     }
 }
 
-fn reexport_widens_message(
-    name: &str,
-    module_source: &ModuleSource,
-    source_visibility: Visibility,
-    reexport_visibility: Visibility,
-) -> String {
-    let reexport = reexport_visibility.keyword().trim_end();
-    let declared = match source_visibility {
-        Visibility::Private => "file-private".to_string(),
-        Visibility::Internal | Visibility::Public => {
-            format!("`{}`", source_visibility.keyword().trim_end())
-        }
-    };
-    format!(
-        "`{reexport} use` of '{name}' reaches further than '{name}' itself, which is \
-         {declared} in '{module_source}'; widen the declaration, or narrow the re-export"
-    )
-}
-
-pub(crate) fn symbol_not_visible_message(
-    name: &str,
-    module_source: &ModuleSource,
-    visibility: Visibility,
-) -> String {
-    match visibility {
-        Visibility::Internal => format!(
-            "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
-             from another package; mark it `pub` to export it across packages"
-        ),
-        // `Public` never reaches here (always importable); folded in for exhaustiveness.
-        Visibility::Private | Visibility::Public => format!(
-            "symbol '{name}' is private to '{module_source}' and cannot be imported; \
-             mark it `internal` (same package) or `pub` (cross package) to export it"
-        ),
-    }
-}
-
-impl std::error::Error for AnalyzeError {}
-
-impl From<AnalyzeError> for Diagnostic {
-    fn from(e: AnalyzeError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        let (code, message, span) = match &e {
+impl AnalyzeError {
+    /// The code, message, and location this error reports.
+    fn render(&self) -> (Code, String, Span) {
+        match self {
             AnalyzeError::ModuleNotFound {
                 module_source,
                 span,
@@ -306,6 +250,16 @@ impl From<AnalyzeError> for Diagnostic {
                     "import of '{name}' collides with the declaration at {}:{}",
                     declared.line, declared.column
                 ),
+                *span,
+            ),
+            AnalyzeError::MissingFunctionBody { name, span } => (
+                Code::MissingFunctionBody,
+                format!("function '{name}' has no body"),
+                *span,
+            ),
+            AnalyzeError::MalformedUnavailable { fault, span } => (
+                Code::MalformedUnavailable,
+                fault.message().to_string(),
                 *span,
             ),
             AnalyzeError::UndefinedSymbol { name, span } => (
@@ -353,7 +307,50 @@ impl From<AnalyzeError> for Diagnostic {
                 ),
                 *span,
             ),
-        };
+        }
+    }
+}
+
+fn reexport_widens_message(
+    name: &str,
+    module_source: &ModuleSource,
+    source_visibility: Visibility,
+    reexport_visibility: Visibility,
+) -> String {
+    let reexport = reexport_visibility.keyword().trim_end();
+    let declared = match source_visibility {
+        Visibility::Private => "file-private".to_string(),
+        Visibility::Internal | Visibility::Public => {
+            format!("`{}`", source_visibility.keyword().trim_end())
+        }
+    };
+    format!(
+        "`{reexport} use` of '{name}' reaches further than '{name}' itself, which is \
+         {declared} in '{module_source}'; widen the declaration, or narrow the re-export"
+    )
+}
+
+pub(crate) fn symbol_not_visible_message(
+    name: &str,
+    module_source: &ModuleSource,
+    visibility: Visibility,
+) -> String {
+    match visibility {
+        Visibility::Internal => format!(
+            "symbol '{name}' is `internal` to '{module_source}' and cannot be imported \
+             from another package; mark it `pub` to export it across packages"
+        ),
+        // `Public` never reaches here (always importable); folded in for exhaustiveness.
+        Visibility::Private | Visibility::Public => format!(
+            "symbol '{name}' is private to '{module_source}' and cannot be imported; \
+             mark it `internal` (same package) or `pub` (cross package) to export it"
+        ),
+    }
+}
+
+impl From<AnalyzeError> for Diagnostic {
+    fn from(e: AnalyzeError) -> Self {
+        let (code, message, span) = e.render();
         Diagnostic {
             severity: Severity::Error,
             code,
@@ -842,10 +839,23 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.check_prelude_collisions(module, source);
         }
 
-        // Fourth pass: validate imports in each module
+        // Fourth pass: every function either has a body or is backed by one
+        for (source, module) in modules {
+            self.check_function_declarations(module, source);
+        }
+
+        // Fifth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())
+    }
+
+    fn check_function_declarations(&self, module: &Module, module_source: &ModuleSource) {
+        for_each_function(module, |site, func| {
+            if let Some(error) = declaration_fault(site, func, module_source) {
+                let _ = self.logger.error_in(module_source, error);
+            }
+        });
     }
 
     fn validate_all_imports(

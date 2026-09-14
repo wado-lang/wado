@@ -1,0 +1,253 @@
+//! Struct field defaults: which fields a literal may omit, what a default
+//! expression may be, and where it resolves. The scope rule is the one function
+//! parameter defaults follow (`default_arg_scope.wado`) — a default is written
+//! by the struct's author, in the author's file, so it resolves there.
+
+use { Serialize, Deserialize } from "core:serde";
+use { from_string } from "core:json";
+use { Counter, counter_count } from "./sub/pub_struct_field_module.wado";
+use { Job, mode_score, color_score } from "./sub/default_scope_xmod_lib.wado";
+use { Config as PrivCfg, hidden_of, tag_of } from "./sub/field_default_private_callee_a.wado";
+use { Cfg, typed_of, via_ns_of } from "./sub/field_default_namespaced_callee_a.wado";
+use { Widget, widget_size } from "./sub/struct_default_private_fn_call_lib.wado";
+use {
+    Config as SeededCfg,
+    config_threshold,
+} from "./sub/struct_default_private_global_lib.wado";
+use { Registry, registry_len } from "./sub/struct_default_foreign_generic_lib.wado";
+
+struct Config {
+    host: String,
+    port: i32 = 8080,
+    timeout: i32 = 30,
+    debug: bool = false,
+}
+
+test "a field with a default may be omitted" {
+    let c1 = Config { host: "localhost" };
+    assert c1.port == 8080;
+    assert c1.timeout == 30;
+    assert c1.debug == false;
+
+    let c2 = Config { host: "localhost", port: 3000 };
+    assert c2.port == 3000;
+    assert c2.timeout == 30;
+
+    let c3 = Config {
+        host: "localhost",
+        port: 3000,
+        timeout: 60,
+        debug: true,
+    };
+    assert c3.debug == true;
+}
+
+struct Foo {
+    b: bool = false,
+    c: String = "",
+}
+
+struct Bar {
+    a: i32,
+    b: bool = false,
+    c: String = "",
+}
+
+// Field indices come from the declaration order, not the order the literal
+// spells them.
+test "a literal may omit an earlier default while providing a later one" {
+    let f = Foo { c: "x" };
+    assert f.b == false;
+    assert f.c == "x";
+
+    let g = Foo { b: true };
+    assert g.b == true;
+    assert g.c == "";
+
+    let h = Bar { a: 1, c: "y" };
+    assert h.a == 1;
+    assert h.b == false;
+    assert h.c == "y";
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Rect {
+    origin: Point = Point { x: 0, y: 0 },
+    width: i32 = 10,
+    height: i32 = 20,
+}
+
+test "a field default may be a composite expression" {
+    let r = Rect {};
+    assert r.origin.x == 0;
+    assert r.origin.y == 0;
+    assert r.width == 10;
+    assert r.height == 20;
+
+    let r2 = Rect { origin: Point { x: 5, y: 5 } };
+    assert r2.origin.x == 5;
+    assert r2.width == 10;
+}
+
+variant Elem {
+    A(Payload),
+    B(i32),
+}
+
+struct Payload {
+    name: String,
+    cache: String = "",
+}
+
+fn norm(e: Elem) -> Elem {
+    if let A(f) = &e {
+        if !f.cache.is_empty() {
+            return e;
+        }
+        return Elem::A(Payload { name: f.name, cache: "x" });
+    }
+    return e;
+}
+
+// The field-default placement used to interact badly with the reference-binding
+// lowering for variant payloads, producing invalid Wasm ("expected
+// (ref null $type), found (ref $type)").
+test "a defaulted field survives a ref binding on a variant payload" {
+    let n = norm(Elem::A(Payload { name: "n" }));
+    if let A(f) = n {
+        assert f.cache == "x";
+    } else {
+        panic("expected A");
+    }
+}
+
+struct Derivable {
+    host: String = "localhost",
+    port: i32 = 8080,
+    debug: bool = false,
+}
+
+fn make_default<T: Default>() -> T {
+    return T::default();
+}
+
+test "a struct whose fields all have defaults derives Default" {
+    let c = Derivable::default();
+    assert c.host == "localhost";
+    assert c.port == 8080;
+    assert c.debug == false;
+
+    let c2 = make_default::<Derivable>();
+    assert c2.host == "localhost";
+    assert c2.port == 8080;
+    assert c2.debug == false;
+}
+
+struct Overridden {
+    host: String = "localhost",
+    port: i32 = 8080,
+}
+
+impl Default for Overridden {
+    fn default() -> Overridden {
+        return Overridden { host: "override", port: 1 };
+    }
+}
+
+test "a written impl Default wins over the derived one" {
+    let c = Overridden::default();
+    assert c.host == "override";
+    assert c.port == 1;
+}
+
+struct Wire {
+    host: String,
+    port: i32 = 8080,
+    verbose: bool = true,
+}
+
+impl Serialize for Wire;
+
+impl Deserialize for Wire;
+
+test "a declared field default makes the field optional on deserialize" {
+    let r = from_string::<Wire>(`\{"host":"localhost"\}`);
+    if let Ok(c) = r {
+        assert c.host == "localhost";
+        assert c.port == 8080;
+        assert c.verbose == true;
+    } else {
+        panic("deserialize with declared defaults failed");
+    }
+}
+
+test "a provided field overrides its declared default on deserialize" {
+    let r = from_string::<Wire>(`\{"host":"example.com","port":9090,"verbose":false\}`);
+    if let Ok(c) = r {
+        assert c.host == "example.com";
+        assert c.port == 9090;
+        assert c.verbose == false;
+    } else {
+        panic("deserialize with all fields failed");
+    }
+}
+
+// The default is evaluated in the defining module, so the private field is
+// never read or written across the boundary and encapsulation holds.
+test "another module may omit a private field that has a default" {
+    let c = Counter { name: "hits" };
+    assert c.name == "hits";
+    assert counter_count(c) == 0;
+}
+
+// Annotate used to cover only bare identifiers in the declaration scope
+// (globals, function refs), so a qualified case errored with "unknown
+// identifier 'Mode::Fast'" and the span was misattributed to the construction
+// site. The private-global default (`retries`) already worked.
+test "a field default names a variant case through a qualified path" {
+    let j = Job { name: "build" };
+    assert mode_score(&j.mode) == 10;
+    assert color_score(&j.color) == 100;
+    assert j.retries == 3;
+    assert j.window.hi - j.window.lo == 8;
+}
+
+test "a field default names a private item of its own module" {
+    let c = PrivCfg { name: "x" };
+    assert c.name == "x";
+    assert tag_of(&c) == 7;
+    assert hidden_of(&c) == 9;
+}
+
+// Issue #1308: the same gap the parameter-default path had.
+test "a field default calls a private function of its own module" {
+    assert widget_size(Widget { name: "x" }) == 7;
+}
+
+// The default's `SEED` used to resolve in the construction site's scope and
+// failed with "unknown identifier 'SEED'".
+test "a field default names a private global of its own module" {
+    assert config_threshold(SeededCfg { name: "cfg" }) == 123;
+}
+
+// One lookup for the alias qualifying a call, another for the alias spelling a
+// type.
+test "a field default resolves its own module's import aliases" {
+    let c = Cfg { x: 1 };
+    assert c.x == 1;
+    assert via_ns_of(&c) == 11;
+    assert typed_of(&c) == 55;
+}
+
+// A generic application used to resolve in the consumer's scope where a plain
+// named type already resolved in the declaring one, so the default's return
+// type `TreeMap<K, V>` came out UNKNOWN and inference failed with "cannot infer
+// type parameter `K`, `V` of `TreeMap::new`". This module imports no `TreeMap`.
+test "a field default applies a generic constructor of its own module" {
+    let r = Registry { name: "reg" };
+    assert registry_len(&r) == 0;
+}

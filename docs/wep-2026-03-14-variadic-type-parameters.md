@@ -36,6 +36,16 @@ generic parameters and at most one type pack may appear together:
 fn example<A, B, ..T>(a: A, b: B, rest: [..T]) { }
 ```
 
+A method declares one the same way, alongside whatever its `impl` block
+declares. The block's parameters and the method's own are separate spaces, so
+the method's pack takes only the type arguments the call spells for the method:
+
+```wado
+impl<T> Box<T> {
+    fn spread<..U>(&self, u: [..U]) -> i32 { }
+}
+```
+
 The `..` prefix was chosen for consistency with Wado's existing `..` semantics: struct
 update (`..p`), rest patterns (`[a, ..]`), and value spread (`[..a, ..b]`). All uses of
 `..` in Wado carry the meaning "expand / spread a sequence."
@@ -251,7 +261,7 @@ its members are reached only as `ReflectStruct::<T>::members()` (see
 
 ```wado
 #[compiler_item("reflect_struct")]
-internal trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
+pub trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
     type FieldTypes;
     type Members;
     fn members() -> Self::Members;

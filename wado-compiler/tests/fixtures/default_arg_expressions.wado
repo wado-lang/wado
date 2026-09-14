@@ -1,0 +1,123 @@
+//! What a default expression may be, and what call-site expansion does with
+//! it. One `test` block per rule the language states; the errors each of these
+//! once caught are named in the block that pins them.
+
+fn greet(name: String, greeting: String = "Hello") -> String {
+    return `${greeting}, ${name}!`;
+}
+
+fn connect(host: String, port: i32 = 8080, timeout: i32 = 30) -> i32 {
+    return port + timeout;
+}
+
+test "a trailing argument may be omitted, and each one independently" {
+    assert greet("Alice") == "Hello, Alice!";
+    assert greet("Bob", "Hi") == "Hi, Bob!";
+    assert connect("localhost") == 8110;
+    assert connect("localhost", 3000) == 3030;
+    assert connect("localhost", 3000, 60) == 3060;
+}
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+fn paint(intensity: i32, color: Color = Color::Red) -> i32 {
+    let shift = match color {
+        Red => 100,
+        Green => 200,
+        Blue => 300,
+    };
+    return intensity + shift;
+}
+
+test "an enum case is a default" {
+    assert paint(1) == 101;
+    assert paint(1, Color::Blue) == 301;
+}
+
+fn clamp(x: i32, lo: i32 = i32::min(0, 0), hi: i32 = i32::max(5, 10)) -> i32 {
+    if x < lo {
+        return lo;
+    }
+    if x > hi {
+        return hi;
+    }
+    return x;
+}
+
+test "a pure associated-function call is a default" {
+    assert clamp(5) == 5;
+    assert clamp(100) == 10;
+    assert clamp(-3, 0) == 0;
+}
+
+fn make_rect(width: f64, height: f64 = width) -> f64 {
+    return width * height;
+}
+
+test "a default may name an earlier parameter" {
+    assert make_rect(10.0) == 100.0;
+    assert make_rect(10.0, 20.0) == 200.0;
+}
+
+global N: i32 = 41;
+global FLAG: bool = true;
+
+fn with_match(_a: i32, y: i32 = match Option::<i32>::Some(N) { Some(v) => v + 1, None => 0 }) -> i32 {
+    return y;
+}
+
+fn with_if(_a: i32, y: i32 = if FLAG { 7 } else { 9 }) -> i32 {
+    return y;
+}
+
+fn with_labeled_block(_a: i32, y: i32 = blk: { let t = 100; break blk: t + 1 }) -> i32 {
+    return y;
+}
+
+// The callee must read its real parameter, not a zero-initialised shadow. A
+// control-flow default used to be reified into the *callee's* context, which
+// allocated its value local there; the local shadowed the parameter, so
+// `return y` read the zero at -O0 (-O2 optimized the shadow away, and a literal
+// default allocates no local, so neither showed it).
+test "a match, if, or labeled block is a default, at every optimization level" {
+    assert with_match(0) == 42;
+    assert with_match(0, 5) == 5;
+    assert with_if(0) == 7;
+    assert with_if(0, 3) == 3;
+    assert with_labeled_block(0) == 101;
+}
+
+global OPT: Option<i32> = Option::Some(99);
+
+fn via_closure(x: i32, f: fn(i32) -> i32 = |x| x + 1) -> i32 {
+    // Called with a value distinct from `x`, so a hijacked body — one ignoring
+    // its own parameter — is observable.
+    return f(x * 100);
+}
+
+fn via_match(x: i32, y: i32 = match OPT { Some(x) => x + 1, None => 0 }) -> i32 {
+    return y;
+}
+
+fn via_if_let(x: i32, y: i32 = if let Some(x) = OPT { x + 1 } else { 0 }) -> i32 {
+    return y;
+}
+
+fn via_labeled_block(x: i32, y: i32 = blk: { let x = 99; break blk: x + 1 }) -> i32 {
+    return y;
+}
+
+// Reify's default-argument override map is keyed by parameter name, and used to
+// hijack a shadowed name inside the form, so the inner binding lost to the
+// caller's argument. Each assertion below yields 11 under that bug.
+test "a binding inside a default shadows an earlier parameter it names" {
+    assert via_closure(10) == 1001;
+    assert via_closure(10, |x| x * 2) == 2000;
+    assert via_match(10) == 100;
+    assert via_if_let(10) == 100;
+    assert via_labeled_block(10) == 100;
+}

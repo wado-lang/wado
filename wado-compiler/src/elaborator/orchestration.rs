@@ -47,7 +47,7 @@ use crate::elaborator::trait_env::{
 };
 use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::types::{BoundRef, type_param_defaults_of};
-use crate::elaborator::{build_func_index, liveness, scope, sig};
+use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
@@ -1400,6 +1400,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             indices
         };
 
+        // Every stdlib module is walked too: an absence the prelude declares is
+        // one a user module calls.
+        let unavailable = collect_unavailable(modules, resolutions.defs());
+
         // Intern every declaration in the TypeTable so `find_decl_type_by_name`
         // (used by `register_symbol_key_type_indices` below) resolves for every
         // symbol, including types that aren't referenced as a field anywhere.
@@ -1473,6 +1477,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             known_type_names_cache: Rc::new(known_type_names_cache),
             module_visible_types: Rc::new(module_visible_types),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
+            unavailable: Rc::new(unavailable),
             // Assembled by `build_tir_from_state` between the decl and body
             // passes, once every module's own declarations are resolved.
             signatures: Rc::new(sig::Signatures::default()),
@@ -1648,9 +1653,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
-            let errors_before = logger.error_count();
+            let errors_before = logger.offered_error_count();
             elaborator.annotate_module_decls(module, module_source.clone());
-            if logger.error_count() > errors_before {
+            if logger.offered_error_count() > errors_before {
                 decl_failed.insert(module_source.clone());
             }
             let saved_sem = elaborator.sem;
@@ -1748,9 +1753,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let mut elaborator =
                 Self::module_elaborator(state, sem, symbols, logger, &entry_module_source);
 
-            let errors_before = logger.error_count();
+            let errors_before = logger.offered_error_count();
             elaborator.annotate_module_bodies(module, module_source.clone());
-            let module_walk_clean = logger.error_count() == errors_before;
+            let module_walk_clean = logger.offered_error_count() == errors_before;
             let saved_sem = elaborator.sem;
             // Re-install the (now-populated) `ModuleSemantics` even on bail
             // so the LSP can answer cursor queries against whatever bindings
@@ -2103,8 +2108,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             }
                         }
                     }
+                    // A `trait` and an `interface` are in the type namespace
+                    // without being types. This validator only knows names, so
+                    // it passes them on; `reject_unresolved_annotation` has the
+                    // declaration and says what each one is.
                     Item::Trait(trait_decl) => {
                         module_known_names.insert(trait_decl.name.clone());
+                    }
+                    Item::Interface(interface_decl) => {
+                        module_known_names.insert(interface_decl.name.clone());
                     }
                     _ => {}
                 }

@@ -1,0 +1,19 @@
+// A declaration nobody calls is not an error, and reaches no later phase: it
+// has no body to lower and mints no export.
+
+#[unavailable("use `map(f).unwrap_or(v)`")]
+fn map_or();
+
+struct S {
+    x: i32,
+}
+
+impl S {
+    #[unavailable("removed in 0.5.0; read `x`")]
+    fn get(&self) -> i32;
+}
+
+test "the module carrying them still compiles and runs" {
+    let s = S { x: 41 };
+    assert s.x + 1 == 42;
+}

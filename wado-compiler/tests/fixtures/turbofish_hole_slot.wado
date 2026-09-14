@@ -1,0 +1,58 @@
+// A `_` in a turbofish is a slot left to inference, and every spelling fills
+// exactly those slots.
+//
+// Left unfilled, `unknown` reaches the callee's name (`take<unknown>`) and the
+// parameter it types has no resolved type.
+
+use ns from "./sub/turbofish_hole_slot_dep.wado";
+use { Take } from "./sub/turbofish_hole_slot_dep.wado";
+
+struct Wrap<T> {
+    v: T,
+}
+
+impl<T: Default> Wrap<T> {
+    fn mk<U: Default>(u: U) -> i32 {
+        return 1;
+    }
+}
+
+// `Type::<A>::method::<_>(..)` spells the receiver's arguments too. The `_`
+// beside them must not substitute, or inference has nothing to solve against.
+test "a type-turbofish call fills the method's `_`" {
+    assert Wrap::<i32>::mk::<_>("s") == 1;
+}
+
+test "a type-turbofish call keeps what the method turbofish names" {
+    assert Wrap::<i32>::mk::<String>("s") == 1;
+}
+
+test "a `_` on the receiver leaves the method turbofish alone" {
+    assert Wrap::<_>::mk::<String>("s") == 1;
+}
+
+test "a type turbofish with no method turbofish infers from the argument" {
+    assert Wrap::<i32>::mk("s") == 1;
+}
+
+test "a namespaced static call fills the `_` beside an explicit argument" {
+    assert ns::Cell::pair::<_, String>(1, |b| b.len()) == 0;
+}
+
+test "a trait-qualified call fills the `_` from its argument" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::take::<_>(&b, "abc").len() == 3;
+}
+
+test "a trait-qualified turbofish types the closure parameter" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::map::<String>(&b, |a| a.len()) == 0;
+}
+
+test "a trait-qualified call without a turbofish types it from the argument" {
+    let b = ns::Box2 { n: 0 };
+    assert Take::map(&b, |a: String| a.len()) == 0;
+}
+
+__DATA__
+{"test": {}}

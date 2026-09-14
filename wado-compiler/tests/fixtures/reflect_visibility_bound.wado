@@ -1,4 +1,10 @@
+// The `Reflect*` family is `pub`, so a derivation outside `core:` can spell its
+// bound out instead of relying on the prelude's auto-import. What gates the
+// bound is the subject's member visibility, not the trait's reach —
+// `reflect_visibility_opaque_error.wado` is the same import against a struct
+// whose fields are private.
 use { Open, Nothing, HandWritten, HandWrittenGeneric } from "./sub/reflect_visibility_dep.wado";
+use { ReflectStruct } from "core:prelude";
 
 trait Tagged {
     fn tag(&self) -> String;

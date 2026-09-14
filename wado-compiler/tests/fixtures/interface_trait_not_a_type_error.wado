@@ -1,0 +1,42 @@
+// An `interface` and a `trait` are declared in the type namespace: one name
+// reaches one declaration wherever it is written. Neither denotes a type, and a
+// type position naming one says so where it was written.
+//
+// A turbofish is its own route: the call resolves its type arguments, not the
+// annotation walk. Left unreported, one resolves to `unknown`, which satisfies
+// every bound, so the call passes its `T: Default` check and reaches
+// monomorphization with no impl to find. `interface_in_annotation_error.wado`
+// covers the annotation route, in its own file because that check stops at the
+// first error reported.
+
+use m from "./sub/ufcs_namespaced_trait_target.wado";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+trait Greet {
+    fn greet(&self) -> String;
+}
+
+fn mk<T: Default>() -> T {
+    return T::default();
+}
+
+export fn run() {
+    let a = mk::<Counter>();
+    let b = mk::<Greet>();
+    let c = mk::<List<Greet>>();
+    // The namespaced spelling names the same declaration, so it says the same
+    // thing. The head of `ns::Name` is a head like any other.
+    let d = mk::<m::Greet>();
+}
+
+__DATA__
+{
+  "compile_errors_contains": [
+    "`Counter` is an interface, not a type",
+    "`Greet` is a trait, not a type"
+  ],
+  "compile_error": "`Counter` is an interface, not a type: it names a set of operations, and no value has it as its type"
+}

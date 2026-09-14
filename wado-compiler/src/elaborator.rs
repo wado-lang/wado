@@ -49,7 +49,7 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility};
 use crate::compiler_host::{CompilerHost, Diagnostic};
-use crate::defs::{DefId, DefKind};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
@@ -86,11 +86,38 @@ pub(crate) fn build_func_index(items: &[Item]) -> IndexMap<String, usize> {
     index
 }
 
+/// The sentence every `#[unavailable]` declaration in the program reports,
+/// keyed by the declaration. Only its `impl` or `trait` can qualify the name.
+pub(crate) fn collect_unavailable(
+    modules: &IndexMap<ModuleSource, Module>,
+    defs: &DefTable,
+) -> IndexMap<DefId, String> {
+    let mut out = IndexMap::default();
+    for module in modules.values() {
+        ast::for_each_function(module, |site, func| {
+            if !site.allows_unavailable() {
+                return;
+            }
+            let Some(reason) = func.unavailable() else {
+                return;
+            };
+            let Some(def) = defs.of_ast_id(func.id) else {
+                return;
+            };
+            let name = match site.owner() {
+                Some(owner) => format!("{owner}::{}", func.name),
+                None => func.name.clone(),
+            };
+            out.insert(def, format!("`{name}` is unavailable: {reason}"));
+        });
+    }
+    out
+}
+
 pub use types::TypeError;
 use types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, TypeLookup, VariantInfo,
 };
-pub(crate) use util::unescape_template_segment;
 
 pub struct Elaborator<'a, H: CompilerHost> {
     /// Pipeline-wide type knowledge: type arena, decl-interned type
@@ -547,12 +574,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         callee::CalleeRef::declared(self.tysys.resolutions.defs(), def)
     }
 
-    /// Record a use→def edge naming the declaration `def`. The map is keyed by
-    /// node on both sides, so the declaring node is read off the identity here
-    /// rather than carried beside it.
-    pub(super) fn record_reference_to_decl(&mut self, use_id: AstId, def: DefId) {
+    /// Report where `def` is `#[unavailable]`. `true` says the site has its
+    /// whole answer: a reserved name carries no signature left to check.
+    pub(super) fn report_unavailable(&mut self, def: DefId, span: Span) -> bool {
+        let Some(message) = self.tysys.unavailable.get(&def).cloned() else {
+            return false;
+        };
+        let _ = self.emit(TypeError::Unavailable { message, span });
+        true
+    }
+
+    /// Record a use→def edge naming `def`, reporting its unavailability so the
+    /// shape can stop before checking a signature the declaration does not have.
+    pub(super) fn record_reference_to_decl(
+        &mut self,
+        use_id: AstId,
+        def: DefId,
+        span: Span,
+    ) -> bool {
+        let unavailable = self.report_unavailable(def, span);
         let node = self.tysys.resolutions.defs().ast_id(def);
         self.insert_reference(use_id, node);
+        unavailable
     }
 
     /// Record that an identifier resolved to a declared symbol reachable from
@@ -937,6 +980,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         is_ref_impl: bool,
         param_is_mut: Vec<bool>,
         param_defaults: Vec<(String, Option<ast::Expr>)>,
+        param_types: Vec<TypeId>,
         defaults_module: ModuleSource,
         return_type: TypeId,
         method_type_args: Vec<TypeId>,
@@ -953,6 +997,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 is_ref_impl,
                 param_is_mut,
                 param_defaults,
+                param_types,
                 defaults_module,
                 return_type,
                 method_type_args,

@@ -179,7 +179,12 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 - [ ] Sinking pure definitions into the branch that uses them (partial DCE). The
       mirror of LICM, reusing its motion-safety predicates; past effectful code
       it is sound where hoisting is not. `core:log`'s disabled path pays two
-      allocations for arguments its gate discards.
+      allocations for arguments its gate discards, and `unwrap_or` / `ok_or`
+      build a fallback the taken path never reads. The prelude offers no lazy
+      form on purpose ([WEP: Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)),
+      so this pass is what makes the eager one free wherever the argument is
+      pure and cannot trap. The effect system already decides that, so no
+      language rule has to change for it.
 - [ ] Forwarding a local bound to a global read. The graph names no global read,
       so `let s = G` reaches the use only when copy propagation removes the
       binding — never for a `String`. Naming it needs a generation check at the
@@ -232,6 +237,21 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       `VariantConstruct`. The constant-scrutinee path runs through
       `const_eval::Value`, which is all-or-nothing constant, so "case known,
       payload opaque" is inexpressible there.
+- [ ] Folding a call whose callee is effect-free and whose arguments are all
+      constant, when the callee is bigger than the inliner's budget. The
+      standing case is a tagged template that scans its literal segments to
+      decide each hole. A template shape holds every segment as a constant, so
+      the scan reads nothing else and has one answer per hole. It folds while
+      the scan fits `inline_threshold` (16 at -O2, 26 at -O3). Past that the
+      call survives, and a code generator rescans a string the compiler already
+      knows on every line it emits. Writing the per-character transition as its
+      own function brings both halves under the budget at any state count,
+      which is how WadoPoet's `wado` tag folds away entirely. So the gap costs
+      the tag author a shape to know, not the fold. `niri` already admits such
+      a callee (`is_ctfe_eligible`) and `--optimize-inline-threshold 200` folds
+      the undivided form; what is missing is reaching the fold without the
+      inliner paying for the body first.
+      `tagged_template_lit_scan_fold.wado` pins all three shapes.
 
 ## Tried and found ineffective
 

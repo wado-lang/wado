@@ -142,12 +142,34 @@ describing its own reach.
 - [x] Struct fields carry the ladder too: reading, setting, or binding one
       beyond its reach — field access, struct literal, or destructuring
       pattern — is a `PRIVATE_SYMBOL` compile error.
+- [x] The prelude is in scope everywhere, so what it puts there is what
+      `core:prelude` exports: its own `pub` declarations and its `pub use`
+      re-exports. Both are read from modules outside `core:`, so
+      `Visibility::reachable_from` gates each against a caller in another
+      package. The builtin types join them on other grounds: `i32` is
+      universal by nature rather than by export. A symbol an implementation
+      module declares for its siblings is not a prelude symbol:
+      `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which
+      `prelude_internal_not_visible.wado` pins. A prelude-private helper stays
+      out of the tier too, which
+      `prelude_tier_holds_only_what_reaches_every_module` pins.
 - [x] Impl members (methods, associated constants) likewise, in expression and
       pattern position alike, and `export` on one is a compile error with a
       targeted diagnostic. Only _inherent_ members carry a ladder; a trait
       impl's members reach as far as the trait, so theirs is not consulted.
 - The bundled `core:internal` module was renamed to `core:rt` so the module
   name no longer collides with the `internal` visibility keyword.
+
+## Known gaps
+
+- The stdlib's implementation modules still mark sibling-only symbols `pub`.
+  The migration would have made those `internal`. So
+  `core:prelude/fpfmt.wado`'s `UnpackResult` is out of the prelude tier but
+  still importable by path from any package, and `core:`'s published API is
+  wider than its facade. Closing the gap means walking each `core:`
+  implementation module, demoting what only its siblings use, and leaving `pub`
+  on whatever `core:prelude` re-exports. It narrows a published API, so it is
+  the human's call.
 
 ## References
 

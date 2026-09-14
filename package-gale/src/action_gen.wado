@@ -17,7 +17,7 @@ use { DiagnosticKind, DiagnosticOwner, DiagnosticSite, LoweredGrammar, Op, Rule,
 use { GenContext, RuleCaptures } from "./gen_context.wado";
 use { TreeMap } from "core:collections";
 use { elements_match, follow_sep, to_snake_case } from "./gen_util.wado";
-use { CodeWriter, FnSpec, ImplSpec, ParamSpec, str_lit } from "./wadopoet.wado";
+use { CodeWriter, FnSpec, ImplSpec, ParamSpec, wado } from "./wadopoet.wado";
 use {
     AmbiguousNode,
     PredictionNode,
@@ -815,7 +815,7 @@ pub fn emit_atn_disabled_seed(
     }
     w.line(&"let mut _atn_disabled: List<i32> = [];");
     for let g of &gates {
-        w.line(&`if !(${g.1}) \{ _atn_disabled.push(${g.0}); \}`);
+        w.line(&`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
     }
     return String::from(", &_atn_disabled");
 }
@@ -1094,7 +1094,7 @@ pub fn add_seeded_vals_param(f: &mut FnSpec, rule: &ParserRule) {
     f.add_param_spec(ParamSpec {
         name: "vals",
         type_str: vname,
-        default_value: Option::Some(`${vname} \{\}`),
+        default_value: Option::Some(`${vname} {}`),
     });
 }
 
@@ -1119,7 +1119,7 @@ pub fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
 /// Emit a gated branch body: the trace pick and the tail call into the alt.
 fn emit_gated_pick(w: &mut CodeWriter, idx: i32, fn_name: &String, ctx: &GenContext, rule_display: &String) {
     if ctx.is_trace() {
-        w.line(&`trace_pick(p, &${str_lit(*rule_display)}, ${idx});`);
+        w.line(&wado`trace_pick(p, &"${*rule_display}", ${idx});`);
     }
     w.line(&`return ${*fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
 }

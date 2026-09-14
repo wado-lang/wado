@@ -27,7 +27,7 @@ use super::common::{
 };
 use crate::ast::Visibility;
 use crate::defs::DefId;
-use crate::elaborator::unescape_template_segment;
+use crate::escape::unescape_template_segment;
 use crate::name::{
     DeclName, FqTraitName, case_construct_helper_name, case_extract_helper_name,
     field_get_helper_name, hole_get_helper_name,

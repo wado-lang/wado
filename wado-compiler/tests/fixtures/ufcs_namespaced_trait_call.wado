@@ -1,0 +1,18 @@
+//! `ns::Trait::method(&recv)`, the namespaced spelling of the trait-qualified
+//! (UFCS) call. The trait is the segment before the method whatever the prefix,
+//! so the bare and namespaced spellings name the same declaration and take the
+//! same defaults from it.
+//!
+//! Reading the path's first segment as the trait asks whether the namespace
+//! declares a method spelled `Greet::greet`. Nothing does, and the call then
+//! types `unknown` with no diagnostic of its own.
+
+use m from "./sub/ufcs_namespaced_trait_target.wado";
+use { Greet } from "./sub/ufcs_namespaced_trait_target.wado";
+
+test "the namespaced spelling names the same trait method" {
+    let p: m::P = m::P { n: 1 };
+    assert Greet::greet(&p) == "hi:1";
+    assert m::Greet::greet(&p) == "hi:1";
+    assert m::Greet::greet(&p, "yo") == "yo:1";
+}

@@ -1,0 +1,33 @@
+// A blanket impl reaches its statics through the receiver param rather than
+// the concrete type, so conformance is what refuses an unavailable member
+// there, before any dispatch is built.
+
+trait Num {
+    fn tag() -> i32;
+}
+
+trait Zero {
+    fn zero() -> i32;
+}
+
+impl<T: Num> Zero for T {
+    #[unavailable("use `Num::tag`")]
+    fn zero() -> i32;
+}
+
+struct S {
+    x: i32,
+}
+
+impl Num for S {
+    fn tag() -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let _ = S::zero();
+}
+
+__DATA__
+{"compile_error": "type `S` does not implement trait `Zero`"}

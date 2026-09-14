@@ -135,7 +135,7 @@ Source:
 ```wado
 struct Handler { cb: fn(i32) -> i32 }
 fn smallest<T: Ord>(a: T, b: T) -> T { if a < b { return a; } return b; }
-let _ = smallest(Handler { cb: |x: i32| x }, Handler { cb: |x: i32| x });
+let _ = smallest(Handler { cb: |x| x }, Handler { cb: |x| x });
 ```
 
 Before:

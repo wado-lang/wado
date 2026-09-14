@@ -1,0 +1,17 @@
+// An `impl` method with no body is the same error as a bodyless function.
+
+struct S {
+    x: i32,
+}
+
+impl S {
+    fn missing(&self) -> i32;
+}
+
+export fn run() {
+    let s = S { x: 1 };
+    let _ = s.missing();
+}
+
+__DATA__
+{"compile_error": "function 'missing' has no body"}

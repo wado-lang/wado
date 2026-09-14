@@ -213,7 +213,7 @@ fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     );
     let call = `_parse_${header.snake_name}(p)`;
     let entry = if entry_emits_vals(ctx, &header.name) {
-        `|p: &mut Parser| \{ let _ = ${call}; \}`;
+        `|p: &mut Parser| { let _ = ${call}; }`;
     } else {
         `|p: &mut Parser| ${call}`;
     };
@@ -360,7 +360,7 @@ pub fn gen_parser_struct(
     if emit_actions {
         init.push_str(&", output: \"\"");
     }
-    w.line(&`return Parser \{ ${init} \};`);
+    w.line(&`return Parser { ${init} };`);
     w.end();
     w.blank();
 

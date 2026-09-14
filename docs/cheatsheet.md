@@ -259,7 +259,7 @@ for let mut i = 0; i < arr.len(); i += 1 { arr[i] = arr[i] * 2; }
 let mut nums: List<i32> = [5, 3, 8, 1];
 nums.sort();                               // in-place ascending sort (requires T: Ord)
 let asc = nums.sorted();                   // returns new sorted array
-nums.sort_by(|a: &i32, b: &i32| { ... });  // sort with custom Ordering comparator
+nums.sort_by(|a, b| { ... });              // sort with custom Ordering comparator
 ```
 
 ### Strings
@@ -453,6 +453,20 @@ let err_val: Result<i32, String> = Result::Err("fail");
 let opt = Option::<i32>::Some(42);
 let res = Result::<i32, String>::Ok(42);
 let none = Option::<i32>::None;
+```
+
+`Option` and `Result` carry a deliberately small method set. `unwrap` and
+`expect` take the value out, and `Result` adds `is_ok` / `is_err` /
+`unwrap_err` / `expect_err`. These six transform it instead:
+
+```wado
+opt.unwrap_or(0)                  // the value, or the fallback
+opt.map(|v: i32| v * 2)           // Option<U>; None passes through
+opt.ok_or("missing")              // Result<T, E>; `?` cannot turn an Option into one
+
+res.unwrap_or(0)                  // the Ok value, or the fallback
+res.map(|v: i32| v * 2)           // Result<U, E>; an Err passes through
+res.map_err(|e: String| e.len())  // Result<T, F>; an Ok passes through
 ```
 
 See Control Flow for pattern matching with `match`, `if let`, and `matches`.
@@ -778,6 +792,28 @@ info("started");                // → info::<NoFields>("started", NoFields {})
 
 A function must have `return` if it returns a value. Default expressions must be effect-free; `export fn` and closures cannot have defaults. On a trait method both kinds of default belong to the trait: the `impl` restates the parameters without them, and the call site fills them from the declaration.
 
+### Declared Absence
+
+A name Wado deliberately does not offer is declared, not simply missing, so a
+call to it reports why instead of "no method named". See
+[WEP: Declared Absence](./wep-2026-09-13-declared-absence.md).
+
+```wado
+impl File {
+    #[unavailable("write `open_with(Options::default())` instead")]
+    pub fn open(&self);                     // a name that never existed
+
+    #[unavailable("removed in 0.5.0; use `open_with`")]
+    pub fn open_timeout(&self);             // a name that was taken out
+}
+```
+
+The reason is required, and it is the attribute's only argument: a removal
+writes its own version into the sentence. The declaration reserves a name rather
+than a signature, so the parameters it lists are never checked against a call.
+Write `self` to reserve the instance name and leave it out to reserve the static
+one. It goes on a module function, an `impl` method, or a trait method.
+
 ### Local Items
 
 `struct` and `type` (newtype) may be declared inside a function body, scoped to
@@ -848,6 +884,10 @@ let get = || count;                          // captures &count; type fn() -> i3
 inc();
 inc();
 assert get() == 2;
+
+// A parameter type comes from the expected fn type; annotate only where
+// nothing supplies one (the `let`s above).
+let f: fn(i32) -> i32 = |x| x + 1;
 ```
 
 ### Generics
@@ -1190,19 +1230,19 @@ iter.next();                              // Option<i32>
 let rest = iter.collect();                // List<i32> (default target)
 let bytes: ByteList = s.bytes().collect(); // any FromIterator target, incl. a newtype over List
 
-// Combinators
-let doubled = arr.into_iter().map(|x: i32| x * 2).collect();       // [2, 4, 6, 8, 10]
-let evens = arr.into_iter().filter(|x: i32| x % 2 == 0).collect(); // [2, 4]
-let acc = arr.into_iter().fold(0, |acc: i32, x: i32| acc + x);     // 15
+// Combinators: the closure's parameter types come from the call
+let doubled = arr.into_iter().map(|x| x * 2).collect();            // [2, 4, 6, 8, 10]
+let evens = arr.into_iter().filter(|x| x % 2 == 0).collect();      // [2, 4]
+let acc = arr.into_iter().fold(0, |acc, x| acc + x);               // 15
 
 // sum/product/min/max and the _by/_by_key variants work on any iterator
 let sum = arr.into_iter().sum();                                   // Some(15)
-let hi = arr.into_iter().map(|x: i32| x * 2).max();                // Some(10)
+let hi = arr.into_iter().map(|x| x * 2).max();                     // Some(10)
 
 // Chaining
 let result = arr.into_iter()
-    .filter(|x: i32| x > 2)
-    .map(|x: i32| x * 10)
+    .filter(|x| x > 2)
+    .map(|x| x * 10)
     .collect();  // [30, 40, 50]
 ```
 
@@ -1256,8 +1296,8 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
 
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });     // E = Stdout
-let x = apply(|n: i32| n + 1, 41);     // E = (none)
-let y = apply(|n: i32| {               // E = Stdout
+let x = apply(|n| n + 1, 41);          // E = (none)
+let y = apply(|n| {                    // E = Stdout
     println(`${n}`);
     return n * 2;
 }, 21);
