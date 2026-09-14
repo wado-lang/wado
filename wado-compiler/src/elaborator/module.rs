@@ -326,43 +326,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                // Set up type parameters from impl block before resolving method signatures.
-                // Use inherited scope to preserve caller-provided context;
-                // only `type_params`, `type_param_bounds`, and
-                // `assoc_type_bindings` are replaced (matching the
-                // original `mem::take` semantics for those fields).
+                // The scope is inherited so the caller's context survives, but
+                // an impl block's parameters are its own: whatever the enclosing
+                // one bound must not answer a name inside this block.
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                 scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-
-                for (slot, param) in impl_block.type_params.iter().enumerate() {
-                    let slot = slot as u32;
-                    let type_id = if param.is_pack {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_pack(param.name.clone(), slot)
-                    } else {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), slot)
-                    };
-                    scope.annotate_ctx.trait_ctx.type_params.insert(
-                        param.name.clone(),
-                        BinderInScope::declared(slot, type_id, param.id),
-                    );
-                    if !param.bounds.is_empty() {
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_param_bounds
-                            .insert(param.name.clone(), param.bounds.clone());
-                    }
-                }
+                scope.register_impl_block_params(impl_block);
 
                 // Set up associated type bindings for trait implementations
                 if impl_block.trait_type.is_some() {
