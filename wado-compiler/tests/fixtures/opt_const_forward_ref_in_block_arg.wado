@@ -1,0 +1,42 @@
+// `invalidate_call_effects_before_rewrite` stopped at a nested body, so a
+// `&mut local` handed to a call from inside a value block was never seen and
+// the callee's mutation did not invalidate the field constants. The dead loops
+// are what put the reference inside a block: without them the argument is a
+// bare `RefAsNonNull(LocalGet)`, which the walk does reach. Only `-O2` kept the
+// calls un-inlined and the constant alive at once.
+
+struct Number {
+    n: i32,
+}
+
+impl Number {
+    fn add_and_get(&mut self, delta: i32) -> i32 {
+        while builtin::black_box(false) { builtin::black_box(delta); }
+        self.n = self.n + delta;
+        while builtin::black_box(false) { builtin::black_box(delta); }
+        return self.n;
+    }
+}
+
+struct NumHolder {
+    num: Number,
+}
+
+impl<i32> IndexRefMut<i32> for NumHolder {
+    type Output = Number;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        while builtin::black_box(false) { builtin::black_box(_idx); }
+        return &mut self.num;
+    }
+}
+
+test "a mutation through a reference built inside a block is not forwarded over" {
+    let mut h = NumHolder { num: Number { n: 0 } };
+    assert h[0].add_and_get(10) == 10;
+    assert h[0].add_and_get(5) == 15;
+    assert h.num.n == 15;
+}
+
+__DATA__
+{"test": {}}
