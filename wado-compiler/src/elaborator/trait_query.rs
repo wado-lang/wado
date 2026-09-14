@@ -583,10 +583,8 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
-    /// The declaration `type_id` is an instance of. A nominal type carries it, so
-    /// a caller holding a type has an identity without reading a `(name, module)`
-    /// pair off it and resolving that again. `None` only where the head names no
-    /// declaration: a type parameter, a projection, an anonymous shape.
+    /// The declaration `type_id` is an instance of. `None` where its head names
+    /// none: a type parameter, a projection, an anonymous shape.
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
         let table = self.type_table.borrow();
         let peeled = table.peel_refs(type_id);

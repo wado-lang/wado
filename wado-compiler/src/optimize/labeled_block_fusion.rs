@@ -475,11 +475,9 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
     Some((*index, *field_index))
 }
 
-// `narrow_break_carries_case` keeps its own narrow traversal rather than folding
-// onto the shared [`walk_exits`]: it runs on the value-discarding path, whose
-// transform (`transform_lb_stmt`) does not rewrite an exit nested in an `if`
-// condition. The shared walk visits those positions, so accepting a case found
-// there would let fusion fire on a break the transform leaves dangling.
+// This keeps its own traversal rather than folding onto [`walk_exits`]: the
+// value-discarding transform leaves an exit nested in an `if` condition, which
+// the shared walk visits, dangling.
 
 /// Whether some `break label:` in `block` constructs case `case`, over the
 /// breaks the value-discarding transform rewrites.

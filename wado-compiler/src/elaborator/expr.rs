@@ -2806,9 +2806,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
-        // Coverage is asked of the structure the scrutinee's cases come from, as
-        // pattern resolution asks it. Reading anything else here left a match
-        // unchecked, to trap at runtime on the case no arm covers.
+        // Coverage is asked of the structure the scrutinee's cases come from, so
+        // that it agrees with what pattern resolution asks.
         let scrutinee_type = self
             .tysys
             .type_table

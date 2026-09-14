@@ -918,9 +918,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .structure_chain_defs(scrutinee_type);
-        let names_scrutinee = |elab: &mut Self, q: &Type| {
-            elab.qualifier_def(q)
-                .is_some_and(|def| chain_defs.contains(&def))
+        let names_scrutinee = |elab: &mut Self, q: &Type| match elab.qualifier_def(q) {
+            Some(def) => chain_defs.contains(&def),
+            // A bare case needs no import of its type, so neither does the
+            // qualifier that spells it: a name this module cannot see may still
+            // be what the declaring module calls a type on the chain.
+            None => chain_defs
+                .iter()
+                .any(|&def| elab.declaration_spells(def, q)),
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
         // writes must agree.
@@ -928,9 +933,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
-                    // `ns::Case` parses as a `Named("ns")` qualifier plus the bare
-                    // `Case`, so a prefix naming no type names a module. It licenses
-                    // the case when the scrutinee's type is reachable through it.
+                    // `ns::Case` parses as a `Named("ns")` qualifier plus a bare
+                    // `Case`, so a prefix naming no type names a module.
                     || chain_defs
                         .iter()
                         .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
@@ -950,12 +954,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declaration a written qualifier means: an import alias, a namespace
-    /// member, `Self`, a type parameter. `None` where it names no declaration, a
-    /// bare namespace prefix among them.
-    ///
-    /// The resolve pass answers first, since a generic newtype has a declaration
-    /// and no instantiated type until a use names its arguments.
+    /// The declaration a written qualifier means, the resolve pass answering
+    /// first: a generic newtype has one before any use names its arguments.
     fn qualifier_def(&mut self, qualifier: &Type) -> Option<DefId> {
         let (site, span, name) = match qualifier {
             Type::Named(t) => (t.id, t.span, t.name.clone()),
@@ -974,13 +974,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.type_table.borrow().nominal_def(resolved)
     }
 
+    /// Whether `qualifier` is the name `def` is declared under. Asked only of a
+    /// qualifier that resolves nowhere, and of a `def` already known to declare
+    /// the scrutinee's cases.
+    fn declaration_spells(&self, def: DefId, qualifier: &Type) -> bool {
+        let written = match qualifier {
+            Type::Named(t) => &t.name,
+            Type::Generic(g) => &g.name,
+            _ => return false,
+        };
+        self.tysys.resolutions.defs().name(def) == written
+    }
+
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
-    /// imports. A re-export is such a reach, so this asks the resolver rather
-    /// than comparing `def`'s own module.
-    ///
-    /// The member alias is assembled here, so no source segment spells it and the
-    /// lookup carries no site: a recorded resolution would answer for the
-    /// qualifier instead.
+    /// imports, a re-export counting as such a reach.
     fn namespace_reaches_type(&mut self, alias: &str, site: AstId, span: Span, def: DefId) -> bool {
         if self.namespace_alias_source(alias, site).is_none() {
             return false;
@@ -1691,11 +1698,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         return Vec::new();
                     }
 
-                    // A case pattern is written `V::Case`, `Case(x)` or `Case()`,
-                    // none of which a variable can be spelled as — a bare `x`
-                    // reaches the `Ident` arm above and only delegates here once
-                    // it is a case. So naming neither a case nor an associated
-                    // constant is an error, not a binding WIR later trips over.
+                    // No variable can be spelled `V::Case`, `Case(x)` or `Case()`,
+                    // so naming neither a case nor a constant is an error here.
                     let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: format!(
                             "valid case of {}",
@@ -1707,9 +1711,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return Vec::new();
                 }
 
-                // Classify by the structure the scrutinee wraps, while the
-                // qualifier is asked of the written type: a newtype's own name
-                // qualifies its base's cases.
+                // The cases come from the structure the scrutinee wraps, while
+                // the qualifier is asked of the written type.
                 let base_type = self
                     .tysys
                     .type_table

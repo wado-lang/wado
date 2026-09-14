@@ -905,6 +905,12 @@ The second is a namespace prefix the scrutinee's type is reachable through, such
 as `h::Green` under `use h from "./hue.wado"`. That prefix names a module rather
 than a type.
 
+A name the file does not import may still qualify, as long as it is the name the
+type is declared under: `Err(ZlibError::DataTooShort)` needs no `use` of
+`ZlibError`, since the bare `Err(DataTooShort)` needs none. A name that does
+resolve is held to the first rule, so a local type of the same name is an error
+rather than a match.
+
 Only a bare identifier can bind. A qualified path that names neither a case nor
 an associated constant is an error, never a variable of that name. A
 namespace-qualified `global` is such an error, though a bare one matches by

@@ -47,11 +47,8 @@ pub enum Value {
         type_id: TypeId,
         elements: Rc<[Value]>,
     },
-    /// A variant value: which case it holds, and the payload that case carries.
-    ///
-    /// Keyed by case index, the identity a pattern carries (WEP 2026-08-12). A
-    /// unit case carries no payload; a multi-field one carries the aggregate its
-    /// construction site built, so a binding reads it by field index.
+    /// A variant value: which case it holds, by index (WEP 2026-08-12), and that
+    /// case's payload — an aggregate where the case carries several fields.
     Variant {
         type_id: TypeId,
         case_index: u32,
