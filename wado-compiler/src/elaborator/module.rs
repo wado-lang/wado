@@ -337,24 +337,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                 scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
-                let mut actual_idx = 0u32;
-                for param in &impl_block.type_params {
+                for (slot, param) in impl_block.type_params.iter().enumerate() {
+                    let slot = slot as u32;
                     let type_id = if param.is_pack {
                         scope
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .make_type_pack(param.name.clone(), actual_idx)
+                            .make_type_pack(param.name.clone(), slot)
                     } else {
                         scope
                             .tysys
                             .type_table
                             .borrow_mut()
-                            .make_type_param(param.name.clone(), actual_idx)
+                            .make_type_param(param.name.clone(), slot)
                     };
                     scope.annotate_ctx.trait_ctx.type_params.insert(
                         param.name.clone(),
-                        BinderInScope::declared(actual_idx, type_id, param.id),
+                        BinderInScope::declared(slot, type_id, param.id),
                     );
                     if !param.bounds.is_empty() {
                         scope
@@ -363,7 +363,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .type_param_bounds
                             .insert(param.name.clone(), param.bounds.clone());
                     }
-                    actual_idx += 1;
                 }
 
                 // Also collect type params from generic type: impl List<T> {...}
@@ -374,7 +373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     other => other,
                 };
                 if let ast::Type::Generic(generic) = impl_inner_ty {
-                    let offset = actual_idx as usize;
+                    let offset = impl_block.type_params.len();
                     for (i, arg) in generic.args.iter().enumerate() {
                         if let ast::Type::Named(named) = arg {
                             let name = &named.name;

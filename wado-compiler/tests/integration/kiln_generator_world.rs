@@ -94,13 +94,13 @@ fn compile_generator(source: &str, what: &str) -> CompileResult {
         Some("generator.wado"),
         kiln_options(),
     ));
-    match result {
-        Ok(result) => result,
-        Err(_) => panic!(
+    let Ok(result) = result else {
+        panic!(
             "{what} failed to compile:\n{}",
             diag_list(&host.diagnostics())
-        ),
-    }
+        );
+    };
+    result
 }
 
 /// Assert `source` is refused for importing `interface`, whatever reached it.

@@ -191,8 +191,8 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// Shared by the decl pass (which records each method's canonical
     /// signature) and the body walk, so both see the same slots.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        let mut actual_idx = 0u32;
-        for param in &impl_block.type_params {
+        for (slot, param) in impl_block.type_params.iter().enumerate() {
+            let slot = slot as u32;
             if !self
                 .annotate_ctx
                 .trait_ctx
@@ -203,16 +203,16 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_pack(param.name.clone(), actual_idx)
+                        .make_type_pack(param.name.clone(), slot)
                 } else {
                     self.tysys
                         .type_table
                         .borrow_mut()
-                        .make_type_param(param.name.clone(), actual_idx)
+                        .make_type_param(param.name.clone(), slot)
                 };
                 self.annotate_ctx.trait_ctx.type_params.insert(
                     param.name.clone(),
-                    scope::BinderInScope::declared(actual_idx, type_id, param.id),
+                    scope::BinderInScope::declared(slot, type_id, param.id),
                 );
             }
             if !param.bounds.is_empty() {
@@ -223,7 +223,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     .or_default()
                     .extend(param.bounds.clone());
             }
-            actual_idx += 1;
         }
 
         // Unwrap reference for ref-type impls (impl Trait for &Container<T>)
