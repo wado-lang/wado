@@ -487,13 +487,13 @@ impl String {
 
     /// Internal: shared reference to the string's bytes (stdlib use only).
     /// Caller must respect the `len()` boundary.
-    internal fn internal_raw_bytes(&self) -> &Array<u8> {
+    internal fn internal_raw_bytes(&self) -> &Array<u8> with stores[self] {
         return &self.repr as &Array<u8>;
     }
 
     /// Internal: mutable reference to the string's bytes (stdlib use only).
     /// Caller must respect the `len()` boundary.
-    internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
+    internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> with stores[self] {
         return &mut self.repr as &mut Array<u8>;
     }
 
@@ -1442,7 +1442,7 @@ impl StrSlice {
     /// A sub-view over `[start, end)`, counted from this view's start.
     /// Panics if the range is out of bounds or either end is off a character
     /// boundary.
-    pub fn sub(&self, start: i32, end: i32) -> StrSlice {
+    pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self] {
         assert 0 <= start && start <= end && end <= self.len(), "byte range out of bounds";
         assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
         return self.sub_unchecked(start, end);
@@ -1454,22 +1454,22 @@ impl StrSlice {
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
     #[inline]
-    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
+    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self] {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
     /// The view's UTF-8 bytes.
-    pub fn as_bytes(&self) -> ByteSlice {
+    pub fn as_bytes(&self) -> ByteSlice with stores[self] {
         return Slice::internal_new(self.repr, self.start, self.end) as ByteSlice;
     }
 
     /// Returns an iterator over the Unicode scalar values (chars) of the view.
-    pub fn chars(&self) -> StrCharIter {
+    pub fn chars(&self) -> StrCharIter with stores[self] {
         return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
     }
 
     /// Returns an iterator over the UTF-8 bytes of the view.
-    pub fn bytes(&self) -> StrUtf8ByteIter {
+    pub fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
         return StrUtf8ByteIter { repr: self.repr, used: self.end, index: self.start };
     }
 

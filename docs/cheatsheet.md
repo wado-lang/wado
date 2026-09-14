@@ -962,10 +962,17 @@ impl Node {
     }
 }
 
-// A reference reached through a parameter is a different reference: copying
-// it out is not that parameter escaping.
-fn rebase(c: &Cursor, at: i32) -> Cursor {
+// A reference reached through a parameter still names what the parameter
+// names, so handing it on hands the parameter on. A value member is copied
+// and needs no declaration.
+struct Cursor { chars: &Array<char>, pos: i32 }
+
+fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
     return Cursor { chars: c.chars, pos: at };
+}
+
+fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
+    return p.name;
 }
 ```
 

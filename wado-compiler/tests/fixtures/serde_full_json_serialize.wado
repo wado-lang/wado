@@ -120,7 +120,7 @@ impl Serializer for JsonSerializer {
 }
 
 impl SerializeSeq for JsonSeqSerializer {
-    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> with stores[self] {
         if self.count > 0 {
             self.w.write(&",");
         }
@@ -137,7 +137,7 @@ impl SerializeSeq for JsonSeqSerializer {
 }
 
 impl SerializeStruct for JsonStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> with stores[self] {
         if self.count > 0 {
             self.w.write(&",");
         }

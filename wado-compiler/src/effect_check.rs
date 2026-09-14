@@ -1706,7 +1706,18 @@ impl AstVisitor for ReturnFlow<'_> {
 /// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
 struct TypeRefCtx {
     members: MemberTables,
-    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+    memo: std::cell::RefCell<IndexMap<(TypeId, bool), bool>>,
+}
+
+/// What a type the walk cannot resolve — an unsubstituted parameter, a pack, an
+/// unresolved projection — counts as.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Unresolved {
+    /// Assume it holds a reference: the answer for a gate that must not miss one.
+    HoldsRef,
+    /// Assume it does not: the answer for a rule that must not fire on a body
+    /// whose parameter no instantiation has filled in yet.
+    NoRef,
 }
 
 impl TypeRefCtx {
@@ -1718,12 +1729,24 @@ impl TypeRefCtx {
     }
 
     fn can_hold_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
-        if let Some(&b) = self.memo.borrow().get(&type_id) {
+        self.holds_ref(tt, type_id, Unresolved::HoldsRef)
+    }
+
+    /// `can_hold_ref` restricted to what the declaration actually spells: a
+    /// generic accessor returning a bare `T` answers no, since the body is
+    /// checked once for every instantiation and none of them is in hand.
+    fn spells_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
+        self.holds_ref(tt, type_id, Unresolved::NoRef)
+    }
+
+    fn holds_ref(&self, tt: &TypeTable, type_id: TypeId, unresolved: Unresolved) -> bool {
+        let key = (type_id, unresolved == Unresolved::HoldsRef);
+        if let Some(&b) = self.memo.borrow().get(&key) {
             return b;
         }
         let mut visited = TypeSet::default();
-        let r = self.walk(tt, type_id, &[], &mut visited);
-        self.memo.borrow_mut().insert(type_id, r);
+        let r = self.walk(tt, type_id, &[], unresolved, &mut visited);
+        self.memo.borrow_mut().insert(key, r);
         r
     }
 
@@ -1735,35 +1758,41 @@ impl TypeRefCtx {
         tt: &TypeTable,
         type_id: TypeId,
         args: &[TypeId],
+        unresolved: Unresolved,
         visited: &mut TypeSet,
     ) -> bool {
         if !visited.insert(type_id) {
             return false;
         }
+        let unknown = unresolved == Unresolved::HoldsRef;
         match tt.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
             ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => {
-                self.walk(tt, *t, args, visited)
+                self.walk(tt, *t, args, unresolved, visited)
             }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.walk(tt, *t, args, visited))
-                    || self.members_hold_ref(tt, type_id, visited)
+                type_args
+                    .iter()
+                    .any(|t| self.walk(tt, *t, args, unresolved, visited))
+                    || self.members_hold_ref(tt, type_id, unresolved, visited)
             }
-            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, args, visited),
+            ResolvedType::Newtype { base_type, .. } => {
+                self.walk(tt, *base_type, args, unresolved, visited)
+            }
             ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-                self.members_hold_ref(tt, type_id, visited)
+                self.members_hold_ref(tt, type_id, unresolved, visited)
             }
             ResolvedType::Function { .. } => false,
             ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
-                Some(&arg) => self.walk(tt, arg, &[], visited),
-                None => true,
+                Some(&arg) => self.walk(tt, arg, &[], unresolved, visited),
+                None => unknown,
             },
             ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            | ResolvedType::Error => unknown,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1775,11 +1804,17 @@ impl TypeRefCtx {
 
     /// Whether a declared member holds a reference. A generic instance is asked
     /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
-    fn members_hold_ref(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+    fn members_hold_ref(
+        &self,
+        tt: &TypeTable,
+        type_id: TypeId,
+        unresolved: Unresolved,
+        visited: &mut TypeSet,
+    ) -> bool {
         let args = tt.nominal_type_args(type_id).unwrap_or_default();
         self.members
             .of(type_id, tt)
-            .any(|t| self.walk(tt, t, &args, visited))
+            .any(|t| self.walk(tt, t, &args, unresolved, visited))
     }
 }
 
@@ -2116,6 +2151,19 @@ fn carries_of(
             place_roots_of(&u.expr, sem, carries)
         }
         Expr::Cast(c) => recurse(&c.expr),
+        // Reading a member out of a place hands out a reference of its own when
+        // the member's type spells one; a value member is copied and carries
+        // nothing. `spells_ref` rather than the guard above, which answers yes
+        // for an unsubstituted parameter — a generic accessor returning a bare
+        // `T` is not a member read the declaration can be held to.
+        Expr::FieldAccess(_) | Expr::Index(_) | Expr::Unary(_)
+            if !expr_type_of(expr, sem).is_some_and(|t| tyctx.spells_ref(&sem.types, t)) =>
+        {
+            IndexSet::default()
+        }
+        Expr::FieldAccess(f) => recurse(&f.expr),
+        Expr::Index(i) => recurse(&i.expr),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => recurse(&u.expr),
         Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
             let Some(call) =
                 resolve_returned_args(expr, sem, annotations, fn_returns, mangled_returns)
