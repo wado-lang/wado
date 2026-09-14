@@ -8,16 +8,13 @@
 //! decodable as a standalone WIT package.
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
 use wado_compiler::wit_emit;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
 
 use wit_parser::decoding::{DecodedWasm, decode};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// Faithful world import set (the WIR-level plan), as the CLI feeds the emitter.
 fn import_plan(source: &str, world_fq: &str) -> Vec<String> {

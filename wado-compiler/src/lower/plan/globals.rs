@@ -16,7 +16,7 @@ use crate::tir::{
     FunctionKind, FunctionRef, GlobalInit, InlineHint, TirBlock, TirExpr, TirExprKind, TirFunction,
     TirGlobal, TirLocal, TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
 };
-use crate::tir_visitor::{TirRefVisitor, shift_locals, shift_locals_in_stmts};
+use crate::tir_visitor::{TirRefVisitor, shift_locals_in_stmts};
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -27,16 +27,14 @@ use crate::token::Span;
 // `build_initialize_modules` half combines them into the top-level
 // `$initialize_modules` aggregator.
 
-/// One global initializer, taken out of the `$init$` function reify put it
-/// in. A body lives only in `functions` until here, so no pass between reify
-/// and this one can walk the functions and miss an initializer.
-#[derive(Clone)]
+/// One global initializer, taken out of the `$init$` function reify put it in.
+/// A body lives only in `functions` until here, so no pass between reify and
+/// this one can walk the functions and miss an initializer.
 struct LazyInit {
     global: String,
     module_source: ModuleSource,
-    /// Statements the value depends on, in the frame `locals` describes.
-    prelude: Vec<TirStmt>,
-    value: TirExpr,
+    /// `{ …; return <initializer>; }`, in the frame `locals` describes.
+    body: TirBlock,
     locals: Vec<TirLocal>,
 }
 
@@ -46,9 +44,8 @@ struct LazyInit {
 /// expressions boxing rewrites; the top-level aggregator calling each
 /// `$initialize_module` is built later by [`build_initialize_modules`].
 pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bail> {
-    // Reify classified these, and the classification has to survive the passes
-    // in between for the slot to hold what it holds: nothing folds a constant
-    // at TIR, and nothing turns a literal into code.
+    // Reify classified these, and nothing since could have changed the answer:
+    // the typed IR folds no constant, and turns no literal into code.
     {
         let type_table = flat.type_table.borrow();
         for global in &flat.globals {
@@ -70,9 +67,14 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         let Some(global) = global_init_target(&func.name).map(str::to_string) else {
             return true;
         };
-        let init = take_initializer(&mut func, global);
+        let init = LazyInit {
+            global,
+            module_source: func.module_source.clone(),
+            body: func.body.take().expect("$init$ carries a body"),
+            locals: std::mem::take(&mut func.locals),
+        };
         by_module
-            .entry(func.module_source.clone())
+            .entry(init.module_source.clone())
             .or_default()
             .push(init);
         false
@@ -85,19 +87,32 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     let reads_by_function = global_reads_by_function(&flat.functions);
     let span = Span::new(0, 0, 1, 1);
     for (module_source, module_inits) in by_module {
-        let sorted_inits =
-            topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
+        let order = topological_sort_global_inits(&module_inits, &reads_by_function, errors)?;
+        let mut taken: Vec<Option<LazyInit>> = module_inits.into_iter().map(Some).collect();
+        let sorted_inits = order
+            .into_iter()
+            .map(|i| {
+                taken[i]
+                    .take()
+                    .expect("the order names each initializer once")
+            })
+            .collect();
         let init_func = build_module_init_function(module_source, sorted_inits, span);
         flat.functions.push(Rc::new(RefCell::new(init_func)));
     }
     Ok(())
 }
 
-/// Split a `$init$` function into the statements leading up to its value and
-/// the value itself. Reify emits `{ return <initializer>; }`, and a synthesis
-/// pass may hoist statements ahead of that return but never adds another.
-fn take_initializer(func: &mut TirFunction, global: String) -> LazyInit {
-    let mut stmts = func.body.take().expect("$init$ carries a body").stmts;
+/// Turn `{ …; return <value>; }` into the statements assigning `<value>` to the
+/// global. Reify emits one return, and a synthesis pass may hoist statements
+/// ahead of it but never adds another.
+fn assign_to_global(
+    body: TirBlock,
+    module_source: ModuleSource,
+    name: String,
+    span: Span,
+) -> Vec<TirStmt> {
+    let mut stmts = body.stmts;
     let Some(TirStmt {
         kind: TirStmtKind::Return { value: Some(value) },
         ..
@@ -111,13 +126,17 @@ fn take_initializer(func: &mut TirFunction, global: String) -> LazyInit {
             .any(|s| matches!(s.kind, TirStmtKind::Return { .. })),
         "a global initializer returns once"
     );
-    LazyInit {
-        global,
-        module_source: func.module_source.clone(),
-        prelude: stmts,
-        value,
-        locals: std::mem::take(&mut func.locals),
-    }
+    let global_set = TirExpr::new(
+        TirExprKind::GlobalVarSet {
+            module_source,
+            name,
+            value: Box::new(value),
+        },
+        TypeTable::UNIT,
+        span,
+    );
+    stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
+    stmts
 }
 
 /// Assign every initializer to its global, in the order given, under one frame.
@@ -129,25 +148,19 @@ fn build_module_init_function(
     let mut init_stmts: Vec<TirStmt> = Vec::new();
     let mut merged_locals: Vec<TirLocal> = Vec::new();
 
-    for mut init in sorted_inits {
+    for init in sorted_inits {
+        let LazyInit {
+            global,
+            module_source,
+            mut body,
+            locals,
+        } = init;
         let offset = u32::try_from(merged_locals.len()).expect("local count fits in u32");
-        if offset > 0 && !init.locals.is_empty() {
-            shift_locals_in_stmts(&mut init.prelude, offset);
-            shift_locals(&mut init.value, offset);
+        if offset > 0 && !locals.is_empty() {
+            shift_locals_in_stmts(&mut body.stmts, offset);
         }
-        merged_locals.extend(init.locals);
-        init_stmts.append(&mut init.prelude);
-
-        let global_set = TirExpr::new(
-            TirExprKind::GlobalVarSet {
-                module_source: init.module_source,
-                name: init.global,
-                value: Box::new(init.value),
-            },
-            TypeTable::UNIT,
-            span,
-        );
-        init_stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
+        merged_locals.extend(locals);
+        init_stmts.extend(assign_to_global(body, module_source, global, span));
     }
 
     TirFunction::synthesized(
@@ -279,13 +292,13 @@ struct InitRefs {
 }
 
 fn collect_global_refs(
-    expr: &TirExpr,
+    body: &TirBlock,
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
 ) -> InitRefs {
     use crate::tir_visitor::TirRefVisitor;
 
     let mut scan = BodyReads::default();
-    scan.visit_expr(expr);
+    scan.visit_block(body);
     let mut refs = InitRefs {
         direct: scan.globals,
         via_calls: IndexSet::default(),
@@ -320,16 +333,15 @@ fn depends_on(deps: &[IndexSet<usize>], from: usize, to: usize) -> bool {
     false
 }
 
-/// Topologically sort global initializers based on dependencies.
-///
-/// Returns the initializers in an order where dependencies are initialized first.
+/// The order to run `lazy_inits` in, as indices into it, each initializer after
+/// every one it depends on.
 fn topological_sort_global_inits(
     lazy_inits: &[LazyInit],
     reads_by_function: &IndexMap<String, IndexSet<(ModuleSource, String)>>,
     errors: &dyn ErrorSink,
-) -> Result<Vec<LazyInit>, Bail> {
+) -> Result<Vec<usize>, Bail> {
     if lazy_inits.len() <= 1 {
-        return Ok(lazy_inits.to_vec());
+        return Ok((0..lazy_inits.len()).collect());
     }
 
     // Build a map from `(module_source, name)` to its index in
@@ -354,7 +366,7 @@ fn topological_sort_global_inits(
 
     let scanned: Vec<InitRefs> = lazy_inits
         .iter()
-        .map(|init| collect_global_refs(&init.value, reads_by_function))
+        .map(|init| collect_global_refs(&init.body, reads_by_function))
         .collect();
 
     // A reference written in the initializer is a definite dependency.
@@ -385,10 +397,10 @@ fn topological_sort_global_inits(
         .map(|(i, _)| i)
         .collect();
 
-    let mut sorted = Vec::with_capacity(lazy_inits.len());
+    let mut sorted: Vec<usize> = Vec::with_capacity(lazy_inits.len());
 
     while let Some(idx) = queue.pop_front() {
-        sorted.push(lazy_inits[idx].clone());
+        sorted.push(idx);
 
         // Update dependents
         for (i, dep_set) in deps.iter().enumerate() {
@@ -411,7 +423,7 @@ fn topological_sort_global_inits(
         let names: Vec<&str> = cycle.iter().map(|init| init.global.as_str()).collect();
         let LazyInit {
             module_source,
-            value: initializer,
+            body,
             ..
         } = cycle[0];
         return Err(errors.fatal_in(
@@ -424,7 +436,7 @@ fn topological_sort_global_inits(
                      another has not been given yet, so none can go first.",
                     names.join(", ")
                 ),
-                span: Some(DiagnosticSpan::from_span(&initializer.span, None)),
+                span: Some(DiagnosticSpan::from_span(&body.span, None)),
             },
         ));
     }

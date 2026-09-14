@@ -1,14 +1,11 @@
 //! Tests for [`wado_compiler::kiln::extract_options_descriptor`].
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use std::assert_matches;
 use wado_compiler::ModuleSource;
 use wado_compiler::kiln::{CanonicalValue, OptionsType, extract_options_descriptor};
 use wado_compiler::semantics::{Semantics, semantics};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 fn entry(sem: &Semantics) -> ModuleSource {
     sem.interner.borrow_mut().entry_point("entry.wado")

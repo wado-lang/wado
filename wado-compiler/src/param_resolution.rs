@@ -16,8 +16,7 @@ use crate::lower::wide_int_literal::create_literal;
 use crate::module_source::ModuleSource;
 use crate::name::global_init_target;
 use crate::tir::{
-    GlobalInit, TirBlock, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind, TypeId,
-    TypeTable,
+    GlobalInit, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable, initializer_body,
 };
 use crate::token::Span;
 
@@ -182,10 +181,16 @@ pub fn resolve_params<H: CompilerHost>(
         {
             match &mut global.init {
                 GlobalInit::Direct(slot) => *slot = literal,
-                GlobalInit::Deferred(_) => set_initializer_value(
-                    &init_fns[&(global.module_source.clone(), global.name.clone())],
-                    literal,
-                ),
+                // A deferred global has an initializer function, and the
+                // resolved literal replaces what it returns.
+                GlobalInit::Deferred(_) => {
+                    let key = (global.module_source.clone(), global.name.clone());
+                    let mut init_fn = init_fns[&key].borrow_mut();
+                    let span = literal.span;
+                    init_fn.body = Some(initializer_body(literal, span));
+                    init_fn.locals.clear();
+                    init_fn.local_count = 0;
+                }
             }
         } else {
             let type_name = type_table.borrow().type_name(global.ty);
@@ -458,22 +463,6 @@ fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
     } else {
         None
     }
-}
-
-/// Replace what a global's initializer function returns, dropping the frame the
-/// declared fallback needed.
-fn set_initializer_value(init_fn: &Rc<RefCell<TirFunction>>, value: TirExpr) {
-    let span = value.span;
-    let mut func = init_fn.borrow_mut();
-    func.body = Some(TirBlock {
-        stmts: vec![TirStmt::new(
-            TirStmtKind::Return { value: Some(value) },
-            span,
-        )],
-        span,
-    });
-    func.locals.clear();
-    func.local_count = 0;
 }
 
 #[cfg(test)]

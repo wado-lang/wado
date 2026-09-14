@@ -14,6 +14,7 @@
 
 use std::sync::Mutex;
 
+use crate::common::block_on;
 use indexmap::IndexMap;
 use wado_compiler::{
     Code, CompileResult, CompilerHost, CompilerOptions, Diagnostic, LogLevel, Severity,
@@ -59,10 +60,6 @@ impl CompilerHost for MapHost {
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         self.diagnostics.lock().unwrap().push(diagnostic);
     }
-}
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
 fn kiln_options() -> CompilerOptions {

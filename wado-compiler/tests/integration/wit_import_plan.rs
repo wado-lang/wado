@@ -8,14 +8,11 @@
 
 use std::collections::BTreeSet;
 
+use crate::common::block_on;
 use crate::common::{FilesystemHost, InMemoryHost};
 use wado_compiler::{
     CompilerOptions, OptLevel, compile_with_host, compile_with_options, dump_with_host_and_world,
 };
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// The plan: `NirPackage::imported_cm_interfaces`, obtained from a dump.
 fn plan_imports(source: &str) -> BTreeSet<String> {

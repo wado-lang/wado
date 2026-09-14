@@ -5,13 +5,10 @@
 //! to confirm the output is syntactically valid WIT.
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::semantics::{semantics, semantics_for_world};
 use wado_compiler::wit_emit::{self, WitEmitOptions, WitScope, emit_wit_text};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// The WIR-level import plan (`NirPackage::imported_cm_interfaces`) for
 /// `source` under `world_fq`, the faithful world import set the emitter reads.

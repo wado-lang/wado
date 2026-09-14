@@ -59,19 +59,18 @@ fn example() {
 ### An initializer performs no effect
 
 An initializer runs at module instantiation. Nothing is installed for it then,
-and the order among initializers is the dependency order, not one the program
-wrote. An effect that reaches out of the initializer has no semantics to give
-it, so it is a compile error:
+and it runs in dependency order rather than one the program wrote. Nothing can
+answer an effect that reaches out of it, so two things are compile errors:
 
 - calling a function that declares an effect,
 - dispatching an operation no enclosing `with … do` installs a handler for.
 
-This is the rule default-value expressions already carry, so one checker answers
-for every position that must be pure, naming the position in the diagnostic.
+A default-value expression already carries this rule. One checker now answers
+for both positions and names the position in the diagnostic.
 
-What the initializer discharges itself is not such an effect. `with E => h do`
-installs a handler for its body, so the operations the body dispatches are
-answered inside the initializer and the expression as a whole performs none:
+An initializer may install its own handler. `with E => h do` answers the
+operations its body dispatches, so the expression as a whole performs no
+effect:
 
 ```wado
 global COUNTED: i32 = hold: {
@@ -83,12 +82,11 @@ global COUNTED: i32 = hold: {
 };
 ```
 
-The purity walk therefore tracks the same grants the effect checker does, and
-the dispatch desugaring reaches an initializer as it reaches a function body. An
-operation the installed handler does not cover is still an error.
+The purity walk tracks the same grants the effect checker does. An operation the
+installed handler does not cover is still an error.
 
-A purely-computational component's operation demands neither a handler nor a
-host capability, so it too belongs here.
+A purely-computational component's operation needs neither a handler nor a host
+capability, so an initializer may call one.
 
 ### What a constant expression can hold
 
@@ -122,9 +120,9 @@ cannot evaluate, a value read out of mutable state, or a payload too large to
 inline as `array.new_fixed` — a long string literal lives in the data section
 and is materialized at run time, so no constant expression can denote it.
 
-Two steps put a value in the slot, and both finish before the module is emitted:
-the syntactic classifier below, which runs at every optimization level, and the
-promotion on the lowered Wasm value, which takes back what the optimizer folded.
+Two steps put a value in the slot, and both finish before the module is emitted.
+The syntactic classifier below runs at every optimization level. The promotion on
+the lowered Wasm value then takes back what the optimizer folded.
 
 ### An initializer is a body, and a body is a function
 
@@ -132,7 +130,7 @@ An initializer that needs to run code is a body: statements, locals, a
 `with … do`, calls to rewrite. Everything that walks bodies — template
 expansion, effect-dispatch desugaring, CM import binding, monomorphization —
 walks the module's functions. A body reachable any other way is a body those
-passes miss, one pass at a time, each miss its own bug.
+passes miss, and each miss is its own bug.
 
 So reify puts it there. A global whose initializer is not a Wasm constant gets
 `$init$<NAME>`, a parameterless function returning the declared value, and the
@@ -140,11 +138,10 @@ global's slot holds the placeholder. A global carries no locals of its own, so
 it cannot hold a body at all. Lowering splices those functions into the module's
 initialization function in dependency order and drops them.
 
-One classifier decides, at reify, and `Direct` means "the Wasm slot can hold
-this" at every phase after it. Deciding that early is safe because the
-classification cannot change on the way: nothing folds a constant at the typed
-IR, and nothing turns a literal into code. Lowering asserts it rather than
-trusting it.
+One classifier decides, at reify. `Direct` then means "the Wasm slot can hold
+this" at every phase after it. Deciding that early is safe because nothing on the
+way can change the answer: the typed IR folds no constant, and turns no literal
+into code. Lowering asserts that rather than trusting it.
 
 ### The decision is made on the value, not on the syntax
 
@@ -167,7 +164,7 @@ The cost of deciding there is that the normalized IR never learns the answer, so
 the compile-time interpreter cannot read a constant global's value — see the
 value-snapshot entry below.
 
-### The declared initializer is never replaced
+### A placeholder never passes for the declared value
 
 A deferred global holds a placeholder, and says so. Asking it for its declared
 value answers "assigned elsewhere", never the placeholder.

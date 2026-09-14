@@ -2561,8 +2561,8 @@ fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
 // Semantics-based purity checking
 // ---------------------------------------------------------------------------
 
-/// Purity over [`Semantics`]: every default expression and global initializer
-/// must call no effectful function and install no handler.
+/// Purity over [`Semantics`]: no default expression or global initializer
+/// performs an effect its own handlers do not answer.
 #[must_use]
 pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     let mut out = Vec::new();
@@ -2630,8 +2630,8 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
     }
 }
 
-/// Walks an expression that must be pure, flagging any call to an effectful
-/// function (or an effect-handler install).
+/// Walks an expression that must be pure, flagging every effect it performs
+/// that no enclosing `with … do` answers.
 struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,

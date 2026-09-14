@@ -8,11 +8,8 @@
 //! `payload: T` field then panicked with "`TypeId`(..) not found in `TypeTable`".
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::{OptLevel, dump_with_host_and_world, unparse::unparse_tir};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 const SOURCE: &str = r#"
 struct Holder<T> {

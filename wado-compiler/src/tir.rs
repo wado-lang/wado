@@ -5656,11 +5656,9 @@ impl<E> GlobalInit<E> {
 /// Whether the Wasm slot can hold this value directly, so the global needs no
 /// assignment from an initialization function.
 ///
-/// Deliberately under-approximates what a constant expression can express: an
-/// aggregate only becomes a `struct.new` once the optimizer has collapsed the
-/// builder producing it, which is not knowable here. The classifier on the
-/// lowered Wasm value promotes back what this defers. Decidable here is what is
-/// already a value: a literal, and arithmetic over literals.
+/// Under-approximates on purpose: whether the builder producing an aggregate
+/// collapses is not knowable here, so the classifier on the lowered Wasm value
+/// promotes back what this defers.
 #[must_use]
 pub fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
     match &expr.kind {
@@ -5718,6 +5716,18 @@ pub fn placeholder_value(type_id: TypeId, type_table: &TypeTable, span: Span) ->
         _ => TirExprKind::Null,
     };
     TirExpr::new(kind, type_id, span)
+}
+
+/// A global initializer function's body: `{ return <value>; }`.
+#[must_use]
+pub fn initializer_body(value: TirExpr, span: Span) -> TirBlock {
+    TirBlock {
+        stmts: vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(value) },
+            span,
+        )],
+        span,
+    }
 }
 
 /// Global variable declaration in TIR

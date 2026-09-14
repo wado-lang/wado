@@ -3,12 +3,9 @@
 //! default expression or a global initializer surfaces even without reify.
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::semantics::semantics;
 use wado_compiler::{Impurity, PureContext, check_purity_semantic};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// Purity callees reported for `source`, whatever the position.
 fn violations(source: &str) -> Vec<String> {

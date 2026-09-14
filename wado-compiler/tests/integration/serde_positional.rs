@@ -9,11 +9,8 @@
 //! against the monomorphized TIR rather than at runtime.
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// Monomorphized TIR text for `source`.
 fn monomorphized_tir(source: &str) -> String {

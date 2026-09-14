@@ -4,12 +4,9 @@
 //! when the function is never called (immune to dead-code gating).
 
 use crate::common::InMemoryHost;
+use crate::common::block_on;
 use wado_compiler::check_stores_semantic;
 use wado_compiler::semantics::semantics;
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// Stores-violation messages reported for `source`.
 fn violations(source: &str) -> Vec<String> {

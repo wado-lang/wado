@@ -2034,35 +2034,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// body. A body lives only in `module.functions`, so no later pass can walk
     /// the module's functions and miss an initializer.
     fn split_global_initializer(
-        &mut self,
+        &self,
         name: &str,
         ty: TypeId,
         initializer: TirExpr,
         locals: Vec<TirLocal>,
         span: Span,
     ) -> (GlobalInit<TirExpr>, Option<TirFunction>) {
-        if tir::is_constant_initializer(&initializer, &self.tysys.type_table.borrow()) {
+        let type_table = self.tysys.type_table.borrow();
+        if tir::is_constant_initializer(&initializer, &type_table) {
             assert!(
                 locals.is_empty(),
                 "a constant initializer allocates no local"
             );
             return (GlobalInit::Direct(initializer), None);
         }
-        let placeholder = tir::placeholder_value(ty, &self.tysys.type_table.borrow(), span);
-        let body = TirBlock {
-            stmts: vec![TirStmt::new(
-                TirStmtKind::Return {
-                    value: Some(initializer),
-                },
-                span,
-            )],
-            span,
-        };
+        let placeholder = tir::placeholder_value(ty, &type_table, span);
         let init_fn = TirFunction::synthesized(
             self.current_module_source.clone(),
             global_init_function(name),
             ty,
-            body,
+            tir::initializer_body(initializer, span),
             locals,
             span,
         );
