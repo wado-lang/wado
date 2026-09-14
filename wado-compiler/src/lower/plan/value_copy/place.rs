@@ -412,9 +412,8 @@ impl<'a> Resolver<'a> {
                     self.bind_pattern(&field.pattern, &nested);
                 }
             }
-            // The binding names the value the pattern tested, not a projection
-            // of it. Deepening by the payload's own selector is sound and
-            // measures worse — WEP 2026-05-21, the value-copy roadmap.
+            // The binding names the value the pattern tested, not a projection of
+            // it: deepening by the payload's selector is sound and measures worse.
             TirPattern::Tuple(sub, _)
             | TirPattern::Variant { bindings: sub, .. }
             | TirPattern::Or(sub) => {

@@ -655,12 +655,12 @@ Nothing is spelled, so nothing can be spelled two ways.
 ## Known gap: a pattern qualifier's type arguments are counted, not read
 
 `Maybe<i32>::Just` and `Maybe<String>::Just` both qualify a `Maybe<i32>`
-scrutinee. The qualifier is resolved to a declaration and compared by `DefId`,
-and the arguments written beside it are only counted, so a count that agrees is
-accepted whatever it names. A qualifier declaring no parameters takes none,
-which is where the count earns its keep.
+scrutinee. The qualifier itself resolves to a declaration and compares by
+`DefId`. The arguments written beside it are only counted, so any count that
+agrees is accepted. The count still earns its keep: a qualifier whose type
+declares no parameters takes none.
 
-Closing it means comparing each written argument against the scrutinee's, which
-needs a rule for a generic context first: a type parameter written where the
-scrutinee carries a concrete type is what a generic function's own body looks
-like, and rejecting it would be wrong.
+Closing this means comparing each written argument against the scrutinee's. That
+needs a rule for a generic body first. There a type parameter stands where the
+scrutinee carries a concrete type, which is ordinary code, so rejecting it would
+be wrong.

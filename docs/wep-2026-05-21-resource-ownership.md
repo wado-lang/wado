@@ -408,12 +408,13 @@ temp's copy for every binding under it. One wrap site answers for the whole arm:
 the bindings read the temp, so each is as defended as the temp is. A place nothing
 can write is matched where it lies, its bindings costing nothing.
 
-That temp dies at the match, so reading it alone calls the place it was hoisted
-out of dead while it is still live, which moves an arm binding out from under the
-holder. A source root stands on its own chain, and the whole chain answers instead
-— the share side always closed its live set that way, and the move side now reads
-the same closure. Both sides close over places rather than root locals, so two
-components of one aggregate are not readers of each other.
+That temp dies at the match. Reading it alone therefore calls the place it was
+hoisted out of dead while that place is still live, which moves an arm binding
+out from under its holder. A source root stands on its own chain, and the whole
+chain answers instead. The share side always closed its live set that way, and
+the move side now reads the same closure. Both sides close over places rather
+than root locals, so two components of one aggregate are not readers of each
+other.
 
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
@@ -475,21 +476,24 @@ unused helper — while a miss leaves the fold no helper to call.
 
 ### Known gap: the release that lets a binding leave the function
 
-`let v = self.held; self.held = null;` gives `v` what the place held, so in
-principle `v` may be handed to a new owner with no copy — the `take` / `drain` /
-`snapshot` idiom. The compiler copies instead.
+`let v = self.held; self.held = null;` gives `v` what the place held. In
+principle `v` may then be handed to a new owner with no copy, which is the
+`take` / `drain` / `snapshot` idiom. The compiler copies instead.
 
-A repoint of the place is not the proof this needs. It says nothing about _when_
-it runs, so one under an `if` that never executes would license the elision, and
-nothing about a _second_ binding read out of the same place, where a write
-through one is observed through the other. `value_copy_release_is_not_a_proof`
-and `value_copy_new_owner_needs_a_proof` are those two programs.
+A repoint of the place is not the proof this needs, for two reasons.
 
-The second half is answered: a hand-over is refused when any other chain reaches
-the storage it takes (`value_copy_two_readers_of_one_place`), which is the
-sibling case stated as a rule rather than a count. The first half is not. The
-backward walk records a live set per write and no position, so which repoints
-dominate a site is not a question it can answer today.
+It says nothing about _when_ it runs, so a repoint under an `if` that never
+executes would license the elision. `value_copy_release_is_not_a_proof` is that
+program.
+
+It says nothing about a _second_ binding read out of the same place, where a
+write through one is observed through the other. `value_copy_new_owner_needs_a_proof`
+is that one, and this half is answered: a hand-over is refused when another chain
+reaches the same place (`value_copy_two_readers_of_one_place`). That states the
+sibling case as a rule instead of counting bindings.
+
+The first half stands. The backward walk records a live set per write and no
+position, so it cannot say today which repoints dominate a site.
 
 ### Known gap: a borrowed projection behind a variant
 
@@ -682,8 +686,9 @@ Verified against the tree.
       compute last-use liveness. Each kept a stack of exit sets that only loops
       pushed, so every such break fell back to _every_ local live. A template
       string lowers to a labeled block, so one interpolation anywhere in a
-      function retired its whole last-use set — most often as a whole-array copy
-      of a `String` handed to a callee that keeps it. The source-level walk had
+      function retired its whole last-use set. That showed most often as a
+      whole-array copy of a `String` handed to a callee that keeps it. The
+      source-level walk had
       the same fallback, and is fixed here rather than left. No fixture changes
       with that half fixed: a template is not a labeled block where that walk
       runs.
@@ -704,15 +709,16 @@ Verified against the tree.
       answers at every hand-over site, and closes the chain on both sides: the
       storage being taken, and everything live where it is taken. Closing only
       the taker's own side left a sibling binding read out of the same place
-      invisible — it reaches the place from beside the taker, not above it — so
-      two bindings both skipped their copy and a write through one was observed
-      through the other. Both sides are compared as places rather than as root
-      locals: asking only whether two chains share a root made each component of
-      a destructured tuple a reader of its siblings, which cost the corpus five
-      copies in `httpbin_*`. Carrying the selectors gives those back. One copy
-      elsewhere stays, in `parser_synth_id_collision_test`, where two bindings
-      read the whole of one place and one is still live — the shape the rule is
-      for, and the only elision in the corpus it takes.
+      invisible, since it reaches the place from beside the taker rather than
+      above it. Two bindings then both skipped their copy, and a write through
+      one was observed through the other. Both sides are compared as places
+      rather than as root locals: asking only whether two chains share a root
+      made each component of a destructured tuple a reader of its siblings,
+      which cost the corpus five copies in `httpbin_*`. Carrying the selectors
+      gives those back. One copy elsewhere stays, in
+      `parser_synth_id_collision_test`, where two bindings read the whole of one
+      place and one is still live. That is the shape the rule is for, and the
+      only elision in the corpus it takes.
 - [ ] Let the fold decide a match arm's binding for itself, so the answer stops
       depending on the temp pattern lowering hoists the scrutinee into. Which
       syntactic position a `match` sits in is part of whether the binding is

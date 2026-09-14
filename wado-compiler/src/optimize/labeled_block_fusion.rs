@@ -475,9 +475,8 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
     Some((*index, *field_index))
 }
 
-// This keeps its own traversal rather than folding onto [`walk_exits`]: the
-// value-discarding transform leaves an exit nested in an `if` condition, which
-// the shared walk visits, dangling.
+// Its own traversal, not [`walk_exits`]: the shared walk visits `if` conditions,
+// whose exits the value-discarding transform leaves dangling.
 
 /// Whether some `break label:` in `block` constructs case `case`, over the
 /// breaks the value-discarding transform rewrites.

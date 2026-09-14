@@ -79,9 +79,8 @@ impl TirRefVisitor for SeedWalker<'_> {
     }
 }
 
-/// Shape predicate shared with the fold. Site-specific gating
-/// (e.g. `skip_value_copy`, `is_source_immutable` for `Let`, the
-/// `Local`-target check for `Assign`) is the caller's job.
+/// Shape predicate shared with the fold. Site-specific gating — `skip_value_copy`,
+/// an immutable `Let` source, an `Assign` whose target is a local — is the caller's.
 pub fn should_wrap(expr: &TirExpr, type_table: &TypeTable, oracle: &OwnedCalls) -> bool {
     value_copy::needs_value_copy(expr.type_id, type_table)
         && !is_copy_value_call(expr)

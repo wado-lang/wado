@@ -259,9 +259,8 @@ pub(super) fn synthesize_lower_tuple(
     stmts
 }
 
-/// A variant case for memory lowering: its Wado (Pascal) case name, its case
-/// index, and for a payload-bearing case the payload's CM AST `Type` and GC
-/// `TypeId`.
+/// A variant case for memory lowering: its Wado (Pascal) name, its index, and a
+/// payload-bearing case's payload as a CM AST `Type` and a GC `TypeId`.
 pub(super) type CmMemCase = (String, u32, Option<(Type, TypeId)>);
 
 /// Lower a variant GC value to a linear-memory buffer at `addr`, given its cases.

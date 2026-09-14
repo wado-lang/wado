@@ -10053,9 +10053,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         scrutinee_type: TypeId,
         case_name: &str,
     ) -> TirPattern {
-        // The head the cases come from: a reference peeled for match ergonomics
-        // (`if let None = rn`, `rn: &Option<T>`), and a newtype for its base's
-        // cases, as `scrutinee_has_variant_case` already asks.
+        // The head the cases come from, peeled the way `scrutinee_has_variant_case`
+        // already asks: references for match ergonomics, then newtypes.
         let head = self.scrutinee_structure_head(scrutinee_type);
         let (case_index, payload_type) = self.variant_case_index_and_payload(head, case_name);
         TirPattern::Variant {
@@ -10510,8 +10509,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// A variant case's discriminant and payload type, substituted with
-    /// `variant_type`'s type args. Where a pattern's case name becomes the index
-    /// every later phase carries; `None` where the type declares no such case.
+    /// `variant_type`'s type args. `None` where the type declares no such case.
     fn variant_case_index_and_payload(
         &self,
         variant_type: TypeId,

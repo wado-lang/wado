@@ -747,9 +747,8 @@ impl FunctionTranslator<'_, '_> {
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
-    /// Whether `value` is a move rather than a copy: a whole-local read at its
-    /// final use, or a field / whole-value materialization that aliases out of a
-    /// dead aggregate at a literal (place-level move, keyed by span).
+    /// Whether `value` is a move rather than a copy: a whole-local read at its final
+    /// use, or a materialization aliasing out of a dead aggregate, keyed by span.
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
         // A newtype cast hands over the same storage (see
         // `last_use::strip_casts`), so it must not hide the materialization

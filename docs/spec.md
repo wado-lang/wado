@@ -909,13 +909,13 @@ Either way the name must be one the file can see. Only the prelude is in scope
 without a `use`, so a qualifier naming an unimported type is an error even where
 the bare case would match.
 
-A qualifier may restate the scrutinee's type arguments, and must write as many as
-the scrutinee carries: `Maybe<i32>::Just` qualifies a `Maybe<i32>`, while
-`Color<i32>::Red` is an error, `Color` declaring no type parameters.
+A qualifier may restate the scrutinee's type arguments. It must then write as
+many as the scrutinee carries, so `Maybe<i32>::Just` qualifies a `Maybe<i32>`
+while `Color<i32>::Red` is an error, because `Color` declares no type parameters.
 
-Only a bare identifier can bind. A qualified path that names neither a case, an
-associated constant, nor an immutable `global` is an error, never a variable of
-that name.
+Only a bare identifier can bind. A qualified path names a case, an associated
+constant, or an immutable `global`; anything else is an error, never a variable
+of that name.
 
 #### Constant Patterns
 
