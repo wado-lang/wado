@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789390212204,
+  "lastUpdate": 1789391827486,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -55893,6 +55893,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/2a33ac547a0288b0dfefab9cba37b56387732662"
         },
         "date": 1789390211547,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285330,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2a33ac547a0288b0dfefab9cba37b56387732662",
+          "message": "Merge pull request #2054 from wado-lang/claude/value-copy-ownership-analysis-8psx0z\n\nfix(lower): value-copy hand-over decided by place, and a variant pattern carrying its case index",
+          "timestamp": "2026-09-14T21:32:02+09:00",
+          "tree_id": "5e2f8c7b8736dc3eefb5fa0c621b3d98229647ac",
+          "url": "https://github.com/wado-lang/wado/commit/2a33ac547a0288b0dfefab9cba37b56387732662"
+        },
+        "date": 1789391827172,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
