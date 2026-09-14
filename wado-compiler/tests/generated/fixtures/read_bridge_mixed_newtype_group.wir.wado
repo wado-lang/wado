@@ -148,7 +148,7 @@ global global:core:prelude/list.wado::$const_obj_27: ref null Array<u8> = array.
 global global:core:prelude/list.wado::$const_obj_28: ref null Array<u8> = array.new_fixed<u8>(32, 97, 116, 32);
 global global:core:prelude/list.wado::$const_obj_29: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101);
 global global:core:prelude/list.wado::$const_obj_30: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
-global global:core:prelude/primitive.wado::$const_obj_38: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_41: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:prelude/primitive.wado::$const_obj_45: ref null Array<u8> = array.new_fixed<u8>(45);
 global global:core:prelude/primitive.wado::$const_obj_46: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48), used: 1 };
 global global:core:prelude/primitive.wado::$const_obj_47: ref null Array<u8> = array.new_fixed<u8>(78, 97, 78);
@@ -657,8 +657,8 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
     let raw_9: ref Array<u8>;
     let new_used_14: i32;
     let start_15: i32;
-    let buf_28: ref Array<u8>;
     let offset_29: i32;
+    let raw_31: ref Array<u8>;
     let buf_33: ref Array<u8>;
     let offset_34: i32;
     let v_37: u64;
@@ -668,9 +668,9 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
     let buf_51: ref Array<u8>;
     let v_55: u64;
     let idx_56: i32;
-    let buf_63: ref Array<u8>;
     let offset_64: i32;
     let n_65: i32;
+    let raw_66: ref Array<u8>;
     let new_used_72: i32;
     let start_73: i32;
     let buf_74: ref Array<u8>;
@@ -688,11 +688,11 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         buf.used = new_used_14;
         builtin::array_set_u8(buf.repr, start_15, 48);
         builtin::array_set_u8(buf.repr, start_15 + 1, 46);
-        $inline_zeros_at_scalar_6: block {
-            buf_28 = buf.repr;
+        $inline_zeros_at_6: block {
             offset_29 = start_15 + 2;
-            break_if $inline_zeros_at_scalar_6 leading <= 0;
-            builtin::array_fill<u8>(buf_28, offset_29, 48, leading);
+            break_if $inline_zeros_at_6 leading <= 0;
+            raw_31 = buf.repr;
+            builtin::array_fill<u8>(raw_31, offset_29, 48, leading);
         };
         buf_33 = buf.repr;
         offset_34 = (start_15 + 2) + leading;
@@ -727,12 +727,12 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
                 continue l67;
             };
         };
-        $inline_zeros_at_scalar_16: block {
-            buf_63 = buf.repr;
+        $inline_zeros_at_16: block {
             offset_64 = start_50 + nd;
             n_65 = decimal_pos - nd;
-            break_if $inline_zeros_at_scalar_16 n_65 <= 0;
-            builtin::array_fill<u8>(buf_63, offset_64, 48, n_65);
+            break_if $inline_zeros_at_16 n_65 <= 0;
+            raw_66 = buf.repr;
+            builtin::array_fill<u8>(raw_66, offset_64, 48, n_65);
         };
     } else {
         new_used_72 = buf.used + (nd + 1);
@@ -1498,11 +1498,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_38, digit_count_4);
-    arr = f.buf.repr;
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_41, digit_count_4);
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

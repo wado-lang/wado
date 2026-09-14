@@ -1992,7 +1992,6 @@ impl Deserialize for Duration {
 
 /// `"Sun, 06 Nov 1994 08:49:37 GMT"`.
 fn parse_imf_fixdate(text: &StrSlice, comma: i32) -> Result<Instant, DeserializeError> {
-    let end = text.len();
     let mut i = comma + 1;
     i = expect_byte(text, i, b' ')?;
     let day = read_digits(text, i, 2)?;
@@ -2011,7 +2010,6 @@ fn parse_imf_fixdate(text: &StrSlice, comma: i32) -> Result<Instant, Deserialize
 /// digits; with no clock to compare against, this pivots at 70 — `70..=99` is
 /// 1970s onward, `00..=69` is 2000s onward.
 fn parse_rfc850_date(text: &StrSlice, comma: i32) -> Result<Instant, DeserializeError> {
-    let end = text.len();
     let mut i = comma + 1;
     i = expect_byte(text, i, b' ')?;
     let day = read_digits(text, i, 2)?;
@@ -2047,7 +2045,6 @@ fn parse_asctime(text: &StrSlice) -> Result<Instant, DeserializeError> {
 /// Read `hh:mm:ss` at `i`, returning the second of the day and the index just
 /// past it.
 fn read_clock_time(text: &StrSlice, i: i32) -> Result<[i64, i32], DeserializeError> {
-    let end = text.len();
     let hour = read_digits(text, i, 2)?;
     let mut j = expect_byte(text, i + 2, b':')?;
     let minute = read_digits(text, j, 2)?;
@@ -2673,7 +2670,6 @@ impl Display for PlainMonthDay {
 
 /// Parse `YYYY-MM-DD` at `start`, returning the date and the index just past it.
 fn parse_iso_date(text: &StrSlice, start: i32) -> Result<[PlainDate, i32], DeserializeError> {
-    let end = text.len();
     let [year, after_year] = parse_iso_year(text, start)?;
     let mut i = expect_byte(text, after_year, b'-')?;
     let month = read_digits(text, i, 2)?;

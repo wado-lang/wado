@@ -1212,6 +1212,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>^core:prel
     let val_i64_21: i64;
     let digit_count: i32;
     let offset: i32;
+    let self_29: ref "core:prelude/string.wado//String";
     self_2 = f.buf;
     new_used = self_2.used + 21;
     if @unlikely(new_used > builtin::array_len(self_2.repr)) {
@@ -1229,7 +1230,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>^core:prel
         break $inline_count_digits_u64_base_7: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_21))) - 1) / 4) + 1;
     };
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/types.wado::$const_obj_5, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset, val_i64_21, digit_count, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"(self_29 = f.buf; self_29.repr, offset, val_i64_21, digit_count, 4, 15, 0);
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -1567,11 +1568,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_74, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

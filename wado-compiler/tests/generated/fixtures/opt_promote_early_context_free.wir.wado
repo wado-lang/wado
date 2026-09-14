@@ -1335,6 +1335,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let self_83: u64;
     let digit_count: i32;
     let offset: i32;
+    let self_96: ref "core:prelude/string.wado//String";
     let self_101: i32;
     let new_used_104: i32;
     let start_105: i32;
@@ -1544,7 +1545,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 };
                 offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"($local_9, 0, global:core:prelude/format.wado::$const_obj_1, digit_count);
                 $licm_buf_132 = f.buf;
-                "core:prelude/primitive.wado/write_u64_base_digits"($local_9.buf.repr, offset, self_83, digit_count, 4, 15, 0);
+                "core:prelude/primitive.wado/write_u64_base_digits"(self_96 = $local_9.buf; self_96.repr, offset, self_83, digit_count, 4, 15, 0);
                 $inline_core_prelude_string_wado_String__push_str_38: block {
                     self_101 = $local_8.used;
                     break_if $inline_core_prelude_string_wado_String__push_str_38 self_101 == 0;
@@ -1724,10 +1725,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(self
     let $cond_29: bool;
     let repr_54: ref Array<u8>;
     let len_56: i32;
-    let b_58: u8;
-    let repr_65: ref Array<u8>;
-    let len_67: i32;
+    let repr_64: ref Array<u8>;
+    let len_66: i32;
     let part: ref Array<u8>;
+    let b_70: u8;
     let repr_71: ref Array<u8>;
     let len_73: i32;
     let b_75: u8;
@@ -1766,25 +1767,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(self
         if select i32(start < 0, 1, start > len_56) {
             break $inline_boundary_at_1: 0;
         }
-        b_58 = builtin::array_get_value<u8>(repr_54, 0 + start);
-        break $inline_boundary_at_1: select i32(b_58 <u 128, 1, b_58 >=u 192);
+        (local.tee b_70(builtin::array_get_value<u8>(repr_54, 0 + start)) & 192) != 128;
+        break $inline_boundary_at_1;
     };
     $v3_seen_26 = 0;
     $v4_seen_28 = 0;
     $cond_29 = (if $v2_24 -> i32 {
         $v3_25 = end;
         $v3_seen_26 = 1;
-        $v4_27 = $inline_boundary_at_1: block -> bool {
+        $v4_27 = $inline_boundary_at_2: block -> bool {
             repr_71 = self.repr;
             len_73 = self.used;
             if select i32($v3_25 == 0, 1, $v3_25 == len_73) {
-                break $inline_boundary_at_1: 1;
+                break $inline_boundary_at_2: 1;
             }
             if select i32($v3_25 < 0, 1, $v3_25 > len_73) {
-                break $inline_boundary_at_1: 0;
+                break $inline_boundary_at_2: 0;
             }
-            b_75 = builtin::array_get_value<u8>(repr_71, 0 + $v3_25);
-            break $inline_boundary_at_1: select i32(b_75 <u 128, 1, b_75 >=u 192);
+            (local.tee b_75(builtin::array_get_value<u8>(repr_71, 0 + $v3_25)) & 192) != 128;
+            break $inline_boundary_at_2;
         };
         $v4_seen_28 = 1;
         $v4_27;
@@ -1800,10 +1801,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes"(self
         if end <= start {
             break $inline_core_prelude_string_wado_String__substr_bytes_unchecked_3: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         }
-        repr_65 = self.repr;
-        part = builtin::array_new<u8>(local.tee len_67(end - start));
-        builtin::array_copy<u8>(part, 0, repr_65, start, len_67);
-        struct.new "core:prelude/string.wado//String" { repr: part, used: len_67 };
+        repr_64 = self.repr;
+        part = builtin::array_new<u8>(local.tee len_66(end - start));
+        builtin::array_copy<u8>(part, 0, repr_64, start, len_66);
+        struct.new "core:prelude/string.wado//String" { repr: part, used: len_66 };
         break $inline_core_prelude_string_wado_String__substr_bytes_unchecked_3;
     };
 }
@@ -1895,11 +1896,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_61, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

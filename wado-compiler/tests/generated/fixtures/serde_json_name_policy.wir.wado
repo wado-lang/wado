@@ -356,17 +356,17 @@ type "functype//core:json/core:json/JsonStructAccess^core:serde/DeserializeStruc
 
 type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(130)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(131)
+type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(131)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(132)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(132)
 
-type "functype//core:json/core:json/JsonDeserializer::key_quote_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(133)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(133)
 
-type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(134)
+type "functype//core:json/core:json/JsonDeserializer::key_quote_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(134)
 
-type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(135)
+type "functype//core:json/core:json/JsonDeserializer::entry_separator_error$scalar" = fn(i32, i32) -> ref "core:serde//DeserializeError";  // TypeId(135)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(136)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(136)
 
 type "functype//core:json/core:json/JsonDeserializer::scan_string_run$scalar" = fn(ref "core:prelude/slice.wado//Slice<u8>", i32) -> [i32, bool, bool];  // TypeId(137)
 
@@ -4259,6 +4259,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let self_83: u64;
     let digit_count: i32;
     let offset: i32;
+    let self_96: ref "core:prelude/string.wado//String";
     let self_101: i32;
     let new_used_104: i32;
     let start_105: i32;
@@ -4468,7 +4469,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 };
                 offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"($local_9, 0, global:core:prelude/format.wado::$const_obj_29, digit_count);
                 $licm_buf_132 = f.buf;
-                "core:prelude/primitive.wado/write_u64_base_digits"($local_9.buf.repr, offset, self_83, digit_count, 4, 15, 0);
+                "core:prelude/primitive.wado/write_u64_base_digits"(self_96 = $local_9.buf; self_96.repr, offset, self_83, digit_count, 4, 15, 0);
                 $inline_core_prelude_string_wado_String__push_str_38: block {
                     self_101 = $local_8.used;
                     break_if $inline_core_prelude_string_wado_String__push_str_38 self_101 == 0;
@@ -5324,27 +5325,31 @@ fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
     return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
+fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
+    return self;
+}
+
+fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
-    let digit_count_4: i32;
-    let offset_5: i32;
-    let val_6: i64;
+    let digit_count_5: i32;
+    let offset_6: i32;
     let arr: ref Array<u8>;
     let pos: i32;
     let t: u64;
     let i: i32;
-    is_negative = self < 0;
-    val_6 = builtin::i64_extend_i32_s(self);
-    digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_127, digit_count_4);
-    arr = f.buf.repr;
-    pos = offset_5 + digit_count_4;
+    let self_15: ref "core:prelude/string.wado//String";
+    is_negative = self < 0_i64;
+    digit_count_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(self < 0_i64, 0_i64 - self, self)));
+    offset_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_127, digit_count_5);
+    self_15 = f.buf;
+    arr = self_15.repr;
+    pos = offset_6 + digit_count_5;
     t = abs_val;
     i = 0;
     b673: block {
         l674: loop {
-            break_if b673 i >= digit_count_4;
+            break_if b673 i >= digit_count_5;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
@@ -5378,29 +5383,29 @@ fn "core:json/core:json/JsonDeserializer::entry_separator_error$scalar"(self, cl
     }, start_32 = $local_2.used, $local_2.used = new_used_31, builtin::array_copy<u8>($local_2.repr, start_32, global:core:json::$const_obj_19, 0, 1), struct.new "core:serde//DeserializeError" { kind: 6, message: $local_2, offset: builtin::i64_extend_i32_s(self) };
 }
 
-fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
-    return self;
-}
-
-fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
+fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
-    let digit_count_5: i32;
-    let offset_6: i32;
+    let digit_count_4: i32;
+    let offset_5: i32;
+    let val_6: i64;
     let arr: ref Array<u8>;
     let pos: i32;
     let t: u64;
     let i: i32;
-    is_negative = self < 0_i64;
-    digit_count_5 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(self < 0_i64, 0_i64 - self, self)));
-    offset_6 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_127, digit_count_5);
-    arr = f.buf.repr;
-    pos = offset_6 + digit_count_5;
+    let self_14: ref "core:prelude/string.wado//String";
+    is_negative = self < 0;
+    val_6 = builtin::i64_extend_i32_s(self);
+    digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_127, digit_count_4);
+    self_14 = f.buf;
+    arr = self_14.repr;
+    pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
     b677: block {
         l678: loop {
-            break_if b677 i >= digit_count_5;
+            break_if b677 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;

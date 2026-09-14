@@ -1663,6 +1663,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
     let val_i64_54: i64;
     let digit_count_57: i32;
     let offset_58: i32;
+    let self_62: ref "core:prelude/string.wado//String";
     let self_63: ref "core:prelude/string.wado//String";
     let new_used_72: i32;
     let start_73: i32;
@@ -1682,6 +1683,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
     let val_i64_139: i64;
     let digit_count_142: i32;
     let offset_143: i32;
+    let self_147: ref "core:prelude/string.wado//String";
     let self_148: ref "core:prelude/string.wado//String";
     let new_used_157: i32;
     let start_158: i32;
@@ -1748,7 +1750,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
             break $inline_count_digits_u64_base_22: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_54))) - 1) / 4) + 1;
         };
         offset_58 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/format.wado::$const_obj_4, digit_count_57);
-        "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset_58, val_i64_54, digit_count_57, 4, 15, 0);
+        "core:prelude/primitive.wado/write_u64_base_digits"(self_62 = f.buf; self_62.repr, offset_58, val_i64_54, digit_count_57, 4, 15, 0);
         self_63 = f.buf;
         new_used_72 = self_63.used + 1;
         if @unlikely(new_used_72 > builtin::array_len(self_63.repr)) {
@@ -1823,7 +1825,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<wa
         break $inline_count_digits_u64_base_57: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_139))) - 1) / 4) + 1;
     };
     offset_143 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, global:core:prelude/format.wado::$const_obj_4, digit_count_142);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset_143, val_i64_139, digit_count_142, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"(self_147 = f.buf; self_147.repr, offset_143, val_i64_139, digit_count_142, 4, 15, 0);
     self_148 = f.buf;
     new_used_157 = self_148.used + 1;
     if @unlikely(new_used_157 > builtin::array_len(self_148.repr)) {
@@ -2386,6 +2388,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let self_83: u64;
     let digit_count: i32;
     let offset: i32;
+    let self_96: ref "core:prelude/string.wado//String";
     let self_101: i32;
     let new_used_104: i32;
     let start_105: i32;
@@ -2595,7 +2598,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 };
                 offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"($local_9, 0, global:core:prelude/format.wado::$const_obj_4, digit_count);
                 $licm_buf_132 = f.buf;
-                "core:prelude/primitive.wado/write_u64_base_digits"($local_9.buf.repr, offset, self_83, digit_count, 4, 15, 0);
+                "core:prelude/primitive.wado/write_u64_base_digits"(self_96 = $local_9.buf; self_96.repr, offset, self_83, digit_count, 4, 15, 0);
                 $inline_core_prelude_string_wado_String__push_str_38: block {
                     self_101 = $local_8.used;
                     break_if $inline_core_prelude_string_wado_String__push_str_38 self_101 == 0;
@@ -3388,11 +3391,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_119, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
