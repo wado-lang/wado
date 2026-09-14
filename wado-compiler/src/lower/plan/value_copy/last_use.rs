@@ -669,7 +669,7 @@ fn readable_paths(paths: &IndexMap<u32, Vec<AccessPath>>, live: &IndexSet<u32>) 
         for source in paths.get(&place.root).into_iter().flatten() {
             let mut up = source.clone();
             if up.selectors.len() + place.selectors.len() <= PATH_DEPTH {
-                up.selectors.extend(place.selectors.iter().cloned());
+                up.selectors.extend(place.selectors.iter().copied());
             }
             work.push(up);
         }
