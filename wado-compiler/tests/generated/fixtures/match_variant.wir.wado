@@ -893,35 +893,34 @@ fn "match_variant.wado/$test_4_a_null_arm_infers_its_option_inner_from_the_some_
     let $fuse_at_12: i32;
     let $fuse_at_13: i32;
     let $fuse_at_14: i32;
-    let self_18: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     s_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     some_value = s_0;
     v = ref.as_non_null(some_value);
-    $cond_3 = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: block -> bool {
-        self_18 = v.used;
-        if self_18 != 5 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1: 0;
+    $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__0: block -> bool {
+        a = v.repr;
+        a_end = v.used;
+        b = global:match_variant.wado::$const_obj_151;
+        len = a_end - 0;
+        if len != 5 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
         }
-        $inline_bytes_match_at_1: block -> bool {
-            haystack = v.repr;
-            needle = global:match_variant.wado::$const_obj_151;
-            j = 0;
-            b69: block {
-                l70: loop {
-                    break_if b69 j >= self_18;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_1: 0;
-                    }
-                    j = j + 1;
-                    continue l70;
-                };
+        i = 0;
+        b69: block {
+            l70: loop {
+                break_if b69 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__0: 0;
+                }
+                i = i + 1;
+                continue l70;
             };
-            break $inline_bytes_match_at_1: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__0: 1;
     };
     if @unlikely($cond_3 == 0) {
         cold_path;
@@ -991,48 +990,18 @@ fn "match_variant.wado/$cm_export__$test_3_a_match_in_statement_position__arms_w
     };
     went = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     went = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("go center"), used: 9 };
-<<<<<<< HEAD
     $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         a = went.repr;
         b = array.new_data<u8>("go center");
         i = 0;
-        b68: block {
-            l69: loop {
-                break_if b68 i >= 9;
-                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
-||||||| b857806bc
-    $cond = $inline_bytes_match_at_5: block -> bool {
-        haystack = went.repr;
-        needle = array.new_data<u8>("go center");
-        j = 0;
-        b68: block {
-            l69: loop {
-                break_if b68 j >= 9;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break $inline_bytes_match_at_5: 0;
-=======
-    $cond = $inline_bytes_match_at_5: block -> bool {
-        haystack = went.repr;
-        needle = array.new_data<u8>("go center");
-        j = 0;
         b76: block {
             l77: loop {
-                break_if b76 j >= 9;
-                if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                    break $inline_bytes_match_at_5: 0;
->>>>>>> origin/main
+                break_if b76 i >= 9;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
                 }
-<<<<<<< HEAD
                 i = i + 1;
-                continue l69;
-||||||| b857806bc
-                j = j + 1;
-                continue l69;
-=======
-                j = j + 1;
                 continue l77;
->>>>>>> origin/main
             };
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
@@ -3191,17 +3160,9 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-<<<<<<< HEAD
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_234, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_243, digit_count_4);
     self_14 = f.buf;
     arr = self_14.repr;
-||||||| b857806bc
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_234, digit_count_4);
-    arr = f.buf.repr;
-=======
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_243, digit_count_4);
-    arr = f.buf.repr;
->>>>>>> origin/main
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
