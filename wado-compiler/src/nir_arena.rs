@@ -447,6 +447,9 @@ pub enum PatKind {
     Variant {
         enum_type: TypeId,
         variant_name: String,
+        /// Which case of `enum_type` this matches, resolved at elaboration. No
+        /// consumer re-derives it from `variant_name`.
+        case_index: u32,
         bindings: Vec<PatId>,
         payload_type: TypeId,
     },
@@ -1052,11 +1055,13 @@ impl Body {
             PatKind::Variant {
                 enum_type,
                 variant_name,
+                case_index,
                 bindings,
                 payload_type,
             } => PatKind::Variant {
                 enum_type,
                 variant_name,
+                case_index,
                 bindings: bindings.into_iter().map(|p| self.clone_pat(p)).collect(),
                 payload_type,
             },
