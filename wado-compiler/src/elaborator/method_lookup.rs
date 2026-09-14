@@ -3216,7 +3216,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             is_ref_impl: method_is_ref_impl,
             method_type_param_ids,
             impl_module,
-            from_concrete_impl: _,
+            from_concrete_impl,
             param_defaults: method_param_defaults,
             param_names: method_param_names,
             consumes_self: _,
@@ -3338,7 +3338,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
-        let output_fq = self.tysys.fq_receiver_head(output_base_type_id);
+        // The same split the container's receiver takes: an impl at one
+        // instantiation generates that instance's own function, a parameterized
+        // one is keyed on the base and specialized per instance.
+        let output_fq = if from_concrete_impl {
+            self.tysys.fq_receiver_instance(output_base_type_id)
+        } else {
+            self.tysys.fq_receiver_head(output_base_type_id)
+        };
         let mangled_method_name =
             MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 

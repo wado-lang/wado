@@ -353,6 +353,43 @@ impl IndexAssign<i32> for Cell<Tally> {
     }
 }
 
+// The Output side takes the same split as the container's: a method from an
+// impl at one instantiation is that instance's own function. Spelling it as the
+// bare `Counter` reached a call WIR could not resolve.
+struct Counter<T> {
+    n: T,
+}
+
+impl Counter<i32> {
+    fn bump(&mut self) {
+        self.n = self.n + 1;
+    }
+
+    fn get(&self) -> i32 {
+        return self.n;
+    }
+}
+
+struct CounterBox {
+    item: Counter<i32>,
+}
+
+impl IndexRef<i32> for CounterBox {
+    type Output = Counter<i32>;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.item;
+    }
+}
+
+impl IndexRefMut<i32> for CounterBox {
+    type Output = Counter<i32>;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.item;
+    }
+}
+
 struct Bag {
     items: List<i32>,
 }
@@ -490,6 +527,14 @@ test "an impl at one instantiation serves every indexing trait" {
     assert c[0].value == 2;
     c[0] = Tally { value: 9 };
     assert c.item.value == 9;
+}
+
+test "an Output at one instantiation dispatches its own method" {
+    let mut c = CounterBox { item: Counter { n: 0 } };
+    c[0].bump();
+    c[0].bump();
+    assert c.item.n == 2;
+    assert c[0].get() == 2;
 }
 
 test "a reference-typed key coerces the subscript" {
