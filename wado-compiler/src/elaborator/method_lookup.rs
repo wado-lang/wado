@@ -1436,7 +1436,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, span) = (input.slots, input.own_params, input.span);
-        let type_args = self.resolve_method_type_args(explicit, input);
+        let mut type_args = self.resolve_method_type_args(explicit, input);
+        self.settle_empty_pack_of(own_params, &mut type_args);
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
@@ -3232,8 +3233,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Past the bail, this path owns the call, so it owns the use->def edge
         // for the method name too — `resolve_method_call_with` never sees it.
-        if let Some(def) = method_def {
-            self.record_reference_to_decl(method_call.method_id, def);
+        if let Some(def) = method_def
+            && self.record_reference_to_decl(method_call.method_id, def, method_call.span)
+        {
+            return Some(TypeTable::ERROR);
         }
 
         // This path answers the call itself, so the ladder is enforced here

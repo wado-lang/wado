@@ -1,0 +1,12 @@
+// A call reaches an `#[unavailable]` declaration and reports its reason,
+// rather than falling through to "no function named".
+
+#[unavailable("argument order is a known trap; write `map(f).unwrap_or(v)`")]
+fn map_or();
+
+export fn run() {
+    map_or();
+}
+
+__DATA__
+{"compile_error": "`map_or` is unavailable: argument order is a known trap; write `map(f).unwrap_or(v)`"}

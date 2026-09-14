@@ -616,10 +616,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
+        // An `#[unavailable]` reserves a name, not a signature, so checking the
+        // arguments against its parameters would report on a shape that means
+        // nothing.
+        if let Some(def) = dispatched_method_def
+            && self.report_unavailable(def, span)
+        {
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
+
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
         self.group_variadic_type_args_of(&method_own_params, &mut type_args);
+        // What the turbofish alone already says, ahead of the value-default
+        // walk that resolves against it. An empty list is no turbofish at all.
+        if !type_args.is_empty() {
+            self.settle_empty_pack_of(&method_own_params, &mut type_args);
+        }
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -716,7 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // before the receiver's associated types are registered.
         let mut default_type_bindings = impl_type_bindings;
         if !method_type_param_ids.is_empty() && defaults.iter().any(|(_, d)| d.is_some()) {
-            let known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
+            let mut known = if turbofish_leaves_slot(&type_args, method_type_param_ids.len()) {
                 let mut infer =
                     InferCtx::new(&self.tysys.type_table, method_type_param_ids.clone());
                 for (i, (&param_type, &arg)) in
@@ -732,6 +746,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 type_args.clone()
             };
+            // The solve above has seen every written argument, so a pack still
+            // open here is one the call left nothing over for.
+            self.settle_empty_pack_of(&method_own_params, &mut known);
             default_type_bindings.extend(self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
@@ -1106,7 +1123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // signature. A name scan cannot stand in: two impls on one type can
         // declare the same method, and only dispatch knows which answered.
         if let (Some(method_id), Some(def)) = (method_id, dispatched_method_def) {
-            self.record_reference_to_decl(method_id, def);
+            self.record_reference_to_decl(method_id, def, span);
         }
 
         let func = FunctionRef {
@@ -1765,8 +1782,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // above, so inference has nothing left to bind for it. A block
             // declaring no slot of its own leaves the method's to its type
             // default, which is not the arguments' to answer.
+            // A pack is settled below instead, never a slot to spell.
             let unanswered = own_ids.iter().enumerate().find(|&(i, id)| {
                 !bindings.contains_key(id)
+                    && !sig.own_params[i].is_pack
                     && method_type_args
                         .get(i)
                         .is_none_or(|&a| a == TypeTable::UNKNOWN)
@@ -1784,6 +1803,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return TypeTable::ERROR;
             }
             merge_turbofish_type_args(&mut method_type_args, &inferred);
+            self.settle_empty_pack_of(&sig.own_params, &mut method_type_args);
             let declaring_args = self
                 .receiver_declaring_args(Some(target_type_id), &[])
                 .unwrap_or_default();
@@ -2411,8 +2431,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let receiver = self.impl_target_of(target_type_id, &DeclName::new(&struct_name));
             self.qualified_method_decl_id(&receiver, &static_call.method)
                 .or_else(|| self.qualified_method_decl_at(None, &struct_name, &static_call.method))
-        }) {
-            self.record_reference_to_decl(static_call.method_id, method_def);
+        }) && self.record_reference_to_decl(static_call.method_id, method_def, static_call.span)
+        {
+            return TypeTable::ERROR;
         }
 
         // A concrete block hosts its own function; a generic one's instance is

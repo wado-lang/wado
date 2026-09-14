@@ -2,8 +2,8 @@
 //! See `docs/wep-2026-04-28-resource-inheritance.md`.
 
 use crate::common::{InMemoryHost, check_diagnostics as diagnostics, diagnostic_messages, runtime};
-use wado_compiler::check_resource_moves_semantic;
 use wado_compiler::semantics::semantics;
+use wado_compiler::{Diagnostic, check_resource_moves_semantic};
 
 /// The move errors in `source`, which must compile otherwise: a source rejected
 /// before the move check runs says nothing about what the move check decides.
@@ -17,7 +17,7 @@ fn move_errors(source: &str) -> Vec<String> {
     );
     check_resource_moves_semantic(&sem)
         .into_iter()
-        .map(|e| e.to_string())
+        .map(|e| Diagnostic::from(e).message)
         .collect()
 }
 

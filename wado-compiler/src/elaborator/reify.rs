@@ -56,8 +56,10 @@ use crate::elaborator::trait_query::{
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::util::{
     is_float_only_literal, parse_i128_literal, parse_int_bits, parse_u128_literal,
-    range_endpoint_to_i128, unescape_byte, unescape_bytes, unescape_char, unescape_string,
-    unescape_template_segment, unpack_i128,
+    range_endpoint_to_i128, unpack_i128,
+};
+use crate::escape::{
+    unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
@@ -6848,20 +6850,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// True when `type_id` is a `TypePack` or a tuple whose elements
-    /// transitively contain one.
+    /// Check if a type contains a `TypePack` (variadic pack parameter).
     fn type_contains_pack(&self, type_id: TypeId) -> bool {
-        use crate::tir::{ResolvedType, TypeTable};
-        let ty = self.tysys.type_table.borrow().get(type_id).clone();
-        match ty {
-            ResolvedType::TypePack { .. } => true,
-            ResolvedType::GenericInstance { def, type_args }
-                if TypeTable::is_tuple_type(self.tysys.type_table.borrow().def_name(def)) =>
-            {
-                type_args.iter().any(|e| self.type_contains_pack(*e))
-            }
-            _ => false,
-        }
+        self.tysys.type_table.borrow().contains_type_pack(type_id)
     }
 
     /// Record on a default's `TypePackExpansion` the tuple the call settled the
@@ -6899,7 +6890,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return;
         }
         let settled: Vec<TypeId> = type_args[at..type_args.len() - after].to_vec();
-        if settled.iter().any(|t| self.type_contains_pack(*t)) {
+        if settled.iter().any(|&t| self.type_contains_pack(t)) {
             return;
         }
         let settled = self.tysys.type_table.borrow_mut().make_tuple(settled);
@@ -9465,7 +9456,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let negated = literal.neg.is_some();
         let repr = match literal.kind {
             NumericLiteralKind::Number(repr) => repr.to_string(),
-            NumericLiteralKind::Byte(raw) => util::unescape_byte(raw).ok()?.to_string(),
+            NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.to_string(),
         };
 
         let parse_result = if name.decl_name() == "u128" {
@@ -9817,7 +9808,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // b'A'` and `let x: i128 = b'A'` reach the float and wide-integer
             // readings a decimal literal does. `u8` is its type on its own.
             ast::Literal::Byte(raw) => {
-                let byte = util::unescape_byte(raw).unwrap_or(0);
+                let byte = unescape_byte(raw).unwrap_or(0);
                 let byte_type = if recorded_type == TypeTable::UNKNOWN {
                     TypeTable::U8
                 } else {

@@ -3820,6 +3820,20 @@ impl TypeTable {
         !self.contains_type_param(id)
     }
 
+    /// Whether `id` is a `TypePack` or a tuple whose elements transitively
+    /// contain one.
+    pub fn contains_type_pack(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::TypePack { .. } => true,
+            ResolvedType::GenericInstance { def, type_args }
+                if Self::is_tuple_type(self.def_name(*def)) =>
+            {
+                type_args.iter().any(|e| self.contains_type_pack(*e))
+            }
+            _ => false,
+        }
+    }
+
     /// Check if a type is or contains type parameters or unresolved types (Unknown/Error)
     pub fn contains_type_param(&self, id: TypeId) -> bool {
         match self.get(id) {

@@ -6447,12 +6447,11 @@ pub fn char::from_u32_unchecked(value: u32) -> char {
 pub fn char::is_ascii_whitespace(self: Box<char>) -> bool {
     return match self.value {
         ' ' => true,
-        '	' => true,
-        '
-' => true,
-        '' => true,
-        '' => true,
-        '' => true,
+        '\t' => true,
+        '\n' => true,
+        '\r' => true,
+        '\u{000B}' => true,
+        '\u{000C}' => true,
         _ => false,
     };
 }

@@ -1,0 +1,27 @@
+// An `#[unavailable]` method reserves the name and nothing else, so an `impl`
+// carrying one has not implemented the trait's method.
+
+trait Greet {
+    fn greet(&self) -> i32;
+}
+
+struct S {
+    x: i32,
+}
+
+impl Greet for S {
+    #[unavailable("never worked; read `x`")]
+    fn greet(&self) -> i32;
+}
+
+fn call<T: Greet>(t: &T) -> i32 {
+    return t.greet();
+}
+
+export fn run() {
+    let s = S { x: 1 };
+    let _ = call(&s);
+}
+
+__DATA__
+{"compile_error": "type `S` does not implement trait `Greet`"}

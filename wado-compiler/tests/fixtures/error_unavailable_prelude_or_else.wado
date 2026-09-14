@@ -1,0 +1,21 @@
+// The lazy fallbacks are refused on all three sites a caller reaches for them,
+// and each says to write `match` instead.
+
+export fn run() {
+    let opt: Option<i32> = Option::<i32>::Some(1);
+    opt.unwrap_or_else(|| 0);
+    opt.ok_or_else(|| "missing");
+
+    let res: Result<i32, String> = Result::<i32, String>::Ok(1);
+    res.unwrap_or_else(|e: String| e.len());
+}
+
+__DATA__
+{
+    "compile_error": "`Option::unwrap_or_else` is unavailable: a closure hides its cost at the call site; write `match` when the fallback must not be evaluated",
+    "compile_errors_contains": [
+        "`Option::unwrap_or_else` is unavailable",
+        "`Option::ok_or_else` is unavailable: a closure hides its cost at the call site; write `match` when the error must not be built",
+        "`Result::unwrap_or_else` is unavailable: a closure hides its cost at the call site; write `match` to read the `Err` value or to skip building a fallback"
+    ]
+}

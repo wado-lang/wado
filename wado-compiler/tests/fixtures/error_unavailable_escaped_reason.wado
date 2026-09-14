@@ -1,0 +1,19 @@
+// An attribute's string argument is read the way an expression's is, so a
+// reason quoting something reaches the caller with its quotes.
+
+struct S {
+    x: i32,
+}
+
+impl S {
+    #[unavailable("write \"x\" instead")]
+    fn get(&self);
+}
+
+export fn run() {
+    let s = S { x: 1 };
+    s.get();
+}
+
+__DATA__
+{"compile_error": "`S::get` is unavailable: write \"x\" instead"}

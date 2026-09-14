@@ -344,6 +344,13 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A site named a declaration that reports a reason in place of a body.
+    /// [`super::collect_unavailable`] renders the sentence.
+    Unavailable {
+        message: String,
+        span: Span,
+    },
+
     /// Unknown variable
     UnknownIdentifier {
         name: String,
@@ -1152,20 +1159,9 @@ pub(super) fn format_operator_not_applicable(
     }
 }
 
-impl std::fmt::Display for TypeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (_, message, span) = self.render();
-        write!(f, "{}:{}: {}", span.line, span.column, message)
-    }
-}
-
-impl std::error::Error for TypeError {}
-
 impl TypeError {
-    /// Render this error into its `(code, message, span)` triple — the single
-    /// source of truth shared by [`std::fmt::Display`] and the
-    /// `From<TypeError> for Diagnostic` conversion, so both surfaces phrase
-    /// every variant identically.
+    /// This error as its `(code, message, span)` triple, which is what
+    /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {
         use crate::compiler_host::Code;
         match self {
@@ -1262,6 +1258,9 @@ impl TypeError {
                 format!("unknown function '{name}'"),
                 *span,
             ),
+            TypeError::Unavailable { message, span } => {
+                (Code::Unavailable, message.clone(), *span)
+            }
             TypeError::UnknownIdentifier { name, span } => (
                 Code::UndefinedVariable,
                 format!("unknown identifier '{name}'"),
@@ -3226,19 +3225,16 @@ mod tests {
     }
 
     #[test]
-    fn display_prefixes_span_and_matches_diagnostic_message() {
+    fn diagnostic_carries_message_and_span() {
         let err = TypeError::UnknownType {
             name: "Frobnicate".to_string(),
             span: span(),
         };
 
-        // `Display` prefixes `line:column:` and reuses the canonical message.
-        assert_eq!(err.to_string(), "7:3: unknown type 'Frobnicate'");
-
-        // `Display` and the `Diagnostic` conversion are a single source of
-        // truth: the rendered message body is byte-for-byte identical.
         let diag: Diagnostic = err.into();
         assert_eq!(diag.message, "unknown type 'Frobnicate'");
+        let diag_span = diag.span.expect("span");
+        assert_eq!((diag_span.line, diag_span.column), (7, 3));
     }
 
     #[test]

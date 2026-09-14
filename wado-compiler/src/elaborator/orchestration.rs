@@ -45,7 +45,17 @@ use crate::elaborator::solver_bridge::SolverBridge;
 use crate::elaborator::trait_env::{
     ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of,
 };
+<<<<<<< HEAD
 use crate::elaborator::{build_func_index, liveness, scope, sig};
+||||||| 129707e1d
+use crate::elaborator::type_resolution::substitute_type_params;
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::elaborator::{build_func_index, liveness, scope, sig};
+=======
+use crate::elaborator::type_resolution::substitute_type_params;
+use crate::elaborator::types::{BoundRef, type_param_defaults_of};
+use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
+>>>>>>> origin/main
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
@@ -1333,6 +1343,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             indices
         };
 
+        // Every stdlib module is walked too: an absence the prelude declares is
+        // one a user module calls.
+        let unavailable = collect_unavailable(modules, resolutions.defs());
+
         // Intern every declaration in the TypeTable so `find_decl_type_by_name`
         // (used by `register_symbol_key_type_indices` below) resolves for every
         // symbol, including types that aren't referenced as a field anywhere.
@@ -1406,6 +1420,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             known_type_names_cache: Rc::new(known_type_names_cache),
             module_visible_types: Rc::new(module_visible_types),
             loaded_module_func_indices: Rc::new(loaded_module_func_indices),
+            unavailable: Rc::new(unavailable),
             // Assembled by `build_tir_from_state` between the decl and body
             // passes, once every module's own declarations are resolved.
             signatures: Rc::new(sig::Signatures::default()),

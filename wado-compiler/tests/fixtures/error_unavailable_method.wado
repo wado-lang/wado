@@ -1,0 +1,18 @@
+// The same answer for a method the receiver's `impl` declares unavailable.
+
+struct S {
+    x: i32,
+}
+
+impl S {
+    #[unavailable("use `x` directly")]
+    fn get(&self);
+}
+
+export fn run() {
+    let s = S { x: 1 };
+    s.get();
+}
+
+__DATA__
+{"compile_error": "`S::get` is unavailable: use `x` directly"}

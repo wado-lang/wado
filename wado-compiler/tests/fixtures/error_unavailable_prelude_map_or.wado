@@ -1,0 +1,11 @@
+// The prelude's own refusals reach a caller who writes the Rust name from
+// muscle memory. The arguments are never checked: the declaration reserves a
+// name, not a signature.
+
+export fn run() {
+    let opt: Option<i32> = Option::<i32>::Some(1);
+    opt.map_or(0, |v: i32| v * 2);
+}
+
+__DATA__
+{"compile_error": "`Option::map_or` is unavailable: the name reads as map-then-fallback while the signature takes the fallback first; write `map(f).unwrap_or(v)`"}
