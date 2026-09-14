@@ -1,9 +1,9 @@
-// `invalidate_call_effects_before_rewrite` stopped at a nested body, so a
-// `&mut local` handed to a call from inside a value block was never seen and
-// the callee's mutation did not invalidate the field constants. The dead loops
-// are what put the reference inside a block: without them the argument is a
-// bare `RefAsNonNull(LocalGet)`, which the walk does reach. Only `-O2` kept the
-// calls un-inlined and the constant alive at once.
+// A `&mut local` handed to a call from inside a value block was never seen by
+// `invalidate_call_effects_before_rewrite`, so the callee's writes did not
+// invalidate the field constants and every mutation through the reference was
+// forwarded over. The dead loops are what put the reference inside a block.
+// `-O2` alone reaches the shape: above it the calls inline, below it no
+// constant is forwarded.
 
 struct Number {
     n: i32,

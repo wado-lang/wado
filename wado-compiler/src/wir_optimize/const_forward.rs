@@ -6,8 +6,6 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirFunction, WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
-use super::util::collect_local_gets_deep;
-
 pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
     let defined_func_base = module.defined_func_base;
@@ -250,7 +248,7 @@ fn collect_aliased_in_instr(
                 };
                 if stores_param {
                     // Callee may store this reference — mark all locals as aliased.
-                    collect_local_gets_deep(arg, aliased);
+                    collect_reference_locals(arg, aliased);
                 }
                 // Recurse into sub-expressions (nested calls get their own analysis).
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, !stores_param);
@@ -260,7 +258,7 @@ fn collect_aliased_in_instr(
         // Indirect calls: conservative (unknown callee).
         WirInstr::CallRef { func_ref, args, .. } => {
             for arg in args {
-                collect_local_gets_deep(arg, aliased);
+                collect_reference_locals(arg, aliased);
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
             }
             collect_aliased_in_instr(func_ref, aliased, functions, defined_func_base, false);
@@ -268,7 +266,7 @@ fn collect_aliased_in_instr(
         }
         WirInstr::CallIndirect { index, args, .. } => {
             for arg in args {
-                collect_local_gets_deep(arg, aliased);
+                collect_reference_locals(arg, aliased);
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
             }
             collect_aliased_in_instr(index, aliased, functions, defined_func_base, false);
@@ -566,17 +564,12 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
-/// The locals a call can mutate through one argument: those whose own object
-/// the argument hands over — a reference-typed read of the local, bare or
-/// wrapped, wherever in the argument it sits.
-///
-/// A field or element loaded out of a local hands over a *different* object.
-/// Nothing recorded about the local can be falsified through it: a fact is a
-/// numeric literal or "equals local X", and a local with a fact is not in
-/// `aliased`, so no object the callee can reach points back at it.
-///
-/// A nested call inside the argument is its own mutation channel, invalidated
-/// when the walk that calls this reaches it.
+/// The locals a call can reach through one argument: those whose own object it
+/// hands over, wherever in the argument the read of them sits.
+//
+// A load hands over the field's pointee, not the base, and no fact recorded for
+// a non-`aliased` local is reachable from that pointee. A nested call inside the
+// argument is its own channel, reached by the walk that calls this.
 fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::LocalGet { name, result_ty } => {
@@ -584,7 +577,6 @@ fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
                 names.insert(name.clone());
             }
         }
-        // A load hands over what the field or element points at, not the base.
         WirInstr::StructGet { .. }
         | WirInstr::ArrayGet { .. }
         | WirInstr::ArrayGetS { .. }
@@ -600,10 +592,8 @@ fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
 /// and stops at a nested body, whose own recursion pre-invalidates in turn.
 fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     match instr {
-        // Every local whose object the arguments hand over, however deep: a
-        // `&mut` passed from inside a value block is the same mutation channel
-        // as a bare one, and a block is where the walk below stops. A scalar
-        // argument is a copy and opens none, so it keeps what is known of it.
+        // A `&mut` handed over from inside a value block is the same channel as
+        // a bare argument, and a block is where this walk stops.
         WirInstr::Call { args, .. }
         | WirInstr::CallRef { args, .. }
         | WirInstr::CallIndirect { args, .. } => {
@@ -734,9 +724,8 @@ fn invalidate_effects_in_instr(
                 known.invalidate_mutated_local(name);
             }
         }
-        // A call mutates through the references its arguments hand over, even
-        // where the callee declares no `stores` — and a `&mut` embedded in a
-        // literal or a value block hands one over just as a bare argument does.
+        // A callee mutates through the references it is handed whether or not
+        // it declares `stores` for them.
         WirInstr::Call { args, .. }
         | WirInstr::CallRef { args, .. }
         | WirInstr::CallIndirect { args, .. } => {

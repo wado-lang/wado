@@ -673,10 +673,10 @@ impl ValuePool {
     /// version-free, so the caller owes a single-version proof
     /// ([`crate::nir_engine::Engine::local_has_one_version`]); without one, two
     /// reads that denote different values share an id.
-    /// A cached value answers only for the type it was minted at: a pass that
-    /// retypes a slot (`sroa_param` scalarizing a parameter) would otherwise
-    /// get a read stamped with the type the slot used to have, and the
-    /// extractor re-emits a field access from that stamp.
+    ///
+    /// A cached value answers only for the type it was minted at: `sroa_param`
+    /// retypes the slot it scalarizes, and the extractor re-emits a read from
+    /// the type stamped here.
     pub fn canonical_local(&mut self, idx: u32, ty: TypeId) -> ValueId {
         if let Some(&v) = self.canonical_locals.get(&idx)
             && self.type_of(v) == Some(ty)

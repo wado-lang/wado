@@ -73,8 +73,6 @@ function read(file: string): Stage {
   return stage;
 }
 
-// A Markdown table, headed when title says so, and nothing at all when there
-// are no rows.
 function table(title: string, columns: string[], rows: string[][]): string[] {
   if (rows.length === 0) {
     return [];

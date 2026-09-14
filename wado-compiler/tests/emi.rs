@@ -212,8 +212,6 @@ struct Source {
 }
 
 impl Source {
-    /// A source every shape is still a candidate for, as it is before
-    /// calibration has ruled on it.
     fn new(root: Root, path: PathBuf) -> Self {
         Self {
             path,
@@ -1025,8 +1023,7 @@ struct Eligible {
     sites: usize,
     shapes: Vec<&'static str>,
     /// What the combinations that fell out were refused for. The source is a
-    /// subject under the rest, so this is not an exclusion — but a shape that
-    /// drops silently is coverage lost without a word.
+    /// subject under the rest, so a drop is coverage lost, not an exclusion.
     dropped: Vec<String>,
 }
 
@@ -1551,11 +1548,10 @@ fn corpus_subjects() -> Vec<Source> {
 }
 
 /// How many sources to work on at once.
-///
-/// A worker holds one whole compile in memory, and the stdlib's modules peak
-/// well past a gigabyte each, so a core count alone oversubscribes a machine
-/// with more cores than spare memory — the OOM killer takes the run down hours
-/// in. Two gigabytes a worker is what the stdlib's peaks asked for here.
+//
+// A worker holds a whole compile, and the stdlib's modules peak past a gigabyte
+// each, so cores alone oversubscribe a machine with more of them than spare
+// memory: 15 workers took 15.4 GB here and the OOM killer ended the run.
 fn jobs() -> usize {
     if let Some(jobs) = selection("WADO_EMI_JOBS") {
         return jobs.parse().expect("WADO_EMI_JOBS must be a number");

@@ -129,8 +129,8 @@ each shape and payload reached.
       compare the Wasm byte for byte. Catches what no output comparison can see.
 - [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
       is calibrated for each shape and loses one at a time, as it does a
-      payload. The loop shape found the second of the two bugs below: a
-      reference handed to a call from inside the loop's own value block.
+      payload. The loop's own value block is what put a reference in a call
+      argument, which is the shape the `O2` bug in the next entry needed.
 - [x] Calibrate and mutate at `O1`, `O2` and `Os` as well as `O0` and `O3`.
       `O2` is what a release build and `wado test` run, and it was not covered.
       `WADO_EMI_LEVELS` trades levels for corpus when a run has a time budget.
