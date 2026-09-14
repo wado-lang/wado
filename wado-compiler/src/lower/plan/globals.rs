@@ -33,7 +33,7 @@ use crate::token::Span;
 struct LazyInit {
     global: String,
     module_source: ModuleSource,
-    /// `{ …; return <initializer>; }`, in the frame `locals` describes.
+    /// `{ return <initializer>; }`, in the frame `locals` describes.
     body: TirBlock,
     locals: Vec<TirLocal>,
 }
@@ -103,29 +103,24 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     Ok(())
 }
 
-/// Turn `{ …; return <value>; }` into the statements assigning `<value>` to the
-/// global. Reify emits one return, and a synthesis pass may hoist statements
-/// ahead of it but never adds another.
+/// Turn `{ return <value>; }` into the statement assigning `<value>` to the
+/// global. Reify writes the one return, and every pass since rewrote
+/// expressions within it, so the shape here is the shape reify wrote.
 fn assign_to_global(
     body: TirBlock,
     module_source: ModuleSource,
     name: String,
     span: Span,
-) -> Vec<TirStmt> {
+) -> TirStmt {
     let mut stmts = body.stmts;
+    assert_eq!(stmts.len(), 1, "a global initializer is a single statement");
     let Some(TirStmt {
         kind: TirStmtKind::Return { value: Some(value) },
         ..
     }) = stmts.pop()
     else {
-        panic!("a global initializer function ends in a return of its value");
+        panic!("a global initializer returns its value");
     };
-    assert!(
-        !stmts
-            .iter()
-            .any(|s| matches!(s.kind, TirStmtKind::Return { .. })),
-        "a global initializer returns once"
-    );
     let global_set = TirExpr::new(
         TirExprKind::GlobalVarSet {
             module_source,
@@ -135,8 +130,7 @@ fn assign_to_global(
         TypeTable::UNIT,
         span,
     );
-    stmts.push(TirStmt::new(TirStmtKind::Expr(global_set), span));
-    stmts
+    TirStmt::new(TirStmtKind::Expr(global_set), span)
 }
 
 /// Assign every initializer to its global, in the order given, under one frame.
@@ -160,7 +154,7 @@ fn build_module_init_function(
             shift_locals_in_stmts(&mut body.stmts, offset);
         }
         merged_locals.extend(locals);
-        init_stmts.extend(assign_to_global(body, module_source, global, span));
+        init_stmts.push(assign_to_global(body, module_source, global, span));
     }
 
     TirFunction::synthesized(
