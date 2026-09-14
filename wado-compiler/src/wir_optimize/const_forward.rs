@@ -16,10 +16,6 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
         // Locals connected by plain local-to-local copies share one GC object;
         // mutations and aliasing must apply to the whole group.
         let copy_groups = collect_copy_groups(&body);
-        // Collect locals whose references escape. Field forwarding is unsafe
-        // for these locals because their fields can be modified through aliases.
-        // Uses stores info: locals passed to functions without `stores` for that
-        // parameter are NOT marked as aliased.
         let mut aliased = collect_aliased_locals(&body, &module.functions, defined_func_base);
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         // Locals assigned exactly once. `local_const` folds a `LocalGet` to its
@@ -200,10 +196,9 @@ fn widen_aliased_across_copy_groups(
     }
 }
 
-/// Collect locals whose references escape (address taken, embedded in structs,
-/// or passed to function calls that declare `stores` for that parameter).
-/// Locals passed to functions without `stores` are NOT aliased — the callee
-/// cannot retain the reference beyond the call.
+/// Locals a reference to which outlives any one statement: address taken, or
+/// passed to a call that declares `stores` for that parameter. These hold no
+/// fact at all; what escapes at a point in the flow is invalidated there.
 fn collect_aliased_locals(
     body: &[WirInstr],
     functions: &[WirFunction],
@@ -564,13 +559,11 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
-/// The locals whose own object `instr` puts in a container — a struct field, an
-/// array element or a global — where whatever reaches the container reaches it.
+/// The locals whose own object `instr` puts in a container: a struct field, an
+/// array element or a global, each reachable by whatever reaches the container.
 //
-// This is where a load's pointee gets a name, which is why
-// `collect_reference_locals` may stop at a load. A store is a point in the flow,
-// not a property of the local: the fact recorded at a local's construction holds
-// until its object goes in, so the escape invalidates rather than disqualifies.
+// A store is a point in the flow, not a property of the local, so the facts it
+// held before its object went in still hold there.
 fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::StructNew { fields, .. } => {
@@ -594,10 +587,9 @@ fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
 /// The locals whose own object `instr` hands over, wherever in it the read of
 /// them sits.
 //
-// A load hands over the field's pointee, not the base. Naming that pointee takes
-// a local whose object is in a container, and putting it there is an escape
-// `collect_container_escapes` invalidates at. A nested call inside `instr` is its
-// own channel, reached by the caller's walk.
+// A load hands over the field's pointee, not the base: naming that pointee takes
+// a local `collect_container_escapes` has already invalidated. A nested call
+// inside `instr` is its own channel, reached by the caller's walk.
 fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
     match instr {
         WirInstr::LocalGet { name, result_ty } => {
@@ -720,10 +712,9 @@ enum InvalidationScope {
     Merge,
 }
 
-/// The single invalidator shared by the straight-line and merge paths:
-/// invalidates defs (`LocalSet`/`LocalTee`/`MultiValueLocalBind`), field
-/// mutations (`StructSet`), and mutations through call arguments or escaped
-/// references. Mutation channels invalidate across copy groups.
+/// The single invalidator shared by the straight-line and merge paths: defs,
+/// field mutations, container stores, and mutations through a call argument or
+/// an escaped reference. Mutation channels invalidate across copy groups.
 fn invalidate_effects_in_instr(
     instr: &WirInstr,
     known: &mut FieldKnowledge<'_>,
@@ -751,8 +742,7 @@ fn invalidate_effects_in_instr(
                 known.invalidate_mutated_field(name, field_name);
             }
         }
-        // A reference to a local escaping anywhere — call argument, stored
-        // into a struct — is a mutation channel for the pointee.
+        // Taking a reference to a local is a mutation channel for it.
         WirInstr::RefAsNonNull(inner) => {
             if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                 known.invalidate_mutated_local(name);
