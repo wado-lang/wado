@@ -17,7 +17,7 @@ use crate::tir::{
     TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal, TirPattern, TirStmt,
     TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 
 // `extract` and `build_initialize_modules` are the two halves of
@@ -203,7 +203,7 @@ fn build_module_init_function(
     for (_, name, gvs_module_source, _, mut initializer, locals) in sorted_inits {
         let offset = u32::try_from(merged_locals.len()).unwrap();
         if offset > 0 && !locals.is_empty() {
-            renumber_locals_in_expr(&mut initializer, offset);
+            RenumberLocals { offset }.visit_expr(&mut initializer);
         }
         merged_locals.extend(locals);
 
@@ -527,184 +527,43 @@ fn topological_sort_global_inits(
     Ok(sorted)
 }
 
-/// Renumber all local variable indices in a TIR expression by adding an offset.
-/// Used when merging multiple global initializers into a single `$initialize_module` function.
-fn renumber_locals_in_expr(expr: &mut TirExpr, offset: u32) {
-    match &mut expr.kind {
-        TirExprKind::Local { index, .. } => *index += offset,
-        TirExprKind::Binary { left, right, .. } => {
-            renumber_locals_in_expr(left, offset);
-            renumber_locals_in_expr(right, offset);
-        }
-        TirExprKind::Unary { expr: inner, .. }
-        | TirExprKind::Cast { expr: inner, .. }
-        | TirExprKind::FieldAccess { expr: inner, .. }
-        | TirExprKind::VariantTag { expr: inner }
-        | TirExprKind::VariantTest { expr: inner, .. }
-        | TirExprKind::VariantPayload { expr: inner, .. } => {
-            renumber_locals_in_expr(inner, offset);
-        }
-        TirExprKind::Index { expr: e, index: i } => {
-            renumber_locals_in_expr(e, offset);
-            renumber_locals_in_expr(i, offset);
-        }
-        TirExprKind::Assign { target, value } => {
-            renumber_locals_in_expr(target, offset);
-            renumber_locals_in_expr(value, offset);
-        }
-        TirExprKind::Call { args, .. } => {
-            for arg in args {
-                renumber_locals_in_expr(&mut arg.expr, offset);
-            }
-        }
-        TirExprKind::CmRawCall { args, .. } => {
-            for arg in args {
-                renumber_locals_in_expr(arg, offset);
-            }
-        }
-        TirExprKind::IndirectCall {
-            callee: receiver,
-            args,
-        } => {
-            renumber_locals_in_expr(receiver, offset);
-            for arg in args {
-                renumber_locals_in_expr(arg, offset);
-            }
-        }
-        TirExprKind::VariantConstruct { payload, .. } => {
-            if let Some(p) = payload {
-                renumber_locals_in_expr(p, offset);
-            }
-        }
-        TirExprKind::StructLiteral { fields, .. } => {
-            for field in fields {
-                renumber_locals_in_expr(&mut field.value, offset);
-            }
-        }
-        TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
-            for elem in elements {
-                renumber_locals_in_expr(elem, offset);
-            }
-        }
-        TirExprKind::TupleSpread { expr } => {
-            renumber_locals_in_expr(expr, offset);
-        }
-        TirExprKind::TypePackExpansion { call_expr, .. } => {
-            renumber_locals_in_expr(call_expr, offset);
-        }
-        TirExprKind::Block(block) | TirExprKind::LabeledBlock { block, .. } => {
-            renumber_locals_in_block(block, offset);
-        }
-        TirExprKind::If {
-            condition,
-            then_branch,
-            else_branch,
-        } => {
-            renumber_locals_in_expr(condition, offset);
-            renumber_locals_in_block(then_branch, offset);
-            if let Some(eb) = else_branch {
-                renumber_locals_in_block(eb, offset);
-            }
-        }
-        TirExprKind::Match {
-            expr: scrutinee,
-            arms,
-        } => {
-            renumber_locals_in_expr(scrutinee, offset);
-            for arm in arms {
-                renumber_locals_in_pattern(&mut arm.pattern, offset);
-                if let Some(ref mut guard) = arm.guard {
-                    renumber_locals_in_expr(guard, offset);
-                }
-                renumber_locals_in_expr(&mut arm.body, offset);
-            }
-        }
-        TirExprKind::GlobalVarSet { value, .. } => {
-            renumber_locals_in_expr(value, offset);
-        }
-        // Leaf nodes with no locals
-        _ => {}
-    }
+/// Shifts every local index in one global's initializer, so several of them
+/// can share `$initialize_module`'s local namespace.
+///
+/// The walk goes through [`TirMutVisitor`], which is exhaustive over
+/// `TirExprKind`: a hand-written one misses whichever node kind arrives next,
+/// and an index left behind aliases another initializer's local.
+struct RenumberLocals {
+    offset: u32,
 }
 
-fn renumber_locals_in_block(block: &mut TirBlock, offset: u32) {
-    for stmt in &mut block.stmts {
-        renumber_locals_in_stmt(stmt, offset);
-    }
-}
-
-fn renumber_locals_in_stmt(stmt: &mut TirStmt, offset: u32) {
-    match &mut stmt.kind {
-        TirStmtKind::Let {
-            local_index, value, ..
-        } => {
-            *local_index += offset;
-            renumber_locals_in_expr(value, offset);
-        }
-        TirStmtKind::Expr(expr) => renumber_locals_in_expr(expr, offset),
-        TirStmtKind::Return { value } => {
-            if let Some(v) = value {
-                renumber_locals_in_expr(v, offset);
-            }
-        }
-        TirStmtKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            renumber_locals_in_expr(condition, offset);
-            renumber_locals_in_block(then_block, offset);
-            if let Some(eb) = else_block {
-                renumber_locals_in_block(eb, offset);
-            }
-        }
-        TirStmtKind::Loop { body } => renumber_locals_in_block(body, offset),
-        TirStmtKind::Break { value, .. } => {
-            if let Some(v) = value {
-                renumber_locals_in_expr(v, offset);
-            }
-        }
-        TirStmtKind::Continue => {}
-        TirStmtKind::LabeledBlock { block, .. } => renumber_locals_in_block(block, offset),
-        TirStmtKind::LetDestructure { pattern, value, .. } => {
-            renumber_locals_in_pattern(pattern, offset);
-            renumber_locals_in_expr(value, offset);
-        }
-        TirStmtKind::TaskReturn { .. } => {}
-        TirStmtKind::VariadicForOf { .. } => {
-            unreachable!("VariadicForOf should be expanded during monomorphization")
+impl TirMutVisitor for RenumberLocals {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } => *index += self.offset,
+            // A closure body numbers its locals from its own zero, so the
+            // enclosing namespace's offset does not apply inside one.
+            TirExprKind::Closure { .. } => {}
+            _ => self.walk_expr(expr),
         }
     }
-}
 
-fn renumber_locals_in_pattern(pattern: &mut TirPattern, offset: u32) {
-    match pattern {
-        TirPattern::Binding { local_index, .. } => *local_index += offset,
-        TirPattern::Tuple(patterns, _) => {
-            for p in patterns {
-                renumber_locals_in_pattern(p, offset);
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        match &mut stmt.kind {
+            TirStmtKind::Let { local_index, .. } => *local_index += self.offset,
+            TirStmtKind::VariadicForOf { .. } => {
+                unreachable!("VariadicForOf should be expanded during monomorphization")
             }
+            _ => {}
         }
-        TirPattern::Variant { bindings, .. } => {
-            for p in bindings {
-                renumber_locals_in_pattern(p, offset);
-            }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        if let TirPattern::Binding { local_index, .. } = pattern {
+            *local_index += self.offset;
         }
-        TirPattern::Struct { fields, .. } => {
-            for f in fields {
-                renumber_locals_in_pattern(&mut f.pattern, offset);
-            }
-        }
-        TirPattern::Wildcard
-        | TirPattern::Literal(_)
-        | TirPattern::Enum { .. }
-        | TirPattern::ConstantValue { .. }
-        | TirPattern::Range { .. } => {}
-        TirPattern::Or(alternatives) => {
-            for p in alternatives {
-                renumber_locals_in_pattern(p, offset);
-            }
-        }
+        self.walk_pattern(pattern);
     }
 }
 
