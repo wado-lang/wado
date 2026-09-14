@@ -1042,6 +1042,18 @@ mod tests {
         }
     }
 
+    /// A read of a struct local. The type is load-bearing: a call mutates
+    /// through the references its arguments hand over, and only those.
+    fn struct_local_get(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::Ref {
+                type_id: test_type_id(),
+                nullable: false,
+            },
+        }
+    }
+
     fn test_type_id() -> WirTypeId {
         WirTypeId::new(0, "test//S".into())
     }
@@ -1074,7 +1086,7 @@ mod tests {
         WirInstr::StructGet {
             type_id: test_type_id(),
             field_name: "f".to_string(),
-            expr: Box::new(local_get(local)),
+            expr: Box::new(struct_local_get(local)),
             result_ty: WirType::I32,
         }
     }
@@ -1251,7 +1263,7 @@ mod tests {
                 result: None,
                 then_body: vec![WirInstr::Call {
                     func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![local_get("a")],
+                    args: vec![struct_local_get("a")],
                 }],
                 else_body: None,
             },
@@ -1284,7 +1296,7 @@ mod tests {
                 "s",
                 WirInstr::Call {
                     func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![local_get("a")],
+                    args: vec![struct_local_get("a")],
                 },
             ),
             local_set("out", struct_get("a")),
@@ -1312,14 +1324,14 @@ mod tests {
 
         let mut body = vec![
             local_set("a", struct_new(WirInstr::I32Const(1))),
-            local_set("b", local_get("a")),
+            local_set("b", struct_local_get("a")),
             // out1 = b.f → folds to 1 through the copy
             local_set("out1", struct_get("b")),
             // b.f = 9 → mutates the shared object; invalidates a's fact too
             WirInstr::StructSet {
                 type_id: test_type_id(),
                 field_name: "f".to_string(),
-                expr: Box::new(local_get("b")),
+                expr: Box::new(struct_local_get("b")),
                 value: Box::new(WirInstr::I32Const(9)),
             },
             local_set("out2", struct_get("a")),
