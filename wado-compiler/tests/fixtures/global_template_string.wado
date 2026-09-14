@@ -1,0 +1,67 @@
+// A global initializer is a body like any other: `reify` puts a
+// `TemplateString` there for a template literal, and for the message an
+// `assert` inside one synthesizes. Template expansion once walked only
+// `module.functions`, so either reached pattern lowering unexpanded and hit
+// its `unreachable!` (issue #2051).
+
+global BASE: String = "https://example.com";
+global DOCS: String = `${BASE}/docs`;
+global BLOG: String = `${BASE}/blog`;
+
+global COUNT: i32 = `x${1}`.len();
+global PADDED: String = `${42:*>5}`;
+global NESTED: String = `a${`b${2}`}c`;
+
+struct Point { x: i32, y: i32 }
+
+global ORIGIN: Point = Point { x: 3, y: 4 };
+global SHOWN: String = `${ORIGIN:?}`;
+
+// The expansion mints locals in the initializer. Every initializer is merged
+// into one `$initialize_module`, its locals renumbered past the ones already
+// there, so two of them carrying locals is what puts that renumbering to work.
+global CHECKED: i32 = check: {
+    let n = 7;
+    assert n > 0;
+    break check: n
+};
+
+global LABELLED: String = build: {
+    let n = CHECKED * 2;
+    break build: `n=${n}`
+};
+
+// A closure body owns its own local namespace, so the template locals belong
+// to it rather than to the enclosing initializer. Its captures are the
+// exception. They name locals out in the initializer, so they are renumbered
+// with it. A capture left behind reads another initializer's local, and the
+// module then fails Wasm validation.
+global CAPTURING: fn() -> String = hold: {
+    let tag = "n";
+    let n = 12;
+    break hold: || `${tag}=${n}`
+};
+
+test "a template hole reading another global" {
+    assert DOCS == "https://example.com/docs";
+    assert BLOG == "https://example.com/blog";
+}
+
+test "a template with a literal hole" {
+    assert COUNT == 2;
+    assert PADDED == "***42";
+    assert NESTED == "ab2c";
+}
+
+test "a template rendering a struct global" {
+    assert SHOWN == "Point { x: 3, y: 4 }";
+}
+
+test "an assert inside a global initializer" {
+    assert CHECKED == 7;
+    assert LABELLED == "n=14";
+}
+
+test "a closure capturing its own initializer's locals" {
+    assert CAPTURING() == "n=12";
+}

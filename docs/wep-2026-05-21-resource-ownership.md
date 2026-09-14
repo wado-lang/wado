@@ -384,10 +384,8 @@ unobserved.
 
 Two kinds of write reach different storage. `p.f = x` points `p.f` elsewhere, so
 a reference already taken out of `p.f` keeps what it has, and only a write
-_inside_ that storage disturbs it. And a place repointed after a binding read it
-hands that binding the only reference to what the place held — the `take` /
-`drain` / `snapshot` idiom — so the binding may leave the function though it was
-read out of a place the caller still owns.
+_inside_ that storage disturbs it. A repoint is therefore never a conflict for a
+binding that read the place: the binding keeps its share across it.
 
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read out
@@ -399,9 +397,24 @@ it. Two reads are such a move: a value read of the binding, and a place-level
 move of a field out of it. A binding with neither is handed nowhere, so refusing
 it a share on move-eligibility alone costs a copy that defends nothing.
 
-A `match` over a place needs no temp of its own: the arms project the place
-where it lies and each binding asks the fold for itself. Only a non-place
-scrutinee is hoisted for `labeled_block_fusion`, whose temp the fold defends.
+A share licenses the binding and nothing built out of it. `let mut b = a` and
+`Wrapper { inner: a }` mint a second owner, which outlives the binding and may be
+written through, so each owes its copy though `a` shares. Only a move exempts
+them, and a move is proved of the binding itself, never inherited from what the
+binding was read out of.
+
+A `match` over a writable place is hoisted into a temp, and the fold decides that
+temp's copy for every binding under it. One wrap site answers for the whole arm:
+the bindings read the temp, so each is as defended as the temp is. A place nothing
+can write is matched where it lies, its bindings costing nothing.
+
+That temp dies at the match. Reading it alone therefore calls the place it was
+hoisted out of dead while that place is still live, which moves an arm binding
+out from under its holder. A source root stands on its own chain, and the whole
+chain answers instead. The share side always closed its live set that way, and
+the move side now reads the same closure. Both sides close over places rather
+than root locals, so two components of one aggregate are not readers of each
+other.
 
 What a call writes is read off the callee rather than assumed: `modref.rs`
 collects each function's writes as fields of the type carrying them and closes
@@ -460,6 +473,27 @@ therefore be complete without predicting what a later pass writes: it reads the
 types a program declares, since no expression rewrite introduces a type the
 program did not already name. Over-synthesis costs nothing — `dce` removes an
 unused helper — while a miss leaves the fold no helper to call.
+
+### Known gap: the release that lets a binding leave the function
+
+`let v = self.held; self.held = null;` gives `v` what the place held. In
+principle `v` may then be handed to a new owner with no copy, which is the
+`take` / `drain` / `snapshot` idiom. The compiler copies instead.
+
+A repoint of the place is not the proof this needs, for two reasons.
+
+It says nothing about _when_ it runs, so a repoint under an `if` that never
+executes would license the elision. `value_copy_release_is_not_a_proof` is that
+program.
+
+It says nothing about a _second_ binding read out of the same place, where a
+write through one is observed through the other. `value_copy_new_owner_needs_a_proof`
+is that one, and this half is answered: a hand-over is refused when another chain
+reaches the same place (`value_copy_two_readers_of_one_place`). That states the
+sibling case as a rule instead of counting bindings.
+
+The first half stands. The backward walk records a live set per write and no
+position, so it cannot say today which repoints dominate a site.
 
 ### Known gap: a borrowed projection behind a variant
 
@@ -619,9 +653,15 @@ Verified against the tree.
       source's later writes.
 - [x] A self-recursive function can prove it returns owned, so `?` on one stops
       deep-copying the error it propagates.
-- [x] A place repointed after a binding read it releases that binding.
-- [x] A place scrutinee is matched where it lies, and a receiver-aliasing call
-      counts as one, so `match *r` and `match xs[0]` decide as `match r` does.
+- [x] A repoint of a place costs a binding that read it nothing: the binding
+      keeps its share across it. Handing that binding on to a new owner is a
+      separate claim, and the gap above says what proving it would take.
+- [x] Whether a binding aliases storage something still reads is asked of the
+      whole chain its source stands on, so a match temp standing between the
+      binding and the holder does not read as the holder's death.
+- [x] A place scrutinee nothing can write is matched where it lies, and a
+      receiver-aliasing call counts as a place, so `match *r` and `match xs[0]`
+      decide as `match r` does. A writable one is hoisted into a temp.
 - [x] A closure costs its captures their move, their share and their
       confinement, not its whole frame's.
 - [x] A projection to a scalar keeps its root live without consuming it, so
@@ -639,14 +679,64 @@ Verified against the tree.
       to `place::is_reference`, which reads both spellings. A raw `Ref` / `MutRef`
       test minted no owned scrutinee temp and the binding aliased the caller's
       payload.
-- [ ] Drive the helper seed from declared types rather than from expressions.
-      Predicting the temps pattern lowering mints is what the current seed does,
-      and each shape it misses is a copy the fold cannot emit.
-- [ ] Decide a match arm's binding in the fold, by lowering it to an ordinary
-      projection of the scrutinee as `let`-destructure already is. Deciding it in
-      pattern lowering puts the copy on a temp that exists for
-      `labeled_block_fusion`, so which syntactic position a `match` sits in
-      changes whether the binding is defended.
+- [x] The helper seed is driven by the types a program names rather than by the
+      expressions it writes, so it predicts none of the temps pattern lowering
+      mints after it. A miss left the fold no helper to call, which
+      `wrap_value_copy` asserts on.
+- [x] A `break LABEL` resumes where its labeled block ends, at both levels that
+      compute last-use liveness. Each kept a stack of exit sets that only loops
+      pushed, so every such break fell back to _every_ local live. A template
+      string lowers to a labeled block, so one interpolation anywhere in a
+      function retired its whole last-use set. That showed most often as a
+      whole-array copy of a `String` handed to a callee that keeps it. The
+      source-level walk had
+      the same fallback, and is fixed here rather than left. No fixture changes
+      with that half fixed: a template is not a labeled block where that walk
+      runs.
+- [x] A caller takes the whole `&mut` handle as written when the callee names a
+      write it cannot re-root there. Re-rooting kept only the writes whose owner
+      was the handle's own type and dropped the rest, so a callee writing through
+      a variant payload reported nothing to its caller at all. Harmless only
+      while a defensive copy stood in the way; the item above removed that copy
+      and `value_copy_nested_write_through_payload` miscompiled.
+- [x] A wrap site skips its copy for a move, never for a share. The two were one
+      set, so a second owner minted out of a share — `let mut b = a`,
+      `Wrapper { inner: a }` — aliased the place the binding was read out of, and a
+      write through it landed there.
+- [x] An arm binding aliases live storage when the scrutinee is live where _that
+      arm_ reads it, decided from the live set the arm's own walk produced. One set
+      merged over every arm made a sibling arm's read refuse this arm's share.
+- [x] Storage is handed over only when no other chain reaches it. One predicate
+      answers at every hand-over site, and closes the chain on both sides: the
+      storage being taken, and everything live where it is taken. Closing only
+      the taker's own side left a sibling binding read out of the same place
+      invisible, since it reaches the place from beside the taker rather than
+      above it. Two bindings then both skipped their copy, and a write through
+      one was observed through the other. Both sides are compared as places
+      rather than as root locals: asking only whether two chains share a root
+      made each component of a destructured tuple a reader of its siblings,
+      which cost the corpus five copies in `httpbin_*`. Carrying the selectors
+      gives those back. One copy elsewhere stays, in
+      `parser_synth_id_collision_test`, where two bindings read the whole of one
+      place and one is still live. That is the shape the rule is for, and the
+      only elision in the corpus it takes.
+- [ ] Let the fold decide a match arm's binding for itself, so the answer stops
+      depending on the temp pattern lowering hoists the scrutinee into. Which
+      syntactic position a `match` sits in is part of whether the binding is
+      defended, which it should not be. Finishing means the binding carries its
+      own path and the fold wraps it, with the corpus no worse off.
+
+      What blocks it is a write reached through a variant payload: `modref` keys
+      it by the payload's type while the call site keys by the handle's, so
+      giving the binding the deeper path files the write where no caller looks.
+      Two pieces close that — `Selector::Variant` carrying its owner, so a
+      variant step is a key as a field is, and `modref` speaking addressable
+      steps rather than fields, the vocabulary `disjoint` already uses.
+
+      An or-pattern is the trap for any attempt: its alternatives bind one local
+      but project different cases, so the local names only what they agree on —
+      the value the whole pattern matched. Reading it as one alternative's
+      payload lets a write to another's be called disjoint.
 - [x] A borrowed projection returned behind a variant construction. `return` is
       not a wrap site, so `return place` hands a borrow out for the caller to
       materialize; `analyze::returned_value` makes `return Some(place)` do the
@@ -700,10 +790,30 @@ Verified against the tree.
       `extract` the verdict "projects `v`".
       It buys nothing alone. `is_owned_value` has no `TirUnaryOp::Ref` arm, so
       `&fresh_local` is never owned, and the caller that would cash the verdict
-      asks exactly that question about its argument. Measured: the resolution on
-      its own leaves all 1768 WIR goldens byte-identical, and a case written to
-      exercise it — `wrap(h: &Holder) -> List<i32> { return get_items(h); }`
-      called with a fresh `Holder` — is byte-identical at `-O0` too.
+      asks exactly that question about its argument. The resolution on its own
+      leaves every WIR golden byte-identical, and a case written to exercise it —
+      `wrap(h: &Holder) -> List<i32> { return get_items(h); }` called with a fresh
+      `Holder` — is byte-identical at `-O0` too.
+
+### Known gap: a destructured field's path is assumed to borrow
+
+A pattern-destructured field's path is marked as borrowing, because the pattern
+carries no type saying whether that field does, and the mark refuses those paths
+a share outright. Closing it means carrying the field's type into the pattern.
+Every WIR golden is byte-identical with the mark removed, so nothing measured
+pays for it.
+
+### Known gap: freshness does not read the fold's own wraps
+
+A copy hands its target storage nothing else reaches, but ownedness is computed
+from a local's source before any wrap site is chosen, so the fold does not read
+the wrap it has just decided as the freshness that wrap creates. Closing it means
+feeding the fold's own decisions back into freshness.
+
+No program reaches the imprecision. For a second read to pay a copy its move must
+be refused, and a copied local aliases nothing, so only a read that is not the
+last one refuses — and there the second copy is a second live object, which is
+needed.
 
 ## Deferred: the `move` and `unique` keywords
 

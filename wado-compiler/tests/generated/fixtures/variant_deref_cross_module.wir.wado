@@ -130,9 +130,9 @@ type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_
 
 type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem" = fn(ref "./sub/variant_deref_helper.wado//LabelElem") -> ref "./sub/variant_deref_helper.wado//LabelElem";  // TypeId(32)
 
-type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem" = fn(ref "./sub/variant_deref_helper.wado//RepeatElem") -> ref "./sub/variant_deref_helper.wado//RepeatElem";  // TypeId(33)
+type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem" = fn(ref "./sub/variant_deref_helper.wado//Elem") -> ref "./sub/variant_deref_helper.wado//Elem";  // TypeId(33)
 
-type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem" = fn(ref "./sub/variant_deref_helper.wado//Elem") -> ref "./sub/variant_deref_helper.wado//Elem";  // TypeId(34)
+type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem" = fn(ref "./sub/variant_deref_helper.wado//RepeatElem") -> ref "./sub/variant_deref_helper.wado//RepeatElem";  // TypeId(34)
 
 type "functype//variant_deref_cross_module.wado/process$scalar" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(35)
 
@@ -268,10 +268,6 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
     return struct.new "./sub/variant_deref_helper.wado//LabelElem" { name: ref.as_non_null(v_1 = v.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_1.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_1.used }), element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
 }
 
-fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem"(v) {
-    return struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
-}
-
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v) {
     let $vc_payload_0: ref "core:prelude/string.wado//String";
     let $vc_payload_1: ref "core:prelude/string.wado//String";
@@ -298,6 +294,10 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
         $vc_payload_5 = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(v).payload_0;
         struct.new "./sub/variant_deref_helper.wado//Elem::Label" { discriminant: 5, payload_0: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"($vc_payload_5)) };
     });
+}
+
+fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem"(v) {
+    return struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
 }
 
 fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {

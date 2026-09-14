@@ -571,14 +571,18 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
-    /// The declaration `type_id` is an instance of. A nominal type already knows
-    /// its declaring node, so a caller holding a type has an identity without
-    /// reading a `(name, module)` pair off it and resolving that again.
-    /// The declaration `type_id` was *registered* under, so it declines for a head
-    /// whose declaration never got a node — a `GenericResource` instantiation.
-    /// For the head's declaration regardless, use [`crate::tir::TypeTable::nominal_def`].
+    /// The declaration `type_id` is an instance of. `None` where its head names
+    /// none: a type parameter, a projection, an anonymous shape.
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
-        let decl = self.type_table.borrow().decl_of_type(type_id)?;
+        let table = self.type_table.borrow();
+        let peeled = table.peel_refs(type_id);
+        if let Some(def) = table.nominal_def(peeled) {
+            return Some(def);
+        }
+        // `Array<T>` is declared definitionless, so its instantiation carries no
+        // `def` and the compiler item names the declaration instead.
+        let decl = table.decl_of_type(peeled)?;
+        drop(table);
         self.resolutions.defs().of_ast_id(decl)
     }
 

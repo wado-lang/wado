@@ -348,6 +348,7 @@ fn build_variant_copy_body(
                 pattern: TirPattern::Variant {
                     enum_type: type_id,
                     variant_name: case_name.clone(),
+                    case_index: *case_index,
                     bindings,
                     payload_type: *payload_ty,
                 },

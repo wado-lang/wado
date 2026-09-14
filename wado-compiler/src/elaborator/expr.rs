@@ -2741,6 +2741,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
+        // Coverage is asked of the structure the scrutinee's cases come from, so
+        // that it agrees with what pattern resolution asks.
+        let scrutinee_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
+
         // Classify each arm pattern once (shape only), pairing it with whether
         // the arm is guardless (guarded arms never contribute to coverage).
         let classified: Vec<(bool, ExhPattern)> = arms
@@ -2832,19 +2840,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Project an AST match-arm pattern onto the shape exhaustiveness reads,
     /// mirroring `resolve_if_pattern_inner`'s `TirPattern`-shape decisions.
-    /// References are peeled first (as `resolve_if_pattern` does) so case-name
-    /// disambiguation uses the underlying type.
     fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
-        let mut peeled = scrutinee_type;
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-            self.tysys.type_table.borrow().get(peeled).clone()
-        {
-            peeled = inner;
-        }
-        self.exh_pattern_inner(pattern, peeled)
-    }
-
-    fn exh_pattern_inner(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
         match pattern {
             ast::Pattern::Wildcard | ast::Pattern::Error(_) => ExhPattern::CatchAll,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
@@ -2854,7 +2850,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !matches!(pattern, ast::Pattern::MutIdent { .. })
                     && self.is_known_case_of_type(scrutinee_type, name, None)
                 {
-                    return self.exh_pattern_inner(
+                    return self.exh_pattern(
                         &ast::Pattern::Variant {
                             variant_name: name.clone(),
                             variant_qualifier: None,
@@ -2895,7 +2891,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Or(alternatives) => ExhPattern::Or(
                 alternatives
                     .iter()
-                    .map(|alt| self.exh_pattern_inner(alt, scrutinee_type))
+                    .map(|alt| self.exh_pattern(alt, scrutinee_type))
                     .collect(),
             ),
             ast::Pattern::Range {

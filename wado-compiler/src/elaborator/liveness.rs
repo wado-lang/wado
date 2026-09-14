@@ -351,7 +351,7 @@ fn analyze_body(
         eligible,
         last_uses,
         spans,
-        loop_exit: Vec::new(),
+        exits: Vec::new(),
     };
     let mut live = IndexSet::default();
     analyzer.walk_block(body, &mut live, true);
@@ -465,8 +465,15 @@ struct LastUseAnalyzer<'a> {
     last_uses: &'a mut IndexSet<AstId>,
     /// Span projection for the enclosing module (see [`Liveness::moved_spans`]).
     spans: &'a mut IndexSet<Span>,
-    /// Live-after-loop set per enclosing loop, for `break` targets.
-    loop_exit: Vec<IndexSet<AstId>>,
+    /// Live-after set per enclosing `break` target: a loop (unlabeled) or a
+    /// labeled block.
+    exits: Vec<Exit>,
+}
+
+/// One `break` target and the live set where it resumes.
+struct Exit {
+    label: Option<String>,
+    live: IndexSet<AstId>,
 }
 
 impl LastUseAnalyzer<'_> {
@@ -486,6 +493,34 @@ impl LastUseAnalyzer<'_> {
             }
             live.insert(def);
         }
+    }
+
+    fn push_exit(&mut self, label: Option<String>, live: IndexSet<AstId>) {
+        self.exits.push(Exit { label, live });
+    }
+
+    /// Live set where a `break` to `label` resumes. No entry for it → every
+    /// eligible local, the sound over-approximation.
+    fn exit_live(&self, label: Option<&str>) -> IndexSet<AstId> {
+        self.exits
+            .iter()
+            .rev()
+            .find(|e| e.label.as_deref() == label)
+            .map_or_else(|| self.eligible.clone(), |e| e.live.clone())
+    }
+
+    /// A labeled block, in statement or expression position: a `break LABEL`
+    /// inside resumes where the block ends.
+    fn walk_labeled_block(
+        &mut self,
+        label: &str,
+        block: &Block,
+        live: &mut IndexSet<AstId>,
+        record: bool,
+    ) {
+        self.push_exit(Some(label.to_string()), live.clone());
+        self.walk_block(block, live, record);
+        self.exits.pop();
     }
 
     fn kill_pattern(&mut self, pat: &ast::Pattern, live: &mut IndexSet<AstId>) {
@@ -538,14 +573,9 @@ impl LastUseAnalyzer<'_> {
             ast::Stmt::Loop(s) => self.walk_loop(&s.body, live, record),
             ast::Stmt::Match(m) => self.walk_match(m, live, record),
             ast::Stmt::Break(b) => {
-                // Reset to the innermost loop-exit set (the fall-through below a
-                // break is unreachable). Unknown target (labeled / no context) →
-                // keep every eligible local live, the safe over-approximation.
-                *live = self
-                    .loop_exit
-                    .last()
-                    .cloned()
-                    .unwrap_or_else(|| self.eligible.clone());
+                // The fall-through below a break is unreachable. No entry for the
+                // target → every eligible local stays live, the safe answer.
+                *live = self.exit_live(b.label.as_deref());
                 if let Some(value) = &b.value {
                     self.walk_expr(value, live, record);
                 }
@@ -562,7 +592,9 @@ impl LastUseAnalyzer<'_> {
                 }
                 self.walk_expr(&a.condition, live, record);
             }
-            ast::Stmt::LabeledBlock(lb) => self.walk_block(&lb.block, live, record),
+            ast::Stmt::LabeledBlock(lb) => {
+                self.walk_labeled_block(&lb.label, &lb.block, live, record);
+            }
             // A local type/impl declaration's methods aren't closures, so
             // they can't read/write the enclosing function's locals; nothing
             // here affects variable liveness.
@@ -597,7 +629,7 @@ impl LastUseAnalyzer<'_> {
         record: bool,
     ) {
         let exit_live = live.clone();
-        self.loop_exit.push(exit_live.clone());
+        self.push_exit(None, exit_live.clone());
         let mut head = exit_live.clone();
         loop {
             let mut work = head.clone();
@@ -616,13 +648,13 @@ impl LastUseAnalyzer<'_> {
             self.walk_condition(cond, &mut candidate, true);
             head = candidate;
         }
-        self.loop_exit.pop();
+        self.exits.pop();
         *live = head;
     }
 
     fn walk_loop(&mut self, body: &Block, live: &mut IndexSet<AstId>, record: bool) {
         let exit_live = live.clone();
-        self.loop_exit.push(exit_live.clone());
+        self.push_exit(None, exit_live.clone());
         let mut head = exit_live;
         loop {
             let mut work = head.clone();
@@ -637,7 +669,7 @@ impl LastUseAnalyzer<'_> {
             self.walk_block(body, &mut work, true);
             head = work;
         }
-        self.loop_exit.pop();
+        self.exits.pop();
         *live = head;
     }
 
@@ -645,7 +677,7 @@ impl LastUseAnalyzer<'_> {
         // `for (init; cond; update) body`: init runs once before the loop;
         // cond/update/body iterate. Model update as part of the loop body tail.
         let exit_live = live.clone();
-        self.loop_exit.push(exit_live.clone());
+        self.push_exit(None, exit_live.clone());
         let mut head = exit_live.clone();
         loop {
             let mut work = head.clone();
@@ -676,7 +708,7 @@ impl LastUseAnalyzer<'_> {
         } else {
             head
         };
-        self.loop_exit.pop();
+        self.exits.pop();
         if let Some(init) = &s.init {
             self.walk_stmt(init, &mut live_after_init, record);
         }
@@ -685,7 +717,7 @@ impl LastUseAnalyzer<'_> {
 
     fn walk_for_of(&mut self, s: &ast::ForOfStmt, live: &mut IndexSet<AstId>, record: bool) {
         let exit_live = live.clone();
-        self.loop_exit.push(exit_live.clone());
+        self.push_exit(None, exit_live.clone());
         let mut head = exit_live.clone();
         loop {
             let mut work = head.clone();
@@ -702,7 +734,7 @@ impl LastUseAnalyzer<'_> {
             self.kill_pattern(&s.binding, &mut work);
             self.walk_block(&s.body, &mut work, true);
         }
-        self.loop_exit.pop();
+        self.exits.pop();
         // The iterable is evaluated once, before the loop.
         *live = union(&head, &exit_live);
         self.walk_expr(&s.iterable, live, record);
@@ -862,7 +894,7 @@ impl LastUseAnalyzer<'_> {
                 self.walk_expr(&e.tag, live, record);
             }
             Expr::Block(b) => self.walk_block(b, live, record),
-            Expr::LabeledBlock(b) => self.walk_block(&b.block, live, record),
+            Expr::LabeledBlock(b) => self.walk_labeled_block(&b.label, &b.block, live, record),
             Expr::If(e) => self.walk_if(
                 &e.condition,
                 &e.then_block,
@@ -1228,6 +1260,16 @@ mod last_use_tests {
         // by-value parameter read for the last time here.
         assert_eq!(count(src, "xs"), 0);
         assert_eq!(count(src, "p"), 1);
+    }
+
+    #[test]
+    fn a_break_to_a_labeled_block_resumes_where_it_ends() {
+        let src = "export fn f(a: List<i32>, c: bool) -> i32 { \
+                   let n = pick: { if c { break pick: 1; } 2 }; \
+                   return a.len() + n; }";
+        // `break pick:` leaves the labeled block, where only `a` is still read.
+        // Taking every local live there instead cost `a` its final use.
+        assert_eq!(count(src, "a"), 1);
     }
 
     #[test]

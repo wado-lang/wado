@@ -400,11 +400,9 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
-                            // A destructured field names the same storage
-                            // `base.field` does, but the pattern carries no
-                            // type to say whether that field borrows. Answer
-                            // borrowed: refusing a share costs a copy, allowing
-                            // one against a borrow costs the value semantics.
+                            // The pattern carries no type to say whether the
+                            // field borrows, and a wrong `false` here costs the
+                            // value semantics rather than a copy.
                             place.through_borrow = true;
                             Names::Place(place)
                         }
@@ -414,6 +412,8 @@ impl<'a> Resolver<'a> {
                     self.bind_pattern(&field.pattern, &nested);
                 }
             }
+            // The binding names the value the pattern tested, not a projection of
+            // it: deepening by the payload's selector is sound and measures worse.
             TirPattern::Tuple(sub, _)
             | TirPattern::Variant { bindings: sub, .. }
             | TirPattern::Or(sub) => {

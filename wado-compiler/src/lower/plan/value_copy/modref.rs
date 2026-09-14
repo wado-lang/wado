@@ -29,10 +29,18 @@ impl Writes {
         self.opaque
     }
 
-    /// Whether a value of `owner` is written past any one field.
+    /// Whether this names any write. Which of the types named a given handle
+    /// reaches is not something this vocabulary answers, so any of them counts.
     #[must_use]
-    pub fn writes_whole(&self, owner: TypeId) -> bool {
-        self.whole.contains(&owner)
+    pub fn writes_anything(&self) -> bool {
+        self.opaque || !self.whole.is_empty() || !self.fields.is_empty()
+    }
+
+    /// Whether every write named here is a field of `owner` itself, so a caller
+    /// holding such a handle can rebuild each as a path from it.
+    #[must_use]
+    pub fn re_rootable_at(&self, owner: TypeId) -> bool {
+        self.whole.is_empty() && self.fields.iter().all(|(ty, _)| *ty == owner)
     }
 
     /// The fields of `owner` this writes, for a caller re-rooting them at the
@@ -82,9 +90,9 @@ enum WholeOf {
 /// A known callee's own writes are still unsettled while its body is being
 /// scanned, so a field this body's argument projects through — `outer.inner`
 /// in `callee(&mut outer.inner)` — is added to this function's own `Writes`
-/// only once the fixpoint shows `callee` writes something inside `handed`
-/// (`Inner` here). Recording it unconditionally would claim a write neither
-/// this function nor its callee makes, and reject a share that is safe.
+/// only once the fixpoint shows `callee` writes anything at all. Recording it
+/// unconditionally would claim a write neither this function nor its callee
+/// makes, and reject a share that is safe.
 struct PendingProjection {
     /// The `(owner, field)` pairs the argument's path projects through, added
     /// together once the condition below is met.
@@ -92,8 +100,6 @@ struct PendingProjection {
     /// A whole-root write to add instead, for a path with no field-typed key
     /// of its own — reached only through an `Index` or `Variant` step.
     whole: Option<TypeId>,
-    /// The type handed to `callee`; its writes are asked about this type.
-    handed: TypeId,
     callee: (ModuleSource, String),
 }
 
@@ -158,11 +164,9 @@ pub fn compute_mod_ref(
                 }
             }
             for p in pending {
-                let hits = per_func.get(&p.callee.0, &p.callee.1).is_some_and(|w| {
-                    w.is_opaque()
-                        || w.writes_whole(p.handed)
-                        || w.fields_of(p.handed).next().is_some()
-                });
+                let hits = per_func
+                    .get(&p.callee.0, &p.callee.1)
+                    .is_some_and(Writes::writes_anything);
                 if hits {
                     merged.fields.extend(p.fields.iter().copied());
                     if let Some(whole) = p.whole {
@@ -307,7 +311,6 @@ impl Walker<'_> {
                 self.pending.push(PendingProjection {
                     fields: Vec::new(),
                     whole: Some(lent),
-                    handed,
                     callee,
                 });
             }
@@ -326,7 +329,6 @@ impl Walker<'_> {
                 self.pending.push(PendingProjection {
                     fields,
                     whole: None,
-                    handed,
                     callee,
                 });
             }

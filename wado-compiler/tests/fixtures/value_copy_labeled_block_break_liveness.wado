@@ -1,0 +1,35 @@
+// A `break LABEL` inside a labeled block resumes where that block ends. A walk
+// that cannot say where stops every local in the function from being final, so a
+// template string — one labeled block per interpolation — used to cost every
+// argument the interpolation follows a defensive copy. `keeps` stores what it is
+// given, so that copy is owed unless `text`'s last use is seen as its last.
+
+use { println, Stdout } from "core:cli";
+
+struct Keeper {
+    s: String,
+}
+
+fn keeps(input: String) -> Keeper {
+    return Keeper { s: input };
+}
+
+fn make() -> Result<String, i32> {
+    return Ok(`payload`);
+}
+
+export fn run() with Stdout {
+    let produced = make();
+    if let Ok(text) = produced {
+        let k = keeps(text);
+        println(`${k.s.len()}`);
+    }
+}
+
+__DATA__
+{
+  "stdout": "7\n",
+  "wir_scope": "/run",
+  "wir_expect:O0": ["k = \"value_copy_labeled_block_break_liveness.wado/keeps\"(text)"],
+  "wir_not_expect:O0": ["$value_copy$"]
+}

@@ -278,8 +278,8 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
         bound,
     } = result;
     let span = synth_span();
-    let (_, _, some_name, _) = items.require_variant_case(CompilerItem::OptionSome);
-    let (_, _, none_name, _) = items.require_variant_case(CompilerItem::OptionNone);
+    let (_, _, some_name, some_index) = items.require_variant_case(CompilerItem::OptionSome);
+    let (_, _, none_name, none_index) = items.require_variant_case(CompilerItem::OptionNone);
     let arm = |pattern, stmts: Vec<TirStmt>| TirMatchArm {
         pattern,
         guard: None,
@@ -294,6 +294,7 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
         TirPattern::Variant {
             enum_type: slot_type,
             variant_name: some_name.to_string(),
+            case_index: some_index,
             bindings: vec![TirPattern::Binding {
                 name: TASK_VALUE_LOCAL.to_string(),
                 local_index: bound,
@@ -312,6 +313,7 @@ fn take_task_result(result: &ResultSlot, items: &CompilerItems) -> TirStmt {
         TirPattern::Variant {
             enum_type: slot_type,
             variant_name: none_name.to_string(),
+            case_index: none_index,
             bindings: vec![],
             payload_type: TypeTable::UNIT,
         },
@@ -410,9 +412,11 @@ fn generate_inline_task_return(
             _ => panic!("Expected Result<T, E> type"),
         };
         let items = tt.compiler_items();
-        let (_, _, ok_case_name, _) = items.require_variant_case(CompilerItem::ResultOk);
+        let (_, _, ok_case_name, ok_case_index) =
+            items.require_variant_case(CompilerItem::ResultOk);
         let ok_case_name = ok_case_name.to_string();
-        let (_, _, err_case_name, _) = items.require_variant_case(CompilerItem::ResultErr);
+        let (_, _, err_case_name, err_case_index) =
+            items.require_variant_case(CompilerItem::ResultErr);
         let err_case_name = err_case_name.to_string();
         drop(tt);
 
@@ -572,6 +576,7 @@ fn generate_inline_task_return(
             pattern: TirPattern::Variant {
                 enum_type: value_type_id,
                 variant_name: ok_case_name,
+                case_index: ok_case_index,
                 bindings: vec![TirPattern::Binding {
                     name: ok_payload_name,
                     local_index: ok_payload_local,
@@ -591,6 +596,7 @@ fn generate_inline_task_return(
             pattern: TirPattern::Variant {
                 enum_type: value_type_id,
                 variant_name: err_case_name,
+                case_index: err_case_index,
                 bindings: vec![TirPattern::Binding {
                     name: err_payload_name,
                     local_index: err_payload_local,

@@ -889,6 +889,34 @@ match customer {
 }
 ```
 
+#### Qualified Patterns
+
+A case may be written under the type that declares it: `Color::Green`. Two kinds
+of qualifier reach the same cases.
+
+The first is a name that resolves to the scrutinee's type. An import alias
+(`M::Nothing` under `use { Maybe as M }`), `Self` inside an `impl`, and a
+namespace-qualified type (`dep::Maybe::Nothing`) all qualify. So does any name on
+the scrutinee's newtype chain, a newtype's cases being its base's: with
+`type C = Color`, both `C::Green` and `Color::Green` qualify. A second newtype
+over the same base does not, being a distinct type.
+
+The second is a namespace prefix the scrutinee's type is reachable through, such
+as `h::Green` under `use h from "./hue.wado"`. That prefix names a module rather
+than a type.
+
+Either way the name must be one the file can see. Only the prelude is in scope
+without a `use`, so a qualifier naming an unimported type is an error even where
+the bare case would match.
+
+A qualifier may restate the scrutinee's type arguments. It must then write as
+many as the scrutinee carries, so `Maybe<i32>::Just` qualifies a `Maybe<i32>`
+while `Color<i32>::Red` is an error, because `Color` declares no type parameters.
+
+Only a bare identifier can bind. A qualified path names a case, an associated
+constant, or an immutable `global`; anything else is an error, never a variable
+of that name.
+
 #### Constant Patterns
 
 A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
