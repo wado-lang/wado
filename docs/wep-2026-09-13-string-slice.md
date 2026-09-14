@@ -52,28 +52,6 @@ What follows:
   leaves no `struct.new` behind. That is a property of the optimizer, so it is
   tested as one.
 
-## Roadmap
-
-- [x] Record in `docs/cheatsheet.md` and `docs/spec.md` that a newtype carries
-      no invariant of its own. Done when both say where an invariant belongs
-      instead.
-- [x] Let the escape analysis see the reference a generic instance holds in a
-      field, so a view of a `&String` parameter that stays local needs no
-      `stores`. Done when a local view compiles and an escaping one is still
-      rejected.
-- [x] Make a view scalarize at `-O2`. Done when a byte-scanning loop over a
-      view of a `&String` emits no `struct.new`.
-- [x] Add `StrSlice` to `core:prelude`: a struct over a string's bytes plus a
-      range, with private fields and constructors that reject an end off a
-      character boundary. Done when a view can be built, compared, printed, and
-      iterated by character.
-- [x] Add `AsStrSlice` with impls for `String` and `StrSlice`. Done when one
-      generic signature accepts an owned string, a reference to one, and a
-      subrange view.
-- [x] Migrate the parsing triples `(text, start, end)` to `StrSlice`, replacing
-      the triple signatures rather than keeping both. Done when `FromStr` names
-      `from_str_slice` and no parsing entry point takes a triple.
-
 ## Known gaps
 
 - A view passed to a function the inliner leaves alone is still materialized.

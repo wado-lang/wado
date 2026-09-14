@@ -325,10 +325,10 @@ part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
 
-fn first_byte<S: AsStrSlice>(s: &S) -> u8 {
-    return s.as_str_slice().get_byte_unchecked(0);
+fn byte_len<S: AsStrSlice>(s: &S) -> i32 {
+    return s.as_str_slice().len();
 }
-first_byte(&"banana");           // a String, a &String, or a StrSlice
+byte_len(&"banana");             // a String, a &String, or a StrSlice
 ```
 
 Tagged templates (see [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.

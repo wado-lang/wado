@@ -2100,6 +2100,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             _ => false,
         };
+        let ref_impl_target = match &header.ty {
+            Type::Reference(inner) | Type::MutReference(inner) if !is_blanket_ref_impl => {
+                Some(scope.resolve_type(inner))
+            }
+            _ => None,
+        };
 
         // The method's canonical signature comes from the decl pass; only its
         // type parameters and the impl's trait reference come off the header.
@@ -2250,6 +2256,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 impl_struct_name: impl_struct_name.clone(),
                 impl_struct_fq: impl_struct_fq.clone(),
                 is_blanket_ref_impl,
+                ref_impl_target,
             });
             method_found = true;
         }
@@ -2318,6 +2325,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     impl_struct_name,
                     impl_struct_fq,
                     is_blanket_ref_impl,
+                    ref_impl_target,
                 });
             }
         }

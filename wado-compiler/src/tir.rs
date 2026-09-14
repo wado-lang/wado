@@ -2324,7 +2324,7 @@ impl TypeTable {
     /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
     #[must_use]
     pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
-        self.rendered_name(self.def_name(def), type_args)
+        self.rendered_name(&self.decl_render_name(def), type_args)
     }
 
     fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
@@ -3590,6 +3590,14 @@ impl TypeTable {
                 _ => return None,
             }
         }
+    }
+
+    /// Whether `link` is a base anywhere in `id`'s newtype chain, rather than
+    /// one peel down, which a longer chain steps past.
+    #[must_use]
+    pub fn newtype_chain_reaches(&self, id: TypeId, link: TypeId) -> bool {
+        self.newtype_link_owning(id, |tid| self.get_newtype_base(tid) == Some(link))
+            .is_some()
     }
 
     /// The declaration a newtype inherits from: its chain peeled to what it

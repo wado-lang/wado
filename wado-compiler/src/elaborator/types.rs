@@ -2802,6 +2802,24 @@ pub(super) struct TraitMethodMatch {
     /// the inner type is a type parameter. False for specific ref impls like
     /// `impl IntoIterator for &List<T>` where the inner type is a concrete generic.
     pub(super) is_blanket_ref_impl: bool,
+    /// The pointee a concrete reference impl targets (`impl Trait for &Inner` →
+    /// `Inner`). A reference impl buckets by kind, so nothing else names the
+    /// link a newtype inherits it through.
+    pub(super) ref_impl_target: Option<TypeId>,
+}
+
+impl TraitMethodMatch {
+    /// The owner a call on `receiver_base` dispatches with: a newtype inherits
+    /// a reference impl the way it inherits a value one, so its signature
+    /// re-types to the receiver.
+    pub(super) fn owner_for(&self, receiver_base: TypeId, types: &TypeTable) -> MethodOwner {
+        match self.ref_impl_target {
+            Some(link) if types.newtype_chain_reaches(receiver_base, link) => {
+                MethodOwner::InheritedFrom(link)
+            }
+            _ => self.method_info.owner,
+        }
+    }
 }
 
 /// Read-only view resolving a type name from a module's perspective without

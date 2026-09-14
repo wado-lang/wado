@@ -385,12 +385,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
+                    let owner =
+                        trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                     matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
                     trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                     matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
                     info.is_ref_impl = true;
+                    info.owner = owner;
                     method_info = Some(info);
                     trait_impl_module_source = Some(trait_match.impl_module_source);
                     blanket_type_param = trait_match.blanket_type_param;

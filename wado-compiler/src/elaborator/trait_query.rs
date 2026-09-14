@@ -2871,6 +2871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             },
             impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
+            ref_impl_target: None,
         })
     }
 }
