@@ -42,9 +42,8 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// The declaration's type parameters as written. Bounds, defaults and
-    /// arity are read from here, so no consumer works from a projection that
-    /// dropped what it happened not to need.
+    /// The declaration's type parameters as written. Bounds, defaults and arity
+    /// are all read from here, never from a projection of it.
     pub(super) type_params: Vec<ast::GenericParam>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
@@ -2925,8 +2924,7 @@ impl<'a> TypeLookup<'a> {
     }
 
     /// `def`'s own type parameters as types, in declaration order. `None` for a
-    /// generic newtype, which keeps no resolved parameters — each instantiation
-    /// substitutes its base AST instead.
+    /// generic newtype, which keeps none: its base is substituted as AST.
     pub(super) fn declared_type_param_ids(&self, def: DefId) -> Option<&'a [TypeId]> {
         if let Some(info) = self.struct_fields_of(def)
             && !info.type_param_type_ids.is_empty()
@@ -2937,27 +2935,11 @@ impl<'a> TypeLookup<'a> {
         (!info.type_param_type_ids.is_empty()).then_some(&*info.type_param_type_ids)
     }
 
-    /// `def`'s type parameters in declaration order, each with the default it
-    /// declared. `None` where `def` takes no type parameters.
+    /// `def`'s type parameters exactly as the declaration wrote them, for the
+    /// one declaration of the three kinds that takes any.
     ///
-    /// The three kinds that take type parameters are asked of one declaration,
-    /// so "how many does it take" and "whose defaults are these" can never be
-    /// about two of them.
-    pub(super) fn declared_type_params(
-        &self,
-        def: DefId,
-    ) -> Option<Vec<(String, Option<ast::Type>)>> {
-        Some(
-            self.declared_generic_params(def)?
-                .iter()
-                .map(|p| (p.name.clone(), p.default.clone()))
-                .collect(),
-        )
-    }
-
-    /// `def`'s type parameters exactly as the declaration wrote them. The one
-    /// source for its bounds, defaults and arity, so a consumer cannot answer
-    /// from a projection that dropped a bound, a pack marker or a default.
+    /// The one source for its bounds, defaults and arity, so a consumer cannot
+    /// answer from a projection that dropped a bound, a pack or a default.
     pub(super) fn declared_generic_params(&self, def: DefId) -> Option<&'a [ast::GenericParam]> {
         if let Some(info) = self.struct_fields_of(def)
             && !info.type_params.is_empty()
@@ -2993,14 +2975,14 @@ impl<'a> TypeLookup<'a> {
         def: DefId,
         args: &[ast::Type],
     ) -> Option<Vec<ast::Type>> {
-        let params = self.declared_type_params(def)?;
+        let params = self.declared_generic_params(def)?;
         if args.len() >= params.len() {
             return None;
         }
-        let names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         let mut filled = args.to_vec();
-        for (_, default) in &params[args.len()..] {
-            let default = default.clone()?;
+        for param in &params[args.len()..] {
+            let default = param.default.clone()?;
             let settled = filled.clone();
             filled.push(substitute_type_params(
                 &default,

@@ -3015,15 +3015,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .copied()
                     .unwrap_or(TypeTable::UNKNOWN);
 
-                // A block declaring parameters generates one function keyed on
-                // the base, specialized per instance; one whose target is a
-                // concrete instantiation generates that instance's own. Naming
-                // the base for the second reaches a function nobody emitted.
-                let receiver = if declared.is_empty() {
-                    s.tysys.fq_receiver_instance(base_type_id)
-                } else {
-                    s.tysys.fq_receiver_head(base_type_id)
-                };
+                let receiver = s.tysys.fq_receiver_of_impl(
+                    base_type_id,
+                    s.impl_is_concrete_instantiation(&impl_ty),
+                );
 
                 Some(IndexingTraitInfo {
                     method_def: method_header.def,
@@ -3341,14 +3336,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return_type = subst.substitute(return_type, &mut self.tysys.type_table.borrow_mut());
         }
 
-        // The same split the container's receiver takes: an impl at one
-        // instantiation generates that instance's own function, a parameterized
-        // one is keyed on the base and specialized per instance.
-        let output_fq = if from_concrete_impl {
-            self.tysys.fq_receiver_instance(output_base_type_id)
-        } else {
-            self.tysys.fq_receiver_head(output_base_type_id)
-        };
+        let output_fq = self
+            .tysys
+            .fq_receiver_of_impl(output_base_type_id, from_concrete_impl);
         let mangled_method_name =
             MethodName::format_local(&output_fq, method_trait_name.as_ref(), &method_call.method);
 

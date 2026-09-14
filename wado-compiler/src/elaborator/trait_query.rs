@@ -33,9 +33,8 @@ use crate::name::{DeclName, FqTraitName};
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{SlotProjections, TraitRef};
 
-/// Proof that a bound was asked and answered no. Its field is private to this
-/// module, so [`TypeError::TraitBoundNotSatisfied`] can only be raised from the
-/// enforcement here, never by a path that rolled its own check.
+/// Proof that a bound was asked and answered no. Its field is private here, so
+/// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
 #[derive(Clone, Debug)]
 pub struct BoundUnmet(());
 
@@ -2258,9 +2257,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_type_arg_bounds(&type_params, type_args, span);
     }
 
-    /// Check trait bounds on a generic type declaration's type arguments —
-    /// every `struct`, `variant` and generic newtype instantiation, whether an
-    /// annotation wrote the arguments or a literal inferred them.
+    /// Check the bounds on a generic type declaration's type arguments, for
+    /// every `struct`, `variant` and generic newtype instantiation.
     pub(super) fn check_type_decl_arg_bounds(
         &mut self,
         def: DefId,
@@ -2333,10 +2331,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check one concrete type argument against one trait bound — the primitive
-    /// every bound-enforcement path funnels through. On success registers the
-    /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
-    /// Answers whether the bound holds.
+    /// Whether one concrete type argument meets one trait bound — the primitive
+    /// every enforcement path funnels through. Registers the associated types on
+    /// success, raises `TraitBoundNotSatisfied` on failure.
     pub(super) fn enforce_single_bound(
         &mut self,
         type_arg: TypeId,
@@ -2372,8 +2369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report that type parameter `param` carries no bound supplying
-    /// `trait_name`. An operator reaches a parameter only through a bound, so
-    /// the miss is said here rather than at WIR build.
+    /// `trait_name`, which is how an operator reaches one.
     pub(super) fn report_operator_bound_missing(
         &mut self,
         param: &str,

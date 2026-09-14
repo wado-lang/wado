@@ -282,10 +282,20 @@ impl TypeSystem {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
-    /// [`Self::fq_receiver_head`] keeping the type arguments, for a receiver an
-    /// impl named as one instantiation (`impl Trait for Box<i32>`).
-    pub(crate) fn fq_receiver_instance(&self, type_id: TypeId) -> FqTypeName {
-        self.type_table.borrow().fq_type_name(type_id)
+    /// How a method dispatched through `impl` spells its receiver: an impl at
+    /// one instantiation owns that instance's function, a parameterized one the
+    /// base's, specialized per instance by monomorphization.
+    pub(crate) fn fq_receiver_of_impl(
+        &self,
+        type_id: TypeId,
+        at_one_instantiation: bool,
+    ) -> FqTypeName {
+        let table = self.type_table.borrow();
+        if at_one_instantiation {
+            table.fq_type_name(type_id)
+        } else {
+            table.fq_base_type_name(type_id)
+        }
     }
 
     /// The first link at or below `type_id` — itself included — writing its own

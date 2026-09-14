@@ -4682,11 +4682,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut inferred = infer.solve();
         // A phantom parameter — one no field mentions — is not an inference
         // failure: the declaration answers it, with its `= Default` if it wrote
-        // one. A bound is checked against that answer, so `S<C: Clock = NoClock>`
-        // written `S {}` must reach `NoClock`; checking `Clock` against the rigid
-        // `C` would fail a literal the declaration already settled. A slot a
-        // field does mention and nothing solved is a failure, so its variable
-        // stays put to be blamed.
+        // one, and the bound is checked against that answer. A slot a field does
+        // mention and nothing solved is a failure, so its variable stays put.
         //
         // Recorded before the answers are, so a phantom's variable is solved
         // to that parameter rather than left unsolved and pinned to `error`

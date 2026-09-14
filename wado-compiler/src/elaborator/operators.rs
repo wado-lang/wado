@@ -745,7 +745,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .compiler_trait_name(item)
                     .to_string();
-                self.report_operator_bound_missing(&name.clone(), &trait_name, span);
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
         }
@@ -804,7 +805,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .borrow()
                     .compiler_trait_name(shift_item)
                     .to_string();
-                self.report_operator_bound_missing(&name.clone(), &trait_name, span);
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
             // Get struct name for trait lookup
@@ -1165,7 +1167,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
-                self.report_operator_bound_missing(&name.clone(), &trait_name, unary.span);
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, unary.span);
                 return TypeTable::ERROR;
             }
             let struct_name = match &operand_resolved {

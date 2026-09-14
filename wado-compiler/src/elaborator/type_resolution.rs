@@ -590,8 +590,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut resolved: Vec<TypeId> = args.iter().map(|t| self.resolve_type(t)).collect();
         let arity = self
             .type_lookup()
-            .declared_type_params(def)
-            .map_or(0, |params| params.len());
+            .declared_generic_params(def)
+            .map_or(0, <[ast::GenericParam]>::len);
         if !self.type_param_defaults_are_ordered(def) {
             resolved.resize(arity.max(resolved.len()), TypeTable::ERROR);
             return resolved;
@@ -634,10 +634,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether every default `def` declares names only parameters to its left.
     ///
-    /// A default standing for a parameter no argument has settled yet has
-    /// nothing to substitute, so it would leak the parameter itself into the
-    /// instantiation. Checked once per declaration: the declaration is what is
-    /// ill-formed, not the application that reached it.
+    /// One naming a parameter no argument has settled yet would leak the
+    /// parameter itself into the instantiation. Checked once per declaration:
+    /// the declaration is ill-formed, not the application that reached it.
     pub(super) fn type_param_defaults_are_ordered(&mut self, def: DefId) -> bool {
         if let Some(&ordered) = self.checked_type_param_defaults.get(&def) {
             return ordered;
@@ -688,9 +687,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         slot: usize,
         settled: &[TypeId],
     ) -> Option<TypeId> {
-        let params = self.type_lookup().declared_type_params(def)?;
-        let default = params.get(slot)?.1.clone()?;
-        let names: Vec<String> = params.into_iter().map(|(name, _)| name).collect();
+        let params = self.type_lookup().declared_generic_params(def)?;
+        let default = params.get(slot)?.default.clone()?;
+        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         let resolved = self.expanding_defaults_of(def, default.span(), |e| {
             e.with_type_param_args(&names, settled, |e| e.resolve_type(&default))
         })?;

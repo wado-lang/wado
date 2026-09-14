@@ -198,13 +198,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Run `body` with `names` bound to `args` and no other type parameter in
-    /// scope, for resolving a type the declaration wrote — a `= Default` or a
-    /// newtype's base — against the arguments settled for it.
+    /// scope, for resolving a type the declaration wrote against its arguments.
     ///
     /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
-    /// happens to declare, so the use site's parameters must not be in scope
-    /// while the default resolves. A name past `args` stays unbound, which is
-    /// how a default reaches only the parameters to its left.
+    /// happens to declare. A name past `args` stays unbound, so a default
+    /// reaches only the parameters to its left.
     pub(super) fn with_type_param_args<R>(
         &mut self,
         names: &[String],
