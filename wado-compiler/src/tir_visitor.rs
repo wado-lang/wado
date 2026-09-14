@@ -878,6 +878,46 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
     }
 }
 
+/// Shift every local index a namespace owns — reads, `Let`s and bindings — so
+/// its body fits a frame already holding `offset` locals.
+pub fn shift_locals(expr: &mut TirExpr, offset: u32) {
+    ShiftLocals { offset }.visit_expr(expr);
+}
+
+struct ShiftLocals {
+    offset: u32,
+}
+
+impl TirMutVisitor for ShiftLocals {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Local { index, .. } => *index += self.offset,
+            // A closure body numbers from its own zero, so it is left alone —
+            // but its captures name locals out here, and shift with them.
+            TirExprKind::Closure { captures, .. } => {
+                for capture in captures.iter_mut() {
+                    capture.outer_index += self.offset;
+                }
+            }
+            _ => self.walk_expr(expr),
+        }
+    }
+
+    fn visit_stmt(&mut self, stmt: &mut TirStmt) {
+        if let TirStmtKind::Let { local_index, .. } = &mut stmt.kind {
+            *local_index += self.offset;
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_pattern(&mut self, pattern: &mut TirPattern) {
+        if let TirPattern::Binding { local_index, .. } = pattern {
+            *local_index += self.offset;
+        }
+        self.walk_pattern(pattern);
+    }
+}
+
 /// Apply a visitor to all function bodies in a project.
 pub fn visit_project_functions(
     project: &mut FlatPackage,

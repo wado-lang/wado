@@ -1,0 +1,32 @@
+// Two components of one destructured value are separate storage, so handing each
+// on copies neither. The hand-over check closes the chain on both sides; asking
+// only whether the two chains share a root made each component a reader of its
+// siblings, and both paid a copy they did not owe.
+
+struct Holder {
+    xs: List<i32>,
+    ys: List<i32>,
+}
+
+fn make() -> [List<i32>, List<i32>] {
+    let mut a: List<i32> = [];
+    a.push(1);
+    let mut b: List<i32> = [];
+    b.push(2);
+    b.push(3);
+    return [a, b];
+}
+
+export fn run() {
+    let [xs, ys] = make();
+    let h = Holder { xs, ys };
+    assert h.xs.len() == 1;
+    assert h.ys.len() == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$core:prelude/list.wado/List<i32>"],
+    "wir_scope": "/run"
+}

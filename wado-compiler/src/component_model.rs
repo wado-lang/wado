@@ -92,11 +92,7 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
 /// Newtypes only: `TypeTable::representation_head` also collapses `flags` to
 /// `u32`, and a CM `flags` is its own type, one byte wide at ≤8 labels.
 pub fn peel_newtypes(type_table: &TypeTable, type_id: TypeId) -> TypeId {
-    let mut id = type_id;
-    while let ResolvedType::Newtype { base_type, .. } = type_table.get(id) {
-        id = *base_type;
-    }
-    id
+    type_table.reflect_structure_head(type_id)
 }
 
 fn try_classify_future_payload(

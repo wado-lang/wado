@@ -332,6 +332,7 @@ fn "from_literal_return.wado/run"() with Stdout {
     let rx_23: i32;
     let tx_24: i32;
     let elements: ref "Array<core:prelude/string.wado/String>";
+    let value_34: ref "core:prelude/string.wado//String";
     let used: i32;
     m = "from_literal_return.wado/make_map"();
     self_9 = struct.new "core:collections//TreeMapKeysValueIter<core:prelude/string.wado/String,i32>" { entries: m.entries, index: 0 };
@@ -342,12 +343,13 @@ fn "from_literal_return.wado/run"() with Stdout {
             $local_3 = "core:collections/core:collections/TreeMapKeysValueIter<core:prelude/string.wado/String,i32>^core:prelude/traits.wado/Iterator::next"(self_9);
             if ref.is_null($local_3) == 0 {
                 item = ref.as_non_null($local_3);
+                value_34 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = item.repr; let $array_clone_len_3: i32; $array_clone_len_3 = item.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: item.used };
                 used = result.used;
                 if @unlikely(used >= builtin::array_len(result.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(result);
                 }
-                builtin::array_set<ref "core:prelude/string.wado//String">(result.repr, used, item);
+                builtin::array_set<ref "core:prelude/string.wado//String">(result.repr, used, value_34);
                 result.used = used + 1;
             } else {
                 break b6;

@@ -1,0 +1,50 @@
+// Every name on a scrutinee's newtype chain qualifies the same cases, a
+// newtype's cases being its base's. Resolving the qualifier to a type first
+// answered for neither a generic newtype, which has no instantiated type until a
+// use names its arguments, nor a link in the middle of a chain.
+
+enum Color {
+    Red,
+    Green,
+}
+
+type C = Color;
+type E = C;
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+type Wrap<T> = Maybe<T>;
+
+test "a mid-chain name qualifies the cases" {
+    let e = Color::Green as E;
+    let by_middle = match e {
+        C::Red => 0,
+        C::Green => 1,
+    };
+    let by_head = match e {
+        Color::Red => 0,
+        Color::Green => 1,
+    };
+    let by_own_name = match e {
+        E::Red => 0,
+        E::Green => 1,
+    };
+    assert by_middle == 1;
+    assert by_head == 1;
+    assert by_own_name == 1;
+}
+
+test "a generic newtype's own name qualifies its base's cases" {
+    let w = Maybe::Just(1) as Wrap<i32>;
+    let n = match w {
+        Wrap::Just(v) => v,
+        Wrap::Nothing => 0,
+    };
+    assert n == 1;
+}
+
+__DATA__
+{"test": {}}

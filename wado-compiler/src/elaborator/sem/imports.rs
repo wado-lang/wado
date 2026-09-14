@@ -4,6 +4,7 @@
 //! or comes from a local declaration participating in same-name resolution. A
 //! local declaration's *body* goes in [`super::decls::ModuleDecls`].
 
+use crate::ast::Type;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::namespace_member_alias;
@@ -38,6 +39,16 @@ impl ModuleImports {
     /// own module.
     pub(crate) fn canonical_ns_ref(&self, name: &str) -> Option<String> {
         canonical_ns_ref(&self.namespace_imports, name)
+    }
+
+    /// The alias under which `name`, written behind a pattern's namespace
+    /// prefix, refers to that namespace's member. `None` for any other
+    /// qualifier, a type prefix among them.
+    pub(crate) fn pattern_ns_member(&self, qualifier: Option<&Type>, name: &str) -> Option<String> {
+        let Some(Type::Named(prefix)) = qualifier else {
+            return None;
+        };
+        self.canonical_ns_ref(&format!("{}::{name}", prefix.name))
     }
 }
 

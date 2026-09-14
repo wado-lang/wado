@@ -1,0 +1,21 @@
+// A qualified path in a pattern is a case or an associated constant. No Wado
+// variable is spelled `V::Nope`, so naming neither is an error — it used to
+// become a binding of that name, which passed `check` and then tripped WIR.
+
+variant V {
+    A(i32),
+    B,
+}
+
+export fn run() {
+    let v = V::A(1);
+    match v {
+        V::Nope => (),
+        _ => (),
+    };
+}
+
+__DATA__
+{
+  "compile_error": "pattern mismatch: expected 'valid case of V', found 'V::Nope'"
+}

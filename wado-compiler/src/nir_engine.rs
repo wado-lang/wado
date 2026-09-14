@@ -1702,11 +1702,13 @@ impl<'a> Engine<'a> {
             PatKind::Variant {
                 enum_type,
                 variant_name,
+                case_index,
                 bindings,
                 payload_type,
             } => PatKind::Variant {
                 enum_type,
                 variant_name,
+                case_index,
                 bindings: bindings.into_iter().map(|p| self.clone_pat(p)).collect(),
                 payload_type,
             },

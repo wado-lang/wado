@@ -259,9 +259,9 @@ pub(super) fn synthesize_lower_tuple(
     stmts
 }
 
-/// A variant case for memory lowering: its Wado (Pascal) case name and, for a
-/// payload-bearing case, the payload's CM AST `Type` and GC `TypeId`.
-pub(super) type CmMemCase = (String, Option<(Type, TypeId)>);
+/// A variant case for memory lowering: its Wado (Pascal) name, its index, and a
+/// payload-bearing case's payload as a CM AST `Type` and a GC `TypeId`.
+pub(super) type CmMemCase = (String, u32, Option<(Type, TypeId)>);
 
 /// Lower a variant GC value to a linear-memory buffer at `addr`, given its cases.
 ///
@@ -299,7 +299,7 @@ fn synthesize_lower_variant_to_memory(
     let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
         cases
             .iter()
-            .filter_map(|(_, p)| p.as_ref().map(|(ty, _)| ty)),
+            .filter_map(|(_, _, p)| p.as_ref().map(|(ty, _)| ty)),
         ctx.cm_interface_registry,
         Some(ctx.wasi_package),
     );
@@ -311,7 +311,7 @@ fn synthesize_lower_variant_to_memory(
 
     let span = synth_span();
     let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
-    for (case_name, payload) in cases {
+    for (case_name, case_index, payload) in cases {
         if let Some((payload_ty, payload_type_id)) = payload {
             let binding_local = alloc_local(next_local, locals, payload_type_id);
             let binding_name = format!("$variant_payload_{binding_local}");
@@ -330,6 +330,7 @@ fn synthesize_lower_variant_to_memory(
                 pattern: TirPattern::Variant {
                     enum_type: value_type_id,
                     variant_name: case_name,
+                    case_index,
                     bindings: vec![TirPattern::Binding {
                         name: binding_name,
                         local_index: binding_local,
@@ -350,6 +351,7 @@ fn synthesize_lower_variant_to_memory(
                 pattern: TirPattern::Variant {
                     enum_type: value_type_id,
                     variant_name: case_name,
+                    case_index,
                     bindings: Vec::new(),
                     payload_type: TypeTable::UNIT,
                 },
@@ -405,7 +407,8 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     let mem_cases: Vec<CmMemCase> = cases
         .iter()
         .cloned()
-        .map(|case| {
+        .enumerate()
+        .map(|(index, case)| {
             let payload = case.payload.map(|ty| {
                 let tid = {
                     let mut tt = ctx.type_table.borrow_mut();
@@ -413,7 +416,8 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
                 };
                 (ty, tid)
             });
-            (kebab_to_pascal(&case.cm_name), payload)
+            let index = u32::try_from(index).expect("case index fits u32");
+            (kebab_to_pascal(&case.cm_name), index, payload)
         })
         .collect();
     synthesize_lower_variant_to_memory(
@@ -523,6 +527,7 @@ pub(super) fn synthesize_lower_option_to_memory(
         pattern: TirPattern::Variant {
             enum_type: value_type_id,
             variant_name: names.some_name.clone(),
+            case_index: names.some_index,
             bindings: vec![TirPattern::Binding {
                 name: payload_binding_name,
                 local_index: payload_binding_local,
@@ -542,6 +547,7 @@ pub(super) fn synthesize_lower_option_to_memory(
         pattern: TirPattern::Variant {
             enum_type: value_type_id,
             variant_name: names.none_name.clone(),
+            case_index: names.none_index,
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },
@@ -579,9 +585,9 @@ pub(super) fn synthesize_lower_result_to_memory(
     ctx: &LowerContext<'_>,
 ) {
     let value_type_id = value.type_id;
-    let (ok_name, err_name, err_index, ok_tid, err_tid) = {
+    let (ok_name, ok_index, err_name, err_index, ok_tid, err_tid) = {
         let tt = ctx.type_table.borrow();
-        let (_, _, ok_name, _) = tt
+        let (_, _, ok_name, ok_index) = tt
             .compiler_items()
             .require_variant_case(CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = tt
@@ -595,6 +601,7 @@ pub(super) fn synthesize_lower_result_to_memory(
         };
         (
             ok_name.to_string(),
+            ok_index,
             err_name.to_string(),
             err_index,
             ok_tid,
@@ -602,16 +609,16 @@ pub(super) fn synthesize_lower_result_to_memory(
         )
     };
 
-    let arm = |name: String, ty: &Type, tid: TypeId| -> CmMemCase {
+    let arm = |name: String, index: u32, ty: &Type, tid: TypeId| -> CmMemCase {
         if ty.is_unit() {
-            (name, None)
+            (name, index, None)
         } else {
-            (name, Some((ty.clone(), tid)))
+            (name, index, Some((ty.clone(), tid)))
         }
     };
     let cases = vec![
-        arm(ok_name, ok_type, ok_tid),
-        arm(err_name.clone(), err_type, err_tid),
+        arm(ok_name, ok_index, ok_type, ok_tid),
+        arm(err_name.clone(), err_index, err_type, err_tid),
     ];
 
     // disc byte: `variant_test(Err)` → 1 when Err, 0 when Ok. (`variant_tag`,
@@ -964,7 +971,8 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                 // wildcard arm is needed.
                 let span = synth_span();
                 let mut arms: Vec<TirMatchArm> = Vec::with_capacity(cases.len());
-                for case in cases {
+                for (case_index, case) in cases.iter().enumerate() {
+                    let case_index = u32::try_from(case_index).expect("case index fits u32");
                     let case_name = case.wado_name.clone();
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
@@ -1016,6 +1024,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             pattern: TirPattern::Variant {
                                 enum_type: vt,
                                 variant_name: case_name,
+                                case_index,
                                 bindings: vec![TirPattern::Binding {
                                     name: binding_name,
                                     local_index: binding_local,
@@ -1036,6 +1045,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                             pattern: TirPattern::Variant {
                                 enum_type: vt,
                                 variant_name: case_name,
+                                case_index,
                                 bindings: Vec::new(),
                                 payload_type: TypeTable::UNIT,
                             },
@@ -1339,6 +1349,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         pattern: TirPattern::Variant {
             enum_type: vt,
             variant_name: names.some_name.clone(),
+            case_index: names.some_index,
             bindings: vec![TirPattern::Binding {
                 name: payload_binding_name,
                 local_index: payload_binding_local,
@@ -1358,6 +1369,7 @@ pub(super) fn synthesize_flatten_option_to_flat_args(
         pattern: TirPattern::Variant {
             enum_type: vt,
             variant_name: names.none_name.clone(),
+            case_index: names.none_index,
             bindings: Vec::new(),
             payload_type: TypeTable::UNIT,
         },
@@ -1440,6 +1452,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     let span = synth_span();
     let ok_arm = flatten_result_case_arm(
         names.ok_name.clone(),
+        names.ok_index,
         ok_type,
         vt,
         &payload_locals,
@@ -1450,6 +1463,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
     );
     let err_arm = flatten_result_case_arm(
         names.err_name.clone(),
+        names.err_index,
         err_type,
         vt,
         &payload_locals,
@@ -1475,6 +1489,7 @@ pub(super) fn synthesize_flatten_result_to_flat_args(
 
 fn flatten_result_case_arm(
     case_name: String,
+    case_index: u32,
     payload_type: &Type,
     enum_type: TypeId,
     payload_locals: &[(u32, TypeId)],
@@ -1491,6 +1506,7 @@ fn flatten_result_case_arm(
             pattern: TirPattern::Variant {
                 enum_type,
                 variant_name: case_name,
+                case_index,
                 bindings: Vec::new(),
                 payload_type: TypeTable::UNIT,
             },
@@ -1551,6 +1567,7 @@ fn flatten_result_case_arm(
         pattern: TirPattern::Variant {
             enum_type,
             variant_name: case_name,
+            case_index,
             bindings: vec![TirPattern::Binding {
                 name: binding_name,
                 local_index: binding_local,

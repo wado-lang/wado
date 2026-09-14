@@ -94,4 +94,15 @@ impl AggregateShapes {
     pub fn case(&self, type_id: TypeId, case_name: &str) -> Option<&CaseShape> {
         self.cases.get(&type_id)?.get(case_name)
     }
+
+    /// The case at `case_index` in `type_id`, with the name that spells it.
+    #[must_use]
+    pub fn case_at(&self, type_id: TypeId, case_index: u32) -> Option<(&str, &CaseShape)> {
+        let (name, shape) = self.cases.get(&type_id)?.get_index(case_index as usize)?;
+        assert_eq!(
+            shape.index, case_index,
+            "variant case shapes are collected in declaration order"
+        );
+        Some((name.as_str(), shape))
+    }
 }

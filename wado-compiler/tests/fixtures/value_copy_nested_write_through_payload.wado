@@ -1,0 +1,42 @@
+// A callee writing a nested field through a `&mut` variant payload. The write
+// reaches the caller's variant, so a value taken out of that place before the
+// call must not see it: the arm binding inside the callee names the payload of
+// the case it matched, and a caller keying the write off the handle's own type
+// has to find it there.
+
+struct Named {
+    name: String,
+}
+
+variant Element {
+    Ref(Named),
+    Wildcard,
+}
+
+fn rename(e: &mut Element) {
+    match e {
+        Ref(r) => {
+            r.name = `renamed`;
+        },
+        Wildcard => (),
+    }
+}
+
+test "a value taken before a nested write through a &mut payload does not see it" {
+    let mut e = Element::Ref(Named { name: `original` });
+    let snapshot = e;
+    rename(&mut e);
+    assert snapshot matches { Ref(r) && r.name == `original` };
+    assert e matches { Ref(r) && r.name == `renamed` };
+}
+
+test "a field read out of the payload before the call keeps its value" {
+    let mut e = Element::Ref(Named { name: `original` });
+    let held = match e {
+        Ref(r) => r.name,
+        Wildcard => ``,
+    };
+    rename(&mut e);
+    assert held == `original`;
+    assert e matches { Ref(r) && r.name == `renamed` };
+}

@@ -1,10 +1,8 @@
 //! Lift `mut` bindings out of `Match` arm and `IfLet` patterns into
 //! explicit `Let mut` statements at the arm body / then-block start.
 //!
-//! Runs as a pre-pass (not inside `translate::pattern`) so the lifted
-//! `Let mut` statements are visible to `value_copy::analyze`'s seed
-//! walker — moving the lift after the seed walker would leave the
-//! wrap helpers unregistered.
+//! Runs as a pre-pass, not inside `translate::pattern`: the fold decides the
+//! lifted `Let mut`'s copy, so the statement must exist before it runs.
 
 use crate::flat_package::FlatPackage;
 use crate::tir::{
@@ -51,12 +49,9 @@ impl MutBindingLifter {
             .is_some_and(|l| l.is_mut)
     }
 
-    /// Replace each `mut` binding in `arm.pattern` with a fresh
-    /// non-mut local and prepend `let mut original = fresh` to the
-    /// arm body. `wir_build::pattern_match::emit_pattern_bindings`
-    /// writes the payload into the fresh slot;
-    /// `value_copy::analyze` picks up the `Let mut` and the fold
-    /// wraps it.
+    /// Replace each `mut` binding in `arm.pattern` with a fresh non-mut local
+    /// and prepend `let mut original = fresh` to the arm body, which the fold
+    /// then decides as it decides any other `Let`.
     fn lift_in_match_arm(&mut self, arm: &mut TirMatchArm) {
         let span = arm.span;
         let mut prefix_stmts: Vec<TirStmt> = Vec::new();
