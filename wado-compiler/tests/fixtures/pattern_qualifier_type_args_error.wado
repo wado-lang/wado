@@ -1,0 +1,22 @@
+// A type declaring no type parameters takes none in a pattern qualifier. The
+// arity check treated "the scrutinee reports no arguments" as "any count will
+// do", so a plain enum accepted arguments it has nowhere to put.
+
+enum Color {
+    Red,
+    Green,
+}
+
+test "a plain enum qualifier takes no type arguments" {
+    let c = Color::Green;
+    let n = match c {
+        Color<i32, bool>::Red => 0,
+        Color<i32, bool>::Green => 1,
+    };
+    assert n == 1;
+}
+
+__DATA__
+{
+    "compile_error": "expected 'valid case of Color', found 'Color<i32, bool>::Red'"
+}

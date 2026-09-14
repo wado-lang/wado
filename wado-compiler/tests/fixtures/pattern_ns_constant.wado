@@ -1,0 +1,36 @@
+// A namespace-qualified immutable global matches by value, as a bare one and a
+// type-qualified associated constant already do. `ns::NAME` reached the case
+// path, which knows only cases and associated constants, so it had nowhere to
+// find the global and reported the name as an invalid case.
+
+use ns from "./sub/pattern_ns_constant.wado";
+use { TK_FOO } from "./sub/pattern_ns_constant.wado";
+
+fn classify(t: i32) -> String {
+    return match t {
+        ns::TK_FOO => "foo",
+        ns::TK_BAR => "bar",
+        _ => "other",
+    };
+}
+
+test "a namespace-qualified global matches by value" {
+    assert classify(7) == "foo";
+    assert classify(9) == "bar";
+    assert classify(1) == "other";
+}
+
+test "the bare and namespaced spellings agree" {
+    let k = match 7 {
+        TK_FOO => "bare",
+        _ => "other",
+    };
+    assert k == "bare";
+}
+
+test "a namespaced global still reads in expression position" {
+    assert ns::TK_BAR == 9;
+}
+
+__DATA__
+{"test": {}}

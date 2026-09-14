@@ -918,18 +918,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .structure_chain_defs(scrutinee_type);
-        let names_scrutinee = |elab: &mut Self, q: &Type| match elab.qualifier_def(q) {
-            Some(def) => chain_defs.contains(&def),
-            // A bare case needs no import of its type, so neither does the
-            // qualifier that spells it: a name this module cannot see may still
-            // be what the declaring module calls a type on the chain.
-            None => chain_defs
-                .iter()
-                .any(|&def| elab.declaration_spells(def, q)),
+        let names_scrutinee = |elab: &mut Self, q: &Type| {
+            elab.qualifier_def(q)
+                .is_some_and(|def| chain_defs.contains(&def))
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
-        // writes must agree.
-        let arity_agrees = |written: usize| scrutinee_arg_len.is_none_or(|n| n == written);
+        // writes must agree — and a type declaring none takes none.
+        let arity_agrees = |written: usize| scrutinee_arg_len == Some(written);
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
@@ -972,18 +967,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let resolved = self.resolve_named_type(site, &name, span, false);
         self.tysys.type_table.borrow().nominal_def(resolved)
-    }
-
-    /// Whether `qualifier` is the name `def` is declared under. Asked only of a
-    /// qualifier that resolves nowhere, and of a `def` already known to declare
-    /// the scrutinee's cases.
-    fn declaration_spells(&self, def: DefId, qualifier: &Type) -> bool {
-        let written = match qualifier {
-            Type::Named(t) => &t.name,
-            Type::Generic(g) => &g.name,
-            _ => return false,
-        };
-        self.tysys.resolutions.defs().name(def) == written
     }
 
     /// Whether `def`'s type is reachable as a member of the namespace `alias`
@@ -1695,6 +1678,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 s.resolve_expr(&assoc.value, ctx, Some(assoc.ty))
                             })
                         });
+                        return Vec::new();
+                    }
+
+                    // `ns::NAME` naming an immutable global the namespace exports
+                    // is a constant-value pattern, as the bare `NAME` is.
+                    if let Some(alias) = self
+                        .sem
+                        .imports
+                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
+                        .filter(|alias| self.is_immutable_global(alias))
+                    {
+                        if let Some(id) = *name_id {
+                            self.record_item_reference_by_name(id, &alias);
+                        }
                         return Vec::new();
                     }
 

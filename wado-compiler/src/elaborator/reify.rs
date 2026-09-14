@@ -10301,6 +10301,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     return const_pat;
                 }
 
+                // `ns::NAME` naming an immutable global the namespace exports
+                // is a constant-value pattern, as the bare `NAME` is.
+                if bindings.is_empty()
+                    && let Some(alias) = self
+                        .sem
+                        .imports
+                        .pattern_ns_member(variant_qualifier.as_ref(), variant_name)
+                    && let Some(const_pat) = self.reify_immutable_global_pattern(&alias, *span)
+                {
+                    return const_pat;
+                }
+
                 // Variant patterns appear in `match Some(x) { Some(v) => …
                 // }` etc. The case's payload type lives on
                 // `tysys.all_variant_cases`; reify reads it to give

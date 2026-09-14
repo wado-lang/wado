@@ -905,16 +905,17 @@ The second is a namespace prefix the scrutinee's type is reachable through, such
 as `h::Green` under `use h from "./hue.wado"`. That prefix names a module rather
 than a type.
 
-A name the file does not import may still qualify, as long as it is the name the
-type is declared under: `Err(ZlibError::DataTooShort)` needs no `use` of
-`ZlibError`, since the bare `Err(DataTooShort)` needs none. A name that does
-resolve is held to the first rule, so a local type of the same name is an error
-rather than a match.
+Either way the name must be one the file can see. Only the prelude is in scope
+without a `use`, so a qualifier naming an unimported type is an error even where
+the bare case would match.
 
-Only a bare identifier can bind. A qualified path that names neither a case nor
-an associated constant is an error, never a variable of that name. A
-namespace-qualified `global` is such an error, though a bare one matches by
-value.
+A qualifier may restate the scrutinee's type arguments, and must write as many as
+the scrutinee carries: `Maybe<i32>::Just` qualifies a `Maybe<i32>`, while
+`Color<i32>::Red` is an error, `Color` declaring no type parameters.
+
+Only a bare identifier can bind. A qualified path that names neither a case, an
+associated constant, nor an immutable `global` is an error, never a variable of
+that name.
 
 #### Constant Patterns
 
