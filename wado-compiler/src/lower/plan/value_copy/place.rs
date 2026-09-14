@@ -63,6 +63,14 @@ impl Place {
         }
     }
 
+    /// Whether this path names one location rather than a family of them. An
+    /// `Index` carries no subscript, so two equal paths under one may still be
+    /// different elements.
+    #[must_use]
+    pub fn names_one_location(&self) -> bool {
+        !self.selectors.contains(&Selector::Index)
+    }
+
     /// Whether every step this path takes is a field, so each `(owner, index)`
     /// along it is a key a caller can look a write up by. An `Index` or a
     /// `Variant` names no type of its own, and a `Field` past one answers for
@@ -400,11 +408,9 @@ impl<'a> Resolver<'a> {
                                 owner,
                                 index: field.field_index,
                             });
-                            // A destructured field names the same storage
-                            // `base.field` does, but the pattern carries no
-                            // type to say whether that field borrows. Answer
-                            // borrowed: refusing a share costs a copy, allowing
-                            // one against a borrow costs the value semantics.
+                            // The pattern carries no type to say whether the
+                            // field borrows, and a wrong `false` here costs the
+                            // value semantics rather than a copy.
                             place.through_borrow = true;
                             Names::Place(place)
                         }
@@ -414,10 +420,9 @@ impl<'a> Resolver<'a> {
                     self.bind_pattern(&field.pattern, &nested);
                 }
             }
-            // A variant, tuple or or-pattern binding names the value the pattern
-            // tested rather than a projection of it. Deepening the path by the
-            // payload's own selector is sound and measures worse — see the
-            // value-copy roadmap in WEP 2026-05-21.
+            // The binding names the value the pattern tested, not a projection
+            // of it. Deepening by the payload's own selector is sound and
+            // measures worse — WEP 2026-05-21, the value-copy roadmap.
             TirPattern::Tuple(sub, _)
             | TirPattern::Variant { bindings: sub, .. }
             | TirPattern::Or(sub) => {

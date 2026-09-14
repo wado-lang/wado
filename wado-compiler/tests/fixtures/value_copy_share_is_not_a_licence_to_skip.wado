@@ -11,9 +11,23 @@ struct Wrapper {
     inner: List<i32>,
 }
 
+struct Watch {
+    xs: &List<i32>,
+}
+
 variant Held {
     Some(List<i32>),
     Empty,
+}
+
+impl Holder {
+    fn peek(&self) -> List<i32> {
+        return self.xs;
+    }
+}
+
+fn watch(xs: &List<i32>) -> Watch with stores[xs] {
+    return Watch { xs };
 }
 
 test "a let from a shared binding copies" {
@@ -67,6 +81,30 @@ test "a release does not travel to a chain whose root is read again" {
     assert a.len() == 2;
     assert b.len() == 3;
     assert h.xs.len() == 0;
+}
+
+test "a released share does not outrun a stored borrow" {
+    let h = Holder { xs: [1, 2] };
+    let mut b = h.peek();
+    let w = watch(&b);
+    let s = b;
+    b = [];
+    let mut c = s;
+    c.push(3);
+    assert w.xs.len() == 2;
+    assert c.len() == 3;
+}
+
+test "a released share does not outrun a reference local" {
+    let h = Holder { xs: [1, 2] };
+    let mut b = h.peek();
+    let r = &b;
+    let s = b;
+    b = [];
+    let mut c = s;
+    c.push(3);
+    assert r.len() == 2;
+    assert c.len() == 3;
 }
 
 __DATA__

@@ -133,10 +133,8 @@ pub struct Ownership {
     /// Locals whose binding copy is elided by sharing the source storage:
     /// `row = self.rows[0]; row.len(); self.rows[0].push(x)`.
     pub share_eligible: IndexSet<u32>,
-    /// The share-eligible locals whose source place was repointed afterwards and
-    /// whose every read is final, so the binding holds the only reference to what
-    /// the place gave up and hands it on. A share alone is no such licence: the
-    /// storage is still readable where it was read from.
+    /// The share-eligible locals holding the only reference to what a repointed
+    /// place gave up, so each hands that storage on. A share alone does not.
     pub share_released: IndexSet<u32>,
 }
 
@@ -197,18 +195,11 @@ pub fn analyze_ownership(
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
-    // Move-eligible: an owned local whose every value-read is final, aliasing
-    // nothing still live at its binding, and outlived by no reference. A
-    // transient borrow is a use, never a block, so a builder still hands off
-    // what it mutated in place.
+    // Move-eligible: an owned local that hands its storage on.
     let owned: IndexSet<u32> = fresh
         .iter()
         .copied()
-        .filter(|idx| {
-            !a.non_final.contains(idx)
-                && !a.aliases_live.contains(idx)
-                && !a.borrow_escaped.contains_key(idx)
-        })
+        .filter(|idx| a.hands_on_storage(*idx))
         .collect();
 
     let moved_places: Vec<&(u32, Option<u32>, Span)> = a
@@ -223,16 +214,16 @@ pub fn analyze_ownership(
 
     let (share_eligible, released) = a.share_eligible(body, &place_move_bases);
     // A released share owns what the place gave up, so it hands that storage on
-    // under the same terms a move does: every read of it final, and no other name
-    // for the storage still read. A release travelling down a chain of bindings
-    // frees each to leave the function, which is not the same as holding the only
-    // reference — the binding it came from may still be read.
+    // under a move's terms. A reference the source lent out outlives the rebind
+    // that freed it, so the source answers for that one thing — its own reads the
+    // rebind already put past this storage.
     let share_released: IndexSet<u32> = released
         .into_iter()
         .filter(|idx| {
-            !a.non_final.contains(idx)
-                && !a.aliases_live.contains(idx)
-                && !a.borrow_escaped.contains_key(idx)
+            a.hands_on_storage(*idx)
+                && a.share_sources
+                    .get(idx)
+                    .is_some_and(|path| !a.borrow_escaped.contains_key(&path.root))
         })
         .collect();
     Ownership {
@@ -409,6 +400,14 @@ impl Analyzer<'_> {
         fresh
     }
 
+    /// Whether `local` may hand its storage to a new owner: every read of it
+    /// final, aliasing nothing still read, and outlived by no reference.
+    fn hands_on_storage(&self, local: u32) -> bool {
+        !self.non_final.contains(&local)
+            && !self.aliases_live.contains(&local)
+            && !self.borrow_escaped.contains_key(&local)
+    }
+
     /// The read-only bindings that may alias the storage they were read out of,
     /// and those of them whose source place was repointed afterwards. Every rule
     /// below is stated in WEP 2026-05-21, _Sharing_.
@@ -486,7 +485,10 @@ impl Analyzer<'_> {
         let mut released = false;
         let mut share_safe = true;
         for (m, r) in self.mutations.iter().zip(&inputs.at_write) {
-            let is_release = m.rebinds_place && m.path == *path;
+            // A release grants a new owner, so it must be the storage the
+            // binding read and not one that may be it: equal paths under an
+            // `Index` are two elements as readily as one.
+            let is_release = m.rebinds_place && m.path == *path && path.names_one_location();
             if is_release && r.contains(&local) {
                 released = true;
             }

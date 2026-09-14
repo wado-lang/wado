@@ -36,11 +36,8 @@ impl Writes {
         self.opaque || !self.whole.is_empty() || !self.fields.is_empty()
     }
 
-    /// Whether a caller holding a handle of `owner` can rebuild every write
-    /// named here as a path from it: each is a field of `owner` itself. A whole
-    /// value, or a field of a type the handle only *reaches* — a variant's
-    /// payload, say — names a place no re-rooting recovers, and dropping it
-    /// would hide the write from the caller.
+    /// Whether every write named here is a field of `owner` itself, so a caller
+    /// holding such a handle can rebuild each as a path from it.
     #[must_use]
     pub fn re_rootable_at(&self, owner: TypeId) -> bool {
         self.whole.is_empty() && self.fields.iter().all(|(ty, _)| *ty == owner)

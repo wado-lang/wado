@@ -391,6 +391,10 @@ read out of a place the caller still owns. The release travels down a chain of
 bindings. A binding read out of one that shares its own source owns nothing
 either, so the rebind that freed the first freed both.
 
+A release grants, so it is read off the place the binding read and no other. A
+path carries no subscript: `xs[i] = v` names one element to the source and every
+element to a path comparison, so it releases nothing.
+
 `*p = v` repoints nothing when the referent is an aggregate. The write is
 expanded field by field into the storage the caller holds, so everything read out
 of `*p` sees it. Only a boxed borrow replaces a slot, and one predicate decides
@@ -471,6 +475,17 @@ therefore be complete without predicting what a later pass writes: it reads the
 types a program declares, since no expression rewrite introduces a type the
 program did not already name. Over-synthesis costs nothing — `dce` removes an
 unused helper — while a miss leaves the fold no helper to call.
+
+### Known gap: a release through an ancestor place
+
+`s = fresh()` gives up everything `s` held, `s.inner.tags` among it, so a binding
+read out of any depth under `s` holds the only reference to what it gave up. Only
+a repoint of the very place the binding read counts as a release, so such a
+binding keeps its share and a new owner minted from it still pays a copy.
+
+Closing it means recognizing a repoint whose path is a prefix of the one read,
+under the same rule that a subscript releases nothing. What it buys is the copies
+at those wrap sites, which nothing has measured.
 
 ### Known gap: a borrowed projection behind a variant
 

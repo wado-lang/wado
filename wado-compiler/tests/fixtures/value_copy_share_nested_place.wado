@@ -1,9 +1,7 @@
-// WEP 2026-05-21: repointing a place gives up everything it held. A binding read
-// out of any depth under it owns what it gave up, so `s = fresh` releases one
-// taken from `s.inner.tags` as it releases one taken from `s` itself. The
-// release does not reach past a write landing inside that same storage first.
-//
-// The rows elsewhere all read one level down. These read two.
+// WEP 2026-05-21: repointing a place leaves what an earlier binding took out of
+// it alone, at any depth, so `taken` still shares `s.inner.tags` across
+// `s = fresh`. A write landing inside that storage first is what costs the
+// share, and it costs it at two levels down as it does at one.
 
 struct Inner {
     tags: List<String>,
@@ -38,6 +36,6 @@ __DATA__
     "stdout": "",
     "wir_expect:O0": [
         "taken = s.inner.tags;",
-        "kept = \"value_copy_release_nested_place.wado/$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>\"(t.inner.tags)"
+        "kept = \"value_copy_share_nested_place.wado/$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>\"(t.inner.tags)"
     ]
 }
