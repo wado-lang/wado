@@ -53,7 +53,8 @@ default), the HTTP service (`wasi:http/service`, run via `wado serve`), or the
 synthetic test world (selected with `--world test`, used by E2E tests). Several
 defaults — including the allocator — depend on the target world.
 
-`--world <name>` overrides it on `compile`, `check`, `dump`, and `wit`.
+`--world <name>` overrides it on `compile`, `check`, `dump`, and `wit` (`check`
+defaults to the library world instead — see Check).
 `--world test` exports the entry module's `test` blocks and drops everything
 else. `run`, `serve`, and `test` pick their world automatically. `build --world
 <fq>` is a different flag: it selects which of `wado.toml`'s declared worlds to
@@ -100,7 +101,12 @@ wado compile --no-validate --wat-to-stdout file.wado
 ```
 
 `wado check` verifies a source file — and re-runs its Kiln generators, comparing
-the output against the committed source — without emitting Wasm.
+the output against the committed source — without emitting Wasm. It resolves
+dependencies exactly as `compile` / `run` do, fetching what the cache lacks.
+
+Its world default is its own: the world whose `[world]` entry names the file,
+and otherwise the library world, which requires no entry point. So a library
+module checks as itself, and `--world <name>` opts into that world's contract.
 
 ## Run
 

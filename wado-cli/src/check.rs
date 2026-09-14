@@ -11,12 +11,15 @@ use std::path::Path;
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
+use wado_lsp::host::discovery::absolutize;
 
 use crate::args::{self, CliExit};
 use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
 use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
 use crate::knobs::{CompileKnobs, KnobOpt};
+use crate::manifest;
 
 #[derive(Debug)]
 pub struct CheckOptions {
@@ -24,8 +27,8 @@ pub struct CheckOptions {
     /// `false` (default) → Kiln warnings produce a non-zero exit. `true`
     /// → keep them as warnings (developer-friendly local triage).
     pub warn_only: bool,
-    /// Target world to check against (default: `wasi:cli/command`). `Some("test")`
-    /// type-checks the entry module as the synthetic test world.
+    /// World to check against. `None` picks it from the manifest, falling back
+    /// to the library world; `Some("test")` is the synthetic test world.
     pub target_world: Option<String>,
     pub knobs: CompileKnobs,
 }
@@ -50,7 +53,16 @@ impl Opt {
                 value: None,
                 desc: "Keep Kiln warnings as warnings instead of promoting them to errors",
             },
-            Self::World => args::WORLD_SPEC,
+            // Not the shared `WORLD_SPEC`: `check` emits nothing, so its default
+            // is the library world rather than `wasi:cli/command`.
+            Self::World => args::OptSpec {
+                long: Some("world"),
+                short: None,
+                value: Some("<name>"),
+                desc: "Check against this world's entry-point contract\n\
+                       (default: the world whose [world] entry names the file, \
+                       else the library world)\nUse 'test' for the test world",
+            },
             Self::Help => args::HELP_SPEC,
         }
     }
@@ -129,12 +141,13 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let manifest_pair = load_nearest_manifest(path);
+    let world = check_world(&opts, path, manifest_pair.as_ref());
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),
         manifest_pair.as_ref(),
         &base_path,
         &source,
-        false,
+        Acquisition::Build,
     )
     .await
     .map_err(CliExit::error)?;
@@ -169,7 +182,9 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     // is a follow-up.
     let compiler_options = wado_compiler::CompilerOptions {
         log_level: Some(opts.knobs.log_level),
-        target_world: opts.target_world.clone(),
+        target_world: world.target_world(),
+        lib_world: world.lib_world(),
+        analysis_only: true,
         invocations: outcome.invocations.clone(),
         ..Default::default()
     };
@@ -194,6 +209,68 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
         ));
     }
     Ok(())
+}
+
+/// The world `wado check` verifies the entry against.
+enum CheckWorld {
+    /// A well-known world and its entry-point contract.
+    Target(String),
+    /// The library world, named by this FQ: every `export fn` is a world export
+    /// and none is required.
+    Lib(String),
+}
+
+impl CheckWorld {
+    fn target_world(&self) -> Option<String> {
+        match self {
+            Self::Target(w) => Some(w.clone()),
+            Self::Lib(_) => None,
+        }
+    }
+
+    fn lib_world(&self) -> Option<String> {
+        match self {
+            Self::Target(_) => None,
+            Self::Lib(fq) => Some(fq.clone()),
+        }
+    }
+}
+
+/// The library FQ a check falls back to when `[package]` names no namespace.
+/// Never emitted — `check` discards the component it builds.
+const CHECK_LIB_WORLD: &str = "wado:check/check@0.0.0";
+
+/// `--world` first, then the world whose `[world]` entry names this file, and
+/// otherwise the library world: a module that is no world's entry is a library,
+/// and demanding `export fn run` of one made `check` unusable on it (issue #2059).
+fn check_world(
+    opts: &CheckOptions,
+    path: &Path,
+    project: Option<&manifest::ProjectManifest>,
+) -> CheckWorld {
+    if let Some(world) = &opts.target_world {
+        return CheckWorld::Target(world.clone());
+    }
+    if let Some(world) = project.and_then(|p| declared_world(p, path)) {
+        return CheckWorld::Target(world);
+    }
+    let fq = project
+        .and_then(|p| p.manifest.package.as_ref())
+        .and_then(|pkg| manifest::lib_world_fq(pkg).ok())
+        .unwrap_or_else(|| CHECK_LIB_WORLD.to_string());
+    CheckWorld::Lib(fq)
+}
+
+/// The `[world]` key whose entry is `path`, comparing absolutized paths so the
+/// manifest-relative entry and a cwd-relative argument meet in one frame.
+fn declared_world(project: &manifest::ProjectManifest, path: &Path) -> Option<String> {
+    let target = absolutize(path);
+    project
+        .manifest
+        .world
+        .iter()
+        .find(|(_, entry)| absolutize(&project.root.join(&entry.entry)) == target)
+        .map(|(world, _)| world.clone())
 }
 
 /// A malformed inline clause and a redirect conflict have already been reported

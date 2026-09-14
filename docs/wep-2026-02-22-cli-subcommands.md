@@ -140,6 +140,31 @@ Rules that keep this consistent:
 - `compile` is the sole primitive that consumes but never resolves (`rustc`),
   the deterministic seam of [Command Tiers](#command-tiers-compile-vs-build).
 
+#### Acquisition tiers — how far a command goes for a cold cache
+
+Consuming the graph still leaves open how a dependency the cache lacks is
+acquired. Two tiers answer it, and every consuming command picks one:
+
+| Tier       | Commands                                            | Cold cache                                       | Unpinned version        |
+| ---------- | --------------------------------------------------- | ------------------------------------------------ | ----------------------- |
+| `Build`    | `compile` `run` `serve` `test` `check` `dump` `wit` | Pulled; a failure fails the command              | Resolved live           |
+| `Analysis` | `query`                                             | Pulled when pinned; a failure degrades to a hint | Never — reports offline |
+
+`check` is a terminal command a person or CI runs, so it acquires like the build
+it gates: a tree where `wado run` works is a tree where `wado check` works. Only
+the editor-facing tier is held back, and for one reason — a live version listing
+would repeat on every document version, so an editor request must never wait on
+one.
+
+A version nothing pins is still resolvable offline from the cache: the newest
+cached version satisfying the requirement pins it, `wado.lock` first where it has
+an entry. A project that ran `wado fetch` therefore resolves in every tier
+without ever writing a lock.
+
+The language server sits below both: it resolves offline and hands its
+pinned-but-cold dependencies to a prefetcher (`wado lsp` installs one) that warms
+them in the background, so a later request resolves what this one could not.
+
 #### Reproducibility flags (`--locked` / `--offline` / `--frozen`)
 
 Cargo accepts these on every command that reads the graph; Wado has none yet.

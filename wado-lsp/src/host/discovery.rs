@@ -4,13 +4,18 @@
 //! [`wado_manifest`] says where a dependency *belongs*; opening a file to find
 //! out what is there happens here, inside the host a browser never runs.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use wado_manifest::dependency::{
-    RegistryComponentNeed, git_pins, registry_component_needs_locked, registry_pins,
+    RegistryComponentNeed, best_matching_version, git_pins, registry_component_needs_locked,
+    registry_lock_id, registry_pins,
 };
 use wado_manifest::workspace::{MANIFEST_FILENAME, workspace_governs};
+
 use wado_manifest::{DependencySource, LockFile, Manifest, ManifestError, read_workspace_members};
+
+use crate::host::prefetch;
 
 /// The nearest ancestor of `start` (inclusive) that contains a `wado.toml`.
 /// `start` may name a file or a directory.
@@ -104,9 +109,11 @@ pub fn resolve_all(
     manifest: &Manifest,
     manifest_dir: &Path,
 ) -> Vec<(String, Result<DependencyEntry, String>)> {
-    let lock = read_lock(manifest_dir);
-    let git = lock.as_ref().map(git_pins).unwrap_or_default();
-    let registry = lock.as_ref().map(registry_pins).unwrap_or_default();
+    let git = read_lock(manifest_dir)
+        .as_ref()
+        .map(git_pins)
+        .unwrap_or_default();
+    let registry = registry_pins_for(manifest, manifest_dir);
 
     let mut out: Vec<(String, Result<DependencyEntry, String>)> = manifest
         .dependencies
@@ -127,6 +134,7 @@ pub fn resolve_all(
         })
         .collect();
 
+    let mut cold = Vec::new();
     out.extend(
         registry_component_needs_locked(manifest, &registry, cache_root().as_deref())
             .into_iter()
@@ -134,16 +142,21 @@ pub fn resolve_all(
                 Ok(need) if need.cache_path.is_file() => {
                     (need.name, Ok(DependencyEntry::Component(need.cache_path)))
                 }
-                Ok(need) => (
-                    need.name,
-                    Err(format!(
+                Ok(need) => {
+                    let entry = Err(format!(
                         "{:?} is not cached; run `wado fetch`",
                         need.coordinate
-                    )),
-                ),
+                    ));
+                    let name = need.name.clone();
+                    cold.push(need);
+                    (name, entry)
+                }
                 Err((name, reason)) => (name, Err(reason)),
             }),
     );
+    // Pinned but cold: a host that can reach the network warms these in the
+    // background, so the next request resolves them without this one waiting.
+    prefetch::request(cold);
     out
 }
 
@@ -154,17 +167,80 @@ pub fn registry_component_needs(
     manifest: &Manifest,
     manifest_dir: &Path,
 ) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
+    let locked = registry_pins_for(manifest, manifest_dir);
+    registry_component_needs_locked(manifest, &locked, cache_root().as_deref())
+}
+
+/// `lock id -> version` for every registry dependency: the `wado.lock` pins
+/// first, then the warm cache for whatever the lock leaves out. A project that
+/// ran `wado fetch` but never wrote a lock resolves offline this way, instead of
+/// reporting a lockfile the rest of the toolchain never asked for (issue #2059).
+fn registry_pins_for(manifest: &Manifest, manifest_dir: &Path) -> BTreeMap<String, String> {
     let locked = read_lock(manifest_dir)
         .as_ref()
         .map(registry_pins)
         .unwrap_or_default();
-    registry_component_needs_locked(manifest, &locked, cache_root().as_deref())
+    pins_with_cached(manifest, locked, cache_root().as_deref())
+}
+
+/// [`registry_pins_for`] with the lock pins and the cache root supplied, so the
+/// cache scan is testable without an environment.
+fn pins_with_cached(
+    manifest: &Manifest,
+    mut pins: BTreeMap<String, String>,
+    cache_root: Option<&Path>,
+) -> BTreeMap<String, String> {
+    let Some(root) = cache_root else {
+        return pins;
+    };
+    for dep in manifest.dependencies.values() {
+        let DependencySource::Registry {
+            registry,
+            package,
+            version,
+        } = &dep.source
+        else {
+            continue;
+        };
+        let Some(url) = manifest
+            .registries
+            .get(registry.as_deref().unwrap_or("default"))
+        else {
+            continue;
+        };
+        let id = registry_lock_id(url, package);
+        if pins.contains_key(&id) {
+            continue;
+        }
+        let Some(dir) = wado_manifest::cache::registry_cache_dir_relative(url, package, None)
+        else {
+            continue;
+        };
+        let cached = cached_versions(&root.join(dir));
+        if let Some(best) = best_matching_version(version, cached.iter().map(String::as_str)) {
+            pins.insert(id, best);
+        }
+    }
+    pins
+}
+
+/// The version directories under one artifact's cache directory that hold a
+/// component — a half-populated directory is not a version that resolves.
+fn cached_versions(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter(|e| e.path().join("component.wasm").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect()
 }
 
 /// The entry module of a git dependency, from `wado.lock` + the warm worktree
 /// cache: the checked-out `[package].lib`, honoring `directory`.
 fn git_dependency_entry(
-    locked: &std::collections::BTreeMap<String, (String, String)>,
+    locked: &BTreeMap<String, (String, String)>,
     name: &str,
     url: &str,
     directory: Option<&str>,
@@ -205,9 +281,7 @@ fn read_lock(manifest_dir: &Path) -> Option<LockFile> {
 /// `lock id -> (version, resolved-ref)` for every git `[[package]]`, so the CLI
 /// materializes the same worktrees the offline index resolves against.
 #[must_use]
-pub fn locked_git_packages(
-    manifest_dir: &Path,
-) -> std::collections::BTreeMap<String, (String, String)> {
+pub fn locked_git_packages(manifest_dir: &Path) -> BTreeMap<String, (String, String)> {
     read_lock(manifest_dir)
         .as_ref()
         .map(git_pins)
@@ -336,6 +410,73 @@ mod tests {
         .unwrap();
         let err = package_lib_entry(tmp.path()).unwrap_err();
         assert!(err.contains("[package].lib"), "{err}");
+    }
+
+    /// A manifest with one registry dependency on `wado-lang:marl`.
+    fn manifest_with_registry_dep(specifier: &str) -> Manifest {
+        format!(
+            "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+             [registries]\ndefault = \"oci://ghcr.io\"\n\n\
+             [dependencies]\n\"wado-lang:marl\" = {{ version = \"{specifier}\" }}\n"
+        )
+        .parse()
+        .unwrap()
+    }
+
+    /// A cache root holding `wado-lang:marl` at each of `versions`.
+    fn cache_with(versions: &[&str]) -> tempfile::TempDir {
+        let tmp = tempfile::tempdir().unwrap();
+        for version in versions {
+            let dir = tmp.path().join("ghcr.io/wado-lang/marl").join(version);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("component.wasm"), b"\0asm").unwrap();
+        }
+        tmp
+    }
+
+    #[test]
+    fn a_fetched_dependency_pins_from_the_cache_without_a_lock() {
+        let cache = cache_with(&["0.1.0", "0.1.2"]);
+        let pins = pins_with_cached(
+            &manifest_with_registry_dep("^0.1"),
+            BTreeMap::default(),
+            Some(cache.path()),
+        );
+        assert_eq!(
+            pins.get("registry+oci://ghcr.io/wado-lang:marl")
+                .map(String::as_str),
+            Some("0.1.2"),
+        );
+    }
+
+    #[test]
+    fn the_lock_outranks_the_cache() {
+        let cache = cache_with(&["0.1.2"]);
+        let locked = BTreeMap::from([(
+            "registry+oci://ghcr.io/wado-lang:marl".to_string(),
+            "0.1.0".to_string(),
+        )]);
+        let pins = pins_with_cached(
+            &manifest_with_registry_dep("^0.1"),
+            locked,
+            Some(cache.path()),
+        );
+        assert_eq!(
+            pins.get("registry+oci://ghcr.io/wado-lang:marl")
+                .map(String::as_str),
+            Some("0.1.0"),
+        );
+    }
+
+    #[test]
+    fn a_cached_version_outside_the_requirement_does_not_pin() {
+        let cache = cache_with(&["0.2.0"]);
+        let pins = pins_with_cached(
+            &manifest_with_registry_dep("^0.1"),
+            BTreeMap::default(),
+            Some(cache.path()),
+        );
+        assert!(pins.is_empty(), "{pins:?}");
     }
 
     #[test]

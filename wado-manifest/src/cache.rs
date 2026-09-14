@@ -21,6 +21,19 @@ pub fn registry_cache_relative(
     world_segment: Option<&str>,
     version: &str,
 ) -> Option<String> {
+    let dir = registry_cache_dir_relative(registry_url, coordinate, world_segment)?;
+    Some(format!("{dir}/{version}/component.wasm"))
+}
+
+/// The cache-root-relative directory holding every cached version of one
+/// artifact: [`registry_cache_relative`] without the `{version}/component.wasm`
+/// tail. Listing it is how an offline resolution discovers what is cached.
+#[must_use]
+pub fn registry_cache_dir_relative(
+    registry_url: &str,
+    coordinate: &str,
+    world_segment: Option<&str>,
+) -> Option<String> {
     let stripped = registry_url.strip_prefix("oci://")?.trim_matches('/');
     let (host, prefix) = match stripped.split_once('/') {
         Some((h, p)) => (h, p.trim_matches('/')),
@@ -37,8 +50,6 @@ pub fn registry_cache_relative(
     if let Some(segment) = world_segment {
         parts.push(segment);
     }
-    parts.push(version);
-    parts.push("component.wasm");
     Some(parts.join("/"))
 }
 

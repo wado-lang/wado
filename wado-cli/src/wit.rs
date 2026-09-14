@@ -18,6 +18,7 @@ use crate::compile::{
     maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
 use crate::manifest::{self, EntryPointKind};
 
 const DEFAULT_WORLD: &str = "wasi:cli/command";
@@ -209,7 +210,7 @@ async fn analysis_host(
         project,
         base_path,
         source,
-        false,
+        Acquisition::Build,
     )
     .await
     .map_err(CliExit::error)

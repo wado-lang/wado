@@ -333,6 +333,10 @@ pub struct CompilerOptions {
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
+    /// The caller discards the component it asks for (`wado check`), so a rule
+    /// that only protects an emitted artifact — an empty library is the one so
+    /// far — does not apply. Type and resolve errors are unaffected.
+    pub analysis_only: bool,
     /// Force the library's exports into the default interface (the A-grouping)
     /// even when no signature references a named type. Set when the library
     /// implements a foreign interface (a provider component), whose consumers
@@ -366,6 +370,7 @@ impl Default for CompilerOptions {
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
             lib_world: None,
+            analysis_only: false,
             lib_interface_export: false,
             providers: Vec::new(),
             params: param_resolution::ParamInputs::default(),
@@ -1274,7 +1279,8 @@ fn compile_after_load<H: CompilerHost>(
     // A `--lib` with neither an `export fn` nor a public type exports nothing —
     // almost always a facade that forgot `export`. Reject it rather than emit an
     // empty library. A data-model library (only public types) is valid and kept.
-    if options.lib_world.is_some()
+    if !options.analysis_only
+        && options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
         && world.exports.is_empty()
         && !lib_has_public_type

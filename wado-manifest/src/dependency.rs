@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::cache::registry_cache_relative;
-use crate::{DependencySource, LockFile, Manifest};
+use crate::{DependencySource, LockFile, Manifest, Version, VersionSpecifier};
 
 /// A registry `[dependencies]` entry resolved to its exact lock-pinned version
 /// and shared-cache location — the single source of truth shared by the LSP
@@ -71,10 +71,13 @@ pub fn registry_component_need(
         .ok_or_else(|| format!("no `[registries].{alias}` for {package:?}"))?;
     // Match by the full lock id (`registry+<url>/<coordinate>`), not the bare
     // coordinate, so the same package hosted on two registries stays distinct.
-    let id = format!("registry+{registry_url}/{package}");
-    let version = locked
-        .get(&id)
-        .ok_or_else(|| format!("no `wado.lock` version for {package:?}; run `wado update`"))?;
+    let id = registry_lock_id(registry_url, package);
+    let version = locked.get(&id).ok_or_else(|| {
+        format!(
+            "no version for {package:?}: not pinned by `wado.lock` and not in the cache; \
+             run `wado fetch` (or `wado update` to pin it)"
+        )
+    })?;
     let cache_root =
         cache_root.ok_or_else(|| format!("no cache root for {package:?}; set `WADO_ROOT`"))?;
     let relative = registry_cache_relative(registry_url, package, None, version)
@@ -87,6 +90,30 @@ pub fn registry_component_need(
         cache_path: cache_root.join(relative),
     })
 }
+/// The lock id a registry dependency pins under — the key
+/// [`registry_component_need`] looks up, so a cache-derived pin lands where a
+/// lock-derived one would.
+#[must_use]
+pub fn registry_lock_id(registry_url: &str, package: &str) -> String {
+    format!("registry+{registry_url}/{package}")
+}
+
+/// The newest of `candidates` satisfying `specifier`, or `None` when none does.
+/// A candidate that is not semver is skipped, so a stray cache directory cannot
+/// resolve a dependency.
+pub fn best_matching_version<'a>(
+    specifier: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<String> {
+    let spec = VersionSpecifier::parse(specifier).ok()?;
+    candidates
+        .into_iter()
+        .filter_map(|c| Version::parse(c).ok())
+        .filter(|v| spec.matches(v))
+        .max()
+        .map(|v| v.to_string())
+}
+
 pub fn git_pins(lock: &LockFile) -> std::collections::BTreeMap<String, (String, String)> {
     lock.packages
         .iter()
@@ -111,7 +138,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
-    use super::{RegistryComponentNeed, registry_component_need};
+    use super::{RegistryComponentNeed, best_matching_version, registry_component_need};
     use crate::Manifest;
 
     fn manifest_with_registry_dep() -> Manifest {
@@ -171,6 +198,25 @@ mod tests {
     fn need_without_lock_pin_asks_for_update() {
         let err = need(&BTreeMap::new(), Some(Path::new("/cache"))).unwrap_err();
         assert!(err.contains("wado update"), "{err}");
+    }
+
+    #[test]
+    fn best_matching_version_takes_the_newest_match() {
+        assert_eq!(
+            best_matching_version("^0.1", ["0.1.0", "0.1.9", "0.2.0"]),
+            Some("0.1.9".to_string())
+        );
+        assert_eq!(best_matching_version("^0.1", ["0.0.29"]), None);
+    }
+
+    #[test]
+    fn best_matching_version_skips_non_semver_candidates() {
+        // A world segment (`core-kiln-generator`) sits beside the version
+        // directories, so a cache listing carries names that are not versions.
+        assert_eq!(
+            best_matching_version("^1.0", ["core-kiln-generator", "1.2.0"]),
+            Some("1.2.0".to_string())
+        );
     }
 
     #[test]

@@ -12,7 +12,7 @@ use crate::args::{self, CliExit};
 use crate::build_dep::{GENERATOR_WORLD_FQ, locked_generator_versions, spec_key};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::{
-    fetch_component_dependencies, resolve_inline_component_dependencies,
+    Acquisition, fetch_component_dependencies, resolve_inline_component_dependencies,
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
@@ -366,7 +366,7 @@ pub async fn try_compile_with_run_cache(
         manifest_pair.as_ref(),
         &base_path,
         &source,
-        true,
+        Acquisition::Build,
     )
     .await
     {
@@ -469,38 +469,40 @@ pub(crate) fn attach_manifest_deps(
 /// table entry (lock-pinned) and a single-file inline
 /// `use … from "ns:pkg@ver" with { registry }` clause parsed from `entry_source`.
 ///
-/// `fetch_missing` chooses the acquisition mode: the build tier (`compile` /
-/// `run`) passes `true` to pull a cold cache; the analysis tier (`check` /
-/// `query`, mirroring the LSP) passes `false` to stay offline — a cold cache
-/// lands in `unresolved` with a `wado fetch` hint instead of hitting the network
-/// or aborting. A warm, locked project is offline either way.
+/// `tier` chooses how far acquisition may go: [`Acquisition::Build`] pulls
+/// whatever is missing and resolves an unpinned version live, while
+/// [`Acquisition::Analysis`] pulls only what a pin names and degrades a failure
+/// to an `unresolved` hint. A warm, pinned project touches no network either way.
 pub(crate) async fn attach_manifest_and_component_deps(
     base_host: FilesystemCompilerHost,
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
     entry_source: &str,
-    fetch_missing: bool,
+    tier: Acquisition,
 ) -> Result<FilesystemCompilerHost, String> {
-    let index =
-        manifest_and_component_index(project, base_path, entry_source, fetch_missing).await?;
+    let index = manifest_and_component_index(project, base_path, entry_source, tier).await?;
     Ok(base_host.with_dependency_index(index))
 }
 
 /// Build the [`DependencyIndex`] for `project` (path deps + offline registry
-/// resolution via the shared `dependency_index_from`), then either fetch the
-/// cold entries or leave them `unresolved`, per `fetch_missing`. Decoupled from
-/// the host so each caller applies it to its own (`compile` verbose, `query`
-/// silent).
+/// resolution via the shared `dependency_index_from`), then acquire the cold
+/// entries per `tier`. Decoupled from the host so each caller applies it to its
+/// own (`compile` verbose, `query` silent).
 async fn manifest_and_component_index(
     project: Option<&manifest::ProjectManifest>,
     base_path: &Path,
     entry_source: &str,
-    fetch_missing: bool,
+    tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
-    // On the build tier, materialize any locked-but-cold git worktrees first, so
-    // the offline git arm below resolves them without a separate `wado fetch`.
-    if fetch_missing && let Some(project) = project {
-        materialize_git_dependencies(&project.manifest, &project.root).await?;
+    // Materialize any locked-but-cold git worktrees first, so the offline git arm
+    // below resolves them without a separate `wado fetch`. Lock-pinned, so the
+    // analysis tier joins in — but a clone that fails there is a hint, not an
+    // aborted query.
+    if let Some(project) = project {
+        let materialized = materialize_git_dependencies(&project.manifest, &project.root).await;
+        if tier == Acquisition::Build {
+            materialized?;
+        }
     }
 
     let mut index = match project {
@@ -511,32 +513,33 @@ async fn manifest_and_component_index(
     };
 
     // The offline pass above already placed warm manifest registry deps in
-    // `components` and cold ones in `unresolved`. On the build tier, upgrade the
-    // cold ones by pulling them (lock-pinned) and clearing the stale hint.
-    if fetch_missing && let Some(project) = project {
+    // `components` and cold ones in `unresolved`. Upgrade the cold ones by
+    // pulling them and clearing the stale hint.
+    if let Some(project) = project {
         let has_registry_dep = project
             .manifest
             .dependencies
             .values()
             .any(|d| matches!(d.source, wado_manifest::DependencySource::Registry { .. }));
         if has_registry_dep {
-            let components = fetch_component_dependencies(&project.manifest, &project.root).await?;
-            for (name, path) in components {
+            let fetched =
+                fetch_component_dependencies(&project.manifest, &project.root, tier).await?;
+            for (name, path) in fetched.resolved {
                 index.unresolved.swap_remove(&name);
                 index.components.insert(name, path);
             }
+            index.unresolved.extend(fetched.unresolved);
         }
     }
 
     let manifest = project.map(|p| &p.manifest);
-    let inline =
-        resolve_inline_component_dependencies(entry_source, manifest, fetch_missing).await?;
+    let inline = resolve_inline_component_dependencies(entry_source, manifest, tier).await?;
     index.components.extend(inline.resolved);
     index.unresolved.extend(inline.unresolved);
 
     // Inline git sources (`use … from "<name>" with { git }`) are source deps:
     // their materialized worktree entry lands in `resolved`, compiled in.
-    let inline_git = resolve_inline_git_dependencies(entry_source, fetch_missing).await?;
+    let inline_git = resolve_inline_git_dependencies(entry_source, tier).await?;
     for (name, path) in inline_git.resolved {
         index.unresolved.swap_remove(&name);
         index.resolved.insert(name, path);
