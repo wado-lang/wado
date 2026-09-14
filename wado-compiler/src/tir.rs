@@ -2294,15 +2294,22 @@ impl TypeTable {
     /// there is no fused name for a declaration lookup to mistake for one.
     #[must_use]
     pub fn struct_rendered_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
-        let decl_name = self.struct_head_name(head);
-        if type_args.is_empty() {
-            return decl_name;
-        }
+        self.rendered_name(&self.struct_head_name(head), type_args)
+    }
+
+    /// The rendered spelling of an instantiation of `def`: the sibling of
+    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
+    #[must_use]
+    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
+        self.rendered_name(self.def_name(def), type_args)
+    }
+
+    fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
         let args: Vec<String> = type_args
             .iter()
             .map(|&a| self.mangle_type_arg_for_generic(a))
             .collect();
-        mangle_generic_name(&decl_name, &args)
+        mangle_generic_name(decl_name, &args)
     }
 
     /// Intern the instantiation of `def` with `type_args`, deriving its
@@ -3488,16 +3495,6 @@ impl TypeTable {
         }
     }
 
-    /// The rendered spelling of an instantiation of `def`: the sibling of
-    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
-    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
-        let args: Vec<String> = type_args
-            .iter()
-            .map(|&a| self.mangle_type_arg_for_generic(a))
-            .collect();
-        mangle_generic_name(self.def_name(def), &args)
-    }
-
     /// The monomorphized `Struct` an instantiation of `def` became, when the run
     /// made one. Monomorphization registers each one under this spelling.
     pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
@@ -3522,6 +3519,13 @@ impl TypeTable {
         } else {
             None
         }
+    }
+
+    /// A newtype's representation head, or `None` for anything else. The head
+    /// rather than one peel, which on a chain lands on another newtype.
+    #[must_use]
+    pub fn newtype_representation(&self, id: TypeId) -> Option<TypeId> {
+        matches!(self.get(id), ResolvedType::Newtype { .. }).then(|| self.representation_head(id))
     }
 
     /// The first link of `id`'s newtype chain that `owns` accepts, outermost

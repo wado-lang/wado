@@ -42,7 +42,7 @@ costs something at `-O2`, the optimizer is fixed rather than worked around.
 What follows:
 
 - `AsStrSlice` is an ordinary trait whose method returns a view of the
-  receiver, so it declares `stores[self]` — the same shape `AsByteSlice` has.
+  receiver, so it declares `stores[self]`, the same shape `AsByteSlice` has.
   Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: &S)` carries no
   dispatch at `-O2`.
 - Every `StrSlice` method that returns another view declares `stores[self]` too.

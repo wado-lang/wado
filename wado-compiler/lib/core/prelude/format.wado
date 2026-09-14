@@ -8,7 +8,7 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 use { Display, Inspect } from "core:prelude/traits.wado";
-use { String, StrCharIter, StrSlice } from "core:prelude/string.wado";
+use { String, StrCharIter, StrSlice, is_char_start } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
 
@@ -223,13 +223,12 @@ impl Formatter {
         }
     }
 
-    /// Characters — not bytes — in `buf[start_pos..]`: every byte that is not a
-    /// UTF-8 continuation byte starts one.
+    /// Characters — not bytes — in `buf[start_pos..]`.
     fn count_chars_from(&self, start_pos: i32) -> i32 {
         let end = self.buf.len();
         let mut count = 0;
         for let mut i = start_pos; i < end; i += 1 {
-            if self.buf.get_byte_unchecked(i) & 0xc0 != 0x80 {
+            if is_char_start(self.buf.get_byte_unchecked(i)) {
                 count += 1;
             }
         }

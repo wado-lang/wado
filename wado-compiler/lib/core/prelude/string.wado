@@ -78,16 +78,18 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     return 4;
 }
 
+/// True when `b` opens a UTF-8 sequence rather than continuing one. A
+/// continuation byte has the form 10xxxxxx (0x80..=0xBF).
+#[inline]
+internal fn is_char_start(b: u8) -> bool {
+    return b & 0xC0 != 0x80;
+}
+
 /// Return the start offset of the UTF-8 sequence containing byte `pos`.
 fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     let mut p = pos;
-    while p > 0 {
-        let b = repr[p];
-        if b >= 0x80 && b < 0xC0 {
-            p -= 1;
-        } else {
-            break;
-        }
+    while p > 0 && !is_char_start(repr[p]) {
+        p -= 1;
     }
     return p;
 }
@@ -101,9 +103,7 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
     if index < 0 || index > len {
         return false;
     }
-    // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
-    let b = repr[start + index];
-    return b < 0x80 || b >= 0xC0;
+    return is_char_start(repr[start + index]);
 }
 
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
