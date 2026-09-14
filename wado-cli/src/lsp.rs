@@ -4,7 +4,6 @@ use std::fmt::Write as _;
 use std::sync::Mutex;
 
 use wado_compiler::hashmap::IndexSet;
-
 use wado_manifest::RegistryComponentNeed;
 
 use crate::args::{self, CliExit};
@@ -40,13 +39,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<LspOptions, CliExit> {
     Ok(LspOptions {})
 }
 
-/// Warm the component cache for the language server: every pinned-but-cold
-/// registry dependency the offline resolution reports is pulled on a background
-/// task, so the next request resolves it while this one answers immediately.
+/// Pull each pinned-but-cold registry dependency on a background task, so the
+/// next request resolves it while this one answers immediately.
 ///
-/// One attempt per `coordinate@version` per process: a failed pull (offline,
-/// unauthorized) must not be retried on every keystroke, and a successful one
-/// leaves the file in the cache where discovery finds it.
+/// One attempt per `coordinate@version` per process: a pull that fails (offline,
+/// unauthorized) must not be retried on every keystroke.
 fn install_prefetcher() {
     let attempted: Mutex<IndexSet<String>> = Mutex::new(IndexSet::default());
     wado_lsp::host::prefetch::set_prefetcher(move |needs: Vec<RegistryComponentNeed>| {

@@ -104,9 +104,9 @@ wado compile --no-validate --wat-to-stdout file.wado
 the output against the committed source — without emitting Wasm. It resolves
 dependencies exactly as `compile` / `run` do, fetching what the cache lacks.
 
-Its world default is its own: the world whose `[world]` entry names the file,
-and otherwise the library world, which requires no entry point. So a library
-module checks as itself, and `--world <name>` opts into that world's contract.
+Its world default is its own. It takes the world whose `[world]` entry names the
+file, and otherwise the library world, which requires no entry point. So a
+library module checks as itself; `--world <name>` opts into a world's contract.
 
 ## Run
 

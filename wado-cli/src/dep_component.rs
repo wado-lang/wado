@@ -40,10 +40,10 @@ pub enum Acquisition {
     Analysis,
 }
 
-/// One tier's outcome for the registry `[dependencies]`: what resolved to a
-/// cache path, and what did not, with the reason phrased for the `use` site.
-#[derive(Default)]
-pub struct ComponentFetch {
+/// What one group of dependencies resolved to and what it did not, each entry
+/// keyed by the import name: a path, or a reason phrased for the `use` site.
+#[derive(Debug, Default)]
+pub struct Resolution {
     pub resolved: Vec<(String, String)>,
     pub unresolved: Vec<(String, String)>,
 }
@@ -60,15 +60,15 @@ pub async fn fetch_component_dependencies(
     manifest: &Manifest,
     manifest_dir: &std::path::Path,
     tier: Acquisition,
-) -> Result<ComponentFetch, String> {
+) -> Result<Resolution, String> {
     let needs = wado_lsp::host::discovery::registry_component_needs(manifest, manifest_dir);
     if !needs.iter().all(Result::is_ok) && tier == Acquisition::Build {
-        return Ok(ComponentFetch {
+        return Ok(Resolution {
             resolved: fetch_via_resolve(manifest, manifest_dir).await?,
             unresolved: Vec::new(),
         });
     }
-    let mut out = ComponentFetch::default();
+    let mut out = Resolution::default();
     for need in needs {
         let need = match need {
             Ok(need) => need,
@@ -124,25 +124,19 @@ fn manifest_key_for_coordinate<'a>(manifest: &'a Manifest, coordinate: &str) -> 
         })
 }
 
-/// A single-file inline component resolution, split into the imports resolved to
-/// a cache path and those that could not be (keyed by the verbatim specifier the
-/// loader looks up, so a `@ver` pin round-trips).
-pub struct InlineResolution {
-    pub resolved: Vec<(String, String)>,
-    pub unresolved: Vec<(String, String)>,
-}
-
 /// Resolve every inline `use … from "ns:pkg@ver" with { registry }` clause in
 /// `source` (single-file mode; the manifest, when present, supplies a default
-/// registry and enforces the inline-vs-`[dependencies]` exclusivity). Each
-/// clause carries an exact pin, so a present cache file resolves offline and a
-/// cold one is pulled on either tier; on [`Acquisition::Analysis`] a failed pull
-/// is reported `unresolved` with a `wado fetch` hint rather than failing.
+/// registry and enforces the inline-vs-`[dependencies]` exclusivity), keyed by
+/// the verbatim specifier the loader looks up, so a `@ver` pin round-trips.
+///
+/// Each clause carries an exact pin, so a present cache file resolves offline
+/// and a cold one is pulled on either tier; on [`Acquisition::Analysis`] a failed
+/// pull is reported `unresolved` with a `wado fetch` hint rather than failing.
 pub async fn resolve_inline_component_dependencies(
     source: &str,
     manifest: Option<&Manifest>,
     tier: Acquisition,
-) -> Result<InlineResolution, String> {
+) -> Result<Resolution, String> {
     let deps = collect_inline_deps(source, manifest)?;
     let mut resolved = Vec::new();
     let mut unresolved = Vec::new();
@@ -161,24 +155,16 @@ pub async fn resolve_inline_component_dependencies(
             Err(e) => return Err(e),
         }
     }
-    Ok(InlineResolution {
+    Ok(Resolution {
         resolved,
         unresolved,
     })
 }
 
-/// Resolution of single-file inline git dependencies
-/// (`use { … } from "<name>" with { git: "<url>", ref: "<ref>" }`). Unlike an
-/// inline registry component, a git dependency is *source*: its materialized
-/// worktree entry lands in the compiler's `resolved` map and compiles into the
-/// consumer, keyed by the import name.
-#[derive(Debug, Default)]
-pub struct InlineGitResolution {
-    pub resolved: Vec<(String, String)>,
-    pub unresolved: Vec<(String, String)>,
-}
-
 /// Resolve every inline `use … from "<name>" with { git }` clause in `source`.
+/// Unlike an inline registry component, a git dependency is *source*: its
+/// materialized worktree entry compiles into the consumer.
+///
 /// Each is pinned by an exact `ref` (single-file mode has no lock, so a
 /// `version` range is rejected). On [`Acquisition::Build`] the ref is resolved to
 /// a commit and the worktree materialized under the Wado root; a `ref` may name a
@@ -187,11 +173,11 @@ pub struct InlineGitResolution {
 pub async fn resolve_inline_git_dependencies(
     source: &str,
     tier: Acquisition,
-) -> Result<InlineGitResolution, String> {
+) -> Result<Resolution, String> {
     let Ok(parsed) = wado_compiler::parse(source).into_fail_fast() else {
-        return Ok(InlineGitResolution::default());
+        return Ok(Resolution::default());
     };
-    let mut out = InlineGitResolution::default();
+    let mut out = Resolution::default();
     for item in &parsed.ast.items {
         let wado_compiler::ast::Item::Use(use_decl) = item else {
             continue;

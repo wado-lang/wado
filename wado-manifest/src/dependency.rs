@@ -90,6 +90,7 @@ pub fn registry_component_need(
         cache_path: cache_root.join(relative),
     })
 }
+
 /// The lock id a registry dependency pins under — the key
 /// [`registry_component_need`] looks up, so a cache-derived pin lands where a
 /// lock-derived one would.

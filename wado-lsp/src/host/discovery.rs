@@ -12,7 +12,6 @@ use wado_manifest::dependency::{
     registry_lock_id, registry_pins,
 };
 use wado_manifest::workspace::{MANIFEST_FILENAME, workspace_governs};
-
 use wado_manifest::{DependencySource, LockFile, Manifest, ManifestError, read_workspace_members};
 
 use crate::host::prefetch;

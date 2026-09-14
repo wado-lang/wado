@@ -1,9 +1,7 @@
-//! The seam a network-capable host uses to warm the dependency cache.
+//! The seam a network-capable host warms the dependency cache through.
 //!
-//! Resolution here is offline: a registry dependency resolves from the cache or
-//! not at all. `wado lsp` installs a prefetcher so a pinned-but-cold dependency
-//! is pulled in the background and the next request resolves it — an editor
-//! request itself never waits on the network. The browser installs none.
+//! Resolution here is offline, so a pinned-but-cold dependency is handed over
+//! instead of waited on. `wado lsp` installs one; the browser installs none.
 
 use std::sync::OnceLock;
 
@@ -22,9 +20,6 @@ pub fn set_prefetcher(f: impl Fn(Vec<RegistryComponentNeed>) + Send + Sync + 'st
 /// Hand `needs` to the installed prefetcher, if any. Returns immediately: what
 /// the prefetcher does with them is its own business.
 pub(crate) fn request(needs: Vec<RegistryComponentNeed>) {
-    if needs.is_empty() {
-        return;
-    }
     if let Some(prefetcher) = PREFETCHER.get() {
         prefetcher(needs);
     }

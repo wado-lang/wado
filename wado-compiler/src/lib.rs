@@ -334,8 +334,7 @@ pub struct CompilerOptions {
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
     /// The caller discards the component it asks for (`wado check`), so a rule
-    /// that only protects an emitted artifact — an empty library is the one so
-    /// far — does not apply. Type and resolve errors are unaffected.
+    /// that only protects an emitted artifact does not apply.
     pub analysis_only: bool,
     /// Force the library's exports into the default interface (the A-grouping)
     /// even when no signature references a named type. Set when the library

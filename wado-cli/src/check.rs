@@ -11,7 +11,6 @@ use std::path::Path;
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
-use wado_lsp::host::discovery::absolutize;
 
 use crate::args::{self, CliExit};
 use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
@@ -141,7 +140,8 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let manifest_pair = load_nearest_manifest(path);
-    let world = check_world(&opts, path, manifest_pair.as_ref());
+    let (target_world, lib_world) =
+        check_world(opts.target_world.as_deref(), path, manifest_pair.as_ref()).options();
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),
         manifest_pair.as_ref(),
@@ -182,8 +182,8 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     // is a follow-up.
     let compiler_options = wado_compiler::CompilerOptions {
         log_level: Some(opts.knobs.log_level),
-        target_world: world.target_world(),
-        lib_world: world.lib_world(),
+        target_world,
+        lib_world,
         analysis_only: true,
         invocations: outcome.invocations.clone(),
         ..Default::default()
@@ -221,17 +221,12 @@ enum CheckWorld {
 }
 
 impl CheckWorld {
-    fn target_world(&self) -> Option<String> {
+    /// `(target_world, lib_world)` — the pair [`wado_compiler::CompilerOptions`]
+    /// wants, of which exactly one is `Some`.
+    fn options(self) -> (Option<String>, Option<String>) {
         match self {
-            Self::Target(w) => Some(w.clone()),
-            Self::Lib(_) => None,
-        }
-    }
-
-    fn lib_world(&self) -> Option<String> {
-        match self {
-            Self::Target(_) => None,
-            Self::Lib(fq) => Some(fq.clone()),
+            Self::Target(world) => (Some(world), None),
+            Self::Lib(fq) => (None, Some(fq)),
         }
     }
 }
@@ -244,14 +239,14 @@ const CHECK_LIB_WORLD: &str = "wado:check/check@0.0.0";
 /// otherwise the library world: a module that is no world's entry is a library,
 /// and demanding `export fn run` of one made `check` unusable on it (issue #2059).
 fn check_world(
-    opts: &CheckOptions,
+    requested: Option<&str>,
     path: &Path,
     project: Option<&manifest::ProjectManifest>,
 ) -> CheckWorld {
-    if let Some(world) = &opts.target_world {
-        return CheckWorld::Target(world.clone());
+    if let Some(world) = requested {
+        return CheckWorld::Target(world.to_string());
     }
-    if let Some(world) = project.and_then(|p| declared_world(p, path)) {
+    if let Some(world) = project.and_then(|p| manifest::world_declaring(p, path)) {
         return CheckWorld::Target(world);
     }
     let fq = project
@@ -259,18 +254,6 @@ fn check_world(
         .and_then(|pkg| manifest::lib_world_fq(pkg).ok())
         .unwrap_or_else(|| CHECK_LIB_WORLD.to_string());
     CheckWorld::Lib(fq)
-}
-
-/// The `[world]` key whose entry is `path`, comparing absolutized paths so the
-/// manifest-relative entry and a cwd-relative argument meet in one frame.
-fn declared_world(project: &manifest::ProjectManifest, path: &Path) -> Option<String> {
-    let target = absolutize(path);
-    project
-        .manifest
-        .world
-        .iter()
-        .find(|(_, entry)| absolutize(&project.root.join(&entry.entry)) == target)
-        .map(|(world, _)| world.clone())
 }
 
 /// A malformed inline clause and a redirect conflict have already been reported

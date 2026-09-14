@@ -151,19 +151,20 @@ acquired. Two tiers answer it, and every consuming command picks one:
 | `Analysis` | `query`                                             | Pulled when pinned; a failure degrades to a hint | Never — reports offline |
 
 `check` is a terminal command a person or CI runs, so it acquires like the build
-it gates: a tree where `wado run` works is a tree where `wado check` works. Only
-the editor-facing tier is held back, and for one reason — a live version listing
-would repeat on every document version, so an editor request must never wait on
-one.
+it gates. A tree where `wado run` works is a tree where `wado check` works.
 
-A version nothing pins is still resolvable offline from the cache: the newest
-cached version satisfying the requirement pins it, `wado.lock` first where it has
-an entry. A project that ran `wado fetch` therefore resolves in every tier
-without ever writing a lock.
+Only `query` is held back, for one reason. A live version listing would repeat
+on every document version, and an editor request must never wait on one.
 
-The language server sits below both: it resolves offline and hands its
-pinned-but-cold dependencies to a prefetcher (`wado lsp` installs one) that warms
-them in the background, so a later request resolves what this one could not.
+The cache pins what the lock does not. Offline resolution takes the `wado.lock`
+entry where there is one, and otherwise the newest cached version the requirement
+admits. A project that ran `wado fetch` resolves in every tier without ever
+writing a lock.
+
+The language server sits below both tiers. It resolves offline, and hands its
+pinned-but-cold dependencies to a prefetcher, which `wado lsp` installs. The
+prefetcher warms them in the background, so a later request resolves what this
+one could not.
 
 #### Reproducibility flags (`--locked` / `--offline` / `--frozen`)
 
