@@ -20,7 +20,7 @@ use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::types::{
     BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
 };
-use crate::name::mangle_local_item_name;
+use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
 use crate::{IndexMap, hashmap, tir};
@@ -908,7 +908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .reflect_structure_head(scrutinee_type);
-        let (base_def, base_module, scrutinee_arg_len) = {
+        let (base_def, scrutinee_arg_len) = {
             let table = self.tysys.type_table.borrow();
             let arg_len = match table.get(base_type) {
                 ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
@@ -918,11 +918,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let def = table
                 .nominal_def(base_type)
                 .expect("a nominal type names a declaration");
-            (def, table.def_module(def).clone(), arg_len)
+            (def, arg_len)
         };
         let newtype_def = self.tysys.type_table.borrow().nominal_def(scrutinee_type);
-        let names_scrutinee = |elab: &mut Self, site, head: &str, span| {
-            elab.qualifier_def(site, head, span)
+        let names_scrutinee = |elab: &mut Self, q: &Type| {
+            elab.qualifier_def(q)
                 .is_some_and(|def| def == base_def || Some(def) == newtype_def)
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
@@ -930,26 +930,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let arity_agrees = |written: usize| scrutinee_arg_len.is_none_or(|n| n == written);
         match qualifier {
             Type::Named(t) => {
-                names_scrutinee(self, t.id, &t.name, t.span)
-                    // `h::Case` parses as a `Named("h")` qualifier plus the bare
-                    // `Case`, so a prefix that names no type names the case's
-                    // source module. The case lookup validates the rest.
-                    || self
-                        .namespace_alias_source(&t.name, t.id)
-                        .is_some_and(|m| m == base_module)
+                names_scrutinee(self, qualifier)
+                    // `ns::Case` parses as a `Named("ns")` qualifier plus the bare
+                    // `Case`, so a prefix naming no type names a module. It licenses
+                    // the case when the scrutinee's type is reachable through it.
+                    || self.namespace_reaches_type(&t.name, t.id, t.span, base_def)
+                    || newtype_def.is_some_and(|def| {
+                        self.namespace_reaches_type(&t.name, t.id, t.span, def)
+                    })
             }
-            Type::Generic(g) => {
-                arity_agrees(g.args.len()) && names_scrutinee(self, g.id, &g.name, g.span)
-            }
-            // `h::Type::Case` names both a module and a type in it, and each
-            // half answers for itself: a prefix naming another module reaches
-            // this declaration only by the head resolving somewhere else.
+            Type::Generic(g) => arity_agrees(g.args.len()) && names_scrutinee(self, qualifier),
             Type::NamespacedGeneric(ns) => {
                 (ns.args.is_empty() || arity_agrees(ns.args.len()))
-                    && self
-                        .namespace_alias_source(&ns.namespace, ns.id)
-                        .is_some_and(|m| m == base_module)
-                    && names_scrutinee(self, ns.id, &ns.name, ns.name_span)
+                    && names_scrutinee(self, qualifier)
             }
             Type::Function(_)
             | Type::Tuple(_)
@@ -961,11 +954,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// The declaration a written type name means, `Self` and a type parameter
-    /// included. `None` where it names no type, a namespace prefix among them.
-    fn qualifier_def(&mut self, site: AstId, name: &str, span: Span) -> Option<DefId> {
-        let resolved = self.resolve_named_type(site, name, span, false);
+    /// The declaration a written qualifier means, resolved as a type: `Self`, a
+    /// type parameter, an import alias, a namespace member. `None` where it
+    /// names no type, a bare namespace prefix among them.
+    fn qualifier_def(&mut self, qualifier: &Type) -> Option<DefId> {
+        let resolved = match qualifier {
+            Type::Named(t) => self.resolve_named_type(t.id, &t.name, t.span, false),
+            Type::Generic(g) => self.resolve_named_type(g.id, &g.name, g.span, false),
+            Type::NamespacedGeneric(ns) => {
+                let member = namespace_member_alias(&ns.namespace, &ns.name);
+                self.resolve_named_type(ns.id, &member, ns.span, false)
+            }
+            _ => return None,
+        };
         self.tysys.type_table.borrow().nominal_def(resolved)
+    }
+
+    /// Whether `def`'s type is reachable as a member of the namespace `alias`
+    /// imports. A re-export is such a reach, so this asks the resolver rather
+    /// than comparing `def`'s own module.
+    fn namespace_reaches_type(
+        &mut self,
+        alias: &str,
+        site: AstId,
+        span: Span,
+        def: DefId,
+    ) -> bool {
+        if self.namespace_alias_source(alias, site).is_none() {
+            return false;
+        }
+        let name = self.tysys.type_table.borrow().def_name(def).to_string();
+        let member = namespace_member_alias(alias, &name);
+        let resolved = self.resolve_named_type(site, &member, span, false);
+        self.tysys.type_table.borrow().nominal_def(resolved) == Some(def)
     }
 
     fn format_pattern_case_name(&self, case_name: &str, qualifier: Option<&Type>) -> String {
