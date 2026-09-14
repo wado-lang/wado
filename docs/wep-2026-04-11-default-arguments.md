@@ -156,7 +156,14 @@ Compile-time literals that read a file follow the declaration too: `#include_str
 
 Two exceptions are deliberate and syntactic, not scoped lookups. Location literals (`#file`/`#line`/`#function`) evaluate at the call site; see the interaction table below. And a default may name an earlier parameter, covered in the next section. That name means the value the call supplied for it. The caller built that value in its own scope, so it may have read its own locals to do so, but nothing else in the default sees the caller: every other name still resolves at the declaration.
 
-The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all.
+The same rule governs a **type parameter's** default (`<T = Priv>`): it names a type in the declaring module's scope, which the use site may not be able to name at all. A parameter the use site declares therefore never answers for it, however the two are spelled (`generic_type_param_defaults.wado`).
+
+Two rules make such a default expandable at all, both checked once per declaration rather than at each application that reaches it:
+
+- It may name a parameter to its left, and stands for that parameter's argument. One naming a parameter at or after its own slot has no argument to stand for (`error_type_param_default_forward.wado`).
+- Expanding it must reach a fixpoint. A walk leading back to the declaration it belongs to — directly, under an argument, or through another declaration's defaults — settles nothing (`error_type_param_default_recursive.wado`).
+
+Both resolvers ask, since a default is reached from an annotation and from a struct field alike.
 
 This mirrors Kotlin/Swift/C#: encapsulation of the declaring module is preserved, and a default behaves identically at every use site.
 

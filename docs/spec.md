@@ -2391,7 +2391,34 @@ info::<Fields>("started", f);
 
 Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
 
-A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`.
+A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
+
+```wado
+struct Zero {}
+struct Marked<M: Mark = Zero> { value: i32 }
+
+fn f<Zero: Mark>(probe: Zero) -> i32 {
+    let m: Marked = Marked { value: 1 };  // the module's `Zero`, not `f`'s
+    return m.total();
+}
+```
+
+A default may name a parameter to its left, and stands for that parameter's argument. One naming a parameter at or after its own slot is rejected, since no argument has settled it yet:
+
+```wado
+struct Both<A, B = A> { v: A }        // OK: `B` takes `A`'s argument
+struct Fwd<A = B, B = i32> { v: B }   // ERROR: `A`'s default names `B`
+struct Own<A = A> { v: i32 }          // ERROR: the same, one slot nearer
+```
+
+Expanding a default must reach a fixpoint. One that leads back to the declaration it belongs to is rejected, whether it names that declaration directly, under an argument, or through another declaration's defaults:
+
+```wado
+struct Rec<T = Rec> { v: i32 }           // ERROR
+struct Pair<A, B = Pair<A>> { v: i32 }   // ERROR
+struct Ping<X, Y = Pong<X>> { v: i32 }   // ERROR, paired with
+struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
+```
 
 A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
 
