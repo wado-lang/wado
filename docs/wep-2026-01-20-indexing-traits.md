@@ -60,6 +60,14 @@ A use site dispatches on the traits provided: `&c[i]` and a `&self` receiver tak
 (`IndexAssign`). `c[i].mutating_method()` on a value-only container is a compile
 error — a copy cannot be mutated in place.
 
+Assigning _into_ the element rather than over it — `c[i].f = v`, and the
+compound `c[i].f += v` — writes through the element, so the subscript under it
+is the `&mut` place a `&mut self` receiver takes and dispatches to
+`IndexRefMut`. It falls back the way that receiver does, to `IndexRef` and then
+to a value copy. A container that only hands out `IndexRef`'s `&Output` refuses
+it: writing through a shared reference is the same error the direct target
+`c[i] = v` reports.
+
 ## The `Ref` and `RefMut` markers
 
 Two properties gate the two reference traits:

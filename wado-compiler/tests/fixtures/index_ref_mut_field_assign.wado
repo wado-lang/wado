@@ -1,0 +1,33 @@
+// `h[0].n = v` writes through the element, so the subscript under it is a
+// `&mut` place and takes `IndexRefMut` — the same route `&mut h[0]` and a
+// `&mut self` method on `h[0]` already take. It resolved as a value read
+// instead, so a container offering only `IndexRefMut` reported no `Index` impl
+// at all.
+
+struct Cell {
+    n: i32,
+}
+
+struct Holder<T> {
+    item: T,
+    cell: Cell,
+}
+
+impl<T> IndexRefMut<i32> for Holder<T> {
+    type Output = Cell;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.cell;
+    }
+}
+
+test "a field assignment through a subscript writes into the element" {
+    let mut h = Holder { item: 1, cell: Cell { n: 1 } };
+    h[0].n = 7;
+    assert h.cell.n == 7;
+    h[0].n += 3;
+    assert h.cell.n == 10;
+}
+
+__DATA__
+{"test": {}}
