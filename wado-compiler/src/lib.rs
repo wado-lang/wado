@@ -342,13 +342,8 @@ pub struct CompilerOptions {
     /// Each is composed as a sibling and wired `provider.export[fq] ->
     /// dependency.import[fq]` (research-cm-boundary-callbacks.md).
     pub providers: Vec<ProviderComponent>,
-    /// Compile-time parameter overrides from the CLI's `-D NAME=value` flags.
-    /// Consumed by the param-resolution pass against `#[param]` globals; an
-    /// entry matching no declaration is reported per `param_policy.unknown`.
-    pub param_overrides: hashmap::IndexMap<String, String>,
-    /// Severity policy for the three param-resolution diagnostic classes
-    /// (`--param-unknown` / `--param-invalid` / `--param-missing`).
-    pub param_policy: param_resolution::ParamPolicy,
+    /// What the param-resolution pass resolves each `#[param]` global against.
+    pub params: param_resolution::ParamInputs,
     /// When `Some`, retain a [`wit_emit::WitEmitSnapshot`] (using this contract)
     /// on [`CompileResult::wit_emit_snapshot`], so the CLI derives the
     /// `component-type` section / `wado wit` text from this compile rather than
@@ -373,8 +368,7 @@ impl Default for CompilerOptions {
             lib_world: None,
             lib_interface_export: false,
             providers: Vec::new(),
-            param_overrides: hashmap::IndexMap::default(),
-            param_policy: param_resolution::ParamPolicy::default(),
+            params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
         }
     }
@@ -954,8 +948,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
             opt: parent.opt,
             log_level: parent.log_level,
             codegen_flags: parent.codegen_flags.clone(),
-            param_overrides: parent.param_overrides.clone(),
-            param_policy: parent.param_policy,
+            params: parent.params.clone(),
             ..Default::default()
         };
         let result = Box::pin(compile_with_options(
@@ -1540,13 +1533,7 @@ fn compile_after_load<H: CompilerHost>(
     // Constant Global Promotion). See `wep-2026-04-26-compile-time-params.md`.
     {
         let _span = logger.span("param-resolution");
-        param_resolution::resolve_params(
-            &mut flat,
-            &options.param_overrides,
-            &options.param_policy,
-            &entry_filename,
-            logger,
-        )?;
+        param_resolution::resolve_params(&mut flat, &options.params, &entry_filename, logger)?;
     }
 
     // === Phase 9: Monomorphize (FlatPackage → FlatPackage) ===
@@ -1666,6 +1653,14 @@ fn compile_after_load<H: CompilerHost>(
             .map(|v| (v.span, v.message())),
     )?;
 
+    // The Kiln guarantee on the imports actually planned, which is the first
+    // point a transitive `core:*` dependency on WASI is visible. Before
+    // codegen, so a generator that cannot instantiate never reaches bytes.
+    if kiln::import_check::check_cm_imports(is_kiln_generator, &wir_package.import_plan, logger) > 0
+    {
+        return Err(Bail);
+    }
+
     // === Phase 13: Optimize WIR ===
     {
         let _span = logger.span("wir_optimize");
@@ -1757,8 +1752,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         None,
         OptOverrides::default(),
         &[],
-        &hashmap::IndexMap::default(),
-        param_resolution::ParamPolicy::default(),
+        &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
     )
     .await
@@ -1782,8 +1776,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     allocator: Option<&str>,
     opt: OptOverrides,
     codegen_flags: &[String],
-    param_overrides: &hashmap::IndexMap<String, String>,
-    param_policy: param_resolution::ParamPolicy,
+    params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
 ) -> Result<DumpResult, Bail> {
     let logger = Logger::new(host, compiler_host::LogLevel::default());
@@ -1973,8 +1966,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let _span = logger.span("param-resolution");
                 param_resolution::resolve_params(
                     &mut flat,
-                    param_overrides,
-                    &param_policy,
+                    params,
                     &entry_source.source_path(),
                     &logger,
                 )?;

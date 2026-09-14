@@ -13,6 +13,7 @@ use crate::elaborator::call::DefaultTypeBinding;
 use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
+use crate::elaborator::trait_query::BoundUnmet;
 use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
@@ -41,17 +42,50 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// Type parameter bounds: (`param_name`, bounds). Each bound keeps the
-    /// reference site that wrote it, so a consumer asks which trait it means
-    /// rather than comparing the spelling (WEP 2026-08-12).
-    pub(super) type_param_bounds: Vec<(String, Vec<BoundRef>)>,
+    /// The declaration's type parameters as written. Bounds, defaults and arity
+    /// are all read from here, never from a projection of it.
+    pub(super) type_params: Vec<ast::GenericParam>,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
-    /// What each type parameter wrote after `=`, parallel to
-    /// `type_param_bounds`. See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+/// Every named head `ty` reaches, as a reference site and its spelling. The
+/// scopeless twin of `Elaborator::walk_type_heads`: a `Self::` or `T::` prefix
+/// is collected like any other and left to `declaration_at`, which answers
+/// `None` for a binder.
+fn collect_type_heads(ty: &ast::Type, out: &mut Vec<(AstId, String)>) {
+    match ty {
+        ast::Type::Named(named) => out.push((named.id, named.name.clone())),
+        ast::Type::Generic(generic) => {
+            out.push((generic.id, generic.name.clone()));
+            for arg in &generic.args {
+                collect_type_heads(arg, out);
+            }
+        }
+        ast::Type::NamespacedGeneric(namespaced) => {
+            out.push((namespaced.id, namespaced.name.clone()));
+            for arg in &namespaced.args {
+                collect_type_heads(arg, out);
+            }
+        }
+        ast::Type::Function(func_ty) => {
+            for param in &func_ty.params {
+                collect_type_heads(param, out);
+            }
+            collect_type_heads(&func_ty.return_type, out);
+        }
+        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+            collect_type_heads(inner, out);
+        }
+        ast::Type::Tuple(elements) => {
+            for element in elements {
+                collect_type_heads(element, out);
+            }
+        }
+        ast::Type::TypePackSpread(_, _) | ast::Type::Infer(_) | ast::Type::Error(_) => {}
+    }
 }
 
 /// Where a qualified prefix's members live when the prefix names a newtype,
@@ -67,13 +101,6 @@ pub(super) fn newtype_member_owner(
     let newtype_id = lookup.newtype_of(def)?;
     let head = tysys.type_table.borrow().reflect_structure_head(newtype_id);
     Some((tysys.type_def(head)?, newtype_id))
-}
-
-/// What each type parameter declares as its default, in declaration order:
-/// `Some(ty)` where the parameter wrote `= ty`. A use site that omits the
-/// argument takes it.
-pub(super) fn type_param_defaults_of(params: &[ast::GenericParam]) -> Vec<Option<ast::Type>> {
-    params.iter().map(|p| p.default.clone()).collect()
 }
 
 impl StructFieldInfo {
@@ -99,14 +126,6 @@ impl StructFieldInfo {
     }
 }
 
-/// A trait bound as a declaration digest records it: the site that wrote it,
-/// which is what says *which* trait, plus the spelling for diagnostics.
-#[derive(Clone, Debug)]
-pub(super) struct BoundRef {
-    pub(super) name: String,
-    pub(super) site: AstId,
-}
-
 /// Variant case info: case name and payload type
 #[derive(Clone)]
 pub(crate) struct VariantCaseData {
@@ -130,7 +149,9 @@ pub(crate) struct VariantInfo {
     pub(crate) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
-    pub(super) type_params: Vec<String>,
+    /// The declaration's type parameters as written, like
+    /// [`StructFieldInfo::type_params`].
+    pub(super) type_params: Vec<ast::GenericParam>,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
@@ -138,9 +159,6 @@ pub(crate) struct VariantInfo {
     /// Used by `infer_variant_type_args` to fill type params from payload args
     /// and expected type context.
     pub(super) type_param_type_ids: Vec<TypeId>,
-    /// What each type parameter wrote after `=`, parallel to `type_params`.
-    /// See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
 }
 
 /// Enum case info: case name and discriminant index
@@ -217,11 +235,19 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    pub(super) type_params: Vec<String>,
+    /// The declaration's type parameters as written, like
+    /// [`StructFieldInfo::type_params`].
+    pub(super) type_params: Vec<ast::GenericParam>,
     pub(super) base_type_ast: ast::Type,
-    /// What each type parameter wrote after `=`, parallel to `type_params`.
-    /// See [`type_param_defaults_of`].
-    pub(super) type_param_defaults: Vec<Option<ast::Type>>,
+}
+
+impl GenericNewtypeInfo {
+    /// The base type with each declared parameter replaced by `args`. A generic
+    /// newtype names no single type, so every instantiation goes through this.
+    pub(super) fn base_instantiated(&self, args: &[ast::Type]) -> ast::Type {
+        let names: Vec<String> = self.type_params.iter().map(|p| p.name.clone()).collect();
+        substitute_type_params(&self.base_type_ast, &names, args)
+    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -283,6 +309,21 @@ pub enum TypeError {
     /// Unknown type name
     UnknownType {
         name: String,
+        span: Span,
+    },
+
+    /// Expanding a type parameter's `= Default` reaches the declaration it
+    /// belongs to again, so filling the slot has no fixpoint.
+    RecursiveTypeParamDefault {
+        name: String,
+        span: Span,
+    },
+
+    /// A type parameter's `= Default` names a parameter declared at or after
+    /// its own slot, which no argument has settled yet.
+    ForwardTypeParamDefault {
+        param: String,
+        referenced: String,
         span: Span,
     },
 
@@ -439,6 +480,9 @@ pub enum TypeError {
         /// indented `note:` lines beneath the headline message.
         reason: Vec<String>,
         span: Span,
+        /// Carries the enforcement's own proof, so this cannot be raised beside
+        /// a hand-rolled bound check. See [`BoundUnmet`].
+        unmet: BoundUnmet,
     },
 
     /// An explicit `impl Eq for T;` / `impl Ord for T;` marker was written,
@@ -1169,6 +1213,27 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::RecursiveTypeParamDefault { name, span } => (
+                Code::UnknownType,
+                format!(
+                    "the default for this type parameter expands into '{name}' again, the \
+                     declaration it belongs to, so filling the slot never settles"
+                ),
+                *span,
+            ),
+            TypeError::ForwardTypeParamDefault {
+                param,
+                referenced,
+                span,
+            } => (
+                Code::UnknownType,
+                format!(
+                    "the default for type parameter '{param}' names '{referenced}', which is \
+                     declared no earlier than '{param}' itself: only a parameter to its left \
+                     has an argument to stand for"
+                ),
+                *span,
+            ),
             TypeError::NotAType { name, kind, span } => (
                 Code::UnknownType,
                 format!(
@@ -1317,6 +1382,7 @@ impl TypeError {
                 param_name,
                 reason,
                 span,
+                unmet: _,
             } => (
                 Code::TypeMismatch,
                 append_reason_chain(
@@ -2912,45 +2978,43 @@ impl<'a> TypeLookup<'a> {
         self.newtype_of(self.declaration(name)?)
     }
 
-    /// `def`'s type parameters in declaration order, each with the default it
-    /// declared. `None` where `def` takes no type parameters.
-    ///
-    /// The three kinds that take type parameters are asked of one declaration,
-    /// so "how many does it take" and "whose defaults are these" can never be
-    /// about two of them.
-    pub(super) fn declared_type_params(
-        &self,
-        def: DefId,
-    ) -> Option<Vec<(String, Option<ast::Type>)>> {
-        fn zip(
-            names: impl IntoIterator<Item = String>,
-            defaults: &[Option<ast::Type>],
-        ) -> Vec<(String, Option<ast::Type>)> {
-            names.into_iter().zip(defaults.iter().cloned()).collect()
-        }
+    /// `def`'s own type parameters as types, in declaration order. `None` for a
+    /// generic newtype, which keeps none: its base is substituted as AST.
+    pub(super) fn declared_type_param_ids(&self, def: DefId) -> Option<&'a [TypeId]> {
         if let Some(info) = self.struct_fields_of(def)
-            && !info.type_param_bounds.is_empty()
+            && !info.type_param_type_ids.is_empty()
         {
-            let names = info.type_param_bounds.iter().map(|(n, _)| n.clone());
-            return Some(zip(names, &info.type_param_defaults));
+            return Some(&info.type_param_type_ids);
+        }
+        let info = self.variant_cases_of(def)?;
+        (!info.type_param_type_ids.is_empty()).then_some(&*info.type_param_type_ids)
+    }
+
+    /// `def`'s type parameters exactly as the declaration wrote them, for the
+    /// one declaration of the three kinds that takes any.
+    ///
+    /// The one source for its bounds, defaults and arity, so a consumer cannot
+    /// answer from a projection that dropped a bound, a pack or a default.
+    pub(super) fn declared_generic_params(&self, def: DefId) -> Option<&'a [ast::GenericParam]> {
+        if let Some(info) = self.struct_fields_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(&info.type_params);
         }
         if let Some(info) = self.variant_cases_of(def)
             && !info.type_params.is_empty()
         {
-            return Some(zip(
-                info.type_params.iter().cloned(),
-                &info.type_param_defaults,
-            ));
+            return Some(&info.type_params);
         }
-        if let Some(info) = self.generic_newtype_of(def)
-            && !info.type_params.is_empty()
-        {
-            return Some(zip(
-                info.type_params.iter().cloned(),
-                &info.type_param_defaults,
-            ));
-        }
-        None
+        let info = self.generic_newtype_of(def)?;
+        (!info.type_params.is_empty()).then_some(&*info.type_params)
+    }
+
+    /// Whether every parameter `def` declares has a default, which is what
+    /// makes its bare name an application of them all.
+    pub(super) fn every_type_param_defaults(&self, def: DefId) -> bool {
+        self.declared_generic_params(def)
+            .is_some_and(|params| params.iter().all(|p| p.default.is_some()))
     }
 
     /// `args` extended with the declared default of each parameter the site
@@ -2966,14 +3030,17 @@ impl<'a> TypeLookup<'a> {
         def: DefId,
         args: &[ast::Type],
     ) -> Option<Vec<ast::Type>> {
-        let params = self.declared_type_params(def)?;
+        let params = self.declared_generic_params(def)?;
         if args.len() >= params.len() {
             return None;
         }
-        let names: Vec<String> = params.iter().map(|(name, _)| name.clone()).collect();
+        if !self.type_param_defaults_terminate(def) {
+            return None;
+        }
+        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         let mut filled = args.to_vec();
-        for (_, default) in &params[args.len()..] {
-            let default = default.clone()?;
+        for param in &params[args.len()..] {
+            let default = param.default.clone()?;
             let settled = filled.clone();
             filled.push(substitute_type_params(
                 &default,
@@ -2982,6 +3049,51 @@ impl<'a> TypeLookup<'a> {
             ));
         }
         Some(filled)
+    }
+
+    /// Whether expanding `def`'s declared defaults reaches a fixpoint.
+    ///
+    /// A default names a type, whose own defaults name types, and so on. Where
+    /// that walk revisits a declaration it is already inside, no amount of
+    /// expansion settles the arguments.
+    pub(super) fn type_param_defaults_terminate(&self, def: DefId) -> bool {
+        let mut expanding = hashmap::IndexSet::default();
+        let mut settled = hashmap::IndexSet::default();
+        !self.defaults_reach_a_cycle(def, &mut expanding, &mut settled)
+    }
+
+    fn defaults_reach_a_cycle(
+        &self,
+        def: DefId,
+        expanding: &mut hashmap::IndexSet<DefId>,
+        settled: &mut hashmap::IndexSet<DefId>,
+    ) -> bool {
+        if settled.contains(&def) {
+            return false;
+        }
+        if !expanding.insert(def) {
+            return true;
+        }
+        let cycles = self
+            .declared_generic_params(def)
+            .into_iter()
+            .flatten()
+            .filter_map(|param| param.default.as_ref())
+            .any(|default| {
+                let mut heads = Vec::new();
+                collect_type_heads(default, &mut heads);
+                heads.into_iter().any(|(site, name)| {
+                    self.declaration_at(Some(site), &name)
+                        .is_some_and(|target| {
+                            self.defaults_reach_a_cycle(target, expanding, settled)
+                        })
+                })
+            });
+        expanding.shift_remove(&def);
+        if !cycles {
+            settled.insert(def);
+        }
+        cycles
     }
 
     /// The fields of the struct `def` declares.
@@ -3101,6 +3213,9 @@ pub(super) struct IndexingTraitInfo {
     /// The trait's index (key) type argument (e.g. `List<i32>`), for subscript
     /// coercion.
     pub(super) index_type: Option<TypeId>,
+    /// How to spell the receiver in the dispatched method's name — the base for
+    /// a block with parameters, the instantiation for one written at a type.
+    pub(super) receiver: FqTypeName,
 }
 
 /// Info about an operator trait implementation

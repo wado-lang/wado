@@ -1,8 +1,7 @@
 //! Kiln generator import-refusal check: under `core:kiln/generator` the package
 //! must import no WASI interface, the sandbox guarantee (WEP 2026-04-12) resting
 //! on the generator being deterministic. `run_generator`'s runtime link refuses
-//! any `wasi:*` CM import as depth. Runs after loading and before analysis, so
-//! the diagnostic points at the user's `use` like any other import error.
+//! any `wasi:*` CM import as depth.
 use crate::ast::Visibility;
 use crate::ast::{
     AstId, Expr, GenericType, IdentExpr, Item, LetStmt, Module, NamedType, Param, Pattern,
@@ -14,6 +13,7 @@ use crate::hashmap::IndexMap;
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
+use crate::wir::{ImportEntry, ImportKind};
 
 pub const KILN_GENERATOR_WORLD: &str = "core:kiln/generator";
 
@@ -26,9 +26,8 @@ pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types@0.1.0";
 /// the CM lift/lower falls back to an i32 handle. Add a new shared type here.
 pub const KILN_SHARED_TYPE_NAMES: &[&str] = &["InputFile", "OutputFile", "Response", "Error"];
 
-/// Run the Kiln generator import-refusal check against every loaded
-/// module. Returns the count of rejected `use` sites; zero means the
-/// generator passed.
+/// Reject the WASI interfaces the author's own `use` names, blaming that span.
+/// Returns the count of rejected sites; zero means the generator passed.
 pub fn check_loaded<H: CompilerHost>(
     target_world: Option<&str>,
     entry_module: &ModuleSource,
@@ -45,6 +44,42 @@ pub fn check_loaded<H: CompilerHost>(
             continue;
         }
         count += check_module(module, entry_module, source, logger);
+    }
+    count
+}
+
+/// Reject the WASI interfaces the planned imports ask the Kiln linker for,
+/// which is where a `core:*` module reaching WASI on the generator's behalf
+/// first shows. Returns the count; zero means the generator links.
+pub fn check_cm_imports<H: CompilerHost>(
+    is_generator_world: bool,
+    import_plan: &[ImportEntry],
+    logger: &Logger<'_, H>,
+) -> usize {
+    if !is_generator_world {
+        return 0;
+    }
+
+    let mut count = 0;
+    for entry in import_plan {
+        // A shared-types instance bears no function, so it asks the linker for
+        // nothing: every generator already instantiates with `wasi:cli/types`.
+        if !entry.fq.starts_with("wasi:") || matches!(entry.kind, ImportKind::SharedTypes) {
+            continue;
+        }
+        let _ = logger.error(Diagnostic {
+            severity: Severity::Error,
+            code: Code::KilnGeneratorForbiddenImport,
+            message: format!(
+                "kiln generator imports `{fq}`, which no `use` in it names — a `core:*` module \
+                 reaches WASI on its behalf. The generator linker offers only \
+                 `core:kiln/kiln-host`, so this component cannot instantiate. \
+                 See WEP 2026-04-12 §\"Design principles\".",
+                fq = entry.fq,
+            ),
+            span: None,
+        });
+        count += 1;
     }
     count
 }

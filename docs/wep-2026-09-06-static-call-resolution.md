@@ -292,13 +292,13 @@ unbound, so `fn from(v: T)` resolved to no type at all. It is numbered after the
 ones the receiver does mention. Only an argument can fill it, which is what
 makes the block a blanket, but a slot is what it is either way.
 
-Two spellings decide where the binding goes and what it skips. It runs before
-the trait's parameters are bound, since `From<T>`'s is also spelled `T`: binding
-the trait's first claims that name for an argument nothing has resolved yet, and
-the block's own slot never gets made. And a parameter position may hold a
-concrete type — `impl<i32> IndexValue<i32> for Box` — which is not a parameter
-and must not be bound, or the slot shadows the type it is named for and the
-diagnostic reads `expected 'i32', found 'i32'`.
+The binding runs before the trait's parameters are bound, since `From<T>`'s is
+also spelled `T`: binding the trait's first claims that name for an argument
+nothing has resolved yet, and the block's own slot never gets made.
+
+Every entry in `impl<...>` declares a parameter, as in Rust. A concrete
+instantiation names its type in the trait or receiver instead —
+`impl IndexValue<i32> for Box`.
 
 With the slot real, "only an argument can fill this parameter" is read off the
 slot's index. Reading it off an _absent_ type meant every unresolved parameter

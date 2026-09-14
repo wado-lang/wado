@@ -46,7 +46,8 @@ diagnostic list.
 Built-in diagnostics and debugging. `gale dump` shows the prediction decision
 for every parser rule (`--atn` shows the simulator's automaton, `--lexer` the
 emit strategy of every lexer rule); the `trace` option makes a generated parser
-log its recursive descent. See [The `gale` command](#the-gale-command).
+log its recursive descent through `core:log`. See
+[The `gale` command](#the-gale-command).
 
 ## Tutorial: a four-function calculator
 
@@ -326,9 +327,12 @@ wado run package-gale gen Grammar.g4
 wado run package-gale gen --output Grammar_parser.wado Grammar.g4
 
 # Options:
-#   --output <f>  write the generated parser to <f> instead of stdout
-#   --trace       emit a parser that logs its recursive descent to stderr
+#   --output <f>       write the generated parser to <f> instead of stdout
+#   --trace            emit a parser that logs its recursive descent
+#   --log-level <lvl>  gale's own threshold: trace, debug, info, warn (default),
+#                      or error. Advisory grammar diagnostics sit at info.
 wado run package-gale gen --trace Grammar.g4
+wado run package-gale gen --log-level info Grammar.g4
 
 # A `.scm` positional arg is a highlight query (see "Syntax highlighting").
 wado run package-gale gen Grammar.g4 Grammar.highlights.scm
@@ -342,6 +346,18 @@ wado run package-gale dump --lexer Grammar.g4  # the lexer's per-rule emit strat
 Multiple `.g4` files are merged (e.g. a split lexer/parser grammar). The
 `trace` option is available on the `use ... with` generator config; a
 highlight query rides in as a `.scm` input (see below).
+
+A traced parser logs through [`core:log`](../docs/stdlib-core-log.md) at
+`Trace`, under the target `gale.trace`. That is below what `core:log` admits
+with no sink installed, so a trace build also exports `trace_to_stderr`, which
+installs one for the duration of a call:
+
+```wado
+let tree = parser::trace_to_stderr(|| parser::to_string_tree(&parser::parse(&src)));
+```
+
+Under `wado test` the threshold is compiled down to `warn`, so a traced parser
+in a test needs `wado test -D log.level=trace` as well.
 
 ## Syntax highlighting
 

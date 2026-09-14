@@ -21,7 +21,8 @@ use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnost
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
-use { build_diagnostics } from "./gir.wado";
+use { diagnostic_level } from "./gir.wado";
+use { Level } from "core:log";
 use { to_snake_case } from "./gen_util.wado";
 use { Deserialize } from "core:serde";
 
@@ -110,17 +111,18 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         fragment_entries: req.options.fragment_entries,
     };
     let generated = codegen_generate(&mut grammar, &gen_opts);
-    // Surface Gale's prediction-strategy diagnostics through the Kiln host so
-    // they appear as normal compile warnings. The Kiln surface is the
-    // production entry (the `gale gen` CLI prints the same warnings on
-    // stderr), so a grammar built either way gets identical visibility. Gale
-    // diagnostics carry no source span yet, so the rule label leads the text.
-    for let d of &build_diagnostics(&generated.diagnostics) {
-        KilnHost::emit_diagnostic(KilnDiagnostic {
-            level: DiagnosticLevel::Warning,
-            span: null,
-            message: `gale: ${d.owner.label()}: ${d.message}`,
-        });
+    // Surface Gale's prediction-strategy diagnostics through the Kiln host, at
+    // the level `gir::diagnostic_level` gives each kind — the same level the
+    // `gale gen` CLI emits it at, so a grammar built either way is read the same
+    // way. Gale diagnostics carry no source span yet, so the label leads the text.
+    for let d of &generated.diagnostics {
+        if let Some(level) = diagnostic_level(&d.kind) {
+            KilnHost::emit_diagnostic(KilnDiagnostic {
+                level: kiln_level(level),
+                span: null,
+                message: `gale: ${d.owner.label()}: ${d.message}`,
+            });
+        }
     }
     let wado_source = generated.source;
 
@@ -139,4 +141,15 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         },
     ];
     return Result::Ok(Response { files });
+}
+
+/// Gale's diagnostic level as a Kiln one. Kiln has no `Debug` or `Trace`, so
+/// both land on `Hint`, its quietest.
+fn kiln_level(level: Level) -> DiagnosticLevel {
+    return match level {
+        Error => DiagnosticLevel::Error,
+        Warn => DiagnosticLevel::Warning,
+        Info => DiagnosticLevel::Info,
+        Debug | Trace => DiagnosticLevel::Hint,
+    };
 }

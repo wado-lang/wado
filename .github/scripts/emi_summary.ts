@@ -8,10 +8,16 @@ import { join } from 'node:path';
 const root = process.argv[2] ?? 'shards';
 const dirs = existsSync(root) ? readdirSync(root).sort() : [];
 
+// The one section the summary leads with: findings are why a run fails.
+const FINDINGS = 'findings';
+
 type Stage = {
   total: { scanned: number; eligible: number; sites: number; excluded: number; findings: number };
   buckets: Map<string, number>;
-  findings: string[];
+  shapes: Map<string, { sources: number; sites: number }>;
+  // Every other section's lines, concatenated across shards, so a section the
+  // report gains reaches the summary without being named here.
+  sections: Map<string, string[]>;
   missing: string[];
 };
 
@@ -24,7 +30,8 @@ function read(file: string): Stage {
   const stage: Stage = {
     total: { scanned: 0, eligible: 0, sites: 0, excluded: 0, findings: 0 },
     buckets: new Map(),
-    findings: [],
+    shapes: new Map(),
+    sections: new Map(),
     missing: [],
   };
   for (const dir of dirs) {
@@ -34,30 +41,62 @@ function read(file: string): Stage {
       continue;
     }
     const text = readFileSync(path, 'utf8');
-    stage.total.scanned += count(text, /^fixtures scanned: (\d+)$/m);
+    stage.total.scanned += count(text, /^sources scanned: (\d+)$/m);
     stage.total.eligible += count(text, /^eligible: (\d+)/m);
     stage.total.sites += count(text, /^eligible: \d+ \((\d+) injection sites\)$/m);
     stage.total.excluded += count(text, /^excluded: (\d+)$/m);
     stage.total.findings += count(text, /^findings: (\d+)$/m);
 
-    let inFindings = false;
+    let section = '';
     for (const line of text.split('\n')) {
-      const header = line.match(/^=== (.+?) \((\d+)\) ===$/);
-      if (header) {
-        stage.buckets.set(header[1], (stage.buckets.get(header[1]) ?? 0) + Number(header[2]));
-        inFindings = false;
+      const counted = line.match(/^=== (.+?) \((\d+)\) ===$/);
+      if (counted) {
+        stage.buckets.set(counted[1], (stage.buckets.get(counted[1]) ?? 0) + Number(counted[2]));
+        section = '';
         continue;
       }
-      if (line === '=== findings ===') {
-        inFindings = true;
+      if (line.startsWith('=== ')) {
+        section = line.slice(4, -4).trim();
         continue;
       }
-      if (inFindings && line.trim() !== '') {
-        stage.findings.push(line);
+      if (section === 'guard shapes') {
+        const shape = line.match(/^(\S+): (\d+) source\(s\) \((\d+) sites\)$/);
+        if (shape) {
+          const seen = stage.shapes.get(shape[1]) ?? { sources: 0, sites: 0 };
+          stage.shapes.set(shape[1], {
+            sources: seen.sources + Number(shape[2]),
+            sites: seen.sites + Number(shape[3]),
+          });
+        }
+        continue;
+      }
+      if (section !== '' && line.trim() !== '') {
+        const lines = stage.sections.get(section) ?? [];
+        lines.push(line);
+        stage.sections.set(section, lines);
       }
     }
   }
   return stage;
+}
+
+function table(title: string, columns: string[], rows: string[][]): string[] {
+  if (rows.length === 0) {
+    return [];
+  }
+  return [
+    ...(title ? [`### ${title}`, ''] : []),
+    `| ${columns.join(' | ')} |`,
+    `| ${columns.map(() => '---').join(' | ')} |`,
+    ...rows.map((row) => `| ${row.join(' | ')} |`),
+    '',
+  ];
+}
+
+// A section the summary has no table for, kept verbatim under its own heading.
+function verbatim(name: string, lines: string[]): string[] {
+  const heading = name.charAt(0).toUpperCase() + name.slice(1);
+  return [`### ${heading}`, '', '```', ...lines, '```', ''];
 }
 
 function render(title: string, stage: Stage): string[] {
@@ -68,22 +107,39 @@ function render(title: string, stage: Stage): string[] {
       '',
     );
   }
-  out.push('| Metric | Value |', '| --- | --- |');
-  out.push(`| fixtures scanned | ${stage.total.scanned} |`);
-  out.push(`| eligible | ${stage.total.eligible} (${stage.total.sites} injection sites) |`);
-  out.push(`| excluded | ${stage.total.excluded} |`);
-  out.push(`| findings | ${stage.total.findings} |`);
-  out.push('');
+  out.push(
+    ...table(
+      '',
+      ['Metric', 'Value'],
+      [
+        ['sources scanned', `${stage.total.scanned}`],
+        ['eligible', `${stage.total.eligible} (${stage.total.sites} injection sites)`],
+        ['excluded', `${stage.total.excluded}`],
+        ['findings', `${stage.total.findings}`],
+      ],
+    ),
+  );
 
-  if (stage.findings.length > 0) {
-    out.push('### Findings', '', '```', ...stage.findings, '```', '');
+  const findings = stage.sections.get(FINDINGS);
+  if (findings) {
+    out.push(...verbatim(FINDINGS, findings));
   }
-  if (stage.buckets.size > 0) {
-    out.push('### Exclusions', '', '| Reason | Count |', '| --- | --- |');
-    for (const [name, n] of [...stage.buckets].sort((a, b) => b[1] - a[1])) {
-      out.push(`| ${name} | ${n} |`);
+  out.push(
+    ...table(
+      'Guard shapes',
+      ['Shape', 'Sources', 'Sites'],
+      [...stage.shapes].map(([name, { sources, sites }]) => [name, `${sources}`, `${sites}`]),
+    ),
+    ...table(
+      'Exclusions',
+      ['Reason', 'Count'],
+      [...stage.buckets].sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, `${n}`]),
+    ),
+  );
+  for (const [name, lines] of stage.sections) {
+    if (name !== FINDINGS) {
+      out.push(...verbatim(name, lines));
     }
-    out.push('');
   }
   if (stage.missing.length > 0) {
     out.push('### Shards that reported nothing', '', ...stage.missing.map((d) => `- ${d}`), '');

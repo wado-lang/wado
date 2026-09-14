@@ -1,0 +1,19 @@
+// A default naming nothing is reported at the declaration that wrote it. No
+// application spells it, so dropping it silently left the slot short of the
+// arity and buried the cause under what that mismatch then produced.
+
+trait Mark {
+    fn tag() -> i32;
+}
+
+struct Holder<A, B: Mark = Nope> {
+    value: A,
+}
+
+export fn run() {
+    let h: Holder<i32> = Holder { value: 1 };
+    assert h.value == 1;
+}
+
+__DATA__
+{"compile_error": "unknown type 'Nope'"}

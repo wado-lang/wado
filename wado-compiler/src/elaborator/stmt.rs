@@ -17,9 +17,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
-use crate::elaborator::types::{
-    BoundRef, GenericNewtypeInfo, ImplMemberKind, StructFieldInfo, type_param_defaults_of,
-};
+use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
 use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
@@ -293,29 +291,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
-                type_param_bounds: Self::type_param_bounds_of(&struct_decl.type_params),
+                type_params: struct_decl.type_params.clone(),
                 type_param_type_ids,
-                type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
             },
         );
-    }
-
-    fn type_param_bounds_of(params: &[ast::GenericParam]) -> Vec<(String, Vec<BoundRef>)> {
-        params
-            .iter()
-            .map(|p| {
-                (
-                    p.name.clone(),
-                    p.bounds
-                        .iter()
-                        .map(|b| BoundRef {
-                            name: b.name.clone(),
-                            site: b.id,
-                        })
-                        .collect(),
-                )
-            })
-            .collect()
     }
 
     fn resolve_local_struct(&mut self, struct_decl: &ast::StructDecl) {
@@ -436,13 +415,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.decls.local_generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
-                    type_params: newtype_decl
-                        .type_params
-                        .iter()
-                        .map(|p| p.name.clone())
-                        .collect(),
+                    type_params: newtype_decl.type_params.clone(),
                     base_type_ast: newtype_decl.ty.clone(),
-                    type_param_defaults: type_param_defaults_of(&newtype_decl.type_params),
                 },
             );
             self.sem

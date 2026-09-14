@@ -216,6 +216,10 @@ struct TestSpec {
     #[serde(default)]
     param_env: indexmap::IndexMap<String, String>,
 
+    /// Host-supplied parameter fallbacks, as `wado test` supplies `log.level`.
+    #[serde(default)]
+    param_defaults: indexmap::IndexMap<String, String>,
+
     /// Stubbed path `[dependencies]`: name → the dependency's `[package].lib`,
     /// relative to the fixture directory. Each entry is its own package.
     #[serde(default)]
@@ -788,12 +792,19 @@ fn run_normal_test(
         skip_validation: false,
         retain_wir: spec.has_wir_expectations(opt_level),
         allocator,
-        param_overrides: spec
-            .params
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
-        param_policy,
+        params: wado_compiler::param_resolution::ParamInputs {
+            overrides: spec
+                .params
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            defaults: spec
+                .param_defaults
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            policy: param_policy,
+        },
         ..Default::default()
     };
 

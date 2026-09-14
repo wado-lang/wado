@@ -679,10 +679,14 @@ b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
-    // The ambient logger import, the trace helpers, the depth field, and the
-    // per-rule calls are all present.
-    assert str_contains(&traced, &"use { log_stderr } from \"core:rt\";");
+    // The `core:log` import, the trace helpers, the opt-in sink installer, the
+    // depth field, and the per-rule calls are all present.
+    assert str_contains(
+        &traced,
+        &"use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";",
+    );
     assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
+    assert str_contains(&traced, &"pub fn trace_to_stderr<T, effect E>");
     assert str_contains(&traced, &"trace_depth: i32,");
     assert str_contains(&traced, &"trace_enter(p, &\"a\");");
     assert str_contains(&traced, &"trace_fail(p, &\"a\", &p.pending_message());");
@@ -694,7 +698,7 @@ b : 'y' ;
     let plain = generate(&mut grammar2, &GenerateOptions { trace: false }).source;
     assert !str_contains(&plain, &"trace_enter");
     assert !str_contains(&plain, &"trace_depth");
-    assert !str_contains(&plain, &"log_stderr");
+    assert !str_contains(&plain, &"core:log");
 }
 
 test "token-led overlap dispatch emits no per-alt scan helpers" {

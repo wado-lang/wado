@@ -1,0 +1,27 @@
+// `sroa_param` scalarizes the `&Point` parameter of the `rebuilt` clone to its
+// one non-constant field, retyping the slot to `String`. The value pool kept
+// the canonical `Opaque(Local)` minted for the old type, so `promote_fields`
+// built `v.used` on it and the WIR extractor resolved the field against the
+// recorded type: `struct.get $Point 1` on a `String` local. `-O1` alone reaches
+// the shape — above it the shadowing `let` folds away — and the empty guard is
+// what keeps that `let` alive there.
+
+struct Point {
+    x: i32,
+    label: String,
+}
+
+fn rebuilt<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> S {
+    if builtin::black_box(false) { }
+    return ReflectStruct::<S>::from_fields(
+        [for let f of ReflectStruct::<S>::members() { f.get(v) }],
+    );
+}
+
+test "a retyped parameter slot keeps its own field type" {
+    let p = Point { x: 1, label: "hi" };
+    assert rebuilt(&p) == p;
+}
+
+__DATA__
+{"test": {}}

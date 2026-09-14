@@ -7,8 +7,9 @@
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
+use wado_compiler::param_resolution::ParamInputs;
 
-use crate::args::{self, CliExit, OptSpec, ParamArgs};
+use crate::args::{self, CliExit, OptSpec};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
@@ -169,8 +170,9 @@ pub struct CompileKnobs {
     /// `-f <flag>` codegen feature flags, forwarded verbatim to
     /// `CompilerOptions::codegen_flags`; the compiler validates them.
     pub codegen_flags: Vec<String>,
-    /// `-D NAME=value` overrides and `--param-*` policy.
-    pub params: ParamArgs,
+    /// `-D NAME=value` overrides, `--param-*` policy, and whatever fallbacks the
+    /// subcommand supplies for itself.
+    pub params: ParamInputs,
 }
 
 impl Default for CompileKnobs {
@@ -183,7 +185,7 @@ impl Default for CompileKnobs {
             opt: wado_compiler::OptOverrides::default(),
             allocator: None,
             codegen_flags: Vec::new(),
-            params: ParamArgs::default(),
+            params: ParamInputs::default(),
         }
     }
 }
