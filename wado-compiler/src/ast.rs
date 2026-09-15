@@ -2896,6 +2896,17 @@ pub struct IdentExpr {
     pub type_args_on_prefix: bool,
 }
 
+impl IdentExpr {
+    /// The segment naming the path's *owner*: `Color` in `Color::Red` and in
+    /// `ns::Color::Red` — the one before the member, so a namespace qualifier
+    /// ahead of the owner does not stand in for it. `None` for a bare name,
+    /// which qualifies nothing.
+    pub fn owner_segment(&self) -> Option<&PathSegment> {
+        let owner = self.segments.len().checked_sub(2)?;
+        self.segments.get(owner)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PathSegment {
     pub id: AstId,

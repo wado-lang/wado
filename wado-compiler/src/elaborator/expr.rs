@@ -956,11 +956,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // inside a foreign default resolves in the declaring module. A bare
         // case (`None`, `Leaf`) has no such segment: the expected type
         // supplies it, or nothing does.
-        let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
-            (
-                self.tysys.resolutions.declared(ident.segments[i].id),
-                ident.name.clone(),
-            )
+        let (owner, spelled) = if let Some(seg) = ident.owner_segment() {
+            (self.tysys.resolutions.declared(seg.id), ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
                 BareCase::Of { owner, spelled } => (Some(owner), spelled),

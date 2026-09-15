@@ -5973,6 +5973,17 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// Take the body's frame, leaving an empty one. The counterpart of
+    /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
+    /// describes its locals with it.
+    pub fn take_frame(&mut self) -> LocalFrame {
+        self.local_count = 0;
+        LocalFrame {
+            locals: std::mem::take(&mut self.locals),
+            address_taken: std::mem::take(&mut self.address_taken_locals),
+        }
+    }
+
     /// Give the body a whole new frame. The three fields describing one are
     /// replaced together, so a caller swapping a body cannot leave one of them
     /// describing the body it replaced.

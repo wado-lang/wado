@@ -528,8 +528,6 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
     effect_by_name: &'a IndexMap<String, EffectRef>,
-    /// `(module, interface, operation)` for every operation declaring a default
-    /// body, which runs when no handler is installed.
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
     interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
@@ -547,8 +545,7 @@ fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
     let Expr::Ident(ident) = callee else {
         return None;
     };
-    let last = ident.segments.len().checked_sub(2)?;
-    ident.segments.get(last)
+    ident.owner_segment()
 }
 
 /// The `interface` the name at `site` declares, as its declaring module, its
@@ -2635,6 +2632,11 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                         walker.check_defaults(&method.params);
                     }
                 }
+                Item::Resource(resource_decl) => {
+                    for method in &resource_decl.methods {
+                        walker.check_defaults(&method.params);
+                    }
+                }
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
@@ -2645,7 +2647,17 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
                 Item::Global(global) => {
                     walker.check(PureContext::GlobalInitializer, &global.initializer);
                 }
-                _ => {}
+                // No expression a position requires to be pure.
+                Item::Use(_)
+                | Item::Enum(_)
+                | Item::Variant(_)
+                | Item::Flags(_)
+                | Item::Newtype(_)
+                | Item::TupleTypeDecl(_)
+                | Item::BuiltinTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Error(_) => {}
             }
         }
     }
@@ -2659,8 +2671,8 @@ struct PurityWalker<'a> {
     index: &'a EffectIndex<'a>,
     module_source: &'a ModuleSource,
     context: PureContext,
-    /// Effects the enclosing `with … do` installs, which their operations
-    /// dispatch to rather than demanding of the position.
+    /// Effects the enclosing `with … do` installs, which a callee declaring
+    /// one may demand of the position.
     granted: IndexSet<EffectRef>,
     out: &'a mut Vec<PurityError>,
 }

@@ -172,9 +172,9 @@ fn example() {
 ```
 
 An initializer must be pure: calling a function that declares an effect is a
-compile error, as is dispatching an operation no enclosing `with … do` handles.
-An initializer may install its own handler, which discharges what its body
-dispatches.
+compile error. A user-defined effect's operation is another matter — it may be
+dispatched, and traps at module init where no `with … do` installs a handler,
+just as it would in a function body. An initializer may install its own.
 
 ## Types
 

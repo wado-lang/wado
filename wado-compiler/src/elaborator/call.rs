@@ -268,22 +268,15 @@ impl CalleeIdentKind<'_> {
         }
     }
 
-    /// The reference site of the interface a dispatch path `[ns::]E::op` names:
-    /// the segment before the operation, so a namespace qualifier ahead of `E`
-    /// does not stand in for it. Its consumers read the operation off the
-    /// path's *last* `::`, which is the other half of the same split.
+    /// The reference site of the interface a dispatch path `[ns::]E::op` names.
+    /// Its consumers read the operation off the path's *last* `::`, which is
+    /// the other half of the same split.
     fn interface_site(&self) -> Option<ast::AstId> {
         match self {
-            Self::AsIs(ident) => interface_segment(ident),
+            Self::AsIs(ident) => Some(ident.owner_segment()?.id),
             _ => None,
         }
     }
-}
-
-/// See [`CalleeIdentKind::interface_site`].
-fn interface_segment(ident: &ast::IdentExpr) -> Option<ast::AstId> {
-    let interface = ident.segments.len().checked_sub(2)?;
-    ident.segments.get(interface).map(|seg| seg.id)
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -531,7 +524,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// alias nor a namespace qualifier may reach them.
     fn effect_operation_callee(&self, ident: &ast::IdentExpr, path: &str) -> Option<CalleeRef> {
         let (_, operation) = path.rsplit_once("::")?;
-        let decl = self.effect_or_resource_decl_at(interface_segment(ident))?;
+        let decl = self.effect_or_resource_decl_at(Some(ident.owner_segment()?.id))?;
         self.tysys
             .signatures
             .resource_method_sig(decl, operation)
@@ -1483,7 +1476,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // The site is asked first: a field default carrying this
                     // spelling is re-walked where its author's alias is not in
                     // scope, so the spelling alone answers for nothing there.
-                    let receiver_site = interface_segment(ident);
+                    let receiver_site = ident.owner_segment().map(|seg| seg.id);
                     let names_a_member = receiver_site
                         .is_some_and(|site| self.decl_key_at(site, type_name).is_some())
                         || self.namespace_member(prefix, type_name).is_some();

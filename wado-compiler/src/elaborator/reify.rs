@@ -453,16 +453,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `Elaborator::qualified_owner_decl`, which answers the same way from the
     /// same table.
     fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        let owner = ident.segments.len().checked_sub(2)?;
-        self.tysys.resolutions.declared(ident.segments[owner].id)
-    }
-
-    /// The reference site of a qualified path's *owner* segment — `Color` in
-    /// `Color::Red`, `Color` in `ns::Color::Red`. `None` for a bare name, which
-    /// qualifies nothing.
-    fn qualified_owner_site(&self, ident: &ast::IdentExpr) -> Option<AstId> {
-        let owner = ident.segments.len().checked_sub(2)?;
-        Some(ident.segments[owner].id)
+        self.tysys.resolutions.declared(ident.owner_segment()?.id)
     }
 
     /// A `Type::Case` identifier as the declaration owning the case and the
@@ -475,7 +466,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (prefix, _) = ident.name.split_once("::")?;
         let owner = self
             .type_lookup()
-            .declaration_at(self.qualified_owner_site(ident), prefix);
+            .declaration_at(ident.owner_segment().map(|seg| seg.id), prefix);
         Some((owner, ident.name.clone()))
     }
 
@@ -8553,7 +8544,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let prefix = &ident.name[..pos];
             let suffix = &ident.name[pos + 2..];
 
-            let owner = self.qualified_owner_site(ident);
+            let owner = ident.owner_segment().map(|seg| seg.id);
             // A newtype reaches its base's constants and keeps its own type.
             let through_newtype = self.newtype_member_owner(owner, prefix);
             let flags = match through_newtype {

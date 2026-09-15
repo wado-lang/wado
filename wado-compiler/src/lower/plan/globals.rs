@@ -79,10 +79,7 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
             global,
             module_source: func.module_source.clone(),
             value: returned_value(func.body.take().expect("$init$ carries a body")),
-            frame: LocalFrame {
-                locals: std::mem::take(&mut func.locals),
-                address_taken: std::mem::take(&mut func.address_taken_locals),
-            },
+            frame: func.take_frame(),
         };
         by_module
             .entry(init.module_source.clone())
