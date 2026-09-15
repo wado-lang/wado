@@ -18,7 +18,7 @@ use crate::common::block_on;
 use indexmap::IndexMap;
 use wado_compiler::{
     Code, CompileResult, CompilerHost, CompilerOptions, Diagnostic, LogLevel, Severity,
-    SourceError, compile_with_options,
+    SourceError, compile_with_options, wir::ImportKind,
 };
 
 struct MapHost {
@@ -69,6 +69,7 @@ fn kiln_options() -> CompilerOptions {
     CompilerOptions {
         log_level: Some(LogLevel::Warn),
         target_world: Some("core:kiln/generator".to_string()),
+        retain_wir: true,
         ..CompilerOptions::default()
     }
 }
@@ -232,33 +233,48 @@ export fn generate(req: Request) -> Result<Response, Error> {
 }
 "#;
 
-/// The `wasi:` interfaces a component imports, as printed names.
-fn wasi_imports_of(wasm: &[u8]) -> Vec<String> {
-    let wat = wasmprinter::print_bytes(wasm).expect("printable component");
-    let mut names: Vec<String> = wat
-        .lines()
-        .map(str::trim)
-        .filter_map(|line| line.strip_prefix("(import \"wasi:"))
-        .filter_map(|rest| rest.split('"').next())
-        .map(|name| format!("wasi:{name}"))
+/// The `wasi:` interfaces a generator's import plan carries, each with the kind
+/// codegen emits it as. `wit_import_plan` pins the plan against the component's
+/// actual imports, so reading the plan reads what the linker will be asked for.
+fn wasi_imports_of(source: &str, what: &str) -> Vec<(String, ImportKind)> {
+    let package = compile_generator(source, what)
+        .wir_package
+        .expect("wir package retained");
+    let mut entries: Vec<(String, ImportKind)> = package
+        .import_plan
+        .iter()
+        .filter(|e| e.fq.starts_with("wasi:"))
+        .map(|e| (e.fq.clone(), e.kind))
         .collect();
-    names.sort();
-    names.dedup();
-    names
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries.dedup();
+    entries
 }
 
 #[test]
 fn generator_using_core_log_adds_no_wasi_import() {
-    let baseline = wasi_imports_of(&compile_generator(NOOP_GENERATOR, "noop generator").wasm);
-    let with_log =
-        wasi_imports_of(&compile_generator(CORE_LOG_GENERATOR, "core:log generator").wasm);
+    let baseline = wasi_imports_of(NOOP_GENERATOR, "noop generator");
+    assert!(
+        baseline.is_empty(),
+        "a generator that only answers `generate` needs no WASI at all, got {baseline:?}"
+    );
 
-    // The baseline carries `wasi:cli/types`, an instance exporting only an
+    // What `core:log` adds is `wasi:cli/types`, an instance exporting only an
     // `error-code` enum. A type-only import needs nothing from the linker,
-    // which is why every generator already instantiates with it.
-    assert_eq!(
-        with_log, baseline,
-        "core:log added a WASI import the Kiln linker never provides"
+    // which is why a generator carrying it still instantiates; anything
+    // function-bearing would not.
+    let with_log = wasi_imports_of(CORE_LOG_GENERATOR, "core:log generator");
+    let provided: Vec<&(String, ImportKind)> = with_log
+        .iter()
+        .filter(|(_, kind)| *kind != ImportKind::SharedTypes)
+        .collect();
+    assert!(
+        provided.is_empty(),
+        "core:log added {provided:?}, a WASI import the Kiln linker never provides"
+    );
+    assert!(
+        !with_log.is_empty(),
+        "core:log imports no WASI interface at all, so this test guards nothing"
     );
 }
 
