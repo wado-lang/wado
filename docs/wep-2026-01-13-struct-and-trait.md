@@ -567,4 +567,4 @@ impl<T: Display> Display for Stack<T> {
 
 - [Rust Traits](https://doc.rust-lang.org/book/ch10-02-traits.html)
 - [Rust Drop](https://doc.rust-lang.org/std/ops/trait.Drop.html)
-- [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)

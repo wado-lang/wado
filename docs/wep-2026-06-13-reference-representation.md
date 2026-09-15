@@ -4,7 +4,7 @@
 
 Wado has no raw pointers and no borrow checker. A reference (`&T` / `&mut T`) is
 always a GC-managed handle (see
-[Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)).
+[Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)).
 How that handle is _represented_ on Wasm GC has never been written down, even
 though the choice differs by referent type and is what makes mutation through a
 `&mut` observable at the original place.
@@ -333,7 +333,7 @@ fix to conform; none should be preserved.
 ## References
 
 - Issue #1333 (closed in favor of this WEP)
-- [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)
 - [Closure Implementation](./wep-2026-01-16-closure-implementation.md)
 - [Indexing Traits Design](./wep-2026-01-20-indexing-traits.md)
 - [Variant Wasm GC Representation](./wep-2026-02-08-variant-representation.md)

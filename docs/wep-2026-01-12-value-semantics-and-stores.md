@@ -1,12 +1,16 @@
-# WEP: Value Semantics and Reference Stores
+# WEP: Value Semantics and Reference Retention
 
 ## Context
 
 Wado targets Wasm GC, where structs and arrays are reference types (heap-allocated, garbage-collected). However, the language design needs to decide on the semantics exposed to programmers:
 
-1. **What semantics should structs have?** Value (copy on assign) or reference (alias on assign)?
-2. **Where are local variables allocated?** Stack or heap?
-3. **How to handle `f(&local_var)` when `f` might store the reference?**
+1. What semantics should structs have — value (copy on assign) or reference (alias on assign)?
+2. Where are local variables allocated, stack or heap?
+3. How should `f(&local_var)` be handled when `f` might keep the reference?
+
+Question 2 turned out to have no second answer to pick, which is §2, and that
+takes the danger out of question 3: it is a question about what the optimizer
+may skip, not about whether a program is well-formed.
 
 ### Survey of Other Languages
 
@@ -30,7 +34,8 @@ This means implementing true value semantics requires explicit copying.
 
 ### The Escape Problem
 
-When a function receives `&local_var`, the caller needs to know if the function will store that reference:
+When a function receives `&local_var`, the question is whether the function will
+keep that reference:
 
 ```wado
 fn caller() {
@@ -39,7 +44,10 @@ fn caller() {
 }
 ```
 
-If `store` keeps the reference, `local` must outlive the function call. In a GC'd language, this means `local` must be on the heap.
+In a language with a stack, the answer decides where `local` lives, and getting
+it wrong is a dangling reference. Wado has no stack to be wrong about (§2), so
+the answer decides only how much the compiler may do to `local` — which is why
+the same question reaches the optimizer and never the programmer.
 
 ### Approaches in Effect System Languages
 
@@ -79,38 +87,29 @@ let b = move a;  // a is invalidated
 - Aligns with Wado's "explicitness" philosophy
 - Move semantics already in the spec provide escape hatch for performance
 
-### 2. Automatic Heap Promotion
+### 2. There Is No Stack, So Nothing Is Promoted
 
-When a reference escapes, the referenced value is automatically heap-promoted. The compiler detects escape through these conditions:
+A programmer never decides between stack and heap, and never annotates a value
+so that it may outlive a scope. That is the decision; the mechanism that carries
+it is not promotion.
 
-| Escape Condition                     | Example                                    |
-| ------------------------------------ | ------------------------------------------ |
-| Passed to a function that retains it | `store(&local)` where `store` keeps `data` |
-| Returned from function               | `return &local;`                           |
-| Stored in global variable            | `GLOBAL = Some(&local);`                   |
-| Stored in struct field               | `Container { data: &local }`               |
-| Captured by escaping closure         | `return` closure that uses `local`         |
+Under [GC in Components](./wep-2026-03-28-gc-in-components.md) every struct,
+array and string a Wado program builds is a Wasm GC allocation from the moment
+it is built. A local holds a reference to it, not the value itself, so a
+reference that outlives its local's scope already points at a live object and
+the collector keeps it live. There is no second home to move it to, and no
+escape condition that could invalidate one.
 
-```wado
-fn example() {
-    let local = Data{};
-    let handle = store(&local);  // local promoted to heap
-}
-```
+The compiler's freedom therefore runs the other way. A value the escape walk
+finds nowhere may be taken _out_ of the heap — held as decomposed Wasm locals
+(`optimize::sroa` and its neighbours) — or moved rather than copied at its last
+use. An escape does not promote anything; it withdraws one of those, which is
+what §5 enumerates. Being a compiler optimization, neither is language
+semantics: a program means the same thing with both turned off.
 
-**Heap promotion is automatic** based on escape analysis:
-
-- Compiler detects when a reference might outlive its scope
-- Promotion is transparent to the programmer
-- Similar to Go's escape analysis
-
-**Rationale**:
-
-- Automatic promotion removes burden from programmer
-- GC handles the heap-allocated values
-- No manual stack/heap decision needed
-
-**Implementation note**: Wasm GC structs are semantically heap-allocated. However, the Wado compiler MAY represent non-escaping structs as Wasm locals (decomposed fields) instead of `struct.new`. This is a compiler optimization, not language semantics.
+This is why none of §3's facts is a safety condition. Go's escape analysis
+decides where a value lives and must be right or the program is wrong; Wado's
+decides only what the optimizer may skip, and a wrong answer costs a copy.
 
 ### 3. Escape Is Inferred, Never Declared
 
@@ -122,10 +121,9 @@ A reference parameter leaves a call in two ways, and they are different claims:
 - Retain — the reference reaches a global, or is written through a `&mut` the
   caller still holds. `array_set`, `array_fill`.
 
-Neither is a safety condition. §1 and §2 put every referent under the GC, so a
-reference that outlives its scope keeps its referent alive and there is nothing
-for a declaration to prevent. Both are optimizer inputs, and §5 lists what each
-one buys.
+Neither is a safety condition, for §2's reason: there is nothing for a
+declaration to prevent. Both are optimizer inputs, and §5 lists what each one
+buys.
 
 A body states both, so the compiler reads them from it rather than from a
 declaration. `lower::plan::value_copy::stores` is that reading: an
@@ -226,15 +224,16 @@ type, and a call resolves against the declaration it names, never against a row
 carried by the type.
 
 The row on a function type is a separate question from the clause on a function,
-and it is the one an indirect call reads. An empty row means "retains nothing"
-today, and that reading is true only because the frontend keeps it true: a
-closure may not retain a reference parameter, and a named function that does is
-rejected where a non-retaining functor type is expected. Remove the obligation
-without replacing the row's source and the empty row becomes a lie, so an
-indirect call must instead assume every reference position escapes.
+and it is the one an indirect call reads. That row used to mean "retains
+nothing", and it meant it only because the frontend kept it true: a closure
+could not retain a reference parameter, and a named function that did was
+rejected where a non-retaining functor type was expected. Removing the
+obligation removed that guarantee with it. The row is now empty on every
+function type and carries no claim at all, so an indirect call assumes every
+reference position escapes.
 
-What the row needs is a source, not a new analysis, and the fixpoint of §3 is
-it. A function value of a given functor type is minted in exactly two places — a
+What the row needs to say something again is a source, not a new analysis, and
+the fixpoint of §3 is it. A function value of a given functor type is minted in exactly two places — a
 reference to a named function, and a closure literal — so joining the facts of
 every such expression of one type bounds every call through a value of that
 type. That join belongs beside the per-function facts, in the same pass, since
@@ -263,17 +262,20 @@ Storing a functor value itself needs no declaration either way: functors are
 
 ### 5. What the Facts Buy
 
-Components running on GC hold a reference as a reference, so nothing is promoted
-to reach it. What the facts buy is what the compiler may then stop doing to the
-argument, which each consumer reads for itself:
+Nothing is promoted to reach a retained reference (§2). What the facts buy is
+what the compiler may then stop doing to the argument, which each consumer reads
+for itself:
 
 - `lower::plan::mut_ref_writeback` writes no `&mut` argument back at a call that
   retains it: the borrow outlives the call, so the call is no place to write it.
 - `lower::plan::value_copy` reads the union. A local passed where the callee
   retains it or hands it out is borrow-escaped and cannot be moved out of.
 - `wir_optimize::const_forward` forwards no constant into a retained parameter.
-- `niri` folds a call at compile time on what the body does, not on retention:
-  a compile-time evaluation keeps nothing past itself.
+- `niri` refuses to fold a call whose result could embed a retained reference,
+  because the engine has no reference values and the result would be a snapshot
+  the next write to that storage leaves stale. It also refuses any retaining
+  call outright, which is the blanket reading roadmap item 10 narrows to the
+  first.
 
 Keeping the channels apart is what makes each precise. An iterator holds a
 reference to what it walks, so folding `into_result` into `escapes` makes every
@@ -314,35 +316,41 @@ The closure value itself follows Wado value semantics: deep-copied on assignment
 
 - Matches Rust ergonomics for capture inference, with the borrow-checker complexity dropped.
 - Aliasing through `&mut` captures is consistent with Wado's general rule that references are the only aliasing types.
-- Escape tracking for closures reuses the existing escape-analysis machinery — if a returned closure captures `&local`, the local is heap-promoted by the same rules that govern any escaping reference.
+- Capturing by reference costs no lifetime machinery of its own (§7), so the ergonomics are had without the analysis that usually pays for them.
 
 Note: closures use "capture" terminology for the outer bindings they name.
 Retention is about the reference _parameters_ a call is handed. These are
 separate mechanisms.
 
-### 7. Heap Promotion of Referents Captured by Closures (Non-Normative)
+### 7. An Escaping Closure Needs No Lifetime Rule
 
-When a closure escapes its declaring scope (returned, stored in a struct field, etc.), the captured bindings must outlive the closure. The compiler heap-promotes them via the same machinery as any escaping reference (§2 / §5). No closure-specific lifetime tracking is required beyond the existing escape analysis.
+When a closure escapes its declaring scope — returned, stored in a struct field
+— its captured bindings outlive the scope they were declared in. Nothing has to
+arrange that: each referent is a GC allocation the capture holds a reference to
+(§2), so the collector keeps it. The only thing the escape changes is what the
+optimizer may do to the binding, which is §5's list.
 
 ### 8. Edge Cases
 
 #### Returning a Reference to Local
 
-Allowed. The compiler promotes the local to heap automatically via escape analysis:
+Allowed, and there is nothing to arrange:
 
 ```wado
 fn make_data() -> &Data {
     let local = Data{};
-    return &local;  // OK: local promoted to heap
+    return &local;  // OK: the referent outlives the frame
 }
 ```
 
-The return type `&Data` from a function that creates the data means "heap-allocated, GC-managed reference." The compiler detects that `local` escapes via return and promotes it to heap.
+`local` holds a reference to a GC allocation, and returning it returns that
+reference. What the escape costs is the chance to scalarize `local` or to move
+out of it, not a relocation.
 
 #### Storing in Globals
 
-Allowed. The referenced value is promoted to heap, and the walk records `data`
-as retained:
+Allowed. The referent is already where the global needs it, and the walk records
+`data` as retained:
 
 ```wado
 let mut GLOBAL: Option<&Data> = None;
@@ -426,7 +434,7 @@ fn multi_share() {
 }
 ```
 
-Each closure's environment holds a reference to `x`. Because references alias, every read and write lands on the same location. If the closures escape `multi_share`, `x` is heap-promoted by the existing escape rules.
+Each closure's environment holds a reference to `x`. Because references alias, every read and write lands on the same location. If the closures escape `multi_share`, that location outlives the call on its own (§7).
 
 ### 9. Component Model Boundaries
 
@@ -471,12 +479,14 @@ its own.
 ### Positive
 
 1. Predictable value semantics: no aliasing surprises with structs.
-2. Automatic heap promotion: the programmer does not manage stack versus heap.
+2. No stack-versus-heap decision to make or to get wrong, and no annotation that
+   lets a value outlive a scope: every value is on the GC heap already.
 3. Nothing to declare and nothing to get wrong: escape is a property of the
    body, and the body is what the compiler reads.
 4. The two escapes stay apart, so neither consumer reads a fact meant for the
    other (§5).
-5. Go-like ergonomics: escape analysis is a familiar pattern.
+5. An escape analysis that can only cost a copy: a wrong answer is slow code,
+   never wrong code, so it may be tuned without a correctness argument (§2).
 6. Auto-capture by reference for closures: captures share Wado's general
    reference-aliasing semantics, with `&T` / `&mut T` inferred per binding from
    body usage (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md));
@@ -575,7 +585,7 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        declaration for everything outside `core:builtin`, and a panic for
        nothing.
 3. [ ] Measure what a conservative reading of an indirect call would cost, at the
-       seventeen exposed signatures §4 names. Done when the number is known: it
+       seventeen exposed signatures Negative 3 names. Done when the number is known: it
        says how much item 4 is worth, and how much the gap below it leaves.
 4. [ ] Give the functor type's row an inferred source, so an indirect call has
        one again (§4). The fixpoint gains a second map, from functor `TypeId` to
@@ -593,14 +603,14 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        and the write-back asymmetry in the gaps below is closed with them.
 5. [x] Delete `check_stores_semantic` and what only it reaches — the oracle, the
        return-provenance fixpoint, the escape walk, the type-reachability memo.
-       Done when `effect_check.rs` reports effects and default purity only, and
-       the fixtures asserting a stores diagnostic are gone with it. This closes
+       Done when `effect_check.rs` reports effects and purity only, and the
+       fixtures asserting a stores diagnostic are gone with it. This closes
        issues #2049 and #2050.
 6. [x] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
-       3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
+       3024 under `package-gale` — 2957 of them Kiln output, so Gale's generator
        stops emitting them first — and 2 under `package-marl`. Done when no
        function declaration in the corpus carries a `stores` clause and
-       `mise run test-wado` passes. The seven trait requirements §4 names lose
+       `mise run test-wado` passes. The eleven trait requirements §4 names lose
        theirs here rather than converting it.
 7. [x] Remove the `stores` clause from the grammar, in both declaration and
        function type position, after nothing writes one. Done when the parser
@@ -620,8 +630,13 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        fixpoint sees it — but the `hands_out_result` heuristic is still there.
        Done when it is gone, closing the "declared `stores` the walk does not
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
-10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
-        §5. Done when compile-time evaluation is decided by the body alone.
+10. [ ] Delete the `func.retains.is_empty()` gate in `niri::is_ctfe_eligible`.
+        It refuses every retaining call, where the reason §5 gives reaches only
+        the calls whose result could embed the retained reference — and
+        `niri::frame` already tests exactly that, narrowly, before it runs one.
+        The blanket gate is the older, coarser copy of the same idea. Done when
+        the narrow test is the only place retention decides a fold, and a
+        retaining call returning a scalar folds.
 11. [ ] Add `into_param` as the walk's third channel (§3), fed by `into = q` on a
         declaration and by a body that puts a reference into one of its own
         parameters. Done when `StoresFacts` carries retained parameter to

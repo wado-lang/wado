@@ -44,7 +44,7 @@ Captures are auto-by-reference and are not part of the closure type. They live i
 
 A closure that escapes outlives the bindings it captured, so a boxing pass promotes those bindings to the heap. For a non-escaping closure the environment may be skipped entirely by inlining the call and reading the bindings as locals — an optimization, not a semantic guarantee, and one that has to be expressed as call rewriting because Wasm GC has no stack-slot references.
 
-Retention of non-closure reference parameters stays a separate mechanism (see [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)).
+Retention of non-closure reference parameters stays a separate mechanism (see [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)).
 
 ### Wasm GC representation
 

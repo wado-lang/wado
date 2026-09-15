@@ -158,7 +158,7 @@ A typical match allocates:
   reference (niche optimization), so the `Option` itself does not box.
 - For a dynamic-route hit with N captured params: **1 allocation** for the
   flat `List<i32>` of byte ranges (length `2N`). The `PathParams` and
-  `RouteMatch` are heap-promoted by the compiler.
+  `RouteMatch` are GC allocations the returned reference keeps alive.
 
 Compare to the previous `TreeMap<String, String>` design, which allocated
 one tree node, one key `String`, and one value `String` per parameter, plus
@@ -225,7 +225,7 @@ impl<H> Router<H> {
     /// `None` on a miss. The path argument must be the URL path only (no
     /// query string, no fragment). Static-route hits return a reference
     /// into a pre-built table; dynamic-route hits return a reference to a
-    /// heap-promoted local `RouteMatch`. Assumes `Option<&T>` niche
+    /// `RouteMatch` built for the call. Assumes `Option<&T>` niche
     /// optimization at codegen, so the `Option` itself is not boxed.
     pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
 

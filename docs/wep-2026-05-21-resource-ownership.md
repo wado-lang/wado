@@ -530,7 +530,7 @@ naming the result, which is what `iter()` and `as_slice()` do and what keeps a
 is not derived: a body that instead puts the reference somewhere the walk cannot
 follow — a raw builtin, a `CmRawCall` — and returns a value is read as routing it
 to the result. Only a body-less declaration carries one now
-([Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)),
+([Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)),
 and a body-less declaration has no body for the reading to contradict, so what
 is left is the seeding of an attribute the compiler owns. What covers the rest
 is the published answer being the union of both channels, so every direct caller
@@ -780,7 +780,7 @@ Verified against the tree.
       it to re-root an iterator's element read at the list, and `array_copy`
       needs it because its elements reach `dst`. Recorded with the rest of
       what the facts cannot yet say, in
-      [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+      [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
 
 - [ ] Read a call through `projection_param`, and `&fresh` through
       `is_owned_value`. Together, not separately.
@@ -837,7 +837,7 @@ client.
 - [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
-- [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)
 - [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second
   backing.
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)
