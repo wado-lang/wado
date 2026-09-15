@@ -1,7 +1,7 @@
-// `if let Some(x) = x` and `while let Some(x) = x` rebuild `x` from the binding
-// they replace, which is the derivation `let x = x + 1` is sanctioned for. A
-// condition takes no `#[allow]`, so a warning there could only be answered by a
-// rename. A scrutinee that names something else still warns.
+// A binder that takes a name its own source already mentions rebuilds that
+// binding rather than hiding it, so the lint passes over it wherever it is
+// written: `if let Some(x) = x`, `while let Some(x) = x`, and a `let` deriving
+// across a scope. A source naming something else still warns.
 
 use { println, Stdout } from "core:cli";
 
@@ -21,9 +21,18 @@ fn drain(xs: List<i32>) -> i32 {
     return total;
 }
 
+fn step(n: i32) -> i32 {
+    if n > 0 {
+        let n = n + 1;
+        return n;
+    }
+    return n;
+}
+
 export fn run() with Stdout {
     assert unwrap(&Option::<i32>::Some(3)) == 3;
     assert drain([1, 2, 3] as List<i32>) == 6;
+    assert step(1) == 2;
     println("ok");
 }
 
@@ -32,6 +41,7 @@ __DATA__
     "stdout": "ok\n",
     "warnings_not_contains": [
         "`a` shadows",
-        "`xs` shadows"
+        "`xs` shadows",
+        "`n` shadows"
     ]
 }

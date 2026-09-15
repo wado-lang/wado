@@ -267,8 +267,7 @@ A binder that takes a name already reaching a known symbol is legal and warns.
 Every binder counts: a `let`, a parameter, a closure parameter, a type
 parameter, a pattern binding, a local item. So does every kind of symbol, in
 any namespace: a function, a global, a type, a trait, a case, an outer binding.
-The derived same-scope `let` above is the one exemption, since the language
-already sanctions it.
+The exemption is the derivation above, since the language already sanctions it.
 
 ```wado
 fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
@@ -287,9 +286,11 @@ A bare identifier pattern is exempt where the name reaches a case or a
 `global`. Such a pattern matches by value rather than binding, and the
 scrutinee's type decides which it does.
 
-The unwrap-rebind `if let Some(x) = x`, and its `while let` form, is exempt too:
-the binder takes a name its own scrutinee already mentions, which is the
-derivation the same-scope `let` is sanctioned for. `if let Some(x) = y` warns.
+The derivation is read off the binder's own source, not off the `let` keyword,
+and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
+`while let Some(x) = x` are all exempt; `if let Some(x) = y` warns. A match arm
+is not exempt — its scrutinee stays in scope across every arm, so
+`match x { Some(x) => … }` gives one name two meanings side by side.
 
 A binder shadows only what is in scope where it is written. A name binds after
 the expression it binds from, and reaches only what the construct carries it

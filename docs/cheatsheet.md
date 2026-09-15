@@ -159,6 +159,7 @@ let println = 1;                                  // warns: shadows the function
 #[allow(shadowed_name)] let eprintln = 1;         // deliberate, no warning
 if let Some(x) = x { }                            // exempt: derives from old x
 if let Some(x) = y { }                            // warns: derives from y
+match x { Some(x) => ... }                        // warns: x means two things here
 ```
 
 ## Global Variables

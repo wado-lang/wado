@@ -611,20 +611,14 @@ impl Resolver<'_> {
         self.irrefutable_pattern = saved;
     }
 
-    /// The names this `let` rebuilds from themselves (`let x = x + 1`) — the
-    /// one shadowing the language sanctions, so the lint passes over them.
+    /// The names this `let` rebuilds from themselves (`let x = x + 1`), at any
+    /// scope: it is the derivation that exempts them, not where the binding it
+    /// replaces sits.
     fn derived_names(&self, stmt: &ast::LetStmt) -> Vec<String> {
-        let Some(value) = stmt.value.as_ref() else {
-            return Vec::new();
-        };
-        derived_from(&stmt.pattern, value)
-            .into_iter()
-            .filter(|name| {
-                self.bindings
-                    .last()
-                    .is_some_and(|frame| frame.contains(name))
-            })
-            .collect()
+        stmt.value
+            .as_ref()
+            .map(|value| derived_from(&stmt.pattern, value))
+            .unwrap_or_default()
     }
 }
 

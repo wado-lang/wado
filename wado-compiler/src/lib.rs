@@ -795,9 +795,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems
             .iter()
             .find_map(|el| resource_in_lib_sig(registry, el)),
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            resource_in_lib_sig(registry, inner)
-        }
+        Type::Reference(inner) | Type::MutReference(inner) => resource_in_lib_sig(registry, inner),
         _ => None,
     }
 }
