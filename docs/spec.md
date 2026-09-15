@@ -3479,9 +3479,9 @@ The prelude defines traits for comparison operators:
 
 ```wado
 /// Types that can be compared for equality
-pub trait Eq {
+pub trait Eq<Rhs = Self> {
     /// Returns true if self equals other
-    fn eq(&self, other: &Self) -> bool;
+    fn eq(&self, other: &Rhs) -> bool;
 }
 ```
 
@@ -3489,6 +3489,10 @@ The `==` and `!=` operators use `Eq::eq`:
 
 - `a == b` desugars to `Eq::eq(&a, &b)`
 - `a != b` desugars to `!Eq::eq(&a, &b)`
+
+The right operand selects among a type's `Eq<Rhs>` impls the way it does among
+its `Add<Rhs>` impls, so `==` can span two types: `StrSlice` and `String` compare
+directly, in either order, with nothing copied.
 
 #### Ordering Enum
 

@@ -55,12 +55,12 @@ Traps unconditionally, marking unreachable code.
 
 ## Traits
 
-### `pub trait Eq`
+### `pub trait Eq<Rhs = Self>`
 
 Trait for equality comparisons.
 Types implementing this trait can be compared with `==` and `!=` operators.
 
-#### `fn eq(&self, other: &Self) -> bool`
+#### `fn eq(&self, other: &Rhs) -> bool`
 
 Returns true if self equals other.
 
@@ -780,9 +780,9 @@ literals stops folding to one.
 
 #### `fn rfind<P: AsStrSlice>(&self, pat: P) -> Option<i32>`
 
-#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<String>`
+#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self]`
 
-#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<String>`
+#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self]`
 
 #### `fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering`
 
@@ -792,17 +792,17 @@ literals stops folding to one.
 
 #### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
-#### `fn trim_ascii_start(&self) -> String`
+#### `fn trim_ascii_start(&self) -> StrSlice with stores[self]`
 
-#### `fn trim_ascii_end(&self) -> String`
+#### `fn trim_ascii_end(&self) -> StrSlice with stores[self]`
 
-#### `fn trim_ascii(&self) -> String`
+#### `fn trim_ascii(&self) -> StrSlice with stores[self]`
 
-#### `fn trim_start(&self) -> String`
+#### `fn trim_start(&self) -> StrSlice with stores[self]`
 
-#### `fn trim_end(&self) -> String`
+#### `fn trim_end(&self) -> StrSlice with stores[self]`
 
-#### `fn trim(&self) -> String`
+#### `fn trim(&self) -> StrSlice with stores[self]`
 
 #### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
 
@@ -3664,30 +3664,6 @@ Reserves capacity for at least `additional` more bytes.
 
 Shrinks the capacity to match the current byte length.
 
-#### `pub fn trim_ascii_start(&self) -> String`
-
-Returns a new string with leading ASCII whitespace removed.
-
-#### `pub fn trim_ascii_end(&self) -> String`
-
-Returns a new string with trailing ASCII whitespace removed.
-
-#### `pub fn trim_ascii(&self) -> String`
-
-Returns a new string with leading and trailing ASCII whitespace removed.
-
-#### `pub fn trim_start(&self) -> String`
-
-Returns a new string with leading Unicode whitespace removed.
-
-#### `pub fn trim_end(&self) -> String`
-
-Returns a new string with trailing Unicode whitespace removed.
-
-#### `pub fn trim(&self) -> String`
-
-Returns a new string with leading and trailing Unicode whitespace removed.
-
 #### `pub fn to_ascii_lowercase(&self) -> String`
 
 Returns a new string with all ASCII uppercase letters converted to lowercase.
@@ -3729,16 +3705,6 @@ Returns true if this string starts with the given prefix.
 #### `pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool`
 
 Returns true if this string ends with the given suffix.
-
-#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<String>`
-
-Returns the string with `prefix` removed from the front, or None when it
-does not start with `prefix`.
-
-#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<String>`
-
-Returns the string with `suffix` removed from the end, or None when it
-does not end with `suffix`.
 
 #### `pub fn find<S: AsStrSlice>(&self, pat: S) -> Option<i32>`
 
@@ -3899,6 +3865,10 @@ Identity: any text parses to the string it spells. Never fails.
 
 ##### `fn internal_append_to(&self, out: &mut String)`
 
+#### `impl Eq<StrSlice> for String`
+
+##### `pub fn eq(&self, other: &StrSlice) -> bool`
+
 ### `pub struct StrUtf8ByteIter`
 
 Iterator over the raw UTF-8 bytes of a String, yielding each as `u8`.
@@ -3962,6 +3932,8 @@ A sub-view without bounds or UTF-8 boundary checks.
 - `start` and `end` lie on UTF-8 character boundaries.
 
 #### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+
+The view's UTF-8 bytes.
 
 #### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
@@ -4106,6 +4078,10 @@ If `count` is negative, replaces all occurrences.
 #### `impl Ord for StrSlice`
 
 ##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Eq<String> for StrSlice`
+
+##### `pub fn eq(&self, other: &String) -> bool`
 
 ### `pub struct List<T>`
 

@@ -1036,7 +1036,7 @@ fn emit_stage_a_parse_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, 
 /// not a clean parse tree) and `[input]`/`[output]` are non-empty.
 fn descriptor_is_stage_c_eligible(parsed: &ParsedDescriptor) -> bool {
     let t = parsed.descriptor_type.trim();
-    if !t.eq_str("Parser") {
+    if t != "Parser" {
         return false;
     }
     if !descriptor_prints(parsed) {

@@ -24,6 +24,7 @@ use super::tysys::TypeSystem;
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
+use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
     get_type_name_static, header_answers_bare_bound,
@@ -2748,50 +2749,68 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_name: &str,
         method_name: &str,
         is_type_param: bool,
+        rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
         // A user-written impl first, then the Eq / Ord auto-derive fallback.
         // Both fix their return types (`bool`, `Ordering`) whatever a user impl
         // writes, so normalize here: `find_arithmetic_trait_impl` would default
         // `output_type` to the receiver type absent a `type Output`. The set and
         // the types come from `TypeSystem::auto_derive_by_trait`.
+        //
+        // The right operand selects among the receiver's `Eq<Rhs>` impls the way
+        // it does among its `Add<Rhs>` impls (WEP 2026-07-31). Admitting none is
+        // not an answer: falling back to the unselected lookup leaves the single
+        // `Eq<Self>` impl to type-check the operand and report the mismatch it
+        // is, rather than "type does not implement `Eq`".
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
-        let (info_trait_name, self_kind, param_types, return_type, impl_def) = if let Some(info) =
-            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_, method_name, None)
-        {
-            let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
-            let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
-            (
-                info.trait_name,
-                info.self_kind,
-                param_types,
-                return_type,
-                Some(info.impl_def),
-            )
-        } else if let Some((item, return_type)) = auto_derive
-            && let Some(trait_) = self.tysys.compiler_trait_def(item)
-            && self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
+        let selected = rhs.and_then(|rhs| {
+            self.find_arithmetic_trait_impl(
+                struct_name,
                 lookup_type_id,
                 trait_,
+                method_name,
+                Some(rhs),
             )
-        {
-            let ref_self_ty = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::Ref(lookup_type_id));
-            // Auto-derived: no `impl` block is written, so none is named.
-            (
-                self.tysys.type_table.borrow().compiler_trait_fq(item),
-                ast::SelfKind::Ref,
-                vec![ref_self_ty],
-                return_type,
-                None,
-            )
-        } else {
-            return None;
-        };
+        });
+        let written = selected.or_else(|| {
+            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_, method_name, None)
+        });
+        let (info_trait_name, self_kind, param_types, return_type, impl_def) =
+            if let Some(info) = written {
+                let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);
+                let param_types = info.rhs_type.map(|t| vec![t]).unwrap_or_default();
+                (
+                    info.trait_name,
+                    info.self_kind,
+                    param_types,
+                    return_type,
+                    Some(info.impl_def),
+                )
+            } else if let Some((item, return_type)) = auto_derive
+                && let Some(trait_) = self.tysys.compiler_trait_def(item)
+                && self.tysys.type_implements_trait(
+                    &self.annotate_ctx,
+                    &self.type_lookup(),
+                    lookup_type_id,
+                    trait_,
+                )
+            {
+                let ref_self_ty = self
+                    .tysys
+                    .type_table
+                    .borrow_mut()
+                    .intern(ResolvedType::Ref(lookup_type_id));
+                // Auto-derived: no `impl` block is written, so none is named.
+                (
+                    self.tysys.type_table.borrow().compiler_trait_fq(item),
+                    ast::SelfKind::Ref,
+                    vec![ref_self_ty],
+                    return_type,
+                    None,
+                )
+            } else {
+                return None;
+            };
         Some(ResolvedTraitMethod {
             // The block's own method where one is written; an auto-derived
             // match names no block and so no declaration.

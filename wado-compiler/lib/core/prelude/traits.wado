@@ -25,9 +25,9 @@ pub enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-pub trait Eq {
+pub trait Eq<Rhs = Self> {
     /// Returns true if self equals other.
-    fn eq(&self, other: &Self) -> bool;
+    fn eq(&self, other: &Rhs) -> bool;
 }
 
 impl<T> Eq for &T {

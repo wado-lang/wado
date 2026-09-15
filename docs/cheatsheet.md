@@ -1108,7 +1108,7 @@ Traits use static dispatch. Use `Self::TypeName` to refer to associated types.
 trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 
 // For == and != operators
-trait Eq { fn eq(&self, other: &Self) -> bool; }
+trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 
 // For <, <=, >, >= operators
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }

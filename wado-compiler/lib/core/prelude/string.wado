@@ -1847,3 +1847,17 @@ impl Ord for StrSlice {
         return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }
+
+/// A view and an owned string are the same text when their bytes are, so `==`
+/// spans the two rather than asking the caller which side to copy.
+impl Eq<String> for StrSlice {
+    pub fn eq(&self, other: &String) -> bool {
+        return self.eq_str(other);
+    }
+}
+
+impl Eq<StrSlice> for String {
+    pub fn eq(&self, other: &StrSlice) -> bool {
+        return other.eq_str(self);
+    }
+}

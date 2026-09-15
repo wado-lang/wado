@@ -145,16 +145,16 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
         return null;
     }
     let first = lines[0].trim_end();
-    let [k, delim] = if first.eq_str("---") {
-        [FrontMatterKind::Yaml, "---"]
-    } else if first.eq_str("+++") {
-        [FrontMatterKind::Toml, "+++"]
+    let [k, delim] = if first == "---" {
+        [FrontMatterKind::Yaml, "---"];
+    } else if first == "+++" {
+        [FrontMatterKind::Toml, "+++"];
     } else {
         return null;
     };
     let mut body_lines: List<String> = [];
     for let mut i = 1; i < lines.len(); i += 1 {
-        if lines[i].trim_end().eq_str(delim) {
+        if lines[i].trim_end() == delim {
             return Option::Some([
                 FrontMatterNode { kind: k, body: body_lines.join("\n") },
                 i + 1,
