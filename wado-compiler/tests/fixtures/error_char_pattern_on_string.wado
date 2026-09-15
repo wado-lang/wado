@@ -1,0 +1,14 @@
+// A char pattern carries the same defect: `char` and `String` have different
+// runtime representations, and nothing compared them.
+
+test "a char pattern needs a char scrutinee" {
+    let s = "a";
+    let k = match s {
+        'a' => 1,
+        _ => 0,
+    };
+    assert k == 0;
+}
+
+__DATA__
+{"compile_error": "pattern mismatch: expected 'char', found 'String'"}

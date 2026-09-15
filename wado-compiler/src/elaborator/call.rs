@@ -1243,6 +1243,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
+                        // A concrete case's declared payload type is the one
+                        // the argument must have. Nothing checked it, so a
+                        // mismatch reached codegen and built a value the
+                        // case's storage cannot hold. A generic case's is a
+                        // type parameter `infer_variant_type_args` binds from
+                        // this very argument, so there is nothing to compare.
+                        if let Some(payload) = payload {
+                            self.typecheck(payload, case_data.payload, call.span);
+                        }
                         self.tysys
                             .type_table
                             .borrow()

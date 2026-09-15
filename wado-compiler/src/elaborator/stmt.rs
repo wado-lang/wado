@@ -6,7 +6,7 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -1534,6 +1534,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     _ => {}
                 }
+                if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected,
+                        found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                        span,
+                    });
+                }
                 Vec::new()
             }
             Pattern::Tuple(patterns, has_rest) => {
@@ -2008,6 +2015,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_variant_case_name(CompilerItem::OptionNone)
             .to_string();
         variant_info.cases.iter().any(|c| c.name == none_case_name)
+    }
+
+    /// The type a literal pattern demands of its scrutinee, when the scrutinee
+    /// is not that type. `None` means it matches, or that the scrutinee's head
+    /// is not pinned down enough to judge — a literal pattern with the wrong
+    /// runtime representation otherwise reaches codegen and builds a value the
+    /// comparison cannot take (issue: invalid core Wasm, or a WIR panic).
+    ///
+    /// Only the literals with a representation of their own are decided here. An
+    /// integer literal coerces across every width and signedness, so what it
+    /// admits is the coercion's answer, not a pattern rule.
+    fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
+        let type_table = self.tysys.type_table.borrow();
+        let head = type_table.representation_head(scrutinee_type);
+        let expected = match lit {
+            Literal::String(_) if !type_table.is_string(head) => "String",
+            Literal::Char(_) if !is_primitive(&type_table, head, PrimitiveType::Char) => "char",
+            Literal::Bool(_) if !is_primitive(&type_table, head, PrimitiveType::Bool) => "bool",
+            _ => return None,
+        };
+        // A head the elaborator has not settled judges nothing: an unresolved
+        // one is reported where it is unresolved, and a type parameter is
+        // decided per instantiation.
+        matches!(
+            type_table.get(head),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Struct { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Unit
+        )
+        .then(|| expected.to_string())
     }
 
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
@@ -3083,6 +3123,11 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
 /// or-pattern handler to align every alternative's `defining_ast_id` with
 /// the first alternative's source node, so that LSP jump-to-def from a use
 /// in the arm body lands on the first alternative's binding.
+/// Whether a type resolves to exactly this primitive.
+fn is_primitive(type_table: &TypeTable, id: TypeId, want: PrimitiveType) -> bool {
+    matches!(type_table.get(id), ResolvedType::Primitive(p) if *p == want)
+}
+
 pub(super) fn collect_ast_pattern_binding_ids(
     pattern: &Pattern,
     out: &mut hashmap::IndexMap<String, AstId>,
