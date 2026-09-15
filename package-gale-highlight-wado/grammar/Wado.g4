@@ -556,6 +556,8 @@ postfixNoStruct
     : primaryNoStruct postfixOp*
     ;
 
+// A labeled block belongs here although it ends in a brace: its `:` says the
+// brace opens the block and not the `if` / `while` / `for` body that follows.
 primaryNoStruct
     : literal
     | 'self'
@@ -567,6 +569,7 @@ primaryNoStruct
     | closure
     | ifExpr
     | matchExpr
+    | labeledBlock
     | '(' expression? ')'
     ;
 
