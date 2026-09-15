@@ -82,10 +82,10 @@ impl BuiltinDeclarations {
     }
 
     /// The parameters a builtin keeps beyond the call, from `#[retain(p)]`.
-    pub fn stored_params(&self, func: &FunctionRef) -> Vec<usize> {
+    pub fn stored_params(&self, func: &FunctionRef) -> impl Iterator<Item = usize> + '_ {
         self.get(func)
-            .map(|d| d.retains.iter().map(|r| r.source).collect())
-            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|d| d.retains.iter().map(|r| r.source))
     }
 }
 

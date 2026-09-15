@@ -427,17 +427,12 @@ impl WriteBack<'_> {
                     args.iter_mut().map(|a| &mut a.expr).collect(),
                 ),
                 TirExprKind::IndirectCall { args, .. } => {
-                    let every =
-                        || -> IndexSet<u32> { (0..u32::try_from(args.len()).unwrap()).collect() };
-                    // Retention is no part of a function's type, so nothing
-                    // here names the body that will run. Reading that as "keeps
-                    // everything" refuses a write-back no program can now
-                    // permit, so this stays at "keeps nothing" until the
-                    // functor type's row has an inferred source — WEP
-                    // 2026-01-12 roadmap item 4. A functor says nothing about
-                    // what it replaces either.
+                    // Nothing here names the body that will run, and reading
+                    // that as "keeps everything" refuses a write-back no
+                    // program can make acceptable — WEP 2026-01-12 roadmap
+                    // item 4. What it replaces is unknown the other way.
                     let stores = IndexSet::default();
-                    let replaced = every();
+                    let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
                     (
                         "a function value".to_string(),
                         stores,

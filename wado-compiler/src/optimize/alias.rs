@@ -2,8 +2,8 @@
 //! [`build_alias_info`] shares one body walk across the alias analysis and the
 //! mutable-escape scan; [`builder_alias_sets`] finishes its `syntactic_mut` into
 //! `mut_escaped`, giving each pass the view it needs to bound heap-write
-//! invalidation. TODO(optimizer): plumb the callee's `stores` annotation in, so
-//! a reference flowing into a `stores`-free callee stops marking its local
+//! invalidation. TODO(optimizer): plumb the callee's retention in, so a
+//! reference flowing into a callee that keeps nothing stops marking its local
 //! aliased — today's unconditional mark over-approximates `(&self).field`.
 //!
 //! [`ValueGraph`]: crate::nir_value_graph
@@ -23,7 +23,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
 /// `aliased` are locals reachable through another handle, `untrackable` those
-/// whose aliasing escapes the analysis entirely (stashed across a `stores`
+/// whose aliasing escapes the analysis entirely (stashed across a retaining
 /// callee), and `alias_groups` the union-find over reference-typed
 /// `let dst = src` copies. Bounds heap-write invalidation in the [`ValueGraph`].
 ///

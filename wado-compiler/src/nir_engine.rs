@@ -321,7 +321,7 @@ pub struct Engine<'a> {
     /// edits. Consumed by `Local`-read exclusions (`store_load_forward`, licm's
     /// arithmetic hoist).
     body_address_taken: Option<IndexSet<u32>>,
-    /// Reference-aliased locals (address-taken / `with stores[p]` /
+    /// Reference-aliased locals (address-taken / retained by a callee /
     /// reference-typed). The `ValueGraph` builder invalidates these
     /// conservatively across field writes and calls; non-aliased locals get
     /// precise per-`(root, field)` forwarding. Empty unless a pass supplies it

@@ -1,5 +1,5 @@
 // Optimization: stores-aware field forwarding.
-// When a struct local is passed by reference to a function without `stores`,
+// When a struct local is passed by reference to a function that retains nothing,
 // the struct should NOT be marked as aliased, enabling field constant forwarding.
 
 use { println, Stdout } from "core:cli";
@@ -9,7 +9,7 @@ struct Pair {
     b: i32,
 }
 
-// Does NOT store the reference — no `stores` declaration.
+// Does NOT store the reference.
 fn read_value(p: &Pair) -> i32 {
     return p.a;
 }

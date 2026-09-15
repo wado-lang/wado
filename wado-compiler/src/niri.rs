@@ -293,9 +293,9 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
 /// `type_params` and `impl_type_params` empty, since CTFE runs after
 /// monomorphization.
 ///
-/// Neither `inline_hint` nor `stores` is consulted: where a body is placed says
-/// nothing about compile-time knowability, and a storing callee still runs for
-/// the writes it performs — `run_call` refuses only its result.
+/// Neither `inline_hint` nor retention is consulted: where a body is placed
+/// says nothing about compile-time knowability, and a retaining callee still
+/// runs for the writes it performs — `run_call` refuses only its result.
 #[must_use]
 pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
     func.effects.is_empty()

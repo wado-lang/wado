@@ -876,7 +876,7 @@ impl<'a> Unparser<'a> {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
             }
-            s.unparse_with_clause(&f.effects);
+            unparse_with_row_into(&f.effects, &mut s.output);
         });
 
         if let Some(body) = &f.body {
@@ -889,10 +889,6 @@ impl<'a> Unparser<'a> {
         } else {
             self.output.push_str(";\n");
         }
-    }
-
-    fn unparse_with_clause(&mut self, effects: &[String]) {
-        unparse_with_row_into(effects, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &Param) {

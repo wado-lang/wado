@@ -210,7 +210,7 @@ A trait method requirement has no body of its own, but every call to it is
 statically dispatched to an impl that has one, and monomorphization resolves
 that before the fixpoint runs — so an attribute there would never be read, and
 one contradicting the impl would never be caught. The eleven requirements
-carrying a `stores` clause today (`AsStrSlice`, `AsSlice`, `AsByteSlice`, and
+that carried a `stores` clause (`AsStrSlice`, `AsSlice`, `AsByteSlice`, and
 eight across `Serializer` and `Deserializer` in `core:serde`) all state
 borrow-out their impls already state, so they lose it rather than convert it.
 
@@ -443,9 +443,9 @@ A CM import is still a body-less declaration, so §4's attributes are accepted o
 one. Nothing under `lib/wasi/` needs them today, because the copy already
 answers; the attribute is there for an import whose lowering does not copy.
 
-**Why CM boundaries are safe**:
+### Why CM boundaries are safe
 
-At Component Model boundaries, data is copied/serialized:
+At Component Model boundaries, data is copied or serialized:
 
 - `struct` → `record` (copied)
 - `List<T>` → `list<T>` (copied)
@@ -461,9 +461,10 @@ fn caller() {
 }
 ```
 
-The external component receives a **copy**, not a GC reference. Even if it "stores" the data, it stores its own copy—the original `local` is unaffected.
-
-**Consequence**: escape tracking only needs to reach within Wado code. Cross-component calls are automatically safe.
+The external component receives a copy, not a GC reference. Whatever it keeps,
+it keeps its own copy, and the original `local` is unaffected. So escape
+tracking only has to reach within Wado code: a cross-component call is safe on
+its own.
 
 ## Consequences
 
@@ -492,17 +493,19 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
    - Mitigation: partial. Roadmap item 13 surfaces the attributes a body-less
      declaration carries, which is every declaration that states anything;
      nothing renders the inferred fact for a bodied one.
-3. An indirect call is answered per functor type, not per call site (§4), so one
-   retaining function value coarsens every call through the same type.
-   - Mitigation: seventeen signatures in the corpus take a functor with a
-     reference parameter at all, four of them comparators in the prelude.
-     Sharpening it to the call site is a gap below.
+3. An indirect call is answered by arity alone: with retention out of the type,
+   nothing at the call names the body that will run.
+   - Mitigation: partial, and it differs by reader — the copy analysis assumes
+     every argument is retained, the write-back that none is. Seventeen
+     signatures in the corpus take a functor with a reference parameter at all,
+     four of them comparators in the prelude. Roadmap item 4 gives both an
+     inferred row; reading it per call site rather than per type is a gap below.
 4. Different from Rust: no lifetimes, different model.
    - Mitigation: the simpler model is easier to learn.
 
 ### Examples
 
-**Basic value semantics**:
+### Basic value semantics
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -512,7 +515,7 @@ let b = a;      // copy
 let c = move a; // move, `a` invalidated
 ```
 
-**Retention read from the body**:
+### Retention read from the body
 
 ```wado
 fn register(data: &Data) -> Handle {
@@ -529,14 +532,14 @@ fn view(s: &String) -> StrSlice {
 }
 ```
 
-**Retention declared where there is no body**:
+### Retention declared where there is no body
 
 ```wado
 #[retain(value)]
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 ```
 
-**Closure capture inference**:
+### Closure capture inference
 
 ```wado
 fn create_adder(x: i32) -> fn(i32) -> i32 {
@@ -544,7 +547,7 @@ fn create_adder(x: i32) -> fn(i32) -> i32 {
 }
 ```
 
-**Mixed with effects**:
+### Mixed with effects
 
 ```wado
 fn store_and_log(data: &Data) -> Handle with Stdout {
@@ -581,13 +584,13 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        body's. A function value of type `T` is minted nowhere else, so the join
        bounds whatever reaches an `IndirectCall`, with no points-to analysis and
        no phase to move: `stores.rs` already walks both node kinds. Items 5 to 7
-       landed first, so the row is empty and the two readers of an indirect call
-       had to split: `stores.rs` reads it as retaining every argument, which
-       costs a copy, and `mut_ref_writeback` as retaining none, because the
-       conservative reading there is a hard error on a program no keyword can
-       now make acceptable. Done when both read the join, a `sort_by` comparator
-       that retains neither argument stops pinning them, and the write-back
-       asymmetry in the gaps below is closed with them.
+       landed first, so the row is empty and its three readers had to split:
+       `stores.rs` and `last_use.rs` read an indirect call as retaining every
+       argument, which costs a copy, and `mut_ref_writeback` as retaining none,
+       because the conservative reading there is a hard error on a program no
+       keyword can now make acceptable. Done when all three read the join, a
+       `sort_by` comparator that retains neither argument stops pinning them,
+       and the write-back asymmetry in the gaps below is closed with them.
 5. [x] Delete `check_stores_semantic` and what only it reaches — the oracle, the
        return-provenance fixpoint, the escape walk, the type-reachability memo.
        Done when `effect_check.rs` reports effects and default purity only, and
@@ -607,9 +610,9 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        `typecheck::check_at`, and `ResolvedType::Function::stores`, which item 4
        replaces. Nothing writes the row since item 7, so the member is already
        absent from every mangled name and the subset check already vacuous; what
-       is left is the field and the three readers that still ask it. Done when
-       two function types differing only in retention are one type, and golden
-       type names carry no stores member.
+       is left is the field and its two remaining readers, `mangle_stores_member`
+       and `typecheck::check_at`. Done when two function types differing only in
+       retention are one type, and golden type names carry no stores member.
 9. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Its two
        halves parted with item 5: `declared_positions` reads `func.retains` and
        `direct` falls back to the linked `BuiltinDeclaration`, because
@@ -651,13 +654,14 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
       — a points-to analysis, which nothing here is;
       `lower::plan::value_copy::funcset` is a borrow-keyed container, not that.
 
-- [ ] Read an indirect call the same way in both places. `stores.rs` assumes it
-      retains every argument and `mut_ref_writeback` that it retains none, so a
-      write-back through a functor is emitted on a body that may keep the
-      reference. The frontend used to refuse that program, and the refusal went
-      with item 5; the reading that would replace it rejects programs no keyword
-      can now make acceptable, which is worse. Roadmap item 4 closes it by
-      giving both the same join.
+- [ ] Read an indirect call the same way everywhere. `stores.rs` and
+      `last_use.rs` assume it retains every argument; `mut_ref_writeback`
+      assumes it retains none, so a write-back through a functor is emitted on a
+      body that may keep the reference. The frontend used to refuse that
+      program, and the refusal went with item 5; the reading that would replace
+      it rejects programs no keyword can now make acceptable, which is worse —
+      and unlike the other two it costs a refusal, not a copy. Roadmap item 4
+      closes it by giving all three the same join.
 
 - [ ] Populate `NirFunction::stores_aliased_locals` from a retaining call, or say
       it is not that. Its doc reads "when inlining a function that stores `x`

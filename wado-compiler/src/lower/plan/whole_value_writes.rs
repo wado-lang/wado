@@ -134,7 +134,7 @@ impl<'a> WriteWalker<'a> {
     /// `&mut *x` reborrow that forwarding a reference argument spells and the
     /// `&mut` bindings that carry one on. One reached any other way is already
     /// covered: whatever derived it is itself a write this walk sees, or an
-    /// escape `stores` answers for.
+    /// escape the retention walk answers for.
     fn root_of(&self, expr: &TirExpr) -> Option<Root> {
         match &expr.kind {
             TirExprKind::Local { index, .. } => Some(

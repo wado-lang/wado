@@ -21,7 +21,7 @@ use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-/// Maps a callee → the set of its parameter indices that have `stores` declared.
+/// Maps a callee → the set of its parameter indices it retains.
 type StoresLookup = IndexMap<FuncId, IndexSet<usize>>;
 
 /// Information about a struct/tuple local that may be decomposable.

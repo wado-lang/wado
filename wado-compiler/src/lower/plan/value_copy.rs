@@ -124,9 +124,9 @@ pub struct ValueCopyPlan {
     /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
     /// a *stored* position is borrow-escaped and cannot be moved; passed at a
     /// non-stored position it is a transient borrow. Interprocedurally inferred
-    /// (a least fixpoint over the call graph), so it is a sound superset of the
-    /// declared `stores[...]` clauses and catches undeclared stores too. Position
-    /// 0 is the receiver, so `receiver_storing_methods` is subsumed by this.
+    /// (a least fixpoint over the call graph), so it is a sound superset of
+    /// what a `#[retain(...)]` states. Position 0 is the receiver, so
+    /// `receiver_storing_methods` is subsumed by this.
     pub stored_params: stores::StoredParams,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis

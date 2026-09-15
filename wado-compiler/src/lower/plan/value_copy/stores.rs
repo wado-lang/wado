@@ -17,7 +17,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -63,9 +63,8 @@ struct StoresOracle<'a> {
 }
 
 impl StoresOracle<'_> {
-    /// Facts for a directly-called function. A builtin is not in `computed` —
-    /// monomorphization drops the generic declaration the seeding walk would
-    /// read — so its `#[retain(...)]` is answered from the snapshot link took.
+    /// Facts for a directly-called function, falling back to link's snapshot:
+    /// monomorphization drops the generic declaration a builtin's is read from.
     fn direct(&self, func: &FunctionRef) -> StoresFacts {
         if let Some(facts) = self.computed.get(&func.module_source, &func.name) {
             return facts.clone();
@@ -73,7 +72,6 @@ impl StoresOracle<'_> {
         let retained: IndexSet<u32> = self
             .builtins
             .stored_params(func)
-            .into_iter()
             .map(|p| u32::try_from(p).unwrap())
             .collect();
         StoresFacts {
@@ -82,10 +80,10 @@ impl StoresOracle<'_> {
         }
     }
 
-    /// Facts for an indirect (functor) callee. Retention is no part of a
-    /// function's type, so nothing at the call names the body that will run:
-    /// every position may escape. WEP 2026-01-12 roadmap item 4 gives the row
-    /// an inferred source and takes the precision back.
+    /// Facts for an indirect (functor) callee: every position, since retention
+    /// is no part of a type and nothing here names the body that will run.
+    // WEP 2026-01-12 roadmap item 4 gives the row an inferred source and takes
+    // the precision back.
     fn indirect(&self, arity: usize) -> StoresFacts {
         let positions: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
         StoresFacts {
@@ -105,11 +103,11 @@ pub fn compute_stored_params(
 
     for func in &project.functions {
         let func = func.borrow();
-        // A declared `stores[p]` says the reference persists, not where. A
-        // value-returning body hands it out with the result — `iter()`,
-        // `as_slice()` — and the walk finds any further escape itself; with no
-        // result to hand it to, or no body to read, only the strong reading is
-        // sound. What that rests on is a known gap in WEP 2026-05-21.
+        // A `#[retain(p)]` with no `into` says the reference persists, not
+        // where. A value-returning body hands it out with the result —
+        // `iter()`, `as_slice()` — and the walk finds any further escape
+        // itself; with no result to hand it to, or no body to read, only the
+        // strong reading is sound. A known gap in WEP 2026-05-21.
         let declared = declared_positions(&func);
         let hands_out_result =
             func.body.is_some() && !matches!(type_table.get(func.return_type), ResolvedType::Unit);
@@ -125,7 +123,7 @@ pub fn compute_stored_params(
     }
 
     let mut carrying = RefCarrying {
-        project,
+        structs: &project.structs,
         type_table: &type_table,
         memo: IndexMap::default(),
     };
@@ -160,7 +158,6 @@ pub fn compute_stored_params(
         }
     }
 
-    drop(type_table);
     out
 }
 
@@ -174,12 +171,11 @@ fn declared_positions(func: &TirFunction) -> IndexSet<u32> {
         .collect()
 }
 
-/// Whether a value of a type can hold a reference. A parameter that is not
-/// itself a reference still carries one when its type holds one — `List::push`
-/// takes `Sink { r: &Item }` by value — and a carrier seeded only from a
-/// reference parameter loses the retention there. Memoized per `TypeId`.
+/// Whether a value of a type can hold a reference, memoized per `TypeId`.
+/// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
+/// reference when its type holds one, not only when it is one.
 struct RefCarrying<'a> {
-    project: &'a FlatPackage,
+    structs: &'a [TirStruct],
     type_table: &'a TypeTable,
     memo: IndexMap<TypeId, bool>,
 }
@@ -238,7 +234,6 @@ impl RefCarrying<'_> {
             ResolvedType::Struct { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
                 let fields = self
-                    .project
                     .structs
                     .iter()
                     .find(|s| s.def == def && s.type_args == type_args)

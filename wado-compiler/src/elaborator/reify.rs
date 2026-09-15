@@ -2158,15 +2158,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
         let named = |name: &str| params.iter().any(|p| p.name == name);
+        let unquoted = |key: &str| {
+            emit(format!(
+                "#[retain({key} = ...)] takes a parameter name, unquoted"
+            ))
+        };
 
         let (source, elements) = match attr.args.first() {
             Some(ast::AttrArg::Ident(name)) => (name.clone(), false),
             Some(ast::AttrArg::KeyIdent(key, name)) if key == "elements_of" => (name.clone(), true),
-            Some(arg) if arg.name() == "elements_of" => {
-                return emit(
-                    "#[retain(elements_of = ...)] takes a parameter name, unquoted".to_string(),
-                );
-            }
+            Some(arg) if arg.name() == "elements_of" => return unquoted("elements_of"),
             _ => {
                 return emit(
                     "#[retain] names one parameter: `p`, or `elements_of = p`".to_string(),
@@ -2185,9 +2186,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 }
                 Some(dest.clone())
             }
-            Some(arg) if arg.name() == "into" => {
-                return emit("#[retain(into = ...)] takes a parameter name, unquoted".to_string());
-            }
+            Some(arg) if arg.name() == "into" => return unquoted("into"),
             Some(arg) => {
                 return emit(format!(
                     "unknown #[retain] argument: {} (expected `into = param`)",

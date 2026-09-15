@@ -1,6 +1,6 @@
 // Optimization: stores-aware alias refinement enables constant-index
 // bounds-check elimination for a mutable (non-globalized) list that is
-// later passed to a callee without `stores`. `sum(&arr)` cannot retain
+// later passed to a callee that retains nothing. `sum(&arr)` cannot retain
 // the reference, so `arr` is not aliased: the `used: 3` fact from the
 // list literal forwards into every constant-index check before the
 // call, folding each `N >= used` comparison away.
