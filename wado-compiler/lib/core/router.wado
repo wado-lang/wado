@@ -385,13 +385,8 @@ impl<H> Router<H> {
     /// Dynamic DFA match.
     ///
     /// On a hit, builds a fresh `RouteMatch` plus its `PathParams` /
-    /// `ranges` storage in this function's locals and returns a reference
-    /// to that match. Wado's escape analysis automatically heap-promotes
-    /// any local whose address escapes the function (see
-    /// `docs/wep-2026-01-12-value-semantics-and-stores.md`), so the
-    /// returned `&RouteMatch<H>` is sound: `rm`, `pp`, and `ranges` all
-    /// migrate to GC-managed storage and live as long as the caller
-    /// retains the reference.
+    /// `ranges` and returns a reference to that match, which outlives this
+    /// frame: each is a GC allocation the returned reference keeps alive.
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
         let plen = path.len();
         let view = path.as_str_slice();
