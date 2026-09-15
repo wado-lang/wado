@@ -341,3 +341,75 @@ export fn run() {
     let v = violations(source);
     assert!(v.is_empty(), "a pure default must not be flagged: {v:?}");
 }
+
+#[test]
+fn effectful_tagged_template_in_global_initializer_is_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn shout<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> i32 with Stdout {
+    println("tag");
+    return 1;
+}
+
+global TAGGED: i32 = shout`hello ${1}`;
+
+export fn run() with Stdout {
+    println(`${TAGGED}`);
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == "shout")),
+        "a tag is a call, so its effects reach the initializer: {found:?}"
+    );
+}
+
+#[test]
+fn effectful_indirect_call_in_global_initializer_is_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("noisy");
+    return 7;
+}
+
+global INDIRECT: i32 = hold: {
+    let f: fn() -> i32 with Stdout = noisy;
+    break hold: f()
+};
+
+export fn run() with Stdout {
+    println(`${INDIRECT}`);
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        !found.is_empty(),
+        "a call through a function-typed value performs what its type declares: {found:?}"
+    );
+}
+
+#[test]
+fn host_operation_in_global_initializer_is_reported_as_a_dispatch() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+use { MonotonicClock, Mark } from "wasi:clocks";
+
+global STARTED: Mark = MonotonicClock::now();
+
+export fn run() with Stdout {
+    println(`${STARTED:?}`);
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "now")),
+        "a host-backed operation demands a capability, not a handler: {found:?}"
+    );
+}

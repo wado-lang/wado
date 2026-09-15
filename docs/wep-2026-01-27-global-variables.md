@@ -156,10 +156,10 @@ global's slot holds the placeholder. A global carries no locals of its own, so
 it cannot hold a body at all. Lowering splices those functions into the module's
 initialization function in dependency order and drops them.
 
-One classifier decides, at reify. `Direct` then means "the Wasm slot can hold
-this" at every phase after it. Deciding that early is safe because nothing on the
-way can change the answer: the typed IR folds no constant, and turns no literal
-into code. Lowering asserts that rather than trusting it.
+Reify decides one direction for good: what it calls `Direct` the Wasm slot can
+hold at every phase after it, because nothing on the way turns a literal into
+code. Lowering asserts that rather than trusting it. What reify defers is
+provisional, and the section below says who settles it.
 
 ### The decision is made on the value, not on the syntax
 
@@ -172,11 +172,11 @@ is not a literal, but it evaluates to a sequence of constants, which is exactly
 an `array.new_fixed`. Deciding syntactically would defer it; deciding on the
 value does not.
 
-Deferral is therefore provisional: reify defers anything that is not
-syntactically constant, and a single classifier later promotes back everything
-the optimizer reduced to a constant expression. It runs once the value is
-lowered to its Wasm shape, because that is where variant representation and
-non-null field wrapping are settled and the constant-instruction test is exact.
+So reify defers anything that is not syntactically constant, and a single
+classifier on the lowered Wasm value promotes back everything the optimizer
+reduced to a constant expression. That classifier settles it: it runs where
+variant representation and non-null field wrapping are settled and the
+constant-instruction test is exact.
 
 The cost of deciding there is that the normalized IR never learns the answer, so
 the compile-time interpreter cannot read a constant global's value — see the

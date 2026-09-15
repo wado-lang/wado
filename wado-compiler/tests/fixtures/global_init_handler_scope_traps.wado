@@ -1,0 +1,40 @@
+// A handler installed in one initializer covers that initializer and nothing
+// after it. The later initializer installs none of its own, so it can only be
+// answered by a leaked handler — and it traps instead.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Tally {
+    value: i32,
+}
+
+impl Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+global HANDLED: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: Counter::next()
+    }
+    break hold: 0
+};
+
+global BARE: i32 = Counter::next();
+
+export fn run() with Stdout {
+    println(`${HANDLED} ${BARE}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["no handler installed for `Counter::next`"]
+}

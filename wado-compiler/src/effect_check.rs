@@ -12,8 +12,8 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTabl
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, AttrArg, Attribute, CallExpr, CmImport, EffectHandlerBinding, Expr,
-    Function, ImplBlock, Item, Stmt,
+    self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
+    ImplBlock, Item, Stmt,
 };
 use crate::compiler_host::Diagnostic;
 use crate::elaborator::liveness::is_user_authored;
@@ -114,7 +114,9 @@ impl PureContext {
 pub enum Impurity {
     /// The named callee declares an effect.
     Call(String),
-    /// The named operation is dispatched with no handler installed to take it.
+    /// The named operation is backed by the host, so dispatching it demands a
+    /// capability. A user-defined effect's operation demands none: it traps
+    /// where no handler answers, which is a runtime outcome, not an impurity.
     Dispatch(String),
 }
 
@@ -136,8 +138,8 @@ impl From<PurityError> for Diagnostic {
                 format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
             }
             Impurity::Dispatch(op) => format!(
-                "{noun} must be pure (no effects), but dispatches effect operation '{op}', \
-                 which needs an installed handler"
+                "{noun} must be pure (no effects), but dispatches '{op}', which needs a \
+                 capability the position does not hold"
             ),
         };
         Diagnostic {
@@ -976,6 +978,116 @@ fn callee_name(callee: &Expr) -> &str {
     }
 }
 
+/// What a diagnostic calls a callee no name reaches.
+const INDIRECT_CALLEE: &str = "(indirect call)";
+
+/// Type of an indirect call's callee, preferring the enclosing function's
+/// parameter types: a function-typed parameter callee leaves no `references`
+/// edge or recorded expression type at the call, so nothing else names it.
+fn indirect_callee_type(
+    sem: &Semantics,
+    param_types: &IndexMap<String, TypeId>,
+    callee: &Expr,
+) -> Option<TypeId> {
+    if let Expr::Ident(ident) = callee
+        && let Some(type_id) = param_types.get(&ident.name)
+    {
+        return Some(*type_id);
+    }
+    expr_type_of(callee, sem)
+}
+
+/// The operation requirement a direct call carries, where its callee is a free
+/// function in this program rather than a method or a host binding.
+fn operation_requirement(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    func_ref: &FunctionRef,
+    receiver_site: Option<AstId>,
+) -> Vec<EffectRef> {
+    if func_ref.method_info.is_some()
+        || !matches!(func_ref.module_source, ModuleSource::Local { .. })
+    {
+        return Vec::new();
+    }
+    operation_requirements(sem, index, receiver_site)
+}
+
+/// What invoking one callee at a call site performs.
+struct CalleeEffects {
+    /// The name a diagnostic gives the callee.
+    name: String,
+    /// Effects the callee's signature declares.
+    declared: Vec<EffectRef>,
+    /// The capability dispatching a host-backed operation demands. It belongs
+    /// to the path that names the interface, not to the callee's signature, so a
+    /// walk may word the two apart.
+    dispatched: Vec<EffectRef>,
+}
+
+/// Every callee a call at `id` resolves to: a free function, each static
+/// dispatch, or the function type of a callee no name reaches.
+///
+/// Both walks read a call through this, so a spelling either one answers for is
+/// a spelling both answer for. A tag call is a call: annotate records its callee
+/// under the template's own id, so the same lookup answers for it.
+fn call_site_effects(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    annotations: Option<&TypeAnnotations>,
+    param_types: &IndexMap<String, TypeId>,
+    callee: &Expr,
+    id: AstId,
+    args: &[Expr],
+) -> Vec<CalleeEffects> {
+    let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
+        name,
+        declared,
+        dispatched: Vec::new(),
+    };
+    if let Expr::Ident(ident) = callee
+        && let Some(def) = sem.referenced_symbol(ident.id)
+        && let Some(effects) = index.fn_effects.get(&def)
+    {
+        let params = index.fn_params.get(&def).cloned().unwrap_or_default();
+        let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
+        return vec![bare(ident.name.clone(), resolved)];
+    }
+    let dispatches: Vec<(FunctionRef, bool)> = annotations
+        .into_iter()
+        .flat_map(|ann| ann.static_dispatches(id))
+        .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+        .collect();
+    if dispatches.is_empty() {
+        // The callee is a function-typed value (a closure or `fn(...)`
+        // parameter). Its type carries the effects it performs when invoked.
+        let Some(callee_type) = indirect_callee_type(sem, param_types, callee) else {
+            return Vec::new();
+        };
+        let ResolvedType::Function { effects, .. } = sem.types.get(callee_type) else {
+            return Vec::new();
+        };
+        return vec![bare(INDIRECT_CALLEE.to_string(), effects.clone())];
+    }
+    let receiver_site = interface_segment(callee).map(|seg| seg.id);
+    dispatches
+        .into_iter()
+        .map(|(func_ref, self_in_args)| {
+            let effects = index.method_effects(&func_ref);
+            let params = index.method_param_types(&func_ref);
+            // A qualified (UFCS) call spells the receiver as its first
+            // argument, so the args already align with the callee's full
+            // parameter list — no self skip.
+            let is_method = func_ref.method_info.is_some() && !self_in_args;
+            CalleeEffects {
+                name: callee_name(callee).to_string(),
+                declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
+                dispatched: operation_requirement(sem, index, &func_ref, receiver_site),
+            }
+        })
+        .collect()
+}
+
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
     sem: &'a Semantics,
@@ -1127,20 +1239,6 @@ impl SemEffectWalker<'_> {
     /// itself; for a CM-component-imported interface it is the reconstructed
     /// host-leaf effect set — empty for a purely-computational component, so its
     /// operations need no `with`. Returns empty for a non-effect-op callee.
-    fn effect_op_requirement(
-        &self,
-        func_ref: &FunctionRef,
-        receiver_site: Option<AstId>,
-    ) -> Vec<EffectRef> {
-        if func_ref.method_info.is_some() {
-            return Vec::new();
-        }
-        if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
-            return Vec::new();
-        }
-        operation_requirements(self.sem, self.index, receiver_site)
-    }
-
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
         binding_granted_effects(
             self.sem,
@@ -1221,21 +1319,8 @@ impl AstVisitor for SemEffectWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if !self.check_call_effects(&call.callee, call.id, &call.args, call.span)
-                    && let Some(callee_type) = self.indirect_callee_type(call)
-                {
-                    // Indirect call: the callee is a function-typed value (a
-                    // closure or `fn(...)` parameter). Its type carries the
-                    // effects it performs when invoked.
-                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type)
-                    {
-                        let effects = effects.clone();
-                        self.report_missing(&effects, "(indirect call)", call.span);
-                    }
-                }
+                self.check_call_effects(&call.callee, call.id, &call.args, call.span);
             }
-            // A tag call is a call: annotate records its callee under the
-            // template's own id, so the same lookup answers for it.
             Expr::TaggedTemplate(tagged) => {
                 self.check_call_effects(&tagged.tag, tagged.id, &[], tagged.span);
             }
@@ -1244,7 +1329,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
                     let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref, None));
+                    effects.extend(operation_requirement(self.sem, self.index, &func_ref, None));
                     let params = self.method_param_types(&func_ref);
                     let resolved = resolve_effect_params(
                         self.sem,
@@ -1266,7 +1351,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                     .collect();
                 for (func_ref, self_in_args) in dispatches {
                     let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref, None));
+                    effects.extend(operation_requirement(self.sem, self.index, &func_ref, None));
                     let params = self.method_param_types(&func_ref);
                     // See the `Call` arm: a trait-turbofish qualified call
                     // carries its receiver in the argument list.
@@ -1316,68 +1401,22 @@ impl SemEffectWalker<'_> {
         self.index.method_param_types(func_ref)
     }
 
-    /// Report the effects the callee named at `id` performs. `false` when
-    /// nothing names it, which for a spelled call means an indirect one.
-    ///
-    /// A free call resolves through `references` on the callee identifier.
-    /// `Type::method(...)` / `Self::method(...)` parse as a `Call` with a path
-    /// callee whose identifier has no free-function reference; they resolve
-    /// through `static_method_dispatch` keyed by the call id. (Free functions
-    /// also appear there, so `references` is tried first — it is the
-    /// authoritative free-call edge.)
-    fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) -> bool {
-        let free = if let Expr::Ident(ident) = callee {
-            self.sem.referenced_symbol(ident.id).and_then(|def| {
-                self.index
-                    .fn_effects
-                    .get(&def)
-                    .map(|effects| (def, effects.clone(), ident.name.clone()))
-            })
-        } else {
-            None
-        };
-        if let Some((def, effects, name)) = free {
-            let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
-            let resolved =
-                resolve_effect_params(self.sem, self.index, &effects, &params, false, args);
-            self.report_missing(&resolved, &name, span);
-            return true;
+    /// Report the effects every callee the call at `id` resolves to performs,
+    /// and the capability its path demands where it dispatches an operation.
+    fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
+        let sites = call_site_effects(
+            self.sem,
+            self.index,
+            self.annotations,
+            &self.param_types,
+            callee,
+            id,
+            args,
+        );
+        for site in sites {
+            self.report_missing(&site.declared, &site.name, span);
+            self.report_missing(&site.dispatched, &site.name, span);
         }
-        let dispatches: Vec<(FunctionRef, bool)> = self
-            .annotations
-            .into_iter()
-            .flat_map(|ann| ann.static_dispatches(id))
-            .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-            .collect();
-        if dispatches.is_empty() {
-            return false;
-        }
-        let receiver_site = interface_segment(callee).map(|seg| seg.id);
-        for (func_ref, self_in_args) in dispatches {
-            let mut effects = self.method_effects(&func_ref);
-            effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
-            let params = self.method_param_types(&func_ref);
-            // A qualified (UFCS) call spells the receiver as its first
-            // argument, so the args already align with the callee's full
-            // parameter list — no self skip.
-            let is_method = func_ref.method_info.is_some() && !self_in_args;
-            let resolved =
-                resolve_effect_params(self.sem, self.index, &effects, &params, is_method, args);
-            self.report_missing(&resolved, callee_name(callee), span);
-        }
-        true
-    }
-
-    /// Type of an indirect call's callee, preferring the enclosing function's
-    /// parameter types: a function-typed parameter callee leaves no `references`
-    /// edge or recorded expression type at the call, so nothing else names it.
-    fn indirect_callee_type(&self, call: &CallExpr) -> Option<TypeId> {
-        if let Expr::Ident(ident) = &call.callee
-            && let Some(type_id) = self.param_types.get(&ident.name)
-        {
-            return Some(*type_id);
-        }
-        expr_type_of(&call.callee, self.sem)
     }
 }
 
@@ -2611,6 +2650,7 @@ fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityE
             module_source: src,
             context: PureContext::DefaultValue,
             granted: IndexSet::default(),
+            param_types: IndexMap::default(),
             out: &mut *out,
         };
         for item in &module.items {
@@ -2676,6 +2716,11 @@ struct PurityWalker<'a> {
     /// Effects the enclosing `with … do` installs, which a callee declaring
     /// one may demand of the position.
     granted: IndexSet<EffectRef>,
+    /// Names the callee of an indirect call through a function-typed parameter.
+    /// Always empty: a global initializer has no enclosing function, and a
+    /// default expression cannot name a parameter — the call site evaluates it
+    /// before any is bound.
+    param_types: IndexMap<String, TypeId>,
     out: &'a mut Vec<PurityError>,
 }
 
@@ -2712,6 +2757,16 @@ impl PurityWalker<'_> {
             .collect()
     }
 
+    /// Whether any of `effects` is one no enclosing `with … do` installs.
+    fn unanswered(&self, effects: &[EffectRef]) -> bool {
+        effects.iter().any(|effect| {
+            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
+            // A `Param` left after resolution bound to no concrete effect, as
+            // `SemEffectWalker::report_missing` reads it.
+            !effect.is_param() && !self.granted.contains(&effect)
+        })
+    }
+
     fn flag_if_effectful(
         &mut self,
         effects: &[EffectRef],
@@ -2722,13 +2777,7 @@ impl PurityWalker<'_> {
         span: Span,
     ) {
         let effects = resolve_effect_params(self.sem, self.index, effects, params, is_method, args);
-        let unanswered = effects.iter().any(|effect| {
-            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // A `Param` left after resolution bound to no concrete effect, as
-            // `SemEffectWalker::report_missing` reads it.
-            !effect.is_param() && !self.granted.contains(&effect)
-        });
-        if unanswered {
+        if self.unanswered(&effects) {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
     }
@@ -2740,7 +2789,30 @@ impl PurityWalker<'_> {
         // An operation declares no effect parameters, so there is nothing for
         // the arguments to resolve.
         let required = operation_requirements(self.sem, self.index, Some(site));
-        self.flag_if_effectful(&required, &[], false, &[], op, span);
+        if self.unanswered(&required) {
+            self.flag(Impurity::Dispatch(op.to_string()), span);
+        }
+    }
+
+    /// Flags every callee the call at `id` resolves to whose effects the
+    /// position does not hold.
+    fn flag_call(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
+        let sites = call_site_effects(
+            self.sem,
+            self.index,
+            self.annotations,
+            &self.param_types,
+            callee,
+            id,
+            args,
+        );
+        // `dispatched` is left to `flag_if_operation`, which asks the path
+        // rather than each dispatch and so answers once per site.
+        for site in sites {
+            if self.unanswered(&site.declared) {
+                self.flag(Impurity::Call(site.name), span);
+            }
+        }
     }
 }
 
@@ -2754,34 +2826,10 @@ impl AstVisitor for PurityWalker<'_> {
                 {
                     self.flag_if_operation(interface.id, &op.name, call.span);
                 }
-                let free = if let Expr::Ident(ident) = &call.callee {
-                    self.sem.referenced_symbol(ident.id).and_then(|def| {
-                        self.index
-                            .fn_effects
-                            .get(&def)
-                            .map(|effects| (def, effects.clone(), ident.name.clone()))
-                    })
-                } else {
-                    None
-                };
-                if let Some((def, effects, name)) = free {
-                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
-                    self.flag_if_effectful(&effects, &params, false, &call.args, &name, call.span);
-                } else {
-                    for (func_ref, self_in_args) in self.dispatches_at(call.id) {
-                        let effects = self.index.method_effects(&func_ref);
-                        let params = self.index.method_param_types(&func_ref);
-                        let is_method = func_ref.method_info.is_some() && !self_in_args;
-                        self.flag_if_effectful(
-                            &effects,
-                            &params,
-                            is_method,
-                            &call.args,
-                            callee_name(&call.callee),
-                            call.span,
-                        );
-                    }
-                }
+                self.flag_call(&call.callee, call.id, &call.args, call.span);
+            }
+            Expr::TaggedTemplate(tagged) => {
+                self.flag_call(&tagged.tag, tagged.id, &[], tagged.span);
             }
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;

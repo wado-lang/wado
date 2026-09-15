@@ -2519,15 +2519,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(defaults) = ctx.closure_defaults.get(&ident.name) {
             return (defaults.clone(), None);
         }
-        // `Effect::op(args)` reads its defaults off the operation's own
+        // `[ns::]E::op(args)` reads its defaults off the operation's own
         // declaration, the same place `resolve_effect_op_signature` reads the
-        // parameter types the padding fills.
-        if let [receiver, method] = ident.segments.as_slice()
-            && let Some(decl) = self.effect_or_resource_decl_at(Some(receiver.id))
+        // parameter types the padding fills — and off the same segment, so the
+        // two agree on how many arguments the call owes.
+        if let Some(owner) = ident.owner_segment()
+            && let Some(operation) = ident.segments.last()
+            && let Some(decl) = self.effect_or_resource_decl_at(Some(owner.id))
             && let Some(sig) = self
                 .tysys
                 .signatures
-                .resource_method_sig(decl, &method.name)
+                .resource_method_sig(decl, &operation.name)
         {
             let defaults = Param::named_defaults(&sig.params);
             let module = self.tysys.resolutions.defs().module(sig.def).clone();

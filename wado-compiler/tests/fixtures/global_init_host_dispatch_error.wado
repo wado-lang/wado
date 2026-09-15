@@ -1,0 +1,20 @@
+// An operation backed by the host demands a capability the position must
+// already hold, and a global initializer holds none — unlike a user-defined
+// effect's operation, which an installed handler answers and which traps with
+// none. See WEP: Global Variables.
+
+use { println, Stdout } from "core:cli";
+use { MonotonicClock, Mark } from "wasi:clocks";
+
+global STARTED: Mark = MonotonicClock::now();
+
+export fn run() with Stdout {
+    println(`${STARTED:?}`);
+}
+
+__DATA__
+{
+    "compile_errors_contains": [
+        "global initializer must be pure (no effects), but dispatches 'now', which needs a capability the position does not hold"
+    ]
+}
