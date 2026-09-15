@@ -16,9 +16,9 @@ use crate::token::Span;
 
 use super::arena_query::block_contains_loop;
 use super::condition_implication::{
-    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, node_modifies,
-    opaque_local, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
-    resolve_panic_ids, stmt_modifies,
+    Binds, BoundKey, Conjunct, build_copy_bindings, check_conjuncts, eliminate_condition,
+    induction_entry, node_modifies, opaque_local, panic_guard_check, parse_break_guard_head,
+    parse_cmp, parse_var_offset, peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -239,26 +239,71 @@ fn peel_not(engine: &Engine, binds: &Binds, op: Operand) -> Option<Operand> {
     }
 }
 
-/// Collect check holders `if (var >= B) { panic }` (or `!(var < B)`) nested
-/// anywhere in `node`, keyed by their bound local `B`.
+/// A versionable in-body check over the guard variable.
+struct Check {
+    holder: NodeRef,
+    cond: Operand,
+    /// The check's bound local `B`.
+    bound: u32,
+    /// The strongest constant floor the check demands of `var`, or `i64::MIN`
+    /// when it demands none.
+    floor: i64,
+}
+
+/// Collect every versionable check nested anywhere in `node`.
 fn collect_checks_in_node(
     engine: &Engine,
     binds: &Binds,
     node: NodeRef,
     var: u32,
-    out: &mut Vec<(NodeRef, Operand, u32)>,
+    out: &mut Vec<Check>,
 ) {
     engine.body.for_each_node_under(node, |n| {
         if let Some(cond) = panic_guard_check(engine, n)
-            && let Some((left, right)) = ge_check_operands(engine, binds, cond)
-            && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
-            && cvar == var
-            && cj == 0
-            && let Some(b) = parse_raw_local(engine, right)
+            && let Some(check) = parse_versionable_check(engine, binds, n, cond, var)
         {
-            out.push((n, cond, b));
+            out.push(check);
         }
     });
+}
+
+/// Read one panic guard as a versionable check: exactly one upper-bound
+/// conjunct `var < B` over the guard variable at offset 0, and any number of
+/// constant floors under that same variable — the shape `assert 0 <= i < n`
+/// lowers to. Any other conjunct refuses the check, so versioning never deletes
+/// a condition it has only half proved.
+fn parse_versionable_check(
+    engine: &Engine,
+    binds: &Binds,
+    holder: NodeRef,
+    cond: Operand,
+    var: u32,
+) -> Option<Check> {
+    let mut bound = None;
+    let mut floor = i64::MIN;
+    for part in check_conjuncts(engine, binds, cond)? {
+        match part {
+            Conjunct::Lt(left, right) => {
+                let (cvar, cj) = parse_var_offset(engine, binds, left)?;
+                if cvar != var || cj != 0 || bound.is_some() {
+                    return None;
+                }
+                bound = Some(parse_raw_local(engine, binds, right)?);
+            }
+            Conjunct::AtLeast(fvar, foff, f) => {
+                if fvar != var || foff != 0 {
+                    return None;
+                }
+                floor = floor.max(f);
+            }
+        }
+    }
+    Some(Check {
+        holder,
+        cond,
+        bound: bound?,
+        floor,
+    })
 }
 
 /// Parse an operand as a direct local read, without resolving through copy
@@ -268,8 +313,8 @@ fn collect_checks_in_node(
 /// field read) would compare a different representation. A local present as
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
-fn parse_raw_local(engine: &Engine, op: Operand) -> Option<u32> {
-    match op {
+fn parse_raw_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
+    match peel_capture_block(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
@@ -295,7 +340,7 @@ fn analyze_loop(
     let (guard_idx, var, h, guard_le) = parse_loop_guard(engine, binds, loop_body)?;
     // Scan statements after the guard while `var` / `H` are unmodified —
     // within that window the guard fact `var <= H` still holds.
-    let mut checks: Vec<(NodeRef, Operand, u32)> = Vec::new();
+    let mut checks: Vec<Check> = Vec::new();
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, BoundKey::Local(h)) {
@@ -303,7 +348,15 @@ fn analyze_loop(
         }
         collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
     }
-    let b = checks.first()?.2;
+    // A floor is answered from the fast arm's own facts, so it must hold for
+    // every collected check before any of them is deleted.
+    let demanded = checks.iter().map(|c| c.floor).max()?;
+    if demanded > i64::MIN
+        && induction_entry(engine, binds, parent, loop_stmt, loop_body, var)? < demanded
+    {
+        return None;
+    }
+    let b = checks.first()?.bound;
     if b == h {
         // Same bound as the guard: statically decidable, not our case.
         return None;
@@ -413,7 +466,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
 fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fast_body: BlockId) {
     let (var, h) = (plan.var, plan.bound);
-    let mut checks: Vec<(NodeRef, Operand, u32)> = Vec::new();
+    let mut checks: Vec<Check> = Vec::new();
     let stmts = engine.body.blocks[fast_body].stmts.clone();
     for &s in stmts.iter().skip(plan.guard_idx + 1) {
         if stmt_modifies(engine, s, var, BoundKey::Local(h)) {
@@ -421,12 +474,14 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         }
         collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
     }
-    for (holder, cond, b) in checks {
-        if b != plan.check_bound {
+    for check in checks {
+        // As in `condition_implication`: the elimination drops the condition
+        // expression, so a condition that writes must stay.
+        if check.bound != plan.check_bound || !is_pure_operand(engine.body, check.cond) {
             continue;
         }
-        constify_check_temp(engine, cond, plan.var, fast_body);
-        eliminate_condition(engine, holder, cond);
+        constify_check_temp(engine, check.cond, plan.var, fast_body);
+        eliminate_condition(engine, check.holder, check.cond);
     }
 }
 

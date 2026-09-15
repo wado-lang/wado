@@ -1,0 +1,35 @@
+// A chained comparison in the check must cost what the single comparison
+// costs. `!(0 <= i && i < xs.len())` is a negated conjunction, so the check
+// is dead only when both halves are proven: the loop guard refutes the upper
+// one, and the counting loop (`i = 0`, `i += 1`, `<` guard) floors the lower
+// one. At O2 nothing of the guard survives.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_chained(xs: &List<i32>) -> i32 {
+    let mut s = 0;
+    for let mut i = 0; i < xs.len(); i += 1 {
+        if !(0 <= i && i < xs.len()) {
+            panic("index out of range");
+        }
+        s += xs[i];
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let xs = List::<i32>::filled(builtin::black_box(5), 3);
+    println(`${sum_chained(&xs)}`);
+}
+
+__DATA__
+{
+    "stdout": "15\n",
+    "wir_scope": ".wado/run\"",
+    "wir_expect:O2": [
+        "builtin::array_get_value<i32>("
+    ],
+    "wir_not_expect:O2": [
+        "cold_path"
+    ]
+}

@@ -14,7 +14,7 @@ use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::{is_pure_nontrapping_expr_typed, storage_root};
+use crate::optimize::arena_query::{is_pure_nontrapping_expr_typed, is_pure_operand, storage_root};
 use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
 
@@ -131,6 +131,10 @@ pub(super) enum BoundKey {
     Local(u32),
     /// `root_local . field_index` — a field read of a by-value local.
     Field(u32, u32),
+    /// A folded bound: `arr.len()` over a literal list is a constant by the time
+    /// the guard and the check meet, and two such constants denote the same
+    /// program object exactly when they are equal.
+    Const(i64),
 }
 
 /// Copy/CSE temp bindings: a single-assignment local `t` bound by
@@ -179,6 +183,59 @@ pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
     cur
 }
 
+/// Read through a power-assert capture block. `assert a < b` records each
+/// operand it may have to print as `{ $v = <op>; $seen = true; $v }`, which
+/// yields exactly `<op>` — so a bound wrapped in one is still that bound.
+pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
+    let mut cur = op;
+    for _ in 0..MAX_BIND_CHAIN {
+        let Some(next) = capture_block_value(engine, resolve(engine, binds, cur)) else {
+            break;
+        };
+        cur = next;
+    }
+    cur
+}
+
+/// The operand a block yields when it yields a local it assigns exactly once.
+/// The single assignment is what makes the value unambiguous: a second one
+/// would leave which write reaches the tail to control flow.
+fn capture_block_value(engine: &Engine, op: Operand) -> Option<Operand> {
+    let Operand::Expr(e) = op else { return None };
+    let tail = engine.body.block_yield(e)?.as_expr()?;
+    let ExprKind::Local { index, .. } = &engine.body.exprs[tail].kind else {
+        return None;
+    };
+    let target = *index;
+    let mut written = None;
+    let mut writes = 0;
+    engine.body.for_each_live_node_under(NodeRef::Expr(e), |n| {
+        if let NodeRef::Expr(ae) = n
+            && let ExprKind::Assign { target: t, value } = &engine.body.exprs[ae].kind
+            && matches!(&engine.body.exprs[*t].kind, ExprKind::Local { index, .. } if *index == target)
+        {
+            written = Some(*value);
+            writes += 1;
+        }
+    });
+    (writes == 1).then_some(written?)
+}
+
+/// [`resolve`], continued through a promoted `Opaque(Local)` back to the `let`
+/// that bound it. The value pool keeps no structure for a condition temp, so
+/// the skeleton is the only place a promoted `&&` still shows its operands.
+fn resolve_through_opaque(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
+    let mut cur = resolve(engine, binds, op);
+    for _ in 0..MAX_BIND_CHAIN {
+        let Operand::Value(v) = cur else { break };
+        let Some(&b) = opaque_local(engine, v).and_then(|i| binds.get(&i)) else {
+            break;
+        };
+        cur = resolve(engine, binds, b);
+    }
+    cur
+}
+
 /// The `Local idx` an `Opaque` value sources from, if any (pool read — not
 /// `value_of`).
 pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
@@ -211,6 +268,10 @@ fn field_bound_root(body: &nir_arena::Body, expr: ExprId) -> Option<u32> {
 /// form and a **promoted** `Operand::Value` (the freeze promotes a `FieldAccess`
 /// bound), decomposed through the value **pool** (`body.values`, not `value_of`).
 pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
+    let op = peel_capture_block(engine, binds, op);
+    if let Some(c) = parse_const_i64(engine, binds, op) {
+        return Some(BoundKey::Const(c));
+    }
     match resolve(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(BoundKey::Local(*index)),
@@ -486,6 +547,16 @@ pub(super) fn parse_break_guard_head(
 /// `(var, off, bound)`.
 fn parse_check(engine: &Engine, binds: &Binds, cond: Operand) -> Option<(u32, i64, BoundKey)> {
     let (left, right) = ge_check_operands(engine, binds, cond)?;
+    parse_ge_pair(engine, binds, left, right)
+}
+
+/// Read the two sides of a failing `left >= right` as `(var, off, bound)`.
+fn parse_ge_pair(
+    engine: &Engine,
+    binds: &Binds,
+    left: Operand,
+    right: Operand,
+) -> Option<(u32, i64, BoundKey)> {
     let (var, off) = parse_var_offset(engine, binds, left)?;
     let bound = parse_bound(engine, binds, right)?;
     Some((var, off, bound))
@@ -502,17 +573,13 @@ pub(super) fn ge_check_operands(
     binds: &Binds,
     cond: Operand,
 ) -> Option<(Operand, Operand)> {
-    match resolve(engine, binds, cond) {
+    let direct = match resolve(engine, binds, cond) {
         Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
             ExprKind::Binary {
                 left,
                 op: NirBinaryOp::GtEq,
                 right,
             } => Some((*left, *right)),
-            ExprKind::Unary {
-                op: NirUnaryOp::Not,
-                expr: inner,
-            } => lt_operands(engine, binds, *inner),
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
@@ -522,11 +589,166 @@ pub(super) fn ge_check_operands(
                 rhs,
                 ..
             } => Some((Operand::Value(*lhs), Operand::Value(*rhs))),
+            _ => None,
+        },
+    };
+    direct.or_else(|| lt_operands(engine, binds, negated_operand(engine, binds, cond)?))
+}
+
+/// The operand a condition negates: `!x`, or the `x == 0` a lowered `&&` leaves
+/// where source wrote `!(a && b)`. Returns `x`. A non-boolean `i == 0` also
+/// parses here, and dead-ends in the caller that tries to read `i` as a
+/// comparison — the recursion, not a type, is what rejects it.
+fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> Option<Operand> {
+    match resolve(engine, binds, cond) {
+        Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Not,
+                expr: inner,
+            } => Some(*inner),
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::Eq,
+                right,
+            } => eq_zero_operand(engine, binds, *left, *right),
+            _ => None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
             ValueKind::Unary {
                 op: NirUnaryOp::Not,
                 operand,
                 ..
-            } => lt_operands(engine, binds, Operand::Value(*operand)),
+            } => Some(Operand::Value(*operand)),
+            ValueKind::Binary {
+                op: NirBinaryOp::Eq,
+                lhs,
+                rhs,
+                ..
+            } => eq_zero_operand(engine, binds, Operand::Value(*lhs), Operand::Value(*rhs)),
+            _ => None,
+        },
+    }
+}
+
+/// The other side of an `x == 0`, whichever side the zero sits on.
+fn eq_zero_operand(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> Option<Operand> {
+    if parse_const_i64(engine, binds, b) == Some(0) {
+        return Some(a);
+    }
+    (parse_const_i64(engine, binds, a) == Some(0)).then_some(b)
+}
+
+/// One conjunct of the predicate a panic guard must be shown to hold.
+#[derive(Clone, Copy)]
+pub(super) enum Conjunct {
+    /// Holds when `left < right` — the shape every bounds check has.
+    Lt(Operand, Operand),
+    /// Holds when `floor <= var + off` — the lower half of a chained
+    /// comparison, which no upper-bound `BoundKey` can express.
+    AtLeast(u32, i64, i64),
+}
+
+/// The conjuncts of the predicate a panic guard `if <cond> { panic }` refutes.
+/// A plain bounds check gives one. `!(A && B)` — what `assert 0 <= i < n`
+/// lowers to — gives one per conjunct, and the guard is dead only when every
+/// one of them holds. `None` when some conjunct is not a comparison this can
+/// classify, so a caller never proves a subset and calls it the whole.
+pub(super) fn check_conjuncts(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+) -> Option<Vec<Conjunct>> {
+    if let Some((left, right)) = ge_check_operands(engine, binds, cond) {
+        return Some(vec![Conjunct::Lt(left, right)]);
+    }
+    let inner = negated_operand(engine, binds, cond)?;
+    let mut parts = Vec::new();
+    collect_and_operands(engine, binds, inner, &mut parts);
+    parts
+        .into_iter()
+        .map(|p| classify_conjunct(engine, binds, p))
+        .collect()
+}
+
+/// Flatten a short-circuit `&&` tree (skeleton, or the promoted `Select` its
+/// value form takes) into its leaf operands. `None` when the tree is not one.
+fn collect_and_operands(engine: &Engine, binds: &Binds, op: Operand, out: &mut Vec<Operand>) {
+    let Some((left, right)) = and_operands(engine, binds, op) else {
+        out.push(op);
+        return;
+    };
+    collect_and_operands(engine, binds, left, out);
+    collect_and_operands(engine, binds, right, out);
+}
+
+/// The two operands of a short-circuit `&&`: the skeleton `Binary(And)`, the
+/// `if a { b } else { false }` a captured operand turns it into, or the pooled
+/// `Select(a, b, false)` the promoted form takes.
+fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, Operand)> {
+    match resolve_through_opaque(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::And,
+                right,
+            } => Some((*left, *right)),
+            ExprKind::If {
+                condition,
+                then_branch,
+                else_branch: Some(else_branch),
+            } => {
+                let else_tail = block_id_tail(engine.body, *else_branch)?;
+                let then_tail = block_id_tail(engine.body, *then_branch)?;
+                (parse_const_i64(engine, binds, else_tail) == Some(0))
+                    .then_some((*condition, then_tail))
+            }
+            _ => None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Select { cond, then, else_ } => {
+                let (cond, then, else_) = (*cond, *then, *else_);
+                (parse_const_i64(engine, binds, Operand::Value(else_)) == Some(0))
+                    .then_some((Operand::Value(cond), Operand::Value(then)))
+            }
+            _ => None,
+        },
+    }
+}
+
+/// Classify one conjunct by which side carries the constant: a constant on the
+/// left of `<` / `<=` is a floor under the other side, anything else is read as
+/// the familiar `left < right`.
+fn classify_conjunct(engine: &Engine, binds: &Binds, op: Operand) -> Option<Conjunct> {
+    let (left, op_kind, right) = cmp_parts(engine, binds, op)?;
+    if let Some(c) = parse_const_i64(engine, binds, left) {
+        let floor = match op_kind {
+            NirBinaryOp::Lt => c.checked_add(1)?,
+            NirBinaryOp::LtEq => c,
+            _ => return None,
+        };
+        let (var, off) = parse_var_offset(engine, binds, right)?;
+        return Some(Conjunct::AtLeast(var, off, floor));
+    }
+    (op_kind == NirBinaryOp::Lt).then_some(Conjunct::Lt(left, right))
+}
+
+/// The `(left, op, right)` of a `<` / `<=` comparison, skeleton or promoted.
+fn cmp_parts(
+    engine: &Engine,
+    binds: &Binds,
+    op: Operand,
+) -> Option<(Operand, NirBinaryOp, Operand)> {
+    let relational =
+        |op: NirBinaryOp| matches!(op, NirBinaryOp::Lt | NirBinaryOp::LtEq).then_some(op);
+    match resolve_through_opaque(engine, binds, op) {
+        Operand::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Binary { left, op, right } => Some((*left, relational(*op)?, *right)),
+            _ => None,
+        },
+        Operand::Value(v) => match engine.body.values.kind(v) {
+            ValueKind::Binary { op, lhs, rhs, .. } => {
+                Some((Operand::Value(*lhs), relational(*op)?, Operand::Value(*rhs)))
+            }
             _ => None,
         },
     }
@@ -626,6 +848,7 @@ fn pool_int_const(engine: &Engine, v: ValueId) -> Option<i64> {
 fn bound_root(b: BoundKey) -> Option<u32> {
     match b {
         BoundKey::Local(l) | BoundKey::Field(l, _) => Some(l),
+        BoundKey::Const(_) => None,
     }
 }
 
@@ -692,7 +915,13 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
 /// `if (var >= bound) { panic }` in the body — by **structural** comparison of
 /// the skeleton reads plus a position-aware "no modification of `var`/`bound`
 /// between the guard and the check" scan. No value graph, no promotion.
-fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
+fn structural_loop_guard(
+    engine: &mut Engine,
+    parent: BlockId,
+    loop_stmt: StmtId,
+    loop_body: BlockId,
+    binds: &Binds,
+) -> bool {
     let Some((guard_idx, gcond)) = parse_break_guard_head(engine, loop_body) else {
         return false;
     };
@@ -714,26 +943,53 @@ fn structural_loop_guard(engine: &mut Engine, loop_body: BlockId, binds: &Binds)
     // nested anywhere inside each — an inlined `index_value` check is an `If`
     // within the statement's expression block — and stopping at the first
     // statement that modifies `var` / `bound`. A `<` guard refutes only the same
-    // wrapping index; a `<=` guard also refutes an offset bound.
-    let le_gbl = match gop {
-        NirBinaryOp::Lt => None,
-        NirBinaryOp::LtEq if goff == 0 => match bound {
-            BoundKey::Local(gbl) => Some(gbl),
-            BoundKey::Field(..) => return false,
+    // wrapping index; a `<=` guard also refutes an offset bound; a constant
+    // bound refutes by arithmetic on the upper bound it leaves.
+    let strategy = match (gop, bound) {
+        (_, BoundKey::Const(c)) => match guard_const_ub(goff, gop, c) {
+            Some(ub) => GuardStrategy::ConstUb(ub),
+            None => return false,
         },
+        (NirBinaryOp::Lt, _) => GuardStrategy::SameOffset,
+        (NirBinaryOp::LtEq, BoundKey::Local(gbl)) if goff == 0 => GuardStrategy::LeLocal(gbl),
         _ => return false,
     };
+    // A `<` guard leaves `var` a step below its bound, so the `+ 1` of a
+    // counting loop cannot wrap and the entry constant floors every iteration.
+    // A `<=` guard has no such headroom; `loop_version_bce` buys it back from
+    // the versioning residual.
+    let floor = (gop == NirBinaryOp::Lt && goff == 0)
+        .then(|| induction_entry(engine, binds, parent, loop_stmt, loop_body, var))
+        .flatten()
+        .map(|lo| (var, lo));
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, bound) {
             break;
         }
-        changed |= match le_gbl {
-            None => eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, binds),
-            Some(gbl) => eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, binds),
+        changed |= match strategy {
+            GuardStrategy::SameOffset => {
+                eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, goff, bound, binds, floor)
+            }
+            GuardStrategy::LeLocal(gbl) => {
+                eliminate_le_checks_in_node(engine, NodeRef::Stmt(s), var, gbl, binds, floor)
+            }
+            GuardStrategy::ConstUb(ub) => {
+                eliminate_const_ub_checks_in_node(engine, NodeRef::Stmt(s), var, ub, binds, floor)
+            }
         };
     }
     changed
+}
+
+/// How a parsed loop guard refutes the checks it dominates.
+enum GuardStrategy {
+    /// `var + goff < bound`: refutes a check at the identical offset and bound.
+    SameOffset,
+    /// `var <= gbound_local`: refutes a check whose bound is `gbound + c`.
+    LeLocal(u32),
+    /// `var <= ub`: refutes a check `var + j >= C` for every `ub + j < C`.
+    ConstUb(i64),
 }
 
 /// Drive to `false` the condition of every `if <cond> { panic }` (no else)
@@ -745,12 +1001,17 @@ fn refute_panic_checks(
     engine: &mut Engine,
     node: NodeRef,
     binds: &Binds,
-    refute: impl Fn(&Engine, &Binds, Operand) -> bool,
+    floor: Option<(u32, i64)>,
+    refute: impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
 ) -> bool {
     let mut holders: Vec<(NodeRef, Operand)> = Vec::new();
     engine.body.for_each_live_node_under(node, |n| {
+        // Driving the condition to `false` drops the expression with it, so a
+        // condition that writes — an `assert`'s operand capture spliced into
+        // the comparison — would lose a store the surviving path still makes.
         if let Some(cond) = panic_guard_check(engine, n)
-            && refute(engine, binds, cond)
+            && is_pure_operand(engine.body, cond)
+            && check_refuted(engine, binds, cond, floor, &refute)
         {
             holders.push((n, cond));
         }
@@ -761,6 +1022,28 @@ fn refute_panic_checks(
         changed = true;
     }
     changed
+}
+
+/// Whether the whole predicate a panic guard refutes is proven. A negated
+/// conjunction — what `assert 0 <= i < n` lowers to — is dead only when every
+/// conjunct holds, so each upper half goes to `refute` and each constant floor
+/// is answered by the caller's proven `floor` on that variable.
+fn check_refuted(
+    engine: &Engine,
+    binds: &Binds,
+    cond: Operand,
+    floor: Option<(u32, i64)>,
+    refute: &impl Fn(&Engine, &Binds, Operand, Operand) -> bool,
+) -> bool {
+    let Some(parts) = check_conjuncts(engine, binds, cond) else {
+        return false;
+    };
+    parts.into_iter().all(|part| match part {
+        Conjunct::Lt(left, right) => refute(engine, binds, left, right),
+        Conjunct::AtLeast(v, off, f) => {
+            floor.is_some_and(|(fv, lo)| fv == v && lo.checked_add(off).is_some_and(|l| l >= f))
+        }
+    })
 }
 
 /// Drive to `false` every else-less `if (var >= bound) { panic }` nested in
@@ -775,10 +1058,11 @@ fn eliminate_checks_in_node(
     k: i64,
     bound: BoundKey,
     binds: &Binds,
+    floor: Option<(u32, i64)>,
 ) -> bool {
-    refute_panic_checks(engine, node, binds, |engine, binds, cond| {
+    refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
         matches!(
-            parse_check(engine, binds, cond),
+            parse_ge_pair(engine, binds, left, right),
             Some((cvar, cj, cbound)) if cvar == var && cbound == bound && cj == k
         )
     })
@@ -795,15 +1079,49 @@ fn eliminate_le_checks_in_node(
     var: u32,
     gbound: u32,
     binds: &Binds,
+    floor: Option<(u32, i64)>,
 ) -> bool {
-    refute_panic_checks(engine, node, binds, |engine, binds, cond| {
-        let Some((left, right)) = ge_check_operands(engine, binds, cond) else {
-            return false;
-        };
+    refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
         let Some((cvar, cj)) = parse_var_offset(engine, binds, left) else {
             return false;
         };
         cvar == var && bound_offset_over(engine, binds, right, gbound).is_some_and(|c| c > cj)
+    })
+}
+
+/// The constant upper bound a guard `var + goff OP C` leaves on its live path.
+/// Only `goff == 0` yields one: Wado add wraps, so a guard on `var + goff` can
+/// pass on a wrapped-negative sum while `var` itself is near `i32::MAX`.
+fn guard_const_ub(goff: i64, op: NirBinaryOp, c: i64) -> Option<i64> {
+    if goff != 0 {
+        return None;
+    }
+    match op {
+        NirBinaryOp::Lt => c.checked_sub(1),
+        NirBinaryOp::LtEq => Some(c),
+        _ => None,
+    }
+}
+
+/// Drive to `false` every dominated check `var + j >= C` (both bounds constant)
+/// that the guard's `var <= ub` refutes: `var + j <= ub + j < C`. No separate
+/// no-wrap side condition is needed — `j >= 0` rules out an underflow, and
+/// `ub + j < C` puts the sum below a constant the program already holds in the
+/// index's own type, so it cannot have overflowed either.
+fn eliminate_const_ub_checks_in_node(
+    engine: &mut Engine,
+    node: NodeRef,
+    var: u32,
+    ub: i64,
+    binds: &Binds,
+    floor: Option<(u32, i64)>,
+) -> bool {
+    refute_panic_checks(engine, node, binds, floor, |engine, binds, left, right| {
+        matches!(
+            parse_ge_pair(engine, binds, left, right),
+            Some((cvar, cj, BoundKey::Const(c)))
+                if cvar == var && cj >= 0 && ub.checked_add(cj).is_some_and(|v| v < c)
+        )
     })
 }
 
@@ -836,7 +1154,7 @@ fn apply_dominating_if(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
         if stmt_modifies(engine, ts, var, bound) {
             break;
         }
-        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(ts), var, k, bound, binds);
+        changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(ts), var, k, bound, binds, None);
     }
     changed
 }
@@ -870,11 +1188,12 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     for s in stmts {
         for &(var, k, bound) in &seguards {
             if !stmt_modifies(engine, s, var, bound) {
-                changed |= eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds);
+                changed |=
+                    eliminate_checks_in_node(engine, NodeRef::Stmt(s), var, k, bound, binds, None);
             }
         }
         changed |= apply_dominating_if(engine, s, binds);
-        changed |= process_stmt(engine, s, binds);
+        changed |= process_stmt(engine, block, s, binds);
         seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
         if let Some(fact) = recognize_early_exit(engine, s, binds) {
             seguards.push(fact);
@@ -883,7 +1202,7 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     changed
 }
 
-fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
+fn process_stmt(engine: &mut Engine, parent: BlockId, s: StmtId, binds: &Binds) -> bool {
     let shape = match &engine.body.stmts[s].kind {
         StmtKind::Loop { body: lb } => StmtShape::Loop(*lb),
         StmtKind::If {
@@ -895,7 +1214,7 @@ fn process_stmt(engine: &mut Engine, s: StmtId, binds: &Binds) -> bool {
         _ => StmtShape::None,
     };
     match shape {
-        StmtShape::Loop(lb) => process_loop(engine, lb, binds),
+        StmtShape::Loop(lb) => process_loop(engine, parent, s, lb, binds),
         StmtShape::If(then_b, else_b) => {
             let mut changed = process_block(engine, then_b, binds);
             if let Some(eb) = else_b {
@@ -936,12 +1255,18 @@ enum StmtShape {
     None,
 }
 
-fn process_loop(engine: &mut Engine, loop_body: BlockId, binds: &Binds) -> bool {
+fn process_loop(
+    engine: &mut Engine,
+    parent: BlockId,
+    loop_stmt: StmtId,
+    loop_body: BlockId,
+    binds: &Binds,
+) -> bool {
     // Loop-head guard `i < bound` / `i <= bound` → dominated body checks. Kept
     // as its own step because loop_version_bce keys on the guard/check shapes it
     // leaves (its target checks relate `H`/`B` only at the call site, so nothing
     // here can prove them false — they survive for loop_version to version on).
-    let mut changed = structural_loop_guard(engine, loop_body, binds);
+    let mut changed = structural_loop_guard(engine, parent, loop_stmt, loop_body, binds);
     // Treat the body as a straight-line block so early-exit guard facts, the
     // dominating-if rule, and every eliminator fire inside the loop, and nested
     // structures recurse (`process_stmt`). This is sound across the back edge:
@@ -1094,8 +1419,15 @@ impl ArenaOptVisitor for ShortCircuitEliminator<'_> {
                 && let Some(re) = right.as_expr()
                 && !node_modifies(engine, NodeRef::Expr(re), var, bound)
             {
-                changed |=
-                    eliminate_checks_in_node(engine, NodeRef::Expr(re), var, k, bound, self.binds);
+                changed |= eliminate_checks_in_node(
+                    engine,
+                    NodeRef::Expr(re),
+                    var,
+                    k,
+                    bound,
+                    self.binds,
+                    None,
+                );
             }
             if let Some(re) = right.as_expr() {
                 changed |= self.visit_expr(engine, re, frames);
@@ -1287,6 +1619,68 @@ fn len_minus_fact(engine: &Engine, binds: &Binds, node: NodeRef) -> Option<Prove
     }
     let bound = parse_bound(engine, binds, minuend)?;
     matches!(bound, BoundKey::Field(..)).then_some((local_index, k - 1, bound))
+}
+
+/// The constant a `+ 1` counting loop's variable enters at, when the enclosing
+/// block leaves it a constant and the body's only write is `var = var + 1`.
+///
+/// This is a floor on `var` at every check **only once the caller has ruled out
+/// the wrap**: Wado add wraps, so `var + 1` at the top of the range restarts at
+/// the bottom. A `<` guard rules it out on its own (`var < B` leaves a step of
+/// headroom); a `<=` guard needs the versioning residual to bound `H` below the
+/// check bound. A step of two or more has no such headroom and is refused.
+pub(super) fn induction_entry(
+    engine: &Engine,
+    binds: &Binds,
+    parent: BlockId,
+    loop_stmt: StmtId,
+    loop_body: BlockId,
+    var: u32,
+) -> Option<i64> {
+    let mut entry = None;
+    for &s in &engine.body.blocks[parent].stmts {
+        if s == loop_stmt {
+            break;
+        }
+        engine.body.for_each_node_under(NodeRef::Stmt(s), |n| {
+            if let Some(value) = local_written_value(engine, n, var) {
+                entry = parse_const_i64(engine, binds, value);
+            }
+        });
+    }
+    let mut stepped = false;
+    let mut steps_by_one = true;
+    engine
+        .body
+        .for_each_node_under(NodeRef::Block(loop_body), |n| {
+            if let Some(value) = local_written_value(engine, n, var) {
+                stepped = true;
+                steps_by_one &= parse_var_offset(engine, binds, value) == Some((var, 1));
+            }
+        });
+    (stepped && steps_by_one).then_some(entry?)
+}
+
+/// The operand written to local `var` by `node`, when `node` is a `let` or an
+/// assignment naming it directly.
+fn local_written_value(engine: &Engine, node: NodeRef, var: u32) -> Option<Operand> {
+    match node {
+        NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
+            StmtKind::Let {
+                local_index, value, ..
+            } if *local_index == var => Some(*value),
+            _ => None,
+        },
+        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+            ExprKind::Assign { target, value } => matches!(
+                &engine.body.exprs[*target].kind,
+                ExprKind::Local { index, .. } if *index == var
+            )
+            .then_some(*value),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// A panic-guard `if <check> { panic }` (no else, `then` a panic block): the
