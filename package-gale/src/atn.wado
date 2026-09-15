@@ -571,7 +571,7 @@ fn build_sequence_prec<S: AsStrSlice>(
 /// is never wrongly dropped to prec 0 when an operator might follow.
 fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
     return match *elem {
-        TokenRef(t) => lr_first.contains(`TK_${t.name}`),
+        TokenRef(t) => lr_first.contains(&`TK_${t.name}`),
         Literal(l) => lr_first.contains(&literal_const_name(&l.text)),
         RuleRef(_) => true,
         Wildcard(_) => true,
