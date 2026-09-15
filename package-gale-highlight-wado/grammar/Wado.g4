@@ -238,12 +238,14 @@ implPubMember
     | 'fn' funcSig
     ;
 
+// The attributes sit here rather than in `genericParam`, whose subtree the
+// highlighter paints as types outright. An attribute holds plain names.
 genericParams
-    : '<' genericParam (',' genericParam)* '>'
+    : '<' attribute* genericParam (',' attribute* genericParam)* '>'
     ;
 
 genericParam
-    : attribute* '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
+    : '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
