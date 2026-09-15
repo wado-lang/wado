@@ -350,6 +350,14 @@ pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Stmt(id), idx)
 }
 
+/// Whether `idx` appears anywhere in what `op` reads, skeleton or promoted.
+pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+    match op {
+        Operand::Expr(e) => expr_mentions_local(body, e, idx),
+        Operand::Value(v) => body.values.value_reads_local(v, idx),
+    }
+}
+
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     mentions_local_except(body, node, None, idx)
 }

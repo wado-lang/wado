@@ -201,12 +201,12 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 2. **Equality chaining**: `==` can only chain with `==`
 3. **No `!=` chaining**: `!=` cannot be chained at all
 4. **No mixing**: Cannot mix equality operators with inequality operators
-5. **No short-circuit**: every operand is evaluated once, left to right, and the comparisons join with `&`. A chain is one test — a range test where the operators are inequalities — and a test that skips an operand on one path is what `&&` is for.
+5. **No short-circuit**: every operand is evaluated once, left to right, and the comparisons join with `&`. A chain is a single range test. Write `&&` where an operand must not run on some path.
 
 **Rationale**:
 
 1. **Mathematical intuition**: Range checks like `0 <= x <= 100` are natural and common
-2. **Familiar syntax**: `a < b < c` reads as it does in Python, though Wado evaluates every operand where Python short-circuits
+2. **Familiar syntax**: `a < b < c` reads as it does in Python. Python short-circuits it; Wado evaluates every operand
 3. **Clearer intent**: `a < b < c` is more readable than `a < b && b < c`
 4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)

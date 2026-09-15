@@ -496,7 +496,7 @@ let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 
 #### Comparison Chaining
 
-Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax. It does not borrow Python's evaluation, as the rule after the examples says:
+Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax, but not Python's evaluation:
 
 ```wado
 // Valid chains (same direction)

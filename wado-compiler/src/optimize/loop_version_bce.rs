@@ -11,7 +11,7 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, 
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{block_contains_loop, has_break_to};
@@ -379,6 +379,18 @@ fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
     Operand::Expr(e)
 }
 
+fn alloc_binary(
+    engine: &mut Engine,
+    left: Operand,
+    op: NirBinaryOp,
+    right: Operand,
+    ty: TypeId,
+    span: Span,
+) -> Operand {
+    let e = engine.alloc_expr(ExprKind::Binary { left, op, right }, ty, span);
+    Operand::Expr(e)
+}
+
 /// Apply one versioning plan: clone the loop, delete the implied checks in
 /// the clone, and replace the loop with
 /// `if <residual> { fast } else { original }`.
@@ -406,18 +418,10 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     } else {
         NirBinaryOp::LtEq
     };
-    let residual = engine.alloc_expr(
-        ExprKind::Binary {
-            left: h_read,
-            op,
-            right: b_read,
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
     let if_stmt = engine.alloc_stmt(
         StmtKind::If {
-            condition: Operand::Expr(residual),
+            condition: residual,
             then_block,
             else_block: Some(else_block),
         },
@@ -687,16 +691,14 @@ fn try_fill_idiom(
     let upper = |engine: &mut Engine| -> Operand {
         let h_read = local_read(engine, h, span);
         if guard_le {
-            let e = engine.alloc_expr(
-                ExprKind::Binary {
-                    left: h_read,
-                    op: NirBinaryOp::Add,
-                    right: Operand::Value(one),
-                },
+            alloc_binary(
+                engine,
+                h_read,
+                NirBinaryOp::Add,
+                Operand::Value(one),
                 ty,
                 span,
-            );
-            Operand::Expr(e)
+            )
         } else {
             h_read
         }
@@ -704,15 +706,7 @@ fn try_fill_idiom(
 
     let upper_for_len = upper(engine);
     let i_read = local_read(engine, var, span);
-    let count = engine.alloc_expr(
-        ExprKind::Binary {
-            left: upper_for_len,
-            op: NirBinaryOp::Sub,
-            right: i_read,
-        },
-        ty,
-        span,
-    );
+    let count = alloc_binary(engine, upper_for_len, NirBinaryOp::Sub, i_read, ty, span);
     let offset = local_read(engine, var, span);
     let fill_call = engine.alloc_expr(
         ExprKind::Call {
@@ -732,7 +726,7 @@ fn try_fill_idiom(
                     is_mut: false,
                 },
                 ArenaCallArg {
-                    expr: Operand::Expr(count),
+                    expr: count,
                     is_mut: false,
                 },
             ],
@@ -752,16 +746,14 @@ fn try_fill_idiom(
             local_read(engine, h, span)
         } else {
             let h_read = local_read(engine, h, span);
-            let e = engine.alloc_expr(
-                ExprKind::Binary {
-                    left: h_read,
-                    op: NirBinaryOp::Sub,
-                    right: Operand::Value(one),
-                },
+            alloc_binary(
+                engine,
+                h_read,
+                NirBinaryOp::Sub,
+                Operand::Value(one),
                 ty,
                 span,
-            );
-            Operand::Expr(e)
+            )
         };
         body_stmts.push(alloc_local_set(engine, var, last_iterated, span));
         body_stmts.extend(middle);
@@ -773,23 +765,16 @@ fn try_fill_idiom(
     // `if i CMP H { ... }` preserves the zero-iteration case.
     let i_read2 = local_read(engine, var, span);
     let h_read2 = local_read(engine, h, span);
-    let enter = engine.alloc_expr(
-        ExprKind::Binary {
-            left: i_read2,
-            op: if guard_le {
-                NirBinaryOp::LtEq
-            } else {
-                NirBinaryOp::Lt
-            },
-            right: h_read2,
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let op = if guard_le {
+        NirBinaryOp::LtEq
+    } else {
+        NirBinaryOp::Lt
+    };
+    let enter = alloc_binary(engine, i_read2, op, h_read2, TypeTable::BOOL, span);
     let body_block = engine.alloc_block(body_stmts, span);
     let fill_if = engine.alloc_stmt(
         StmtKind::If {
-            condition: Operand::Expr(enter),
+            condition: enter,
             then_block: body_block,
             else_block: None,
         },

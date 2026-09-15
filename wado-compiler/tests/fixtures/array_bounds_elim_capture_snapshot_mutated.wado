@@ -1,0 +1,25 @@
+// A block yields what its statements saved, not a fresh read of where they saved
+// it from. Writing `limit` after the save leaves the two different, so a guard
+// read as a bound on `limit` proves nothing about the check below it.
+
+use { println, Stdout } from "core:cli";
+
+struct Window { limit: i32 }
+
+export fn run() with Stdout {
+    let mut w = Window { limit: builtin::black_box(3) };
+    let i = builtin::black_box(2);
+    if i < save: { let saved = w.limit; w.limit = builtin::black_box(1); saved } {
+        if i >= w.limit {
+            builtin::cold_path();
+            panic("index out of bounds");
+        }
+        println("bound survived its own guard");
+    }
+}
+
+__DATA__
+{
+    "stderr_contains": ["index out of bounds"],
+    "trapped": true
+}

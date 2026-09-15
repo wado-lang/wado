@@ -15,7 +15,8 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use crate::optimize::arena_query::{
-    binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local, storage_root,
+    binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
+    operand_mentions_local, storage_root,
 };
 use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
@@ -199,9 +200,10 @@ pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) ->
     cur
 }
 
-/// The local a block binds and the operand it yields for it, when its own
-/// statements write that local exactly once. Anything weaker leaves which write
-/// reaches the tail to control flow, and the block stands for no operand.
+/// The local a block binds and the operand it yields for it: one unconditional
+/// write, which nothing else in the block undoes. A second write leaves the
+/// choice to control flow, and a write to what the operand reads leaves the tail
+/// holding a snapshot the operand no longer matches.
 pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32, Operand)> {
     let Operand::Expr(e) = op else { return None };
     let ExprKind::LabeledBlock { block, .. } = &engine.body.exprs[e].kind else {
@@ -212,10 +214,12 @@ pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32
     let ExprKind::Local { index, .. } = &engine.body.exprs[tail].kind else {
         return None;
     };
-    Some((
-        *index,
-        sole_unconditional_write(engine, block, *index, None)?,
-    ))
+    let index = *index;
+    let value = sole_unconditional_write(engine, block, index, None)?;
+    let clobbered = modifies_root_matching(engine, NodeRef::Block(block), |root| {
+        operand_mentions_local(engine.body, value, root)
+    });
+    (!clobbered).then_some((index, value))
 }
 
 /// [`resolve`], continued through a promoted `Opaque(Local)` back to the `let`
@@ -771,9 +775,8 @@ fn bound_root(b: BoundKey) -> Option<u32> {
     }
 }
 
-/// Conservatively, does statement `s` modify `var` or `bound`'s backing — an
-/// assignment to the local / its field, a `&mut` escape of either root, or a
-/// method call whose receiver is either root (may take `&mut self`)? Sound
+/// Conservatively, does statement `s` modify `var` or `bound`'s backing, as
+/// [`modified_root`] counts a modification? Sound
 /// over-approximation: a false "modifies" only forgoes an elimination. The
 /// guard/check's own `panic(msg)` is a free call on neither root, so it does not
 /// trip this — keeping a clean check eliminable.
@@ -785,47 +788,41 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
     let roots = [Some(var), bound_root(bound)];
-    let is_root = |l: u32| roots.contains(&Some(l));
-    let mut hit = false;
-    let visit = |node: NodeRef| {
-        if let NodeRef::Expr(e) = node {
-            match &engine.body.exprs[e].kind {
-                ExprKind::Assign { target, .. } => {
-                    if let Some(root) = storage_root(engine.body, *target)
-                        && is_root(root)
-                    {
-                        hit = true;
-                    }
-                }
-                ExprKind::Unary {
-                    op: NirUnaryOp::MutRef,
-                    expr: inner,
-                } => {
-                    if let Some(ie) = inner.as_expr()
-                        && let Some(root) = storage_root(engine.body, ie)
-                        && is_root(root)
-                    {
-                        hit = true;
-                    }
-                }
-                ExprKind::Call {
-                    args,
-                    has_receiver: true,
-                    ..
-                } => {
-                    if let Some(re) = args.first().and_then(|a| a.expr.as_expr())
-                        && let Some(root) = storage_root(engine.body, re)
-                        && is_root(root)
-                    {
-                        hit = true;
-                    }
-                }
-                _ => {}
-            }
-        }
+    modifies_root_matching(engine, node, |root| roots.contains(&Some(root)))
+}
+
+/// The local root the expression node itself may modify: an assignment's place,
+/// a `&mut` escape, or a method receiver (which may take `&mut self`).
+fn modified_root(body: &nir_arena::Body, e: ExprId) -> Option<u32> {
+    let place = match &body.exprs[e].kind {
+        ExprKind::Assign { target, .. } => *target,
+        ExprKind::Unary {
+            op: NirUnaryOp::MutRef,
+            expr: inner,
+        } => inner.as_expr()?,
+        ExprKind::Call {
+            args,
+            has_receiver: true,
+            ..
+        } => args.first()?.expr.as_expr()?,
+        _ => return None,
     };
-    engine.body.for_each_live_node_under(node, visit);
-    hit
+    storage_root(body, place)
+}
+
+/// Whether anything under `node` modifies a root `wanted` accepts.
+fn modifies_root_matching(
+    engine: &Engine,
+    node: NodeRef,
+    mut wanted: impl FnMut(u32) -> bool,
+) -> bool {
+    engine
+        .body
+        .find_in_live_node_under(node, |n| {
+            let NodeRef::Expr(e) = n else { return None };
+            wanted(modified_root(engine.body, e)?).then_some(())
+        })
+        .is_some()
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
