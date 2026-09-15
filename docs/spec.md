@@ -2310,7 +2310,7 @@ is reported at the call, not inside the closure.
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.
 
-A closure declares neither effects nor stores; both are inferred from the body.
+A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
 which the compiler does not carry yet and rejects. A handler body therefore
 needs a block or parentheses:
@@ -2335,7 +2335,8 @@ assert get() == 2;
 See [`docs/wep-2026-01-16-closure-implementation.md`](./wep-2026-01-16-closure-implementation.md) for the full design (`fn` vs `fn mut`, sub-typing, effect generics, iterator API integration).
 
 A closure capturing an outer binding is a separate concept from what a function
-does with its reference _parameters_. See [Reference Escape](#reference-escape).
+does with its reference _parameters_, which nothing in the language states — see
+[WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ### Function References
 
@@ -5017,8 +5018,7 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }
 ```
 
-Every row member is an effect. Reference escape is not one, and is never written
-here — see [Reference Escape](#reference-escape).
+Every row member is an effect.
 
 ### Importing Effect Operations
 
@@ -5155,71 +5155,6 @@ The spread expression is evaluated exactly once. For non-trivial expressions (e.
 // make_pair() is called once, not twice
 let t = [..make_pair(), 30];
 ```
-
-### Reference Escape
-
-A reference parameter leaves a call two ways: the result aliases it, or the
-callee keeps it past the return. Neither is written down. Every referent is
-GC-managed, so neither can dangle, and the compiler reads both from the body.
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-```wado
-fn register(data: &Data) -> Handle {
-    registry.push(data);      // kept past the return
-    return new_handle();
-}
-
-fn process(data: &Data) -> Result {
-    return compute(*data);    // nothing kept
-}
-
-fn rebase(c: &Cursor, at: i32) -> Cursor {
-    return Cursor { chars: c.chars, pos: at };  // leaves with the result
-}
-```
-
-A reference member read out of a reference parameter still names what that
-parameter names, so it carries the parameter with it. A value member is copied
-and carries nothing:
-
-```wado
-fn name_of(p: &Person) -> String {   // `name` is a `String`
-    return p.name;
-}
-```
-
-A function type carries no escape information, so a call through one is read
-conservatively: every reference position may escape.
-
-#### `#[retain(...)]` and `#[returns(...)]`
-
-A declaration with no body — a `core:builtin` primitive, a Component Model
-import, a `.wasm` / `.wat` asset import — has no body to read, so it states its
-facts as attributes:
-
-```wado
-#[returns(part_of = arr)]
-pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
-
-#[retain(value, into = arr)]
-pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
-
-#[retain(elements_of = src, into = dst)]
-pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
-```
-
-`#[returns(owned)]` says the result is freshly allocated; `#[returns(part_of = p)]`
-says it is part of `p`.
-
-`#[retain(...)]` names one retained thing and repeats where there is more than
-one, so each carries its own destination. A bare name is the parameter itself
-and `elements_of = p` is that parameter's elements; `into = q` names the
-parameter it lands in, and without it the destination is unknown. Silence is the
-conservative reading.
-
-Both attributes are an error on a function with a body, and on a `trait` or
-`interface` method requirement: a call to one is statically dispatched to an
-impl that has a body, so the impl states it.
 
 ### Handlers
 
@@ -5805,6 +5740,40 @@ The attribute is only valid inside `core::*` modules; the elaborator rejects it 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
 Links Wado definitions (effects, resources, enums) to Component Model interfaces. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
+
+#### `#[retain(...)]` / `#[returns(...)]`
+
+What a call does with the reference parameters it is handed: whether its result
+aliases one, and whether it keeps one past the return. Neither is a safety
+condition — every referent is GC-managed, so neither can dangle — and the
+compiler reads both from a function's body. These attributes are for a
+declaration that has none: a `core:builtin` primitive, a Component Model import,
+a `.wasm` / `.wat` asset import. See
+[WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+
+```wado
+#[returns(part_of = arr)]
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+
+#[retain(value, into = arr)]
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+
+#[retain(elements_of = src, into = dst)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+```
+
+`#[returns(owned)]` says the result is freshly allocated; `#[returns(part_of = p)]`
+says it is part of `p`.
+
+`#[retain(...)]` names one retained thing and repeats where there is more than
+one, so each carries its own destination. A bare name is the parameter itself
+and `elements_of = p` is that parameter's elements; `into = q` names the
+parameter it lands in, and without it the destination is unknown. Silence is the
+conservative reading.
+
+Both are an error on a function with a body, and on a `trait` or `interface`
+method requirement: a call to one is statically dispatched to an impl that has a
+body, so the impl states it.
 
 ### The "mem" Core Module
 
