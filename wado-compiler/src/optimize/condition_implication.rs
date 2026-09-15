@@ -601,7 +601,7 @@ pub(super) fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> 
                 left,
                 op: NirBinaryOp::Eq,
                 right,
-            } => eq_zero_operand(engine, binds, *left, *right),
+            } => eq_false_operand(engine, binds, *left, *right),
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
@@ -615,18 +615,31 @@ pub(super) fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> 
                 lhs,
                 rhs,
                 ..
-            } => eq_zero_operand(engine, binds, Operand::Value(*lhs), Operand::Value(*rhs)),
+            } => eq_false_operand(engine, binds, Operand::Value(*lhs), Operand::Value(*rhs)),
             _ => None,
         },
     }
 }
 
-/// The other side of an `x == 0`, whichever side the zero sits on.
-fn eq_zero_operand(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> Option<Operand> {
-    if parse_const_i64(engine, binds, b) == Some(0) {
+/// The other side of an `x == false`, whichever side the constant sits on.
+fn eq_false_operand(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> Option<Operand> {
+    if is_const_false(engine, binds, b) {
         return Some(a);
     }
-    (parse_const_i64(engine, binds, a) == Some(0)).then_some(b)
+    is_const_false(engine, binds, a).then_some(b)
+}
+
+/// Is this operand a constant `false`? A bool literal pools as
+/// `ValueKind::Bool`, which no integer parse reads, so both spellings of the
+/// zero a lowered bool can wear are asked for here and nowhere else.
+fn is_const_false(engine: &Engine, binds: &Binds, op: Operand) -> bool {
+    if parse_const_i64(engine, binds, op) == Some(0) {
+        return true;
+    }
+    let Operand::Value(v) = resolve(engine, binds, op) else {
+        return false;
+    };
+    engine.body.values.kind(v).as_bool() == Some(false)
 }
 
 /// One conjunct of the predicate a panic guard must be shown to hold.
@@ -696,15 +709,14 @@ fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand,
             } => {
                 let else_tail = block_id_tail(engine.body, *else_branch)?;
                 let then_tail = block_id_tail(engine.body, *then_branch)?;
-                (parse_const_i64(engine, binds, else_tail) == Some(0))
-                    .then_some((*condition, then_tail))
+                is_const_false(engine, binds, else_tail).then_some((*condition, then_tail))
             }
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
             ValueKind::Select { cond, then, else_ } => {
                 let (cond, then, else_) = (*cond, *then, *else_);
-                (parse_const_i64(engine, binds, Operand::Value(else_)) == Some(0))
+                is_const_false(engine, binds, Operand::Value(else_))
                     .then_some((Operand::Value(cond), Operand::Value(then)))
             }
             ValueKind::Binary {
