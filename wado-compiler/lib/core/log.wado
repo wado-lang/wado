@@ -828,7 +828,7 @@ pub fn parse_directives(spec: String) -> List<Directive> {
         }
         match item.find("=") {
             Some(eq) => {
-                let target = item.substr_bytes(0, eq).trim();
+                let target = item.substr_bytes(0, eq).trim().to_string();
                 let name = item.substr_bytes(eq + 1, item.len()).trim();
                 if let Ok(level) = Level::from_str_lenient(&name) {
                     if !target.is_empty() {

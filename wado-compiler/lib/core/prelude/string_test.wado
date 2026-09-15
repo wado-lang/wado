@@ -461,71 +461,71 @@ test "String to_ascii_uppercase" {
 }
 
 test "trim_ascii both sides" {
-    assert "  hello  ".trim_ascii() == "hello";
-    assert "\t\nhello\r\n".trim_ascii() == "hello";
-    assert "hello".trim_ascii() == "hello";
-    assert "   ".trim_ascii() == "";
-    assert "".trim_ascii() == "";
+    assert "  hello  ".trim_ascii().eq_str("hello");
+    assert "\t\nhello\r\n".trim_ascii().eq_str("hello");
+    assert "hello".trim_ascii().eq_str("hello");
+    assert "   ".trim_ascii().eq_str("");
+    assert "".trim_ascii().eq_str("");
 }
 
 test "trim_ascii_start" {
-    assert "  hello  ".trim_ascii_start() == "hello  ";
-    assert "\t\nhello".trim_ascii_start() == "hello";
-    assert "hello".trim_ascii_start() == "hello";
-    assert "   ".trim_ascii_start() == "";
+    assert "  hello  ".trim_ascii_start().eq_str("hello  ");
+    assert "\t\nhello".trim_ascii_start().eq_str("hello");
+    assert "hello".trim_ascii_start().eq_str("hello");
+    assert "   ".trim_ascii_start().eq_str("");
 }
 
 test "trim_ascii_end" {
-    assert "  hello  ".trim_ascii_end() == "  hello";
-    assert "hello\t\n".trim_ascii_end() == "hello";
-    assert "hello".trim_ascii_end() == "hello";
-    assert "   ".trim_ascii_end() == "";
+    assert "  hello  ".trim_ascii_end().eq_str("  hello");
+    assert "hello\t\n".trim_ascii_end().eq_str("hello");
+    assert "hello".trim_ascii_end().eq_str("hello");
+    assert "   ".trim_ascii_end().eq_str("");
 }
 
 test "trim_ascii preserves non-ASCII" {
     // NO-BREAK SPACE (U+00A0) is not ASCII whitespace
     let s = '\u{A0}'.to_string() + "hello";
-    assert s.trim_ascii() == s;
+    assert s.trim_ascii().eq_str(s);
 }
 
 test "trim both sides" {
-    assert "  hello  ".trim() == "hello";
-    assert "\t\nhello\r\n".trim() == "hello";
-    assert "hello".trim() == "hello";
-    assert "   ".trim() == "";
-    assert "".trim() == "";
+    assert "  hello  ".trim().eq_str("hello");
+    assert "\t\nhello\r\n".trim().eq_str("hello");
+    assert "hello".trim().eq_str("hello");
+    assert "   ".trim().eq_str("");
+    assert "".trim().eq_str("");
 }
 
 test "trim_start" {
-    assert "  hello  ".trim_start() == "hello  ";
-    assert "\t\nhello".trim_start() == "hello";
-    assert "hello".trim_start() == "hello";
-    assert "   ".trim_start() == "";
+    assert "  hello  ".trim_start().eq_str("hello  ");
+    assert "\t\nhello".trim_start().eq_str("hello");
+    assert "hello".trim_start().eq_str("hello");
+    assert "   ".trim_start().eq_str("");
 }
 
 test "trim_end" {
-    assert "  hello  ".trim_end() == "  hello";
-    assert "hello\t\n".trim_end() == "hello";
-    assert "hello".trim_end() == "hello";
-    assert "   ".trim_end() == "";
+    assert "  hello  ".trim_end().eq_str("  hello");
+    assert "hello\t\n".trim_end().eq_str("hello");
+    assert "hello".trim_end().eq_str("hello");
+    assert "   ".trim_end().eq_str("");
 }
 
 test "trim Unicode whitespace" {
     let nbsp = '\u{A0}'.to_string();
     let s = nbsp + "hello" + nbsp;
-    assert s.trim() == "hello";
+    assert s.trim().eq_str("hello");
 }
 
 test "trim IDEOGRAPHIC SPACE" {
     let ideographic = '\u{3000}'.to_string();
     let s = ideographic + "日本語" + ideographic;
-    assert s.trim() == "日本語";
+    assert s.trim().eq_str("日本語");
 }
 
 test "trim mixed ASCII and Unicode whitespace" {
     let nbsp = '\u{A0}'.to_string();
     let s = " " + nbsp + "hello" + " ";
-    assert s.trim() == "hello";
+    assert s.trim().eq_str("hello");
 }
 
 test "string addition" {
@@ -1296,16 +1296,16 @@ test "String::from_utf8_slice rejects invalid UTF-8" {
 }
 
 test "strip_suffix removes a matching suffix" {
-    assert "hello.md".strip_suffix(".md") matches { Some(s) && s == "hello" };
+    assert "hello.md".strip_suffix(".md") matches { Some(s) && s.eq_str("hello") };
     assert "hello.md".strip_suffix(".txt") matches { None };
     assert "".strip_suffix(".md") matches { None };
-    assert "a".strip_suffix("a") matches { Some(s) && s == "" };
+    assert "a".strip_suffix("a") matches { Some(s) && s.eq_str("") };
 }
 
 test "strip_prefix removes a matching prefix" {
-    assert "---json".strip_prefix("---") matches { Some(s) && s == "json" };
+    assert "---json".strip_prefix("---") matches { Some(s) && s.eq_str("json") };
     assert "abc".strip_prefix("x") matches { None };
-    assert "abc".strip_prefix("abc") matches { Some(s) && s == "" };
+    assert "abc".strip_prefix("abc") matches { Some(s) && s.eq_str("") };
 }
 
 test "split_once cuts at the first separator" {

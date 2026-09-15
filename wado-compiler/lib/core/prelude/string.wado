@@ -761,36 +761,6 @@ impl String {
         }
     }
 
-    /// Returns a new string with leading ASCII whitespace removed.
-    pub fn trim_ascii_start(&self) -> String {
-        return self.as_str_slice().trim_ascii_start().to_string();
-    }
-
-    /// Returns a new string with trailing ASCII whitespace removed.
-    pub fn trim_ascii_end(&self) -> String {
-        return self.as_str_slice().trim_ascii_end().to_string();
-    }
-
-    /// Returns a new string with leading and trailing ASCII whitespace removed.
-    pub fn trim_ascii(&self) -> String {
-        return self.as_str_slice().trim_ascii().to_string();
-    }
-
-    /// Returns a new string with leading Unicode whitespace removed.
-    pub fn trim_start(&self) -> String {
-        return self.as_str_slice().trim_start().to_string();
-    }
-
-    /// Returns a new string with trailing Unicode whitespace removed.
-    pub fn trim_end(&self) -> String {
-        return self.as_str_slice().trim_end().to_string();
-    }
-
-    /// Returns a new string with leading and trailing Unicode whitespace removed.
-    pub fn trim(&self) -> String {
-        return self.as_str_slice().trim().to_string();
-    }
-
     /// Returns a new string with all ASCII uppercase letters converted to lowercase.
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_lowercase(&self) -> String {
@@ -838,24 +808,6 @@ impl String {
     /// Returns true if this string ends with the given suffix.
     pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool {
         return self.as_str_slice().ends_with(pat);
-    }
-
-    /// Returns the string with `prefix` removed from the front, or None when it
-    /// does not start with `prefix`.
-    pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<String> {
-        let Some(rest) = self.as_str_slice().strip_prefix(prefix) else {
-            return null;
-        };
-        return Option::Some(rest.to_string());
-    }
-
-    /// Returns the string with `suffix` removed from the end, or None when it
-    /// does not end with `suffix`.
-    pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<String> {
-        let Some(rest) = self.as_str_slice().strip_suffix(suffix) else {
-            return null;
-        };
-        return Option::Some(rest.to_string());
     }
 
     /// Returns the byte index of the first occurrence of `pat`, or None.
@@ -1737,12 +1689,12 @@ pub trait AsStrSlice {
         return self.as_str_slice().rfind(pat);
     }
 
-    fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<String> {
-        return self.as_str_slice().strip_prefix(prefix).map(|v: StrSlice| v.to_string());
+    fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self] {
+        return self.as_str_slice().strip_prefix(prefix);
     }
 
-    fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<String> {
-        return self.as_str_slice().strip_suffix(suffix).map(|v: StrSlice| v.to_string());
+    fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self] {
+        return self.as_str_slice().strip_suffix(suffix);
     }
 
     fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering {
@@ -1761,28 +1713,28 @@ pub trait AsStrSlice {
         return self.as_str_slice().char_at_byte(byte_index);
     }
 
-    fn trim_ascii_start(&self) -> String {
-        return self.as_str_slice().trim_ascii_start().to_string();
+    fn trim_ascii_start(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii_start();
     }
 
-    fn trim_ascii_end(&self) -> String {
-        return self.as_str_slice().trim_ascii_end().to_string();
+    fn trim_ascii_end(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii_end();
     }
 
-    fn trim_ascii(&self) -> String {
-        return self.as_str_slice().trim_ascii().to_string();
+    fn trim_ascii(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii();
     }
 
-    fn trim_start(&self) -> String {
-        return self.as_str_slice().trim_start().to_string();
+    fn trim_start(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_start();
     }
 
-    fn trim_end(&self) -> String {
-        return self.as_str_slice().trim_end().to_string();
+    fn trim_end(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_end();
     }
 
-    fn trim(&self) -> String {
-        return self.as_str_slice().trim().to_string();
+    fn trim(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim();
     }
 
     fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self] {

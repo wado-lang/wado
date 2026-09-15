@@ -135,7 +135,7 @@ fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     if url.len() == 0 {
         return null;
     }
-    return Option::Some(LinkReferenceDef { label: label.trim(), url, title });
+    return Option::Some(LinkReferenceDef { label: label.trim().to_string(), url, title });
 }
 
 // --- front matter ---
@@ -145,16 +145,16 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
         return null;
     }
     let first = lines[0].trim_end();
-    let [k, delim] = match first {
-        "---" => [FrontMatterKind::Yaml, "---"],
-        "+++" => [FrontMatterKind::Toml, "+++"],
-        _ => {
-            return null;
-        },
+    let [k, delim] = if first.eq_str("---") {
+        [FrontMatterKind::Yaml, "---"]
+    } else if first.eq_str("+++") {
+        [FrontMatterKind::Toml, "+++"]
+    } else {
+        return null;
     };
     let mut body_lines: List<String> = [];
     for let mut i = 1; i < lines.len(); i += 1 {
-        if lines[i].trim_end() == delim {
+        if lines[i].trim_end().eq_str(delim) {
             return Option::Some([
                 FrontMatterNode { kind: k, body: body_lines.join("\n") },
                 i + 1,
@@ -192,7 +192,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, i, end);
-            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end()));
+            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
             i = block_end;
             continue;
         }
@@ -379,7 +379,7 @@ fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
     if run < 3 {
         return null;
     }
-    let info = slice_chars(chars, p, len).trim();
+    let info = slice_chars(chars, p, len).trim().to_string();
     if ch == '`' && info.contains("`") {
         return null;
     }
@@ -460,7 +460,7 @@ fn strip_atx_closing<S: AsStrSlice>(s: S) -> String {
         return "";
     }
     if chars[e - 1] matches { ' ' | '\t' } {
-        return slice_chars(&chars, 0, e).trim();
+        return slice_chars(&chars, 0, e).trim().to_string();
     }
     return s.to_string();
 }
@@ -855,7 +855,7 @@ fn split_row<S: AsStrSlice>(line: S) -> List<String> {
             continue;
         }
         if c == '|' {
-            cells.push(cur.trim());
+            cells.push(cur.trim().to_string());
             cur = String::new();
             k += 1;
             continue;
@@ -863,7 +863,7 @@ fn split_row<S: AsStrSlice>(line: S) -> List<String> {
         cur.push(c);
         k += 1;
     }
-    cells.push(cur.trim());
+    cells.push(cur.trim().to_string());
     return cells;
 }
 

@@ -589,7 +589,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
             Option::Some([
                 Node::ShortcutLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
-                    label: raw_label.trim(),
+                    label: raw_label.trim().to_string(),
                 }), close + 1,
             ]);
         },
@@ -689,7 +689,7 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
             Option::Some([
                 Node::ReferenceLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
-                    label: raw_label.trim(),
+                    label: raw_label.trim().to_string(),
                 }), second_close + 1,
             ]);
         },
@@ -725,13 +725,13 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
         let raw_label = if inner.trim().len() == 0 { alt } else { inner };
         return match ref_table_get(refs, &raw_label) {
             Some(_) => Option::Some([
-                Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim() }), second_close + 1,
+                Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim().to_string() }), second_close + 1,
             ]),
             None => null,
         };
     }
     return match ref_table_get(refs, &alt) {
-        Some(_) => Option::Some([Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim() }), close + 1]),
+        Some(_) => Option::Some([Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim().to_string() }), close + 1]),
         None => null,
     };
 }
