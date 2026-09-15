@@ -17,8 +17,9 @@ use crate::token::Span;
 use super::arena_query::block_contains_loop;
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, build_copy_bindings, check_conjuncts, eliminate_condition,
-    induction_entry, node_modifies, opaque_local, panic_guard_check, parse_break_guard_head,
-    parse_cmp, parse_var_offset, peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
+    induction_entry, negated_operand, node_modifies, opaque_local, panic_guard_check,
+    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
+    stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -185,7 +186,7 @@ fn parse_loop_guard(
     loop_body: BlockId,
 ) -> Option<(usize, u32, u32, bool)> {
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
-    let inner = peel_not(engine, binds, cond)?;
+    let inner = negated_operand(engine, binds, cond)?;
     let (var, off, bound, op) = parse_cmp(engine, binds, inner)?;
     if off != 0 {
         return None;
@@ -216,27 +217,6 @@ fn parse_loop_guard(
         | NirBinaryOp::RefNotEq => return None,
     };
     Some((guard_idx, var, h, guard_le))
-}
-
-/// Peel a logical `!` in either representation, returning the inner operand.
-fn peel_not(engine: &Engine, binds: &Binds, op: Operand) -> Option<Operand> {
-    match resolve(engine, binds, op) {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Not,
-                expr,
-            } => Some(*expr),
-            _ => None,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Unary {
-                op: NirUnaryOp::Not,
-                operand,
-                ..
-            } => Some(Operand::Value(*operand)),
-            _ => None,
-        },
-    }
 }
 
 /// A versionable in-body check over the guard variable.
@@ -314,7 +294,12 @@ fn parse_versionable_check(
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
 fn parse_raw_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
-    match peel_capture_block(engine, binds, op) {
+    read_local(engine, peel_capture_block(engine, binds, op))
+}
+
+/// The local a direct read names, in either operand form.
+fn read_local(engine: &Engine, op: Operand) -> Option<u32> {
+    match op {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Local { index, .. } => Some(*index),
             _ => None,
@@ -480,7 +465,7 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         if check.bound != plan.check_bound || !is_pure_operand(engine.body, check.cond) {
             continue;
         }
-        constify_check_temp(engine, check.cond, plan.var, fast_body);
+        constify_check_temp(engine, binds, check.cond, plan.var, fast_body);
         eliminate_condition(engine, check.holder, check.cond);
     }
 }
@@ -490,21 +475,18 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
 /// evaluates to (`!c` panics ⇒ `c` is `true`), deleting the per-iteration
 /// compare. Overwritten only when the initializer structurally *is* that
 /// comparison, a function-scoped slot being re-bindable.
-fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: BlockId) {
-    let Operand::Expr(ce) = cond else {
+fn constify_check_temp(
+    engine: &mut Engine,
+    binds: &Binds,
+    cond: Operand,
+    var: u32,
+    fast_body: BlockId,
+) {
+    let negated = negated_operand(engine, binds, cond);
+    let Some(temp) = read_local(engine, negated.unwrap_or(cond)) else {
         return;
     };
-    let (temp, konst) = match &engine.body.exprs[ce].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Not,
-            expr,
-        } => match expr.as_expr().map(|e| &engine.body.exprs[e].kind) {
-            Some(ExprKind::Local { index, .. }) => (*index, true),
-            _ => return,
-        },
-        ExprKind::Local { index, .. } => (*index, false),
-        _ => return,
-    };
+    let konst = negated.is_some();
     // Find the temp's comparison `let` inside the fast clone and overwrite it.
     let mut stack = vec![NodeRef::Block(fast_body)];
     while let Some(n) = stack.pop() {
@@ -543,33 +525,21 @@ fn is_check_comparison(engine: &Engine, value: Operand, var: u32) -> bool {
             NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
         )
     };
+    let reads_var = |op| read_local(engine, op) == Some(var);
     match value {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
             ExprKind::Binary { left, op, right } => {
-                is_relational(*op)
-                    && (operand_reads_local(engine, *left, var)
-                        || operand_reads_local(engine, *right, var))
+                is_relational(*op) && (reads_var(*left) || reads_var(*right))
             }
             _ => false,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
             ValueKind::Binary { op, lhs, rhs, .. } => {
                 is_relational(*op)
-                    && (opaque_local(engine, *lhs) == Some(var)
-                        || opaque_local(engine, *rhs) == Some(var))
+                    && (reads_var(Operand::Value(*lhs)) || reads_var(Operand::Value(*rhs)))
             }
             _ => false,
         },
-    }
-}
-
-/// Whether `op` is a direct read of local `var`, in either operand form.
-fn operand_reads_local(engine: &Engine, op: Operand, var: u32) -> bool {
-    match op {
-        Operand::Expr(e) => {
-            matches!(&engine.body.exprs[e].kind, ExprKind::Local { index, .. } if *index == var)
-        }
-        Operand::Value(v) => opaque_local(engine, v) == Some(var),
     }
 }
 

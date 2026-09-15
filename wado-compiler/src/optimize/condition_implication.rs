@@ -599,7 +599,7 @@ pub(super) fn ge_check_operands(
 /// where source wrote `!(a && b)`. Returns `x`. A non-boolean `i == 0` also
 /// parses here, and dead-ends in the caller that tries to read `i` as a
 /// comparison — the recursion, not a type, is what rejects it.
-fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> Option<Operand> {
+pub(super) fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> Option<Operand> {
     match resolve(engine, binds, cond) {
         Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
             ExprKind::Unary {
@@ -756,32 +756,9 @@ fn cmp_parts(
 
 /// The `(left, right)` of a strict `left < right`, skeleton or promoted.
 fn lt_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, Operand)> {
-    match resolve(engine, binds, op) {
-        Operand::Expr(ie) => {
-            if let ExprKind::Binary {
-                left,
-                op: NirBinaryOp::Lt,
-                right,
-            } = &engine.body.exprs[ie].kind
-            {
-                Some((*left, *right))
-            } else {
-                None
-            }
-        }
-        Operand::Value(v) => {
-            if let ValueKind::Binary {
-                op: NirBinaryOp::Lt,
-                lhs,
-                rhs,
-                ..
-            } = engine.body.values.kind(v)
-            {
-                Some((Operand::Value(*lhs), Operand::Value(*rhs)))
-            } else {
-                None
-            }
-        }
+    match cmp_parts(engine, binds, op)? {
+        (left, NirBinaryOp::Lt, right) => Some((left, right)),
+        _ => None,
     }
 }
 
@@ -926,17 +903,10 @@ fn structural_loop_guard(
         return false;
     };
     let stmts = engine.body.blocks[loop_body].stmts.clone();
-    let Some(ge) = gcond.as_expr() else {
+    let Some(inner) = negated_operand(engine, binds, gcond) else {
         return false;
     };
-    let ExprKind::Unary {
-        op: NirUnaryOp::Not,
-        expr: inner,
-    } = &engine.body.exprs[ge].kind
-    else {
-        return false;
-    };
-    let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, *inner) else {
+    let Some((var, goff, bound, gop)) = parse_cmp(engine, binds, inner) else {
         return false;
     };
     // Walk the statements after the guard in order, eliminating dominated checks
