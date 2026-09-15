@@ -975,45 +975,34 @@ fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
 arity(&tri);             // ..P comes from `Tri::Items`
 ```
 
-### Reference Storage
+### Reference Escape
 
 See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
-Functions that store reference parameters must declare `stores[...]`:
+Nothing to declare. Every referent is GC-managed, so a reference cannot dangle,
+and the compiler reads from the body what each call does with its reference
+parameters:
 
 ```wado
-struct Container {
-    data: &Data,
+struct Container { data: &Data }
+
+fn store_data(data: &Data) -> Container {
+    return Container { data };          // leaves with the result
 }
 
-// Function that stores a reference parameter — must declare stores
-fn store_data(data: &Data) -> Container with stores[data] {
-    return Container { data };
-}
-
-// Function that uses but does NOT store a reference — no stores needed
 fn use_data(data: &Data) -> i32 {
-    return data.value;
+    return data.value;                  // nothing kept
 }
 
-// Combined with effects
-fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
-    println(`Storing: ${data.value}`);
-    return Container { data };
-}
-
-// `self` is a reference parameter like any other.
-impl Node {
-    fn wrap(&self) -> Ref with stores[self] {
-        return Ref { inner: self };
-    }
+fn register(data: &Data) {
+    REGISTRY.push(data);                // kept past the return
 }
 
 // A reference member read out of a parameter still names what the parameter
-// names, so returning it needs the declaration. A value member is copied.
+// names. A value member is copied and carries nothing.
 struct Cursor { chars: &Array<char>, pos: i32 }
 
-fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
+fn rebase(c: &Cursor, at: i32) -> Cursor {
     return Cursor { chars: c.chars, pos: at };
 }
 
@@ -1022,12 +1011,17 @@ fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
 }
 ```
 
-Rules:
+A declaration with no body — a builtin, a CM import, a `.wasm` / `.wat` asset
+import — states it instead, as an attribute. Both are an error on a function
+that has a body:
 
-- `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`, `self` included
-- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
-- In function type position, use positional indices: `fn(&Data) with stores[0]`
+```wado
+#[returns(part_of = arr)]                        // the result is part of `arr`
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+
+#[stores(value)]                                 // `value` is kept past the call
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+```
 
 ## Visibility
 
@@ -1377,7 +1371,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `stores`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `#[stores(...)]`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {

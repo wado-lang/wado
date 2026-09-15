@@ -349,15 +349,13 @@ Limitations — these require separate work and are pinned by `#![TODO]` fixture
 
 See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for the full handler design including syntax, resume semantics, MockCM, handler bundling, and testing patterns.
 
-### Relation to `stores`
+### Relation to Reference Escape
 
-The `stores` annotation shares syntax with effects:
-
-```wado
-fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
-    // ...
-}
-```
+Every `with` row member is an effect. What a function does with its reference
+parameters is not one and is never written in the row: an effect is authority a
+caller grants and a handler can intercept, while retaining a reference grants
+nothing and only tells the compiler what it may stop doing to an argument. See
+[WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ## Consequences
 

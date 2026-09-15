@@ -2334,7 +2334,8 @@ assert get() == 2;
 
 See [`docs/wep-2026-01-16-closure-implementation.md`](./wep-2026-01-16-closure-implementation.md) for the full design (`fn` vs `fn mut`, sub-typing, effect generics, iterator API integration).
 
-Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
+A closure capturing an outer binding is a separate concept from what a function
+does with its reference _parameters_. See [Reference Escape](#reference-escape).
 
 ### Function References
 
@@ -4958,7 +4959,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
 - a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
 - a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
-- a `stores` clause — nothing checks it on an operation, so it would constrain call sites on a promise the handler never makes;
+- a `#[stores(...)]` attribute — an operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes;
 - type parameters — dispatch holds one slot per operation, not one per instantiation.
 
 #### Colorless Async
@@ -5016,12 +5017,8 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }
 ```
 
-`stores[...]` is a row member, so it is parenthesized with the rest:
-
-```wado
-fn keep(data: &Data) -> Container with (Stdout, stores[data]) { ... }
-fn keep_only(data: &Data) -> Container with stores[data] { ... }
-```
+Every row member is an effect. Reference escape is not one, and is never written
+here — see [Reference Escape](#reference-escape).
 
 ### Importing Effect Operations
 
@@ -5159,48 +5156,31 @@ The spread expression is evaluated exactly once. For non-trivial expressions (e.
 let t = [..make_pair(), 30];
 ```
 
-### Reference Storage (`stores[...]`)
+### Reference Escape
 
-The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md) for the design rationale.
-
-#### Syntax
-
-`with stores[param1, param2, ...]`
+A reference parameter leaves a call two ways: the result aliases it, or the
+callee keeps it past the return. Neither is written down. Every referent is
+GC-managed, so neither can dangle, and the compiler reads both from the body.
+See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
 
 ```wado
-// Function that stores a reference parameter
-fn register(data: &Data) -> Handle with stores[data] {
-    registry.push(data);    // Stores the reference
+fn register(data: &Data) -> Handle {
+    registry.push(data);      // kept past the return
     return new_handle();
 }
 
-// Function that does NOT store (no stores declaration)
 fn process(data: &Data) -> Result {
-    return compute(*data);  // Uses but doesn't store
+    return compute(*data);    // nothing kept
 }
 
-// Combined with effects
-fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
-    println("Storing data...");
-    return register(data);
+fn rebase(c: &Cursor, at: i32) -> Cursor {
+    return Cursor { chars: c.chars, pos: at };  // leaves with the result
 }
 ```
 
-Every reference parameter follows this rule, `self` included. A method that
-returns or stores `self` declares `with stores[self]`.
-
-A reference member read out of a parameter still names what that parameter
-names, so returning it lets the caller's storage escape. Declare it:
-
-```wado
-struct Cursor { chars: &Array<char>, pos: i32 }
-
-fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
-    return Cursor { chars: c.chars, pos: at };
-}
-```
-
-A value member is copied, so nothing of the parameter escapes with it:
+A reference member read out of a reference parameter still names what that
+parameter names, so it carries the parameter with it. A value member is copied
+and carries nothing:
 
 ```wado
 fn name_of(p: &Person) -> String {   // `name` is a `String`
@@ -5208,22 +5188,27 @@ fn name_of(p: &Person) -> String {   // `name` is a `String`
 }
 ```
 
-#### Naming Rationale
+A function type carries no escape information, so a call through one is read
+conservatively: every reference position may escape.
 
-The keyword is `stores` (not `captures`) because:
+#### `#[stores(...)]` and `#[returns(...)]`
 
-- "Capture" is established terminology for closures (`let f = || x + 1` captures `x`)
-- `stores` describes what the function _does_ with the reference—it stores it for later use
-- This avoids conflating two different concepts: closures capturing variables vs functions storing parameters
-
-Functor types can also declare stores (positional: 0 = first parameter):
+A declaration with no body — a `core:builtin` primitive, a Component Model
+import, a `.wasm` / `.wat` asset import — has no body to read, so it states its
+two facts as attributes. Both name parameters, and both are an error on a
+function that has a body:
 
 ```wado
-fn take_storing(f: fn(&Data) with stores[0]) { ... }
-fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
+#[returns(part_of = arr)]
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+
+#[stores(value)]
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
+`#[returns(owned)]` says the result is freshly allocated; `#[returns(part_of = p)]`
+says it is part of `p`. `#[stores(p, ...)]` names the parameters the call keeps
+beyond it. Silence is the conservative reading.
 
 ### Handlers
 

@@ -83,18 +83,18 @@ let b = move a;  // a is invalidated
 
 When a reference escapes, the referenced value is automatically heap-promoted. The compiler detects escape through these conditions:
 
-| Escape Condition                      | Example                                          |
-| ------------------------------------- | ------------------------------------------------ |
-| Passed to function with `stores[...]` | `store(&local)` where `store` has `stores[data]` |
-| Returned from function                | `return &local;`                                 |
-| Stored in global variable             | `GLOBAL = Some(&local);`                         |
-| Stored in struct field                | `Container { data: &local }`                     |
-| Captured by escaping closure          | `return` closure that uses `local`               |
+| Escape Condition                     | Example                                    |
+| ------------------------------------ | ------------------------------------------ |
+| Passed to a function that retains it | `store(&local)` where `store` keeps `data` |
+| Returned from function               | `return &local;`                           |
+| Stored in global variable            | `GLOBAL = Some(&local);`                   |
+| Stored in struct field               | `Container { data: &local }`               |
+| Captured by escaping closure         | `return` closure that uses `local`         |
 
 ```wado
 fn example() {
     let local = Data{};
-    let handle = store(&local);  // local promoted to heap (store has stores[])
+    let handle = store(&local);  // local promoted to heap
 }
 ```
 
@@ -112,70 +112,80 @@ fn example() {
 
 **Implementation note**: Wasm GC structs are semantically heap-allocated. However, the Wado compiler MAY represent non-escaping structs as Wasm locals (decomposed fields) instead of `struct.new`. This is a compiler optimization, not language semantics.
 
-### 3. The `stores[...]` Keyword for Reference Storage
+### 3. Two Escapes, Both Inferred
 
-Functions and functors that store references must declare this with `stores[...]`:
+A reference parameter leaves a call in two ways, and they are different claims:
 
-```wado
-// Function that stores a reference parameter
-fn store(data: &Data) -> Handle with stores[data] {
-    // can store `data`
-}
+- Borrow-out — the result aliases the parameter's storage. `StrSlice::sub`,
+  `List::as_slice`, `array_get_ref`. The caller already owns the referent, so
+  nothing outlives anything.
+- Retain — the reference reaches a global, or is written through a `&mut` the
+  caller still holds. `array_set`, `array_fill`.
 
-// Function that does NOT store (no stores declaration)
-fn process(data: &Data) -> Result {
-    // cannot store `data`, only use it
-}
-```
+Neither is a safety condition. §1 and §2 put every referent under the GC, so a
+reference that outlives its scope keeps its referent alive and there is nothing
+for a declaration to prevent. Both are optimizer inputs, and §5 lists what each
+one buys.
 
-Handing the reference back to the caller counts as storing it: the caller holds
-what the parameter names once the call returns. That covers a reference read out
-of the parameter, since it still names the parameter's storage. A value member is
-copied, so it carries nothing out. See [the spec](./spec.md#reference-storage).
+A body states both, so the compiler reads them from it rather than from a
+declaration. `lower::plan::value_copy::stores` is that reading: an
+interprocedural least fixpoint over the call graph, keeping retain in
+`StoresFacts::escapes` and borrow-out in `StoresFacts::into_result`, publishing
+the union to callers. Wado has no separate compilation — a published package
+ships its sources ([Provider Metadata](./wep-2026-07-26-provider-metadata.md)) — so the fixpoint always has
+every body it needs.
 
-**Syntax**: `with stores[param1, param2, ...]`
+A function with a body therefore declares nothing. There is no `stores` row on
+a function declaration, in a function type, or on a closure, and no obligation
+for a programmer to discharge.
 
-- Uses `[...]` (not `{...}`) to avoid ambiguity with function body
-- Familiar to C++ developers (lambda capture syntax)
-- `stores` is a **keyword**, not an effect interface
-- Only `stores` can use `[...]` syntax; regular effects cannot
+### 4. A Declaration Only Where There Is No Body
 
-**Naming Rationale**: The keyword is `stores` (not `captures`) because:
-
-- "Capture" is used in closure semantics (`let f = || x + 1` captures `x`)
-- `stores` describes what the function _does_ with the reference—it stores it
-- This avoids conflating two different concepts: closures capturing variables vs functions storing references
-
-### 4. Stores Rules
-
-| Declaration                    | Stores Behavior                             |
-| ------------------------------ | ------------------------------------------- |
-| Named function with `&T` param | Must declare `stores[param]` if storing     |
-| Closure using outer variable   | Closure captures inferred from usage        |
-| Functor type (`fn(...)`)       | Must declare `stores[0]` etc. if it stores  |
-| Functor value itself           | No stores needed (functors are value types) |
-
-**Note on functors**: In Wasm, functors are `funcref` values. Storing a functor itself (not its parameters) does not require `stores[...]` because functors have value semantics—they are copied when assigned or passed.
-
-**Named functions**:
+A body-less declaration is the exception: there is nothing to read, so it
+states its two facts itself. It states them as attributes, next to the
+`#[returns(...)]` that already carries borrow-out:
 
 ```wado
-fn store(data: &Data) -> Handle with stores[data] { ... }
-fn process(data: &Data) -> Result { ... }  // no stores = cannot store
+#[returns(part_of = arr)]
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+
+#[stores(value)]
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-**Closures**:
+`#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out;
+`#[stores(p, ...)]` states retain. Both name parameters rather than positions,
+and both report an argument that names none. Silence is the conservative
+reading of whichever consumer asks — for `#[returns]` that is "allocates",
+which elides copies.
 
-```wado
-// Closure captures inferred from usage
-let f = || { return local_var; };
-// Inferred type: fn() -> i32 (captures local_var)
-```
+Where each is accepted:
 
-A closure declares neither its effects nor its stores. The parser still reads a
-`with` row where one would go, and reports that the compiler does not carry it
-yet.
+| Declaration                                        | `#[stores]` / `#[returns]` |
+| -------------------------------------------------- | -------------------------- |
+| `core:builtin`, body-less                          | Yes                        |
+| CM component import, WASI, `.wasm` / `.wat` import | Yes                        |
+| Anything with a body                               | Error — the body states it |
 
+A program has no body-less function of its own to put these on — the one it can
+write is a [declared absence](./wep-2026-09-13-declared-absence.md), which
+reserves a name and is never called — so in practice the attributes belong to
+`core:builtin` and to imports. That is the sense in which §3 removes escape
+declaration from user code entirely, rather than making it optional.
+
+An attribute rather than a `with` row, because retention is not part of the
+function's type. Two declarations that differ only in what they retain are one
+type, and a call resolves against the declaration it names, never against a row
+carried by the type. That is what lets §3 drop the row from function types.
+
+It follows that an indirect call through a functor type carries no retention
+fact of its own. A `fn(&Data)` parameter says nothing about what the function
+behind it keeps, so a call through one must assume every reference position
+escapes. Recovering the precision takes knowing which functions reach the call;
+that is a gap below, not something the row bought back.
+
+A closure declares neither effects nor stores. The parser still reads a `with`
+row where one would go, and reports that the compiler does not carry it yet.
 That keyword is always the closure's row, whether it follows the parameter list
 or the return type. It never starts a handler expression, so a handler reaches
 the body through a block or a pair of parentheses:
@@ -185,35 +195,27 @@ let f = || (with Log => &mut sink do { Log::emit(`hi`); });
 let g = || { with Log => &mut sink do { Log::emit(`hi`); } };
 ```
 
-**Functor types**:
+Storing a functor value itself needs no declaration either way: functors are
+`funcref` values with value semantics, copied when assigned or passed.
 
-```wado
-// Must declare stores in type (positional: 0 = first parameter)
-fn take_storing(f: fn(&Data) with stores[0]) { ... }
-fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
-```
-
-The row is part of the function type's identity, mangled into the type's name.
-It orders the two types: a function storing nothing goes where one that stores
-is expected, never the reverse. Passing a storing function to `take_pure` is an
-error naming the position.
-
-### 5. What a Declared `stores` Buys
+### 5. What the Two Facts Buy
 
 Components running on GC hold a reference as a reference, so nothing is promoted
-to reach it. What the declaration buys is what the compiler may then stop doing
-to the argument, which each consumer reads for itself:
+to reach it. What the facts buy is what the compiler may then stop doing to the
+argument, which each consumer reads for itself:
 
 - `lower::plan::mut_ref_writeback` writes no `&mut` argument back at a call that
-  keeps it: the borrow outlives the call, so the call is no place to write it.
-- `lower::plan::value_copy::stores` runs the interprocedural fixpoint over the
-  declared positions. A local passed at a stored position is borrow-escaped and
-  cannot be moved out of.
-- `wir_optimize::const_forward` forwards no constant into a stored parameter.
-- `niri` runs no function that stores at compile time.
+  retains it: the borrow outlives the call, so the call is no place to write it.
+- `lower::plan::value_copy` reads the union. A local passed where the callee
+  retains it or hands it out is borrow-escaped and cannot be moved out of.
+- `wir_optimize::const_forward` forwards no constant into a retained parameter.
+- `niri` folds a call at compile time on what the body does, not on retention:
+  a compile-time evaluation keeps nothing past itself.
 
-The type checker reads it too. §4's functor rule makes the row part of the
-function type, so a caller sees it without reading the body.
+Keeping the two apart is what makes the second precise. An iterator holds a
+reference to what it walks, so reading both as one makes every `&List` parameter
+retained the moment a body iterates it, while a `collect()` that drops the
+iterator retains nothing.
 
 ### 6. Closures Capture by Reference
 
@@ -267,76 +269,75 @@ fn make_data() -> &Data {
 }
 ```
 
-The return type `&Data` from a function that creates the data means "heap-allocated, GC-managed reference." This is different from storing a parameter—no `stores[...]` declaration is needed because there's no parameter being stored. The compiler detects that `local` escapes via return and promotes it to heap.
+The return type `&Data` from a function that creates the data means "heap-allocated, GC-managed reference." The compiler detects that `local` escapes via return and promotes it to heap.
 
 #### Storing in Globals
 
-Allowed. The referenced value is promoted to heap:
+Allowed. The referenced value is promoted to heap, and the walk records `data`
+as retained:
 
 ```wado
 let mut GLOBAL: Option<&Data> = None;
 
-fn store_global(data: &Data) with stores[data] {
-    GLOBAL = Some(data);  // OK: data's source promoted to heap
+fn store_global(data: &Data) {
+    GLOBAL = Some(data);
 }
 ```
 
 #### Storing in Struct Fields
 
-Requires `stores[...]` declaration:
+Allowed. Whether the reference leaves with the result or lands somewhere the
+caller cannot see follows from where `Container` goes:
 
 ```wado
 struct Container {
     data: &Data,
 }
 
-fn make_container(data: &Data) -> Container with stores[data] {
-    return Container { data };  // Must declare stores
+fn make_container(data: &Data) -> Container {
+    return Container { data };
 }
 ```
 
 #### Storing Through Method Calls
 
-The method must declare `stores[...]`:
+A caller that hands its own reference parameter to a retaining callee retains it
+in turn, and the fixpoint carries that along the call graph:
 
 ```wado
 impl List<&Data> {
-    fn push(&mut self, item: &Data) with stores[item] {
-        // stores item
-    }
+    fn push(&mut self, item: &Data) { ... }
 }
 
-fn example(list: &mut List<&Data>, data: &Data) with stores[data] {
-    list.push(data);  // Caller must also declare stores
+fn example(list: &mut List<&Data>, data: &Data) {
+    list.push(data);  // `data` is retained here too
 }
 ```
 
 #### Generic Functions
 
-The compiler detects stores through type propagation:
+A pass-through keeps nothing of its own:
 
 ```wado
 fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
-    return f(x);  // apply doesn't store, just passes through
+    return f(x);
 }
-
-// If f's type is fn(&Data) -> R with stores[0],
-// compiler traces that x may be stored
 ```
 
-If a generic function stores its parameter without declaring `stores[...]`, the compiler detects this and reports an error.
+What `f` does with `x` is not visible in `f`'s type (§4), so a call through it
+assumes every reference position escapes.
 
 #### References to Primitives
 
 References to primitives (`&i32`, `&bool`, etc.) follow the same rules as references to structs:
 
 ```wado
-fn store_int(x: &i32) with stores[x] {
-    SAVED_INT = Some(x);  // OK: stores declared
+fn store_int(x: &i32) {
+    SAVED_INT = Some(x);  // retained
 }
 
 fn use_int(x: &i32) -> i32 {
-    return *x + 1;  // OK: no storage, no stores needed
+    return *x + 1;  // nothing kept
 }
 ```
 
@@ -361,13 +362,18 @@ Each closure's environment holds a reference to `x`. Because references alias, e
 
 ### 9. Component Model Boundaries
 
-The `stores[...]` mechanism only applies **within a Wado component**. External Wasm modules are protected by Component Model boundaries:
+Escape tracking is a within-component concern. A call that crosses a Component
+Model boundary copies, so it carries nothing of the caller's storage across:
 
-| Boundary                     | Reference Behavior            | `stores[...]` Needed? |
-| ---------------------------- | ----------------------------- | --------------------- |
-| Within Wado component        | GC references passed directly | Yes                   |
-| Wado builtins (wasm-bundled) | Controlled by Wado project    | Annotated correctly   |
-| External Wasm module (CM)    | Data copied at boundary       | No                    |
+| Boundary                     | Reference Behavior            | Where the fact comes from |
+| ---------------------------- | ----------------------------- | ------------------------- |
+| Within Wado component        | GC references passed directly | The body (§3)             |
+| Wado builtins (wasm-bundled) | Controlled by Wado project    | The attribute (§4)        |
+| External Wasm module (CM)    | Data copied at boundary       | The copy — nothing to say |
+
+A CM import is still a body-less declaration, so §4's attributes are accepted on
+one. Nothing under `lib/wasi/` needs them today, because the copy already
+answers; the attribute is there for an import whose lowering does not copy.
 
 **Why CM boundaries are safe**:
 
@@ -395,26 +401,32 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 
 ### Positive
 
-1. **Predictable value semantics**: No aliasing surprises with structs
-2. **Automatic heap promotion**: Programmer doesn't manage stack vs heap
-3. **Explicit store tracking**: `stores[...]` makes storage intent clear
-4. **Type-safe escaping**: Can't accidentally escape references without declaration
-5. **Go-like ergonomics**: Escape analysis is familiar pattern
-6. **C++-like syntax**: `stores[...]` familiar to C++ developers (lambda capture syntax)
-7. **Auto-capture by reference for closures**: captures share Wado's general reference-aliasing semantics, with `&T` / `&mut T` kind inferred per binding from body usage (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md)); no separate aliasing model needed for closures
-8. **CM boundaries protect external calls**: No annotation needed for cross-component calls
-9. **Clear terminology**: "stores" for function parameters, "captures" for closures
+1. Predictable value semantics: no aliasing surprises with structs.
+2. Automatic heap promotion: the programmer does not manage stack versus heap.
+3. Nothing to declare and nothing to get wrong: escape is a property of the
+   body, and the body is what the compiler reads.
+4. The two escapes stay apart, so neither consumer reads a fact meant for the
+   other (§5).
+5. Go-like ergonomics: escape analysis is a familiar pattern.
+6. Auto-capture by reference for closures: captures share Wado's general
+   reference-aliasing semantics, with `&T` / `&mut T` inferred per binding from
+   body usage (see [Closure Implementation](./wep-2026-01-16-closure-implementation.md));
+   no separate aliasing model is needed for closures.
+7. CM boundaries protect external calls: the copy answers, so no annotation is
+   needed for a cross-component call.
 
 ### Negative
 
-1. **Copy overhead**: Value semantics may cause unexpected copies for large structs
-   - **Mitigation**: Use `move` for large values, profiler will identify hotspots
-2. **Learning curve**: `stores[...]` is a new concept
-   - **Mitigation**: Clear error messages when stores declaration is missing
-3. **Verbose functor types**: `fn(&Data) with stores[0]` is long
-   - **Mitigation**: Type inference reduces explicit annotations
-4. **Different from Rust**: No lifetimes, different model
-   - **Mitigation**: Simpler model is easier to learn
+1. Copy overhead: value semantics may cause unexpected copies for large structs.
+   - Mitigation: use `move` for large values; the profiler identifies hotspots.
+2. A signature no longer says what a function retains, so a reader of a `pub`
+   API learns it from the body or not at all.
+   - Mitigation: none in the language. `wado doc` could render the inferred
+     fact, which is a gap below.
+3. An indirect call has no retention fact, so it assumes the worst (§4).
+   - Mitigation: none today; recovering it is a gap below.
+4. Different from Rust: no lifetimes, different model.
+   - Mitigation: the simpler model is easier to learn.
 
 ### Examples
 
@@ -428,25 +440,28 @@ let b = a;      // copy
 let c = move a; // move, `a` invalidated
 ```
 
-**Function with stores**:
+**Retention read from the body**:
 
 ```wado
-// Storing a functor: no stores needed (functors are value types)
-fn register_callback(cb: fn(&Event)) -> Id {
-    callbacks.push(cb);  // OK: cb is a funcref, copied by value
-    return new_id();
+fn register(data: &Data) -> Handle {
+    REGISTRY.push(data);   // retained: reaches a global
+    return new_handle();
 }
 
-// Functor that stores its parameter
-fn register_storing_callback(cb: fn(&Event) with stores[0]) -> Id {
-    // cb may store references passed to it
-    callbacks.push(cb);
-    return new_id();
+fn process(data: &Data) -> Result {
+    return compute(*data); // nothing kept
 }
 
-fn process_once(cb: fn(&Event)) {
-    cb(&event);  // uses but doesn't store
+fn view(s: &String) -> StrSlice {
+    return s.as_str_slice();  // handed out with the result, not retained
 }
+```
+
+**Retention declared where there is no body**:
+
+```wado
+#[stores(value)]
+pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 ```
 
 **Closure capture inference**:
@@ -460,42 +475,69 @@ fn create_adder(x: i32) -> fn(i32) -> i32 {
 **Mixed with effects**:
 
 ```wado
-fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
+fn store_and_log(data: &Data) -> Handle with Stdout {
     println("Storing data...");
     return create_handle(data);
 }
 ```
 
+## Roadmap
+
+1. [ ] Add `#[stores(p, ...)]`, accepted on a body-less declaration and reported
+       on one with a body. Done when `BuiltinDeclaration::stores` is fed from the
+       attribute and `array_set` / `array_fill` carry the same fact they carry
+       today.
+2. [ ] Snapshot the declarations of every body-less function at link, not only
+       `core:builtin`'s. Done when `record_builtin_declaration` keys on the
+       absence of a body, so a CM import or a `.wasm` / `.wat` asset import can
+       carry §4's attributes.
+3. [ ] Remove the `stores` row from the grammar, from function types, and from
+       the mangled function type name. Done when no `.wado` in the corpus parses
+       one and `fn_type_name_info` writes no stores member.
+4. [ ] Delete `check_stores_semantic` and what only it reaches — the oracle, the
+       return-provenance fixpoint, the escape walk, the type-reachability memo.
+       Done when `effect_check.rs` reports effects and default purity only, and
+       the fixtures asserting a stores diagnostic are gone with it. This closes
+       issues #2049 and #2050.
+5. [ ] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
+       3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
+       stops emitting them first — and 2 under `package-marl`. Done when no
+       `with` row in the corpus names `stores` and `mise run test-wado` passes.
+6. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
+       `declared_positions` reads `BuiltinDeclaration` and the `hands_out_result`
+       heuristic is gone, closing the "declared `stores` the walk does not
+       confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
+7. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
+       §5. Done when compile-time evaluation is decided by the body alone.
+8. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
+       READMEs carry the new numbers.
+
 ## Known gaps
 
-- [ ] Let a closure declare `with (Effect, stores[p])`, which §4 says it cannot.
-      Closing it means the elaborator checking the declared row against what the
-      body does, as it does for a named function, and the closure's functor type
-      carrying the row so a caller sees it.
+- [ ] An indirect call assumes every reference position escapes (§4). Closing it
+      takes knowing which functions can reach the call site;
+      `lower::plan::value_copy::funcset` is a borrow-keyed container today, not
+      that analysis.
 
-- [ ] Say which field a stored parameter is stored into. `stores[p]` records
-      that `p` outlives the call, not where it lands, and `array_copy(dst, _,
-      src, _, _)` is the case that needs the difference: for a reference `T` its
-      elements reach `dst` afterwards, so `src` escapes into a place the caller
-      may still hold.
-      Written with what exists, `with stores[src]` marks the whole reference
-      borrow-escaped at all twenty call sites. Fifteen are `Array<u8>`, where a
-      scalar element escapes nothing. The other five are the backing-array swap
-      in `List::grow` and its neighbours, which hand elements from an array they
-      then discard, so the declaration would cost the hottest paths in the
-      stdlib for a leak none of them has.
+- [ ] Say which place a retained parameter lands in. Retention records that `p`
+      outlives the call, not where it goes, and `array_copy(dst, _, src, _, _)`
+      is the case that needs the difference: for a reference `T` its elements
+      reach `dst` afterwards, so `src` escapes into a place the caller may still
+      hold. Read as plain retention it marks the whole reference borrow-escaped
+      at all twenty call sites. Fifteen are `Array<u8>`, where a scalar element
+      escapes nothing; the other five are the backing-array swap in `List::grow`
+      and its neighbours, which hand elements from an array they then discard, so
+      it would cost the hottest paths in the stdlib for a leak none of them has.
+      §4's attribute has room for the destination — `#[stores(src, into = dst)]`
+      — and nothing reads one.
 
-- [ ] Check the obligation in the standard library, which `is_user_authored`
-      exempts. 49 declarations are missing one today (issue #2049). Closing it
-      means annotating each and deleting the exemption.
+- [ ] Show the inferred facts. A reader of a `pub` signature can no longer see
+      what it retains, and neither `wado doc` nor `wado query hover` says.
+      Closing it means running the fixpoint early enough for the language
+      service, which today it is not: it runs at `lower::plan`.
 
-- [ ] Split the two relations the keyword names, or decide they are one (issue
-      #2050). "The caller holds it after the call" and "the callee keeps it past
-      the call" are different claims, and §5's three consumers each read the
-      declaration with only the second in mind.
-
-- [ ] Populate `NirFunction::stores_aliased_locals` from a `stores` call, or say
-      it is not that. Its doc reads "when inlining `fn f(x: &T) with stores[x]`
+- [ ] Populate `NirFunction::stores_aliased_locals` from a retaining call, or say
+      it is not that. Its doc reads "when inlining a function that stores `x`
       with argument `&local`, `local` is added here", and no writer does that:
       `sroa` adds the aliases it mints, `inline`, `cold_outline` and `dae` carry
       and renumber what is already there. Either the field is fed only by SROA
@@ -535,23 +577,20 @@ fn format_float(value: f64) -> String {
 
 This keeps the core language clean while providing escape hatch for low-level FFI.
 
-## Theoretical Relationship: Stores and Effects
+## Retention Is Not an Effect
 
-**Is storing an effect?**
+Traditional effect systems (I/O, State, Exception) treat an effect as what a
+function does. Retention is what it keeps, and in a capability-based reading the
+two look close: a retained reference can be mutated later, so tracking retention
+looks like tracking a potential effect.
 
-Traditional effect systems (I/O, State, Exception) treat effects as "what the function DOES." Storing is about "what the function RETAINS."
-
-However, in capability-based systems, storing is closely related to effects:
-
-- Storing enables future effects (stored reference can be mutated later)
-- Tracking stores is tracking _potential_ effects
-
-Wado treats `stores` as a **separate mechanism** from effects:
-
-- Effects (`with (Stdout, FileSystem)`) = authority to interact with external world
-- Stores (`with stores[data]`) = authority to retain references
-
-Both use the `with` keyword for consistency, but they are orthogonal concerns.
+Wado keeps them apart, and §3 and §4 are where the difference shows. An effect
+is authority a caller grants and a handler can intercept, so it belongs to the
+signature and the caller must see it. Retention grants nothing and intercepts
+nothing; it only tells the compiler what it may stop doing to an argument. So an
+effect is declared in the `with` row and is part of the function's type, while
+retention is read from the body — or, where there is none, stated as an
+attribute that the type does not carry.
 
 ## References
 

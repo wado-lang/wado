@@ -524,17 +524,23 @@ untouched even with the cloned array provably unread.
 
 ### Known gap: a declared `stores` the walk does not confirm
 
-`stores.rs` reads a `stores[p]` on a value-returning body as naming the result,
-which is what `iter()` and `as_slice()` do and what keeps a `collect()` that
-drops the iterator from pinning the list it walked. The reading is not derived:
-a body that instead puts the reference somewhere the walk cannot follow — a raw
-builtin, a `CmRawCall` — and returns a value is read as routing it to the
-result. What still covers it is not the analysis: the published answer is the
-union of both channels, so every direct caller stays conservative, and the
+`stores.rs` reads a declared `stores[p]` on a value-returning body as naming the
+result, which is what `iter()` and `as_slice()` do and what keeps a `collect()`
+that drops the iterator from pinning the list it walked. The reading is not
+derived: a body that instead puts the reference somewhere the walk cannot
+follow — a raw builtin, a `CmRawCall` — and returns a value is read as routing it
+to the result. What still covers it is not the analysis: the published answer is
+the union of both channels, so every direct caller stays conservative, and the
 frontend makes a caller handing on its own reference parameter declare
 `stores` in turn. A carried value that is neither — a reference inside an
 aggregate — passed to such a callee whose result the caller drops is the shape
 that would escape both.
+
+The gap is a declaration's, so it goes when bodied functions stop carrying one:
+[Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+leaves a declaration only where there is no body, and its roadmap seeds the walk
+from that alone. Until then the reading and the frontend obligation stand
+together.
 
 `carries` drops the same way at a projection whose type only _holds_ a
 reference — `w.h` where `Held { r: &Rep }` — since the arm keys on the
