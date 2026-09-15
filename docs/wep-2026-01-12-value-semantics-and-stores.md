@@ -112,7 +112,7 @@ fn example() {
 
 **Implementation note**: Wasm GC structs are semantically heap-allocated. However, the Wado compiler MAY represent non-escaping structs as Wasm locals (decomposed fields) instead of `struct.new`. This is a compiler optimization, not language semantics.
 
-### 3. Two Escapes, Both Inferred
+### 3. Escape Is Inferred, Never Declared
 
 A reference parameter leaves a call in two ways, and they are different claims:
 
@@ -129,39 +129,57 @@ one buys.
 
 A body states both, so the compiler reads them from it rather than from a
 declaration. `lower::plan::value_copy::stores` is that reading: an
-interprocedural least fixpoint over the call graph, keeping retain in
-`StoresFacts::escapes` and borrow-out in `StoresFacts::into_result`, publishing
-the union to callers. Wado has no separate compilation — a published package
-ships its sources ([Provider Metadata](./wep-2026-07-26-provider-metadata.md)) — so the fixpoint always has
-every body it needs.
+interprocedural least fixpoint over the call graph, publishing the union to
+callers. Wado has no separate compilation — a published package ships its
+sources ([Provider Metadata](./wep-2026-07-26-provider-metadata.md)) — so the
+fixpoint always has every body it needs.
 
-A function with a body therefore declares nothing. There is no `stores` row on
-a function declaration, in a function type, or on a closure, and no obligation
-for a programmer to discharge.
+A fact is one of three, by where the reference lands:
+
+| Channel       | Where it lands                     | Example                    |
+| ------------- | ---------------------------------- | -------------------------- |
+| `escapes`     | Somewhere the caller cannot see    | a global                   |
+| `into_result` | The return value — borrow-out      | `List::as_slice`           |
+| `into_param`  | A named parameter the caller holds | `array_copy`, `List::push` |
+
+Retain is two channels rather than one because a destination the caller can name
+bounds the retention: a reference put into a parameter the caller owns lives as
+long as that parameter, while one that reaches a global is bounded by nothing.
+
+`into_param` is what `into = dst` states, and it is a channel of the walk rather
+than a reading of an attribute: a body that puts a reference into one of its own
+parameters lands there too. Without that, the fact would stop at the one
+declaration carrying it — `array_copy` would be precise while `List::push`,
+`List::extend` and `String::push_str`, the same shape with a body, stayed at
+`escapes`, and the precision would be lost one call up.
+
+A function with a body therefore declares nothing. There is no escape row on a
+function declaration, in a function type, or on a closure, and no obligation for
+a programmer to discharge.
 
 ### 4. A Declaration Only Where There Is No Body
 
-A body-less declaration is the exception: there is nothing to read, so it
-states its two facts itself. It states them as attributes, next to the
-`#[returns(...)]` that already carries borrow-out:
+A body-less declaration is the exception: there is nothing to read, so it states
+its facts itself. It states them as attributes, next to the `#[returns(...)]`
+that already carries borrow-out:
 
 ```wado
 #[returns(part_of = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
-#[stores(value)]
+#[retain(value, into = arr)]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
 `#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out.
-`#[stores(...)]` states retain, and names one retained thing per attribute,
+`#[retain(...)]` states retain, and names one retained thing per attribute,
 repeated where there is more than one — so each carries its own destination
 without the attribute grammar growing a way to group them:
 
 ```wado
-#[stores(value, into = arr)]               // `value` itself, landing in `arr`
-#[stores(elements_of = src, into = dst)]   // `src`'s elements, landing in `dst`
-#[stores(data)]                            // `data` itself, destination unknown
+#[retain(value, into = arr)]               // `value` itself, landing in `arr`
+#[retain(elements_of = src, into = dst)]   // `src`'s elements, landing in `dst`
+#[retain(data)]                            // `data` itself, destination unknown
 ```
 
 A bare name is the parameter as a whole and `elements_of = p` is that
@@ -176,7 +194,7 @@ Silence is the conservative reading of whichever consumer asks — for
 
 Where each is accepted:
 
-| Declaration                                        | `#[stores]` / `#[returns]`   |
+| Declaration                                        | `#[retain]` / `#[returns]`   |
 | -------------------------------------------------- | ---------------------------- |
 | `core:builtin`, body-less                          | Yes                          |
 | CM component import, WASI, `.wasm` / `.wat` import | Yes                          |
@@ -223,8 +241,9 @@ type, nothing is checked at coercion, and retention leaves the mangled type
 name. The precision it recovers is per type rather than per call site, which is
 a gap below.
 
-A closure declares neither effects nor stores. The parser still reads a `with`
-row where one would go, and reports that the compiler does not carry it yet.
+A closure declares no effects, and no more than a named function does about what
+it retains. The parser still reads a `with` row where one would go, and reports
+that the compiler does not carry it yet.
 That keyword is always the closure's row, whether it follows the parameter list
 or the return type. It never starts a handler expression, so a handler reaches
 the body through a block or a pair of parentheses:
@@ -237,7 +256,7 @@ let g = || { with Log => &mut sink do { Log::emit(`hi`); } };
 Storing a functor value itself needs no declaration either way: functors are
 `funcref` values with value semantics, copied when assigned or passed.
 
-### 5. What the Two Facts Buy
+### 5. What the Facts Buy
 
 Components running on GC hold a reference as a reference, so nothing is promoted
 to reach it. What the facts buy is what the compiler may then stop doing to the
@@ -251,10 +270,13 @@ argument, which each consumer reads for itself:
 - `niri` folds a call at compile time on what the body does, not on retention:
   a compile-time evaluation keeps nothing past itself.
 
-Keeping the two apart is what makes the second precise. An iterator holds a
-reference to what it walks, so reading both as one makes every `&List` parameter
-retained the moment a body iterates it, while a `collect()` that drops the
-iterator retains nothing.
+Keeping the channels apart is what makes each precise. An iterator holds a
+reference to what it walks, so folding `into_result` into `escapes` makes every
+`&List` parameter retained the moment a body iterates it, while a `collect()`
+that drops the iterator retains nothing. Folding `into_param` in costs the same
+way: a reference put into a parameter the caller owns is bounded by that
+parameter's extent, and reading it as "somewhere the caller cannot see" throws
+the bound away.
 
 ### 6. Closures Capture by Reference
 
@@ -289,7 +311,9 @@ The closure value itself follows Wado value semantics: deep-copied on assignment
 - Aliasing through `&mut` captures is consistent with Wado's general rule that references are the only aliasing types.
 - Escape tracking for closures reuses the existing escape-analysis machinery — if a returned closure captures `&local`, the local is heap-promoted by the same rules that govern any escaping reference.
 
-Note: Closures use "capture" terminology; the `stores[...]` keyword is for functions that store reference _parameters_ passed to them. These are separate mechanisms.
+Note: closures use "capture" terminology for the outer bindings they name.
+Retention is about the reference _parameters_ a call is handed. These are
+separate mechanisms.
 
 ### 7. Heap Promotion of Referents Captured by Closures (Non-Normative)
 
@@ -434,7 +458,7 @@ fn caller() {
 
 The external component receives a **copy**, not a GC reference. Even if it "stores" the data, it stores its own copy—the original `local` is unaffected.
 
-**Consequence**: `stores[...]` only needs to track escapes within Wado code. Cross-component calls are automatically safe.
+**Consequence**: escape tracking only needs to reach within Wado code. Cross-component calls are automatically safe.
 
 ## Consequences
 
@@ -458,10 +482,11 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
 
 1. Copy overhead: value semantics may cause unexpected copies for large structs.
    - Mitigation: use `move` for large values; the profiler identifies hotspots.
-2. A signature no longer says what a function retains, so a reader of a `pub`
-   API learns it from the body or not at all.
-   - Mitigation: none in the language. `wado doc` could render the inferred
-     fact, which is a gap below.
+2. A bodied function's signature no longer says what it retains, so a reader of
+   a `pub` API learns it from the body or not at all.
+   - Mitigation: partial. Roadmap item 13 surfaces the attributes a body-less
+     declaration carries, which is every declaration that states anything;
+     nothing renders the inferred fact for a bodied one.
 3. An indirect call is answered per functor type, not per call site (§4), so one
    retaining function value coarsens every call through the same type.
    - Mitigation: seventeen signatures in the corpus take a functor with a
@@ -502,7 +527,7 @@ fn view(s: &String) -> StrSlice {
 **Retention declared where there is no body**:
 
 ```wado
-#[stores(value)]
+#[retain(value)]
 pub fn array_fill<T>(arr: &mut Array<T>, offset: i32, value: T, len: i32);
 ```
 
@@ -525,10 +550,10 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
 
 ## Roadmap
 
-1. [ ] Add `#[stores(p, ...)]`, accepted on a body-less declaration and reported
-       on one with a body. Done when `BuiltinDeclaration::stores` is fed from the
-       attribute and `array_set` / `array_fill` carry the same fact they carry
-       today.
+1. [ ] Add `#[retain(...)]`, accepted on a body-less declaration and reported on
+       one with a body or on a trait requirement (§4). Done when
+       `BuiltinDeclaration` is fed from the attribute and `array_set` /
+       `array_fill` carry the same fact they carry today.
 2. [ ] Snapshot the declarations of every body-less function at link, not only
        `core:builtin`'s. Done when `record_builtin_declaration` keys on the
        absence of a body, so a CM import or a `.wasm` / `.wat` asset import can
@@ -572,22 +597,27 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
 10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
         §5. Done when compile-time evaluation is decided by the body alone.
-11. [ ] Say which place a retained parameter lands in, and whether what lands is
-        the parameter or its elements (§4). Retention alone records that `p`
-        outlives the call, not where it goes, and `array_copy(dst, _, src, _, _)`
-        is the case that needs both: `src`'s elements reach `dst` afterwards, so
-        plain retention marks the whole reference borrow-escaped at all twenty
-        call sites. Fifteen are `Array<u8>`, where a scalar element escapes
-        nothing; the other five are the backing-array swap in `List::grow` and
-        its neighbours, which hand elements out of an array they then discard.
-        Done when `array_copy` carries `elements_of` and `into`, the fifteen
-        scalar sites stop paying for it, and a caller reasons about `dst`'s
-        extent instead of assuming the worst.
-12. [ ] Show the inferred facts, which no signature states any more. Done when
-        `wado query hover` and `wado doc` say what a function retains and hands
-        out — which needs the facts in the language service, where only the
-        frontend runs today.
-13. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
+11. [ ] Add `into_param` as the walk's third channel (§3), fed by `into = q` on a
+        declaration and by a body that puts a reference into one of its own
+        parameters. Done when `StoresFacts` carries retained parameter to
+        destination parameters, the fixpoint propagates it, and `List::push` —
+        which has a body — reaches it without an attribute.
+12. [ ] Say which place a retained parameter lands in, and whether what lands is
+        the parameter or its elements (§4). `array_copy(dst, _, src, _, _)` is
+        the case that needs both: `src`'s elements reach `dst` afterwards, so a
+        destinationless retention marks the whole reference borrow-escaped at all
+        twenty call sites. Fifteen are `Array<u8>`, where a scalar element
+        escapes nothing; the other five are the backing-array swap in
+        `List::grow` and its neighbours, which hand elements out of an array they
+        then discard. Done when `array_copy` carries `elements_of` and `into`,
+        the fifteen scalar sites stop paying for it, and a caller reasons about
+        `dst`'s extent instead of assuming the worst.
+13. [ ] Surface every attribute a declaration carries in `wado query hover` and
+        `wado doc`, with no per-attribute allowlist — `#[retain]` and
+        `#[returns]` reach a reader because attributes do, not because these two
+        were singled out. Done when a body-less declaration's attributes appear
+        in both, and adding an attribute needs no change to either.
+14. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
         READMEs carry the new numbers.
 
 ## Known gaps

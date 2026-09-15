@@ -4959,7 +4959,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
 - a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
 - a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
-- a `#[stores(...)]` attribute — an operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes;
+- a `#[retain(...)]` attribute — an operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes;
 - type parameters — dispatch holds one slot per operation, not one per instantiation.
 
 #### Colorless Async
@@ -5191,24 +5191,35 @@ fn name_of(p: &Person) -> String {   // `name` is a `String`
 A function type carries no escape information, so a call through one is read
 conservatively: every reference position may escape.
 
-#### `#[stores(...)]` and `#[returns(...)]`
+#### `#[retain(...)]` and `#[returns(...)]`
 
 A declaration with no body — a `core:builtin` primitive, a Component Model
 import, a `.wasm` / `.wat` asset import — has no body to read, so it states its
-two facts as attributes. Both name parameters, and both are an error on a
-function that has a body:
+facts as attributes:
 
 ```wado
 #[returns(part_of = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
-#[stores(value)]
+#[retain(value, into = arr)]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+
+#[retain(elements_of = src, into = dst)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
 
 `#[returns(owned)]` says the result is freshly allocated; `#[returns(part_of = p)]`
-says it is part of `p`. `#[stores(p, ...)]` names the parameters the call keeps
-beyond it. Silence is the conservative reading.
+says it is part of `p`.
+
+`#[retain(...)]` names one retained thing and repeats where there is more than
+one, so each carries its own destination. A bare name is the parameter itself
+and `elements_of = p` is that parameter's elements; `into = q` names the
+parameter it lands in, and without it the destination is unknown. Silence is the
+conservative reading.
+
+Both attributes are an error on a function with a body, and on a `trait` or
+`interface` method requirement: a call to one is statically dispatched to an
+impl that has a body, so the impl states it.
 
 ### Handlers
 

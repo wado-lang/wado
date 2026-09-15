@@ -1012,16 +1012,23 @@ fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
 ```
 
 A declaration with no body — a builtin, a CM import, a `.wasm` / `.wat` asset
-import — states it instead, as an attribute. Both are an error on a function
-that has a body:
+import — states it instead, as an attribute:
 
 ```wado
-#[returns(part_of = arr)]                        // the result is part of `arr`
+#[returns(part_of = arr)]              // the result is part of `arr`
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
-#[stores(value)]                                 // `value` is kept past the call
+#[retain(value, into = arr)]           // `value` itself lands in `arr`
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+
+#[retain(elements_of = src, into = dst)]   // `src`'s elements land in `dst`
+pub fn array_copy<T>(dst: &mut Array<T>, d: i32, src: &Array<T>, s: i32, len: i32);
 ```
+
+`#[retain]` names one retained thing and repeats for more; `into = q` is the
+parameter it lands in, absent meaning unknown. Both attributes are an error on a
+function with a body, and on a trait method requirement — an impl's body states
+it.
 
 ## Visibility
 
@@ -1371,7 +1378,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `#[stores(...)]`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `#[retain(...)]`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {
