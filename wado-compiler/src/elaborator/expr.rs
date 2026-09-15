@@ -378,7 +378,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_static_method_call(static_call, ctx)
             }
             Expr::FieldAccess(field_access) => self.resolve_field_access(field_access, ctx),
-            Expr::Index(index) => self.resolve_index(index, ctx, IndexAccess::Value),
+            Expr::Index(index) => {
+                let access = if ctx.mut_place_subscripts.contains(&index.id) {
+                    IndexAccess::Mutable
+                } else {
+                    IndexAccess::Value
+                };
+                self.resolve_index(index, ctx, access)
+            }
             Expr::Block(block) => {
                 // Walk the block for its facts; reify rebuilds the `Block`
                 // node. Read the overall type from `expression_types` (AST

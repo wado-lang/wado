@@ -109,7 +109,7 @@ paramList
 
 param
     : selfParam
-    | 'mut'? identifier ':' typeRef ('=' expression)?
+    | attribute* 'mut'? identifier ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -238,8 +238,10 @@ implPubMember
     | 'fn' funcSig
     ;
 
+// The attributes sit here rather than in `genericParam`, whose subtree the
+// highlighter paints as types outright. An attribute holds plain names.
 genericParams
-    : '<' genericParam (',' genericParam)* '>'
+    : '<' attribute* genericParam (',' attribute* genericParam)* '>'
     ;
 
 genericParam
@@ -346,7 +348,7 @@ labeledBlock
     ;
 
 letStatement
-    : 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
+    : attribute* 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
     ;
 
 assertStatement
@@ -604,7 +606,7 @@ closureParamList
     ;
 
 closureParam
-    : 'mut'? ('_' | IDENTIFIER) closureParamType?
+    : attribute* 'mut'? ('_' | IDENTIFIER) closureParamType?
     ;
 
 closureParamType

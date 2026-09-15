@@ -121,6 +121,43 @@ When the user might have intended to reassign instead of redeclare:
   hint: shadowing is allowed when the new value is derived from the old one (e.g., `let x = x + 1`)
 ```
 
+### The `shadowed_name` Lint
+
+The rule above governs one shape, the same-scope `let`. Every other binder may
+take a name that already reaches a known symbol. That is legal and warns under
+`shadowed_name`: a parameter, a closure parameter, a type parameter, a pattern
+binding, and a local item.
+
+The symbol may be of any kind and may sit in any namespace: a function, a
+global, a type, a trait, a case, an outer binding. A reader who meets the name
+has to work out which one it means, and that is the same work whichever
+namespace answers.
+
+The exemption is the derivation this WEP sanctions, read off the binder's own
+source rather than off the `let` keyword. A binder whose source already mentions
+the name it binds rebuilds that binding instead of hiding it. This holds for
+`let`, `if let` and `while let`, at any scope:
+
+```wado
+let x = x + 1;                    // exempt, at the same scope or an inner one
+if let Some(x) = x { ... }        // exempt: `x` comes from `x`
+while let Some(x) = x { ... }     // exempt
+if let Some(x) = y { ... }        // warns: `x` comes from something else
+```
+
+A match arm is not exempt. Its scrutinee stays in scope across every arm, so
+`match x { Some(x) => … }` gives the name one meaning in one arm and another
+next to it. That is the confusion the lint names.
+
+`#[allow(shadowed_name)]` on the binder waives it, and
+`#![allow(shadowed_name)]` waives it for a module. A condition and a match arm
+take no attribute, so a rename is the only answer to a warning there.
+
+A bare identifier pattern is exempt where the name reaches a case or a
+`global`. Such a pattern matches by value rather than binding, and the
+scrutinee's type decides which it does. The resolution pass has no types, so it
+leaves the name alone.
+
 ## Alternatives Considered
 
 ### Allow All Same-Scope Shadowing (Rust-style)

@@ -152,6 +152,14 @@ let z: i64 = 100;       // with type annotation
 let x = x + 1;          // OK: derives from old x
 let x = transform(x);   // OK: derives from old x
 // let x = 2;           // Error: does not reference old x
+
+// Any other binder taking a name that already reaches a known symbol warns
+// (`shadowed_name`). Waive it per binder or per module with `allow`.
+let println = 1;                                  // warns: shadows the function
+#[allow(shadowed_name)] let eprintln = 1;         // deliberate, no warning
+if let Some(x) = x { }                            // exempt: derives from old x
+if let Some(x) = y { }                            // warns: derives from y
+match x { Some(x) => ... }                        // warns: x means two things here
 ```
 
 ## Global Variables

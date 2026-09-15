@@ -894,6 +894,15 @@ fn convert_dep(name: &str, raw: RawDependency) -> Result<Dependency, ManifestErr
     })
 }
 
+/// The URL a registry alias names. An omitted alias means `default`.
+#[must_use]
+pub fn registry_url<'a>(
+    registries: &'a IndexMap<String, String>,
+    alias: Option<&str>,
+) -> Option<&'a String> {
+    registries.get(alias.unwrap_or("default"))
+}
+
 // Normalized rendering for `deps_hash`: an omitted registry renders as `default`.
 fn source_fingerprint(source: &DependencySource) -> String {
     match source {

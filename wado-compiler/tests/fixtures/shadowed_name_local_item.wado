@@ -1,0 +1,27 @@
+// A local item shadows a module-level one deliberately, and the language keeps
+// that. It is still worth saying, because the two declarations read alike at
+// the use site.
+
+struct Size {
+    width: i32,
+}
+
+fn area() -> i32 {
+    struct Size {
+        width: i32,
+        height: i32,
+    }
+
+    let s = Size { width: 3, height: 4 };
+    return s.width * s.height;
+}
+
+export fn run() {
+    assert area() == 12;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_contains": ["`Size` shadows"]
+}

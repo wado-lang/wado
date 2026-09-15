@@ -896,6 +896,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_param(&mut self, param: &Param) {
+        self.emit_inline_attrs(&param.attrs);
         if let Some(self_form) = self_param_shorthand(param) {
             self.output.push_str(self_form);
             return;
@@ -1004,6 +1005,7 @@ impl<'a> Unparser<'a> {
             return;
         }
         self.delimited("<", ">", params, |s, param| {
+            s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
             s.output.push_str(&param.name);
@@ -1393,7 +1395,13 @@ impl<'a> Unparser<'a> {
                 Spacing::KeepBlankLines,
             );
             self.emit_leading_for(stmt_id);
-            self.emit_blank_lines_to(stmt_span.line);
+            // A local item's attributes sit above its keyword, and
+            // `unparse_item` anchors on them. Anchoring here on the keyword
+            // instead would count the attribute lines as a gap and open one.
+            self.emit_blank_lines_to(match stmt {
+                Stmt::Item(item) => get_item_first_line(item),
+                _ => stmt_span.line,
+            });
             self.unparse_stmt(stmt);
             self.emit_trailing_for(stmt_id);
             self.last_source_line = stmt_span.end_line();
@@ -1448,7 +1456,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_let(&mut self, l: &LetStmt) {
-        self.write_indent();
+        self.emit_outer_attrs(&l.attrs);
         // `reactive` is a prefix keyword that must precede `let` (the parser
         // accepts `reactive let ...`, not `let reactive ...`), so emit it
         // before the `let` keyword to keep the formatted output reparseable.
@@ -2553,6 +2561,7 @@ impl<'a> Unparser<'a> {
 
     fn unparse_closure(&mut self, c: &ClosureExpr) {
         self.delimited("|", "| ", &c.params, |s, param| {
+            s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_mut, "mut ");
             s.output.push_str(&param.name);
             if let Some(ty) = &param.ty {
@@ -2761,6 +2770,15 @@ impl<'a> Unparser<'a> {
         f(self);
         if cond {
             self.output.push(')');
+        }
+    }
+
+    /// Emit each attribute on a binder written mid-line — a parameter, a type
+    /// parameter — followed by a space.
+    fn emit_inline_attrs(&mut self, attrs: &[Attribute]) {
+        for attr in attrs {
+            self.unparse_attribute(attr);
+            self.output.push(' ');
         }
     }
 

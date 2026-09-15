@@ -1,0 +1,38 @@
+// `o[i][j] = v` reaches its element through `o[i]`, so that subscript is a
+// place the write passes through and needs `IndexRefMut`. A container offering
+// only `IndexRef` hands out a shared `&Output`, which is the write the direct
+// target `o[i] = v` is already refused.
+
+struct Inner {
+    n: i32,
+}
+
+struct Outer {
+    inner: Inner,
+}
+
+impl IndexAssign<i32> for Inner {
+    type Output = i32;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.n = value;
+    }
+}
+
+impl IndexRef<i32> for Outer {
+    type Output = Inner;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.inner;
+    }
+}
+
+export fn run() {
+    let mut o = Outer { inner: Inner { n: 1 } };
+    o[0][1] = 7;
+}
+
+__DATA__
+{
+    "compile_error": "cannot assign through immutable reference"
+}

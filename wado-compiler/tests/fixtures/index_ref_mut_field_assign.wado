@@ -1,0 +1,86 @@
+// `h[0].n = v` writes through the element, so the subscript under it is a
+// `&mut` place and takes `IndexRefMut` — the same route `&mut h[0]` and a
+// `&mut self` method on `h[0]` already take. It resolved as a value read
+// instead, so a container offering only `IndexRefMut` reported no `Index` impl
+// at all. Every subscript on the path is such a place, not just the innermost:
+// `o[0][0].n = v` writes through both.
+
+struct Cell {
+    n: i32,
+}
+
+struct Holder<T> {
+    item: T,
+    cell: Cell,
+}
+
+impl<T> IndexRefMut<i32> for Holder<T> {
+    type Output = Cell;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.cell;
+    }
+}
+
+struct Outer {
+    inner: Holder<i32>,
+}
+
+impl IndexRefMut<i32> for Outer {
+    type Output = Holder<i32>;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.inner;
+    }
+}
+
+test "a field assignment through a subscript writes into the element" {
+    let mut h = Holder { item: 1, cell: Cell { n: 1 } };
+    h[0].n = 7;
+    assert h.cell.n == 7;
+    h[0].n += 3;
+    assert h.cell.n == 10;
+}
+
+test "a chain of subscripts writes through every one of them" {
+    let mut o = Outer { inner: Holder { item: 1, cell: Cell { n: 1 } } };
+    o[0][0].n = 7;
+    assert o.inner.cell.n == 7;
+    o[0][0].n += 3;
+    assert o.inner.cell.n == 10;
+}
+
+struct Slot {
+    v: i32,
+}
+
+struct Bag {
+    slot: Slot,
+}
+
+impl IndexAssign<i32> for Slot {
+    type Output = i32;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.v = value;
+    }
+}
+
+impl IndexRefMut<i32> for Bag {
+    type Output = Slot;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.slot;
+    }
+}
+
+// The `IndexAssign` target resolves its own receiver, so the subscript under
+// that receiver is a `&mut` place before the receiver is walked.
+test "an IndexAssign target reaches its receiver through IndexRefMut" {
+    let mut b = Bag { slot: Slot { v: 1 } };
+    b[0][1] = 7;
+    assert b.slot.v == 7;
+}
+
+__DATA__
+{"test": {}}

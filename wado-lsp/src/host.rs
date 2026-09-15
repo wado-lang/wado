@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 use wado_compiler::{CompilerHost, DependencyIndex, Diagnostic, Severity, SourceError};
 
 pub mod discovery;
+pub mod prefetch;
 
 use discovery::{DependencyEntry, absolutize};
 
