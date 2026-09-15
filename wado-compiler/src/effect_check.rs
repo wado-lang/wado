@@ -118,7 +118,7 @@ pub enum Impurity {
     Dispatch(String),
 }
 
-/// Error from purity checking
+/// One impurity, at the position that must not hold it.
 #[derive(Debug, Clone)]
 pub struct PurityError {
     pub context: PureContext,
