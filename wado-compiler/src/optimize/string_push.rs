@@ -23,7 +23,8 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 
 pub(super) struct Ctx {
     /// The `push_str` instances a fused run absorbs: those appending a whole
-    /// `String`, since `write_str_at` copies from byte 0 and a view starts past it.
+    /// `String` or a reference to one, since `write_str_at` copies from byte 0
+    /// and a view starts past it.
     push_str_ids: IndexSet<FuncId>,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: FuncId,
@@ -59,7 +60,9 @@ impl Ctx {
             let [_receiver, text] = f.params.as_slice() else {
                 return false;
             };
-            type_table.is_string(text.type_id)
+            type_table
+                .try_peel_refs(text.type_id)
+                .is_some_and(|inner| type_table.is_string(inner))
         };
         for func_rc in &project.functions {
             let f = func_rc.borrow();

@@ -64,7 +64,7 @@ impl Highlight for PlainHighlight {
 }
 
 /// Render Markdown to HTML with plain (escaped) code blocks.
-export fn render<S: AsStrSlice>(source: S) -> RenderResult {
+export fn render(source: String) -> RenderResult {
     let mut h = PlainHighlight {};
     return with &mut h do {
         render_document(source);
@@ -74,7 +74,7 @@ export fn render<S: AsStrSlice>(source: S) -> RenderResult {
 /// Render Markdown to HTML, delegating each code block to a `Highlight`
 /// handler — the extension point a consumer satisfies with a syntax
 /// highlighter (e.g. a `provider` supplying `wado-lang:gale-highlight-wado`).
-export fn render_highlighted<S: AsStrSlice>(source: S) -> RenderResult with Highlight {
+export fn render_highlighted(source: String) -> RenderResult with Highlight {
     return render_document(source);
 }
 

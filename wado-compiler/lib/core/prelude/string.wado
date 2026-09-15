@@ -1821,6 +1821,26 @@ impl AsStrSlice for String {
     fn internal_append_to(&self, out: &mut String) {
         out.internal_push_string(self);
     }
+
+    /// The byte accessors read the backing array directly. The default builds a
+    /// view per call, which a scan over a generic body's text pays per byte.
+    fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    fn is_empty(&self) -> bool {
+        return self.used == 0;
+    }
+
+    fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.repr[index];
+    }
+
+    /// Already a `String`: the default would rebuild one byte by byte, which a
+    /// per-field wire name pays on every serialization.
+    fn to_string(&self) -> String {
+        return *self;
+    }
 }
 
 impl<T: AsStrSlice> AsStrSlice for &T {
@@ -1830,6 +1850,32 @@ impl<T: AsStrSlice> AsStrSlice for &T {
 
     fn internal_append_to(&self, out: &mut String) {
         (*self).internal_append_to(out);
+    }
+
+    /// Forwarded, so a reference reaches `T`'s own overrides instead of the
+    /// defaults, which answer through a view built on every call.
+    fn len(&self) -> i32 {
+        return (*self).len();
+    }
+
+    fn is_empty(&self) -> bool {
+        return (*self).is_empty();
+    }
+
+    fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return (*self).get_byte_unchecked(index);
+    }
+
+    fn is_char_boundary(&self, index: i32) -> bool {
+        return (*self).is_char_boundary(index);
+    }
+
+    fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
+        return (*self).char_at_byte_unchecked(byte_index);
+    }
+
+    fn to_string(&self) -> String {
+        return (*self).to_string();
     }
 }
 

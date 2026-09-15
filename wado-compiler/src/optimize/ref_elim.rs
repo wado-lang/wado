@@ -145,6 +145,9 @@ impl Rule for RefElimRule {
                 expr: inner,
             } => {
                 let inner = *inner;
+                if cancel_borrow(engine, id, inner) {
+                    return true;
+                }
                 // A promoted `Operand::Value` inner names no local — no rewrite.
                 let Some(inner_e) = inner.as_expr() else {
                     return false;
@@ -164,6 +167,29 @@ impl Rule for RefElimRule {
             _ => false,
         }
     }
+}
+
+/// `*(&e)` / `*(&mut e)` → `e`: borrowing a place and dereferencing it names
+/// that same place. A generic body reaching a `&T` through the blanket
+/// `impl<T: …> for &T` inlines to this shape, and the rebinding it leaves inside
+/// a loop hides the invariant read LICM would otherwise hoist.
+fn cancel_borrow(engine: &mut Engine, id: ExprId, inner: Operand) -> bool {
+    let Some(inner_e) = inner.as_expr() else {
+        return false;
+    };
+    let ExprKind::Unary {
+        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+        expr: borrowed,
+    } = &engine.body.exprs[inner_e].kind
+    else {
+        return false;
+    };
+    let Some(borrowed_e) = borrowed.as_expr() else {
+        return false;
+    };
+    let kind = std::mem::replace(&mut engine.body.exprs[borrowed_e].kind, ExprKind::Dead);
+    engine.replace_expr_kind(id, kind);
+    true
 }
 
 /// Resolve the unresolved referent `e` into a fresh engine-allocated subtree,
