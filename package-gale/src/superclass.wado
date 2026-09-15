@@ -325,7 +325,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
             ')' | ']' | '}' => depth -= 1,
             ',' => {
                 if depth == 0 {
-                    out.push(collect_range(chars, arg_start, i).trim());
+                    out.push(collect_range(chars, arg_start, i).trim().to_string());
                     arg_start = i + 1;
                 }
             },
@@ -336,7 +336,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     }
     let last = collect_range(chars, arg_start, close - 1).trim();
     if !last.is_empty() || !out.is_empty() {
-        out.push(last);
+        out.push(last.to_string());
     }
     return out;
 }

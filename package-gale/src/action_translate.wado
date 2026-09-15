@@ -713,10 +713,10 @@ pub fn field_in_vals(d: &AttrDecl) -> bool {
 /// the type has no known Wado default (a non-Wado name like `int` is skipped).
 pub fn wado_type_default<S: AsStrSlice>(type_text: S) -> Option<String> {
     let t = type_text.trim();
-    if t == "bool" {
+    if t.eq_str("bool") {
         return Option::Some("false");
     }
-    if t == "String" {
+    if t.eq_str("String") {
         return Option::Some("\"\"");
     }
     if t.starts_with("List") || t.starts_with("[") {

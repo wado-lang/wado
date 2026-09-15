@@ -377,7 +377,7 @@ fn emit_print(
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
 pub fn map_java_type<S: AsStrSlice>(ty: S) -> Option<String> {
-    return match ty.trim() {
+    return match ty.trim().to_string() {
         "int" => Option::Some("i32"),
         "short" => Option::Some("i16"),
         "byte" => Option::Some("i8"),

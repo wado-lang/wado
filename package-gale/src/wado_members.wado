@@ -162,7 +162,7 @@ fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberF
     if init.is_empty() {
         return Result::Err(`gale: Wado @members: field '${name}' has an empty initializer`);
     }
-    fields.push(MemberField { name, ty, init });
+    fields.push(MemberField { name, ty: ty.to_string(), init: init.to_string() });
     return Result::Ok(if init_end < n { init_end + 1 } else { n });
 }
 
