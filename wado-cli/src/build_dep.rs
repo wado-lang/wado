@@ -15,7 +15,8 @@ use std::path::Path;
 
 use indexmap::IndexMap;
 
-use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest};
+use wado_manifest::dependency::registry_lock_id;
+use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest, registry_url};
 
 use crate::cache::{generator_path, write_atomic};
 use crate::oci;
@@ -84,7 +85,7 @@ impl ResolvedBuildDep {
     #[must_use]
     pub fn locked_package(&self, integrity: String) -> LockedPackage {
         LockedPackage {
-            id: format!("registry+{}/{}", self.registry_url, self.coordinate),
+            id: registry_lock_id(&self.registry_url, &self.coordinate),
             version: self.version.clone(),
             resolved_ref: None,
             integrity: Some(integrity),
@@ -118,9 +119,7 @@ pub async fn resolve_build_dependencies(
         else {
             continue;
         };
-        let registry_url = manifest
-            .registries
-            .get(registry.as_deref().unwrap_or("default"))
+        let registry_url = registry_url(&manifest.registries, registry.as_deref())
             .cloned()
             .ok_or_else(|| {
                 format!("build-dependency `{key}`: no registry in scope (set [registries].default)")

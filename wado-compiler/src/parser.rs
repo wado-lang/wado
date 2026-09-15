@@ -457,30 +457,59 @@ impl Parser {
     /// falls through to the "probably a missing `}`" recovery. `flags` and `type`
     /// are contextual, so only `flags <IDENT>` / `type <IDENT>` count.
     fn at_local_item_start(&self) -> bool {
-        match self.peek_kind() {
+        self.local_item_starts_at(0)
+    }
+
+    /// [`Self::at_local_item_start`] asked `at` tokens ahead, so the same
+    /// question answers the same way past a run of attributes.
+    fn local_item_starts_at(&self, at: usize) -> bool {
+        match self.peek_nth(at).kind {
             T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
-            T::Flags | T::Type => matches!(self.peek_nth(1).kind, TokenKind::Ident(_)),
+            T::Flags | T::Type => matches!(self.peek_nth(at + 1).kind, TokenKind::Ident(_)),
             _ => false,
         }
     }
 
-    /// True when the current token is a visibility modifier (`pub`/
-    /// `internal`/`export`) immediately followed by a local-item-start
-    /// keyword — e.g. `pub struct` or `internal type Foo` in block/statement
-    /// position. A local item is always private (see `at_local_item_start`'s
-    /// doc), so this shape is never valid; it exists only so
-    /// `parse_stmt_in_block` can give it a clear, dedicated parse error
-    /// instead of silently falling through to the generic "expected `}`"
-    /// recovery.
-    fn at_visibility_prefixed_local_item_start(&self) -> bool {
-        if !matches!(self.peek_kind(), T::Pub | T::Internal | T::Export) {
-            return false;
+    /// True at the `#` of an attribute (`#[…]`), as opposed to a compile-time
+    /// literal (`#file`).
+    fn at_attribute(&self) -> bool {
+        self.check(&TokenKind::Hash) && matches!(self.peek_nth(1).kind, TokenKind::LBracket)
+    }
+
+    /// How many tokens the attributes at the current position span, so a
+    /// statement can dispatch on what they decorate without consuming them.
+    fn attributes_end(&self) -> usize {
+        let mut at = 0;
+        while matches!(self.peek_nth(at).kind, TokenKind::Hash)
+            && matches!(self.peek_nth(at + 1).kind, TokenKind::LBracket)
+        {
+            at += 1;
+            let mut depth = 0;
+            loop {
+                match self.peek_nth(at).kind {
+                    TokenKind::LBracket => depth += 1,
+                    TokenKind::RBracket => depth -= 1,
+                    TokenKind::Eof => return at,
+                    _ => {}
+                }
+                at += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
         }
-        match self.peek_nth(1).kind {
-            T::Struct | T::Enum | T::Variant | T::Impl | T::Trait => true,
-            T::Flags | T::Type => matches!(self.peek_nth(2).kind, TokenKind::Ident(_)),
-            _ => false,
-        }
+        at
+    }
+
+    /// True `at` tokens ahead of a visibility modifier (`pub`/`internal`/
+    /// `export`) followed by a local-item-start keyword — `pub struct` or
+    /// `internal type Foo` in block position. A local item is always private
+    /// (see `at_local_item_start`'s doc), so this shape is never valid; it
+    /// exists only so `parse_stmt_in_block` can give it a dedicated error
+    /// instead of the generic "expected `}`" recovery.
+    fn visibility_prefixed_local_item_starts_at(&self, at: usize) -> bool {
+        matches!(self.peek_nth(at).kind, T::Pub | T::Internal | T::Export)
+            && self.local_item_starts_at(at + 1)
     }
 
     /// True when the current token can begin a top-level item. This is the sync
@@ -1868,6 +1897,7 @@ impl Parser {
 
     fn parse_param(&mut self) -> ParseResult<Param> {
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
         let start_span = self.peek().span;
 
         // Handle &self and &mut self for methods
@@ -1900,6 +1930,7 @@ impl Parser {
                 };
                 return Ok(Param {
                     id,
+                    attrs,
                     name: "self".to_string(),
                     name_span: self_span,
                     ty,
@@ -1945,6 +1976,7 @@ impl Parser {
             });
             return Ok(Param {
                 id,
+                attrs,
                 name: "self".to_string(),
                 name_span: self_span,
                 ty: self_type,
@@ -1978,6 +2010,7 @@ impl Parser {
         // parameter that stops short loses everything past that point.
         Ok(Param {
             id,
+            attrs,
             name,
             name_span,
             ty,
@@ -2122,7 +2155,7 @@ impl Parser {
         while !self.check(&TokenKind::RBrace)
             && !self.is_at_end()
             && (self.at_local_item_start()
-                || self.at_visibility_prefixed_local_item_start()
+                || self.visibility_prefixed_local_item_starts_at(0)
                 || !self.at_hard_item_keyword())
         {
             // A lone `;` is an empty statement: no node, nothing to record.
@@ -2184,19 +2217,21 @@ impl Parser {
             return self.parse_task_return_stmt();
         }
 
-        // A local type/impl declaration (`struct`/`enum`/`variant`/`flags`/
-        // `type`/`impl`/`trait`). `parse_item` handles the full item grammar;
-        // no visibility prefix precedes the keyword here (see
-        // `at_local_item_start`'s doc), so the parsed item is always private.
-        if self.at_local_item_start() {
-            return self.parse_item().map(|item| Stmt::Item(Box::new(item)));
-        }
+        // Attributes decorate what follows them, so every test below looks past
+        // them at the statement they belong to. Without that a `#` in statement
+        // position reads as a compile-time literal and the statement is a parse
+        // error, which would make `#[allow(...)]` unwritable on these binders.
+        let at = if self.at_attribute() {
+            self.attributes_end()
+        } else {
+            0
+        };
 
         // `pub struct`/`internal type Foo`/etc: give this shape a clear,
         // dedicated error instead of falling through to the generic
         // "expected `}`" the caller's recovery would otherwise report.
-        if self.at_visibility_prefixed_local_item_start() {
-            let span = self.peek().span;
+        if self.visibility_prefixed_local_item_starts_at(at) {
+            let span = self.peek_nth(at).span;
             return Err(self.error_at_span(
                 span,
                 "a local item cannot be `pub`, `internal`, or `export`; \
@@ -2204,8 +2239,19 @@ impl Parser {
             ));
         }
 
+        // A local type/impl declaration (`struct`/`enum`/`variant`/`flags`/
+        // `type`/`impl`/`trait`). `parse_item` handles the full item grammar;
+        // no visibility prefix precedes the keyword here (see
+        // `at_local_item_start`'s doc), so the parsed item is always private.
+        if self.local_item_starts_at(at) {
+            return self.parse_item().map(|item| Stmt::Item(Box::new(item)));
+        }
+
+        if matches!(self.peek_nth(at).kind, TokenKind::Let | TokenKind::Reactive) {
+            return self.parse_let_stmt();
+        }
+
         match self.peek_kind() {
-            TokenKind::Let | TokenKind::Reactive => self.parse_let_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),
@@ -2333,6 +2379,7 @@ impl Parser {
         // outermost-first parser (`parse_block`, `parse_function`,
         // `parse_match_arm`, …).
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
 
         let is_reactive = if self.check(&TokenKind::Reactive) {
             self.advance();
@@ -2399,6 +2446,7 @@ impl Parser {
 
         Ok(Stmt::Let(LetStmt {
             id,
+            attrs,
             pattern,
             name_span,
             is_mut,
@@ -4716,6 +4764,7 @@ impl Parser {
 
     fn parse_closure_param(&mut self) -> ParseResult<ClosureParam> {
         let id = self.alloc_ast_id();
+        let attrs = self.parse_attributes()?;
         let is_mut = if self.check(&TokenKind::Mut) {
             self.advance();
             true
@@ -4740,6 +4789,7 @@ impl Parser {
         };
         Ok(ClosureParam {
             id,
+            attrs,
             name,
             name_span,
             ty,
@@ -4994,6 +5044,7 @@ impl Parser {
         let mut params = Vec::new();
 
         while !self.pending_gt && !self.check(&TokenKind::Gt) && !self.is_at_end() {
+            let attrs = self.parse_attributes()?;
             let start_span = self.peek().span;
 
             // Parse effect parameter: `effect E`
@@ -5046,6 +5097,7 @@ impl Parser {
 
             params.push(GenericParam {
                 id: self.alloc_ast_id(),
+                attrs,
                 name,
                 name_span,
                 is_effect,
@@ -5772,6 +5824,7 @@ impl Parser {
                 if !type_params.iter().any(|p| p.name == param_name) {
                     type_params.push(GenericParam {
                         id: self.alloc_ast_id(),
+                        attrs: Vec::new(),
                         name: param_name.clone(),
                         name_span: param_name_span,
                         is_effect: false,

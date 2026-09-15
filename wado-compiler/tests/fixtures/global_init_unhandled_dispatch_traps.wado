@@ -1,0 +1,22 @@
+// A user-defined effect's operation is answered by an installed handler, and
+// traps where none is. A global initializer runs before the program installs
+// anything, so the dispatch compiles and traps at module init — the same
+// outcome a function body would give, rather than a rule of its own.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+global COUNTED: i32 = Counter::next();
+
+export fn run() with Stdout {
+    println(`${COUNTED}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["no handler installed for `Counter::next`"]
+}

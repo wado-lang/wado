@@ -2,13 +2,9 @@
 //! (Design B, Phase 1b). It runs on the LSP analysis result (no TIR), so a
 //! function with a missing effect is reported even when it is never called.
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::check_effects_semantic;
 use wado_compiler::semantics::semantics;
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// Effect violations as `"callee: missing_effect"` strings.
 fn violations(source: &str) -> Vec<String> {

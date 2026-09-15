@@ -16,6 +16,7 @@ use crate::compile::{
     maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
 use crate::discover;
 use crate::manifest::ProjectManifest;
 
@@ -51,7 +52,7 @@ async fn prepare_query(filename: &str) -> Result<PreparedQuery, CliExit> {
         manifest_pair.as_ref(),
         &base,
         &source,
-        false,
+        Acquisition::Analysis,
     )
     .await
     .map_err(CliExit::error)?;
@@ -226,7 +227,7 @@ async fn symbol_env(notation: &str, base: &str) -> Result<SymbolEnv, CliExit> {
         manifest_pair.as_ref(),
         &base_dir,
         "",
-        false,
+        Acquisition::Analysis,
     )
     .await
     .map_err(CliExit::error)?;

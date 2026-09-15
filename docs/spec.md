@@ -261,6 +261,42 @@ let x = 2;  // Error: cannot redeclare 'x' in the same scope
 let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not the outer variable
 ```
 
+#### The `shadowed_name` Lint
+
+A binder that takes a name already reaching a known symbol is legal and warns.
+Every binder counts: a `let`, a parameter, a closure parameter, a type
+parameter, a pattern binding, a local item. So does every kind of symbol, in
+any namespace: a function, a global, a type, a trait, a case, an outer binding.
+The exemption is the derivation above, since the language already sanctions it.
+
+```wado
+fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
+fn keep<i32>(v: i32) { }       // warns: `i32` shadows the builtin type of the same name
+let println = 1;               // warns: `println` shadows the function of the same name
+```
+
+Mark the binder `#[allow(shadowed_name)]` where the shadowing is deliberate, or
+the module `#![allow(shadowed_name)]`:
+
+```wado
+fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
+```
+
+A bare identifier pattern is exempt where the name reaches a case or a
+`global`. Such a pattern matches by value rather than binding, and the
+scrutinee's type decides which it does.
+
+The derivation is read off the binder's own source, not off the `let` keyword,
+and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
+`while let Some(x) = x` are all exempt; `if let Some(x) = y` warns. A match arm
+is not exempt. Its scrutinee stays in scope across every arm, so
+`match x { Some(x) => … }` gives one name two meanings side by side.
+
+A binder shadows only what is in scope where it is written. A name binds after
+the expression it binds from, and reaches only what the construct carries it to.
+So an `if let` binding is not in scope in the `else`, and the alternatives of an
+or-pattern bind one set of names rather than shadowing each other.
+
 ### Local Item Definitions
 
 `struct` and `type` (newtype) may be declared inside a function or method
@@ -317,7 +353,15 @@ global mut counter: i32 = 0;
 pub global VERSION: i32 = 1;
 ```
 
-Any type is supported. Any pure expression (no effects) can be used as an initializer.
+Any type is supported. Any pure expression (no effects) can be used as an
+initializer. An initializer runs at module initialization, with no handler
+installed for it and in an order it does not choose. It declares no `with`
+clause and has nowhere to declare one, so calling a function that declares an
+effect is an error, as is dispatching an operation backed by the host.
+
+A user-defined effect's operation is answered by an installed handler and traps
+where none is, in an initializer as in a function body, so an initializer may
+dispatch one. It may also install its own handler.
 
 #### Mutability
 

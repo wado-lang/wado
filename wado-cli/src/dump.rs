@@ -9,6 +9,7 @@ use crate::compile::{
     attach_manifest_and_component_deps, load_nearest_manifest, maybe_run_pipeline,
 };
 use crate::compiler_host::FilesystemCompilerHost;
+use crate::dep_component::Acquisition;
 use crate::knobs::{CompileKnobs, KnobOpt};
 
 pub struct DumpOptions {
@@ -334,7 +335,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         manifest_pair.as_ref(),
         &base_path,
         &source,
-        false,
+        Acquisition::Build,
     )
     .await
     .map_err(CliExit::error)?;

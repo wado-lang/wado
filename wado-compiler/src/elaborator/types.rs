@@ -2451,6 +2451,10 @@ pub(super) struct FunctionContext {
     /// re-resolving the node, so it is walked once (matching reify's
     /// `compound_overrides`). Empty outside `resolve_compound_assign`.
     pub(super) compound_hoist_types: IndexMap<AstId, TypeId>,
+    /// Subscripts an assignment target projects through (`h[0].n = v`). They
+    /// name a `&mut` place rather than a value read, so they take `IndexRefMut`
+    /// like `&mut h[0]` does. Empty outside an assignment target.
+    pub(super) mut_place_subscripts: IndexSet<AstId>,
     /// Local slots bound as the index of an enclosing variadic `for let [i, v]
     /// of t.enumerate()`. Such a binding is a compile-time constant once the
     /// loop is unrolled, so it is the one non-literal a pack-typed tuple
@@ -2510,6 +2514,7 @@ impl FunctionContext {
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
+            mut_place_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
         }
     }
@@ -2570,6 +2575,7 @@ impl FunctionContext {
             assert_capture_ctx: None,
             reify_assert_capture_ctx: None,
             compound_hoist_types: IndexMap::default(),
+            mut_place_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
         }
     }

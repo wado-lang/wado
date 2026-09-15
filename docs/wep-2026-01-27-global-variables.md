@@ -56,6 +56,56 @@ fn example() {
 }
 ```
 
+### An initializer performs no effect
+
+An initializer runs at module instantiation. Nothing is installed for it then,
+and it runs in dependency order rather than one the program wrote. It declares
+no `with` clause, and has nowhere to declare one, so it behaves as a function
+body that declares no effect: calling a function that declares one is a compile
+error. A default-value expression carries the same rule, and one checker answers
+for both positions, naming the position in its diagnostic.
+
+A closure literal's body is read where it is written, as it is inside a
+function: the `fn() with E` a global's annotation gives it grants its body
+nothing.
+
+An initializer may install its own handler. `with E => h do` answers the
+operations its body dispatches:
+
+```wado
+global COUNTED: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: Counter::next()
+    }
+    break hold: 0
+};
+```
+
+### A dispatch is not an effect the position holds
+
+A user-defined effect's operation is answered by an installed handler, and traps
+where none is (see [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md)).
+That is a runtime outcome rather than a demand on the position, and it is the
+same outcome in an initializer as in a function body, which is why an
+initializer may write the dispatch:
+
+```wado
+global COUNTED: i32 = Counter::next();   // compiles; traps at module init
+```
+
+The purity check would otherwise have to hold only for a dispatch written
+directly in the initializer: a signature carries no record that a function
+dispatches an operation, so the same dispatch one call away is invisible to it.
+A rule that holds for `Counter::next()` and not for `indirect()` is worse than
+no rule, and the runtime answer already covers both.
+
+An operation backed by the host, or by a component that reaches the host, is a
+different matter: it demands a capability the position must already hold, and an
+initializer holds none, so dispatching one is a compile error. A purely
+computational component's operation demands nothing, so an initializer may call
+it.
+
 ### What a constant expression can hold
 
 Wado targets Wasm 3.0, so the GC and extended-const instructions are available.
@@ -88,6 +138,29 @@ cannot evaluate, a value read out of mutable state, or a payload too large to
 inline as `array.new_fixed` — a long string literal lives in the data section
 and is materialized at run time, so no constant expression can denote it.
 
+Two steps put a value in the slot, and both finish before the module is emitted:
+reify classifies the initializer's syntax, at every optimization level, and a
+later classifier reads the lowered Wasm value and promotes back what the
+optimizer folded to a constant.
+
+### An initializer is a body, and a body is a function
+
+An initializer that needs to run code is a body: statements, locals, a
+`with … do`, calls to rewrite. Everything that walks bodies — template
+expansion, effect-dispatch desugaring, CM import binding, monomorphization —
+walks the module's functions. A body reachable any other way is a body those
+passes miss, and each miss is its own bug.
+
+So reify puts it there. A global whose initializer is not a Wasm constant gets
+`$init$<NAME>`, a parameterless function returning the declared value, and the
+global's slot holds the placeholder. A global carries no locals of its own, so
+it cannot hold a body at all. Lowering splices those functions into the module's
+initialization function in dependency order and drops them.
+
+What reify calls `Direct` stays direct. The Wasm slot can hold it at every phase
+after, because nothing on the way turns a literal into code, and lowering asserts
+that rather than trusting it. What reify defers is provisional.
+
 ### The decision is made on the value, not on the syntax
 
 Whether a global is direct is decided from what its initializer _evaluates to_,
@@ -99,20 +172,20 @@ is not a literal, but it evaluates to a sequence of constants, which is exactly
 an `array.new_fixed`. Deciding syntactically would defer it; deciding on the
 value does not.
 
-Deferral is therefore provisional: lowering defers anything that is not
-syntactically constant, and a single classifier later promotes back everything
-the optimizer reduced to a constant expression. It runs once the value is
-lowered to its Wasm shape, because that is where variant representation and
-non-null field wrapping are settled and the constant-instruction test is exact.
+So reify defers anything that is not syntactically constant, and a single
+classifier on the lowered Wasm value promotes back everything the optimizer
+reduced to a constant expression. That classifier settles it: it runs where
+variant representation and non-null field wrapping are settled and the
+constant-instruction test is exact.
 
 The cost of deciding there is that the normalized IR never learns the answer, so
 the compile-time interpreter cannot read a constant global's value — see the
 value-snapshot entry below.
 
-### The declared initializer is never replaced
+### A placeholder never passes for the declared value
 
-A global's recorded initializer is always the one the program declared. A
-deferred global carries its placeholder alongside, never instead.
+A deferred global holds a placeholder, and says so. Asking it for its declared
+value answers "assigned elsewhere", never the placeholder.
 
 This is the invariant the representation must preserve. Anything asking "what is
 this global's value" — constant folding, globalization, documentation — must get

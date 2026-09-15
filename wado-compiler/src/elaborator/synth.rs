@@ -513,7 +513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return ArgClass::Opaque(OpaqueReason::Unresolved);
         };
         let (prefix, suffix) = (&name[..pos], &name[pos + 2..]);
-        let owner = id.segments.len().checked_sub(2).map(|i| id.segments[i].id);
+        let owner = id.owner_segment().map(|seg| seg.id);
         if let Some(info) = self.lookup_variant_cases_at(owner, prefix) {
             let declared_at = info.defined_at;
             let generic = !info.type_params.is_empty();

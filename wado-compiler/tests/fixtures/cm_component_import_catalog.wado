@@ -96,3 +96,11 @@ test "nested containers round-trip" {
     assert CmCatalog::id_tuple_option([Option::Some(3), 4]) == [Option::Some(3), 4];
     assert CmCatalog::id_list_tuple_record([[Point { x: 1.0, y: 2.0 }, 9]]) == [[Point { x: 1.0, y: 2.0 }, 9]];
 }
+
+// A component operation is pure, so a global initializer may call one. The
+// import binding must reach the initializer as it reaches a function body.
+global CATALOG_ID: u32 = CmCatalog::id_u32(42);
+
+test "component call in a global initializer" {
+    assert CATALOG_ID == 42;
+}

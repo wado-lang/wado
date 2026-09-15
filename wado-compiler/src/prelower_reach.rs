@@ -10,7 +10,7 @@ use std::rc::Rc;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, is_type_bridge};
+use crate::name::{FunctionId, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -30,12 +30,14 @@ fn function_key(func: &TirFunction) -> FunctionId {
 
 /// The exports the emitted component keeps, matching `optimize::dce`'s entries,
 /// plus what a later phase may call without any TIR body naming it: a compiler
-/// item the compiler resolves itself, and a per-type synthesized bridge.
+/// item the compiler resolves itself, a per-type synthesized bridge, and a
+/// global initializer, which `lower` splices into `$initialize_module`.
 fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
         || func.compiler_item.is_some()
         || is_type_bridge(&func.name)
+        || global_init_target(&func.name).is_some()
 }
 
 /// What [`reachable`] found, against the population it walked.
@@ -48,9 +50,8 @@ pub(crate) struct Reached {
     named: IndexSet<FunctionId>,
 }
 
-/// Every function the program reaches from its roots, plus what a global
-/// initializer calls — reify emits every global, so its calls are live. Walks
-/// only the bodies it reaches, which is the work [`prune`] saves.
+/// Every function the program reaches from its roots. Walks only the bodies it
+/// reaches, which is the work [`prune`] saves.
 fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
     let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut work: Vec<FunctionId> = Vec::new();
@@ -62,10 +63,6 @@ fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
         }
         bodies.insert(key, func_rc);
     }
-    for global in &flat.globals {
-        work.extend(Callees::of_expr(global.init.slot_expr()));
-    }
-
     let mut reached: IndexSet<FunctionId> = IndexSet::default();
     while let Some(key) = work.pop() {
         if !reached.insert(key.clone()) {
@@ -178,12 +175,6 @@ impl Callees {
     fn of_body(body: &TirBlock) -> Vec<FunctionId> {
         let mut collector = Self::default();
         collector.walk_block(body);
-        collector.keys
-    }
-
-    fn of_expr(expr: &TirExpr) -> Vec<FunctionId> {
-        let mut collector = Self::default();
-        collector.visit_expr(expr);
         collector.keys
     }
 }

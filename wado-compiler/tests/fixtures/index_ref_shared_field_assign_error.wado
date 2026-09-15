@@ -1,0 +1,30 @@
+// A container offering only `IndexRef` hands out `&Output`, so a write through
+// the element is a write through a shared reference. The direct target
+// (`h[0] = v`) was refused; the projected one (`h[0].n = v`) took the same
+// `&Output` and wrote through it.
+
+struct Cell {
+    n: i32,
+}
+
+struct Holder {
+    cell: Cell,
+}
+
+impl IndexRef<i32> for Holder {
+    type Output = Cell;
+
+    fn index_ref(&self, _idx: i32) -> &Self::Output {
+        return &self.cell;
+    }
+}
+
+export fn run() {
+    let mut h = Holder { cell: Cell { n: 1 } };
+    h[0].n = 7;
+}
+
+__DATA__
+{
+    "compile_error": "cannot assign through immutable reference"
+}

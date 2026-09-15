@@ -1,0 +1,23 @@
+// A match arm binds for its own guard and body, so neither is a reference to
+// the binding outside the match. With no arm referencing it, the same-scope
+// `let` derives from nothing and the redeclaration is an error.
+
+use { println, Stdout } from "core:cli";
+
+fn shadowed(opt: &Option<i32>) -> i32 {
+    let total = 1;
+    let total = match *opt {
+        Some(total) => total,
+        None => 0,
+    };
+    return total;
+}
+
+export fn run() with Stdout {
+    println(`${shadowed(&Option::<i32>::Some(5))}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot redeclare 'total' in the same scope"
+}

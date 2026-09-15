@@ -156,6 +156,9 @@ pub enum Code {
     TestOnlyFunction,
     /// A global is reached only from `test` blocks, never from production.
     TestOnlyGlobal,
+    /// A binder takes a name that already reaches a declaration or an enclosing
+    /// binding.
+    ShadowedName,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -254,6 +257,7 @@ impl std::fmt::Display for Code {
             Code::DeadGlobal => "DEAD_GLOBAL",
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
+            Code::ShadowedName => "SHADOWED_NAME",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

@@ -3,12 +3,8 @@
 //! `Package::moved_local_spans`, so every last use lowered as a
 //! defensive `$value_copy$` the real compilation never emits.
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 const SOURCE: &str = r#"
 fn consume(xs: List<i32>) -> i32 {

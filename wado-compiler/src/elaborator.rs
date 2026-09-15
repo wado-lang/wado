@@ -1566,8 +1566,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resolve walk answered for. `None` for a bare name, which qualifies
     /// nothing, and for an owner that reaches no declaration.
     pub(crate) fn qualified_owner_decl(&self, ident: &ast::IdentExpr) -> Option<DefId> {
-        let owner = ident.segments.len().checked_sub(2)?;
-        self.tysys.resolutions.declared(ident.segments[owner].id)
+        self.tysys.resolutions.declared(ident.owner_segment()?.id)
     }
 
     /// Field info for the declaration a *written* struct name resolved to.

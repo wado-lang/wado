@@ -83,7 +83,8 @@ pub(crate) fn compute(
         // A file-level `#![allow(dead_code)]` waives the lint for every item in
         // the module — the idiom for test-helper files whose functions exist
         // only to back `test` blocks.
-        let module_allows_dead = inner_attrs_allow_dead_code(&module.inner_attributes);
+        let module_allows_dead =
+            ast::inner_attrs_allow(&module.inner_attributes, ast::lint::DEAD_CODE);
         for item in &module.items {
             match item {
                 Item::Function(func) => {
@@ -106,7 +107,7 @@ pub(crate) fn compute(
                     if user
                         && func.body.is_some()
                         && !module_allows_dead
-                        && !attrs_allow_dead_code(&func.attrs)
+                        && !ast::attrs_allow(&func.attrs, ast::lint::DEAD_CODE)
                     {
                         graph.report_candidates.push(key);
                     }
@@ -123,7 +124,10 @@ pub(crate) fn compute(
                     } else {
                         graph.seed_emit(key);
                     }
-                    if user && !module_allows_dead && !attrs_allow_dead_code(&global.attributes) {
+                    if user
+                        && !module_allows_dead
+                        && !ast::attrs_allow(&global.attributes, ast::lint::DEAD_CODE)
+                    {
                         graph.report_candidates.push(key);
                     }
                 }
@@ -1148,26 +1152,6 @@ impl CompilerNamed {
 /// `#[export]` marks a raw Wasm export — an export-boundary root.
 fn has_export_attr(func: &Function) -> bool {
     func.attrs.iter().any(|attr| attr.name == "export")
-}
-
-/// True if `args` name the `dead_code` lint, as in `allow(dead_code)`.
-fn args_name_dead_code(args: &[ast::AttrArg]) -> bool {
-    args.iter()
-        .any(|arg| matches!(arg, ast::AttrArg::Ident(name) if name == "dead_code"))
-}
-
-/// `#[allow(dead_code)]` on an item waives its unused / test-only lint.
-fn attrs_allow_dead_code(attrs: &[ast::Attribute]) -> bool {
-    attrs
-        .iter()
-        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
-}
-
-/// `#![allow(dead_code)]` at the top of a module waives the lint for every item.
-fn inner_attrs_allow_dead_code(attrs: &[ast::InnerAttribute]) -> bool {
-    attrs
-        .iter()
-        .any(|attr| attr.name == "allow" && args_name_dead_code(&attr.args))
 }
 
 #[cfg(test)]

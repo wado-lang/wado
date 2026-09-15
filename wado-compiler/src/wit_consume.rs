@@ -255,6 +255,7 @@ impl Builder {
                     let ty = self.map_type(resolve, p.ty, fq);
                     Param {
                         id: self.id(),
+                        attrs: Vec::new(),
                         name: p.name.to_snake_case(),
                         name_span: syn(),
                         ty,
@@ -339,6 +340,7 @@ impl Builder {
                 let ty = self.map_type(resolve, p.ty, "");
                 Param {
                     id: self.id(),
+                    attrs: Vec::new(),
                     name: p.name.to_snake_case(),
                     name_span: syn(),
                     ty,

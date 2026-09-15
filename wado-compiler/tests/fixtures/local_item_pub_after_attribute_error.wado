@@ -1,0 +1,13 @@
+// Attributes decorate what follows them, so the statement dispatch reads past
+// them before deciding what it is looking at. Reading only the `#` reported a
+// compile-time literal, hiding the real shape underneath.
+
+export fn run() {
+    #[allow(shadowed_name)]
+    internal struct Point {
+        x: i32,
+    }
+}
+
+__DATA__
+{"compile_error": "a local item cannot be `pub`, `internal`, or `export`"}

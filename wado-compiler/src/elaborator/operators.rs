@@ -1,6 +1,6 @@
 //! Binary and unary operator resolution, including operator overloading.
 
-use crate::ast::{self, BinaryOp, UnaryOp};
+use crate::ast::{self, AstId, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
@@ -1266,6 +1266,65 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
+    /// Mark `subscripts` as `&mut` places for the walks that follow, answering
+    /// what [`Self::unmark_mut_place_subscripts`] takes back. One already
+    /// marked is left out, so a nested walk does not unmark its caller's.
+    fn mark_mut_place_subscripts(subscripts: &[AstId], ctx: &mut FunctionContext) -> Vec<AstId> {
+        subscripts
+            .iter()
+            .copied()
+            .filter(|id| ctx.mut_place_subscripts.insert(*id))
+            .collect()
+    }
+
+    fn unmark_mut_place_subscripts(marked: &[AstId], ctx: &mut FunctionContext) {
+        for id in marked {
+            ctx.mut_place_subscripts.swap_remove(id);
+        }
+    }
+
+    /// Resolve `expr` with every subscript `target` projects through standing as
+    /// a `&mut` place. `Err` is the refusal, already reported: one of those
+    /// subscripts hands out something no write can reach the element through.
+    fn resolve_place_receiver(
+        &mut self,
+        expr: &ast::Expr,
+        target: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> Result<TypeId, ()> {
+        let projected = projected_subscripts_of_place(target);
+        let marked = Self::mark_mut_place_subscripts(&projected, ctx);
+        let resolved = self.resolve_expr(expr, ctx, None);
+        Self::unmark_mut_place_subscripts(&marked, ctx);
+        if let Some(refusal) = projected
+            .iter()
+            .find_map(|id| self.subscript_write_refusal(*id))
+        {
+            let _ = self.emit(TypeError::CannotAssign {
+                message: refusal.to_string(),
+                span: target.span(),
+            });
+            return Err(());
+        }
+        Ok(resolved)
+    }
+
+    /// Why a write cannot reach the element this subscript names, if it cannot.
+    /// Only `IndexRefMut`'s `&mut Output` can be written through: `IndexRef`
+    /// hands out a shared alias, and `IndexValue` hands out a copy, which the
+    /// write would land on and then discard.
+    fn subscript_write_refusal(&self, index_id: AstId) -> Option<&'static str> {
+        let dispatch = self.sem.types.operator_dispatch.get(&index_id)?;
+        if !dispatch.needs_deref {
+            return Some("cannot assign through a by-value index; the container hands out a copy");
+        }
+        matches!(
+            self.tysys.type_table.borrow().get(dispatch.return_type),
+            ResolvedType::Ref(_)
+        )
+        .then_some("cannot assign through immutable reference")
+    }
+
     /// Whether an `Index` assignment target reaching `assign_to_target`'s general
     /// path is an assignable place — index-assignable receivers already returned
     /// above. A read-only `Index` access lowers to `*recv.index(i)` over
@@ -1359,8 +1418,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
-            // Resolve the indexed expression to get its type
-            let indexed_type = self.resolve_expr(&index_expr.expr, ctx, None);
+            let Ok(indexed_type) = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)
+            else {
+                return TypeTable::ERROR;
+            };
 
             let indexed_immutable = matches!(
                 self.tysys.type_table.borrow().get(indexed_type),
@@ -1498,7 +1559,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Standard assignment handling. Fall through here happens when the
         // target isn't `Expr::Index`, or when the IndexAssign trait lookup
         // returned None — `value` was not consumed on either of those paths.
-        let target_type = self.resolve_expr(target_ast, ctx, None);
+        let Ok(target_type) = self.resolve_place_receiver(target_ast, target_ast, ctx) else {
+            return TypeTable::ERROR;
+        };
         let value_span = value.span();
         let value_type = match value {
             AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
@@ -1640,6 +1703,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // frames stay identical; later walks re-encounter each piece via
         // `compound_hoist_types` instead of re-resolving.
         ctx.enter_scope();
+        // `h[0].n += 3` reads and writes one place, so the read side takes the
+        // same `&mut` subscript the write side does.
+        let marked =
+            Self::mark_mut_place_subscripts(&projected_subscripts_of_place(&compound.target), ctx);
         let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
@@ -1678,6 +1745,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
         );
         ctx.compound_hoist_types = saved_hoist_types;
+        Self::unmark_mut_place_subscripts(&marked, ctx);
         ctx.exit_scope();
         result
     }
@@ -1972,6 +2040,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // recorded `operator_dispatch` (receiver adjustment via `self_kind`,
         // arg `&`-wrapping via `arg_ref_wraps`) + the AST.
         resolved.return_type
+    }
+}
+
+/// Every subscript an assignment target projects through, as in `h[0].n` or
+/// `o[0][0].n` — the one place a subscript names a `&mut` rather than a value
+/// read. A target that is the subscript itself is excluded: `IndexAssign`
+/// writes into that one.
+fn projected_subscripts_of_place(target: &ast::Expr) -> Vec<AstId> {
+    let mut at = match target {
+        ast::Expr::FieldAccess(field) => &field.expr,
+        ast::Expr::Index(index) => &index.expr,
+        _ => return Vec::new(),
+    };
+    let mut subscripts = Vec::new();
+    loop {
+        match at {
+            ast::Expr::Index(index) => {
+                subscripts.push(index.id);
+                at = &index.expr;
+            }
+            ast::Expr::FieldAccess(field) => at = &field.expr,
+            _ => return subscripts,
+        }
     }
 }
 

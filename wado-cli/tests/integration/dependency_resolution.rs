@@ -87,6 +87,87 @@ export fn run() with Stdout {
         .args(["check", "src/main.wado"])
         .assert()
         .success();
+
+    // A module the `[world]` table does not name checks as a library: no world
+    // entry point is required of it (issue #2059).
+    wado_in(&greet)
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
+}
+
+/// A registry dependency that `wado fetch` warmed but no `wado.lock` pins is
+/// resolved from the cache by every tier — the build one (`run`, `check`) and
+/// the offline one (`query`). Before, only the build tier resolved it and
+/// `check` reported a lockfile nothing else asked for (issue #2059).
+#[test]
+fn a_cached_registry_dependency_resolves_without_a_lock() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let cache = root.join("cache");
+
+    // The published component: built here, then placed where a fetch caches it.
+    let lib = root.join("lib");
+    fs::create_dir_all(lib.join("src")).unwrap();
+    fs::write(
+        lib.join("wado.toml"),
+        "[package]\nname = \"demo-lib\"\nnamespace = \"acme\"\nversion = \"0.1.2\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    fs::write(
+        lib.join("src/lib.wado"),
+        "export fn greet() -> String {\n    return \"hi from the registry\";\n}\n",
+    )
+    .unwrap();
+    wado_in(&lib).args(["build", "--lib"]).assert().success();
+
+    let cached = cache.join("ghcr.io/acme/demo-lib/0.1.2");
+    fs::create_dir_all(&cached).unwrap();
+    fs::copy(lib.join("build/lib.wasm"), cached.join("component.wasm")).unwrap();
+
+    let app = root.join("app");
+    fs::create_dir_all(app.join("src")).unwrap();
+    fs::write(
+        app.join("wado.toml"),
+        r#"[package]
+name = "app"
+version = "0.1.0"
+
+[world]
+"wasi:cli/command" = "src/main.wado"
+
+[registries]
+default = "oci://ghcr.io"
+
+[dependencies]
+"acme:demo-lib" = { version = "^0.1" }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        app.join("src/main.wado"),
+        r#"use { println, Stdout } from "core:cli";
+use { greet } from "acme:demo-lib";
+
+export fn run() with Stdout {
+    println(greet());
+}
+"#,
+    )
+    .unwrap();
+    assert!(!app.join("wado.lock").exists());
+
+    for args in [
+        vec!["run", "src/main.wado"],
+        vec!["check", "src/main.wado"],
+        vec!["query", "diagnostics", "src/main.wado"],
+    ] {
+        wado_in(&app)
+            .env("WADO_ROOT", &cache)
+            .args(&args)
+            .assert()
+            .success();
+    }
 }
 
 /// The dependency's own modules resolve relative imports inside the

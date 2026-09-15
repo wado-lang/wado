@@ -57,10 +57,10 @@ fn walk(
 
 // Format 1: a Lisp-style S-expression on one line.
 fn to_sexpr(node: &Node) -> String {
-    let mut w = Writer { out: "" };
+    let mut sink = Writer { out: "" };
     walk(
         node,
-        &mut w,
+        &mut sink,
         0,
         |w: &mut Writer, _d: i32, name: &String| {
             w.put(&`(${name} `);
@@ -72,15 +72,15 @@ fn to_sexpr(node: &Node) -> String {
             w.put(&")");
         },
     );
-    return w.out;
+    return sink.out;
 }
 
 // Format 2: an indented outline. Same skeleton, different leaf strings.
 fn to_outline(node: &Node) -> String {
-    let mut w = Writer { out: "" };
+    let mut sink = Writer { out: "" };
     walk(
         node,
-        &mut w,
+        &mut sink,
         0,
         |w: &mut Writer, d: i32, name: &String| {
             w.indent(d);
@@ -93,7 +93,7 @@ fn to_outline(node: &Node) -> String {
         |w: &mut Writer, _d: i32, _name: &String| {
         },
     );
-    return w.out;
+    return sink.out;
 }
 
 fn sample() -> Node {
