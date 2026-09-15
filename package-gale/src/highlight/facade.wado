@@ -8,6 +8,7 @@
 //! no grammar-specific runtime type ever crosses this package boundary.
 
 use { eprintln, Stderr } from "core:cli";
+use { debug, error, info } from "core:log";
 use { parse as parse_args } from "core:args";
 use { Deserialize } from "core:serde";
 use fs from "core:fs";
@@ -23,7 +24,8 @@ impl Deserialize for Options;
 
 /// A batch highlight CLI, generic over the grammar. Reads each input file,
 /// renders it via `highlight`, and writes the HTML fragment to
-/// `<output_dir>/<path>.html`. Logs per-file timing and a closing `stats:` line.
+/// `<output_dir>/<path>.html`. Per-file timing logs at `Debug` and the closing
+/// summary at `Info`, so a default run reports only what failed.
 ///
 /// The output is a bare `<span class="...">` fragment — bring your own CSS and
 /// page shell to display it (see `example/standalone.wado` for a starting
@@ -61,10 +63,15 @@ pub fn run_cli(highlight: fn(&String) -> String, args: List<String>) with (Stder
         }
     }
     if count > 0 {
-        let min_ms = min as f64 / 1000000.0;
-        let max_ms = max as f64 / 1000000.0;
-        let avg_ms = sum as f64 / count as f64 / 1000000.0;
-        eprintln(`stats: ${count} files | min ${min_ms:.3} ms | max ${max_ms:.3} ms | avg ${avg_ms:.3} ms`);
+        info(
+            `highlight stats`,
+            {
+                files: count,
+                min_ms: min as f64 / 1000000.0,
+                max_ms: max as f64 / 1000000.0,
+                avg_ms: sum as f64 / count as f64 / 1000000.0,
+            },
+        );
     }
 }
 
@@ -74,11 +81,11 @@ fn highlight_file(
     path: &String,
     output_dir: &String,
     highlight: fn(&String) -> String,
-) -> Option<u64> with (Stderr, Preopens, MonotonicClock) {
+) -> Option<u64> with (Preopens, MonotonicClock) {
     let input = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln(`error: ${e}`);
+            error(`cannot read input`, { path: *path, reason: `${e}` });
             return null;
         },
     };
@@ -90,14 +97,14 @@ fn highlight_file(
 
     let out_path = `${*output_dir}/${*path}.html`;
     if let Err(e) = fs::create_dir_all(&parent_of(&out_path)) {
-        eprintln(`error: ${e}`);
+        error(`cannot create output directory`, { out_path, reason: `${e}` });
         return null;
     }
     if let Err(e) = fs::write(&out_path, &html) {
-        eprintln(`error: ${e}`);
+        error(`cannot write output`, { out_path, reason: `${e}` });
         return null;
     }
-    eprintln(`${*path} -> ${out_path} (${ms:.3} ms)`);
+    debug(`highlighted`, { path: *path, out_path, ms });
     return Option::Some(elapsed as u64);
 }
 

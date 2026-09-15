@@ -9,11 +9,17 @@ use dep from "./sub/aliased_variant_type_arg_inference_dep.wado";
 test "an aliased variant infers its type args from the annotation" {
     let m: M<i32> = M::Nothing;
     assert m matches { M::Nothing };
+    // The negative is what keeps the assertion above honest: a pattern that bound
+    // instead of matching would satisfy it either way.
+    let j: M<i32> = M::Just(7);
+    assert !(j matches { M::Nothing });
 }
 
 test "a namespace-qualified variant infers its type args from the annotation" {
     let m: dep::Maybe<i32> = dep::Maybe::Nothing;
     assert m matches { dep::Maybe::Nothing };
+    let j: dep::Maybe<i32> = dep::Maybe::Just(7);
+    assert !(j matches { dep::Maybe::Nothing });
 }
 
 __DATA__

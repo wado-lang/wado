@@ -72,23 +72,24 @@ global mut global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_1
 fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     let e_3: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
     let $cond_4: bool;
-    let e_53: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
-    let $local_2_54: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
-    let self_114: i32;
-    let haystack_115: ref Array<u8>;
-    let needle_117: ref Array<u8>;
-    let j_119: i32;
+    let e_52: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
+    let $local_2_53: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
+    let a_112: ref Array<u8>;
+    let a_end_114: i32;
+    let b_115: ref Array<u8>;
+    let len_118: i32;
+    let i_119: i32;
     let $match_scrut_1: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
     $match_scrut_1 = $inline_guarded_3: block -> ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" {
-        $local_2_54 = struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } };
-        if (if ref.is_null($local_2_54) == 0 -> i32 {
-            e_53 = ref.as_non_null($local_2_54);
+        $local_2_53 = struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 109), used: 4 } };
+        if (if ref.is_null($local_2_53) == 0 -> i32 {
+            e_52 = ref.as_non_null($local_2_53);
             1;
         } else {
             0;
         }) {
-            break $inline_guarded_3: e_53;
-        } else if @likely(ref.is_null($local_2_54) == 0) {
+            break $inline_guarded_3: e_52;
+        } else if @likely(ref.is_null($local_2_53) == 0) {
             break $inline_guarded_3: struct.new "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("suppressed"), used: 10 } };
         } else {
             unreachable;
@@ -97,28 +98,26 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     };
     $cond_4 = (if ref.is_null($match_scrut_1) == 0 -> bool {
         e_3 = ref.as_non_null($match_scrut_1);
-        $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: block -> bool {
-            self_114 = e_3.message.used;
-            if self_114 != 4 {
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4: 0;
+        $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
+            a_112 = e_3.message.repr;
+            a_end_114 = e_3.message.used;
+            b_115 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_5;
+            len_118 = a_end_114 - 0;
+            if len_118 != 4 {
+                break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
-            $inline_bytes_match_at_2: block -> bool {
-                haystack_115 = e_3.message.repr;
-                needle_117 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_5;
-                j_119 = 0;
-                b5: block {
-                    l6: loop {
-                        break_if b5 j_119 >= self_114;
-                        if builtin::array_get_value<u8>(haystack_115, 0 + j_119) != builtin::array_get_value<u8>(needle_117, j_119) {
-                            break $inline_bytes_match_at_2: 0;
-                        }
-                        j_119 = j_119 + 1;
-                        continue l6;
-                    };
+            i_119 = 0;
+            b5: block {
+                l6: loop {
+                    break_if b5 i_119 >= len_118;
+                    if builtin::array_get_value<u8>(a_112, 0 + i_119) != builtin::array_get_value<u8>(b_115, 0 + i_119) {
+                        break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
+                    }
+                    i_119 = i_119 + 1;
+                    continue l6;
                 };
-                break $inline_bytes_match_at_2: 1;
             };
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_4;
+            break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
         };
     } else {
         0;

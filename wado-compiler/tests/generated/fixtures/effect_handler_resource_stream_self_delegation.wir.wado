@@ -1792,8 +1792,9 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
 fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/$Closure_1::$call"(self) {
     let self_1: ref "effect_handler_resource_stream_self_delegation.wado//BaseStream";
     let snapshot: ref "core:prelude//List<u8>";
+    let v: ref "core:prelude//List<u8>";
     let elements: ref Array<u8>;
-    return self_1 = self.$capture_0, snapshot = self_1.buf, self_1.buf = ref.as_non_null(elements = array.new_fixed<u8>(); struct.new "core:prelude//List<u8>" { repr: elements, used: 0 }), struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: snapshot, result: 0 };
+    return self_1 = self.$capture_0, v = self_1.buf, snapshot = struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v.used }, self_1.buf = ref.as_non_null(elements = array.new_fixed<u8>(); struct.new "core:prelude//List<u8>" { repr: elements, used: 0 }), struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: snapshot, result: 0 };
 }
 
 fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_stream_self_delegation.wado/$Closure_2::$call"() {
@@ -1923,11 +1924,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_59, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

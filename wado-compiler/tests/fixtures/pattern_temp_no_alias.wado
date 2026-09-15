@@ -195,6 +195,37 @@ test "a take-and-replace binding owns what the place gave up" {
     assert src.items.len() == 1;
 }
 
+// An arm binding stands on the chain its scrutinee stands on, so the `take`
+// idiom reaches it — and must not reach past a write landing on the same
+// storage first.
+
+struct Slot {
+    held: Option<List<i32>>,
+}
+
+impl Slot {
+    fn grow(&mut self) {
+        if let Some(ys) = &mut self.held {
+            ys.push(7);
+        }
+    }
+
+    fn take_after_call(&mut self) -> Option<List<i32>> {
+        if let Some(xs) = self.held {
+            self.grow();
+            self.held = null;
+            return Option::Some(xs);
+        }
+        return null;
+    }
+}
+
+test "an arm binding keeps its copy past a write to the same storage" {
+    let mut s = Slot { held: Option::Some([1]) };
+    let Some(xs) = s.take_after_call() else { unreachable(); };
+    assert xs.len() == 1;
+}
+
 // A `&mut` to a variant or a primitive is a `Box<T>` by the time these lower, so
 // the rows below add the spelling the ones above never take.
 
@@ -240,5 +271,72 @@ test "a match binding does not alias the payload of a &mut local" {
             assert xs.len() == 1;
         }
         V::B => {}
+    }
+}
+
+// Or-pattern alternatives bind one name between them but project different
+// cases, so the binding names only the value the whole pattern matched. Reading
+// it as one alternative's payload lets a write to the other's be called
+// disjoint, and the binding then aliases what the write repointed.
+
+variant W {
+    P(List<i32>),
+    Q(List<i32>),
+}
+
+fn or_arm_len(slot: &mut W) -> i32 {
+    match *slot {
+        W::P(xs) | W::Q(xs) => {
+            *slot = W::P([9, 9, 9]);
+            return xs.len();
+        }
+    }
+}
+
+test "an or-pattern binding does not alias the payload of a &mut parameter" {
+    let mut p = W::P([1]);
+    assert or_arm_len(&mut p) == 1;
+    let mut q = W::Q([1, 2]);
+    assert or_arm_len(&mut q) == 2;
+}
+
+fn bump_q(slot: &mut W) {
+    if let W::Q(ys) = slot {
+        ys.push(7);
+    }
+}
+
+// A write *inside* one alternative's payload, which is what a path reading the
+// binding as that payload would call disjoint from the other's.
+fn or_arm_len_across_payload_write(slot: &mut W) -> i32 {
+    match *slot {
+        W::P(xs) | W::Q(xs) => {
+            bump_q(slot);
+            return xs.len();
+        }
+    }
+}
+
+test "an or-pattern binding does not alias either alternative's payload" {
+    let mut q = W::Q([1, 2]);
+    assert or_arm_len_across_payload_write(&mut q) == 2;
+    let mut p = W::P([1]);
+    assert or_arm_len_across_payload_write(&mut p) == 1;
+}
+
+test "an or-pattern binding does not alias a mut local" {
+    let mut w = W::Q([1]);
+    match w {
+        W::P(xs) | W::Q(xs) => {
+            w = W::P([9, 9]);
+            assert xs.len() == 1;
+        }
+    }
+    let mut u = W::P([1, 2, 3]);
+    match u {
+        W::P(xs) | W::Q(xs) => {
+            u = W::Q([9]);
+            assert xs.len() == 3;
+        }
     }
 }

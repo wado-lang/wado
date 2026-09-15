@@ -5258,7 +5258,8 @@ fn variant_eq_body(
     let outer_arms: Vec<TirMatchArm> = cases
         .iter()
         .zip(payload_bindings.iter())
-        .map(|((case_name, _, payload_type), binding)| {
+        .map(|((case_name, case_index, payload_type), binding)| {
+            let case_index = *case_index;
             let is_unit = *payload_type == TypeTable::UNIT;
             let (self_bindings, inner_arms): (Vec<TirPattern>, Vec<TirMatchArm>) = if is_unit {
                 let inner_arms = vec![
@@ -5266,6 +5267,7 @@ fn variant_eq_body(
                         pattern: TirPattern::Variant {
                             enum_type: variant_type,
                             variant_name: case_name.clone(),
+                            case_index,
                             bindings: Vec::new(),
                             payload_type: *payload_type,
                         },
@@ -5315,6 +5317,7 @@ fn variant_eq_body(
                         pattern: TirPattern::Variant {
                             enum_type: variant_type,
                             variant_name: case_name.clone(),
+                            case_index,
                             bindings: vec![TirPattern::Binding {
                                 name: other_name,
                                 local_index: other_idx,
@@ -5352,6 +5355,7 @@ fn variant_eq_body(
                 pattern: TirPattern::Variant {
                     enum_type: variant_type,
                     variant_name: case_name.clone(),
+                    case_index,
                     bindings: self_bindings,
                     payload_type: *payload_type,
                 },

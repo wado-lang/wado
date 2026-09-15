@@ -33,6 +33,11 @@ use crate::name::{DeclName, FqTraitName};
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{SlotProjections, TraitRef};
 
+/// Proof that a bound was asked and answered no. Its field is private here, so
+/// [`TypeError::TraitBoundNotSatisfied`] can be raised from nowhere else.
+#[derive(Clone, Debug)]
+pub struct BoundUnmet(());
+
 /// Whether a bound query may follow a newtype to its base. Dispatch does; rank
 /// 2 does not (`docs/wep-2026-09-01-trait-resolution.md`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -450,30 +455,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             }
             for (bound_name, bound_def) in &bounds {
-                let Some(bound_def) = *bound_def else {
-                    continue;
-                };
-                if !self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
+                self.enforce_single_bound(
                     type_id,
-                    bound_def,
-                ) {
-                    let type_name = self.tysys.type_id_to_string(type_id);
-                    let reason = self.tysys.trait_unimpl_reason_chain(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        type_id,
-                        bound_name,
-                    );
-                    let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                        type_name,
-                        trait_name: bound_name.clone(),
-                        param_name: binding.name.clone(),
-                        reason,
-                        span: binding.span,
-                    });
-                }
+                    bound_name,
+                    *bound_def,
+                    &binding.name,
+                    binding.span,
+                );
             }
         }
     }
@@ -582,14 +570,18 @@ impl TypeSystem {
         self.resolutions.defs().of_ast_id(decl)
     }
 
-    /// The declaration `type_id` is an instance of. A nominal type already knows
-    /// its declaring node, so a caller holding a type has an identity without
-    /// reading a `(name, module)` pair off it and resolving that again.
-    /// The declaration `type_id` was *registered* under, so it declines for a head
-    /// whose declaration never got a node — a `GenericResource` instantiation.
-    /// For the head's declaration regardless, use [`crate::tir::TypeTable::nominal_def`].
+    /// The declaration `type_id` is an instance of. `None` where its head names
+    /// none: a type parameter, a projection, an anonymous shape.
     pub(crate) fn type_def(&self, type_id: TypeId) -> Option<DefId> {
-        let decl = self.type_table.borrow().decl_of_type(type_id)?;
+        let table = self.type_table.borrow();
+        let peeled = table.peel_refs(type_id);
+        if let Some(def) = table.nominal_def(peeled) {
+            return Some(def);
+        }
+        // `Array<T>` is declared definitionless, so its instantiation carries no
+        // `def` and the compiler item names the declaration instead.
+        let decl = table.decl_of_type(peeled)?;
+        drop(table);
         self.resolutions.defs().of_ast_id(decl)
     }
 
@@ -2268,6 +2260,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.enforce_type_arg_bounds(&type_params, type_args, span);
     }
 
+    /// Check the bounds on a generic type declaration's type arguments, for
+    /// every `struct`, `variant` and generic newtype instantiation.
+    pub(super) fn check_type_decl_arg_bounds(
+        &mut self,
+        def: DefId,
+        type_args: &[TypeId],
+        span: Span,
+    ) {
+        let Some(params) = self
+            .type_lookup()
+            .declared_generic_params(def)
+            .map(<[ast::GenericParam]>::to_vec)
+        else {
+            return;
+        };
+        self.enforce_type_arg_bounds(&params, type_args, span);
+    }
+
     /// The single enforcement of trait bounds on a generic decl's type args,
     /// shared by every generic-call kind so the rule cannot drift. Enforces only
     /// fully concrete args: a still-parametric arg is forwarded from the caller
@@ -2324,9 +2334,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check one concrete type argument against one trait bound — the primitive
-    /// every bound-enforcement path funnels through. On success registers the
-    /// associated types; on failure raises a clean `TraitBoundNotSatisfied`.
+    /// Whether one concrete type argument meets one trait bound — the primitive
+    /// every enforcement path funnels through. Registers the associated types on
+    /// success, raises `TraitBoundNotSatisfied` on failure.
     pub(super) fn enforce_single_bound(
         &mut self,
         type_arg: TypeId,
@@ -2334,28 +2344,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: Option<DefId>,
         param_name: &str,
         span: Span,
-    ) {
+    ) -> bool {
         // A bound whose site names no declaration cannot be enforced against an
         // identity; the unresolved name is diagnosed where it was written.
         let Some(trait_) = trait_ else {
-            return;
+            return true;
         };
-        if !self.check_and_register_bound(type_arg, trait_) {
-            let type_name = self.tysys.type_id_to_string(type_arg);
-            let reason = self.tysys.trait_unimpl_reason_chain(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                type_arg,
-                trait_name,
-            );
-            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                type_name,
-                trait_name: trait_name.to_string(),
-                param_name: param_name.to_string(),
-                reason,
-                span,
-            });
+        if self.check_and_register_bound(type_arg, trait_) {
+            return true;
         }
+        let type_name = self.tysys.type_id_to_string(type_arg);
+        let reason = self.tysys.trait_unimpl_reason_chain(
+            &self.annotate_ctx,
+            &self.type_lookup(),
+            type_arg,
+            trait_name,
+        );
+        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+            type_name,
+            trait_name: trait_name.to_string(),
+            param_name: param_name.to_string(),
+            reason,
+            span,
+            unmet: BoundUnmet(()),
+        });
+        false
+    }
+
+    /// Report that type parameter `param` carries no bound supplying
+    /// `trait_name`, which is how an operator reaches one.
+    pub(super) fn report_operator_bound_missing(
+        &mut self,
+        param: &str,
+        trait_name: &str,
+        span: Span,
+    ) {
+        let _ = self.emit(TypeError::TraitBoundNotSatisfied {
+            type_name: param.to_string(),
+            trait_name: trait_name.to_string(),
+            param_name: param.to_string(),
+            reason: Vec::new(),
+            span,
+            unmet: BoundUnmet(()),
+        });
     }
 
     /// What a bare bound binds `decl`'s slots to: slot 0 is `Self`, and the
@@ -2789,14 +2820,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Option<TraitMethodMatch> {
         let (item, _, return_type) = self.tysys.auto_derive_by_method(method_name)?;
         let base_type_id = self.tysys.get_base_type(receiver_type_id);
-        if !self.tysys.auto_derive_eligible_kind(base_type_id) {
+        // A newtype has no derivation of its own: the one its representation
+        // carries answers, and is inherited the way a written impl on the base
+        // is, so the signature re-types back to the receiver.
+        let derive_id = self
+            .tysys
+            .type_table
+            .borrow()
+            .representation_head(base_type_id);
+        let inherited = (derive_id != base_type_id).then_some(derive_id);
+        if !self.tysys.auto_derive_eligible_kind(derive_id) {
             return None;
         }
         let trait_ = self.tysys.compiler_trait_def(item)?;
         if !self.tysys.type_implements_trait(
             &self.annotate_ctx,
             &self.type_lookup(),
-            base_type_id,
+            derive_id,
             trait_,
         ) {
             return None;
@@ -2805,7 +2845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow_mut()
-            .intern(ResolvedType::Ref(base_type_id));
+            .intern(ResolvedType::Ref(derive_id));
         let method_info = MethodInfo {
             // Derived from the receiver's structure, off no `impl` block.
             impl_type_bindings: Vec::new(),
@@ -2816,7 +2856,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_is_mut: vec![false],
             param_defaults: vec![None],
             param_names: vec!["other".to_string()],
-            owner: MethodOwner::Receiver,
+            owner: inherited.map_or(MethodOwner::Receiver, MethodOwner::InheritedFrom),
             cm_name: None,
             is_ref_impl: false,
             method_type_param_ids: vec![],
@@ -2833,7 +2873,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .nominal_def(base_type_id)
+            .nominal_def(derive_id)
             .map_or_else(
                 || self.declaring_module_of(struct_name),
                 |def| self.tysys.resolutions.defs().module(def).clone(),
@@ -2855,9 +2895,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_type_param: None,
             blanket_binder: None,
             blanket_bounds: None,
-            impl_struct_name: struct_name.to_string(),
-            impl_struct_fq: self.tysys.fq_receiver_head(base_type_id),
+            impl_struct_name: match inherited {
+                Some(id) => self.tysys.type_table.borrow().mangle_type_name(id),
+                None => struct_name.to_string(),
+            },
+            impl_struct_fq: self.tysys.fq_receiver_head(derive_id),
             is_blanket_ref_impl: false,
+            ref_impl_target: None,
         })
     }
 }

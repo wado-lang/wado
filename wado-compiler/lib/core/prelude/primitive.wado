@@ -8,7 +8,7 @@
 // This module intentionally does NOT depend on core:rt to keep the
 // dependency structure simple.
 
-use { String } from "core:prelude/string.wado";
+use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
 use { Array } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteList } from "core:prelude/bytes.wado";
@@ -120,9 +120,7 @@ use {
     ParseFloatError,
     parse_i64_radix,
     parse_u64_radix,
-    parse_i64_radix_range,
-    parse_u64_radix_range,
-    parse_f64_from_str_range,
+    parse_f64_from_str,
     lenient_int_preprocess,
     lenient_float_preprocess,
     lenient_int_error,
@@ -616,7 +614,7 @@ impl i8 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(s, radix, 127, 128) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -626,8 +624,8 @@ impl i8 {
 impl FromStr for i8 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix_range(s, start, end, 10, 127, 128) {
+    fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError> {
+        return match parse_i64_radix(s, 10, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -737,7 +735,7 @@ impl u8 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(s, radix, 255) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -747,8 +745,8 @@ impl u8 {
 impl FromStr for u8 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix_range(s, start, end, 10, 255) {
+    fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError> {
+        return match parse_u64_radix(s, 10, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -806,7 +804,7 @@ impl i16 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(s, radix, 32767, 32768) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -816,8 +814,8 @@ impl i16 {
 impl FromStr for i16 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix_range(s, start, end, 10, 32767, 32768) {
+    fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError> {
+        return match parse_i64_radix(s, 10, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -875,7 +873,7 @@ impl u16 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(s, radix, 65535) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -885,8 +883,8 @@ impl u16 {
 impl FromStr for u16 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix_range(s, start, end, 10, 65535) {
+    fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError> {
+        return match parse_u64_radix(s, 10, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -967,7 +965,7 @@ impl i32 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(s, radix, 2147483647, 2147483648) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -977,8 +975,8 @@ impl i32 {
 impl FromStr for i32 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix_range(s, start, end, 10, 2147483647, 2147483648) {
+    fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError> {
+        return match parse_i64_radix(s, 10, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -1043,7 +1041,7 @@ impl u32 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(s, radix, 4294967295) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -1053,8 +1051,8 @@ impl u32 {
 impl FromStr for u32 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix_range(s, start, end, 10, 4294967295) {
+    fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError> {
+        return match parse_u64_radix(s, 10, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -1136,15 +1134,15 @@ impl i64 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(s, radix, 9223372036854775807, 9223372036854775808);
+        return parse_i64_radix(&s.as_str_slice(), radix, 9223372036854775807, 9223372036854775808);
     }
 }
 
 impl FromStr for i64 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix_range(s, start, end, 10, 9223372036854775807, 9223372036854775808);
+    fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(s, 10, 9223372036854775807, 9223372036854775808);
     }
 }
 
@@ -1230,15 +1228,15 @@ impl u64 {
     }
 
     pub fn from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError> {
-        return parse_u64_radix(s, radix, u64::MAX);
+        return parse_u64_radix(&s.as_str_slice(), radix, u64::MAX);
     }
 }
 
 impl FromStr for u64 {
     type Err = ParseIntError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError> {
-        return parse_u64_radix_range(s, start, end, 10, u64::MAX);
+    fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(s, 10, u64::MAX);
     }
 }
 
@@ -1580,8 +1578,8 @@ impl f32 {
 impl FromStr for f32 {
     type Err = ParseFloatError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<f32, ParseFloatError> {
-        return match parse_f64_from_str_range(s, start, end) {
+    fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError> {
+        return match parse_f64_from_str(s) {
             Ok(v) => Result::Ok(v as f32),
             Err(e) => Result::Err(e),
         };
@@ -1973,8 +1971,8 @@ impl f64 {
 impl FromStr for f64 {
     type Err = ParseFloatError;
 
-    fn from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str_range(s, start, end);
+    fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError> {
+        return parse_f64_from_str(s);
     }
 }
 

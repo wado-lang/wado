@@ -102,7 +102,7 @@ global global:tmpl_hoist_escape_safe.wado::$const_obj_8: ref null Array<u8> = ar
 global global:tmpl_hoist_escape_safe.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(118, 61);
 global global:tmpl_hoist_escape_safe.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(108, 101, 110, 61);
 global global:tmpl_hoist_escape_safe.wado::$const_obj_11: ref null Array<u8> = array.new_fixed<u8>(110, 61);
-global global:core:prelude/primitive.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "tmpl_hoist_escape_safe.wado/run"() with Stdout {
     let total: i32;
@@ -956,11 +956,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_12, digit_count_4);
-    arr = f.buf.repr;
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_13, digit_count_4);
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
@@ -989,7 +991,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_12, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_13, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -1014,7 +1016,7 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let t: u64;
     let i: i32;
     digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
-    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::$const_obj_12, digit_count_2);
+    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, 0, global:core:prelude/primitive.wado::$const_obj_13, digit_count_2);
     arr = f.repr;
     pos = offset_3 + digit_count_2;
     t = self;

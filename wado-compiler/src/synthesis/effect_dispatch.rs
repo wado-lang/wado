@@ -880,14 +880,15 @@ fn build_dispatch_wrapper_function(
         nullable_ref_type_id,
         span,
     );
-    let some_case_name = {
+    let (some_case_name, some_case_index) = {
         let tt = type_table.borrow();
-        tt.compiler_variant_case_name(CompilerItem::OptionSome)
-            .to_string()
+        let (_, _, name, index) = tt.compiler_variant_case(CompilerItem::OptionSome);
+        (name.to_string(), index)
     };
     let pattern = TirPattern::Variant {
         enum_type: nullable_ref_type_id,
         variant_name: some_case_name,
+        case_index: some_case_index,
         bindings: vec![TirPattern::Binding {
             name: "$d".to_string(),
             local_index: d_local,

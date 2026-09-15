@@ -374,17 +374,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .into_string(),
                     )
                 }
+                // No written impl answers, so the derivation the representation
+                // carries does — named by that head, not by one peel, which on a
+                // chain (`type B = A; type A = Point`) lands on another newtype.
                 ResolvedType::Newtype { base_type, .. } => {
                     let tt = self.tysys.type_table.borrow();
                     let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
-                        ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => {
-                            Some(tt.fq_base_type_name(*base_type).into_string())
-                        }
-                        // A newtype of a variant (e.g. `type Alias = SomeVariant;`)
-                        // needs the same Variant-dispatch path as a direct
-                        // `ResolvedType::Variant` comparison above.
-                        ResolvedType::Variant { .. } => {
+                        ResolvedType::Struct { .. }
+                        | ResolvedType::GenericInstance { .. }
+                        | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
                         _ => None,
@@ -397,8 +396,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let lookup_type_id = if let Some(link) = comparison_impl_link {
                     link
                 } else {
-                    let tt = self.tysys.type_table.borrow();
-                    tt.get_newtype_base(left).unwrap_or(left)
+                    self.tysys.type_table.borrow().representation_head(left)
                 };
 
                 // Handle Eq trait (== and !=)
@@ -651,11 +649,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // dispatched through `Position` declares `&Vec2`, and the
                     // operand is a `Position` over the same base.
                     let rhs_base = self.tysys.own_impl_link(right, trait_).unwrap_or_else(|| {
-                        self.tysys
-                            .type_table
-                            .borrow()
-                            .get_newtype_base(right)
-                            .unwrap_or(right)
+                        self.tysys.type_table.borrow().representation_head(right)
                     });
                     let rhs_class = ArgClass::Exact(rhs_base);
                     admitted = self.find_arithmetic_trait_impls(
@@ -739,20 +733,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         origin,
                     );
                 }
-                // A type parameter reaches its operator only through a bound,
-                // so say so here rather than at WIR build.
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name: self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(item)
-                        .to_string(),
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span,
-                });
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(item)
+                    .to_string();
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
         }
@@ -805,18 +793,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
             }
             if let ResolvedType::TypeParam { name, .. } = &left_type {
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name: self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(shift_item)
-                        .to_string(),
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span,
-                });
+                let trait_name = self
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .compiler_trait_name(shift_item)
+                    .to_string();
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, span);
                 return TypeTable::ERROR;
             }
             // Get struct name for trait lookup
@@ -1176,16 +1160,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(unary.id),
                 );
             }
-            // A type parameter reaches its operator only through a bound, so
-            // say so here rather than at WIR build.
             if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
-                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                    type_name: name.clone(),
-                    trait_name,
-                    param_name: name.clone(),
-                    reason: Vec::new(),
-                    span: unary.span,
-                });
+                let param = name.clone();
+                self.report_operator_bound_missing(&param, &trait_name, unary.span);
                 return TypeTable::ERROR;
             }
             let struct_name = match &operand_resolved {
@@ -1451,7 +1428,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         Elaborator::find_index_assign_trait_impl,
                     );
-                    if let Some((trait_info, matched_type_id)) = assign_info {
+                    if let Some((trait_info, _)) = assign_info {
                         if let Some(key_type) = trait_info.index_type
                             && key_type != index_type
                         {
@@ -1471,7 +1448,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.typecheck(value_type, trait_info.output_type, value_span);
 
                         // Get the mangled method name: StructName^IndexAssign<IndexType>::index_assign
-                        let receiver = self.fq_index_receiver(matched_type_id);
+                        let receiver = trait_info.receiver.clone();
                         let mangled_method_name = MethodName::format_local(
                             &receiver,
                             Some(&trait_info.trait_name),

@@ -1,0 +1,20 @@
+// A namespace qualifier names the type it reaches, not the module that declares
+// it. `core:prelude` re-exports `Option` from a sub-file, so comparing declaring
+// modules rejected every facade — the stdlib among them.
+
+use prelude from "core:prelude";
+
+fn unwrap_or_zero(o: prelude::Option<i32>) -> i32 {
+    return match o {
+        prelude::Option::Some(v) => v,
+        prelude::Option::None => 0,
+    };
+}
+
+test "a re-exported type qualifies its cases" {
+    assert unwrap_or_zero(prelude::Option::Some(7)) == 7;
+    assert unwrap_or_zero(null) == 0;
+}
+
+__DATA__
+{"test": {}}

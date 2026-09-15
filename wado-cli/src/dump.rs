@@ -221,7 +221,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<DumpOptions, CliExit> {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
-            knobs.params.apply(p, &mut parser)?;
+            args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Tokens => {
@@ -358,8 +358,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.allocator.as_deref(),
         knobs.opt,
         &knobs.codegen_flags,
-        &knobs.params.overrides,
-        knobs.params.policy,
+        &knobs.params,
         invocations,
     )
     .await

@@ -897,6 +897,34 @@ match customer {
 }
 ```
 
+#### Qualified Patterns
+
+A case may be written under the type that declares it: `Color::Green`. Two kinds
+of qualifier reach the same cases.
+
+The first is a name that resolves to the scrutinee's type. An import alias
+(`M::Nothing` under `use { Maybe as M }`), `Self` inside an `impl`, and a
+namespace-qualified type (`dep::Maybe::Nothing`) all qualify. So does any name on
+the scrutinee's newtype chain, a newtype's cases being its base's: with
+`type C = Color`, both `C::Green` and `Color::Green` qualify. A second newtype
+over the same base does not, being a distinct type.
+
+The second is a namespace prefix the scrutinee's type is reachable through, such
+as `h::Green` under `use h from "./hue.wado"`. That prefix names a module rather
+than a type.
+
+Either way the name must be one the file can see. Only the prelude is in scope
+without a `use`, so a qualifier naming an unimported type is an error even where
+the bare case would match.
+
+A qualifier may restate the scrutinee's type arguments. It must then write as
+many as the scrutinee carries, so `Maybe<i32>::Just` qualifies a `Maybe<i32>`
+while `Color<i32>::Red` is an error, because `Color` declares no type parameters.
+
+Only a bare identifier can bind. A qualified path names a case, an associated
+constant, or an immutable `global`; anything else is an error, never a variable
+of that name.
+
 #### Constant Patterns
 
 A pattern identifier that resolves to an immutable `global` or an associated constant matches by value, instead of binding a new variable:
@@ -2399,7 +2427,34 @@ info::<Fields>("started", f);
 
 Inference runs first and the default fills only what it left unbound, so an argument or an expected type always decides the slot it pins.
 
-A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`.
+A default resolves in the declaring module's scope, as a value default does. It may therefore name a type the call site cannot: `NoFields` above is private to `core:log`. By the same rule a parameter the use site declares does not answer for it, however the two are spelled:
+
+```wado
+struct Zero {}
+struct Marked<M: Mark = Zero> { value: i32 }
+
+fn f<Zero: Mark>(probe: Zero) -> i32 {
+    let m: Marked = Marked { value: 1 };  // the module's `Zero`, not `f`'s
+    return m.total();
+}
+```
+
+A default may name a parameter to its left, and stands for that parameter's argument. One naming a parameter at or after its own slot is rejected, since no argument has settled it yet:
+
+```wado
+struct Both<A, B = A> { v: A }        // OK: `B` takes `A`'s argument
+struct Fwd<A = B, B = i32> { v: B }   // ERROR: `A`'s default names `B`
+struct Own<A = A> { v: i32 }          // ERROR: the same, one slot nearer
+```
+
+Expanding a default must reach a fixpoint. One that leads back to the declaration it belongs to is rejected, whether it names that declaration directly, under an argument, or through another declaration's defaults:
+
+```wado
+struct Rec<T = Rec> { v: i32 }           // ERROR
+struct Pair<A, B = Pair<A>> { v: i32 }   // ERROR
+struct Ping<X, Y = Pong<X>> { v: i32 }   // ERROR, paired with
+struct Pong<X, Y = Ping<X>> { v: i32 }   // this one
+```
 
 A trait method's type parameter default belongs to the trait, exactly as its value defaults do. The implementation restates the list — the same parameters in the same order, with the defaults omitted — and every spelling of the call fills them from the trait's declaration:
 
@@ -2505,6 +2560,12 @@ let raw: f64 = m as f64;      // explicit cast required
 - Explicit `as` cast required to convert between `T` and `U`
 - Zero runtime cost (same Wasm representation)
 - Literal coercion to `T` when type context expects `T`
+
+A newtype does not carry an invariant of its own. `as` converts in both
+directions at no cost, so `T` admits exactly what `U` admits. An invariant the
+base type does not enforce, such as UTF-8 in a byte view, belongs in a `struct`
+with a private field and a checked constructor, where the check is the only way
+in.
 
 #### Method Signature Substitution
 
@@ -3556,7 +3617,7 @@ f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 
@@ -5136,13 +5197,22 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
 Every reference parameter follows this rule, `self` included. A method that
 returns or stores `self` declares `with stores[self]`.
 
-A reference reached _through_ a parameter is a different reference. Copying it
-out is not that parameter escaping, and the code that put it there already
-declared it, so it needs no declaration here:
+A reference member read out of a parameter still names what that parameter
+names, so returning it lets the caller's storage escape. Declare it:
 
 ```wado
-fn rebase(c: &Cursor, at: i32) -> Cursor {   // no stores[c]
+struct Cursor { chars: &Array<char>, pos: i32 }
+
+fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
     return Cursor { chars: c.chars, pos: at };
+}
+```
+
+A value member is copied, so nothing of the parameter escapes with it:
+
+```wado
+fn name_of(p: &Person) -> String {   // `name` is a `String`
+    return p.name;
 }
 ```
 

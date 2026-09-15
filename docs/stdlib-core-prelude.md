@@ -646,24 +646,19 @@ wins. A target without this impl rejects `..base` where it is written.
 
 Parse a value from a string.
 
-`from_str_range` is the fundamental operation: it parses `s[start..end)`
-without allocating a substring. Implementors must provide it. The
-`from_str` convenience method is a thin wrapper that parses the entire
-string and is provided as a default.
+`from_str_slice` is the fundamental operation: a `StrSlice` names part of a
+string without allocating a substring, so parsing a field out of a larger
+buffer copies nothing. `from_str` is a default that views the whole string.
 
-#### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Self, Self::Err>`
+#### `fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>`
 
-Parse the byte range `s[start..end)` as `Self`. Takes `s` by
-reference because the function only reads and the call site
-(often the router's per-request path) is a hot path where a
-`String` value copy would dominate the work.
+Parse the view as `Self`.
 
 #### `fn from_str(s: &String) -> Result<Self, Self::Err>`
 
-Parse the entire string as `Self`. Delegates to `from_str_range`.
-Takes `&String` for the same reason `from_str_range` does — callers
-already holding a `&String` (e.g. the JSON deserializer threading
-the input buffer through) should not have to dereference and copy.
+Parse the entire string as `Self`. Takes `&String` because callers
+already holding one (e.g. the JSON deserializer threading the input
+buffer through) should not have to dereference and copy.
 
 ### `pub trait LenientFromStr`
 
@@ -742,6 +737,13 @@ not positive.
 
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
+
+### `pub trait AsStrSlice`
+
+Conversion to a `StrSlice` that copies no bytes, so one signature takes an
+owned string, a reference to one, or a view of part of one.
+
+#### `fn as_str_slice(&self) -> StrSlice with stores[self]`
 
 ### `pub trait AsByteSlice`
 
@@ -1146,7 +1148,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl FromStr for i8`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i8, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError>`
 
 #### `impl LenientFromStr for i8`
 
@@ -1276,7 +1278,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for u8`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u8, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError>`
 
 #### `impl LenientFromStr for u8`
 
@@ -1360,7 +1362,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for i16`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i16, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError>`
 
 #### `impl LenientFromStr for i16`
 
@@ -1452,7 +1454,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for u16`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u16, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError>`
 
 #### `impl LenientFromStr for u16`
 
@@ -1548,7 +1550,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for i32`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i32, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError>`
 
 #### `impl LenientFromStr for i32`
 
@@ -1648,7 +1650,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for u32`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u32, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError>`
 
 #### `impl LenientFromStr for u32`
 
@@ -1756,7 +1758,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for i64`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i64, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError>`
 
 #### `impl LenientFromStr for i64`
 
@@ -1868,7 +1870,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for u64`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u64, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError>`
 
 #### `impl LenientFromStr for u64`
 
@@ -2147,7 +2149,7 @@ Creates an f32 from its bit representation.
 
 #### `impl FromStr for f32`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<f32, ParseFloatError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError>`
 
 #### `impl LenientFromStr for f32`
 
@@ -2408,7 +2410,7 @@ Creates an f64 from its bit representation.
 
 #### `impl FromStr for f64`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<f64, ParseFloatError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError>`
 
 #### `impl LenientFromStr for f64`
 
@@ -2734,10 +2736,9 @@ Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
 
-#### `pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<u128, ParseIntError>`
+#### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<u128, ParseIntError>`
 
-Range variant of `from_str_radix`. Parses `s[start..end)` as a `u128`
-in the given radix without allocating a substring.
+Parse the view as a `u128` in the given radix, allocating no substring.
 
 #### `pub fn zero() -> u128`
 
@@ -2797,7 +2798,7 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl FromStr for u128`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<u128, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<u128, ParseIntError>`
 
 #### `impl LenientFromStr for u128`
 
@@ -2939,10 +2940,9 @@ Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`)
 
 Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
 
-#### `pub fn from_str_radix_range(s: &String, start: i32, end: i32, radix: u32) -> Result<i128, ParseIntError>`
+#### `pub fn from_str_radix_slice(s: &StrSlice, radix: u32) -> Result<i128, ParseIntError>`
 
-Range variant of `from_str_radix`. Parses `s[start..end)` as an `i128`
-in the given radix without allocating a substring.
+Parse the view as an `i128` in the given radix, allocating no substring.
 
 #### `pub fn zero() -> i128`
 
@@ -3013,7 +3013,7 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl FromStr for i128`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<i128, ParseIntError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<i128, ParseIntError>`
 
 #### `impl LenientFromStr for i128`
 
@@ -3798,6 +3798,10 @@ Identity: any string parses to itself. Never fails.
 
 ##### `pub fn from(value: char) -> String`
 
+#### `impl AsStrSlice for String`
+
+##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+
 ### `pub struct StrUtf8ByteIter`
 
 Iterator over the raw UTF-8 bytes of a String, yielding each as `u8`.
@@ -3817,6 +3821,76 @@ _Fields are private._
 #### `impl Iterator for StrCharIter`
 
 ##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrSlice`
+
+A view of part of a string, its ends on UTF-8 character boundaries.
+Creating one copies nothing.
+
+_Fields are private._
+
+#### `pub fn len(&self) -> i32`
+
+Length in bytes.
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
+
+Read the byte at `index`, counted from the view's start, without bounds
+checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= index < self.len()`.
+
+#### `pub fn is_char_boundary(&self, index: i32) -> bool`
+
+Returns true if `index`, counted from the view's start, is 0, `len()`,
+or the start of a character.
+
+#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+
+A sub-view over `[start, end)`, counted from this view's start.
+Panics if the range is out of bounds or either end is off a character
+boundary.
+
+#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+
+A sub-view without bounds or UTF-8 boundary checks.
+
+# Safety (caller-side preconditions)
+
+- `0 <= start <= end <= self.len()`.
+- `start` and `end` lie on UTF-8 character boundaries.
+
+#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+
+The view's UTF-8 bytes.
+
+#### `pub fn chars(&self) -> StrCharIter with stores[self]`
+
+Returns an iterator over the Unicode scalar values (chars) of the view.
+
+#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+
+Returns an iterator over the UTF-8 bytes of the view.
+
+#### `pub fn to_string(&self) -> String`
+
+Copy the view into an owned `String`.
+
+#### `impl AsStrSlice for StrSlice`
+
+##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+
+#### `impl Eq for StrSlice`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for StrSlice`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
 
 ### `pub struct List<T>`
 

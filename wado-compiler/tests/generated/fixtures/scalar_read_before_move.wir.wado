@@ -215,20 +215,19 @@ fn "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_
     let $fuse_at_20: i32;
     let elements_23: ref Array<i32>;
     let elements_24: ref "Array<scalar_read_before_move.wado/S>";
+    let item: ref "scalar_read_before_move.wado//S";
     let v_31: ref "scalar_read_before_move.wado//S";
     let v_32: ref "core:prelude//List<i32>";
     let used_35: i32;
-    let value_41: ref "scalar_read_before_move.wado//S";
     let used_42: i32;
-    let self_49: ref "core:prelude//List<i32>";
-    let used_51: i32;
-    let $v1_54: i32;
-    let self_69: ref "core:prelude//List<i32>";
-    let $v1_72: i32;
+    let self_47: ref "core:prelude//List<i32>";
+    let used_49: i32;
+    let $v1_52: i32;
+    let self_67: ref "core:prelude//List<i32>";
+    let $v1_70: i32;
     let $sroa_$iter_0_repr: ref "Array<scalar_read_before_move.wado/S>";
     let $sroa_$iter_0_index: i32;
-    let $sroa_item_tag: i32;
-    let $sroa_$sroa_item_items_used: i32;
+    let $av_88: i32;
     elements_23 = array.new_fixed<i32>();
     tags = struct.new "core:prelude//List<i32>" { repr: elements_23, used: 0 };
     elements_24 = array.new_fixed<ref "scalar_read_before_move.wado//S">();
@@ -239,56 +238,47 @@ fn "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_
         l1: loop {
             break_if b0 $sroa_$iter_0_index >= 1;
             v_31 = builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            v_32 = v_31.items;
-            let $array_clone_src_1: ref Array<i32>;
-            $array_clone_src_1 = v_32.repr;
-            let $array_clone_len_3: i32;
-            $array_clone_len_3 = v_32.used;
-            let $array_clone_dst_2: ref Array<i32>;
-            $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3);
-            builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_$sroa_item_items_used = v_32.used;
-            $sroa_item_tag = v_31.tag;
+            $av_88 = v_31.tag;
+            item = struct.new "scalar_read_before_move.wado//S" { items: ref.as_non_null(v_32 = v_31.items; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_32.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_32.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_32.used }), tag: $av_88 };
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            if $sroa_item_tag == -1 {
+            if $av_88 == -1 {
                 used_35 = tags.used;
                 if @unlikely(used_35 >= builtin::array_len(tags.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(tags);
                 }
-                builtin::array_set<i32>(tags.repr, used_35, $sroa_item_tag);
+                builtin::array_set<i32>(tags.repr, used_35, $av_88);
                 tags.used = used_35 + 1;
             } else {
-                value_41 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<i32>; $array_clone_dst_5 = builtin::array_new<i32>($sroa_$sroa_item_items_used); builtin::array_copy<i32>($array_clone_dst_5, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_items_used); $array_clone_dst_5), used: $sroa_$sroa_item_items_used }, tag: $sroa_item_tag };
                 used_42 = out.used;
                 if @unlikely(used_42 >= builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(out);
                 }
-                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, used_42, value_41);
+                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, used_42, item);
                 out.used = used_42 + 1;
             }
             continue l1;
         };
     };
-    self_49 = $v1_54 = out.used; if @unlikely(0 >= $v1_54) {
+    self_47 = $v1_52 = out.used; if @unlikely(0 >= $v1_52) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_54);
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_52);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    used_51 = self_49.used;
-    if @unlikely(used_51 >= builtin::array_len(self_49.repr)) {
+    used_49 = self_47.used;
+    if @unlikely(used_49 >= builtin::array_len(self_47.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_49);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_47);
     }
-    builtin::array_set<i32>(self_49.repr, used_51, 2);
-    self_49.used = used_51 + 1;
-    self_69 = $v1_72 = out.used; if @unlikely(0 >= $v1_72) {
+    builtin::array_set<i32>(self_47.repr, used_49, 2);
+    self_47.used = used_49 + 1;
+    self_67 = $v1_70 = out.used; if @unlikely(0 >= $v1_70) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_72);
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_70);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    $v0_7 = self_69.used;
+    $v0_7 = self_67.used;
     if @unlikely($v0_7 != 2) {
         cold_path;
         "scalar_read_before_move.wado/$test_0_a_scalar_read_before_a_move_leaves_the_source_untouched$cold0"($v0_7);
@@ -460,10 +450,10 @@ fn "scalar_read_before_move.wado/$test_3_a_scalar_read_before_a_move_of_a_local"
     let out: ref "core:prelude//List<scalar_read_before_move.wado/S>";
     let $v0: i32;
     let elements_6: ref "Array<scalar_read_before_move.wado/S>";
-    let self_17: ref "core:prelude//List<i32>";
-    let used_19: i32;
-    let self_30: ref "core:prelude//List<i32>";
-    let $v1_33: i32;
+    let self_15: ref "core:prelude//List<i32>";
+    let used_17: i32;
+    let self_28: ref "core:prelude//List<i32>";
+    let $v1_31: i32;
     elements_6 = array.new_fixed<ref "scalar_read_before_move.wado//S">();
     out = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: elements_6, used: 0 };
     if @unlikely(0 >= builtin::array_len(out.repr)) {
@@ -472,20 +462,20 @@ fn "scalar_read_before_move.wado/$test_3_a_scalar_read_before_a_move_of_a_local"
     }
     builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, 0, struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, tag: 7 });
     out.used = 1;
-    self_17 = builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    used_19 = self_17.used;
-    if @unlikely(used_19 >= builtin::array_len(self_17.repr)) {
+    self_15 = builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
+    used_17 = self_15.used;
+    if @unlikely(used_17 >= builtin::array_len(self_15.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_17);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_15);
     }
-    builtin::array_set<i32>(self_17.repr, used_19, 2);
-    self_17.used = used_19 + 1;
-    self_30 = $v1_33 = out.used; if @unlikely(0 >= $v1_33) {
+    builtin::array_set<i32>(self_15.repr, used_17, 2);
+    self_15.used = used_17 + 1;
+    self_28 = $v1_31 = out.used; if @unlikely(0 >= $v1_31) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_33);
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_31);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    $v0 = self_30.used;
+    $v0 = self_28.used;
     if @unlikely($v0 != 2) {
         cold_path;
         "scalar_read_before_move.wado/$test_3_a_scalar_read_before_a_move_of_a_local$cold0"($v0);
@@ -497,19 +487,18 @@ fn "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move"() 
     let out: ref "core:prelude//List<scalar_read_before_move.wado/S>";
     let $v0_6: i32;
     let elements_15: ref "Array<scalar_read_before_move.wado/S>";
+    let item: ref "scalar_read_before_move.wado//S";
     let v_22: ref "scalar_read_before_move.wado//S";
     let v_23: ref "core:prelude//List<i32>";
-    let value_31: ref "scalar_read_before_move.wado//S";
+    let $v1_26: i32;
     let used_32: i32;
-    let self_39: ref "core:prelude//List<i32>";
-    let used_41: i32;
-    let $v1_44: i32;
-    let self_59: ref "core:prelude//List<i32>";
-    let $v1_62: i32;
+    let self_37: ref "core:prelude//List<i32>";
+    let used_39: i32;
+    let $v1_42: i32;
+    let self_57: ref "core:prelude//List<i32>";
+    let $v1_60: i32;
     let $sroa_$iter_0_repr: ref "Array<scalar_read_before_move.wado/S>";
     let $sroa_$iter_0_index: i32;
-    let $sroa_item_tag: i32;
-    let $sroa_$sroa_item_items_used: i32;
     elements_15 = array.new_fixed<ref "scalar_read_before_move.wado//S">();
     out = struct.new "core:prelude//List<scalar_read_before_move.wado/S>" { repr: elements_15, used: 0 };
     $sroa_$iter_0_repr = global:scalar_read_before_move.wado::$const_obj_14;
@@ -518,52 +507,42 @@ fn "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move"() 
         l30: loop {
             break_if b29 $sroa_$iter_0_index >= 1;
             v_22 = builtin::array_get_value<ref "scalar_read_before_move.wado//S">($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            v_23 = v_22.items;
-            let $array_clone_src_1: ref Array<i32>;
-            $array_clone_src_1 = v_23.repr;
-            let $array_clone_len_3: i32;
-            $array_clone_len_3 = v_23.used;
-            let $array_clone_dst_2: ref Array<i32>;
-            $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3);
-            builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-            $sroa_$sroa_item_items_used = v_23.used;
-            $sroa_item_tag = v_22.tag;
+            item = struct.new "scalar_read_before_move.wado//S" { items: ref.as_non_null(v_23 = v_22.items; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_23.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_23.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_23.used }), tag: v_22.tag };
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            if if @unlikely(0 >= $sroa_$sroa_item_items_used) {
+            if $v1_26 = item.items.used; if @unlikely(0 >= $v1_26) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $sroa_$sroa_item_items_used);
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_26);
                 unreachable;
-            }; builtin::array_get_value<i32>($array_clone_dst_2, 0) == 1 {
-                value_31 = struct.new "scalar_read_before_move.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_dst_5: ref Array<i32>; $array_clone_dst_5 = builtin::array_new<i32>($sroa_$sroa_item_items_used); builtin::array_copy<i32>($array_clone_dst_5, 0, $array_clone_dst_2, 0, $sroa_$sroa_item_items_used); $array_clone_dst_5), used: $sroa_$sroa_item_items_used }, tag: $sroa_item_tag };
+            }; builtin::array_get_value<i32>(item.items.repr, 0) == 1 {
                 used_32 = out.used;
                 if @unlikely(used_32 >= builtin::array_len(out.repr)) {
                     cold_path;
                     "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>::grow"(out);
                 }
-                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, used_32, value_31);
+                builtin::array_set<ref "scalar_read_before_move.wado//S">(out.repr, used_32, item);
                 out.used = used_32 + 1;
             }
             continue l30;
         };
     };
-    self_39 = $v1_44 = out.used; if @unlikely(0 >= $v1_44) {
+    self_37 = $v1_42 = out.used; if @unlikely(0 >= $v1_42) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_44);
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_42);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    used_41 = self_39.used;
-    if @unlikely(used_41 >= builtin::array_len(self_39.repr)) {
+    used_39 = self_37.used;
+    if @unlikely(used_39 >= builtin::array_len(self_37.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_39);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_37);
     }
-    builtin::array_set<i32>(self_39.repr, used_41, 2);
-    self_39.used = used_41 + 1;
-    self_59 = $v1_62 = out.used; if @unlikely(0 >= $v1_62) {
+    builtin::array_set<i32>(self_37.repr, used_39, 2);
+    self_37.used = used_39 + 1;
+    self_57 = $v1_60 = out.used; if @unlikely(0 >= $v1_60) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_62);
+        "core:prelude/list.wado/core:prelude/list.wado/List<scalar_read_before_move.wado/S>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_60);
         unreachable;
     }; builtin::array_get_value<ref "scalar_read_before_move.wado//S">(out.repr, 0).items;
-    $v0_6 = self_59.used;
+    $v0_6 = self_57.used;
     if @unlikely($v0_6 != 2) {
         cold_path;
         "scalar_read_before_move.wado/$test_4_a_scalar_element_read_before_a_move$cold0"($v0_6);
@@ -1795,11 +1774,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_116, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

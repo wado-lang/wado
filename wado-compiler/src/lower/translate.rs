@@ -725,9 +725,6 @@ impl FunctionTranslator<'_, '_> {
         value_copy::analyze::should_wrap(value, &self.base.type_table.borrow(), &oracle)
     }
 
-    /// Whether `value` is a move rather than a copy: a whole-local read at its
-    /// final use, or a field / whole-value materialization that aliases out of a
-    /// dead aggregate at a literal (place-level move, keyed by span).
     /// Whether an immutable binding may alias `value`'s storage instead of
     /// copying it: the source must be rooted at an immutable local whose
     /// storage is never moved to a new owner.
@@ -752,6 +749,8 @@ impl FunctionTranslator<'_, '_> {
             .is_some_and(|root| !self.moved_roots.contains(&root))
     }
 
+    /// Whether `value` is a move rather than a copy: a whole-local read at its final
+    /// use, or a materialization aliasing out of a dead aggregate, keyed by span.
     fn is_last_use_move(&self, value: &TirExpr) -> bool {
         // A newtype cast hands over the same storage (see
         // `last_use::strip_casts`), so it must not hide the materialization
@@ -1875,15 +1874,8 @@ impl FunctionTranslator<'_, '_> {
         args: &[CallArg],
         has_receiver: bool,
     ) -> ExprKind {
-        if func.module_source.is_core_builtin()
-            && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
-            && args.len() == 1
-            && let Some(type_id) = func.monomorph_info.as_ref().and_then(|mi| {
-                mi.impl_type_args
-                    .first()
-                    .or(mi.method_type_args.first())
-                    .copied()
-            })
+        if args.len() == 1
+            && let Some(type_id) = value_copy::copy_value_type_arg(func)
             && let Some((helper_module, helper_name)) = self
                 .base
                 .value_copy
@@ -2134,11 +2126,13 @@ impl FunctionTranslator<'_, '_> {
             TirPattern::Variant {
                 enum_type,
                 variant_name,
+                case_index,
                 bindings,
                 payload_type,
             } => PatKind::Variant {
                 enum_type: *enum_type,
                 variant_name: variant_name.clone(),
+                case_index: *case_index,
                 bindings: bindings.iter().map(|p| self.convert_pattern(p)).collect(),
                 payload_type: *payload_type,
             },

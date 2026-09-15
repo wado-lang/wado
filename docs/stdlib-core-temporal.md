@@ -202,7 +202,7 @@ Interpret this instant in `time_zone`, the zoned view of the same moment
 
 #### `impl FromStr for Instant`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Instant, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<Instant, DeserializeError>`
 
 #### `impl Serialize for Instant`
 
@@ -440,7 +440,7 @@ zone name.
 
 #### `impl FromStr for ZonedDateTime`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<ZonedDateTime, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<ZonedDateTime, DeserializeError>`
 
 #### `impl Serialize for ZonedDateTime`
 
@@ -543,7 +543,7 @@ The ISO 8601 form, e.g. `"P1Y2M3W4DT5H6M7.5S"`. A zero duration is
 
 #### `impl FromStr for Duration`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<Duration, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<Duration, DeserializeError>`
 
 #### `impl Deserialize for Duration`
 
@@ -677,7 +677,7 @@ instant. Traps on an IANA zone name.
 
 #### `impl FromStr for PlainDate`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDate, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<PlainDate, DeserializeError>`
 
 ### `pub struct PlainTime`
 
@@ -762,7 +762,7 @@ exact.
 
 #### `impl FromStr for PlainTime`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainTime, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<PlainTime, DeserializeError>`
 
 ### `pub struct PlainDateTime`
 
@@ -824,7 +824,7 @@ Traps on an IANA zone name.
 
 #### `impl FromStr for PlainDateTime`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainDateTime, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<PlainDateTime, DeserializeError>`
 
 ### `pub struct PlainYearMonth`
 
@@ -902,7 +902,7 @@ Land this month on a day, clamped to the month's length.
 
 #### `impl FromStr for PlainYearMonth`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainYearMonth, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<PlainYearMonth, DeserializeError>`
 
 ### `pub struct PlainMonthDay`
 
@@ -950,7 +950,7 @@ Temporal month code, `"M01"` … `"M12"`.
 
 #### `impl FromStr for PlainMonthDay`
 
-##### `fn from_str_range(s: &String, start: i32, end: i32) -> Result<PlainMonthDay, DeserializeError>`
+##### `fn from_str_slice(s: &StrSlice) -> Result<PlainMonthDay, DeserializeError>`
 
 ## Enums
 

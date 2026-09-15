@@ -71,7 +71,9 @@ The plan never holds a second copy of the same elements. A scored alternation on
 
 For a grammar outside the repo, `wado run --dir <dir> package-gale dump Grammar.g4` — see `--dir` in the root [`AGENTS.md`](../AGENTS.md).
 
-The `trace` generator option logs a runtime event stream to stderr (enter / ok / FAIL per rule, per-alt scan lengths, the committed `pick`); its `alt#N` indices match `gale dump`. Strictly opt-in — off is byte-identical output.
+The `trace` generator option logs a runtime event stream (enter / ok / FAIL per rule, per-alt scan lengths, the committed `pick`); its `alt#N` indices match `gale dump`. Strictly opt-in — off is byte-identical output.
+
+It goes through `core:log` at `Trace` under the target `gale.trace`, so four gates stand between a decision and a line: the codegen switch, then `core:log`'s three tiers. `Trace` is below what `core:log` admits with no sink, so a trace build exports `trace_to_stderr(|| …)`, which installs one. Under `wado test` tier 1 is compiled down to `warn`, so add `-D log.level=trace` there as well.
 
 ```sh
 gale gen --trace Grammar.g4

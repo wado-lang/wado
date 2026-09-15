@@ -1,0 +1,46 @@
+// A default whose expansion never reaches a fixpoint, in the three shapes the
+// walk can take: naming its own declaration, naming it under an argument, and
+// two declarations naming each other. Each used to recurse until the stack ran
+// out, which reports nothing at all.
+//
+// `Pair` is reached through a struct field rather than an annotation, the path
+// that resolves types without the elaborator — so the guard has to sit on the
+// declaration, where both resolvers ask.
+
+struct Rec<T = Rec> {
+    v: i32,
+}
+
+struct Pair<A, B = Pair<A>> {
+    v: i32,
+}
+
+struct Reaches {
+    pair: Pair<i32>,
+}
+
+struct Ping<X, Y = Pong<X>> {
+    v: i32,
+}
+
+struct Pong<X, Y = Ping<X>> {
+    v: i32,
+}
+
+export fn run() {
+    let r: Rec = Rec { v: 1 };
+    let reaches = Reaches { pair: Pair { v: 2 } };
+    let p: Ping<i32> = Ping { v: 3 };
+    assert r.v + reaches.pair.v + p.v == 6;
+}
+
+__DATA__
+{
+    "compile_error": "so filling the slot never settles",
+    "compile_errors_contains": [
+        "expands into 'Rec' again",
+        "expands into 'Pair' again",
+        "expands into 'Ping' again",
+        "expands into 'Pong' again"
+    ]
+}

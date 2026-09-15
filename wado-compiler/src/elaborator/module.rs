@@ -15,8 +15,6 @@ use crate::elaborator::item::{
     register_method_compiler_item, register_trait_compiler_item,
     register_variant_case_compiler_item, register_variant_compiler_item,
 };
-use crate::elaborator::scope::param_decl;
-use crate::elaborator::types::{BoundRef, type_param_defaults_of};
 use crate::name::{FqTypeName, MethodName, RefKind};
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -44,23 +42,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
                     }
-                    // Extract type parameter bounds
-                    let type_param_bounds: Vec<(String, Vec<BoundRef>)> = struct_decl
-                        .type_params
-                        .iter()
-                        .map(|p| {
-                            (
-                                p.name.clone(),
-                                p.bounds
-                                    .iter()
-                                    .map(|b| BoundRef {
-                                        name: b.name.clone(),
-                                        site: b.id,
-                                    })
-                                    .collect(),
-                            )
-                        })
-                        .collect();
                     // Collect TypeIds for struct's own type params in declaration order.
                     let type_param_type_ids: Vec<TypeId> = struct_decl
                         .type_params
@@ -86,9 +67,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_param_bounds,
+                            type_params: struct_decl.type_params.clone(),
                             type_param_type_ids,
-                            type_param_defaults: type_param_defaults_of(&struct_decl.type_params),
                         },
                     );
 
@@ -116,19 +96,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.sem.decls.local_newtypes.insert(def, newtype_id);
                     } else {
                         // Generic newtype: store definition for lazy instantiation
-                        let type_params = newtype_decl
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
                         self.sem.decls.local_generic_newtypes.insert(
                             self.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
-                                type_params,
+                                type_params: newtype_decl.type_params.clone(),
                                 base_type_ast: newtype_decl.ty.clone(),
-                                type_param_defaults: type_param_defaults_of(
-                                    &newtype_decl.type_params,
-                                ),
                             },
                         );
                     }
@@ -152,13 +124,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 .get(&p.name)
                                 .map(|b| b.type_id)
                         })
-                        .collect();
-
-                    // Collect type parameters
-                    let type_params: Vec<String> = variant_decl
-                        .type_params
-                        .iter()
-                        .map(|p| p.name.clone())
                         .collect();
 
                     // Collect variant cases with resolved payload types
@@ -187,10 +152,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: variant_decl.name.clone(),
                             module_source: module_source.clone(),
                             defined_at: variant_decl.id,
-                            type_params,
+                            type_params: variant_decl.type_params.clone(),
                             cases,
                             type_param_type_ids,
-                            type_param_defaults: type_param_defaults_of(&variant_decl.type_params),
                         },
                     );
 
@@ -362,88 +326,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                // Set up type parameters from impl block before resolving method signatures.
-                // Use inherited scope to preserve caller-provided context;
-                // only `type_params`, `type_param_bounds`, and
-                // `assoc_type_bindings` are replaced (matching the
-                // original `mem::take` semantics for those fields).
+                // The scope is inherited so the caller's context survives, but
+                // an impl block's parameters are its own: whatever the enclosing
+                // one bound must not answer a name inside this block.
                 let mut scope = self.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
                 scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
                 scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-
-                // First, collect explicit type params from impl<T>, skipping concrete types
-                // (e.g., `impl<i32, T> IndexValue<i32> for Triple<T>` — skip "i32").
-                let mut actual_idx = 0u32;
-                for param in &impl_block.type_params {
-                    if scope
-                        .tysys
-                        .is_known_type_name_in(&scope.current_module_source, &param.name)
-                    {
-                        continue;
-                    }
-                    let type_id = if param.is_pack {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_pack(param.name.clone(), actual_idx)
-                    } else {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), actual_idx)
-                    };
-                    scope.annotate_ctx.trait_ctx.type_params.insert(
-                        param.name.clone(),
-                        BinderInScope::declared(actual_idx, type_id, param.id),
-                    );
-                    if !param.bounds.is_empty() {
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .type_param_bounds
-                            .insert(param.name.clone(), param.bounds.clone());
-                    }
-                    actual_idx += 1;
-                }
-
-                // Also collect type params from generic type: impl List<T> {...}
-                // The type args in List<T> are type parameters.
-                // For ref types (impl Trait for &Container<T>), unwrap the reference first.
-                let impl_inner_ty = match &impl_block.ty {
-                    ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
-                    other => other,
-                };
-                if let ast::Type::Generic(generic) = impl_inner_ty {
-                    let offset = actual_idx as usize;
-                    for (i, arg) in generic.args.iter().enumerate() {
-                        if let ast::Type::Named(named) = arg {
-                            let name = &named.name;
-                            if !scope.annotate_ctx.trait_ctx.type_params.contains_key(name)
-                                && !scope
-                                    .tysys
-                                    .is_known_type_name_in(&scope.current_module_source, name)
-                            {
-                                let index = (offset + i) as u32;
-                                let type_id = scope
-                                    .tysys
-                                    .type_table
-                                    .borrow_mut()
-                                    .make_type_param(name.clone(), index);
-                                scope.annotate_ctx.trait_ctx.type_params.insert(
-                                    name.clone(),
-                                    BinderInScope {
-                                        index,
-                                        type_id,
-                                        decl: param_decl(&impl_block.type_params, name),
-                                    },
-                                );
-                            }
-                        }
-                    }
-                }
+                scope.register_impl_block_params(impl_block);
 
                 // Set up associated type bindings for trait implementations
                 if impl_block.trait_type.is_some() {

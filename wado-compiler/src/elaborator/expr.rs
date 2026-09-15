@@ -1844,10 +1844,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         })
                         .flatten()
                 });
-            if let Some(((trait_info, matched_type_id), index_method)) = index_trait_info {
+            if let Some(((trait_info, _), index_method)) = index_trait_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = self.fq_index_receiver(matched_type_id);
+                let receiver = trait_info.receiver.clone();
                 let mangled_method_name =
                     MethodName::format_local(&receiver, Some(&trait_info.trait_name), index_method);
 
@@ -1902,10 +1902,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     |s, n, t| s.find_index_value_trait_impl(n, t, Some(index_type)),
                 )
             });
-            if let Some((trait_info, matched_type_id)) = index_value_info {
+            if let Some((trait_info, _)) = index_value_info {
                 debug_assert_key_matches(trait_info.index_type, index_type);
 
-                let receiver = self.fq_index_receiver(matched_type_id);
+                let receiver = trait_info.receiver.clone();
                 let mangled_method_name = MethodName::format_local(
                     &receiver,
                     Some(&trait_info.trait_name),
@@ -2738,6 +2738,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         scrutinee_type: TypeId,
         span: Span,
     ) {
+        // Coverage is asked of the structure the scrutinee's cases come from, so
+        // that it agrees with what pattern resolution asks.
+        let scrutinee_type = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee_type);
+
         // Classify each arm pattern once (shape only), pairing it with whether
         // the arm is guardless (guarded arms never contribute to coverage).
         let classified: Vec<(bool, ExhPattern)> = arms
@@ -2829,19 +2837,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Project an AST match-arm pattern onto the shape exhaustiveness reads,
     /// mirroring `resolve_if_pattern_inner`'s `TirPattern`-shape decisions.
-    /// References are peeled first (as `resolve_if_pattern` does) so case-name
-    /// disambiguation uses the underlying type.
     fn exh_pattern(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
-        let mut peeled = scrutinee_type;
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) =
-            self.tysys.type_table.borrow().get(peeled).clone()
-        {
-            peeled = inner;
-        }
-        self.exh_pattern_inner(pattern, peeled)
-    }
-
-    fn exh_pattern_inner(&mut self, pattern: &ast::Pattern, scrutinee_type: TypeId) -> ExhPattern {
         match pattern {
             ast::Pattern::Wildcard | ast::Pattern::Error(_) => ExhPattern::CatchAll,
             ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
@@ -2851,7 +2847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !matches!(pattern, ast::Pattern::MutIdent { .. })
                     && self.is_known_case_of_type(scrutinee_type, name, None)
                 {
-                    return self.exh_pattern_inner(
+                    return self.exh_pattern(
                         &ast::Pattern::Variant {
                             variant_name: name.clone(),
                             variant_qualifier: None,
@@ -2892,7 +2888,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ast::Pattern::Or(alternatives) => ExhPattern::Or(
                 alternatives
                     .iter()
-                    .map(|alt| self.exh_pattern_inner(alt, scrutinee_type))
+                    .map(|alt| self.exh_pattern(alt, scrutinee_type))
                     .collect(),
             ),
             ast::Pattern::Range {
@@ -4023,7 +4019,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // two different structs when a local shadows a module-level generic.
         let is_generic_struct = self
             .struct_fields_of_written_decl(struct_decl)
-            .is_some_and(|info| !info.type_param_bounds.is_empty());
+            .is_some_and(|info| !info.type_params.is_empty());
         let (struct_type, _mangled_struct_name, _fields) = if is_generic_struct {
             // This is a generic struct - infer type arguments from field values.
             // `expected_type` lets the caller's annotation (e.g.
@@ -4111,37 +4107,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
 
             // Check trait bounds on inferred type arguments
-            if let Some(struct_info) = self.struct_fields_of_written_decl(struct_decl).cloned() {
-                for (i, (param_name, bounds)) in struct_info.type_param_bounds.iter().enumerate() {
-                    if let Some(&type_arg) = type_args.get(i) {
-                        for bound in bounds {
-                            let Some(bound_def) = self.bound_trait_def(bound.site) else {
-                                continue;
-                            };
-                            if !self.tysys.type_implements_trait(
-                                &self.annotate_ctx,
-                                &self.type_lookup(),
-                                type_arg,
-                                bound_def,
-                            ) {
-                                let type_name = self.tysys.type_id_to_string(type_arg);
-                                let reason = self.tysys.trait_unimpl_reason_chain(
-                                    &self.annotate_ctx,
-                                    &self.type_lookup(),
-                                    type_arg,
-                                    &bound.name,
-                                );
-                                let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                                    type_name,
-                                    trait_name: bound.name.clone(),
-                                    param_name: param_name.clone(),
-                                    reason,
-                                    span: struct_lit.span,
-                                });
-                            }
-                        }
-                    }
-                }
+            if let Some(def) = struct_decl {
+                self.check_type_decl_arg_bounds(def, &type_args, struct_lit.span);
             }
 
             // The declaration comes from the node that declares it where the
@@ -4495,9 +4462,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            type_param_bounds: Vec::new(),
+            type_params: Vec::new(),
             type_param_type_ids: Vec::new(),
-            type_param_defaults: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);
 
@@ -4708,15 +4674,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let mut inferred = infer.solve();
         // A phantom parameter — one no field mentions — is not an inference
-        // failure: the declaration's own parameter *is* the answer, and
-        // monomorphization substitutes it. A slot a field does mention and
-        // nothing solved is a failure, so its variable stays put to be blamed
-        // and reported.
+        // failure: the declaration answers it, with its `= Default` if it wrote
+        // one, and the bound is checked against that answer. A slot a field does
+        // mention and nothing solved is a failure, so its variable stays put.
         //
         // Recorded before the answers are, so a phantom's variable is solved
         // to that parameter rather than left unsolved and pinned to `error`
         // at finalize behind no diagnostic.
-        for (slot, answer) in inferred.iter_mut().enumerate() {
+        for slot in 0..inferred.len() {
             let decl_param = struct_info.type_param_type_ids[slot];
             let is_phantom = {
                 let table = self.tysys.type_table.borrow();
@@ -4729,9 +4694,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .iter()
                     .any(|&f| table.contains_type_param_index(f, index))
             };
-            if inst.vars.get(slot) == Some(answer) && is_phantom {
-                *answer = decl_param;
+            if inst.vars.get(slot) != inferred.get(slot) || !is_phantom {
+                continue;
             }
+            inferred[slot] = struct_decl
+                .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
+                .unwrap_or(decl_param);
         }
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
@@ -5398,30 +5366,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_trait_name(CompilerItem::Ord)
             .to_string();
         let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+        assert!(ord.is_some(), "core:prelude declares Ord");
         if element_type != TypeTable::ERROR
-            && !ord.is_some_and(|trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    element_type,
-                    trait_,
-                )
-            })
+            && !self.enforce_single_bound(element_type, &ord_trait_name, ord, "T", range.span)
         {
-            let type_name = self.tysys.type_id_to_string(element_type);
-            let reason = self.tysys.trait_unimpl_reason_chain(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                element_type,
-                &ord_trait_name,
-            );
-            let _ = self.emit(TypeError::TraitBoundNotSatisfied {
-                type_name,
-                trait_name: ord_trait_name,
-                param_name: "T".to_string(),
-                reason,
-                span: range.span,
-            });
             return TypeTable::ERROR;
         }
 

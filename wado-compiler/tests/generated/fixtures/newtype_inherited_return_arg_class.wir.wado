@@ -31,51 +31,47 @@ struct core:prelude/slice.wado//Slice<u8> {  // TypeId(5)
     mut end: i32,
 }
 
-struct newtype_inherited_return_arg_class.wado//Base<i32> {  // TypeId(6)
-    mut value: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
+type "functype//newtype_inherited_return_arg_class.wado/run" = fn();  // TypeId(13)
 
-type "functype//newtype_inherited_return_arg_class.wado/run" = fn();  // TypeId(14)
+type "functype//newtype_inherited_return_arg_class.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//newtype_inherited_return_arg_class.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(15)
+type "functype//newtype_inherited_return_arg_class.wado/$cm_export__run" = fn();  // TypeId(15)
 
-type "functype//newtype_inherited_return_arg_class.wado/$cm_export__run" = fn();  // TypeId(16)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(16)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(17)
+type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(17)
 
-type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(19)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(20)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(20)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(21)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(21)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(22)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(23)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -91,8 +87,7 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:newtype_inherited_return_arg_class.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
-global global:newtype_inherited_return_arg_class.wado::$const_obj_2: ref null "newtype_inherited_return_arg_class.wado//Base<i32>" = struct.new "newtype_inherited_return_arg_class.wado//Base<i32>" { value: 7 };
-global global:core:prelude/primitive.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "newtype_inherited_return_arg_class.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
@@ -106,10 +101,9 @@ fn "newtype_inherited_return_arg_class.wado/run"() with Stdout {
     let rx_38: i32;
     let tx_39: i32;
     let $sroa_sink_total: i32;
-    let $sroa_echoed_value: i32;
     $sroa_sink_total = 1;
-    $sroa_sink_total = local.tee $sroa_sink_total(1 + global:newtype_inherited_return_arg_class.wado::$const_obj_2.value) + global:newtype_inherited_return_arg_class.wado::$const_obj_2.value;
-    $sroa_echoed_value = global:newtype_inherited_return_arg_class.wado::$const_obj_2.value;
+    $sroa_sink_total = 8;
+    $sroa_sink_total = 15;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     f_19 = $local_4_4;
@@ -124,7 +118,7 @@ fn "newtype_inherited_return_arg_class.wado/run"() with Stdout {
     builtin::array_copy<u8>($local_3.repr, start_30, global:newtype_inherited_return_arg_class.wado::$const_obj_1, 0, 1);
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     f_34 = $local_4_4;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"($sroa_echoed_value, f_34);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(7, f_34);
     rx_38 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_39 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "newtype_inherited_return_arg_class.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
@@ -747,11 +741,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_3, digit_count_4);
-    arr = f.buf.repr;
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_2, digit_count_4);
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

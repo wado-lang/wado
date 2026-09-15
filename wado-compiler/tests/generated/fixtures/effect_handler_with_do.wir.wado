@@ -103,15 +103,13 @@ type "functype//effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure
 
 type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(35)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(36)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(40)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -130,7 +128,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_handler_with_do.wado::$effect_MonotonicClock: ref null "effect_handler_with_do.wado//$Dispatch_MonotonicClock" = ref.null none;
 global global:effect_handler_with_do.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(109, 97, 114, 107, 58, 32);
 global global:effect_handler_with_do.wado::$const_obj_2: ref null "effect_handler_with_do.wado//FixedClock" = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
-global global:core:prelude/primitive.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_with_do.wado/run"() with Stdout {
     let m: u64;
@@ -379,36 +376,34 @@ fn "effect_handler_with_do.wado/effect_handler_with_do.wado/$Closure_3::$call"()
 
 fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     let digit_count_2: i32;
-    let offset_3: i32;
     let arr: ref Array<u8>;
     let pos: i32;
     let t: u64;
-    let i: i32;
+    let i_10: i32;
+    let new_used_67: i32;
+    let start_68: i32;
     digit_count_2 = "core:prelude/primitive.wado/count_digits_u64"(self);
-    offset_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, global:core:prelude/primitive.wado::$const_obj_5, digit_count_2);
+    new_used_67 = f.used + digit_count_2;
+    if @unlikely(new_used_67 > builtin::array_len(f.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_67);
+    }
+    start_68 = f.used;
+    f.used = new_used_67;
     arr = f.repr;
-    pos = offset_3 + digit_count_2;
+    pos = start_68 + digit_count_2;
     t = self;
-    i = 0;
-    b32: block {
-        l33: loop {
-            break_if b32 i >= digit_count_2;
+    i_10 = 0;
+    b33: block {
+        l34: loop {
+            break_if b33 i_10 >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
-            i = i + 1;
-            continue l33;
+            i_10 = i_10 + 1;
+            continue l34;
         };
     };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, alt_prefix, digit_count) {
-    let new_used_55: i32;
-    let start_56: i32;
-    return new_used_55 = self.used + digit_count, if @unlikely(new_used_55 > builtin::array_len(self.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_55);
-    }, start_56 = self.used, self.used = new_used_55, start_56;
 }
 
 fn "closure/effect_handler_with_do.wado/$closure_wrapper_0"($env) {

@@ -385,12 +385,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if let Some(trait_match) = result
                     && !trait_match.is_blanket_ref_impl
                 {
+                    let owner =
+                        trait_match.owner_for(base_type_id, &self.tysys.type_table.borrow());
                     matched_impl_struct_name = Some(trait_match.impl_struct_name.clone());
                     trait_impl_struct_name = Some(trait_match.impl_struct_fq);
                     matched_ref_kind = Some(ref_kind);
                     trait_name = Some(trait_match.trait_name);
                     let mut info = trait_match.method_info;
                     info.is_ref_impl = true;
+                    info.owner = owner;
                     method_info = Some(info);
                     trait_impl_module_source = Some(trait_match.impl_module_source);
                     blanket_type_param = trait_match.blanket_type_param;
@@ -451,7 +454,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 trait_impl_struct_name = Some(trait_match.impl_struct_fq);
             }
             trait_name = Some(trait_match.trait_name);
-            method_info = Some(trait_match.method_info);
+            let mut info = trait_match.method_info;
+            // A newtype inherits a trait impl its base wrote, and the impl
+            // spells `Self` as that base. Name the link the impl sits on, so
+            // the signature re-types to the receiver the way an inherited
+            // inherent method's does.
+            if let Some(trait_def) = trait_name.as_ref().and_then(FqTraitName::canonical)
+                && let Some(link) = self.tysys.own_impl_link(base_type_id, trait_def)
+                && link != base_type_id
+                && info.owner == MethodOwner::Receiver
+            {
+                info.owner = MethodOwner::InheritedFrom(link);
+            }
+            method_info = Some(info);
             trait_impl_module_source = Some(trait_match.impl_module_source);
             blanket_type_param = trait_match.blanket_type_param;
             blanket_binder = trait_match.blanket_binder;

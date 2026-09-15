@@ -197,6 +197,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// Run `body` with `names` bound to `args` and no other type parameter in
+    /// scope, for resolving a type the declaration wrote against its arguments.
+    ///
+    /// Nothing in `struct Marked<M: Mark = Zero>` means the `Zero` a caller
+    /// happens to declare. A name past `args` stays unbound, so a default
+    /// reaches only the parameters to its left.
+    pub(super) fn with_type_param_args<R>(
+        &mut self,
+        names: &[String],
+        args: &[TypeId],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let binders: IndexMap<String, BinderInScope> = names
+            .iter()
+            .zip(args)
+            .enumerate()
+            .map(|(slot, (name, &type_id))| {
+                (
+                    name.clone(),
+                    BinderInScope::undeclared(slot as u32, type_id),
+                )
+            })
+            .collect();
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params = binders;
+        body(&mut scope)
+    }
+
     /// Run `body` with the scope field selected by `field` set to `value`,
     /// restoring the previous value on return (panic-safe).
     fn with_scope_field<T, R>(

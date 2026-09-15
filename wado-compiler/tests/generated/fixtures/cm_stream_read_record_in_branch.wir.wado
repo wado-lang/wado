@@ -208,17 +208,18 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     let v_37: ref "wasi:filesystem/types.wado//DescriptorType";
     let $vc_payload_7: ref null "core:prelude/string.wado//String";
     let v_39: ref "core:prelude/string.wado//String";
-    let handle_46: i32;
-    let packed_48: i64;
-    let rx_49: i32;
-    let tx_50: i32;
-    let handle_58: i32;
-    let packed_60: i64;
-    let rx_61: i32;
-    let tx_62: i32;
+    let handle_45: i32;
+    let packed_47: i64;
+    let rx_48: i32;
+    let tx_49: i32;
+    let handle_57: i32;
+    let packed_59: i64;
+    let rx_60: i32;
+    let tx_61: i32;
     let $vc_payload_0: ref "core:prelude/string.wado//String";
-    let needle: ref Array<u8>;
-    let j: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     let $sroa_$iter_0_repr: ref "Array<wasi:filesystem/types.wado/DirectoryEntry>";
     let $sroa_$iter_0_index: i32;
     let $sroa_$sroa_item_name_used: i32;
@@ -285,26 +286,24 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
             builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
             $sroa_$sroa_item_name_used = v_39.used;
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            if $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: block -> bool {
-                if $sroa_$sroa_item_name_used != 9 {
-                    break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14: 0;
+            if $inline_core_prelude_array_wado_seq_eq_u8__2: block -> bool {
+                b = global:cm_stream_read_record_in_branch.wado::$const_obj_2;
+                len = $sroa_$sroa_item_name_used - 0;
+                if len != 9 {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
                 }
-                $inline_bytes_match_at_3: block -> bool {
-                    needle = global:cm_stream_read_record_in_branch.wado::$const_obj_2;
-                    j = 0;
-                    b15: block {
-                        l16: loop {
-                            break_if b15 j >= $sroa_$sroa_item_name_used;
-                            if builtin::array_get_value<u8>($array_clone_dst_5, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                                break $inline_bytes_match_at_3: 0;
-                            }
-                            j = j + 1;
-                            continue l16;
-                        };
+                i = 0;
+                b15: block {
+                    l16: loop {
+                        break_if b15 i >= len;
+                        if builtin::array_get_value<u8>($array_clone_dst_5, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                            break $inline_core_prelude_array_wado_seq_eq_u8__2: 0;
+                        }
+                        i = i + 1;
+                        continue l16;
                     };
-                    break $inline_bytes_match_at_3: 1;
                 };
-                break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_14;
+                break $inline_core_prelude_array_wado_seq_eq_u8__2: 1;
             } {
                 found_hello = 1;
             }
@@ -314,17 +313,17 @@ fn "cm_stream_read_record_in_branch.wado/run"() with Stdout, Stderr, Preopens {
     "wasi/future-drop-readable:transmission-filesystem"(_done);
     "wasi/stream-drop-readable:directory-entry"(dir_stream);
     if found_hello {
-        rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
-        tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
-        handle_46 = "cm_stream_read_record_in_branch.wado/$cm_binding__Stdout_write_via_stream"(rx_49);
-        "core:rt/write_string_to_stream"(tx_50, global:cm_stream_read_record_in_branch.wado::$const_obj_1);
-        "wasi/future-drop-readable:transmission-cli"(handle_46);
+        rx_48 = builtin::i32_wrap_i64(local.tee packed_47("wasi/stream-new"()));
+        tx_49 = builtin::i32_wrap_i64(packed_47 >> 32_i64);
+        handle_45 = "cm_stream_read_record_in_branch.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
+        "core:rt/write_string_to_stream"(tx_49, global:cm_stream_read_record_in_branch.wado::$const_obj_1);
+        "wasi/future-drop-readable:transmission-cli"(handle_45);
     } else {
-        rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
-        tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
-        handle_58 = "cm_stream_read_record_in_branch.wado/$cm_binding__Stderr_write_via_stream"(rx_61);
-        "core:rt/write_string_to_stream"(tx_62, global:cm_stream_read_record_in_branch.wado::$const_obj_0);
-        "wasi/future-drop-readable:transmission-cli"(handle_58);
+        rx_60 = builtin::i32_wrap_i64(local.tee packed_59("wasi/stream-new"()));
+        tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
+        handle_57 = "cm_stream_read_record_in_branch.wado/$cm_binding__Stderr_write_via_stream"(rx_60);
+        "core:rt/write_string_to_stream"(tx_61, global:cm_stream_read_record_in_branch.wado::$const_obj_0);
+        "wasi/future-drop-readable:transmission-cli"(handle_57);
     }
     "wasi/resource-drop:descriptor"(dir);
 }
@@ -1204,11 +1203,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_17, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

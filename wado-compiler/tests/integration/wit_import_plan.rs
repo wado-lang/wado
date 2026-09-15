@@ -26,8 +26,7 @@ fn plan_imports(source: &str) -> BTreeSet<String> {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
-        &wado_compiler::hashmap::IndexMap::default(),
-        wado_compiler::param_resolution::ParamPolicy::default(),
+        &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
     ))
     .expect("dump succeeds");
@@ -144,8 +143,7 @@ fn plan_matches_component_for_http_service_with_resources() {
             None,
             wado_compiler::OptOverrides::default(),
             &[],
-            &wado_compiler::hashmap::IndexMap::default(),
-            wado_compiler::param_resolution::ParamPolicy::default(),
+            &wado_compiler::param_resolution::ParamInputs::default(),
             wado_compiler::kiln::InvocationIndex::default(),
         ))
         .expect("dump succeeds");
@@ -225,8 +223,7 @@ fn component_plan_and_actual(source: &str) -> (BTreeSet<String>, BTreeSet<String
             None,
             wado_compiler::OptOverrides::default(),
             &[],
-            &wado_compiler::hashmap::IndexMap::default(),
-            wado_compiler::param_resolution::ParamPolicy::default(),
+            &wado_compiler::param_resolution::ParamInputs::default(),
             wado_compiler::kiln::InvocationIndex::default(),
         ))
         .expect("dump succeeds");

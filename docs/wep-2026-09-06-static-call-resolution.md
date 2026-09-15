@@ -292,13 +292,13 @@ unbound, so `fn from(v: T)` resolved to no type at all. It is numbered after the
 ones the receiver does mention. Only an argument can fill it, which is what
 makes the block a blanket, but a slot is what it is either way.
 
-Two spellings decide where the binding goes and what it skips. It runs before
-the trait's parameters are bound, since `From<T>`'s is also spelled `T`: binding
-the trait's first claims that name for an argument nothing has resolved yet, and
-the block's own slot never gets made. And a parameter position may hold a
-concrete type — `impl<i32> IndexValue<i32> for Box` — which is not a parameter
-and must not be bound, or the slot shadows the type it is named for and the
-diagnostic reads `expected 'i32', found 'i32'`.
+The binding runs before the trait's parameters are bound, since `From<T>`'s is
+also spelled `T`: binding the trait's first claims that name for an argument
+nothing has resolved yet, and the block's own slot never gets made.
+
+Every entry in `impl<...>` declares a parameter, as in Rust. A concrete
+instantiation names its type in the trait or receiver instead —
+`impl IndexValue<i32> for Box`.
 
 With the slot real, "only an argument can fill this parameter" is read off the
 slot's index. Reading it off an _absent_ type meant every unresolved parameter
@@ -408,24 +408,13 @@ that needs it, never eagerly for the caller's convenience — resolving the
 receiver up front made a lookup mutate state on paths that never used it, and
 `List<T>::with_capacity`, called from inside its own `impl`, stopped resolving.
 
-## Roadmap
+### Every name reads one answer
 
-- [x] `resolve_static_callee` and its outcomes.
-- [x] The identity question: `is_static_method_at`, `is_static_method`.
-- [x] The signature questions: `lookup_static_method_type_params`,
-      `static_callee_params`, `qualified_call_param_types`,
-      `lookup_static_method_return_type`.
-- [x] The selection: the three sites that located an impl and then looked its
-      return type up separately now make one call, so the two cannot name
-      different declarations.
-- [x] The blanket path's selection: a value blanket is a candidate the rules
-      rank, and every spelling that reaches one asks the resolution first.
-
-Five of the sixteen names are gone outright. The rest no longer walk a ladder of
-their own: each reads the resolution's answer, or asks one rung through the
-shared `impl_method_entries` walk. `find_blanket_static_method` and
-`lookup_static_method_param_types_keyed` still walk the blanket's own rungs, but
-they instantiate what the rules picked rather than picking it.
+A lookup walks no ladder of its own. It reads the resolution's answer, or asks
+one rung through the shared `impl_method_entries` walk.
+`find_blanket_static_method` and `lookup_static_method_param_types_keyed` are the
+exceptions: they walk the blanket's own rungs, but to instantiate what the rules
+picked rather than to pick it.
 
 ## Known gaps
 

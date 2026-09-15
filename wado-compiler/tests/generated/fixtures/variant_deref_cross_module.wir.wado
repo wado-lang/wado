@@ -130,9 +130,9 @@ type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_
 
 type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem" = fn(ref "./sub/variant_deref_helper.wado//LabelElem") -> ref "./sub/variant_deref_helper.wado//LabelElem";  // TypeId(32)
 
-type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem" = fn(ref "./sub/variant_deref_helper.wado//RepeatElem") -> ref "./sub/variant_deref_helper.wado//RepeatElem";  // TypeId(33)
+type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem" = fn(ref "./sub/variant_deref_helper.wado//Elem") -> ref "./sub/variant_deref_helper.wado//Elem";  // TypeId(33)
 
-type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem" = fn(ref "./sub/variant_deref_helper.wado//Elem") -> ref "./sub/variant_deref_helper.wado//Elem";  // TypeId(34)
+type "functype//variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem" = fn(ref "./sub/variant_deref_helper.wado//RepeatElem") -> ref "./sub/variant_deref_helper.wado//RepeatElem";  // TypeId(34)
 
 type "functype//variant_deref_cross_module.wado/process$scalar" = fn(ref "./sub/variant_deref_helper.wado//Elem", ref "core:prelude/string.wado//String");  // TypeId(35)
 
@@ -210,34 +210,33 @@ fn "variant_deref_cross_module.wado/$test_0_recursive_variant_deref_from_another
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_5: i32;
     let $fuse_at_6: i32;
-    let self_12: i32;
-    let haystack: ref Array<u8>;
-    let needle: ref Array<u8>;
-    let j: i32;
+    let a: ref Array<u8>;
+    let a_end: i32;
+    let b: ref Array<u8>;
+    let len: i32;
+    let i: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     "variant_deref_cross_module.wado/process_all$scalar"(struct.new "core:prelude//List<./sub/variant_deref_helper.wado/Elem>" { repr: array.new_fixed<ref "./sub/variant_deref_helper.wado//Elem">(struct.new "./sub/variant_deref_helper.wado//Elem::TokenRef" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 } }, struct.new "./sub/variant_deref_helper.wado//Elem::Repeat" { discriminant: 3, payload_0: struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: struct.new "./sub/variant_deref_helper.wado//Elem::Literal" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>(" world"), used: 6 } } } }), used: 2 }, out);
-    $cond = $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: block -> bool {
-        self_12 = out.used;
-        if self_12 != 11 {
-            break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2: 0;
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
+        a = out.repr;
+        a_end = out.used;
+        b = global:variant_deref_cross_module.wado::$const_obj_13;
+        len = a_end - 0;
+        if len != 11 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
         }
-        $inline_bytes_match_at_5: block -> bool {
-            haystack = out.repr;
-            needle = global:variant_deref_cross_module.wado::$const_obj_13;
-            j = 0;
-            b1: block {
-                l2: loop {
-                    break_if b1 j >= self_12;
-                    if builtin::array_get_value<u8>(haystack, 0 + j) != builtin::array_get_value<u8>(needle, j) {
-                        break $inline_bytes_match_at_5: 0;
-                    }
-                    j = j + 1;
-                    continue l2;
-                };
+        i = 0;
+        b1: block {
+            l2: loop {
+                break_if b1 i >= len;
+                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
+                }
+                i = i + 1;
+                continue l2;
             };
-            break $inline_bytes_match_at_5: 1;
         };
-        break $inline_core_prelude_string_wado_String_core_prelude_traits_wado_Eq__eq_2;
+        break $inline_core_prelude_array_wado_seq_eq_u8__3: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -268,10 +267,6 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
     return struct.new "./sub/variant_deref_helper.wado//LabelElem" { name: ref.as_non_null(v_1 = v.name; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_1.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_1.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_1.used }), element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
 }
 
-fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem"(v) {
-    return struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
-}
-
 fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v) {
     let $vc_payload_0: ref "core:prelude/string.wado//String";
     let $vc_payload_1: ref "core:prelude/string.wado//String";
@@ -298,6 +293,10 @@ fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/
         $vc_payload_5 = ref.cast "./sub/variant_deref_helper.wado//Elem::Label"(v).payload_0;
         struct.new "./sub/variant_deref_helper.wado//Elem::Label" { discriminant: 5, payload_0: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/LabelElem"($vc_payload_5)) };
     });
+}
+
+fn "variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/RepeatElem"(v) {
+    return struct.new "./sub/variant_deref_helper.wado//RepeatElem" { element: ref.as_non_null("variant_deref_cross_module.wado/$value_copy$./sub/variant_deref_helper.wado/Elem"(v.element)) };
 }
 
 fn "variant_deref_cross_module.wado/process$scalar"(elem, out) {
@@ -964,6 +963,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let self_83: u64;
     let digit_count: i32;
     let offset: i32;
+    let self_96: ref "core:prelude/string.wado//String";
     let self_101: i32;
     let new_used_104: i32;
     let start_105: i32;
@@ -1173,7 +1173,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
                 };
                 offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"($local_9, 0, global:core:prelude/format.wado::$const_obj_1, digit_count);
                 $licm_buf_132 = f.buf;
-                "core:prelude/primitive.wado/write_u64_base_digits"($local_9.buf.repr, offset, self_83, digit_count, 4, 15, 0);
+                "core:prelude/primitive.wado/write_u64_base_digits"(self_96 = $local_9.buf; self_96.repr, offset, self_83, digit_count, 4, 15, 0);
                 $inline_core_prelude_string_wado_String__push_str_38: block {
                     self_101 = $local_8.used;
                     break_if $inline_core_prelude_string_wado_String__push_str_38 self_101 == 0;
@@ -1416,11 +1416,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_14, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

@@ -305,20 +305,23 @@ fn check_fusion_preconditions_match(
     let else_arm_body = arm1.body;
 
     let PatKind::Variant {
-        variant_name,
+        case_index,
         bindings,
         ..
     } = &body.pats[arm0.pattern].kind
     else {
         return None;
     };
-    let variant_name = variant_name.clone();
+    let case_index = *case_index;
 
     // At most one payload binding slot.
     let pattern_payload_binding = single_payload_binding(body, bindings)?;
 
-    // Resolve case_index from the labeled block's breaks.
-    let case_index = find_break_case_index_for_name(body, lb_block, &label, &variant_name)?;
+    // The narrow traversal is what holds fusion to the breaks the transform
+    // rewrites, so the arm's case must be one it reaches.
+    if !narrow_break_carries_case(body, lb_block, &label, case_index) {
+        return None;
+    }
 
     // --- LabeledBlock only breaks to L with null or VariantConstruct ---
     let payload_type = check_lb_breaks_and_get_payload(body, lb_block, &label, case_index)?;
@@ -472,129 +475,84 @@ fn tag_slot_of(body: &Body, e: ExprId) -> Option<(u32, u32)> {
     Some((*index, *field_index))
 }
 
-// `find_break_case_index_for_name` deliberately keeps its own narrow traversal
-// rather than folding onto the shared [`walk_exits`]: it is a best-effort
-// locator run *before* [`check_lb_breaks_and_get_payload`] on the
-// value-discarding path, whose transform (`transform_lb_stmt`) does not rewrite
-// an exit nested in an `if` condition. The shared walk visits those positions
-// (the threading transform does rewrite them); locating a case index there
-// would let value-discarding fusion fire on a break the transform leaves
-// dangling. Keeping the locator narrow preserves the original fusion decisions.
+// Its own traversal, not [`walk_exits`]: the shared walk visits `if` conditions,
+// whose exits the value-discarding transform leaves dangling.
 
-/// Walk `block` looking for `break label: VariantConstruct { case_name }`
-/// and return the embedded `case_index`.
-fn find_break_case_index_for_name(
-    body: &Body,
-    block: BlockId,
-    label: &str,
-    variant_name: &str,
-) -> Option<u32> {
-    for s in &body.blocks[block].stmts {
-        if let Some(idx) = find_break_case_index_for_name_in_stmt(body, *s, label, variant_name) {
-            return Some(idx);
-        }
-    }
-    None
+/// Whether some `break label:` in `block` constructs case `case`, over the
+/// breaks the value-discarding transform rewrites.
+fn narrow_break_carries_case(body: &Body, block: BlockId, label: &str, case: u32) -> bool {
+    body.blocks[block]
+        .stmts
+        .iter()
+        .any(|s| narrow_break_carries_case_in_stmt(body, *s, label, case))
 }
 
-fn find_break_case_index_for_name_in_stmt(
-    body: &Body,
-    s: StmtId,
-    label: &str,
-    variant_name: &str,
-) -> Option<u32> {
+fn narrow_break_carries_case_in_stmt(body: &Body, s: StmtId, label: &str, case: u32) -> bool {
     match &body.stmts[s].kind {
         StmtKind::Break {
             label: Some(l),
             value: Some(v),
-        } if l == label => {
-            // A promoted value break (e.g. a `Null` placeholder) is not a
-            // `VariantConstruct` — no case index.
-            if let Some(e) = v.as_expr()
-                && let ExprKind::VariantConstruct {
-                    case_index,
-                    case_name,
-                    ..
-                } = &body.exprs[e].kind
-                && case_name == variant_name
-            {
-                return Some(*case_index);
-            }
-            None
-        }
-        StmtKind::LabeledBlock { label: l, .. } if l == label => None,
+        } if l == label => v.as_expr().is_some_and(|e| {
+            matches!(
+                &body.exprs[e].kind,
+                ExprKind::VariantConstruct { case_index, .. } if *case_index == case
+            )
+        }),
+        StmtKind::LabeledBlock { label: l, .. } if l == label => false,
         StmtKind::If {
             then_block,
             else_block,
             ..
-        } => find_break_case_index_for_name(body, *then_block, label, variant_name).or_else(|| {
-            else_block.and_then(|eb| find_break_case_index_for_name(body, eb, label, variant_name))
-        }),
+        } => {
+            narrow_break_carries_case(body, *then_block, label, case)
+                || else_block.is_some_and(|eb| narrow_break_carries_case(body, eb, label, case))
+        }
         StmtKind::Loop { body: b } | StmtKind::LabeledBlock { block: b, .. } => {
-            find_break_case_index_for_name(body, *b, label, variant_name)
+            narrow_break_carries_case(body, *b, label, case)
         }
         StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
-            find_break_case_index_for_name_in_operand(body, *value, label, variant_name)
+            narrow_break_carries_case_in_operand(body, *value, label, case)
         }
-        StmtKind::Expr(expr) => {
-            find_break_case_index_for_name_in_operand(body, *expr, label, variant_name)
+        StmtKind::Expr(expr) => narrow_break_carries_case_in_operand(body, *expr, label, case),
+        StmtKind::Return { value } => {
+            value.is_some_and(|v| narrow_break_carries_case_in_operand(body, v, label, case))
         }
-        StmtKind::Return { value } => value
-            .and_then(|v| find_break_case_index_for_name_in_operand(body, v, label, variant_name)),
         StmtKind::Break { value: Some(v), .. } => {
-            find_break_case_index_for_name_in_operand(body, *v, label, variant_name)
+            narrow_break_carries_case_in_operand(body, *v, label, case)
         }
-        StmtKind::Break { value: None, .. } | StmtKind::Continue => None,
+        StmtKind::Break { value: None, .. } | StmtKind::Continue => false,
     }
 }
 
-fn find_break_case_index_for_name_in_operand(
-    body: &Body,
-    op: Operand,
-    label: &str,
-    variant_name: &str,
-) -> Option<u32> {
+fn narrow_break_carries_case_in_operand(body: &Body, op: Operand, label: &str, case: u32) -> bool {
     op.as_expr()
-        .and_then(|e| find_break_case_index_for_name_in_expr(body, e, label, variant_name))
+        .is_some_and(|e| narrow_break_carries_case_in_expr(body, e, label, case))
 }
 
-fn find_break_case_index_for_name_in_expr(
-    body: &Body,
-    e: ExprId,
-    label: &str,
-    variant_name: &str,
-) -> Option<u32> {
+fn narrow_break_carries_case_in_expr(body: &Body, e: ExprId, label: &str, case: u32) -> bool {
     match &body.exprs[e].kind {
         ExprKind::LabeledBlock { block, .. } => {
-            find_break_case_index_for_name(body, *block, label, variant_name)
+            narrow_break_carries_case(body, *block, label, case)
         }
         ExprKind::If {
             condition,
             then_branch,
             else_branch,
-        } => find_break_case_index_for_name_in_operand(body, *condition, label, variant_name)
-            .or_else(|| find_break_case_index_for_name(body, *then_branch, label, variant_name))
-            .or_else(|| {
-                else_branch
-                    .and_then(|b| find_break_case_index_for_name(body, b, label, variant_name))
-            }),
-        ExprKind::Match { expr: scrut, arms } => find_break_case_index_for_name_in_operand(
-            body,
-            *scrut,
-            label,
-            variant_name,
-        )
-        .or_else(|| {
-            arms.iter().find_map(|arm| {
-                find_break_case_index_for_name_in_operand(body, arm.body, label, variant_name)
-                    .or_else(|| {
-                        arm.guard.and_then(|g| {
-                            find_break_case_index_for_name_in_operand(body, g, label, variant_name)
+        } => {
+            narrow_break_carries_case_in_operand(body, *condition, label, case)
+                || narrow_break_carries_case(body, *then_branch, label, case)
+                || else_branch.is_some_and(|b| narrow_break_carries_case(body, b, label, case))
+        }
+        ExprKind::Match { expr: scrut, arms } => {
+            narrow_break_carries_case_in_operand(body, *scrut, label, case)
+                || arms.iter().any(|arm| {
+                    narrow_break_carries_case_in_operand(body, arm.body, label, case)
+                        || arm.guard.is_some_and(|g| {
+                            narrow_break_carries_case_in_operand(body, g, label, case)
                         })
-                    })
-            })
-        }),
-        _ => None,
+                })
+        }
+        _ => false,
     }
 }
 
@@ -1889,8 +1847,8 @@ pub(super) fn expr_has_free_unlabeled_loop_exit(body: &Body, e: ExprId, loop_dep
 // Value-producing threading (`apply_expr`): `match LB { … }` → `LB` in place.
 
 struct ArmInfo {
-    /// `None` for a wildcard arm; `Some(case)` for a `Variant` pattern.
-    case_name: Option<String>,
+    /// `None` for a wildcard arm; `Some(index)` for a `Variant` pattern.
+    case_index: Option<u32>,
     binding: Option<u32>,
     body: Operand,
 }
@@ -1977,18 +1935,18 @@ fn arm_info(body: &Body, arm: &ArmData) -> Option<ArmInfo> {
     }
     match &body.pats[arm.pattern].kind {
         PatKind::Wildcard => Some(ArmInfo {
-            case_name: None,
+            case_index: None,
             binding: None,
             body: arm.body,
         }),
         PatKind::Variant {
-            variant_name,
+            case_index,
             bindings,
             ..
         } => {
             let binding = single_payload_binding(body, bindings)?;
             Some(ArmInfo {
-                case_name: Some(variant_name.clone()),
+                case_index: Some(*case_index),
                 binding,
                 body: arm.body,
             })
@@ -1997,12 +1955,12 @@ fn arm_info(body: &Body, arm: &ArmData) -> Option<ArmInfo> {
     }
 }
 
-/// First arm a `VariantConstruct` of `case_name` selects: the same-case
+/// First arm a `VariantConstruct` of `case_index` selects: the same-case
 /// `Variant` arm or a wildcard. Case A never matches a `Variant` pattern of
 /// case B, so skipping non-matching variant arms is exact.
-fn select_arm(arms: &[ArmInfo], case_name: &str) -> Option<usize> {
+fn select_arm(arms: &[ArmInfo], case_index: u32) -> Option<usize> {
     arms.iter()
-        .position(|a| a.case_name.as_deref().is_none_or(|n| n == case_name))
+        .position(|a| a.case_index.is_none_or(|index| index == case_index))
 }
 
 /// Whether a non-unit arm body splits into `stmts + tail value`: a plain
@@ -2035,19 +1993,21 @@ impl ExitSink for ExitValidator<'_> {
             return false;
         };
         let ExprKind::VariantConstruct {
-            case_name, payload, ..
+            case_index,
+            payload,
+            ..
         } = &body.exprs[vc].kind
         else {
             return false;
         };
-        let (case_name, payload) = (case_name.clone(), *payload);
+        let (case_index, payload) = (*case_index, *payload);
         if payload.is_some_and(|p| {
             p.as_expr()
                 .is_some_and(|e| has_break_to(body, NodeRef::Expr(e), self.label))
         }) {
             return false;
         }
-        let Some(idx) = select_arm(self.arms, &case_name) else {
+        let Some(idx) = select_arm(self.arms, case_index) else {
             return false;
         };
         if let Some(binding) = self.arms[idx].binding {
@@ -2299,13 +2259,15 @@ fn emit_threaded_exit(
         .and_then(Operand::as_expr)
         .expect("guarded by plan_threading");
     let ExprKind::VariantConstruct {
-        case_name, payload, ..
+        case_index,
+        payload,
+        ..
     } = &engine.body.exprs[vc].kind
     else {
         unreachable!("guarded by plan_threading");
     };
-    let payload = *payload;
-    let arm_idx = select_arm(&plan.arms, case_name).expect("guarded by plan_threading");
+    let (case_index, payload) = (*case_index, *payload);
+    let arm_idx = select_arm(&plan.arms, case_index).expect("guarded by plan_threading");
     let arm = &plan.arms[arm_idx];
     let arm_body = arm.body;
     let binding = arm.binding;

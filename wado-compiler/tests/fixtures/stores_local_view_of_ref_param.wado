@@ -1,0 +1,22 @@
+// `Slice<u8>` holds its reference in a field, not in a type argument, so a call
+// handing one back is a borrow into the result rather than an external store.
+// A view that stays local needs no `stores`.
+use { println, Stdout } from "core:cli";
+
+fn count_bytes(s: &String, needle: u8) -> i32 {
+    let view = s.as_byte_slice();
+    let mut n = 0;
+    for let mut i = 0; i < view.len(); i += 1 {
+        if view.get_unchecked(i) == needle {
+            n += 1;
+        }
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${count_bytes(&"banana", b'a')}`);
+}
+
+__DATA__
+{ "stdout": "3\n" }

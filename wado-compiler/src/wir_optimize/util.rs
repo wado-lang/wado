@@ -76,16 +76,6 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
     instr.for_each_child(&mut |child| collect_ref_funcs_instr(child, pinned));
 }
 
-/// Collect all local names referenced by `LocalGet` in an expression tree.
-pub(super) fn collect_local_gets_deep(instr: &WirInstr, names: &mut IndexSet<String>) {
-    if let WirInstr::LocalGet { name, .. } = instr {
-        names.insert(name.clone());
-    }
-    instr.for_each_child(&mut |child| {
-        collect_local_gets_deep(child, names);
-    });
-}
-
 /// True if no node in `instr`'s sub-tree is observable. Pure loads
 /// (`StructGet`, `ArrayGet*`, memory loads, `LocalGet`, `GlobalGet`) and
 /// arithmetic / ref ops are treated as side-effect-free.

@@ -513,35 +513,9 @@ fn append_all(buf: &mut ByteList, src: &ByteList) {
     buf.extend_from_slice(src.as_slice());
 }
 
-/// Bytewise lexicographic comparison of two encoded keys (RFC 8949 §4.2.1
-/// orders map keys by the bytewise order of their encoded form). Hand-rolled
-/// rather than `List<u8>::cmp` because the `ByteList` newtype does not surface
-/// the element `Ord` impl's `cmp` here.
-fn cmp_bytes(a: &ByteList, b: &ByteList) -> Ordering {
-    let n = if a.len() < b.len() { a.len() } else { b.len() };
-    let mut i = 0;
-    while i < n {
-        let x = a[i];
-        let y = b[i];
-        if x < y {
-            return Ordering::Less;
-        }
-        if x > y {
-            return Ordering::Greater;
-        }
-        i += 1;
-    }
-    if a.len() < b.len() {
-        return Ordering::Less;
-    }
-    if a.len() > b.len() {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
-}
-
 fn emit_sorted_map(buf: &mut ByteList, entries: &mut List<[ByteList, ByteList]>) {
-    entries.sort_by(|a: &[ByteList, ByteList], b: &[ByteList, ByteList]| cmp_bytes(&a.0, &b.0));
+    // RFC 8949 §4.2.1 orders map keys by the bytewise order of their encoded form.
+    entries.sort_by(|a: &[ByteList, ByteList], b: &[ByteList, ByteList]| a.0.cmp(&b.0));
     write_head(buf, MAJOR_MAP, entries.len() as u64);
     for let mut i = 0; i < entries.len(); i += 1 {
         append_all(buf, &entries[i].0);

@@ -23,6 +23,21 @@ use crate::tir;
 use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable};
 use funcset::{FuncKeyMap, FuncKeySet};
 
+/// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
+/// rewrites the marker into. The seed and the rewrite must name the same one.
+pub fn copy_value_type_arg(func: &tir::FunctionRef) -> Option<TypeId> {
+    if !func.module_source.is_core_builtin()
+        || !tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
+    {
+        return None;
+    }
+    let mono = func.monomorph_info.as_ref()?;
+    mono.impl_type_args
+        .first()
+        .or(mono.method_type_args.first())
+        .copied()
+}
+
 /// The element type `T` of a `builtin::array_clone::<T>` /
 /// `array_clone_prefix::<T>` call, or `None` for any other expression.
 fn array_clone_element_type_arg(expr: &TirExpr) -> Option<TypeId> {
@@ -145,7 +160,7 @@ pub fn plan(
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
-    let seed = analyze::collect_seed_types(flat, &builtins);
+    let seed = analyze::collect_seed_types(flat);
     let helpers = synthesize::synthesize_helpers(flat, seed);
     // Built after synthesis so the value-copy helpers (always owned) are present
     // in `flat.functions`, and shared: every summary below is a monotone

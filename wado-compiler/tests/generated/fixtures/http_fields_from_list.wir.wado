@@ -383,9 +383,9 @@ type "functype//wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/tr
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(88)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(89)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(89)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(90)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(90)
 
 type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(91)
 
@@ -635,7 +635,7 @@ fn "http_fields_from_list.wado/$cm_task_entry__handle"(request) {
     let rx: i32;
     let tx: i32;
     elements_189 = array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-one"), used: 5 }, 1: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(118, 49), used: 2 } });
-    entries = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: elements_189, used: builtin::array_len(elements_189) };
+    entries = struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: elements_189, used: 1 };
     result = "http_fields_from_list.wado/$cm_binding__Fields_from_list"(entries);
     if @likely(ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(result)) {
         fields = ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(result).payload_0;
@@ -2032,6 +2032,7 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/In
     let val_i64_21: i64;
     let digit_count: i32;
     let offset: i32;
+    let self_29: ref "core:prelude/string.wado//String";
     self_2 = f.buf;
     new_used = self_2.used + 9;
     if @unlikely(new_used > builtin::array_len(self_2.repr)) {
@@ -2049,7 +2050,7 @@ fn "wasi:http/types.wado/wasi:http/types.wado/Fields^core:prelude/traits.wado/In
         break $inline_count_digits_u64_base_7: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_21))) - 1) / 4) + 1;
     };
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 }, digit_count);
-    "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset, val_i64_21, digit_count, 4, 15, 0);
+    "core:prelude/primitive.wado/write_u64_base_digits"(self_29 = f.buf; self_29.repr, offset, val_i64_21, digit_count, 4, 15, 0);
 }
 
 fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, data) {
@@ -2125,6 +2126,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     };
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -2135,11 +2140,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_38, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
@@ -2153,10 +2160,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l229;
         };
     };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 export fn "http_fields_from_list.wado/$cm_export__handle" as "handle"

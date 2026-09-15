@@ -1,0 +1,35 @@
+// A newtype names its base's storage, so a write through it is the base's
+// write: the copy planner must not let a binding share storage it then mutates.
+
+use { println, Stdout } from "core:cli";
+
+struct Point { x: i32, y: i32 }
+
+type MyList = List<u8>;
+type Loc = Point;
+
+export fn run() with Stdout {
+    let mut src: MyList = [97, 98, 99] as MyList;
+    let mut copy = src;
+    copy[0] = 122;
+    assert src[0] == 97;
+    assert copy[0] == 122;
+
+    // Through the stdlib's own newtype over `List<u8>`.
+    let mut bytes: ByteList = b"abc";
+    let mut bcopy = bytes;
+    bcopy[0] = 122;
+    assert bytes[0] == 97;
+
+    // A struct newtype, read through a destructuring pattern.
+    let mut here: Loc = Point { x: 1, y: 2 } as Loc;
+    let mut there = here;
+    there.x = 9;
+    let { x, y } = here;
+    assert x == 1 && y == 2;
+
+    println(`${src[0]} ${copy[0]} ${there.x}`);
+}
+
+__DATA__
+{"stdout": "97 122 9\n"}

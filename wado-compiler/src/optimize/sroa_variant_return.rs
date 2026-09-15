@@ -90,7 +90,7 @@ struct Layout {
     slot_pads: Vec<Pad>,
     /// Per case index: where its payload lives.
     case_slots: Vec<CaseSlots>,
-    /// Case names in declaration order, for resolving a pattern's case name.
+    /// Case names in declaration order, for spelling a case the rewrite mints.
     case_names: Vec<String>,
     /// Payload type per case, for typing a pattern binding.
     case_payloads: Vec<TypeId>,
@@ -102,18 +102,11 @@ struct Layout {
 }
 
 impl Layout {
-    fn case_index_of(&self, case_name: &str) -> Option<u32> {
-        self.case_names
-            .iter()
-            .position(|n| n == case_name)
-            .map(|i| u32::try_from(i).expect("variant case index overflow"))
-    }
-
     /// The payload a binding for `case_index` receives. `None` for a unit case,
     /// which has no slot to read.
     fn payload_read_type(&self, case_index: u32) -> Option<TypeId> {
-        self.case_slots[case_index as usize].flat()?;
-        Some(self.case_payloads[case_index as usize])
+        self.case_slots.get(case_index as usize)?.flat()?;
+        self.case_payloads.get(case_index as usize).copied()
     }
 }
 
@@ -1796,15 +1789,14 @@ fn arm_is_one_level(body: &Body, arm: &ArmData, rebind: &Rebind, layout: &Layout
     match &body.pats[arm.pattern].kind {
         PatKind::Wildcard => true,
         PatKind::Variant {
-            variant_name,
+            case_index,
             bindings,
             ..
         } => match bindings.as_slice() {
             [] => true,
             [b] => match body.pats[*b].kind {
                 PatKind::Binding { local_index, .. } => layout
-                    .case_index_of(variant_name)
-                    .and_then(|case| layout.payload_read_type(case))
+                    .payload_read_type(*case_index)
                     .is_some_and(|payload| rebind.rebound(local_index, payload).is_some()),
                 PatKind::Wildcard => true,
                 _ => false,
@@ -2583,15 +2575,10 @@ fn rewrite_match_on_temp(
                 continue;
             }
             PatKind::Variant {
-                variant_name,
+                case_index,
                 bindings,
                 ..
             } => {
-                let case_index = layout.case_index_of(&variant_name).unwrap_or_else(|| {
-                    panic!(
-                        "variant-return SROA: arm names case `{variant_name}`, not in the layout"
-                    )
-                });
                 let binding = bindings.first().and_then(|&b| match &body.pats[b].kind {
                     PatKind::Binding { local_index, .. } => Some(*local_index),
                     _ => None,

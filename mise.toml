@@ -230,6 +230,29 @@ fi
 ./scripts/exclusive.sh test-stdlib cargo run -p wado-cli -- test "-${level}" wado-compiler "${extra_args[@]}"
 """
 
+[tasks.test-log-levels]
+description = "Run the core:log tier tests at one optimization level, each file at the tier-1 level it needs"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# Each file names the tier-1 level it needs with `-D`, so no ambient
+# WADO_LOG_LEVEL can decide what its assertions see. Discovery excludes them
+# (`[test].exclude` in `wado-compiler/wado.toml`); an explicit path gets in.
+#
+# Tier 1 folds in the optimizer, so the optimization level matters here as it
+# does to `test-stdlib`.
+level="${1:-O2}"
+case "${level}" in
+    O0 | O1 | O2 | O3 | Os) ;;
+    *)
+        echo "error: unknown optimization level '${level}' (expected O0, O1, O2, O3 or Os)" >&2
+        exit 1
+        ;;
+esac
+cargo run -p wado-cli -- test "-${level}" -D log.level=trace wado-compiler/lib/core/log_level_test.wado
+cargo run -p wado-cli -- test "-${level}" -D log.level=warn wado-compiler/lib/core/log_warn_test.wado
+"""
+
 [tasks.test-hooks]
 description = "Run the Claude Code hook tests"
 run = "node --test .claude/hooks/*.test.mts"
@@ -270,20 +293,22 @@ run = "cargo llvm-cov --all-features --workspace --html"
 
 [tasks.emi-calibrate]
 description = """\
-Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard at \
-every statement boundary of every e2e fixture, stdlib test module and example, \
-and keep the ones whose output is unmoved. Writes \
-target/emi/{corpus,calibration}.txt. Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
-WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_SHARD (k/n), \
-WADO_EMI_LIMIT, WADO_EMI_OUT.\
+Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard, \
+as a branch and as a loop, at every statement boundary of every e2e fixture, \
+stdlib test module and example, and keep the ones whose output is unmoved. \
+Writes target/emi/{corpus,calibration}.txt. \
+Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
+WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
+WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
 run = "cargo test -p wado-compiler --test emi -- --ignored --nocapture calibrate_corpus"
 
 [tasks.emi-mutate]
 description = """\
-Mutate the calibrated EMI corpus: behind an undecidable guard, write to and \
-read every binding in scope at every statement boundary, and report any \
-source whose output moves. Reads target/emi/corpus.txt, so run emi-calibrate \
+Mutate the calibrated EMI corpus: at every statement boundary, behind an \
+undecidable guard in each shape the source was calibrated for, write to and \
+read every binding in scope, then report any source whose output moves. \
+Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """

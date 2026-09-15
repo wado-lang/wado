@@ -1,0 +1,13 @@
+// Narrowing a view does not launder the escape: `sub` copies out `repr`, a
+// reference into what `s` names, so handing the result back hands `s` back.
+
+fn head(s: &String) -> StrSlice {
+    return s.as_str_slice().sub(0, 2);
+}
+
+export fn run() {
+    assert head(&"abc").len() == 2;
+}
+
+__DATA__
+{ "compile_error": "returning reference parameter 's' requires `stores[s]` declaration" }

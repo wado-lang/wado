@@ -129,6 +129,12 @@ struct StrLinesIter {
     finished: bool,
 }
 
+pub struct StrSlice {
+    repr: &Array<u8>,
+    start: i32,
+    end: i32,
+}
+
 pub struct ConvertError {
     pub message: String,
 }
@@ -337,6 +343,22 @@ pub struct "StructField<core:prelude/traits.wado/LenientParseError,core:prelude/
 }
 
 pub struct "StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/string.wado/StrSlice,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/string.wado/StrSlice,&Array<u8>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1637,12 +1659,12 @@ pub struct "Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,cor
     value: Result<u128, IntErrorKind>,
 }
 
-pub struct "Box<core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>>" {
-    value: Result<[bool, i32], IntErrorKind>,
+pub struct "Box<core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>>" {
+    value: Result<[bool, StrSlice], IntErrorKind>,
 }
 
-pub struct "Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>" {
-    value: Result<i32, IntErrorKind>,
+pub struct "Box<core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>>" {
+    value: Result<StrSlice, IntErrorKind>,
 }
 
 pub struct "Box<core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/ParseIntError>>" {
@@ -3654,7 +3676,7 @@ fn "core:prelude/format.wado/Formatter::count_chars_from"(self: &Formatter, star
             break;
         }
         $for_0_body: {
-            if ((self.buf."core:prelude/string.wado/String::get_byte_unchecked"(i) & 192) != 128) {
+            if "core::prelude/string.wado::is_char_start"(self.buf."core:prelude/string.wado/String::get_byte_unchecked"(i)) {
                 count = (count + 1);
             }
         }
@@ -3894,6 +3916,14 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspec
     if truncated {
         f."core:prelude/format.wado/Formatter::write_str"(&String { repr: packed"...", used: 3 });
     }
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Display::fmt"(self: &StrSlice, f: &mut Formatter) {
+    self."core:prelude/string.wado/StrSlice::to_string"()."core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &StrSlice, f: &mut Formatter) {
+    self."core:prelude/string.wado/StrSlice::to_string"()."core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(f);
 }
 
 pub fn "!^core:prelude/traits.wado/Inspect::inspect"(self: &!, f: &mut Formatter) {
@@ -4800,41 +4830,41 @@ pub fn parse(d: u64, p: i32) -> f64 {
     return "core::prelude/fpfmt.wado::pack64"("core::prelude/fpfmt.wado::unrounded_round"(u), -e);
 }
 
-pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
-    if (((start < 0) || (end > s."core:prelude/string.wado/String::len"())) || (start >= end)) {
+pub fn parse_text(s: &StrSlice) -> Option<f64> {
+    let len: i32 = s."core:prelude/string.wado/StrSlice::len"();
+    if (len == 0) {
         return null;
     }
-    let len: i32 = end;
     let mut sign: f64 = 1.0;
-    let mut i: i32 = start;
-    let first: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"(start);
+    let mut i: i32 = 0;
+    let first: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(0);
     if (first == 45) {
         sign = -1.0;
-        i = (start + 1);
+        i = 1;
     } else {
         if (first == 43) {
-            i = (start + 1);
+            i = 1;
         }
     }
     if (i >= len) {
         return null;
     }
     let remaining: i32 = (len - i);
-    let c0: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"(i);
+    let c0: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i);
     if (Box<u8> { value: c0 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 }) && (remaining >= 3)) {
         core::builtin::cold_path();
-        let c1: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 1));
-        let c2: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 2));
+        let c1: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 1));
+        let c2: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 2));
         if (Box<u8> { value: c1 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 }) && Box<u8> { value: c2 }.u8::eq_ignore_ascii_case(Box<u8> { value: 102 })) {
             if (remaining == 3) {
                 return Option<f64>::Some(core::builtin::f64_copysign(Infinity, sign));
             }
             if (remaining == 8) {
-                let c3: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 3));
-                let c4: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 4));
-                let c5: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 5));
-                let c6: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 6));
-                let c7: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 7));
+                let c3: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 3));
+                let c4: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 4));
+                let c5: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 5));
+                let c6: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 6));
+                let c7: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 7));
                 if ((((Box<u8> { value: c3 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 }) && Box<u8> { value: c4 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 })) && Box<u8> { value: c5 }.u8::eq_ignore_ascii_case(Box<u8> { value: 105 })) && Box<u8> { value: c6 }.u8::eq_ignore_ascii_case(Box<u8> { value: 116 })) && Box<u8> { value: c7 }.u8::eq_ignore_ascii_case(Box<u8> { value: 121 })) {
                     return Option<f64>::Some(core::builtin::f64_copysign(Infinity, sign));
                 }
@@ -4844,8 +4874,8 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
     if (Box<u8> { value: c0 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 }) && (remaining == 3)) {
         core::builtin::cold_path();
-        let c1: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 1));
-        let c2: u8 = s."core:prelude/string.wado/String::get_byte_unchecked"((i + 2));
+        let c1: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 1));
+        let c2: u8 = s."core:prelude/string.wado/StrSlice::get_byte_unchecked"((i + 2));
         if (Box<u8> { value: c1 }.u8::eq_ignore_ascii_case(Box<u8> { value: 97 }) && Box<u8> { value: c2 }.u8::eq_ignore_ascii_case(Box<u8> { value: 110 })) {
             return Option<f64>::Some((0.0 / 0.0));
         }
@@ -4856,27 +4886,27 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     let mut frac: i32 = 0;
     let digit_start: i32 = i;
     loop {
-        if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
+        if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
             break;
         }
         $for_0_body: {
-            d = ((d * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as u64);
+            d = ((d * 10) + (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) - 48) as u64);
         }
         i = (i + 1);
     }
     let int_digits: i32 = (i - digit_start);
-    if ((i < len) && (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 46)) {
+    if ((i < len) && (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) == 46)) {
         if (int_digits == 0) {
             return null;
         }
         i = (i + 1);
         let frac_start: i32 = i;
         loop {
-            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
+            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
             $for_1_body: {
-                d = ((d * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as u64);
+                d = ((d * 10) + (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) - 48) as u64);
                 frac = (frac + 1);
             }
             i = (i + 1);
@@ -4890,15 +4920,15 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
         return null;
     }
     let mut p: i32 = 0;
-    if ((i < len) && ((s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 101) || (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 69))) {
+    if ((i < len) && ((s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) == 101) || (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) == 69))) {
         i = (i + 1);
         let mut exp_sign: i32 = 1;
         if (i < len) {
-            if (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 45) {
+            if (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) == 45) {
                 exp_sign = -1;
                 i = (i + 1);
             } else {
-                if (s."core:prelude/string.wado/String::get_byte_unchecked"(i) == 43) {
+                if (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) == 43) {
                     i = (i + 1);
                 }
             }
@@ -4908,11 +4938,11 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
             return null;
         }
         loop {
-            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/String::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
+            if !((i < len) && Box<u8> { value: s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) }.u8::is_ascii_digit()) {
                 break;
             }
             $for_2_body: {
-                p = ((p * 10) + (s."core:prelude/string.wado/String::get_byte_unchecked"(i) - 48) as i32);
+                p = ((p * 10) + (s."core:prelude/string.wado/StrSlice::get_byte_unchecked"(i) - 48) as i32);
             }
             i = (i + 1);
         }
@@ -4936,10 +4966,6 @@ pub fn parse_text_range(s: &String, start: i32, end: i32) -> Option<f64> {
     }
     let val: f64 = "core::prelude/fpfmt.wado::parse"(d, eff_p);
     return Option<f64>::Some(core::builtin::f64_copysign(val, sign));
-}
-
-pub fn parse_text(s: &String) -> Option<f64> {
-    return "core::prelude/fpfmt.wado::parse_text_range"(s, 0, s."core:prelude/string.wado/String::len"());
 }
 
 pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/Reflect::type_name"() -> String {
@@ -6536,7 +6562,7 @@ pub fn i32::clamp(value: i32, low: i32, high: i32) -> i32 {
                 $r."core:prelude/string.wado/String::push_str"(&String { repr: packed"core:prelude/primitive.wado", used: 27 });
                 $r."core:prelude/string.wado/String::push_str"(&String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 927 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 925 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str"(&String { repr: packed"\ncondition: low <= high\n", used: 24 });
                 $r."core:prelude/string.wado/String::push_str"(&String { repr: packed"low: ", used: 5 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -7731,6 +7757,11 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
 }
 
 #[inline]
+fn is_char_start(b: u8) -> bool {
+    return ((b & 192) != 128);
+}
+
+#[inline]
 fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len: i32) -> bool {
     let mut j: i32 = 0;
     loop {
@@ -8031,11 +8062,11 @@ pub fn "core:prelude/string.wado/String::as_bytes"(self: &String) -> Slice<u8> w
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr as &Array<u8>, 0, self.used) as Slice<u8>;
 }
 
-fn "core:prelude/string.wado/String::internal_raw_bytes"(self: &String) -> &Array<u8> {
+fn "core:prelude/string.wado/String::internal_raw_bytes"(self: &String) -> &Array<u8> with stores[self] {
     return &self.repr as &Array<u8>;
 }
 
-fn "core:prelude/string.wado/String::internal_raw_bytes_mut"(self: &mut String) -> &mut Array<u8> {
+fn "core:prelude/string.wado/String::internal_raw_bytes_mut"(self: &mut String) -> &mut Array<u8> with stores[self] {
     return &mut self.repr as &mut Array<u8>;
 }
 
@@ -8244,43 +8275,32 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(self:
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Eq::eq"(self: &String, other: &String) -> bool {
-    let len: i32 = self."core:prelude/string.wado/String::len"();
-    if (len != other."core:prelude/string.wado/String::len"()) {
-        return false;
-    }
-    return "core::prelude/string.wado::bytes_match_at"(&self.repr as &Array<u8>, 0, &other.repr as &Array<u8>, len);
+    return "core::prelude/array.wado::core/prelude/array.wado/seq_eq<u8>"(&self.repr as &Array<u8>, 0, self.used, &other.repr as &Array<u8>, 0, other.used);
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Ord::cmp"(self: &String, other: &String) -> Ordering {
-    let len_a: i32 = self."core:prelude/string.wado/String::len"();
-    let len_b: i32 = other."core:prelude/string.wado/String::len"();
-    let min_len: i32 = "core::prelude/primitive.wado::i32::min"(len_a, len_b);
-    let a_repr: &Array<u8> = &self.repr as &Array<u8>;
-    let b_repr: &Array<u8> = &other.repr as &Array<u8>;
-    let mut i: i32 = 0;
-    loop {
-        if !(i < min_len) {
-            break;
-        }
-        $for_0_body: {
-            let a_byte: u8 = a_repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
-            let b_byte: u8 = b_repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(i);
-            if (a_byte < b_byte) {
-                return Ordering::Less;
-            }
-            if (a_byte > b_byte) {
-                return Ordering::Greater;
-            }
-        }
-        i = (i + 1);
-    }
-    if (len_a < len_b) {
-        return Ordering::Less;
-    }
-    if (len_a > len_b) {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
+    return "core::prelude/array.wado::core/prelude/array.wado/seq_cmp<u8>"(&self.repr as &Array<u8>, 0, self.used, &other.repr as &Array<u8>, 0, other.used);
+}
+
+pub fn "core:prelude/string.wado/StrSlice::len"(self: &StrSlice) -> i32 {
+    return (self.end - self.start);
+}
+
+#[inline]
+pub fn "core:prelude/string.wado/StrSlice::get_byte_unchecked"(self: &StrSlice, index: i32) -> u8 {
+    return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + index));
+}
+
+pub fn "core:prelude/string.wado/StrSlice::to_string"(self: &StrSlice) -> String {
+    return "core::prelude/string.wado::substring"(self.repr, self.start, self."core:prelude/string.wado/StrSlice::len"());
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Eq::eq"(self: &StrSlice, other: &StrSlice) -> bool {
+    return "core::prelude/array.wado::core/prelude/array.wado/seq_eq<u8>"(self.repr, self.start, self.end, other.repr, other.start, other.end);
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Ord::cmp"(self: &StrSlice, other: &StrSlice) -> Ordering {
+    return "core::prelude/array.wado::core/prelude/array.wado/seq_cmp<u8>"(self.repr, self.start, self.end, other.repr, other.start, other.end);
 }
 
 pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/Reflect::type_name"() -> String {
@@ -8682,6 +8702,46 @@ pub fn "$field_get$core:prelude/string.wado/StrLinesIter$i32"(v: &StrLinesIter, 
 pub fn "$field_get$core:prelude/string.wado/StrLinesIter$bool"(v: &StrLinesIter, index: i32) -> bool {
     return match index {
         3 => v.finished,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Reflect::type_name"() -> String {
+    return String { repr: packed"StrSlice", used: 8 };
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>] {
+    return [StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 1, field_name: String { repr: packed"start", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 2, field_name: String { repr: packed"end", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32]) -> StrSlice {
+    return StrSlice { repr: fields.0, start: fields.1, end: fields.2 };
+}
+
+#[inline(always)]
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::defaults"() -> [Option<&Array<u8>>, Option<i32>, Option<i32>] {
+    return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::empty_slots"() -> [Option<&Array<u8>>, Option<i32>, Option<i32>] {
+    return [Option<&Array<u8>>::None, Option<i32>::None, Option<i32>::None];
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Reflect::wire_name_policy"() -> CaseStyle {
+    return CaseStyle::Identity;
+}
+
+pub fn "$field_get$core:prelude/string.wado/StrSlice$&Array<u8>"(v: &StrSlice, index: i32) -> &Array<u8> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/string.wado/StrSlice$i32"(v: &StrSlice, index: i32) -> i32 {
+    return match index {
+        1 => v.start,
+        2 => v.end,
         _ => core::builtin::unreachable(),
     };
 }
@@ -10506,6 +10566,56 @@ pub fn "core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self: &Stream
     }
 }
 
+fn "core/prelude/array.wado/seq_cmp<u8>"(a: &Array<u8>, a_start: i32, a_end: i32, b: &Array<u8>, b_start: i32, b_end: i32) -> Ordering {
+    let a_len: i32 = (a_end - a_start);
+    let b_len: i32 = (b_end - b_start);
+    let min_len: i32 = "core::prelude/primitive.wado::i32::min"(a_len, b_len);
+    let mut i: i32 = 0;
+    loop {
+        if !(i < min_len) {
+            break;
+        }
+        $for_0_body: {
+            let x: u8 = core::builtin::array_get_value::<u8>(a, (a_start + i));
+            let y: u8 = core::builtin::array_get_value::<u8>(b, (b_start + i));
+            if (Box<u8> { value: x }."u8^core:prelude/traits.wado/Ord::cmp"(Box<u8> { value: y }) == Ordering::Less) {
+                return Ordering::Less;
+            }
+            if (Box<u8> { value: x }."u8^core:prelude/traits.wado/Ord::cmp"(Box<u8> { value: y }) == Ordering::Greater) {
+                return Ordering::Greater;
+            }
+        }
+        i = (i + 1);
+    }
+    if (a_len < b_len) {
+        return Ordering::Less;
+    }
+    if (a_len > b_len) {
+        return Ordering::Greater;
+    }
+    return Ordering::Equal;
+}
+
+fn "core/prelude/array.wado/seq_eq<u8>"(a: &Array<u8>, a_start: i32, a_end: i32, b: &Array<u8>, b_start: i32, b_end: i32) -> bool {
+    let len: i32 = (a_end - a_start);
+    if (len != (b_end - b_start)) {
+        return false;
+    }
+    let mut i: i32 = 0;
+    loop {
+        if !(i < len) {
+            break;
+        }
+        $for_0_body: {
+            if !(core::builtin::array_get_value::<u8>(a, (a_start + i)) == core::builtin::array_get_value::<u8>(b, (b_start + i))) {
+                return false;
+            }
+        }
+        i = (i + 1);
+    }
+    return true;
+}
+
 pub fn "core:prelude/slice.wado/Slice<u8>::get_unchecked"(self: &Slice<u8>, index: i32) -> u8 {
     return core::builtin::array_get_value::<u8>(self.repr, (self.start + index));
 }
@@ -12211,7 +12321,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/u12
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$[bool,i32]"(v: Box<core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> [bool, i32] {
+pub fn "$case_extract$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$[bool,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> [bool, StrSlice] {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -12221,14 +12331,14 @@ pub fn "$case_extract$core:prelude/types.wado/Result<[bool,i32],core:prelude/int
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$[bool,i32]"(payload: [bool, i32], index: i32) -> Result<[bool, i32], IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$[bool,core:prelude/string.wado/StrSlice]"(payload: [bool, StrSlice], index: i32) -> Result<[bool, StrSlice], IntErrorKind> {
     return match index {
-        0 => Result<[bool, i32], IntErrorKind>::Ok(payload),
+        0 => Result<[bool, StrSlice], IntErrorKind>::Ok(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
+pub fn "$case_extract$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -12238,24 +12348,24 @@ pub fn "$case_extract$core:prelude/types.wado/Result<[bool,i32],core:prelude/int
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<[bool, i32], IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<[bool, StrSlice], IntErrorKind> {
     return match index {
-        1 => Result<[bool, i32], IntErrorKind>::Err(payload),
+        1 => Result<[bool, StrSlice], IntErrorKind>::Err(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<[bool, i32], IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<[bool, StrSlice], IntErrorKind> {
     return match index {
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$variant_tag$core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<[bool,i32],core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
+pub fn "$variant_tag$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     return $variant_tag(self.value);
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$i32"(v: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> i32 {
+pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/string.wado/StrSlice"(v: Box<core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> StrSlice {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -12265,14 +12375,14 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/intparse.w
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$i32"(payload: i32, index: i32) -> Result<i32, IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/string.wado/StrSlice"(payload: StrSlice, index: i32) -> Result<StrSlice, IntErrorKind> {
     return match index {
-        0 => Result<i32, IntErrorKind>::Ok(payload),
+        0 => Result<StrSlice, IntErrorKind>::Ok(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
+pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(v: Box<core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> IntErrorKind {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
     };
@@ -12282,20 +12392,20 @@ pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/intparse.w
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<i32, IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/intparse.wado/IntErrorKind"(payload: IntErrorKind, index: i32) -> Result<StrSlice, IntErrorKind> {
     return match index {
-        1 => Result<i32, IntErrorKind>::Err(payload),
+        1 => Result<StrSlice, IntErrorKind>::Err(payload),
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<i32, IntErrorKind> {
+pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$()"(payload: (), index: i32) -> Result<StrSlice, IntErrorKind> {
     return match index {
         _ => core::builtin::unreachable(),
     };
 }
 
-pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
+pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>"(self: Box<core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -15275,96 +15385,986 @@ fn "$initialize_modules"() {
     mess_dirty.wado::$modules_initialized = true;
 }
 
-fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
-    return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>"(v: Option<List<u8>>) -> Option<List<u8>> {
+    return match v {
+        Some($vc_payload_0) => Option<List<u8>>::Some("mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
-    return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>"(v: Option<StrUtf8ByteIter>) -> Option<StrUtf8ByteIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrUtf8ByteIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSplitIter {
-    return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>"(v: Option<StrCharIndicesIter>) -> Option<StrCharIndicesIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrCharIndicesIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrSplitNIter"(v: StrSplitNIter) -> StrSplitNIter {
-    return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>"(v: Option<StrSplitIter>) -> Option<StrSplitIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrSplitIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
-    return StrSplitWhitespaceIter { repr: v.repr, used: v.used, pos: v.pos };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>"(v: Option<StrSplitNIter>) -> Option<StrSplitNIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrSplitNIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
-    return StrLinesIter { repr: v.repr, used: v.used, pos: v.pos, finished: v.finished };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: Option<StrSplitWhitespaceIter>) -> Option<StrSplitWhitespaceIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrSplitWhitespaceIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: WaitEvent) -> WaitEvent {
-    return WaitEvent { code: v.code, handle: v.handle, payload: v.payload };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>"(v: Option<StrLinesIter>) -> Option<StrLinesIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrLinesIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
-    return [i32,char] { 0: v.0, 1: v.1 };
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>"(v: Option<StrCharIter>) -> Option<StrCharIter> {
+    return match v {
+        Some($vc_payload_0) => Option<StrCharIter>::Some("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"($vc_payload_0)),
+        None => v,
+    };
 }
 
-fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) -> ParseFloatError {
-    return ParseFloatError { kind: v.kind };
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/traits.wado/LenientParseError>"(v: Result<String, LenientParseError>) -> Result<String, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<String, LenientParseError>::Ok("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"($vc_payload_0)),
+        Err($vc_payload_1) => Result<String, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
 }
 
-fn "$value_copy$[bool,i32]"(v: [bool, i32]) -> [bool, i32] {
-    return [bool,i32] { 0: v.0, 1: v.1 };
+fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(v: Option<[String, String]>) -> Option<[String, String]> {
+    return match v {
+        Some($vc_payload_0) => Option<[String, String]>::Some("mess_dirty.wado::$value_copy$[core:prelude/string.wado/String,core:prelude/string.wado/String]"($vc_payload_0)),
+        None => v,
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/ConvertError>"(v: Result<u8, ConvertError>) -> Result<u8, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u8, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u8, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/ConvertError>"(v: Result<u16, ConvertError>) -> Result<u16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u16, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/ConvertError>"(v: Result<u32, ConvertError>) -> Result<u32, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u32, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u32, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/ConvertError>"(v: Result<i8, ConvertError>) -> Result<i8, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i8, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i8, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/ConvertError>"(v: Result<i16, ConvertError>) -> Result<i16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i16, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/ConvertError>"(v: Result<i32, ConvertError>) -> Result<i32, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i32, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i32, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>"(v: Result<f64, LenientParseError>) -> Result<f64, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f64, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f64, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>"(v: Result<f32, LenientParseError>) -> Result<f32, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f32, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f32, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f32, ParseFloatError>) -> Result<f32, ParseFloatError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f32, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f32, ParseFloatError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/LenientParseError>"(v: Result<u64, LenientParseError>) -> Result<u64, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u64, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u64, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/LenientParseError>"(v: Result<i64, LenientParseError>) -> Result<i64, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i64, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i64, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/LenientParseError>"(v: Result<u32, LenientParseError>) -> Result<u32, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u32, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u32, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/intparse.wado/ParseIntError>"(v: Result<u32, ParseIntError>) -> Result<u32, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u32, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u32, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/LenientParseError>"(v: Result<i32, LenientParseError>) -> Result<i32, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i32, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i32, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/ParseIntError>"(v: Result<i32, ParseIntError>) -> Result<i32, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i32, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i32, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/LenientParseError>"(v: Result<u16, LenientParseError>) -> Result<u16, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u16, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u16, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/intparse.wado/ParseIntError>"(v: Result<u16, ParseIntError>) -> Result<u16, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u16, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u16, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/LenientParseError>"(v: Result<i16, LenientParseError>) -> Result<i16, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i16, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i16, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/intparse.wado/ParseIntError>"(v: Result<i16, ParseIntError>) -> Result<i16, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i16, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i16, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/LenientParseError>"(v: Result<u8, LenientParseError>) -> Result<u8, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u8, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u8, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/intparse.wado/ParseIntError>"(v: Result<u8, ParseIntError>) -> Result<u8, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u8, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u8, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/LenientParseError>"(v: Result<i8, LenientParseError>) -> Result<i8, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i8, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i8, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/intparse.wado/ParseIntError>"(v: Result<i8, ParseIntError>) -> Result<i8, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i8, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i8, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<char,core:prelude/traits.wado/LenientParseError>"(v: Result<char, LenientParseError>) -> Result<char, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<char, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<char, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<bool,core:prelude/traits.wado/LenientParseError>"(v: Result<bool, LenientParseError>) -> Result<bool, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<bool, LenientParseError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<bool, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f64, ParseFloatError>) -> Result<f64, ParseFloatError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f64, ParseFloatError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f64, ParseFloatError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseFloatError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseIntError>"(v: Result<u64, ParseIntError>) -> Result<u64, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u64, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u64, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/ParseIntError>"(v: Result<i64, ParseIntError>) -> Result<i64, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i64, ParseIntError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i64, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>"(v: Result<StrSlice, IntErrorKind>) -> Result<StrSlice, IntErrorKind> {
+    return match v {
+        Ok($vc_payload_0) => Result<StrSlice, IntErrorKind>::Ok("mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_0)),
+        Err($vc_payload_1) => Result<StrSlice, IntErrorKind>::Err($vc_payload_1),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>"(v: Result<[bool, StrSlice], IntErrorKind>) -> Result<[bool, StrSlice], IntErrorKind> {
+    return match v {
+        Ok($vc_payload_0) => Result<[bool, StrSlice], IntErrorKind>::Ok("mess_dirty.wado::$value_copy$[bool,core:prelude/string.wado/StrSlice]"($vc_payload_0)),
+        Err($vc_payload_1) => Result<[bool, StrSlice], IntErrorKind>::Err($vc_payload_1),
+    };
+}
+
+fn "$value_copy$[bool,core:prelude/string.wado/StrSlice]"(v: [bool, StrSlice]) -> [bool, StrSlice] {
+    return [bool,core:prelude/string.wado/StrSlice] { 0: v.0, 1: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/IntErrorKind>"(v: Result<u128, IntErrorKind>) -> Result<u128, IntErrorKind> {
+    return match v {
+        Ok($vc_payload_0) => Result<u128, IntErrorKind>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<u128, IntErrorKind>::Err($vc_payload_1),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<[core:prelude/string.wado/String,u32],core:prelude/traits.wado/LenientParseError>"(v: Result<[String, u32], LenientParseError>) -> Result<[String, u32], LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<[String, u32], LenientParseError>::Ok("mess_dirty.wado::$value_copy$[core:prelude/string.wado/String,u32]"($vc_payload_0)),
+        Err($vc_payload_1) => Result<[String, u32], LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
 }
 
 fn "$value_copy$[core:prelude/string.wado/String,u32]"(v: [String, u32]) -> [String, u32] {
     return [core:prelude/string.wado/String,u32] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0), 1: v.1 };
 }
 
-fn "$value_copy$core:prelude/traits.wado/ConvertError"(v: ConvertError) -> ConvertError {
-    return ConvertError { message: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.message) };
+fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/ConvertError>"(v: Result<f32, ConvertError>) -> Result<f32, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f32, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f32, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
 }
 
-fn "$value_copy$core:prelude/traits.wado/LenientParseError"(v: LenientParseError) -> LenientParseError {
-    return LenientParseError { reason: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.reason) };
+fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/ConvertError>"(v: Result<f64, ConvertError>) -> Result<f64, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f64, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f64, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
 }
 
-fn "$value_copy$core:prelude/intparse.wado/ParseIntError"(v: ParseIntError) -> ParseIntError {
-    return ParseIntError { kind: v.kind };
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/ConvertError>"(v: Result<u128, ConvertError>) -> Result<u128, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u128, ConvertError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<u128, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
 }
 
-fn "$value_copy$Array<i32>"(v: Array<i32>) -> Array<i32> {
-    return core::builtin::array_clone::<i32>(&v);
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/ConvertError>"(v: Result<i128, ConvertError>) -> Result<i128, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i128, ConvertError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<i128, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
 }
 
-fn "$value_copy$core:prelude/slice.wado/Slice<u8>"(v: Slice<u8>) -> Slice<u8> {
-    return Slice<u8> { repr: v.repr, start: v.start, end: v.end };
+fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/ConvertError>"(v: Result<i64, ConvertError>) -> Result<i64, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i64, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i64, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/ConvertError>"(v: Result<u64, ConvertError>) -> Result<u64, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u64, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<u64, ConvertError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/traits.wado/LenientParseError>"(v: Result<i128, LenientParseError>) -> Result<i128, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i128, LenientParseError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<i128, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,core:prelude/intparse.wado/ParseIntError>"(v: Result<i128, ParseIntError>) -> Result<i128, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<i128, ParseIntError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<i128, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/traits.wado/LenientParseError>"(v: Result<u128, LenientParseError>) -> Result<u128, LenientParseError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u128, LenientParseError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<u128, LenientParseError>::Err("mess_dirty.wado::$value_copy$core:prelude/traits.wado/LenientParseError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>"(v: Result<u128, ParseIntError>) -> Result<u128, ParseIntError> {
+    return match v {
+        Ok($vc_payload_0) => Result<u128, ParseIntError>::Ok("mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
+        Err($vc_payload_1) => Result<u128, ParseIntError>::Err("mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+fn "$value_copy$core:prelude/range.wado/RangeExclusive<i32>"(v: RangeExclusive<i32>) -> RangeExclusive<i32> {
+    return RangeExclusive<i32> { start: v.start, end: v.end };
+}
+
+fn "$value_copy$core:prelude/range.wado/RangeInclusive<i32>"(v: RangeInclusive<i32>) -> RangeInclusive<i32> {
+    return RangeInclusive<i32> { start: v.start, end: v.end, exhausted: v.exhausted };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterFilter<core:prelude/string.wado/StrUtf8ByteIter>) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterFilter<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>) -> IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterTake<core:prelude/string.wado/StrUtf8ByteIter>) -> IterTake<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterTake<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterSkip<core:prelude/string.wado/StrUtf8ByteIter>) -> IterSkip<core:prelude/string.wado/StrUtf8ByteIter> {
+    return IterSkip<core:prelude/string.wado/StrUtf8ByteIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>"(v: IterFilter<core:prelude/string.wado/StrCharIter>) -> IterFilter<core:prelude/string.wado/StrCharIter> {
+    return IterFilter<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>"(v: IterEnumerate<core:prelude/string.wado/StrCharIter>) -> IterEnumerate<core:prelude/string.wado/StrCharIter> {
+    return IterEnumerate<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>"(v: IterTake<core:prelude/string.wado/StrCharIter>) -> IterTake<core:prelude/string.wado/StrCharIter> {
+    return IterTake<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>"(v: IterSkip<core:prelude/string.wado/StrCharIter>) -> IterSkip<core:prelude/string.wado/StrCharIter> {
+    return IterSkip<core:prelude/string.wado/StrCharIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>"(v: IterFilter<core:prelude/string.wado/StrCharIndicesIter>) -> IterFilter<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterFilter<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>"(v: IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>) -> IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterEnumerate<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>"(v: IterTake<core:prelude/string.wado/StrCharIndicesIter>) -> IterTake<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterTake<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>"(v: IterSkip<core:prelude/string.wado/StrCharIndicesIter>) -> IterSkip<core:prelude/string.wado/StrCharIndicesIter> {
+    return IterSkip<core:prelude/string.wado/StrCharIndicesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>"(v: IterFilter<core:prelude/string.wado/StrSplitIter>) -> IterFilter<core:prelude/string.wado/StrSplitIter> {
+    return IterFilter<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitIter> {
+    return IterEnumerate<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>"(v: IterTake<core:prelude/string.wado/StrSplitIter>) -> IterTake<core:prelude/string.wado/StrSplitIter> {
+    return IterTake<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>"(v: IterSkip<core:prelude/string.wado/StrSplitIter>) -> IterSkip<core:prelude/string.wado/StrSplitIter> {
+    return IterSkip<core:prelude/string.wado/StrSplitIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>"(v: IterFilter<core:prelude/string.wado/StrSplitNIter>) -> IterFilter<core:prelude/string.wado/StrSplitNIter> {
+    return IterFilter<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitNIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitNIter> {
+    return IterEnumerate<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>"(v: IterTake<core:prelude/string.wado/StrSplitNIter>) -> IterTake<core:prelude/string.wado/StrSplitNIter> {
+    return IterTake<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>"(v: IterSkip<core:prelude/string.wado/StrSplitNIter>) -> IterSkip<core:prelude/string.wado/StrSplitNIter> {
+    return IterSkip<core:prelude/string.wado/StrSplitNIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> {
+    return IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> {
+    return IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> {
+    return IterTake<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>) -> IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> {
+    return IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>"(v: IterFilter<core:prelude/string.wado/StrLinesIter>) -> IterFilter<core:prelude/string.wado/StrLinesIter> {
+    return IterFilter<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), pred: v.pred };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>"(v: IterEnumerate<core:prelude/string.wado/StrLinesIter>) -> IterEnumerate<core:prelude/string.wado/StrLinesIter> {
+    return IterEnumerate<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), count: v.count };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>"(v: IterTake<core:prelude/string.wado/StrLinesIter>) -> IterTake<core:prelude/string.wado/StrLinesIter> {
+    return IterTake<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>"(v: IterSkip<core:prelude/string.wado/StrLinesIter>) -> IterSkip<core:prelude/string.wado/StrLinesIter> {
+    return IterSkip<core:prelude/string.wado/StrLinesIter> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"(v.inner), remaining: v.remaining };
+}
+
+fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>"(v: IterMap<core:prelude/string.wado/StrCharIter,char>) -> IterMap<core:prelude/string.wado/StrCharIter,char> {
+    return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
+}
+
+fn "$value_copy$core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<(),()>>"(v: AsyncCall<core:prelude/types.wado/Result<(),()>>) -> AsyncCall<core:prelude/types.wado/Result<(),()>> {
+    return AsyncCall<core:prelude/types.wado/Result<(),()>> { __cm_packed: v.__cm_packed, __cm_outptr: v.__cm_outptr, __cm_size: v.__cm_size, __cm_align: v.__cm_align, __cm_lift: v.__cm_lift };
 }
 
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u8>"(v: SliceValueIter<u8>) -> SliceValueIter<u8> {
     return SliceValueIter<u8> { repr: v.repr, index: v.index, end: v.end };
 }
 
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>) -> VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> {
+    return VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
 fn "$value_copy$[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]"(v: [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>]) -> [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] {
     return [core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>,core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v.1) };
 }
 
-fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>"(v: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String>) -> VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> {
-    return VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(v: VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,[core:prelude/string.wado/String,core:prelude/string.wado/String]>) -> VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,[core:prelude/string.wado/String,core:prelude/string.wado/String]> {
+    return VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,[core:prelude/string.wado/String,core:prelude/string.wado/String]> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>"(v: Array<[String, String]>) -> Array<[String, String]> {
+    return core::builtin::array_clone::<[String, String]>(&v);
+}
+
+fn "$value_copy$Array<core:prelude/string.wado/String>"(v: Array<String>) -> Array<String> {
+    return core::builtin::array_clone::<String>(&v);
 }
 
 fn "$value_copy$Array<u64>"(v: Array<u64>) -> Array<u64> {
     return core::builtin::array_clone::<u64>(&v);
 }
 
+fn "$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v: EnumCase<wasi:cli/types.wado/ErrorCode>) -> EnumCase<wasi:cli/types.wado/ErrorCode> {
+    return EnumCase<wasi:cli/types.wado/ErrorCode> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>]"(v: [EnumCase<wasi:cli/types.wado/ErrorCode>, EnumCase<wasi:cli/types.wado/ErrorCode>, EnumCase<wasi:cli/types.wado/ErrorCode>]) -> [EnumCase<wasi:cli/types.wado/ErrorCode>, EnumCase<wasi:cli/types.wado/ErrorCode>, EnumCase<wasi:cli/types.wado/ErrorCode>] {
+    return [core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/FlagsBit<u32>"(v: FlagsBit<u32>) -> FlagsBit<u32> {
+    return v;
+}
+
+fn "$value_copy$[core:prelude/traits.wado/FlagsBit<u32>,core:prelude/traits.wado/FlagsBit<u32>,core:prelude/traits.wado/FlagsBit<u32>]"(v: [FlagsBit<u32>, FlagsBit<u32>, FlagsBit<u32>]) -> [FlagsBit<u32>, FlagsBit<u32>, FlagsBit<u32>] {
+    return [core:prelude/traits.wado/FlagsBit<u32>,core:prelude/traits.wado/FlagsBit<u32>,core:prelude/traits.wado/FlagsBit<u32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/FlagsBit<u32>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/FlagsBit<u32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/FlagsBit<u32>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>"(v: EnumCase<mess_dirty.wado/Color>) -> EnumCase<mess_dirty.wado/Color> {
+    return EnumCase<mess_dirty.wado/Color> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>]"(v: [EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>]) -> [EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>, EnumCase<mess_dirty.wado/Color>] {
+    return [core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>,core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<mess_dirty.wado/Color>"(v.3) };
+}
+
 fn "$value_copy$[f64,f64]"(v: [f64, f64]) -> [f64, f64] {
     return [f64,f64] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,()>"(v: VariantCase<mess_dirty.wado/Shape,()>) -> VariantCase<mess_dirty.wado/Shape,()> {
+    return VariantCase<mess_dirty.wado/Shape,()> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,[f64,f64]>"(v: VariantCase<mess_dirty.wado/Shape,[f64,f64]>) -> VariantCase<mess_dirty.wado/Shape,[f64,f64]> {
+    return VariantCase<mess_dirty.wado/Shape,[f64,f64]> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,f64>"(v: VariantCase<mess_dirty.wado/Shape,f64>) -> VariantCase<mess_dirty.wado/Shape,f64> {
+    return VariantCase<mess_dirty.wado/Shape,f64> { index: v.index, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), is_unit: v.is_unit };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,f64>,core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,[f64,f64]>,core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,()>]"(v: [VariantCase<mess_dirty.wado/Shape,f64>, VariantCase<mess_dirty.wado/Shape,[f64,f64]>, VariantCase<mess_dirty.wado/Shape,()>]) -> [VariantCase<mess_dirty.wado/Shape,f64>, VariantCase<mess_dirty.wado/Shape,[f64,f64]>, VariantCase<mess_dirty.wado/Shape,()>] {
+    return [core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,f64>,core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,[f64,f64]>,core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,()>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,f64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,[f64,f64]>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/VariantCase<mess_dirty.wado/Shape,()>"(v.2) };
+}
+
+fn "$value_copy$mess_dirty.wado/Shape"(v: Shape) -> Shape {
+    return match v {
+        Circle($vc_payload_0) => Shape::Circle($vc_payload_0),
+        Rect($vc_payload_1) => Shape::Rect("mess_dirty.wado::$value_copy$[f64,f64]"($vc_payload_1)),
+        Dot => v,
+    };
+}
+
+fn "$value_copy$mess_dirty.wado/Logger"(v: Logger) -> Logger {
+    return Logger { prefix: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.prefix) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>"(v: StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>) -> StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String> {
+    return StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>]"(v: [StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>]) -> [StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>] {
+    return [core:prelude/traits.wado/StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Logger,core:prelude/string.wado/String>"(v.0) };
+}
+
+fn "$value_copy$mess_dirty.wado/Wrapper"(v: Wrapper) -> Wrapper {
+    return Wrapper { val: v.val };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Wrapper,i32>"(v: StructField<mess_dirty.wado/Wrapper,i32>) -> StructField<mess_dirty.wado/Wrapper,i32> {
+    return StructField<mess_dirty.wado/Wrapper,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<mess_dirty.wado/Wrapper,i32>]"(v: [StructField<mess_dirty.wado/Wrapper,i32>]) -> [StructField<mess_dirty.wado/Wrapper,i32>] {
+    return [core:prelude/traits.wado/StructField<mess_dirty.wado/Wrapper,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Wrapper,i32>"(v.0) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<i32>]"(v: [Option<i32>]) -> [Option<i32>] {
+    return [core:prelude/types.wado/Option<i32>] { 0: v.0 };
+}
+
+fn "$value_copy$mess_dirty.wado/Counter"(v: Counter) -> Counter {
+    return Counter { n: v.n };
+}
+
+fn "$value_copy$[i32]"(v: [i32]) -> [i32] {
+    return [i32] { 0: v.0 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Counter,i32>"(v: StructField<mess_dirty.wado/Counter,i32>) -> StructField<mess_dirty.wado/Counter,i32> {
+    return StructField<mess_dirty.wado/Counter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<mess_dirty.wado/Counter,i32>]"(v: [StructField<mess_dirty.wado/Counter,i32>]) -> [StructField<mess_dirty.wado/Counter,i32>] {
+    return [core:prelude/traits.wado/StructField<mess_dirty.wado/Counter,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Counter,i32>"(v.0) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<i32>, Option<i32>, Option<i32>]) -> [Option<i32>, Option<i32>, Option<i32>] {
+    return [core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$mess_dirty.wado/Point"(v: Point) -> Point {
+    return Point { x: v.x, y: v.y, z: v.z };
+}
+
+fn "$value_copy$[i32,i32,i32]"(v: [i32, i32, i32]) -> [i32, i32, i32] {
+    return [i32,i32,i32] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>"(v: StructField<mess_dirty.wado/Point,i32>) -> StructField<mess_dirty.wado/Point,i32> {
+    return StructField<mess_dirty.wado/Point,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>,core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>,core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>]"(v: [StructField<mess_dirty.wado/Point,i32>, StructField<mess_dirty.wado/Point,i32>, StructField<mess_dirty.wado/Point,i32>]) -> [StructField<mess_dirty.wado/Point,i32>, StructField<mess_dirty.wado/Point,i32>, StructField<mess_dirty.wado/Point,i32>] {
+    return [core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>,core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>,core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<mess_dirty.wado/Point,i32>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>"(v: Option<WaitEvent>) -> Option<WaitEvent> {
+    return match v {
+        Some($vc_payload_0) => Option<WaitEvent>::Some("mess_dirty.wado::$value_copy$core:prelude/types.wado/WaitEvent"($vc_payload_0)),
+        None => v,
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/StreamChunk<u8>"(v: StreamChunk<u8>) -> StreamChunk<u8> {
+    return StreamChunk<u8> { items: "mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"(v.items), result: v.result };
+}
+
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v: EnumCase<core:prelude/types.wado/CopyResult>) -> EnumCase<core:prelude/types.wado/CopyResult> {
+    return EnumCase<core:prelude/types.wado/CopyResult> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>]"(v: [EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>]) -> [EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>, EnumCase<core:prelude/types.wado/CopyResult>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<u32>]"(v: [Option<i32>, Option<i32>, Option<u32>]) -> [Option<i32>, Option<i32>, Option<u32>] {
+    return [core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<u32>] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/types.wado/WaitEvent"(v: WaitEvent) -> WaitEvent {
+    return WaitEvent { code: v.code, handle: v.handle, payload: v.payload };
+}
+
+fn "$value_copy$[i32,i32,u32]"(v: [i32, i32, u32]) -> [i32, i32, u32] {
+    return [i32,i32,u32] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>"(v: StructField<core:prelude/types.wado/WaitEvent,u32>) -> StructField<core:prelude/types.wado/WaitEvent,u32> {
+    return StructField<core:prelude/types.wado/WaitEvent,u32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v: StructField<core:prelude/types.wado/WaitEvent,i32>) -> StructField<core:prelude/types.wado/WaitEvent,i32> {
+    return StructField<core:prelude/types.wado/WaitEvent,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>]"(v: [StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,u32>]) -> [StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,u32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>]"(v: [Option<i32>, Option<CopyResult>]) -> [Option<i32>, Option<CopyResult>] {
+    return [core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$[i32,core:prelude/types.wado/CopyResult]"(v: [i32, CopyResult]) -> [i32, CopyResult] {
+    return [i32,core:prelude/types.wado/CopyResult] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>"(v: StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>) -> StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> {
+    return StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>"(v: StructField<core:prelude/types.wado/StreamWrite,i32>) -> StructField<core:prelude/types.wado/StreamWrite,i32> {
+    return StructField<core:prelude/types.wado/StreamWrite,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>]"(v: [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>]) -> [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>"(v.1) };
 }
 
 fn "$value_copy$core:prelude/types.wado/StreamWrite"(v: StreamWrite) -> StreamWrite {
     return StreamWrite { count: v.count, result: v.result };
 }
 
-fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
-    return core::builtin::array_clone::<u8>(&v);
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v: EnumCase<core:prelude/traits.wado/CaseStyle>) -> EnumCase<core:prelude/traits.wado/CaseStyle> {
+    return EnumCase<core:prelude/traits.wado/CaseStyle> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>]"(v: [EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>]) -> [EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>, EnumCase<core:prelude/traits.wado/CaseStyle>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.3), 4: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.4), 5: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.5), 6: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/CaseStyle>"(v.6) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>"(v: EnumCase<core:prelude/traits.wado/Ordering>) -> EnumCase<core:prelude/traits.wado/Ordering> {
+    return EnumCase<core:prelude/traits.wado/Ordering> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>]"(v: [EnumCase<core:prelude/traits.wado/Ordering>, EnumCase<core:prelude/traits.wado/Ordering>, EnumCase<core:prelude/traits.wado/Ordering>]) -> [EnumCase<core:prelude/traits.wado/Ordering>, EnumCase<core:prelude/traits.wado/Ordering>, EnumCase<core:prelude/traits.wado/Ordering>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>,core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Ordering>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/LenientParseError"(v: LenientParseError) -> LenientParseError {
+    return LenientParseError { reason: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.reason) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>"(v: StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>) -> StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> {
+    return StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]"(v: [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]) -> [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>"(v.0) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<core:prelude/string.wado/String>]"(v: [Option<String>]) -> [Option<String>] {
+    return [core:prelude/types.wado/Option<core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.0) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/ConvertError"(v: ConvertError) -> ConvertError {
+    return ConvertError { message: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.message) };
+}
+
+fn "$value_copy$[core:prelude/string.wado/String]"(v: [String]) -> [String] {
+    return [core:prelude/string.wado/String] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>"(v: StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>) -> StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> {
+    return StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>]"(v: [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>]) -> [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>"(v.0) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v: StructField<core:prelude/string.wado/StrSlice,i32>) -> StructField<core:prelude/string.wado/StrSlice,i32> {
+    return StructField<core:prelude/string.wado/StrSlice,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSlice,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSlice,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>]"(v: [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>]) -> [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>] {
+    return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
+}
+
+fn "$value_copy$[&Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i32, i32, bool]) -> [&Array<u8>, i32, i32, bool] {
+    return [&Array<u8>,i32,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>"(v: StructField<core:prelude/string.wado/StrLinesIter,bool>) -> StructField<core:prelude/string.wado/StrLinesIter,bool> {
+    return StructField<core:prelude/string.wado/StrLinesIter,bool> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>"(v: StructField<core:prelude/string.wado/StrLinesIter,i32>) -> StructField<core:prelude/string.wado/StrLinesIter,i32> {
+    return StructField<core:prelude/string.wado/StrLinesIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>]"(v: [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,bool>]) -> [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,bool>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>"(v.3) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>) -> StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> {
+    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>]"(v: [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>]) -> [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<Array<u8>>, Option<i32>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<Array<u8>>, Option<i32>, Option<i32>, Option<bool>] {
+    return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v.3), 4: v.4, 5: v.5, 6: v.6 };
+}
+
+fn "$value_copy$[&Array<u8>,i32,i32,Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i32, i32, Array<u8>, i32, i32, bool]) -> [&Array<u8>, i32, i32, Array<u8>, i32, i32, bool] {
+    return [&Array<u8>,i32,i32,Array<u8>,i32,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: core::builtin::array_clone::<u8>(&v.3), 4: v.4, 5: v.5, 6: v.6 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>"(v: StructField<core:prelude/string.wado/StrSplitNIter,bool>) -> StructField<core:prelude/string.wado/StrSplitNIter,bool> {
+    return StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitNIter,i32>) -> StructField<core:prelude/string.wado/StrSplitNIter,i32> {
+    return StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>]"(v: [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,bool>]) -> [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,bool>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,Array<u8>>"(v.3), 4: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.4), 5: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.5), 6: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>"(v.6) };
+}
+
+fn "$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v: Option<Array<u8>>) -> Option<Array<u8>> {
+    return match v {
+        Some($vc_payload_0) => Option<Array<u8>>::Some(core::builtin::array_clone::<u8>(&$vc_payload_0)),
+        None => v,
+    };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<Array<u8>>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<Array<u8>>, Option<i32>, Option<bool>] {
+    return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v.3), 4: v.4, 5: v.5 };
+}
+
+fn "$value_copy$[&Array<u8>,i32,i32,Array<u8>,i32,bool]"(v: [&Array<u8>, i32, i32, Array<u8>, i32, bool]) -> [&Array<u8>, i32, i32, Array<u8>, i32, bool] {
+    return [&Array<u8>,i32,i32,Array<u8>,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: core::builtin::array_clone::<u8>(&v.3), 4: v.4, 5: v.5 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>"(v: StructField<core:prelude/string.wado/StrSplitIter,bool>) -> StructField<core:prelude/string.wado/StrSplitIter,bool> {
+    return StructField<core:prelude/string.wado/StrSplitIter,bool> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitIter,Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSplitIter,Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitIter,i32>) -> StructField<core:prelude/string.wado/StrSplitIter,i32> {
+    return StructField<core:prelude/string.wado/StrSplitIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>]"(v: [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,bool>]) -> [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,bool>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,Array<u8>>"(v.3), 4: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.4), 5: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>"(v.5) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>"(v: StructField<core:prelude/string.wado/StrCharIndicesIter,i32>) -> StructField<core:prelude/string.wado/StrCharIndicesIter,i32> {
+    return StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>]"(v: [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>]) -> [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v: StructField<core:prelude/string.wado/StrCharIter,i32>) -> StructField<core:prelude/string.wado/StrCharIter,i32> {
+    return StructField<core:prelude/string.wado/StrCharIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>]"(v: [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIter,i32>, StructField<core:prelude/string.wado/StrCharIter,i32>]) -> [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIter,i32>, StructField<core:prelude/string.wado/StrCharIter,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>] {
+    return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$[&Array<u8>,i32,i32]"(v: [&Array<u8>, i32, i32]) -> [&Array<u8>, i32, i32] {
+    return [&Array<u8>,i32,i32] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v: StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>) -> StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> {
+    return StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> {
+    return StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>]"(v: [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>]) -> [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>]"(v: [Option<Array<u8>>, Option<i32>]) -> [Option<Array<u8>>, Option<i32>] {
+    return [core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v.0), 1: v.1 };
+}
+
+fn "$value_copy$[Array<u8>,i32]"(v: [Array<u8>, i32]) -> [Array<u8>, i32] {
+    return [Array<u8>,i32] { 0: core::builtin::array_clone::<u8>(&v.0), 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>"(v: StructField<core:prelude/string.wado/String,i32>) -> StructField<core:prelude/string.wado/String,i32> {
+    return StructField<core:prelude/string.wado/String,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>"(v: StructField<core:prelude/string.wado/String,Array<u8>>) -> StructField<core:prelude/string.wado/String,Array<u8>> {
+    return v;
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>]"(v: [StructField<core:prelude/string.wado/String,Array<u8>>, StructField<core:prelude/string.wado/String,i32>]) -> [StructField<core:prelude/string.wado/String,Array<u8>>, StructField<core:prelude/string.wado/String,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>"(v.1) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<u32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<u32>, Option<i32>, Option<bool>]) -> [Option<u32>, Option<i32>, Option<bool>] {
+    return [core:prelude/types.wado/Option<u32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/string.wado/Utf8Scalar"(v: Utf8Scalar) -> Utf8Scalar {
+    return Utf8Scalar { code: v.code, advance: v.advance, valid: v.valid };
+}
+
+fn "$value_copy$[u32,i32,bool]"(v: [u32, i32, bool]) -> [u32, i32, bool] {
+    return [u32,i32,bool] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>"(v: StructField<core:prelude/string.wado/Utf8Scalar,bool>) -> StructField<core:prelude/string.wado/Utf8Scalar,bool> {
+    return StructField<core:prelude/string.wado/Utf8Scalar,bool> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>"(v: StructField<core:prelude/string.wado/Utf8Scalar,i32>) -> StructField<core:prelude/string.wado/Utf8Scalar,i32> {
+    return StructField<core:prelude/string.wado/Utf8Scalar,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>"(v: StructField<core:prelude/string.wado/Utf8Scalar,u32>) -> StructField<core:prelude/string.wado/Utf8Scalar,u32> {
+    return StructField<core:prelude/string.wado/Utf8Scalar,u32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>]"(v: [StructField<core:prelude/string.wado/Utf8Scalar,u32>, StructField<core:prelude/string.wado/Utf8Scalar,i32>, StructField<core:prelude/string.wado/Utf8Scalar,bool>]) -> [StructField<core:prelude/string.wado/Utf8Scalar,u32>, StructField<core:prelude/string.wado/Utf8Scalar,i32>, StructField<core:prelude/string.wado/Utf8Scalar,bool>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>"(v.2) };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
+    return StrLinesIter { repr: v.repr, used: v.used, pos: v.pos, finished: v.finished };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
+    return StrSplitWhitespaceIter { repr: v.repr, used: v.used, pos: v.pos };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrSplitNIter"(v: StrSplitNIter) -> StrSplitNIter {
+    return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSplitIter {
+    return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: core::builtin::array_clone::<u8>(&v.sep_repr), sep_len: v.sep_len, finished: v.finished };
+}
+
+fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
+    return [i32,char] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char]>) -> Option<[i32, char]> {
@@ -15374,52 +16374,266 @@ fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char
     };
 }
 
+fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
+    return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
+    return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
+}
+
 fn "$value_copy$[u32,i32]"(v: [u32, i32]) -> [u32, i32] {
     return [u32,i32] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$core:prelude/fpfmt.wado/FormatResult"(v: FormatResult) -> FormatResult {
-    return FormatResult { digits: v.digits, exponent: v.exponent, n_digits: v.n_digits };
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>"(v: EnumCase<core:prelude/intparse.wado/FloatErrorKind>) -> EnumCase<core:prelude/intparse.wado/FloatErrorKind> {
+    return EnumCase<core:prelude/intparse.wado/FloatErrorKind> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
 }
 
-fn "$value_copy$[bool,bool,core:prelude/fpfmt.wado/SpecialKind]"(v: [bool, bool, SpecialKind]) -> [bool, bool, SpecialKind] {
-    return [bool,bool,core:prelude/fpfmt.wado/SpecialKind] { 0: v.0, 1: v.1, 2: v.2 };
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>]"(v: [EnumCase<core:prelude/intparse.wado/FloatErrorKind>, EnumCase<core:prelude/intparse.wado/FloatErrorKind>]) -> [EnumCase<core:prelude/intparse.wado/FloatErrorKind>, EnumCase<core:prelude/intparse.wado/FloatErrorKind>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/FloatErrorKind>"(v.1) };
 }
 
-fn "$value_copy$core:prelude/int128.wado/i128"(v: i128) -> i128 {
-    return i128 { low: v.low, high: v.high };
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v: EnumCase<core:prelude/intparse.wado/IntErrorKind>) -> EnumCase<core:prelude/intparse.wado/IntErrorKind> {
+    return EnumCase<core:prelude/intparse.wado/IntErrorKind> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>]"(v: [EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>]) -> [EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>, EnumCase<core:prelude/intparse.wado/IntErrorKind>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.3) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>]"(v: [Option<FloatErrorKind>]) -> [Option<FloatErrorKind>] {
+    return [core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>] { 0: v.0 };
+}
+
+fn "$value_copy$core:prelude/intparse.wado/ParseFloatError"(v: ParseFloatError) -> ParseFloatError {
+    return ParseFloatError { kind: v.kind };
+}
+
+fn "$value_copy$[core:prelude/intparse.wado/FloatErrorKind]"(v: [FloatErrorKind]) -> [FloatErrorKind] {
+    return [core:prelude/intparse.wado/FloatErrorKind] { 0: v.0 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>"(v: StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>) -> StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> {
+    return StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>]"(v: [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>]) -> [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>"(v.0) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>]"(v: [Option<IntErrorKind>]) -> [Option<IntErrorKind>] {
+    return [core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>] { 0: v.0 };
+}
+
+fn "$value_copy$core:prelude/intparse.wado/ParseIntError"(v: ParseIntError) -> ParseIntError {
+    return ParseIntError { kind: v.kind };
+}
+
+fn "$value_copy$[core:prelude/intparse.wado/IntErrorKind]"(v: [IntErrorKind]) -> [IntErrorKind] {
+    return [core:prelude/intparse.wado/IntErrorKind] { 0: v.0 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>"(v: StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>) -> StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> {
+    return StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]"(v: [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]) -> [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>"(v.0) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i64>]"(v: [Option<u64>, Option<i64>]) -> [Option<u64>, Option<i64>] {
+    return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i64>] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>"(v: StructField<core:prelude/int128.wado/i128,i64>) -> StructField<core:prelude/int128.wado/i128,i64> {
+    return StructField<core:prelude/int128.wado/i128,i64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>"(v: StructField<core:prelude/int128.wado/i128,u64>) -> StructField<core:prelude/int128.wado/i128,u64> {
+    return StructField<core:prelude/int128.wado/i128,u64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>]"(v: [StructField<core:prelude/int128.wado/i128,u64>, StructField<core:prelude/int128.wado/i128,i64>]) -> [StructField<core:prelude/int128.wado/i128,u64>, StructField<core:prelude/int128.wado/i128,i64>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>"(v.1) };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v: StructField<core:prelude/int128.wado/u128,u64>) -> StructField<core:prelude/int128.wado/u128,u64> {
+    return StructField<core:prelude/int128.wado/u128,u64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>]"(v: [StructField<core:prelude/int128.wado/u128,u64>, StructField<core:prelude/int128.wado/u128,u64>]) -> [StructField<core:prelude/int128.wado/u128,u64>, StructField<core:prelude/int128.wado/u128,u64>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v.1) };
+}
+
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>"(v: Option<i128>) -> Option<i128> {
+    return match v {
+        Some($vc_payload_0) => Option<i128>::Some("mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
+        None => v,
+    };
+}
+
+fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>"(v: Option<u128>) -> Option<u128> {
+    return match v {
+        Some($vc_payload_0) => Option<u128>::Some("mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
+        None => v,
+    };
 }
 
 fn "$value_copy$[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128]"(v: [u128, u128]) -> [u128, u128] {
     return [core:prelude/int128.wado/u128,core:prelude/int128.wado/u128] { 0: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"(v.1) };
 }
 
-fn "$value_copy$[u64,u64]"(v: [u64, u64]) -> [u64, u64] {
-    return [u64,u64] { 0: v.0, 1: v.1 };
+fn "$value_copy$[u64,i64]"(v: [u64, i64]) -> [u64, i64] {
+    return [u64,i64] { 0: v.0, 1: v.1 };
 }
 
 fn "$value_copy$core:prelude/int128.wado/u128"(v: u128) -> u128 {
     return u128 { low: v.low, high: v.high };
 }
 
-fn "$value_copy$[u64,i64]"(v: [u64, i64]) -> [u64, i64] {
-    return [u64,i64] { 0: v.0, 1: v.1 };
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v: EnumCase<core:prelude/fpfmt.wado/SpecialKind>) -> EnumCase<core:prelude/fpfmt.wado/SpecialKind> {
+    return EnumCase<core:prelude/fpfmt.wado/SpecialKind> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>]"(v: [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>]) -> [EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>, EnumCase<core:prelude/fpfmt.wado/SpecialKind>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.3) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<u64>, Option<i32>, Option<i32>]) -> [Option<u64>, Option<i32>, Option<i32>] {
+    return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$[u64,i32,i32]"(v: [u64, i32, i32]) -> [u64, i32, i32] {
+    return [u64,i32,i32] { 0: v.0, 1: v.1, 2: v.2 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v: StructField<core:prelude/fpfmt.wado/FormatResult,i32>) -> StructField<core:prelude/fpfmt.wado/FormatResult,i32> {
+    return StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>"(v: StructField<core:prelude/fpfmt.wado/FormatResult,u64>) -> StructField<core:prelude/fpfmt.wado/FormatResult,u64> {
+    return StructField<core:prelude/fpfmt.wado/FormatResult,u64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>]"(v: [StructField<core:prelude/fpfmt.wado/FormatResult,u64>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>]) -> [StructField<core:prelude/fpfmt.wado/FormatResult,u64>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<u64>]"(v: [Option<u64>, Option<u64>]) -> [Option<u64>, Option<u64>] {
+    return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<u64>] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$[u64,u64]"(v: [u64, u64]) -> [u64, u64] {
+    return [u64,u64] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v: StructField<core:prelude/fpfmt.wado/PmHiLo,u64>) -> StructField<core:prelude/fpfmt.wado/PmHiLo,u64> {
+    return StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>]"(v: [StructField<core:prelude/fpfmt.wado/PmHiLo,u64>, StructField<core:prelude/fpfmt.wado/PmHiLo,u64>]) -> [StructField<core:prelude/fpfmt.wado/PmHiLo,u64>, StructField<core:prelude/fpfmt.wado/PmHiLo,u64>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v.1) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>]"(v: [Option<u64>, Option<i32>]) -> [Option<u64>, Option<i32>] {
+    return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>"(v: StructField<core:prelude/fpfmt.wado/UnpackResult,i32>) -> StructField<core:prelude/fpfmt.wado/UnpackResult,i32> {
+    return StructField<core:prelude/fpfmt.wado/UnpackResult,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>"(v: StructField<core:prelude/fpfmt.wado/UnpackResult,u64>) -> StructField<core:prelude/fpfmt.wado/UnpackResult,u64> {
+    return StructField<core:prelude/fpfmt.wado/UnpackResult,u64> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>]"(v: [StructField<core:prelude/fpfmt.wado/UnpackResult,u64>, StructField<core:prelude/fpfmt.wado/UnpackResult,i32>]) -> [StructField<core:prelude/fpfmt.wado/UnpackResult,u64>, StructField<core:prelude/fpfmt.wado/UnpackResult,i32>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>"(v.1) };
+}
+
+fn "$value_copy$[bool,bool,core:prelude/fpfmt.wado/SpecialKind]"(v: [bool, bool, SpecialKind]) -> [bool, bool, SpecialKind] {
+    return [bool,bool,core:prelude/fpfmt.wado/SpecialKind] { 0: v.0, 1: v.1, 2: v.2 };
 }
 
 fn "$value_copy$[u64,i32]"(v: [u64, i32]) -> [u64, i32] {
     return [u64,i32] { 0: v.0, 1: v.1 };
 }
 
-fn "$value_copy$core:prelude/fpfmt.wado/UnpackResult"(v: UnpackResult) -> UnpackResult {
-    return UnpackResult { mantissa: v.mantissa, exponent: v.exponent };
+fn "$value_copy$core:prelude/fpfmt.wado/FormatResult"(v: FormatResult) -> FormatResult {
+    return FormatResult { digits: v.digits, exponent: v.exponent, n_digits: v.n_digits };
 }
 
 fn "$value_copy$core:prelude/fpfmt.wado/PmHiLo"(v: PmHiLo) -> PmHiLo {
     return PmHiLo { hi: v.hi, lo: v.lo };
 }
 
+fn "$value_copy$core:prelude/fpfmt.wado/UnpackResult"(v: UnpackResult) -> UnpackResult {
+    return UnpackResult { mantissa: v.mantissa, exponent: v.exponent };
+}
+
+fn "$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v: EnumCase<core:prelude/format.wado/Alignment>) -> EnumCase<core:prelude/format.wado/Alignment> {
+    return EnumCase<core:prelude/format.wado/Alignment> { discriminant: v.discriminant, value: v.value, case_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.case_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override) };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>]"(v: [EnumCase<core:prelude/format.wado/Alignment>, EnumCase<core:prelude/format.wado/Alignment>, EnumCase<core:prelude/format.wado/Alignment>]) -> [EnumCase<core:prelude/format.wado/Alignment>, EnumCase<core:prelude/format.wado/Alignment>, EnumCase<core:prelude/format.wado/Alignment>] {
+    return [core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.2) };
+}
+
+fn "$value_copy$[core:prelude/types.wado/Option<char>,core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>]"(v: [Option<char>, Option<Alignment>, Option<bool>, Option<bool>, Option<bool>, Option<i32>, Option<i32>, Option<i32>, Option<&mut String>]) -> [Option<char>, Option<Alignment>, Option<bool>, Option<bool>, Option<bool>, Option<i32>, Option<i32>, Option<i32>, Option<&mut String>] {
+    return [core:prelude/types.wado/Option<char>,core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7, 8: v.8 };
+}
+
+fn "$value_copy$[char,core:prelude/format.wado/Alignment,bool,bool,bool,i32,i32,i32,&mut core:prelude/string.wado/String]"(v: [char, Alignment, bool, bool, bool, i32, i32, i32, &mut String]) -> [char, Alignment, bool, bool, bool, i32, i32, i32, &mut String] {
+    return [char,core:prelude/format.wado/Alignment,bool,bool,bool,i32,i32,i32,&mut core:prelude/string.wado/String] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7, 8: v.8 };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>"(v: StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>) -> StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> {
+    return StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v: StructField<core:prelude/format.wado/Formatter,i32>) -> StructField<core:prelude/format.wado/Formatter,i32> {
+    return StructField<core:prelude/format.wado/Formatter,i32> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v: StructField<core:prelude/format.wado/Formatter,bool>) -> StructField<core:prelude/format.wado/Formatter,bool> {
+    return StructField<core:prelude/format.wado/Formatter,bool> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>"(v: StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>) -> StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> {
+    return StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>"(v: StructField<core:prelude/format.wado/Formatter,char>) -> StructField<core:prelude/format.wado/Formatter,char> {
+    return StructField<core:prelude/format.wado/Formatter,char> { index: v.index, field_name: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+}
+
+fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>]"(v: [StructField<core:prelude/format.wado/Formatter,char>, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>]) -> [StructField<core:prelude/format.wado/Formatter,char>, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>] {
+    return [core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>] { 0: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>"(v.1), 2: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.2), 3: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.3), 4: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.4), 5: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.5), 6: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.6), 7: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.7), 8: "mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>"(v.8) };
+}
+
+fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
+    return StrSlice { repr: v.repr, start: v.start, end: v.end };
+}
+
 fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
     return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+}
+
+fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
+    return core::builtin::array_clone::<u8>(&v);
+}
+
+fn "$value_copy$core:prelude/slice.wado/Slice<u8>"(v: Slice<u8>) -> Slice<u8> {
+    return Slice<u8> { repr: v.repr, start: v.start, end: v.end };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
+    return List<u8> { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
+}
+
+fn "$value_copy$Array<i32>"(v: Array<i32>) -> Array<i32> {
+    return core::builtin::array_clone::<i32>(&v);
 }
 
 fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>"(v: Result<String, String>) -> Result<String, String> {
@@ -15433,10 +16647,6 @@ fn "$value_copy$core:prelude/list.wado/List<i32>"(v: List<i32>) -> List<i32> {
     return List<i32> { repr: core::builtin::array_clone_prefix::<i32>(&v.repr, v.used), used: v.used };
 }
 
-fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
-    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
-}
-
 fn "$value_copy$[core:prelude/string.wado/String,core:prelude/string.wado/String]"(v: [String, String]) -> [String, String] {
     return [core:prelude/string.wado/String,core:prelude/string.wado/String] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.1) };
 }
@@ -15445,16 +16655,8 @@ fn "$value_copy$core:prelude/list.wado/List<[core:prelude/string.wado/String,cor
     return List<[core:prelude/string.wado/String,core:prelude/string.wado/String]> { repr: core::builtin::array_clone_prefix::<[String, String]>(&v.repr, v.used), used: v.used };
 }
 
-fn "$value_copy$core:prelude/list.wado/List<u8>"(v: List<u8>) -> List<u8> {
-    return List<u8> { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
-}
-
 fn "$value_copy$[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>]"(v: [Stream<u8>, StreamWritable<u8>]) -> [Stream<u8>, StreamWritable<u8>] {
     return [core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StreamWritable<u8>] { 0: v.0, 1: v.1 };
-}
-
-fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
-    return String { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
 }
 
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v: Option<String>) -> Option<String> {
@@ -15468,8 +16670,28 @@ fn "$value_copy$core:prelude/list.wado/List<core:prelude/string.wado/String>"(v:
     return List<core:prelude/string.wado/String> { repr: core::builtin::array_clone_prefix::<String>(&v.repr, v.used), used: v.used };
 }
 
+fn "$value_copy$core:prelude/string.wado/String"(v: String) -> String {
+    return String { repr: core::builtin::array_clone_prefix::<u8>(&v.repr, v.used), used: v.used };
+}
+
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>"(v: SliceValueIter<core:prelude/string.wado/String>) -> SliceValueIter<core:prelude/string.wado/String> {
     return SliceValueIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
+}
+
+fn "$value_copy$core:prelude/int128.wado/i128"(v: i128) -> i128 {
+    return i128 { low: v.low, high: v.high };
+}
+
+fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {
+    return [i64,i64] { 0: v.0, 1: v.1 };
+}
+
+fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
+    return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
+}
+
+fn "$value_copy$core:prelude/list.wado/List<u64>"(v: List<u64>) -> List<u64> {
+    return List<u64> { repr: core::builtin::array_clone_prefix::<u64>(&v.repr, v.used), used: v.used };
 }
 
 fn array_len();

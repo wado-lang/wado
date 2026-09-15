@@ -998,7 +998,7 @@ fn index_ref_mut_method_call_definition() {
             "    }\n",
             "}\n",
             "struct Wrapper { acc: Acc }\n",
-            "impl<i32> IndexRefMut<i32> for Wrapper {\n",
+            "impl IndexRefMut<i32> for Wrapper {\n",
             "    type Output = Acc;\n",
             "    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {\n",
             "        return &mut self.acc;\n",

@@ -105,8 +105,7 @@ fn entry_plan() -> String {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
-        &wado_compiler::hashmap::IndexMap::default(),
-        wado_compiler::param_resolution::ParamPolicy::default(),
+        &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
     ))
     .expect("dump succeeds");

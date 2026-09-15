@@ -151,12 +151,12 @@ fn const_identity_eq(a: &Value, b: &Value) -> bool {
         (
             Value::Variant {
                 type_id: at,
-                case_name: ac,
+                case_index: ac,
                 payload: ap,
             },
             Value::Variant {
                 type_id: bt,
-                case_name: bc,
+                case_index: bc,
                 payload: bp,
             },
         ) => {
@@ -218,11 +218,11 @@ fn const_identity_hash<H: std::hash::Hasher>(v: &Value, state: &mut H) {
         }
         Value::Variant {
             type_id,
-            case_name,
+            case_index,
             payload,
         } => {
             type_id.hash(state);
-            case_name.hash(state);
+            case_index.hash(state);
             match payload {
                 Some(p) => const_identity_hash(p, state),
                 None => 0u8.hash(state),
@@ -673,8 +673,14 @@ impl ValuePool {
     /// version-free, so the caller owes a single-version proof
     /// ([`crate::nir_engine::Engine::local_has_one_version`]); without one, two
     /// reads that denote different values share an id.
+    ///
+    /// A cached value answers only for the type it was minted at: `sroa_param`
+    /// retypes the slot it scalarizes, and the extractor re-emits a read from
+    /// the type stamped here.
     pub fn canonical_local(&mut self, idx: u32, ty: TypeId) -> ValueId {
-        if let Some(&v) = self.canonical_locals.get(&idx) {
+        if let Some(&v) = self.canonical_locals.get(&idx)
+            && self.type_of(v) == Some(ty)
+        {
             return v;
         }
         let v = self.fresh_opaque_with_source(OpaqueSource::Local(idx));
@@ -860,6 +866,19 @@ impl ValuePool {
             }
             ControlFlow::Continue(())
         });
+    }
+
+    /// Give each named local's `Opaque` leaf its new type. A pass that re-types
+    /// locals owes this: extraction names a `FieldAccess` field by that type.
+    pub fn retype_locals(&mut self, types: &[(u32, TypeId)]) {
+        for i in 0..self.values.len() {
+            if let ValueKind::Opaque(oid) = self.values[i]
+                && let Some(OpaqueSource::Local(idx)) = self.opaque_source(oid)
+                && let Some(&(_, ty)) = types.iter().find(|(local, _)| *local == idx)
+            {
+                self.set_type(ValueId(i as u32), ty);
+            }
+        }
     }
 
     /// Remap every `OpaqueSource::Local` index through `remap` (old → new), which

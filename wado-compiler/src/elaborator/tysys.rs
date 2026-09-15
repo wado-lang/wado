@@ -282,6 +282,22 @@ impl TypeSystem {
         self.type_table.borrow().fq_base_type_name(type_id)
     }
 
+    /// How a method dispatched through `impl` spells its receiver: an impl at
+    /// one instantiation owns that instance's function, a parameterized one the
+    /// base's, specialized per instance by monomorphization.
+    pub(crate) fn fq_receiver_of_impl(
+        &self,
+        type_id: TypeId,
+        at_one_instantiation: bool,
+    ) -> FqTypeName {
+        let table = self.type_table.borrow();
+        if at_one_instantiation {
+            table.fq_type_name(type_id)
+        } else {
+            table.fq_base_type_name(type_id)
+        }
+    }
+
     /// The first link at or below `type_id` — itself included — writing its own
     /// impl of `trait_`, stopping above a scalar base: a primitive's operator
     /// impl *is* the instruction, not one a newtype inherits.
@@ -324,11 +340,14 @@ impl TypeSystem {
         }
     }
 
-    /// A newtype's base name and `TypeId` for a trait-impl lookup fallback,
+    /// A newtype's representation head, named for a trait-impl lookup fallback,
     /// else the name and id given.
+    ///
+    /// A middle link writes no impl of its own, or [`Self::own_impl_link`] would
+    /// have stopped there.
     pub(crate) fn newtype_base_lookup(&self, name: &str, type_id: TypeId) -> (String, TypeId) {
         let tt = self.type_table.borrow();
-        if let Some(base_id) = tt.get_newtype_base(type_id) {
+        if let Some(base_id) = tt.newtype_representation(type_id) {
             let is_builtin_array = matches!(tt.get(base_id), ResolvedType::BuiltinArray(_));
             drop(tt);
             if is_builtin_array {

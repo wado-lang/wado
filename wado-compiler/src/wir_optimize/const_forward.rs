@@ -6,8 +6,6 @@
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirFunction, WirInstr, WirPackage, WirTypeDef, WirTypeId};
 
-use super::util::collect_local_gets_deep;
-
 pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
     let types = &module.types;
     let defined_func_base = module.defined_func_base;
@@ -18,10 +16,6 @@ pub(super) fn forward_struct_field_constants(module: &mut WirPackage) {
         // Locals connected by plain local-to-local copies share one GC object;
         // mutations and aliasing must apply to the whole group.
         let copy_groups = collect_copy_groups(&body);
-        // Collect locals whose references escape. Field forwarding is unsafe
-        // for these locals because their fields can be modified through aliases.
-        // Uses stores info: locals passed to functions without `stores` for that
-        // parameter are NOT marked as aliased.
         let mut aliased = collect_aliased_locals(&body, &module.functions, defined_func_base);
         widen_aliased_across_copy_groups(&mut aliased, &copy_groups);
         // Locals assigned exactly once. `local_const` folds a `LocalGet` to its
@@ -202,10 +196,9 @@ fn widen_aliased_across_copy_groups(
     }
 }
 
-/// Collect locals whose references escape (address taken, embedded in structs,
-/// or passed to function calls that declare `stores` for that parameter).
-/// Locals passed to functions without `stores` are NOT aliased — the callee
-/// cannot retain the reference beyond the call.
+/// Locals a reference to which outlives any one statement: address taken, or
+/// passed to a call that declares `stores` for that parameter. These hold no
+/// fact at all; what escapes at a point in the flow is invalidated there.
 fn collect_aliased_locals(
     body: &[WirInstr],
     functions: &[WirFunction],
@@ -249,29 +242,28 @@ fn collect_aliased_in_instr(
                     None => true,
                 };
                 if stores_param {
-                    // Callee may store this reference — mark all locals as aliased.
-                    collect_local_gets_deep(arg, aliased);
+                    collect_reference_locals(arg, aliased);
                 }
-                // Recurse into sub-expressions (nested calls get their own analysis).
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, !stores_param);
             }
-            return; // Skip default for_each_child — args handled above.
-        }
-        // Indirect calls: conservative (unknown callee).
-        WirInstr::CallRef { func_ref, args, .. } => {
-            for arg in args {
-                collect_local_gets_deep(arg, aliased);
-                collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
-            }
-            collect_aliased_in_instr(func_ref, aliased, functions, defined_func_base, false);
             return;
         }
-        WirInstr::CallIndirect { index, args, .. } => {
+        // An unknown callee stores every argument for all this can tell.
+        WirInstr::CallRef {
+            func_ref: callee,
+            args,
+            ..
+        }
+        | WirInstr::CallIndirect {
+            index: callee,
+            args,
+            ..
+        } => {
             for arg in args {
-                collect_local_gets_deep(arg, aliased);
+                collect_reference_locals(arg, aliased);
                 collect_aliased_in_instr(arg, aliased, functions, defined_func_base, false);
             }
-            collect_aliased_in_instr(index, aliased, functions, defined_func_base, false);
+            collect_aliased_in_instr(callee, aliased, functions, defined_func_base, false);
             return;
         }
         // RefAsNonNull of a LocalGet: address taken — but suppress if inside
@@ -283,7 +275,6 @@ fn collect_aliased_in_instr(
         }
         _ => {}
     }
-    // Recurse into children, propagating the suppression context.
     instr.for_each_child(&mut |child| {
         collect_aliased_in_instr(
             child,
@@ -395,7 +386,6 @@ impl<'a> FieldKnowledge<'a> {
             if name == local_name {
                 return false;
             }
-            // If the stored value references the reassigned local, invalidate it
             if let WirInstr::LocalGet { name: source, .. } = val
                 && source == local_name
             {
@@ -566,6 +556,55 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
     }
 }
 
+/// The locals whose own object `instr` puts in a container: a struct field, an
+/// array element, a table slot or a global, each reachable by whatever reaches
+/// the container.
+//
+// Every instruction putting a value somewhere that outlives the statement
+// belongs here. A store is a point in the flow, so earlier facts still hold.
+fn collect_container_escapes(instr: &WirInstr, names: &mut IndexSet<String>) {
+    match instr {
+        WirInstr::StructNew { fields, .. } => {
+            for field in fields {
+                collect_reference_locals(field, names);
+            }
+        }
+        WirInstr::ArrayNewFixed { elements, .. } => {
+            for element in elements {
+                collect_reference_locals(element, names);
+            }
+        }
+        WirInstr::ArrayNew { init, .. } => collect_reference_locals(init, names),
+        WirInstr::StructSet { value, .. }
+        | WirInstr::ArraySet { value, .. }
+        | WirInstr::ArrayFill { value, .. }
+        | WirInstr::TableSet { value, .. }
+        | WirInstr::GlobalSet { value, .. } => collect_reference_locals(value, names),
+        _ => {}
+    }
+}
+
+/// The locals whose own object `instr` hands over, wherever in it the read of
+/// them sits.
+//
+// A load hands over the field's pointee, not the base: naming that pointee takes
+// a local `collect_container_escapes` has already invalidated. A nested call
+// inside `instr` is its own channel, reached by the caller's walk.
+fn collect_reference_locals(instr: &WirInstr, names: &mut IndexSet<String>) {
+    match instr {
+        WirInstr::LocalGet { name, result_ty } => {
+            if result_ty.is_reference() {
+                names.insert(name.clone());
+            }
+        }
+        WirInstr::StructGet { .. }
+        | WirInstr::ArrayGet { .. }
+        | WirInstr::ArrayGetS { .. }
+        | WirInstr::ArrayGetU { .. } => {}
+        _ => instr.for_each_child(&mut |child| collect_reference_locals(child, names)),
+    }
+}
+
 /// Invalidate what a **call** inside `instr` may mutate, before the statement is
 /// rewritten. [`update_knowledge_from_instr`] runs *after*, which is right for a
 /// statement's own store but wrong for a call, whose arguments evaluate in
@@ -573,17 +612,14 @@ fn branches_at_or_beyond(instr: &WirInstr, label_depth: u32) -> bool {
 /// and stops at a nested body, whose own recursion pre-invalidates in turn.
 fn invalidate_call_effects_before_rewrite(instr: &WirInstr, known: &mut FieldKnowledge<'_>) {
     match instr {
-        WirInstr::Call { args, .. } => {
-            for arg in args {
-                if let WirInstr::LocalGet { name, .. } = arg {
-                    known.invalidate_mutated_local(name);
-                }
-            }
-        }
-        WirInstr::CallRef { args, .. } | WirInstr::CallIndirect { args, .. } => {
+        // A `&mut` handed over from inside a value block is the same channel as
+        // a bare argument, and a block is where this walk stops.
+        WirInstr::Call { args, .. }
+        | WirInstr::CallRef { args, .. }
+        | WirInstr::CallIndirect { args, .. } => {
             let mut names = IndexSet::default();
             for arg in args {
-                collect_local_gets_deep(arg, &mut names);
+                collect_reference_locals(arg, &mut names);
             }
             for name in &names {
                 known.invalidate_mutated_local(name);
@@ -676,15 +712,20 @@ enum InvalidationScope {
     Merge,
 }
 
-/// The single invalidator shared by the straight-line and merge paths:
-/// invalidates defs (`LocalSet`/`LocalTee`/`MultiValueLocalBind`), field
-/// mutations (`StructSet`), and mutations through call arguments or escaped
-/// references. Mutation channels invalidate across copy groups.
+/// The single invalidator shared by the straight-line and merge paths: defs,
+/// field mutations, container stores, and mutations through a call argument or
+/// an escaped reference. Mutation channels invalidate across copy groups.
 fn invalidate_effects_in_instr(
     instr: &WirInstr,
     known: &mut FieldKnowledge<'_>,
     scope: InvalidationScope,
 ) {
+    let mut escaped = IndexSet::default();
+    collect_container_escapes(instr, &mut escaped);
+    for name in &escaped {
+        known.invalidate_mutated_local(name);
+    }
+
     match instr {
         WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
             known.invalidate_local(name);
@@ -701,31 +742,20 @@ fn invalidate_effects_in_instr(
                 known.invalidate_mutated_field(name, field_name);
             }
         }
-        // A reference to a local escaping anywhere — call argument, stored
-        // into a struct — is a mutation channel for the pointee.
+        // Taking a reference to a local is a mutation channel for it.
         WirInstr::RefAsNonNull(inner) => {
             if let WirInstr::LocalGet { name, .. } = inner.as_ref() {
                 known.invalidate_mutated_local(name);
             }
         }
-        // Direct calls: a reference argument can be mutated during the call
-        // even by a callee without `stores`, so every top-level `LocalGet`
-        // argument invalidates. `RefAsNonNull(LocalGet)` nested in an
-        // argument (a `&mut` embedded in a literal) is caught by the arm
-        // above during recursion.
-        WirInstr::Call { args, .. } => {
-            for arg in args {
-                if let WirInstr::LocalGet { name, .. } = arg {
-                    known.invalidate_mutated_local(name);
-                }
-            }
-        }
-        // Unknown callees: conservatively treat every local reachable from
-        // the arguments as mutated.
-        WirInstr::CallRef { args, .. } | WirInstr::CallIndirect { args, .. } => {
+        // A callee mutates through the references it is handed whether or not
+        // it declares `stores` for them.
+        WirInstr::Call { args, .. }
+        | WirInstr::CallRef { args, .. }
+        | WirInstr::CallIndirect { args, .. } => {
             let mut names = IndexSet::default();
             for arg in args {
-                collect_local_gets_deep(arg, &mut names);
+                collect_reference_locals(arg, &mut names);
             }
             for name in &names {
                 known.invalidate_mutated_local(name);
@@ -1025,25 +1055,54 @@ mod tests {
         }
     }
 
+    /// A read of a struct local. The type is load-bearing: a call mutates
+    /// through the references its arguments hand over, and only those.
+    fn struct_local_get(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::non_null_ref(test_type_id()),
+        }
+    }
+
     fn test_type_id() -> WirTypeId {
         WirTypeId::new(0, "test//S".into())
     }
 
     fn test_types() -> Vec<WirTypeDef> {
-        vec![WirTypeDef::Struct(WirStructType {
-            name: WirName {
-                fq: "test//S".to_string(),
-            },
-            fields: vec![WirField {
-                name: "f".to_string(),
-                ty: WirType::I32,
-                mutable: true,
-            }],
-            meta: WirMeta::default(),
-            generic_origin: None,
-            newtype_origin: None,
-            supertype: None,
-        })]
+        vec![
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    fq: "test//S".to_string(),
+                },
+                fields: vec![WirField {
+                    name: "f".to_string(),
+                    ty: WirType::I32,
+                    mutable: true,
+                }],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+            WirTypeDef::Struct(WirStructType {
+                name: WirName {
+                    fq: "test//Outer".to_string(),
+                },
+                fields: vec![WirField {
+                    name: "child".to_string(),
+                    ty: WirType::non_null_ref(test_type_id()),
+                    mutable: true,
+                }],
+                meta: WirMeta::default(),
+                generic_origin: None,
+                newtype_origin: None,
+                supertype: None,
+            }),
+        ]
+    }
+
+    fn outer_type_id() -> WirTypeId {
+        WirTypeId::new(1, "test//Outer".into())
     }
 
     fn struct_new(field_value: WirInstr) -> WirInstr {
@@ -1057,8 +1116,46 @@ mod tests {
         WirInstr::StructGet {
             type_id: test_type_id(),
             field_name: "f".to_string(),
-            expr: Box::new(local_get(local)),
+            expr: Box::new(struct_local_get(local)),
             result_ty: WirType::I32,
+        }
+    }
+
+    /// An `Outer` holding `child`'s object, and a read of the field back out.
+    fn outer_new(child: WirInstr) -> WirInstr {
+        WirInstr::StructNew {
+            type_id: outer_type_id(),
+            fields: vec![child],
+        }
+    }
+
+    fn outer_child_get(local: &str) -> WirInstr {
+        WirInstr::StructGet {
+            type_id: outer_type_id(),
+            field_name: "child".to_string(),
+            expr: Box::new(outer_local_get(local)),
+            result_ty: WirType::non_null_ref(test_type_id()),
+        }
+    }
+
+    fn outer_local_get(name: &str) -> WirInstr {
+        WirInstr::LocalGet {
+            name: name.to_string(),
+            result_ty: WirType::non_null_ref(outer_type_id()),
+        }
+    }
+
+    fn test_global() -> WirName {
+        WirName {
+            fq: "test//g".to_string(),
+        }
+    }
+
+    /// A call to a function that may mutate through what it is handed.
+    fn mutate_call(arg: WirInstr) -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, "test//mutate".into()),
+            args: vec![arg],
         }
     }
 
@@ -1219,10 +1316,118 @@ mod tests {
         );
     }
 
-    // A call inside an `if` arm may mutate a local passed to it; the merge
-    // must invalidate that local's facts. Runs with an empty aliased set,
-    // modelling a callee without `stores` — the merge invalidation alone
-    // must protect the read.
+    // A local whose object goes into a struct field is reachable through that
+    // field, so a call handed the field mutates it.
+    #[test]
+    fn a_field_that_holds_a_local_s_object_is_a_channel_to_it() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            local_set("a", outer_new(struct_local_get("b"))),
+            local_set(
+                "out",
+                WirInstr::I32Add(
+                    Box::new(mutate_call(outer_child_get("a"))),
+                    Box::new(struct_get("b")),
+                ),
+            ),
+        ];
+
+        run_forward(&mut body, &types);
+
+        let WirInstr::I32Add(_, right) = set_value(&body[2]) else {
+            panic!("expected the add, got {:?}", set_value(&body[2]));
+        };
+        assert_matches!(
+            right.as_ref(),
+            WirInstr::StructGet { .. },
+            "the call is handed `b`'s own object through `a.child` and may mutate `b.f`"
+        );
+    }
+
+    // A global is a container like any other, and a write through it is not a
+    // `LocalGet` base that `StructSet` invalidation would recognize.
+    #[test]
+    fn a_global_that_holds_a_local_s_object_is_a_channel_to_it() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            WirInstr::GlobalSet {
+                name: test_global(),
+                value: Box::new(struct_local_get("b")),
+            },
+            mutate_call(WirInstr::GlobalGet {
+                name: test_global(),
+                result_ty: WirType::non_null_ref(test_type_id()),
+            }),
+            local_set("out", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[3]),
+            WirInstr::StructGet { .. },
+            "the call reaches `b`'s object through the global and may mutate `b.f`"
+        );
+    }
+
+    // `array.fill` stores one object into every slot it covers, so the array
+    // holds it as surely as `array.set` would.
+    #[test]
+    fn an_array_fill_puts_the_local_s_object_in_the_array() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            WirInstr::ArrayFill {
+                type_id: outer_type_id(),
+                array: Box::new(struct_local_get("xs")),
+                offset: Box::new(WirInstr::I32Const(0)),
+                value: Box::new(struct_local_get("b")),
+                len: Box::new(WirInstr::I32Const(4)),
+            },
+            mutate_call(struct_local_get("xs")),
+            local_set("out", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[3]),
+            WirInstr::StructGet { .. },
+            "the call reaches `b`'s object through the filled array"
+        );
+    }
+
+    #[test]
+    fn a_fact_holds_until_its_local_s_object_goes_into_a_container() {
+        let types = test_types();
+
+        let mut body = vec![
+            local_set("b", struct_new(WirInstr::I32Const(7))),
+            local_set("early", struct_get("b")),
+            local_set("a", outer_new(struct_local_get("b"))),
+            mutate_call(outer_local_get("a")),
+            local_set("late", struct_get("b")),
+        ];
+
+        run_forward(&mut body, &types);
+
+        assert_matches!(
+            set_value(&body[1]),
+            WirInstr::I32Const(7),
+            "nothing can reach `b` before its object goes into `a`"
+        );
+        assert_matches!(
+            set_value(&body[4]),
+            WirInstr::StructGet { .. },
+            "once `b`'s object is in `a`, the call reaches it"
+        );
+    }
+
     #[test]
     fn call_in_if_arm_invalidates() {
         let types = test_types();
@@ -1232,10 +1437,7 @@ mod tests {
             WirInstr::If {
                 condition: Box::new(local_get("c")),
                 result: None,
-                then_body: vec![WirInstr::Call {
-                    func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![local_get("a")],
-                }],
+                then_body: vec![mutate_call(struct_local_get("a"))],
                 else_body: None,
             },
             local_set("out", struct_get("a")),
@@ -1263,13 +1465,7 @@ mod tests {
 
         let mut body = vec![
             local_set("a", struct_new(WirInstr::I32Const(1))),
-            local_set(
-                "s",
-                WirInstr::Call {
-                    func_id: WirFuncId::new(0, "test//mutate".into()),
-                    args: vec![local_get("a")],
-                },
-            ),
+            local_set("s", mutate_call(struct_local_get("a"))),
             local_set("out", struct_get("a")),
         ];
 
@@ -1295,14 +1491,14 @@ mod tests {
 
         let mut body = vec![
             local_set("a", struct_new(WirInstr::I32Const(1))),
-            local_set("b", local_get("a")),
+            local_set("b", struct_local_get("a")),
             // out1 = b.f → folds to 1 through the copy
             local_set("out1", struct_get("b")),
             // b.f = 9 → mutates the shared object; invalidates a's fact too
             WirInstr::StructSet {
                 type_id: test_type_id(),
                 field_name: "f".to_string(),
-                expr: Box::new(local_get("b")),
+                expr: Box::new(struct_local_get("b")),
                 value: Box::new(WirInstr::I32Const(9)),
             },
             local_set("out2", struct_get("a")),

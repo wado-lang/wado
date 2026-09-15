@@ -149,6 +149,67 @@ impl From<PurityError> for Diagnostic {
     }
 }
 
+/// The members of a nominal type, by the declaration's module and name.
+type MemberTable = IndexMap<(ModuleSource, String), Vec<TypeId>>;
+
+/// Every declaration's members: a struct's fields, a variant's case payloads.
+#[derive(Default)]
+struct MemberTables {
+    struct_fields: MemberTable,
+    variant_payloads: MemberTable,
+}
+
+impl MemberTables {
+    fn collect(sem: &Semantics, state: &AnnotateState) -> Self {
+        let mut tables = Self::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                if let Item::Struct(struct_decl) = item
+                    && let Some(field_types) =
+                        annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
+                {
+                    tables
+                        .struct_fields
+                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
+                }
+            }
+        }
+        for info in state.tysys.all_variant_cases.values() {
+            tables.variant_payloads.insert(
+                (info.module_source.clone(), info.name.clone()),
+                info.cases.iter().map(|case| case.payload).collect(),
+            );
+        }
+        tables
+    }
+
+    /// The members `type_id` declares, an instance's answered from its own type
+    /// arguments.
+    ///
+    /// Only a member the head spells as a bare slot is answered. One that buries
+    /// a slot (`&Array<T>`) would have to be substituted into, which interns a
+    /// type, and this phase holds the table shared.
+    fn of<'a>(&'a self, type_id: TypeId, tt: &'a TypeTable) -> impl Iterator<Item = TypeId> + 'a {
+        let key = tt
+            .nominal_head(type_id)
+            .map(|(name, module)| (module, name));
+        let fields = key.as_ref().and_then(|k| self.struct_fields.get(k));
+        let payloads = key.as_ref().and_then(|k| self.variant_payloads.get(k));
+        let type_args = tt.nominal_type_args(type_id).unwrap_or_default();
+        fields
+            .into_iter()
+            .flatten()
+            .chain(payloads.into_iter().flatten())
+            .map(move |&member| match tt.get(member) {
+                ResolvedType::TypeParam { index, .. } => {
+                    type_args.get(*index as usize).copied().unwrap_or(member)
+                }
+                _ => member,
+            })
+    }
+}
+
 /// Walk a type recursively, collecting every resource (`Resource` or
 /// `GenericResource`) reference as an `EffectRef::Concrete`.
 ///
@@ -158,8 +219,7 @@ impl From<PurityError> for Diagnostic {
 fn collect_resource_refs(
     type_id: TypeId,
     tt: &TypeTable,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    members: &MemberTables,
     out: &mut IndexSet<EffectRef>,
     visited: &mut TypeSet,
 ) {
@@ -179,20 +239,23 @@ fn collect_resource_refs(
             }
             if let ResolvedType::GenericResource { type_args, .. } = ty {
                 for ta in type_args {
-                    collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
+                    collect_resource_refs(*ta, tt, members, out, visited);
                 }
             }
         }
         ResolvedType::GenericInstance { type_args, .. } => {
             for ta in type_args {
-                collect_resource_refs(*ta, tt, struct_fields, variant_payloads, out, visited);
+                collect_resource_refs(*ta, tt, members, out, visited);
+            }
+            for member in members.of(type_id, tt) {
+                collect_resource_refs(member, tt, members, out, visited);
             }
         }
         ResolvedType::Ref(t)
         | ResolvedType::MutRef(t)
         | ResolvedType::Reactive(t)
         | ResolvedType::BuiltinArray(t) => {
-            collect_resource_refs(*t, tt, struct_fields, variant_payloads, out, visited);
+            collect_resource_refs(*t, tt, members, out, visited);
         }
         ResolvedType::Function {
             params,
@@ -200,45 +263,16 @@ fn collect_resource_refs(
             ..
         } => {
             for p in params {
-                collect_resource_refs(*p, tt, struct_fields, variant_payloads, out, visited);
+                collect_resource_refs(*p, tt, members, out, visited);
             }
-            collect_resource_refs(
-                *return_type,
-                tt,
-                struct_fields,
-                variant_payloads,
-                out,
-                visited,
-            );
+            collect_resource_refs(*return_type, tt, members, out, visited);
         }
         ResolvedType::Newtype { base_type, .. } => {
-            collect_resource_refs(
-                *base_type,
-                tt,
-                struct_fields,
-                variant_payloads,
-                out,
-                visited,
-            );
+            collect_resource_refs(*base_type, tt, members, out, visited);
         }
-        ResolvedType::Struct { def, .. } => {
-            let (name, module_source) = tt
-                .nominal_head(type_id)
-                .expect("a struct names a declaration");
-            let _ = def;
-            if let Some(fields) = struct_fields.get(&(module_source, name)) {
-                for ft in fields {
-                    collect_resource_refs(*ft, tt, struct_fields, variant_payloads, out, visited);
-                }
-            }
-        }
-        ResolvedType::Variant { def } => {
-            if let Some(payloads) =
-                variant_payloads.get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
-            {
-                for pt in payloads {
-                    collect_resource_refs(*pt, tt, struct_fields, variant_payloads, out, visited);
-                }
+        ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+            for member in members.of(type_id, tt) {
+                collect_resource_refs(member, tt, members, out, visited);
             }
         }
         // Primitives, Unit, Never, Enum, Flags, TypeParam, TypePack,
@@ -348,8 +382,7 @@ struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     resource_names: IndexSet<(ModuleSource, String)>,
-    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
@@ -394,45 +427,19 @@ impl OwnedEffectData {
         }
 
         let mut resource_names: IndexSet<(ModuleSource, String)> = IndexSet::default();
-        // `(module, struct name)` → field type ids, so resource detection
-        // follows resources nested in struct fields of a signature / op type.
-        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
         for (src, module) in &sem.modules {
-            let annotations = state.module_semantics.get(src).map(|m| &m.types);
             for item in &module.items {
-                match item {
-                    Item::Resource(resource) => {
-                        resource_names.insert((src.clone(), resource.name.clone()));
-                    }
-                    Item::Struct(struct_decl) => {
-                        if let Some(field_types) =
-                            annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
-                        {
-                            struct_fields.insert(
-                                (src.clone(), struct_decl.name.clone()),
-                                field_types.clone(),
-                            );
-                        }
-                    }
-                    _ => {}
+                if let Item::Resource(resource) = item {
+                    resource_names.insert((src.clone(), resource.name.clone()));
                 }
             }
         }
 
-        // `(module, variant name)` → case payload type ids, so resource
-        // detection descends into variant case payloads.
-        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
-            IndexMap::default();
-        for info in state.tysys.all_variant_cases.values() {
-            variant_payloads.insert(
-                (info.module_source.clone(), info.name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
-        }
+        let members = MemberTables::collect(sem, state);
 
         // Effect / resource propagation closure: holding effect `E` admits the
         // resources `E`'s operations reference (e.g. `Stdout` → `Stream`).
-        let closure = build_propagation_closure_sem(sem, state, &struct_fields, &variant_payloads);
+        let closure = build_propagation_closure_sem(sem, state, &members);
 
         // Name → resolved `EffectRef` for every declared effect / resource,
         // used to resolve `#[benign(E)]` names and to canonicalise.
@@ -480,8 +487,7 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             resource_names,
-            struct_fields,
-            variant_payloads,
+            members,
             closure,
             effect_by_name,
             interface_cm_fq,
@@ -497,8 +503,7 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             resource_names: &self.resource_names,
-            struct_fields: &self.struct_fields,
-            variant_payloads: &self.variant_payloads,
+            members: &self.members,
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
             interface_cm_fq: &self.interface_cm_fq,
@@ -520,10 +525,8 @@ struct EffectIndex<'a> {
     mangled_params: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
-    /// `(module, struct name)` → field type ids, for nested-resource detection.
-    struct_fields: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    /// `(module, variant name)` → case payload type ids.
-    variant_payloads: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Declared members, for nested-resource detection.
+    members: &'a MemberTables,
     /// Effect → implied resources propagation closure.
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
@@ -717,14 +720,7 @@ fn check_function_effects_sem(
         .into_iter()
         .collect();
     if let Some(ann) = annotations {
-        add_signature_resources(
-            ann,
-            caller_key,
-            &sem.types,
-            index.struct_fields,
-            index.variant_payloads,
-            &mut current,
-        );
+        add_signature_resources(ann, caller_key, &sem.types, index.members, &mut current);
     }
     // A handler method holds the effect it handles: `E::op()` from inside
     // `impl E for T` delegates to the outer handler, what `..forward` desugars to.
@@ -773,14 +769,12 @@ fn check_function_effects_sem(
 /// Build the effect / resource propagation closure from `Semantics`: for each
 /// effect or resource declaration, the resources its operations' parameter and
 /// return types reference, transitively closed. Reads the resolved operation
-/// signatures from the `effect_ops` facts; `struct_fields` / `variant_payloads`
-/// let resource detection descend into struct fields and variant payloads of an
-/// operation's types.
+/// signatures from the `effect_ops` facts; `members` lets resource detection
+/// descend into an operation type's own members.
 fn build_propagation_closure_sem(
     sem: &Semantics,
     state: &AnnotateState,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    members: &MemberTables,
 ) -> IndexMap<EffectRef, IndexSet<EffectRef>> {
     let type_table = &sem.types;
     let mut direct: IndexMap<EffectRef, IndexSet<EffectRef>> = IndexMap::default();
@@ -804,8 +798,7 @@ fn build_propagation_closure_sem(
                     collect_resource_refs(
                         param.type_id,
                         type_table,
-                        struct_fields,
-                        variant_payloads,
+                        members,
                         &mut refs,
                         &mut TypeSet::default(),
                     );
@@ -813,8 +806,7 @@ fn build_propagation_closure_sem(
                 collect_resource_refs(
                     op.return_type,
                     type_table,
-                    struct_fields,
-                    variant_payloads,
+                    members,
                     &mut refs,
                     &mut TypeSet::default(),
                 );
@@ -939,16 +931,14 @@ fn expand_through_closure(
 /// signature that already exposes a resource does not also require an explicit
 /// `with R`.
 ///
-/// Resources nested inside struct fields and variant case payloads are
-/// followed via `struct_fields` / `variant_payloads`; direct and
-/// container-nested resources (`Option<R>`, `List<R>`, `&R`, `fn() -> R`) are
-/// too.
+/// Resources nested inside a type's own members are followed via `members`;
+/// direct and container-nested ones (`Option<R>`, `List<R>`, `&R`,
+/// `fn() -> R`) are too.
 fn add_signature_resources(
     annotations: &TypeAnnotations,
     fn_key: AstId,
     type_table: &TypeTable,
-    struct_fields: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: &IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    members: &MemberTables,
     out: &mut IndexSet<EffectRef>,
 ) {
     let mut visited = TypeSet::default();
@@ -958,34 +948,13 @@ fn add_signature_resources(
         .into_iter()
         .flatten()
     {
-        collect_resource_refs(
-            type_id,
-            type_table,
-            struct_fields,
-            variant_payloads,
-            out,
-            &mut visited,
-        );
+        collect_resource_refs(type_id, type_table, members, out, &mut visited);
     }
     if let Some(&return_type) = annotations.fn_return_types.get(&fn_key) {
-        collect_resource_refs(
-            return_type,
-            type_table,
-            struct_fields,
-            variant_payloads,
-            out,
-            &mut visited,
-        );
+        collect_resource_refs(return_type, type_table, members, out, &mut visited);
     }
     if let Some(&task_return) = annotations.function_task_returns.get(&fn_key) {
-        collect_resource_refs(
-            task_return,
-            type_table,
-            struct_fields,
-            variant_payloads,
-            out,
-            &mut visited,
-        );
+        collect_resource_refs(task_return, type_table, members, out, &mut visited);
     }
 }
 
@@ -1786,81 +1755,84 @@ impl AstVisitor for ReturnFlow<'_> {
 /// (`i32`, `String`, `Unit`) never carries a parameter, so a storing call that
 /// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
 struct TypeRefCtx {
-    struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>>,
-    memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
+    members: MemberTables,
+    memo: std::cell::RefCell<IndexMap<(TypeId, bool), bool>>,
 }
 
 impl TypeRefCtx {
     fn build(sem: &Semantics, state: &AnnotateState) -> Self {
-        let mut struct_fields: IndexMap<(ModuleSource, String), Vec<TypeId>> = IndexMap::default();
-        for (src, module) in &sem.modules {
-            let annotations = state.module_semantics.get(src).map(|m| &m.types);
-            for item in &module.items {
-                if let Item::Struct(struct_decl) = item
-                    && let Some(field_types) =
-                        annotations.and_then(|ann| ann.struct_field_types.get(&struct_decl.id))
-                {
-                    struct_fields
-                        .insert((src.clone(), struct_decl.name.clone()), field_types.clone());
-                }
-            }
-        }
-        let mut variant_payloads: IndexMap<(ModuleSource, String), Vec<TypeId>> =
-            IndexMap::default();
-        for info in state.tysys.all_variant_cases.values() {
-            variant_payloads.insert(
-                (info.module_source.clone(), info.name.clone()),
-                info.cases.iter().map(|case| case.payload).collect(),
-            );
-        }
         Self {
-            struct_fields,
-            variant_payloads,
+            members: MemberTables::collect(sem, state),
             memo: std::cell::RefCell::new(IndexMap::default()),
         }
     }
 
     fn can_hold_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
-        if let Some(&b) = self.memo.borrow().get(&type_id) {
+        self.holds_ref(tt, type_id, true)
+    }
+
+    /// `can_hold_ref` restricted to what the declaration actually spells: a
+    /// generic accessor returning a bare `T` answers no, since the body is
+    /// checked once for every instantiation and none of them is in hand.
+    fn spells_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
+        self.holds_ref(tt, type_id, false)
+    }
+
+    /// `unresolved` is the answer for a type the walk cannot resolve — an
+    /// unsubstituted parameter, a pack, an unresolved projection.
+    fn holds_ref(&self, tt: &TypeTable, type_id: TypeId, unresolved: bool) -> bool {
+        let key = (type_id, unresolved);
+        if let Some(&b) = self.memo.borrow().get(&key) {
             return b;
         }
         let mut visited = TypeSet::default();
-        let r = self.walk(tt, type_id, &mut visited);
-        self.memo.borrow_mut().insert(type_id, r);
+        let r = self.walk(tt, type_id, &[], unresolved, &mut visited);
+        self.memo.borrow_mut().insert(key, r);
         r
     }
 
-    fn walk(&self, tt: &TypeTable, type_id: TypeId, visited: &mut TypeSet) -> bool {
+    /// `args` fills the slots of the instance whose member is being walked, so a
+    /// slot a member buries (`List<T>`'s `Array<T>`) answers for the instance at
+    /// hand rather than for every `T`.
+    fn walk(
+        &self,
+        tt: &TypeTable,
+        type_id: TypeId,
+        args: &[TypeId],
+        unresolved: bool,
+        visited: &mut TypeSet,
+    ) -> bool {
         if !visited.insert(type_id) {
             return false;
         }
         match tt.get(type_id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
-            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => self.walk(tt, *t, visited),
+            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => {
+                self.walk(tt, *t, args, unresolved, visited)
+            }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.walk(tt, *t, visited))
+                type_args
+                    .iter()
+                    .any(|t| self.walk(tt, *t, args, unresolved, visited))
+                    || self.members_hold_ref(tt, type_id, unresolved, visited)
             }
-            ResolvedType::Newtype { base_type, .. } => self.walk(tt, *base_type, visited),
-            ResolvedType::Struct { def, .. } => self
-                .struct_fields
-                .get(&(
-                    tt.struct_head_module(*def).clone(),
-                    tt.struct_head_name(*def),
-                ))
-                .is_some_and(|fields| fields.iter().any(|t| self.walk(tt, *t, visited))),
-            ResolvedType::Variant { def } => self
-                .variant_payloads
-                .get(&(tt.def_module(*def).clone(), tt.def_name(*def).to_string()))
-                .is_some_and(|payloads| payloads.iter().any(|t| self.walk(tt, *t, visited))),
+            ResolvedType::Newtype { base_type, .. } => {
+                self.walk(tt, *base_type, args, unresolved, visited)
+            }
+            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
+                self.members_hold_ref(tt, type_id, unresolved, visited)
+            }
             ResolvedType::Function { .. } => false,
-            ResolvedType::TypeParam { .. }
-            | ResolvedType::TypePack { .. }
+            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
+                Some(&arg) => self.walk(tt, arg, &[], unresolved, visited),
+                None => unresolved,
+            },
+            ResolvedType::TypePack { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            | ResolvedType::Error => unresolved,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
             | ResolvedType::Never
@@ -1868,6 +1840,21 @@ impl TypeRefCtx {
             | ResolvedType::Resource { .. }
             | ResolvedType::Flags { .. } => false,
         }
+    }
+
+    /// Whether a declared member holds a reference. A generic instance is asked
+    /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
+    fn members_hold_ref(
+        &self,
+        tt: &TypeTable,
+        type_id: TypeId,
+        unresolved: bool,
+        visited: &mut TypeSet,
+    ) -> bool {
+        let args = tt.nominal_type_args(type_id).unwrap_or_default();
+        self.members
+            .of(type_id, tt)
+            .any(|t| self.walk(tt, t, &args, unresolved, visited))
     }
 }
 
@@ -2021,6 +2008,16 @@ fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
     sem.expression_type(expr.id())
 }
 
+/// The place a member read projects out of: a field, an element, or a referent.
+fn member_read_base(expr: &Expr) -> Option<&Expr> {
+    match expr {
+        Expr::FieldAccess(f) => Some(&f.expr),
+        Expr::Index(i) => Some(&i.expr),
+        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
+        _ => None,
+    }
+}
+
 /// The parameter positions the *place* operand of `&` is rooted at, ignoring
 /// the place's own type (`&p.field` roots at `p`).
 fn place_roots_of(
@@ -2028,15 +2025,15 @@ fn place_roots_of(
     sem: &Semantics,
     carries: &IndexMap<AstId, IndexSet<u32>>,
 ) -> IndexSet<u32> {
+    if let Some(base) = member_read_base(place) {
+        return place_roots_of(base, sem, carries);
+    }
     match place {
         Expr::Ident(ident) => sem
             .referenced_symbol(ident.id)
             .and_then(|def| carries.get(&def))
             .cloned()
             .unwrap_or_default(),
-        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => place_roots_of(&u.expr, sem, carries),
-        Expr::FieldAccess(f) => place_roots_of(&f.expr, sem, carries),
-        Expr::Index(i) => place_roots_of(&i.expr, sem, carries),
         Expr::Cast(c) => place_roots_of(&c.expr, sem, carries),
         _ => IndexSet::default(),
     }
@@ -2162,13 +2159,8 @@ fn resolve_returned_args<'e>(
     }
 }
 
-/// Parameter positions the reference produced by `expr` carries — the shared
-/// reference-flow used by both the escape walk and the return-provenance
-/// fixpoint. A value whose type cannot hold a reference carries nothing. Only
-/// `&place` roots at a parameter; reading a reference-typed field / element /
-/// deref yields a reference to a *separate* object, so it carries nothing. A
-/// cast preserves reference identity; an aggregate literal unions its fields; a
-/// call folds its arguments at the callee's return-provenance positions.
+/// Parameter positions the reference produced by `expr` carries. The shared
+/// reference-flow behind the escape walk and the return-provenance fixpoint.
 #[allow(clippy::too_many_arguments)]
 fn carries_of(
     expr: &Expr,
@@ -2194,6 +2186,16 @@ fn carries_of(
             carries,
         )
     };
+    // `spells_ref` rather than the gate above, which answers yes for an
+    // unsubstituted parameter no instantiation has filled in.
+    if let Some(base) = member_read_base(expr) {
+        let spells_ref = expr_type_of(expr, sem).is_some_and(|t| tyctx.spells_ref(&sem.types, t));
+        return if spells_ref {
+            recurse(base)
+        } else {
+            IndexSet::default()
+        };
+    }
     match expr {
         Expr::Ident(ident) => sem
             .referenced_symbol(ident.id)

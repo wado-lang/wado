@@ -8,7 +8,10 @@ on:
     inputs:
       shards:
         description: 'Number of parallel shards'
-        default: '4'
+        default: '8'
+      levels:
+        description: 'WADO_EMI_LEVELS — optimization levels to run, empty for all'
+        default: ''
       filter:
         description: 'WADO_EMI_FILTER — substring a fixture path must contain'
         default: ''
@@ -35,7 +38,7 @@ jobs:
     steps:
       - id: plan
         env:
-          SHARDS: ${{ inputs.shards || '4' }}
+          SHARDS: ${{ inputs.shards || '8' }}
         run: |
           set -euo pipefail
           echo "shards=[$(seq -s, 0 "$((SHARDS - 1))")]" >> "$GITHUB_OUTPUT"
@@ -45,12 +48,16 @@ jobs:
     name: Calibrate (shard ${{ matrix.shard }})
     needs: plan
     runs-on: ubuntu-latest
-    # A cold build, then both stages over this shard's slice — the stdlib's
-    # modules cost minutes each, so a quarter of the corpus is ~10 minutes
-    # calibrating and ~12 mutating. The margin is for growth.
+    # A cold build, then both stages over this shard's slice. Each source is
+    # compiled and run once per level, shape and payload, so an eighth of the
+    # corpus costs about what a quarter did at two levels and one shape.
     timeout-minutes: 180
     permissions:
       contents: read
+    # Both stages must run the same levels, or the mutation stage takes a
+    # corpus calibrated for levels it does not run.
+    env:
+      WADO_EMI_LEVELS: ${{ inputs.levels }}
     strategy:
       # A finding in one shard says nothing about the others; the report needs all.
       fail-fast: false
