@@ -184,9 +184,9 @@ test "the emit hook retypes ID by the case of its first character" {
     for let mut i = 0; i < tokens.len(); i += 1 {
         names.push(antlr4::token_kind_name(tokens.kinds[i]));
     }
-    assert names.contains("RULE_REF"), `expected a RULE_REF, got ${names:?}`;
-    assert names.contains("TOKEN_REF"), `expected a TOKEN_REF, got ${names:?}`;
-    assert !names.contains("ID"), `no ID may survive the hook, got ${names:?}`;
+    assert names.contains(&"RULE_REF"), `expected a RULE_REF, got ${names:?}`;
+    assert names.contains(&"TOKEN_REF"), `expected a TOKEN_REF, got ${names:?}`;
+    assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
 }
 
 #[TODO]

@@ -1360,7 +1360,7 @@ mode INTAG;
 NAME : [a-zA-Z]+ ;
 GT   : '>' -> popMode ;";
     let g = parse(input).unwrap();
-    assert g.mode_names.contains("INTAG"), "INTAG mode should be registered";
+    assert g.mode_names.contains(&"INTAG"), "INTAG mode should be registered";
     let name_rule = g.lexer_rules.iter_ref().find(|r: &LexerRule| r.name == "NAME").unwrap();
     assert g.mode_names[name_rule.mode as i32] == "INTAG", "NAME should live in INTAG mode";
 }
@@ -1428,7 +1428,7 @@ A : 'a' -> ;";
     assert !err.message.contains("unknown lexer command"), err.message;
     // The `;` is what was found; the commands are what was wanted.
     assert err.message == `got ";"`, err.message;
-    assert err.expected.contains("pushMode"), `${err.expected:?}`;
+    assert err.expected.contains(&"pushMode"), `${err.expected:?}`;
 }
 
 test "unknown lexer command in combined grammar is rejected" {

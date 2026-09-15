@@ -688,9 +688,9 @@ b : 'y' ;
     assert str_contains(&traced, "fn trace_enter<S: AsStrSlice>(p: &Parser, rule: S)");
     assert str_contains(&traced, "pub fn trace_to_stderr<T, effect E>");
     assert str_contains(&traced, "trace_depth: i32,");
-    assert str_contains(&traced, "trace_enter(p, &\"a\");");
-    assert str_contains(&traced, "trace_fail(p, &\"a\", &p.pending_message());");
-    assert str_contains(&traced, "trace_ok(p, &\"b\");");
+    assert str_contains(&traced, "trace_enter(p, \"a\");");
+    assert str_contains(&traced, "trace_fail(p, \"a\", p.pending_message());");
+    assert str_contains(&traced, "trace_ok(p, \"b\");");
 
     // Default generation (trace off) must contain none of it — the feature
     // is strictly opt-in and adds zero instrumentation otherwise.
@@ -749,8 +749,8 @@ Z : 'Z' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
-    assert str_contains(&traced, "trace_scan_alt(p, &\"a\",");
-    assert str_contains(&traced, "trace_pick(p, &\"a\", _sd_best_i);");
+    assert str_contains(&traced, "trace_scan_alt(p, \"a\",");
+    assert str_contains(&traced, "trace_pick(p, \"a\", _sd_best_i);");
     assert str_contains(&traced, "fn trace_scan_alt<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, end: i32)");
 
     // Default generation (trace off) emits none of the decision-point hooks.
@@ -778,8 +778,8 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
-    assert !str_contains(&traced, "trace_pick(p, &\"tok\",");
-    assert str_contains(&traced, "trace_pick(p, &\"sub\",");
+    assert !str_contains(&traced, "trace_pick(p, \"tok\",");
+    assert str_contains(&traced, "trace_pick(p, \"sub\",");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {

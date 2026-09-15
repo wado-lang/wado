@@ -2733,7 +2733,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // as the descent unwinds.
     let rk = rule_kind_const(rule_display);
     if trace {
-        w.line(`trace_enter(p, &${lit});`);
+        w.line(`trace_enter(p, ${lit});`);
         w.line("p.trace_depth += 1;");
     }
     if needs_atn {
@@ -2764,9 +2764,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     w.begin("if p.recovering");
     w.line(`p.push_rule_stack(${lit});`);
     if trace {
-        w.line(`trace_fail(p, &${lit}, &p.pending_message());`);
+        w.line(`trace_fail(p, ${lit}, p.pending_message());`);
         w.else_begin("else");
-        w.line(`trace_ok(p, &${lit});`);
+        w.line(`trace_ok(p, ${lit});`);
     }
     w.end();
     if returns_vals {
@@ -8004,7 +8004,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         let rlit = wado`"${rule_display.to_string()}"`;
         for let mut i = 0; i < sorted_indices.len(); i += 1 {
             let idx = sorted_indices[i];
-            w.line(`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+            w.line(`trace_scan_alt(p, ${rlit}, ${idx}, _sd_p_${idx});`);
         }
     }
     w.line("let mut _sd_best_i: i32 = -1;");

@@ -2844,7 +2844,7 @@ test "emit_test_chunk: Todo triage decorates the test and wires Stage A paths" {
 
 test "emit_test_chunk: each descriptor calls through its own namespace" {
     let b = emit_stage_b_test_chunk("C", "N", "i", "", "(t)", false, &Triage::Pass, 0);
-    assert b.tree_helpers.contains("normalize_tree"), `${b.tree_helpers:?}`;
+    assert b.tree_helpers.contains(&"normalize_tree"), `${b.tree_helpers:?}`;
     assert b.text.contains("output_dir: \"../../../generated/antlr4_compat_b/C/N\""), b.text;
     assert b.text.contains("t_N::parse(&input)"), b.text;
 
