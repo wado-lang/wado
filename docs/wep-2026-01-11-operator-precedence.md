@@ -201,7 +201,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 2. **Equality chaining**: `==` can only chain with `==`
 3. **No `!=` chaining**: `!=` cannot be chained at all
 4. **No mixing**: Cannot mix equality operators with inequality operators
-5. **No short-circuit**: every operand is evaluated once, left to right, and the comparisons join with `&`. A chain is a range test, and a test that skips an operand on one path is what `&&` is for.
+5. **No short-circuit**: every operand is evaluated once, left to right, and the comparisons join with `&`. A chain is one test — a range test where the operators are inequalities — and a test that skips an operand on one path is what `&&` is for.
 
 **Rationale**:
 

@@ -345,12 +345,12 @@ fn parse_var_offset_depth(
                 if let Some((v, o)) = parse_var_offset_depth(engine, binds, *left, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *right)
                 {
-                    return Some((v, o + c));
+                    return Some((v, o.checked_add(c)?));
                 }
                 if let Some((v, o)) = parse_var_offset_depth(engine, binds, *right, depth + 1)
                     && let Some(c) = parse_const_i64(engine, binds, *left)
                 {
-                    return Some((v, o + c));
+                    return Some((v, o.checked_add(c)?));
                 }
                 None
             }
@@ -376,12 +376,12 @@ fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
             if let Some((var, o)) = parse_value_offset(engine, lhs)
                 && let Some(c) = pool_int_const(engine, rhs)
             {
-                return Some((var, o + c));
+                return Some((var, o.checked_add(c)?));
             }
             if let Some((var, o)) = parse_value_offset(engine, rhs)
                 && let Some(c) = pool_int_const(engine, lhs)
             {
-                return Some((var, o + c));
+                return Some((var, o.checked_add(c)?));
             }
             None
         }
