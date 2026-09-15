@@ -1,0 +1,26 @@
+// A `let` binding cannot fail to match, so every bare identifier in one binds.
+// The case-or-`global` reading belongs to a refutable position alone, and
+// applying it here left a binding over a `global` silently unreported.
+
+use { println, Stdout } from "core:cli";
+
+global LIMIT: i32 = 10;
+
+fn cap() -> i32 {
+    return LIMIT;
+}
+
+export fn run() with Stdout {
+    let LIMIT = 3;
+    assert LIMIT == 3;
+    assert cap() == 10;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_contains": [
+        "`LIMIT` shadows the global of the same name"
+    ]
+}

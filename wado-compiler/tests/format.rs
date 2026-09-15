@@ -3605,3 +3605,22 @@ fn test_format_keeps_an_attribute_on_a_binder() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+/// A local item carries its attributes above its keyword, so the blank-line
+/// anchor is the first attribute; anchoring on the keyword opened a gap under
+/// the enclosing `{`.
+#[test]
+fn test_format_keeps_an_attribute_on_a_local_item() {
+    let source = concat!(
+        "export fn run() {\n",
+        "    #[allow(shadowed_name)]\n",
+        "    struct Size {\n",
+        "        w: i32,\n",
+        "    }\n",
+        "    assert Size { w: 1 }.w == 1;\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}

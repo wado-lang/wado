@@ -157,6 +157,8 @@ let x = transform(x);   // OK: derives from old x
 // (`shadowed_name`). Waive it per binder or per module with `allow`.
 let println = 1;                                  // warns: shadows the function
 #[allow(shadowed_name)] let eprintln = 1;         // deliberate, no warning
+if let Some(x) = x { }                            // exempt: derives from old x
+if let Some(x) = y { }                            // warns: derives from y
 ```
 
 ## Global Variables

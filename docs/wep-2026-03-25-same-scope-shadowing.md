@@ -124,20 +124,46 @@ When the user might have intended to reassign instead of redeclare:
 ### The `shadowed_name` Lint
 
 The rule above governs one shape, the same-scope `let`. Every other binder may
-take a name that already reaches a known symbol, which is legal and warns under
+take a name that already reaches a known symbol. That is legal and warns under
 `shadowed_name`: a parameter, a closure parameter, a type parameter, a pattern
-binding, a local item, and a `let` in an inner block. The symbol may be of any
-kind and may sit in any namespace — a function, a global, a type, a trait, a
-case, an outer binding — because the confusion the lint names is about the
-reader, not about which namespace answers. The derived same-scope `let` is the
-one exemption, since this WEP sanctions it.
+binding, a local item, and a `let` in an inner block.
+
+The symbol may be of any kind and may sit in any namespace: a function, a
+global, a type, a trait, a case, an outer binding. A reader who meets the name
+has to work out which one it means, and that is the same work whichever
+namespace answers.
+
+Two shapes are exempt, both of them the derivation this WEP sanctions. One is
+the same-scope `let`. The other is the unwrap-rebind in a condition:
+
+```wado
+if let Some(x) = x { ... }        // exempt: `x` comes from `x`
+while let Some(x) = x { ... }     // exempt
+if let Some(x) = y { ... }        // warns: `x` comes from something else
+```
+
+The reading is the same in both — the binder takes a name its own source
+already mentions, so the name means what it meant. A condition also takes no
+attribute, which would leave a rename as the only answer to a warning there.
 
 `#[allow(shadowed_name)]` on the binder waives it, and
 `#![allow(shadowed_name)]` waives it for a module.
 
 A bare identifier pattern is exempt where the name reaches a case or a
-`global`. Such a pattern matches by value rather than binding, and which it
-does depends on the scrutinee's type — which the resolution pass does not have.
+`global`. Such a pattern matches by value rather than binding, and the
+scrutinee's type decides which it does. The resolution pass has no types, so it
+leaves the name alone.
+
+## Known Gaps
+
+A match arm reads as the same derivation and is not exempt:
+`match x { Some(x) => … }` warns, and a match arm takes no attribute either, so
+a rename is the only answer. Whether to extend the exemption to it is open.
+
+A `let` in an inner block is not exempt either, even when derived: `let x = x +
+1` under an `if` warns, while the same line at the same scope does not. The
+exemption is written against the same-scope rule this WEP states rather than
+against the derivation alone.
 
 ## Alternatives Considered
 

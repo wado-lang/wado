@@ -369,10 +369,10 @@ fn check<T: Arbitrary + Shrink + Inspect>(
     mut prop: fn mut(&T) -> bool,
 ) -> bool with Stdout {
     let mut g = Gen::new(seed);
-    for let mut run = 1; run <= runs; run += 1 {
+    for let mut attempt = 1; attempt <= runs; attempt += 1 {
         let value = T::arbitrary(&mut g);
         if !prop(&value) {
-            println(`FAIL ${name}: falsified after ${run} run(s)`);
+            println(`FAIL ${name}: falsified after ${attempt} run(s)`);
             println(`     counterexample: ${value:?}`);
             println(`     minimized:      ${minimize(value, prop):?}`);
             return false;
@@ -465,7 +465,7 @@ test "every kind reaches its generator through a blanket" {
 
 test "json round-trips every generated event" {
     let mut g = Gen::new(0x5EED);
-    for let mut run = 0; run < 50; run += 1 {
+    for let mut attempt = 0; attempt < 50; attempt += 1 {
         let event = Event::arbitrary(&mut g);
         let text = to_string(&event).unwrap();
         assert from_string::<Event>(text).unwrap() == event;

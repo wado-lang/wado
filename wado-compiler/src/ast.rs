@@ -728,16 +728,18 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
     v.visit_id(stmt.id(), stmt.span());
     match stmt {
         Stmt::Let(s) => {
-            v.visit_pattern(&s.pattern);
             if let Some(ty) = &s.ty {
                 v.visit_type(ty);
             }
             if let Some(val) = &s.value {
                 v.visit_expr(val);
             }
+            // The `else` block runs where the pattern did not match, so it
+            // comes before the binding it never sees.
             if let Some(eb) = &s.else_block {
                 v.visit_block(eb);
             }
+            v.visit_pattern(&s.pattern);
         }
         Stmt::Expr(s) => v.visit_expr(&s.expr),
         Stmt::Return(s) => {
@@ -770,8 +772,8 @@ pub fn walk_stmt<V: AstVisitor>(v: &mut V, stmt: &Stmt) {
             v.visit_block(&s.body);
         }
         Stmt::ForOf(s) => {
-            v.visit_pattern(&s.binding);
             v.visit_expr(&s.iterable);
+            v.visit_pattern(&s.binding);
             v.visit_block(&s.body);
         }
         Stmt::Loop(s) => v.visit_block(&s.body),
@@ -800,9 +802,12 @@ pub fn walk_condition<V: AstVisitor>(v: &mut V, cond: &Condition) {
         Condition::LetChain { elements, .. } => {
             for el in elements {
                 match el {
+                    // A let chain binds from its scrutinee, so the scrutinee
+                    // comes first: the names the pattern binds reach nothing
+                    // written inside it.
                     ConditionElement::Let { pattern, expr, .. } => {
-                        v.visit_pattern(pattern);
                         v.visit_expr(expr);
+                        v.visit_pattern(pattern);
                     }
                     ConditionElement::Expr(e) => v.visit_expr(e),
                 }
@@ -2235,7 +2240,7 @@ pub enum Stmt {
     /// `enum`, `variant`, `flags`, `type` (newtype), `impl`, or `trait`.
     /// Scoped to the block that writes it and in scope for the whole of it, so
     /// a use may precede the declaration. `Parser::at_local_item_start`
-    /// decides which keywords start one; `Parser::at_visibility_prefixed_local_item_start`
+    /// decides which keywords start one; `Parser::visibility_prefixed_local_item_starts_at`
     /// gives a dedicated error for a `pub`/`internal`/`export` prefix, since a
     /// local item is always private.
     Item(Box<Item>),

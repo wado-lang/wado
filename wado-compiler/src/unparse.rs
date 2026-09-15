@@ -1395,7 +1395,13 @@ impl<'a> Unparser<'a> {
                 Spacing::KeepBlankLines,
             );
             self.emit_leading_for(stmt_id);
-            self.emit_blank_lines_to(stmt_span.line);
+            // A local item's attributes sit above its keyword, and
+            // `unparse_item` anchors on them. Anchoring here on the keyword
+            // instead would count the attribute lines as a gap and open one.
+            self.emit_blank_lines_to(match stmt {
+                Stmt::Item(item) => get_item_first_line(item),
+                _ => stmt_span.line,
+            });
             self.unparse_stmt(stmt);
             self.emit_trailing_for(stmt_id);
             self.last_source_line = stmt_span.end_line();
@@ -2767,10 +2773,8 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Emit each outer attribute on its own indented line, then write the indent
-    /// for the line that follows. Replaces the `write_indent + for attr {...}` prologue
-    /// shared by every item and member declaration.
-    /// Attributes on a binder written mid-line — a parameter, a `let`.
+    /// Emit each attribute on a binder written mid-line — a parameter, a type
+    /// parameter — followed by a space.
     fn emit_inline_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             self.unparse_attribute(attr);
@@ -2778,6 +2782,9 @@ impl<'a> Unparser<'a> {
         }
     }
 
+    /// Emit each outer attribute on its own indented line, then write the indent
+    /// for the line that follows. Replaces the `write_indent + for attr {...}` prologue
+    /// shared by every item and member declaration.
     fn emit_outer_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             self.write_indent();

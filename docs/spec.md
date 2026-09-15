@@ -264,11 +264,11 @@ let x = |x: i32| x + 1;  // Error: the x inside is the closure parameter, not th
 #### The `shadowed_name` Lint
 
 A binder that takes a name already reaching a known symbol is legal and warns.
-It covers every binder — `let`, a parameter, a closure parameter, a type
-parameter, a pattern binding, a local item — and every kind of symbol a name
-can reach, across namespaces: a function, a global, a type, a trait, a case, an
-outer binding. The derived same-scope `let` above is the one exemption, since
-the language already sanctions it.
+Every binder counts: a `let`, a parameter, a closure parameter, a type
+parameter, a pattern binding, a local item. So does every kind of symbol, in
+any namespace: a function, a global, a type, a trait, a case, an outer binding.
+The derived same-scope `let` above is the one exemption, since the language
+already sanctions it.
 
 ```wado
 fn draw(Point: i32) { }        // warns: `Point` shadows the struct of the same name
@@ -284,8 +284,17 @@ fn twice(#[allow(shadowed_name)] String: i32) -> i32 { return String * 2; }
 ```
 
 A bare identifier pattern is exempt where the name reaches a case or a
-`global`: such a pattern matches by value rather than binding, and which it
-does depends on the scrutinee's type.
+`global`. Such a pattern matches by value rather than binding, and the
+scrutinee's type decides which it does.
+
+The unwrap-rebind `if let Some(x) = x`, and its `while let` form, is exempt too:
+the binder takes a name its own scrutinee already mentions, which is the
+derivation the same-scope `let` is sanctioned for. `if let Some(x) = y` warns.
+
+A binder shadows only what is in scope where it is written. A name binds after
+the expression it binds from, and reaches only what the construct carries it
+to — so an `if let` binding is not in scope in the `else`, and the alternatives
+of an or-pattern bind one set of names rather than shadowing each other.
 
 ### Local Item Definitions
 
