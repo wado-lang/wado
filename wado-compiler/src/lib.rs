@@ -775,27 +775,49 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     }
 }
 
-/// The first resource an exported library signature names. Every Wado
-/// `resource` binds one another interface owns, so the library's own instance
-/// type has no export for it to point at.
+/// The types a library declaration carries: a struct's fields, a variant's
+/// payloads, a newtype's base. What [`resource_in_lib_sig`] follows a name into.
+fn declared_member_types(item: &ast::Item) -> Vec<&ast::Type> {
+    use crate::ast::Item;
+    match item {
+        Item::Struct(s) => s.fields.iter().map(|f| &f.ty).collect(),
+        Item::Variant(v) => v.cases.iter().filter_map(|c| c.payload.as_ref()).collect(),
+        Item::Newtype(n) => vec![&n.ty],
+        _ => Vec::new(),
+    }
+}
+
+/// The first resource an exported library signature reaches, through the
+/// declarations it names as well as the types it spells. Every Wado `resource`
+/// binds one another interface owns, so the library's own instance type has no
+/// export for the handle to point at.
 fn resource_in_lib_sig<'a>(
     registry: &'a component_model::CmInterfaceRegistry,
+    declared: &hashmap::IndexMap<String, &ast::Item>,
     ty: &ast::Type,
+    entered: &mut hashmap::IndexSet<String>,
 ) -> Option<&'a str> {
     use crate::ast::Type;
+    let mut follow = |t: &ast::Type| resource_in_lib_sig(registry, declared, t, entered);
     match ty {
+        Type::Generic(g) => g.args.iter().find_map(&mut follow),
+        Type::Tuple(elems) => elems.iter().find_map(&mut follow),
+        Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            let source = registry.resolve_cm_source_for(named, None)?;
-            registry.get_resource_cm_name_by_source(&source, &named.name)
+            if let Some(source) = registry.resolve_cm_source_for(named, None)
+                && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
+            {
+                return Some(cm);
+            }
+            // A recursive declaration (`struct Node { next: Option<Node> }`)
+            // reaches itself, and every name answers the same way twice.
+            if !entered.insert(named.name.clone()) {
+                return None;
+            }
+            declared_member_types(declared.get(named.name.as_str())?)
+                .into_iter()
+                .find_map(|t| resource_in_lib_sig(registry, declared, t, entered))
         }
-        Type::Generic(g) => g
-            .args
-            .iter()
-            .find_map(|arg| resource_in_lib_sig(registry, arg)),
-        Type::Tuple(elems) => elems
-            .iter()
-            .find_map(|el| resource_in_lib_sig(registry, el)),
-        Type::Reference(inner) | Type::MutReference(inner) => resource_in_lib_sig(registry, inner),
         _ => None,
     }
 }
@@ -1361,14 +1383,21 @@ fn compile_after_load<H: CompilerHost>(
         return Err(Bail);
     }
 
-    // A library's exported signature cannot name a resource: every Wado
+    // A library's exported signature cannot carry a resource handle: every Wado
     // `resource` binds one another interface owns, so the library's own
-    // instance type has no export for the handle to point at. The emitter used
-    // to reach that missing entry and panic.
+    // instance type has no export for it to point at. The emitter used to reach
+    // that missing entry and panic, so a declaration the signature names is
+    // followed into its own members.
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
         && let Some(registry) = sem.cm_interface_registry()
     {
+        let declared: hashmap::IndexMap<String, &ast::Item> = sem
+            .modules
+            .iter()
+            .flat_map(|(_, module)| &module.items)
+            .filter_map(|item| Some((lib_type_decl_name(item)?, item)))
+            .collect();
         let mut refused = false;
         for export in &world.exports {
             let types = export
@@ -1377,14 +1406,15 @@ fn compile_after_load<H: CompilerHost>(
                 .map(|(_, ty)| ty)
                 .chain(export.return_type.as_ref());
             for ty in types {
-                if let Some(name) = resource_in_lib_sig(registry, ty) {
+                let mut entered = hashmap::IndexSet::default();
+                if let Some(name) = resource_in_lib_sig(registry, &declared, ty, &mut entered) {
                     refused = true;
                     let _ = logger.error(compiler_host::Diagnostic {
                         severity: compiler_host::Severity::Error,
                         code: compiler_host::Code::CodegenError,
                         message: format!(
-                            "`export fn {}` names the resource `{name}`, which another interface \
-                             owns; a library's public API cannot carry a resource handle",
+                            "`export fn {}` reaches the resource `{name}`, which another \
+                             interface owns; a library's public API cannot carry a resource handle",
                             export.name
                         ),
                         span: None,

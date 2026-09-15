@@ -10,7 +10,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
     ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, Pattern,
-    ReturnStmt, Stmt, WhileStmt,
+    ReturnStmt, Stmt, WhileStmt, for_each_pattern_name,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
@@ -155,13 +155,15 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
             expr_references_var(&range.start, name) || expr_references_var(&range.end, name)
         }
 
+        // The condition's bindings reach the `then` block and stop there.
         Expr::If(if_expr) => {
             condition_references_var(&if_expr.condition, name)
-                || if_expr
-                    .then_block
-                    .stmts
-                    .iter()
-                    .any(|s| stmt_references_var(s, name))
+                || (!condition_binds_name(&if_expr.condition, name)
+                    && if_expr
+                        .then_block
+                        .stmts
+                        .iter()
+                        .any(|s| stmt_references_var(s, name)))
                 || if_expr
                     .else_block
                     .as_ref()
@@ -170,17 +172,20 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
         Expr::Match(m) => {
             expr_references_var(&m.expr, name)
                 || m.arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|g| expr_references_var(g, name))
-                        || expr_references_var(&arm.body, name)
+                    !pattern_binds_name(&arm.pattern, name)
+                        && (arm
+                            .guard
+                            .as_ref()
+                            .is_some_and(|g| expr_references_var(g, name))
+                            || expr_references_var(&arm.body, name))
                 })
         }
         Expr::Matches(m) => {
             expr_references_var(&m.expr, name)
-                || m.guard
-                    .as_ref()
-                    .is_some_and(|g| expr_references_var(g, name))
+                || (!pattern_binds_name(&m.pattern, name)
+                    && m.guard
+                        .as_ref()
+                        .is_some_and(|g| expr_references_var(g, name)))
         }
 
         Expr::Block(block) => block.stmts.iter().any(|s| stmt_references_var(s, name)),
@@ -197,7 +202,8 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
         }
         Expr::TupleLiteral(t) => t.elements.iter().any(|e| expr_references_var(e, name)),
         Expr::TupleComprehension(c) => {
-            expr_references_var(&c.iterable, name) || expr_references_var(&c.body, name)
+            expr_references_var(&c.iterable, name)
+                || (!pattern_binds_name(&c.binding, name) && expr_references_var(&c.body, name))
         }
         Expr::StructLiteral(s) => {
             s.fields.iter().any(|f| expr_references_var(&f.value, name))
@@ -250,11 +256,12 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
         }
         Stmt::If(if_stmt) => {
             condition_references_var(&if_stmt.condition, name)
-                || if_stmt
-                    .then_block
-                    .stmts
-                    .iter()
-                    .any(|s| stmt_references_var(s, name))
+                || (!condition_binds_name(&if_stmt.condition, name)
+                    && if_stmt
+                        .then_block
+                        .stmts
+                        .iter()
+                        .any(|s| stmt_references_var(s, name)))
                 || if_stmt
                     .else_block
                     .as_ref()
@@ -262,7 +269,8 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
         }
         Stmt::While(w) => {
             condition_references_var(&w.condition, name)
-                || w.body.stmts.iter().any(|s| stmt_references_var(s, name))
+                || (!condition_binds_name(&w.condition, name)
+                    && w.body.stmts.iter().any(|s| stmt_references_var(s, name)))
         }
         Stmt::For(f) => {
             f.init
@@ -278,16 +286,19 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
         }
         Stmt::ForOf(fo) => {
             expr_references_var(&fo.iterable, name)
-                || fo.body.stmts.iter().any(|s| stmt_references_var(s, name))
+                || (!pattern_binds_name(&fo.binding, name)
+                    && fo.body.stmts.iter().any(|s| stmt_references_var(s, name)))
         }
         Stmt::Loop(l) => l.body.stmts.iter().any(|s| stmt_references_var(s, name)),
         Stmt::Match(m) => {
             expr_references_var(&m.expr, name)
                 || m.arms.iter().any(|arm| {
-                    arm.guard
-                        .as_ref()
-                        .is_some_and(|g| expr_references_var(g, name))
-                        || expr_references_var(&arm.body, name)
+                    !pattern_binds_name(&arm.pattern, name)
+                        && (arm
+                            .guard
+                            .as_ref()
+                            .is_some_and(|g| expr_references_var(g, name))
+                            || expr_references_var(&arm.body, name))
                 })
         }
         Stmt::LabeledBlock(lb) => lb.block.stmts.iter().any(|s| stmt_references_var(s, name)),
@@ -298,14 +309,51 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
     }
 }
 
+/// Whether a name a construct binds is the one being looked for, so the body it
+/// scopes reads that binder rather than the binding outside.
+fn pattern_binds_name(pattern: &Pattern, name: &str) -> bool {
+    let mut binds = false;
+    for_each_pattern_name(pattern, &mut |bound, _| binds |= bound == name);
+    binds
+}
+
+/// A let-chain element binds for the elements after it, so the walk stops at the
+/// first one taking the name.
 fn condition_references_var(condition: &Condition, name: &str) -> bool {
     match condition {
         Condition::Expr(expr) => expr_references_var(expr, name),
-        Condition::LetChain { elements, .. } => elements.iter().any(|elem| match elem {
-            ConditionElement::Let { expr, .. } => expr_references_var(expr, name),
-            ConditionElement::Expr(expr) => expr_references_var(expr, name),
-        }),
+        Condition::LetChain { elements, .. } => {
+            for elem in elements {
+                match elem {
+                    ConditionElement::Let { pattern, expr, .. } => {
+                        if expr_references_var(expr, name) {
+                            return true;
+                        }
+                        if pattern_binds_name(pattern, name) {
+                            return false;
+                        }
+                    }
+                    ConditionElement::Expr(expr) => {
+                        if expr_references_var(expr, name) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        }
     }
+}
+
+/// Whether a condition's bindings reach past it, into the block it guards.
+fn condition_binds_name(condition: &Condition, name: &str) -> bool {
+    let Condition::LetChain { elements, .. } = condition else {
+        return false;
+    };
+    elements.iter().any(|elem| match elem {
+        ConditionElement::Let { pattern, .. } => pattern_binds_name(pattern, name),
+        ConditionElement::Expr(_) => false,
+    })
 }
 
 /// Collect bare `Pattern::Ident` names at the top level of a pattern,

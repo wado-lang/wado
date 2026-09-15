@@ -535,22 +535,34 @@ fn test_check_with_no_file_checks_every_declared_world() {
 }
 
 #[test]
-fn test_library_export_naming_a_resource_is_refused() {
+fn test_library_export_reaching_a_resource_is_refused() {
     // A handle from another interface has no export index in the library's own
-    // instance type, and the CM emitter used to panic on the missing entry.
+    // instance type, and the CM emitter used to panic on the missing entry. A
+    // declaration the signature names carries one just as the signature does,
+    // so the guard follows fields, payloads and a newtype base.
     let dir = tempfile::tempdir().unwrap();
-    let src = dir.path().join("lib.wado");
-    std::fs::write(
-        &src,
-        "use { Descriptor } from \"wasi:filesystem\";\n\
-         export fn take(d: Descriptor) -> i32 { return 1; }\n",
-    )
-    .unwrap();
-    wado()
-        .args(["check", src.to_str().unwrap()])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("cannot carry a resource handle"));
+    let cases = [
+        "export fn take(d: Descriptor) -> i32 { return 1; }",
+        "pub struct Holder { d: Descriptor }\n\
+         export fn take(h: Holder) -> i32 { return 1; }",
+        "pub variant Payload { Open(Descriptor), Closed }\n\
+         export fn take(p: Payload) -> i32 { return 1; }",
+        "pub type Handle = Descriptor;\n\
+         export fn take(h: Handle) -> i32 { return 1; }",
+    ];
+    for (i, case) in cases.iter().enumerate() {
+        let src = dir.path().join(format!("lib{i}.wado"));
+        std::fs::write(
+            &src,
+            format!("use {{ Descriptor }} from \"wasi:filesystem\";\n{case}\n"),
+        )
+        .unwrap();
+        wado()
+            .args(["check", src.to_str().unwrap()])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("cannot carry a resource handle"));
+    }
 }
 
 #[test]

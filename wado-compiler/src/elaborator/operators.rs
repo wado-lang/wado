@@ -1398,8 +1398,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
-            // Resolve the indexed expression to get its type
+            // The receiver is resolved here, so the `&mut` marks have to be up
+            // before it: a subscript under this one (`o[i][j] = v`) is a place
+            // the write reaches through, not a value read.
+            let projected = projected_subscripts_of_place(target_ast);
+            let marked = Self::mark_mut_place_subscripts(&projected, ctx);
             let indexed_type = self.resolve_expr(&index_expr.expr, ctx, None);
+            Self::unmark_mut_place_subscripts(&marked, ctx);
 
             let indexed_immutable = matches!(
                 self.tysys.type_table.borrow().get(indexed_type),

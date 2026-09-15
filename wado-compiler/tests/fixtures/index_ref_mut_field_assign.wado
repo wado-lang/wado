@@ -50,5 +50,37 @@ test "a chain of subscripts writes through every one of them" {
     assert o.inner.cell.n == 10;
 }
 
+struct Slot {
+    v: i32,
+}
+
+struct Bag {
+    slot: Slot,
+}
+
+impl IndexAssign<i32> for Slot {
+    type Output = i32;
+
+    fn index_assign(&mut self, _idx: i32, value: Self::Output) {
+        self.v = value;
+    }
+}
+
+impl IndexRefMut<i32> for Bag {
+    type Output = Slot;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.slot;
+    }
+}
+
+// The `IndexAssign` target resolves its own receiver, so the subscript under
+// that receiver is a `&mut` place before the receiver is walked.
+test "an IndexAssign target reaches its receiver through IndexRefMut" {
+    let mut b = Bag { slot: Slot { v: 1 } };
+    b[0][1] = 7;
+    assert b.slot.v == 7;
+}
+
 __DATA__
 {"test": {}}

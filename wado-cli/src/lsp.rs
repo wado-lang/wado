@@ -42,13 +42,20 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<LspOptions, CliExit> {
 /// Pull each pinned-but-cold registry dependency on a background task, so the
 /// next request resolves it while this one answers immediately.
 ///
-/// One attempt per `coordinate@version` per process: a pull that fails (offline,
-/// unauthorized) must not be retried on every keystroke.
+/// One attempt per cache entry per process: a pull that fails (offline,
+/// unauthorized) must not be retried on every keystroke. The registry is part of
+/// the identity, as it is of the cache path two registries serving one
+/// `coordinate@version` land on.
 fn install_prefetcher() {
-    let attempted: Mutex<IndexSet<String>> = Mutex::new(IndexSet::default());
+    let attempted: Mutex<IndexSet<(String, String, String)>> = Mutex::new(IndexSet::default());
     wado_lsp::host::prefetch::set_prefetcher(move |needs: Vec<RegistryComponentNeed>| {
         for need in needs {
-            if !lock(&attempted).insert(format!("{}@{}", need.coordinate, need.version)) {
+            let entry = (
+                need.registry_url.clone(),
+                need.coordinate.clone(),
+                need.version.clone(),
+            );
+            if !lock(&attempted).insert(entry) {
                 continue;
             }
             tokio::spawn(async move {

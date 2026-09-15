@@ -109,7 +109,7 @@ paramList
 
 param
     : selfParam
-    | 'mut'? identifier ':' typeRef ('=' expression)?
+    | attribute* 'mut'? identifier ':' typeRef ('=' expression)?
     ;
 
 selfParam
@@ -243,7 +243,7 @@ genericParams
     ;
 
 genericParam
-    : '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
+    : attribute* '..'? 'effect'? IDENTIFIER (':' traitBounds)? ('=' typeRef)?
     ;
 
 traitBounds
@@ -346,7 +346,7 @@ labeledBlock
     ;
 
 letStatement
-    : 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
+    : attribute* 'reactive'? 'let' pattern (':' typeRef)? ('=' expression ('else' block)?)?
     ;
 
 assertStatement
@@ -604,7 +604,7 @@ closureParamList
     ;
 
 closureParam
-    : 'mut'? ('_' | IDENTIFIER) closureParamType?
+    : attribute* 'mut'? ('_' | IDENTIFIER) closureParamType?
     ;
 
 closureParamType
