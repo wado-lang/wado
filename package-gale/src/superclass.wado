@@ -809,7 +809,12 @@ pub fn lexer_rule_replay_calls_super<S: AsStrSlice>(rule: &LexerRule, all_rules:
     return rule_calls_super_with(rule, all_rules, base_name, true);
 }
 
-fn rule_calls_super_with<S: AsStrSlice>(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: S, actions: bool) -> bool {
+fn rule_calls_super_with<S: AsStrSlice>(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    base_name: S,
+    actions: bool,
+) -> bool {
     let needle = `${base_name.to_string()}::`;
     let mut visited: List<String> = [];
     return rule_calls_super(rule, all_rules, &needle, actions, &mut visited);
@@ -911,12 +916,18 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
 pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
-    return `${base_name.to_string()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.to_string()})`;
+    return `${base_name.to_string()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.to_string(
+    )})`;
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
 /// there and passing `args` after the receiver.
-pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, method: S1, site: SuperSite, args: &List<String>) -> String {
+pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
+    base_name: S,
+    method: S1,
+    site: SuperSite,
+    args: &List<String>,
+) -> String {
     let recv = match site {
         LexerPredicate => "LexerView { chars, start, pos }",
         LexerAction => "LexerView { chars, start, pos }, lx",

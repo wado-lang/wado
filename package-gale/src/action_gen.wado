@@ -1117,11 +1117,19 @@ pub fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
 }
 
 /// Emit a gated branch body: the trace pick and the tail call into the alt.
-fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, idx: i32, fn_name: S, ctx: &GenContext, rule_display: S1) {
+fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    idx: i32,
+    fn_name: S,
+    ctx: &GenContext,
+    rule_display: S1,
+) {
     if ctx.is_trace() {
         w.line(&wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
     }
-    w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+    w.line(
+        `return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
+    );
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.

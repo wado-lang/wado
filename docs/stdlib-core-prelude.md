@@ -654,11 +654,9 @@ buffer copies nothing. `from_str` is a default that views the whole string.
 
 Parse the view as `Self`.
 
-#### `fn from_str(s: &String) -> Result<Self, Self::Err>`
+#### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
-Parse the entire string as `Self`. Takes `&String` because callers
-already holding one (e.g. the JSON deserializer threading the input
-buffer through) should not have to dereference and copy.
+Parse the whole of any `AsStrSlice` text as `Self`.
 
 ### `pub trait LenientFromStr`
 
@@ -669,7 +667,7 @@ spellings only — an undenotable value still yields `Err`, and whitespace
 is never trimmed (that is the caller's concern). See
 `docs/wep-2026-06-22-lenient-from-str.md`.
 
-#### `fn from_str_lenient(s: &String) -> Result<Self, Self::Err>`
+#### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
 Parse the entire string as `Self`, accepting forgiving spellings.
 
@@ -677,7 +675,7 @@ Parse the entire string as `Self`, accepting forgiving spellings.
 
 Writes a `Display` value into a `String` in place, skipping the temporary
 `String` that a `` `${value}` `` template allocates before copying it in. The
-alloc-free counterpart to `buf.push_str(&`${value}`)` for a single value with
+alloc-free counterpart to `buf.push_str(`${value}`)` for a single value with
 no format spec — the hot path in the serde numeric encoders.
 
 A trait (not an inherent `impl String`, which the coherence rules forbid on a
@@ -744,6 +742,103 @@ Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
 
 #### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+
+#### `fn internal_append_to(&self, out: &mut String)`
+
+Append this text to `out`. `String` overrides it to copy straight out of
+its own backing array: the view the default builds hides the append's
+operands from the constant-folding frame, which is how a template of
+literals stops folding to one.
+
+#### `fn len(&self) -> i32`
+
+#### `fn is_empty(&self) -> bool`
+
+#### `fn get_byte_unchecked(&self, index: i32) -> u8`
+
+#### `fn is_char_boundary(&self, index: i32) -> bool`
+
+#### `fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+
+#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+
+#### `fn as_bytes(&self) -> ByteSlice with stores[self]`
+
+#### `fn chars(&self) -> StrCharIter with stores[self]`
+
+#### `fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+
+#### `fn to_string(&self) -> String`
+
+#### `fn starts_with<P: AsStrSlice>(&self, pat: P) -> bool`
+
+#### `fn ends_with<P: AsStrSlice>(&self, pat: P) -> bool`
+
+#### `fn contains<P: AsStrSlice>(&self, pat: P) -> bool`
+
+#### `fn find<P: AsStrSlice>(&self, pat: P) -> Option<i32>`
+
+#### `fn rfind<P: AsStrSlice>(&self, pat: P) -> Option<i32>`
+
+#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<String>`
+
+#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<String>`
+
+#### `fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering`
+
+#### `fn eq_str<P: AsStrSlice>(&self, other: P) -> bool`
+
+#### `fn eq_ignore_ascii_case<P: AsStrSlice>(&self, other: P) -> bool`
+
+#### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+
+#### `fn trim_ascii_start(&self) -> String`
+
+#### `fn trim_ascii_end(&self) -> String`
+
+#### `fn trim_ascii(&self) -> String`
+
+#### `fn trim_start(&self) -> String`
+
+#### `fn trim_end(&self) -> String`
+
+#### `fn trim(&self) -> String`
+
+#### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+
+#### `fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+
+#### `fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+
+#### `fn lines(&self) -> StrLinesIter with stores[self]`
+
+#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+
+#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+
+#### `fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+
+#### `fn to_chars(&self) -> List<char>`
+
+#### `fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
+
+#### `fn to_ascii_lowercase(&self) -> String`
+
+#### `fn to_ascii_uppercase(&self) -> String`
+
+#### `fn substr_bytes(&self, start: i32, end: i32) -> String`
+
+#### `fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
+
+#### `fn contains_char(&self, ch: char) -> bool`
+
+#### `fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
+
+#### `fn repeat(&self, n: i32) -> String`
+
+#### `fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String`
+
+#### `fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String`
 
 ### `pub trait AsByteSlice`
 
@@ -988,7 +1083,7 @@ An owned, fixed-length byte buffer.
 
 #### `impl LenientFromStr for bool`
 
-##### `fn from_str_lenient(s: &String) -> Result<bool, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bool, LenientParseError>`
 
 #### `impl Display for bool`
 
@@ -1100,7 +1195,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl LenientFromStr for char`
 
-##### `fn from_str_lenient(s: &String) -> Result<char, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError>`
 
 #### `impl Display for char`
 
@@ -1142,9 +1237,9 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<i8, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i8, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>`
 
 #### `impl FromStr for i8`
 
@@ -1152,7 +1247,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl LenientFromStr for i8`
 
-##### `fn from_str_lenient(s: &String) -> Result<i8, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError>`
 
 #### `impl Display for i8`
 
@@ -1272,9 +1367,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<u8, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u8, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>`
 
 #### `impl FromStr for u8`
 
@@ -1282,7 +1377,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl LenientFromStr for u8`
 
-##### `fn from_str_lenient(s: &String) -> Result<u8, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError>`
 
 #### `impl Display for u8`
 
@@ -1356,9 +1451,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<i16, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i16, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>`
 
 #### `impl FromStr for i16`
 
@@ -1366,7 +1461,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl LenientFromStr for i16`
 
-##### `fn from_str_lenient(s: &String) -> Result<i16, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError>`
 
 #### `impl Display for i16`
 
@@ -1448,9 +1543,9 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<u16, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u16, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>`
 
 #### `impl FromStr for u16`
 
@@ -1458,7 +1553,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl LenientFromStr for u16`
 
-##### `fn from_str_lenient(s: &String) -> Result<u16, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError>`
 
 #### `impl Display for u16`
 
@@ -1544,9 +1639,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<i32, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i32, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>`
 
 #### `impl FromStr for i32`
 
@@ -1554,7 +1649,7 @@ Counts the number of set bits (population count).
 
 #### `impl LenientFromStr for i32`
 
-##### `fn from_str_lenient(s: &String) -> Result<i32, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError>`
 
 #### `impl Display for i32`
 
@@ -1644,9 +1739,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<u32, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u32, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>`
 
 #### `impl FromStr for u32`
 
@@ -1654,7 +1749,7 @@ Counts the number of set bits (population count).
 
 #### `impl LenientFromStr for u32`
 
-##### `fn from_str_lenient(s: &String) -> Result<u32, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError>`
 
 #### `impl Display for u32`
 
@@ -1752,9 +1847,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<i64, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
 
 #### `impl FromStr for i64`
 
@@ -1762,7 +1857,7 @@ Counts the number of set bits (population count).
 
 #### `impl LenientFromStr for i64`
 
-##### `fn from_str_lenient(s: &String) -> Result<i64, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
 
 #### `impl Display for i64`
 
@@ -1864,9 +1959,9 @@ Counts the number of set bits (population count).
 
 #### `pub fn to_string(&self) -> String`
 
-#### `pub fn from_str_hex(s: &String) -> Result<u64, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
 
 #### `impl FromStr for u64`
 
@@ -1874,7 +1969,7 @@ Counts the number of set bits (population count).
 
 #### `impl LenientFromStr for u64`
 
-##### `fn from_str_lenient(s: &String) -> Result<u64, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
 
 #### `impl Display for u64`
 
@@ -2153,7 +2248,7 @@ Creates an f32 from its bit representation.
 
 #### `impl LenientFromStr for f32`
 
-##### `fn from_str_lenient(s: &String) -> Result<f32, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError>`
 
 #### `impl Display for f32`
 
@@ -2414,7 +2509,7 @@ Creates an f64 from its bit representation.
 
 #### `impl LenientFromStr for f64`
 
-##### `fn from_str_lenient(s: &String) -> Result<f64, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError>`
 
 #### `impl Display for f64`
 
@@ -2647,9 +2742,9 @@ precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
 
 Create a Formatter with the default spec, writing into the given buffer.
 
-#### `pub fn write_str(&mut self, s: &String)`
+#### `pub fn write_str<S: AsStrSlice>(&mut self, s: S)`
 
-Write a string to the output buffer.
+Write any `AsStrSlice` text to the output buffer.
 
 #### `pub fn write_char(&mut self, c: char)`
 
@@ -2659,7 +2754,7 @@ Write a single character to the output buffer.
 
 Write `n` copies of a character to the output buffer.
 
-#### `pub fn pad(&mut self, content: String)`
+#### `pub fn pad<S: AsStrSlice>(&mut self, content: S)`
 
 Pad a pre-formatted content string to the configured width.
 If no width is set or content is already as wide, writes content as-is.
@@ -2684,7 +2779,7 @@ Content bytes in `buf[start_pos..]` are shifted in-place if padding is needed.
 Write raw bytes from linear memory, applying width/alignment padding.
 Used only for values produced by bundled Wasm functions (e.g., f64_to_buffer).
 
-#### `pub fn prepare_int_write(&mut self, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32`
+#### `pub fn prepare_int_write<S: AsStrSlice>(&mut self, is_negative: bool, alt_prefix: S, digit_count: i32) -> i32`
 
 Prepare the output buffer for integer digits.
 
@@ -2704,11 +2799,11 @@ Write indentation (2 spaces per level) for pretty-printing.
 
 Write a newline followed by indentation for pretty-printing.
 
-#### `pub fn open_brace(&mut self, open: String)`
+#### `pub fn open_brace<S: AsStrSlice>(&mut self, open: S)`
 
 Open a pretty-printed brace: write opening delimiter, increase indent.
 
-#### `pub fn close_brace(&mut self, close: String)`
+#### `pub fn close_brace<S: AsStrSlice>(&mut self, close: S)`
 
 Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
 
@@ -2728,11 +2823,11 @@ Create a u128 from a u64 value (zero-extended)
 Create a u128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
 
-#### `pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u128, ParseIntError>`
 
 Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError>`
 
 Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
 
@@ -2802,7 +2897,7 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl LenientFromStr for u128`
 
-##### `fn from_str_lenient(s: &String) -> Result<u128, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u128, LenientParseError>`
 
 #### `impl Display for u128`
 
@@ -2932,11 +3027,11 @@ Create an i128 from an i64 value (sign-extended)
 Create an i128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
 
-#### `pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError>`
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i128, ParseIntError>`
 
 Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
 
-#### `pub fn from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntError>`
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError>`
 
 Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
 
@@ -3017,7 +3112,7 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl LenientFromStr for i128`
 
-##### `fn from_str_lenient(s: &String) -> Result<i128, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i128, LenientParseError>`
 
 #### `impl Display for i128`
 
@@ -3455,9 +3550,9 @@ Ensure capacity for at least `min_capacity` bytes.
 
 Append `n` copies of `byte` to this string.
 
-#### `pub fn push_str(&mut self, other: &String)`
+#### `pub fn push_str<S: AsStrSlice>(&mut self, other: S)`
 
-Append another string to this one.
+Append any `AsStrSlice` text to this one.
 
 #### `pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S)`
 
@@ -3468,7 +3563,7 @@ Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
 
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn push_str_range_unchecked(&mut self, s: &String, start: i32, end: i32)`
+#### `pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32)`
 
 Append the byte range `[start, end)` of `s` to this string.
 
@@ -3603,7 +3698,7 @@ Non-ASCII bytes are left unchanged.
 Returns a new string with all ASCII lowercase letters converted to uppercase.
 Non-ASCII bytes are left unchanged.
 
-#### `pub fn eq_ignore_ascii_case(&self, other: String) -> bool`
+#### `pub fn eq_ignore_ascii_case<S: AsStrSlice>(&self, other: S) -> bool`
 
 Checks that two strings are an ASCII case-insensitive match.
 Non-ASCII bytes are compared exactly.
@@ -3623,33 +3718,33 @@ UTF-8 boundary checks.
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
 
-#### `pub fn contains(&self, pat: String) -> bool`
+#### `pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool`
 
 Returns true if this string contains the given substring.
 
-#### `pub fn starts_with(&self, pat: String) -> bool`
+#### `pub fn starts_with<S: AsStrSlice>(&self, pat: S) -> bool`
 
 Returns true if this string starts with the given prefix.
 
-#### `pub fn ends_with(&self, pat: String) -> bool`
+#### `pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool`
 
 Returns true if this string ends with the given suffix.
 
-#### `pub fn strip_prefix(&self, prefix: String) -> Option<String>`
+#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<String>`
 
 Returns the string with `prefix` removed from the front, or None when it
 does not start with `prefix`.
 
-#### `pub fn strip_suffix(&self, suffix: String) -> Option<String>`
+#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<String>`
 
 Returns the string with `suffix` removed from the end, or None when it
 does not end with `suffix`.
 
-#### `pub fn find(&self, pat: String) -> Option<i32>`
+#### `pub fn find<S: AsStrSlice>(&self, pat: S) -> Option<i32>`
 
 Returns the byte index of the first occurrence of `pat`, or None.
 
-#### `pub fn rfind(&self, pat: String) -> Option<i32>`
+#### `pub fn rfind<S: AsStrSlice>(&self, pat: S) -> Option<i32>`
 
 Returns the byte index of the last occurrence of `pat`, or None.
 
@@ -3657,7 +3752,7 @@ Returns the byte index of the last occurrence of `pat`, or None.
 
 Returns true if the string contains the given character.
 
-#### `pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32>`
+#### `pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32>`
 
 Returns the byte index of the first character matching the predicate, or None.
 
@@ -3675,12 +3770,12 @@ Inserts a character at `byte_index` without bounds or UTF-8 boundary checks.
 - `0 <= byte_index <= self.len()`.
 - `byte_index` lies on a UTF-8 character boundary.
 
-#### `pub fn insert_str(&mut self, byte_index: i32, s: String)`
+#### `pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S)`
 
 Inserts a string at the given byte index.
 Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
 
-#### `pub fn insert_str_unchecked(&mut self, byte_index: i32, s: String)`
+#### `pub fn insert_str_unchecked<S: AsStrSlice>(&mut self, byte_index: i32, s: S)`
 
 Inserts a string at `byte_index` without bounds or UTF-8 boundary checks.
 
@@ -3708,11 +3803,11 @@ UTF-8 boundary checks.
 
 Returns this string repeated `n` times.
 
-#### `pub fn replace(&self, from: String, to: String) -> String`
+#### `pub fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String`
 
 Replaces all occurrences of `from` with `to`.
 
-#### `pub fn replacen(&self, from: String, to: String, count: i32) -> String`
+#### `pub fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String`
 
 Replaces the first `count` occurrences of `from` with `to`.
 If `count` is negative, replaces all occurrences.
@@ -3746,20 +3841,20 @@ Build a `String` from an iterable of bytes without UTF-8 validation.
 
 The caller must ensure the bytes form valid UTF-8.
 
-#### `pub fn split(&self, sep: String) -> StrSplitIter with stores[self]`
+#### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter with stores[self]`
 
 Returns an iterator over substrings split by the given separator.
 
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
+#### `pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter with stores[self]`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_once(&self, sep: String) -> Option<[String, String]>`
+#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]>`
 
 Splits at the first `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn rsplit_once(&self, sep: String) -> Option<[String, String]>`
+#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]>`
 
 Splits at the last `sep` into the parts before and after it, or None
 when `sep` does not occur.
@@ -3782,9 +3877,9 @@ Returns an iterator over the lines of this string.
 
 #### `impl LenientFromStr for String`
 
-##### `fn from_str_lenient(s: &String) -> Result<String, LenientParseError>`
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<String, LenientParseError>`
 
-Identity: any string parses to itself. Never fails.
+Identity: any text parses to the string it spells. Never fails.
 
 #### `impl Ord for String`
 
@@ -3801,6 +3896,8 @@ Identity: any string parses to itself. Never fails.
 #### `impl AsStrSlice for String`
 
 ##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+
+##### `fn internal_append_to(&self, out: &mut String)`
 
 ### `pub struct StrUtf8ByteIter`
 
@@ -3866,8 +3963,6 @@ A sub-view without bounds or UTF-8 boundary checks.
 
 #### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
 
-The view's UTF-8 bytes.
-
 #### `pub fn chars(&self) -> StrCharIter with stores[self]`
 
 Returns an iterator over the Unicode scalar values (chars) of the view.
@@ -3879,6 +3974,126 @@ Returns an iterator over the UTF-8 bytes of the view.
 #### `pub fn to_string(&self) -> String`
 
 Copy the view into an owned `String`.
+
+#### `pub fn starts_with<S: AsStrSlice>(&self, pat: S) -> bool`
+
+Returns true if the view starts with `pat`.
+
+#### `pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool`
+
+Returns true if the view ends with `pat`.
+
+#### `pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool`
+
+Returns true if the view contains `pat`.
+
+#### `pub fn find<S: AsStrSlice>(&self, pat: S) -> Option<i32>`
+
+The byte index of the first occurrence of `pat`, counted from the view's
+start, or None.
+
+#### `pub fn rfind<S: AsStrSlice>(&self, pat: S) -> Option<i32>`
+
+The byte index of the last occurrence of `pat`, counted from the view's
+start, or None.
+
+#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> with stores[self]`
+
+The view with `prefix` removed from the front, or None when it does not
+start with `prefix`.
+
+#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> with stores[self]`
+
+The view with `suffix` removed from the end, or None when it does not
+end with `suffix`.
+
+#### `pub fn cmp_str<S: AsStrSlice>(&self, other: S) -> Ordering`
+
+Byte order against any text, the `cmp` a generic body cannot reach:
+`Ord` compares two `StrSlice`s, and a type parameter is neither.
+
+#### `pub fn eq_str<S: AsStrSlice>(&self, other: S) -> bool`
+
+Byte equality against any text. `==` reaches only another `StrSlice`,
+so a body generic over `AsStrSlice` has no operator to compare with.
+
+#### `pub fn eq_ignore_ascii_case<S: AsStrSlice>(&self, other: S) -> bool`
+
+Checks that two views are an ASCII case-insensitive match.
+Non-ASCII bytes are compared exactly.
+
+#### `pub fn char_at_byte(&self, byte_index: i32) -> Option<char>`
+
+The character starting at `byte_index`, counted from the view's start,
+or None past the end.
+
+#### `pub fn trim_ascii_start(&self) -> StrSlice with stores[self]`
+
+The view with leading ASCII whitespace removed.
+
+#### `pub fn trim_ascii_end(&self) -> StrSlice with stores[self]`
+
+The view with trailing ASCII whitespace removed.
+
+#### `pub fn trim_ascii(&self) -> StrSlice with stores[self]`
+
+The view with leading and trailing ASCII whitespace removed.
+
+#### `pub fn trim_start(&self) -> StrSlice with stores[self]`
+
+The view with leading Unicode whitespace removed.
+
+#### `pub fn trim_end(&self) -> StrSlice with stores[self]`
+
+The view with trailing Unicode whitespace removed.
+
+#### `pub fn trim(&self) -> StrSlice with stores[self]`
+
+The view with leading and trailing Unicode whitespace removed.
+
+#### `pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+
+#### `pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+
+#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
+
+#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+
+The parts either side of the first `sep`, or None when it does not
+occur. Both parts are copied out, as `String::split_once` does.
+
+#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+
+#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+
+#### `pub fn to_chars(&self) -> List<char>`
+
+#### `pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char`
+
+#### `pub fn to_ascii_lowercase(&self) -> String`
+
+#### `pub fn to_ascii_uppercase(&self) -> String`
+
+#### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
+
+#### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
+
+#### `pub fn contains_char(&self, ch: char) -> bool`
+
+#### `pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32>`
+
+#### `pub fn repeat(&self, n: i32) -> String`
+
+#### `pub fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String`
+
+Replaces all occurrences of `from` with `to`.
+
+#### `pub fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String`
+
+Replaces the first `count` occurrences of `from` with `to`.
+If `count` is negative, replaces all occurrences.
 
 #### `impl AsStrSlice for StrSlice`
 

@@ -220,14 +220,27 @@ fn rule_token_kinds(
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
 /// and tree-sitter's convention), rather than being dead behind it.
-fn push_override<S: AsStrSlice, S1: AsStrSlice>(overrides: &mut List<ResolvedOverride>, rule_name: S, token_kind: i32, capture: S1) {
+fn push_override<S: AsStrSlice, S1: AsStrSlice>(
+    overrides: &mut List<ResolvedOverride>,
+    rule_name: S,
+    token_kind: i32,
+    capture: S1,
+) {
     for let mut i = 0; i < overrides.len(); i += 1 {
         if overrides[i].rule_name == rule_name.to_string() && overrides[i].token_kind == token_kind {
-            overrides[i] = ResolvedOverride { rule_name: rule_name.to_string(), token_kind, capture: capture.to_string() };
+            overrides[i] = ResolvedOverride {
+                rule_name: rule_name.to_string(),
+                token_kind,
+                capture: capture.to_string(),
+            };
             return;
         }
     }
-    overrides.push(ResolvedOverride { rule_name: rule_name.to_string(), token_kind, capture: capture.to_string() });
+    overrides.push(ResolvedOverride {
+        rule_name: rule_name.to_string(),
+        token_kind,
+        capture: capture.to_string(),
+    });
 }
 
 fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {

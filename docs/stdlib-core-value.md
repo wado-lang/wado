@@ -67,7 +67,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
@@ -77,11 +77,11 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<ValueMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<ValueStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<ValueStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<ValueVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<ValueVariantSerializer, SerializeError>`
 
 ## Variants
 

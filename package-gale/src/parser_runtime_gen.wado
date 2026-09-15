@@ -159,7 +159,9 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenCo
 /// propagated error and `p.pending`).
 fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
-        `fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(ctx)}) -> ParseResult${superclass_clause(
+        `fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(
+            ctx,
+        )}) -> ParseResult${superclass_clause(
             ctx,
         )}`,
     );
@@ -999,7 +1001,9 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.line("fn trace_fail<S: AsStrSlice, S1: AsStrSlice>(p: &Parser, rule: S, msg: S1) {");
     w.indent();
     gen_trace_gate(w);
-    w.line("trace(`${trace_pad(p.trace_depth)}FAIL ${rule.to_string()}: ${msg.to_string()}`, { rule: rule.to_string(), reason: msg.to_string() }, TRACE_TARGET);");
+    w.line(
+        "trace(`${trace_pad(p.trace_depth)}FAIL ${rule.to_string()}: ${msg.to_string()}`, { rule: rule.to_string(), reason: msg.to_string() }, TRACE_TARGET);",
+    );
     w.dedent();
     w.line("}");
     w.blank();

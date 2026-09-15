@@ -1023,7 +1023,12 @@ impl GenContext {
     /// `min_cycle` mechanism. A FIRST set computed while ancestors are on the
     /// stack may under-count (a cycle contributes the empty set), so it is only
     /// cached once its whole SCC has closed at this frame (`local_min >= p`).
-    fn first_of_rule_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+    fn first_of_rule_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<i32> {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.first_cache[rid];
@@ -1544,7 +1549,12 @@ impl GenContext {
 
     /// Open-endedness of a rule, with `rule_is_nullable_at`'s SCC-aware memo:
     /// every decision site asks, and the rule graph is transitive.
-    fn rule_reaches_open_end_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn rule_reaches_open_end_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             if let Some(val) = self.open_end_cache[rid] {
@@ -1703,7 +1713,12 @@ impl GenContext {
     /// Single-token classification with SCC-aware memoization (see
     /// `is_rule_scannable_at`): cache only once the SCC has closed at this
     /// frame (`local_min >= p`).
-    fn rule_is_single_token_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn rule_is_single_token_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.single_token_cache[rid];
@@ -1951,7 +1966,11 @@ impl GenContext {
     /// shared single-alt group (in practice every reached single-alt
     /// group is in the map; callers pass the surrounding rule's name as
     /// a defensive fallback).
-    pub fn general_group_rule_name<S: AsStrSlice, S1: AsStrSlice>(&self, single_alt_type_name: S, fallback: S1) -> String {
+    pub fn general_group_rule_name<S: AsStrSlice, S1: AsStrSlice>(
+        &self,
+        single_alt_type_name: S,
+        fallback: S1,
+    ) -> String {
         if let Some(owner) = self.single_alt_owner.get(single_alt_type_name.to_string()) {
             return owner;
         }
@@ -2352,7 +2371,11 @@ fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> TreeMap<String
     return map;
 }
 
-fn scan_elements_for_single_alt_groups<S: AsStrSlice>(elements: &List<Element>, rule_name: S, map: &mut TreeMap<String, String>) {
+fn scan_elements_for_single_alt_groups<S: AsStrSlice>(
+    elements: &List<Element>,
+    rule_name: S,
+    map: &mut TreeMap<String, String>,
+) {
     for let elem of elements {
         scan_element_for_single_alt_groups(elem, rule_name, map);
     }

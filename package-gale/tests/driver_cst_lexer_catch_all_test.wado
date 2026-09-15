@@ -9,7 +9,8 @@ use { TK_EOF } from "./grammars/lexer_catch_all_reach.g4";
 
 fn assert_tokens<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
-    assert actual == expected.to_string(), `\ninput: ${input.to_string()}\nactual:\n${actual}\nexpected:\n${expected.to_string()}`;
+    assert actual == expected.to_string(), `\ninput: ${input.to_string()}\nactual:\n${actual}\nexpected:\n${expected.to_string(
+    )}`;
 }
 
 // `A` matches in full, so the catch-all loses on length.

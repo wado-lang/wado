@@ -166,7 +166,12 @@ impl Renderer {
     /// normally. A task-list marker (`[ ] ` / `[x] `) leads the first child's
     /// content, so it lands inside the `<p>` of a loose item without
     /// inspecting the output.
-    fn render_item_children<S: AsStrSlice>(&mut self, children: &List<Node>, loose: bool, marker: S) -> String with Highlight {
+    fn render_item_children<S: AsStrSlice>(
+        &mut self,
+        children: &List<Node>,
+        loose: bool,
+        marker: S,
+    ) -> String with Highlight {
         let mut parts: List<String> = [];
         let mut first = true;
         for let child of children {
@@ -266,7 +271,14 @@ fn render_table(t: &MdTable, refs: &RefTable) -> String {
     return out;
 }
 
-fn render_cells<S: AsStrSlice>(tag: S, row: &MdTableRow, ncol: i32, align: &List<ColumnAlign>, refs: &RefTable, out: &mut String) {
+fn render_cells<S: AsStrSlice>(
+    tag: S,
+    row: &MdTableRow,
+    ncol: i32,
+    align: &List<ColumnAlign>,
+    refs: &RefTable,
+    out: &mut String,
+) {
     for let c of 0..<ncol {
         let inner = match row.cells.get(c) {
             Some(cell) => render_inline_seq(&cell, refs),
@@ -377,7 +389,13 @@ fn scheme_is_safe<S: AsStrSlice>(scheme: S) -> bool {
     return scheme.eq_str("http") || scheme.eq_str("https") || scheme.eq_str("mailto") || scheme.eq_str("tel");
 }
 
-fn render_link<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, children: &List<Node>, refs: &RefTable, out: &mut String) {
+fn render_link<S: AsStrSlice, S1: AsStrSlice>(
+    url: S,
+    title: S1,
+    children: &List<Node>,
+    refs: &RefTable,
+    out: &mut String,
+) {
     let href = escape_attr_ref(&sanitize_url(url));
     out.push_str(`<a href="${href}"${title_attr(title)}>${render_inline_seq(children, refs)}</a>`);
 }

@@ -75,7 +75,11 @@ struct ParsedMethod {
 /// Translate a `@members` block body to fields + methods. `grammar_name` keys the
 /// `<Name>Parser` token-constant qualifier; a call inside a method body resolves
 /// against the block's own method names.
-pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(body: S, grammar_name: S1, lexer: bool = false) -> Result<MemberDecls, String> {
+pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
+    body: S,
+    grammar_name: S1,
+    lexer: bool = false,
+) -> Result<MemberDecls, String> {
     let tokens = tokenize_java(body)?;
     // A method body resolves names against the whole block: its siblings, and
     // the fields declared after it as much as before it.
@@ -357,7 +361,12 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
     return Result::Ok(MemberField { name: to_snake_case(name), ty, init });
 }
 
-fn parse_method<S: AsStrSlice, S1: AsStrSlice>(tokens: &List<JToken>, pos: &mut i32, name: S, ret_java: S1) -> Result<ParsedMethod, String> {
+fn parse_method<S: AsStrSlice, S1: AsStrSlice>(
+    tokens: &List<JToken>,
+    pos: &mut i32,
+    name: S,
+    ret_java: S1,
+) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, "{") {
         return Result::Err(`java2wado: @members: expected '{' for method '${name.to_string()}'`);
@@ -366,7 +375,12 @@ fn parse_method<S: AsStrSlice, S1: AsStrSlice>(tokens: &List<JToken>, pos: &mut 
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
     *pos = close + 1;
     let stmts = parse_java_stmts(&body_tokens)?;
-    return Result::Ok(ParsedMethod { name: name.to_string(), params, ret_java: ret_java.to_string(), stmts });
+    return Result::Ok(ParsedMethod {
+        name: name.to_string(),
+        params,
+        ret_java: ret_java.to_string(),
+        stmts,
+    });
 }
 
 /// Emit a field initializer, which has no rule / value-channel context.

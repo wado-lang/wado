@@ -636,7 +636,13 @@ fn lexer_reader<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, fiel
     w.end();
 }
 
-fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, arg: S1, field: S2, vis: Vis) {
+fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    w: &mut CodeWriter,
+    name: S,
+    arg: S1,
+    field: S2,
+    vis: Vis,
+) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&mut self");
     f.add_param(arg, "i32");
@@ -1018,7 +1024,13 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
 /// trailing), so predicates at any position in an alt are placed.
-fn gen_lexer_rule_predicates<S: AsStrSlice>(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool, fail_action: S) {
+fn gen_lexer_rule_predicates<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    actions: &List<AltAction>,
+    before: i32,
+    ea: bool,
+    fail_action: S,
+) {
     if !ea {
         return;
     }

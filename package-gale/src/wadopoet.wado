@@ -373,11 +373,19 @@ pub struct FieldSpec {
 
 impl FieldSpec {
     pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
-        return FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: false };
+        return FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: false,
+        };
     }
 
     pub fn new_pub<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
-        return FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: true };
+        return FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: true,
+        };
     }
 }
 
@@ -392,12 +400,20 @@ impl StructSpec {
         return StructSpec { name: name.to_string(), fields: [], visibility };
     }
 
-    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec with stores[self] {
+    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        name: S,
+        type_str: S1,
+    ) -> &mut StructSpec with stores[self] {
         self.fields.push(FieldSpec::new(name, type_str));
         return self;
     }
 
-    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec with stores[self] {
+    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        name: S,
+        type_str: S1,
+    ) -> &mut StructSpec with stores[self] {
         self.fields.push(FieldSpec::new_pub(name, type_str));
         return self;
     }
@@ -408,7 +424,12 @@ impl StructSpec {
         type_str: S1,
         default: S2,
     ) -> &mut StructSpec with stores[self] {
-        self.fields.push(FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: false, default: Option::Some(default.to_string()) });
+        self.fields.push(FieldSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            is_pub: false,
+            default: Option::Some(default.to_string()),
+        });
         return self;
     }
 
@@ -451,7 +472,11 @@ impl VariantSpec {
         return self;
     }
 
-    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec with stores[self] {
+    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        name: S,
+        payload: S1,
+    ) -> &mut VariantSpec with stores[self] {
         self.cases.push(VariantCase {
             name: name.to_string(),
             payload: Option::<String>::Some(payload.to_string()),
@@ -493,7 +518,11 @@ impl EnumSpec {
         return self;
     }
 
-    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec with stores[self] {
+    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(
+        &mut self,
+        name: S,
+        comment: S1,
+    ) -> &mut EnumSpec with stores[self] {
         self.members.push(EnumMember {
             name: name.to_string(),
             trailing_comment: Option::<String>::Some(comment.to_string()),
@@ -523,7 +552,10 @@ pub struct ParamSpec {
 
 impl ParamSpec {
     pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> ParamSpec {
-        return ParamSpec { name: name.to_string(), type_str: type_str.to_string() };
+        return ParamSpec {
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+        };
     }
 }
 
@@ -683,7 +715,12 @@ pub struct GlobalSpec {
 }
 
 impl GlobalSpec {
-    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(name: S, type_str: S1, initializer: S2, visibility: Vis = Vis::Private) -> GlobalSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+        name: S,
+        type_str: S1,
+        initializer: S2,
+        visibility: Vis = Vis::Private,
+    ) -> GlobalSpec {
         return GlobalSpec {
             name: name.to_string(),
             type_str: type_str.to_string(),

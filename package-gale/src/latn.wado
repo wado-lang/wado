@@ -298,7 +298,12 @@ fn scan_recursive_ng_elem<S: AsStrSlice>(name: S, elem: &LexerElement, all_rules
 
 /// Does `elem` transitively reference the rule named `target` (directly or
 /// through other lexer rules / fragments)? `visited` guards rule cycles.
-fn elem_refs_rule<S: AsStrSlice>(target: S, elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
+fn elem_refs_rule<S: AsStrSlice>(
+    target: S,
+    elem: &LexerElement,
+    all_rules: &List<LexerRule>,
+    visited: &mut List<String>,
+) -> bool {
     match *elem {
         RuleRef(rn) => {
             if rn == target.to_string() {
@@ -424,7 +429,12 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
 
 /// Add `name` and every rule it transitively references to `incl` (build
 /// order; `seen` dedups).
-fn collect_reachable<S: AsStrSlice>(name: S, all_rules: &List<LexerRule>, incl: &mut List<String>, seen: &mut List<String>) {
+fn collect_reachable<S: AsStrSlice>(
+    name: S,
+    all_rules: &List<LexerRule>,
+    incl: &mut List<String>,
+    seen: &mut List<String>,
+) {
     for let s of seen {
         if *s == name.to_string() {
             return;

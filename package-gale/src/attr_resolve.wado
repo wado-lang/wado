@@ -201,7 +201,12 @@ fn ok_attr<S: AsStrSlice>(r: &AttrRef, target: AttrTarget, rule_name: S) -> Resu
 /// Like `ok_attr` but with an explicit binding `name` (the fragment span still
 /// comes from `r`). Used when `$e` aliases a labeled ref `q=e`: the binding name
 /// is the label (`q`), the rewritten span the original `$e`.
-fn ok_attr_named<S: AsStrSlice, S1: AsStrSlice>(r: &AttrRef, name: S, target: AttrTarget, rule_name: S1) -> Result<ResolvedAttr, String> {
+fn ok_attr_named<S: AsStrSlice, S1: AsStrSlice>(
+    r: &AttrRef,
+    name: S,
+    target: AttrTarget,
+    rule_name: S1,
+) -> Result<ResolvedAttr, String> {
     return Result::Ok(ResolvedAttr {
         target,
         name: name.to_string(),
@@ -228,7 +233,12 @@ fn alias_target<S: AsStrSlice>(env: &AttrEnv, name: S) -> String {
 /// target admits the token member set; a rule-like target admits the rule
 /// pseudo-members plus the referenced rule's `returns` fields; specials and
 /// scalar attrs admit no member.
-fn check_member<S: AsStrSlice>(r: &AttrRef, target: &AttrTarget, rule_name: S, rules: &List<ParserRule>) -> Result<(), String> {
+fn check_member<S: AsStrSlice>(
+    r: &AttrRef,
+    target: &AttrTarget,
+    rule_name: S,
+    rules: &List<ParserRule>,
+) -> Result<(), String> {
     let member = match &r.member {
         Some(m) => *m,
         None => {

@@ -898,7 +898,12 @@ variant ScanOrigin {
 /// Remember the gate a run of candidate scans must each start from. The
 /// position needs no saving: a candidate binds its answer to a local rather
 /// than moving `pos`.
-fn gen_lr_candidates_begin<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, parse_launched: bool, slot: S) -> ScanOrigin {
+fn gen_lr_candidates_begin<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    ctx: &GenContext,
+    parse_launched: bool,
+    slot: S,
+) -> ScanOrigin {
     if parse_launched {
         return ScanOrigin::Parser;
     }
@@ -970,7 +975,10 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             w.line(`let mut _lr_s_${*gi}: i32 = -1;`);
             w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
-            w.line(`_lr_s_${*gi} = ${scan_fn.to_string()}_lr_${lr.alt_index}(${tokens_expr.to_string()}, ${pos_expr.to_string()}${fsep});`);
+            w.line(
+                `_lr_s_${*gi} = ${scan_fn.to_string()}_lr_${lr.alt_index}(${tokens_expr.to_string()}, ${pos_expr.to_string(
+                )}${fsep});`,
+            );
             w.end();
         }
         gen_lr_candidates_end(w, ctx, &origin);
@@ -2133,7 +2141,12 @@ fn repeat_guard_cond<S: AsStrSlice>(admits: &Admits, excluded: &List<String>, ex
 /// What `admits` admits, less `excluded`. Taking a set out of `Everything`
 /// leaves a negative test, not a smaller set, so the exclusion is stated here
 /// rather than by shrinking what the body admits.
-fn admits_check_excluding<S: AsStrSlice>(admits: &Admits, excluded: &List<String>, expr: S, ctx: &mut GenContext) -> String {
+fn admits_check_excluding<S: AsStrSlice>(
+    admits: &Admits,
+    excluded: &List<String>,
+    expr: S,
+    ctx: &mut GenContext,
+) -> String {
     let mut parts: List<String> = [];
     if let Kinds(kinds) = admits {
         parts.push(ctx.kind_check_str(kinds, expr));
@@ -2310,7 +2323,13 @@ fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_first: &L
 /// parse side dispatches on, measured rather than committed to, so the length
 /// left in `pos` is the alternative's the parse will take. A `lenient` group
 /// rewinds on no match; a strict one fails.
-fn gen_scan_op_group<S: AsStrSlice>(w: &mut CodeWriter, ge: &ScanGroupElement, ctx: &mut GenContext, fail_stmt: S, lenient: bool) {
+fn gen_scan_op_group<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    ge: &ScanGroupElement,
+    ctx: &mut GenContext,
+    fail_stmt: S,
+    lenient: bool,
+) {
     if ge.alts.len() == 1 {
         // Single alt: outer `done` wraps inner `body`.
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
@@ -4882,7 +4901,13 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
 
 /// Emit a rule prequel (`@init` / `@after`) with the expected-token set its body
 /// may print in scope. Empty for a rule whose FOLLOW is not exact.
-fn gen_prequel_action<S: AsStrSlice>(w: &mut CodeWriter, src: &ActionSource, rule_name: S, at_entry: bool, ctx: &mut GenContext) {
+fn gen_prequel_action<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    src: &ActionSource,
+    rule_name: S,
+    at_entry: bool,
+    ctx: &mut GenContext,
+) {
     ctx.set_expected_names(prequel_expected_names(rule_name, at_entry, ctx));
     gen_action_body(w, src, ctx, !at_entry);
     ctx.set_expected_names(String::new());
@@ -5911,8 +5936,18 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
 /// Greedy-Optional leaf body: `if [!gate &&] cond { <body> }`.
 /// The body appends to the builder when present; an absent optional emits
 /// nothing. `gate_expr` is the caller-FOLLOW yield check (empty = none).
-fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, body: &Op, gate_expr: S, cond: S1, ctx: &mut GenContext) {
-    let guard = if gate_expr.is_empty() { cond.to_string() } else { `!(${gate_expr.to_string()}) && (${cond.to_string()})` };
+fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
+    w: &mut CodeWriter,
+    body: &Op,
+    gate_expr: S,
+    cond: S1,
+    ctx: &mut GenContext,
+) {
+    let guard = if gate_expr.is_empty() {
+        cond.to_string();
+    } else {
+        `!(${gate_expr.to_string()}) && (${cond.to_string()})`;
+    };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, body, ctx, &mut nc);
@@ -6540,7 +6575,12 @@ fn gen_scan_commit<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &GenC
 
 /// `if <wins> { <best> = <end>; <gate snapshot> }` as one statement, so a
 /// candidate emitted through a commit string keeps the gate with its length.
-fn scan_gate_best_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(ctx: &GenContext, best: S, wins: S1, end: S2) -> String {
+fn scan_gate_best_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    ctx: &GenContext,
+    best: S,
+    wins: S1,
+    end: S2,
+) -> String {
     let mut body = `${best.to_string()} = ${end.to_string()};`;
     for let line of scan_gate_snapshot(ctx, best) {
         body.push_str(` ${line}`);
@@ -6573,7 +6613,10 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
-    w.line(`let ${name.to_string()} = if ${at.to_string()} < ${stream.to_string()}.len() { ${stream.to_string()}[${at.to_string()}] } else { TK_EOF };`);
+    w.line(
+        `let ${name.to_string()} = if ${at.to_string()} < ${stream.to_string()}.len() { ${stream.to_string()}[${at.to_string(
+        )}] } else { TK_EOF };`,
+    );
 }
 
 /// `kind_check_str` for a set that may be empty — an empty one admits nothing,
@@ -6917,7 +6960,13 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 /// the running max keeps it — ANTLR4's ambiguity resolution.
 /// Take the longest candidate, where `best` holds a length: nothing runs a scan
 /// from it, so there is no gate to carry.
-fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, best_var: S, winner_var: S1, end_expr: S2, winner_value: i32) {
+fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    w: &mut CodeWriter,
+    best_var: S,
+    winner_var: S1,
+    end_expr: S2,
+    winner_value: i32,
+) {
     w.begin(`if ${end_expr.to_string()} > ${best_var.to_string()}`);
     w.line(`${best_var.to_string()} = ${end_expr.to_string()};`);
     w.line(`${winner_var.to_string()} = ${winner_value};`);
@@ -7669,7 +7718,11 @@ fn general_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternative
 
 /// The discriminator an overlap group's sub-dispatch branches on, measured on
 /// the carrier (invariant 11). Empty means "none", never "anything".
-fn compute_lr_second_token<S: AsStrSlice>(shared_token: S, elements: &List<Element>, ctx: &mut GenContext) -> List<String> {
+fn compute_lr_second_token<S: AsStrSlice>(
+    shared_token: S,
+    elements: &List<Element>,
+    ctx: &mut GenContext,
+) -> List<String> {
     for let mut i = 1; i < elements.len(); i += 1 {
         let elem = &elements[i];
         let mut visiting: List<String> = [];
@@ -7869,11 +7922,15 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
         w.begin(`if ${var.to_string()} == ${idx}`);
-        w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+        w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+            ctx,
+        )});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(`return ${fn_name.to_string()}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+    w.line(`return ${fn_name.to_string()}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+        ctx,
+    )});`);
 }
 
 
@@ -8086,7 +8143,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 w.line(`p.pos -= ${skip};`);
             }
             w.line(
-                `return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
+                `return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+                    ctx,
+                )});`,
             );
         },
         Consume(c) => {
@@ -8145,7 +8204,8 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 // is not a parser rule, which `ir.wado` rejects first. Assert
                 // that rather than keep the try-fail-retry lowerings only
                 // breaking it could reach.
-                assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display.to_string()} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
+                assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display.to_string()} carries ${sorted_indices.len(
+                )} alt(s), expected 2 or more`;
                 let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
                 assert all_scan_full, `an alternative of ${rule_display.to_string()} is not fully scannable`;
                 emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);

@@ -29,8 +29,7 @@ test "translate rewrites a cross-rule $a.v to a child binding" {
 r : a=e { print($a.v); } ;
 e returns [i32 v] : ID ;
 ").unwrap();
-    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($a.v); ", false, &NO_BINDINGS).unwrap(
-    );
+    let out = translate_wado_action(&g.parser_rules[0], &g.parser_rules, " print($a.v); ", false, &NO_BINDINGS).unwrap();
     assert out == " print(a.v); ", `out: '${out}'`;
 }
 
@@ -162,8 +161,7 @@ e : ID ;
 ").unwrap();
     let rule = &g.parser_rules[0];
     // Empty parens.
-    let a = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap(
-    );
+    let a = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree()); ", false, &NO_BINDINGS).unwrap();
     assert a == " p.emit(p.rule_string_tree()); ", `a: '${a}'`;
     // ANTLR / java2wado idiom `toStringTree(this)` — the `(this)` argument is absorbed.
     let b = translate_wado_action(rule, &g.parser_rules, " p.emit($ctx.toStringTree(this)); ", false, &NO_BINDINGS).unwrap(

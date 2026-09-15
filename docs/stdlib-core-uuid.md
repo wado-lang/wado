@@ -57,7 +57,7 @@ Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
 and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
 random bits.
 
-#### `pub fn parse(s: &String) -> Result<Uuid, ParseError>`
+#### `pub fn parse<S: AsStrSlice>(s: S) -> Result<Uuid, ParseError>`
 
 Parse a UUID string (case-insensitive), accepting every form Go's
 `uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,

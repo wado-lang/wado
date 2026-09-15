@@ -959,7 +959,8 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
     slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
-        triage_doc_line("stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${sub_rule.to_string()}' subtree,`,
+        triage_doc_line("stage_b"), "//",
+        `// Stage B sub-tree: [output] is the labelled child '${sub_rule.to_string()}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {
@@ -1319,8 +1320,7 @@ fn emit_stage_a_tokens_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            triage_doc_line("stage_a"), "//",
-            "// Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format",
+            triage_doc_line("stage_a"), "//", "// Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format",
             "// dump as the descriptor's [output] block.",
         ],
         output_subdir: "antlr4_compat_a",
@@ -2471,17 +2471,29 @@ fn lookup_for_axis<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, ke
     };
 }
 
-fn assert_triage_skip<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1, expected_reason: S2) {
+fn assert_triage_skip<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    maps: &TriageMaps,
+    axis: S,
+    key: S1,
+    expected_reason: S2,
+) {
     if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string()}'), got Skip('${*reason}')`;
+        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string(
+        )}'), got Skip('${*reason}')`;
     } else {
         panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Skip, got other`);
     }
 }
 
-fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1, expected_reason: S2) {
+fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    maps: &TriageMaps,
+    axis: S,
+    key: S1,
+    expected_reason: S2,
+) {
     if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string()}'), got Todo('${*reason}')`;
+        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string(
+        )}'), got Todo('${*reason}')`;
     } else {
         panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Todo, got other`);
     }

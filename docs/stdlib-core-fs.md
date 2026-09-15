@@ -43,38 +43,38 @@ The directory every path resolves against: the first the host preopened.
 The escape hatch for everything this module does not do. The descriptor is
 owned by the caller, which may pass it to any `wasi:filesystem` method.
 
-### `pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens`
+### `pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens`
 
 The whole content of `path`. A path that names anything but a regular file
 — a directory, a device, a pipe — fails rather than reading.
 
-### `pub fn read_to_string(path: &String) -> Result<String, FsError> with Preopens`
+### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
 The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
 
-### `pub fn write<T: AsByteSlice>(path: &String, data: &T) -> Result<(), FsError> with Preopens`
+### `pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens`
 
 Write `data` to `path`, creating it or truncating what is there.
 
 `data` is anything that views as bytes — a `String`, a `ByteList`, a
 `ByteSlice` — and is written through without a copy.
 
-### `pub fn remove_file(path: &String) -> Result<(), FsError> with Preopens`
+### `pub fn remove_file<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Remove the file `path` names. A directory is not a file: `remove_file` on
 one fails rather than removing it.
 
-### `pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens`
+### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 
 Every entry of the directory `path` names, in the order the host lists
 them. `""` and `"."` name the preopened directory itself.
 
-### `pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens`
+### `pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Create the directory `path` names. The parent has to exist and the path
 itself has to be free, so an occupied path is `Io(Exist)`.
 
-### `pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens`
+### `pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Create the directory `path` names, and every parent it needs. A directory
 that already exists is not a failure.

@@ -118,8 +118,15 @@ fn parse_table<S: AsStrSlice>(content: S, failures: &mut i32) -> List<ValueRange
     return out;
 }
 
-fn report<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1, expected: &List<[i32, i32]>, actual: &List<[i32, i32]>) with Stdout {
-    println(`${property.to_string()}=${value.to_string()}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`);
+fn report<S: AsStrSlice, S1: AsStrSlice>(
+    property: S,
+    value: S1,
+    expected: &List<[i32, i32]>,
+    actual: &List<[i32, i32]>,
+) with Stdout {
+    println(
+        `${property.to_string()}=${value.to_string()}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`,
+    );
     let mut shown = 0;
     for let mut i = 0; i < i32::max(expected.len(), actual.len()) && shown < 4; i += 1 {
         let e = if i < expected.len() { `${expected[i].0:X}-${expected[i].1:X}` } else { "—" };

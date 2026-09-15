@@ -2109,7 +2109,12 @@ pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool 
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body<S: AsStrSlice>(alt: &Alternative, ctx: &mut GenContext, rule_name: S, reaches_rule_tail: bool) -> ScanBody {
+fn lower_scan_body<S: AsStrSlice>(
+    alt: &Alternative,
+    ctx: &mut GenContext,
+    rule_name: S,
+    reaches_rule_tail: bool,
+) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
