@@ -310,15 +310,19 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 }
 
 /// Whether `func`'s call can be replaced by the value it computes: runnable,
-/// producing a value at all, and keeping no reference past the call.
+/// and producing a value at all.
 ///
 /// Strictly stronger than [`is_ctfe_runnable`], which the [`CalleeMap`] gates
 /// on: a frame runs a unit callee for the writes it performs, so requiring a
 /// value there would refuse work the frame does. This is what a caller asks
 /// when it wants to hold the result.
+///
+/// Retention is not consulted, for the reason [`is_ctfe_runnable`] gives. What
+/// a retaining callee threatens is a result that embeds the retained
+/// reference, and the frame tests for that before it runs one.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    func.return_type != TypeTable::UNIT && func.retains.is_empty() && is_ctfe_runnable(func)
+    func.return_type != TypeTable::UNIT && is_ctfe_runnable(func)
 }
 
 /// Derive the [`MaterializingGlobals`] set: pair a global on every block that
@@ -983,3 +987,39 @@ pub type PatBindings = Vec<(u32, Value)>;
 /// The environment entries [`Interpreter::enter_arm`] displaced, restored by
 /// [`Interpreter::leave_arm`].
 pub struct ArmScope(Vec<(u32, Option<Lattice>)>);
+
+#[cfg(test)]
+mod tests {
+    use super::{NirFunction, is_ctfe_eligible};
+    use crate::module_source::ModuleSource;
+    use crate::nir::FunctionRef;
+    use crate::nir_arena::Body;
+    use crate::tir::TypeTable;
+
+    /// A runnable body-less-shaped callee made runnable: a value to return, and
+    /// a parameter it keeps.
+    fn retaining(returns: bool) -> NirFunction {
+        let mut func = NirFunction::extern_stub(&FunctionRef {
+            module_source: ModuleSource::default(),
+            name: "keep".to_string(),
+            monomorph_info: None,
+            method_info: None,
+        });
+        func.body = Some(Body::empty());
+        func.retains = vec!["p".to_string()];
+        if returns {
+            func.return_type = TypeTable::I32;
+        }
+        func
+    }
+
+    #[test]
+    fn retention_does_not_decide_ctfe_eligibility() {
+        assert!(is_ctfe_eligible(&retaining(true)));
+    }
+
+    #[test]
+    fn a_unit_callee_is_still_not_ctfe_eligible() {
+        assert!(!is_ctfe_eligible(&retaining(false)));
+    }
+}

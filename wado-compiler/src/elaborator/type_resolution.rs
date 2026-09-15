@@ -86,7 +86,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     params,
                     return_type,
                     effects,
-                    Vec::new(),
                 )
             }
             Type::Tuple(elements) => {

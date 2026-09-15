@@ -21,7 +21,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
     TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
-    mangle_local_item_name, mangle_stores_member, mangle_tuple_type,
+    mangle_local_item_name, mangle_tuple_type,
 };
 use crate::symbol_notation::render;
 use crate::token::Span;
@@ -237,14 +237,13 @@ impl SubstitutionContext {
                 params,
                 return_type,
                 effects,
-                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
                     .map(|&p| self.substitute(p, type_table))
                     .collect();
                 let new_return = self.substitute(return_type, type_table);
-                type_table.make_function_with_mut(is_mut, new_params, new_return, effects, stores)
+                type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
             }
             ResolvedType::GenericResource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
@@ -487,8 +486,6 @@ pub enum ResolvedType {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        /// Positional indices of parameters the function may store.
-        stores: Vec<u32>,
     },
     Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
@@ -2283,9 +2280,8 @@ impl TypeTable {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        stores: Vec<u32>,
     ) -> TypeId {
-        self.make_function_with_mut(false, params, return_type, effects, stores)
+        self.make_function_with_mut(false, params, return_type, effects)
     }
 
     pub fn make_function_with_mut(
@@ -2294,14 +2290,12 @@ impl TypeTable {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        stores: Vec<u32>,
     ) -> TypeId {
         self.intern(ResolvedType::Function {
             is_mut,
             params,
             return_type,
             effects,
-            stores,
         })
     }
 
@@ -3243,7 +3237,6 @@ impl TypeTable {
                 params,
                 return_type,
                 effects,
-                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
@@ -3253,13 +3246,7 @@ impl TypeTable {
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
-                    self.make_function_with_mut(
-                        is_mut,
-                        new_params,
-                        new_return_type,
-                        effects,
-                        stores,
-                    )
+                    self.make_function_with_mut(is_mut, new_params, new_return_type, effects)
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
@@ -4472,11 +4459,8 @@ impl TypeTable {
         params: &[TypeId],
         return_type: TypeId,
         effects: &[EffectRef],
-        stores: &[u32],
     ) -> TypeNameInfo {
-        let mut with_clause: Vec<String> =
-            effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
-        with_clause.extend(stores.iter().map(|i| mangle_stores_member(*i)));
+        let with_clause: Vec<String> = effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
         TypeNameInfo::Function {
             is_mut,
             params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
@@ -4494,12 +4478,11 @@ impl TypeTable {
             params,
             return_type,
             effects,
-            stores,
         } = resolved
         else {
             panic!("fn_receiver_name expects a function type");
         };
-        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects, stores);
+        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects);
         FqTypeName::builtin(&format_type_name(info))
     }
 
@@ -4698,8 +4681,7 @@ impl TypeTable {
                 params,
                 return_type,
                 effects,
-                stores,
-            } => self.fn_type_name_info(*is_mut, params, *return_type, effects, stores),
+            } => self.fn_type_name_info(*is_mut, params, *return_type, effects),
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }

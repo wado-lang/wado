@@ -734,14 +734,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_mut,
                         params,
                         return_type,
-                        stores,
                         ..
                     } => ResolvedType::Function {
                         is_mut: *is_mut,
                         params: params.clone(),
                         return_type: *return_type,
                         effects,
-                        stores: stores.clone(),
                     },
                     _ => return resolved,
                 };
@@ -6925,7 +6923,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_info.is_mutating,
             param_types,
             return_type,
-            Vec::new(),
             Vec::new(),
         );
 

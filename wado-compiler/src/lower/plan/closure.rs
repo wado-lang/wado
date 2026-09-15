@@ -1390,9 +1390,9 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             );
 
             let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-            let func_type =
-                self.type_table
-                    .make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+            let func_type = self
+                .type_table
+                .make_function(param_types, sig.return_type, Vec::new());
 
             expr.kind = TirExprKind::Closure {
                 params: closure_params,

@@ -1586,8 +1586,8 @@ pub enum TypeNameInfo {
         /// reads two ways — the effects on the inner type or on the outer — so
         /// a function-typed return is parenthesised and the two spellings part.
         return_is_function: bool,
-        /// `with (...)` members: the effects, then any `stores[i]`. Always
-        /// parenthesised, so a single member cannot run into what follows it.
+        /// `with (...)` members: the effects. Always parenthesised, so a
+        /// single member cannot run into what follows it.
         with_clause: Vec<String>,
         is_mut: bool,
     },
@@ -1861,15 +1861,6 @@ pub fn mangle_fn_type(
 #[must_use]
 pub fn is_fn_type_name(name: &str) -> bool {
     name.starts_with("fn(") || name.starts_with("fn mut(")
-}
-
-/// A `stores[...]` member of a `with` clause, by parameter position.
-///
-/// The type carries positions where source writes parameter names; a mangle is
-/// never read back, so the position is what it spells.
-#[must_use]
-pub fn mangle_stores_member(param_index: u32) -> String {
-    format!("stores[{param_index}]")
 }
 
 /// Build an Option type name from inner type name.

@@ -341,7 +341,7 @@ fn synthesize_dispatch_struct(
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
+            let op_func_type = tt.make_function(param_types, op.return_type, vec![]);
             op_field_types.push(op_func_type);
         }
     }
@@ -2254,7 +2254,7 @@ fn build_handler_op_closure(
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
 
     TirExpr::new(
         TirExprKind::Closure {
@@ -2306,7 +2306,7 @@ fn build_trap_closure(
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2377,10 +2377,9 @@ fn build_default_closure(
     );
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, op.return_type, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, op.return_type, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2441,7 +2440,7 @@ fn build_forward_closure(
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -3028,9 +3027,8 @@ fn open_boundary_effects(project: &Package) -> IndexSet<(ModuleSource, String)> 
 }
 
 /// **Late phase** — desugar `WithHandler` into the dispatch protocol, after
-/// `effect_check` and `stores_check`, both of which read the original shape:
-/// one for which effects are satisfied locally, the other for reference flow
-/// through handler installs. Takes the `dispatch_plans`
+/// `effect_check`, which reads the original shape to say whether effects are
+/// satisfied locally. Takes the `dispatch_plans`
 /// [`synthesize_pre_cm_binding`] left on the `Package`.
 pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
     let plans = std::mem::take(&mut project.dispatch_plans);

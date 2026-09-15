@@ -1480,7 +1480,6 @@ impl<'a> AdapterBuilder<'a> {
             vec![TypeTable::I32],
             inner_type_id,
             Vec::new(),
-            Vec::new(),
         );
         let lift_fn_ref = TirExpr::new(
             TirExprKind::FuncRef {

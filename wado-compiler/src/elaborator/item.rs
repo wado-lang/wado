@@ -2472,8 +2472,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param.is_mut,
                 type_id,
             );
-            // `params` survives only to feed the recorded `fn_param_types`
-            // and `validate_stores`; the TIR `default_expr` is not built.
+            // `params` survives only to feed the recorded `fn_param_types`;
+            // the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
@@ -2828,8 +2828,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param.is_mut,
                 type_id,
             );
-            // `params` survives only to feed the recorded `fn_param_types`
-            // and `validate_stores`; the TIR `default_expr` is not built.
+            // `params` survives only to feed the recorded `fn_param_types`;
+            // the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,

@@ -104,19 +104,16 @@ pub fn compute_stored_params(
     for func in &project.functions {
         let func = func.borrow();
         // A `#[retain(p)]` with no `into` says the reference persists, not
-        // where. A value-returning body hands it out with the result —
-        // `iter()`, `as_slice()` — and the walk finds any further escape
-        // itself; with no result to hand it to, or no body to read, only the
-        // strong reading is sound. A known gap in WEP 2026-05-21.
+        // where, so both channels take it: only the strong reading is sound
+        // until `into` has a reader (WEP 2026-01-12 roadmap item 8).
         let declared = declared_positions(&func);
-        let hands_out_result =
-            func.body.is_some() && !matches!(type_table.get(func.return_type), ResolvedType::Unit);
+        debug_assert!(
+            declared.is_empty() || func.body.is_none(),
+            "`{}` has a body and a `#[retain]`",
+            func.name
+        );
         let facts = StoresFacts {
-            escapes: if hands_out_result {
-                IndexSet::default()
-            } else {
-                declared.clone()
-            },
+            escapes: declared.clone(),
             into_result: declared,
         };
         computed.insert(func.module_source.clone(), func.name.clone(), facts);

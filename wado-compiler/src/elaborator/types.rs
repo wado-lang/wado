@@ -133,8 +133,6 @@ pub(crate) struct VariantCaseData {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
-    /// `pub(crate)` so the Semantics-based stores checker can key a
-    /// constructor call's return provenance by this id.
     pub(crate) ast_id: AstId,
 }
 

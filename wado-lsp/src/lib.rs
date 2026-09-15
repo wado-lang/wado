@@ -113,8 +113,8 @@ pub(crate) struct Snapshot {
     /// Lex, parse, load, and analysis errors the host emitted while the pass
     /// ran — a side effect of building `sem`.
     pub(crate) diagnostics: Vec<CompilerDiagnostic>,
-    /// Design-B semantic diagnostics (effect / stores / default-purity /
-    /// resource moves), derived on first request and cached.
+    /// Design-B semantic diagnostics (effect / purity / resource moves),
+    /// derived on first request and cached.
     ///
     /// Deriving them walks the whole module graph again, and only
     /// `Engine::diagnostics` reads them.

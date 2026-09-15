@@ -1162,7 +1162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inst.param_types,
             inst.return_type,
             sig.effects.clone(),
-            Vec::new(),
         ))
     }
 
