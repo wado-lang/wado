@@ -6,46 +6,41 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-struct core:prelude/string.wado//String {  // TypeId(2)
-    mut repr: ref Array<u8>,
-    mut used: i32,
-}
-
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(3)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_lbf_fallthrough_block.wado/run" = fn();  // TypeId(11)
+type "functype//opt_lbf_fallthrough_block.wado/run" = fn();  // TypeId(10)
 
-type "functype//opt_lbf_fallthrough_block.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//opt_lbf_fallthrough_block.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//opt_lbf_fallthrough_block.wado/$cm_export__run" = fn();  // TypeId(13)
+type "functype//opt_lbf_fallthrough_block.wado/$cm_export__run" = fn();  // TypeId(12)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(14)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(13)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -60,7 +55,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/task-return from "wasi/task-return";
 
-global global:opt_lbf_fallthrough_block.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 75, 58, 32, 52, 50), used: 6 };
+global global:opt_lbf_fallthrough_block.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(79, 75, 58, 32, 52, 50);
 
 fn "opt_lbf_fallthrough_block.wado/run"() with Stdout {
     let handle_9: i32;
@@ -72,7 +67,7 @@ fn "opt_lbf_fallthrough_block.wado/run"() with Stdout {
     tx_32 = builtin::i32_wrap_i64(packed_30 >> 32_i64);
     handle_9 = "opt_lbf_fallthrough_block.wado/$cm_binding__Stdout_write_via_stream"(rx_31);
     new_repr_50 = builtin::array_new<u8>(7);
-    builtin::array_copy<u8>(new_repr_50, 0, global:opt_lbf_fallthrough_block.wado::$const_obj_1.repr, 0, 6);
+    builtin::array_copy<u8>(new_repr_50, 0, global:opt_lbf_fallthrough_block.wado::$const_obj_1, 0, 6);
     builtin::array_set_u8(new_repr_50, 6, 10);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_32, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr_50, start: 0, end: 7 });
     "wasi/stream-drop-writable"(tx_32);

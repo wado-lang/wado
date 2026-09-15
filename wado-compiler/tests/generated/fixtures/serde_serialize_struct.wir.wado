@@ -122,12 +122,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:serde_serialize_struct.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(34);
 global global:serde_serialize_struct.wado::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(34, 58);
-global global:serde_serialize_struct.wado::$const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
-global global:serde_serialize_struct.wado::$const_obj_27: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(125), used: 1 };
+global global:serde_serialize_struct.wado::$const_obj_23: ref null Array<u8> = array.new_fixed<u8>(44);
+global global:serde_serialize_struct.wado::$const_obj_27: ref null Array<u8> = array.new_fixed<u8>(125);
 global global:serde_serialize_struct.wado::$const_obj_28: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 99, 116, 105, 118, 101), used: 6 };
 global global:serde_serialize_struct.wado::$const_obj_29: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 103, 101), used: 3 };
 global global:serde_serialize_struct.wado::$const_obj_30: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114, 78, 97, 109, 101), used: 8 };
-global global:serde_serialize_struct.wado::$const_obj_31: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 };
+global global:serde_serialize_struct.wado::$const_obj_31: ref null Array<u8> = array.new_fixed<u8>(123);
 global global:serde_serialize_struct.wado::$const_obj_32: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 97, 108, 115, 101), used: 5 };
 global global:serde_serialize_struct.wado::$const_obj_33: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
 
@@ -380,7 +380,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:pre
 
 fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<core:prelude/string.wado/String>"(self, name, value) {
     let $local_3: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
     let out_11: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -396,7 +395,6 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
     let start_62: i32;
     let s_65: ref "serde_serialize_struct.wado//JsonSerializer";
     if self.count > 0 {
-        other_7 = global:serde_serialize_struct.wado::$const_obj_23;
         out_11 = self.ser.buf;
         new_used_18 = out_11.used + 1;
         if @unlikely(new_used_18 > builtin::array_len(out_11.repr)) {
@@ -405,7 +403,7 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
         }
         start_19 = out_11.used;
         out_11.used = new_used_18;
-        builtin::array_copy<u8>(out_11.repr, start_19, other_7.repr, 0, 1);
+        builtin::array_copy<u8>(out_11.repr, start_19, global:serde_serialize_struct.wado::$const_obj_23, 0, 1);
     }
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $local_3.used = 1;
@@ -446,15 +444,12 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
     let st_2: ref "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_struct.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_serialize_struct.wado/SerializeError>]";
     let $local_4: ref "serde_serialize_struct.wado//JsonStructSerializer";
     let $match_5: ref "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>";
-    let other_10: ref "core:prelude/string.wado//String";
     let out_14: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
-    let other_26: ref "core:prelude/string.wado//String";
     let out_30: ref "core:prelude/string.wado//String";
     let new_used_37: i32;
     let start_38: i32;
-    other_10 = global:serde_serialize_struct.wado::$const_obj_31;
     out_14 = s.buf;
     new_used_21 = out_14.used + 1;
     if @unlikely(new_used_21 > builtin::array_len(out_14.repr)) {
@@ -463,7 +458,7 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
     }
     start_22 = out_14.used;
     out_14.used = new_used_21;
-    builtin::array_copy<u8>(out_14.repr, start_22, other_10.repr, 0, 1);
+    builtin::array_copy<u8>(out_14.repr, start_22, global:serde_serialize_struct.wado::$const_obj_31, 0, 1);
     st_2 = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_struct.wado/JsonStructSerializer>, core:prelude/types.wado/Option<serde_serialize_struct.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_serialize_struct.wado//JsonStructSerializer" { ser: s, count: 0 }, 2: ref.null none };
     $match_5 = block -> ref "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<serde_serialize_struct.wado/JsonStructSerializer,serde_serialize_struct.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(st_2.1) };
@@ -473,10 +468,10 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
         drop("serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<core:prelude/string.wado/String>"($local_4, global:serde_serialize_struct.wado::$const_obj_30, self.name));
         drop("serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<i32>$scalar"($local_4, global:serde_serialize_struct.wado::$const_obj_29, 30));
         drop("serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<bool>$scalar"($local_4, global:serde_serialize_struct.wado::$const_obj_28, 1));
-        return other_26 = global:serde_serialize_struct.wado::$const_obj_27, out_30 = $local_4.ser.buf, new_used_37 = out_30.used + 1, if @unlikely(new_used_37 > builtin::array_len(out_30.repr)) {
+        return out_30 = $local_4.ser.buf, new_used_37 = out_30.used + 1, if @unlikely(new_used_37 > builtin::array_len(out_30.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_30, new_used_37);
-        }, start_38 = out_30.used, out_30.used = new_used_37, builtin::array_copy<u8>(out_30.repr, start_38, other_26.repr, 0, 1), ref.null none;
+        }, start_38 = out_30.used, out_30.used = new_used_37, builtin::array_copy<u8>(out_30.repr, start_38, global:serde_serialize_struct.wado::$const_obj_27, 0, 1), ref.null none;
     } else {
     }
     return struct.new "serde_serialize_struct.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_struct failed"), used: 19 } };
@@ -484,7 +479,6 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/User^serde_serialize
 
 fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<bool>$scalar"(self, name, value) {
     let $local_3: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
     let out_11: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -500,7 +494,6 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
     let start_62: i32;
     let s_65: ref "serde_serialize_struct.wado//JsonSerializer";
     if self.count > 0 {
-        other_7 = global:serde_serialize_struct.wado::$const_obj_23;
         out_11 = self.ser.buf;
         new_used_18 = out_11.used + 1;
         if @unlikely(new_used_18 > builtin::array_len(out_11.repr)) {
@@ -509,7 +502,7 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
         }
         start_19 = out_11.used;
         out_11.used = new_used_18;
-        builtin::array_copy<u8>(out_11.repr, start_19, other_7.repr, 0, 1);
+        builtin::array_copy<u8>(out_11.repr, start_19, global:serde_serialize_struct.wado::$const_obj_23, 0, 1);
     }
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $local_3.used = 1;
@@ -552,7 +545,6 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
 
 fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer^serde_serialize_struct.wado/SerializeStruct::field<i32>$scalar"(self, name, value) {
     let $local_3_3: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
     let out_11: ref "core:prelude/string.wado//String";
     let new_used_18: i32;
     let start_19: i32;
@@ -569,7 +561,6 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
     let s_65: ref "serde_serialize_struct.wado//JsonSerializer";
     let $local_2: ref "core:prelude/string.wado//String";
     if self.count > 0 {
-        other_7 = global:serde_serialize_struct.wado::$const_obj_23;
         out_11 = self.ser.buf;
         new_used_18 = out_11.used + 1;
         if @unlikely(new_used_18 > builtin::array_len(out_11.repr)) {
@@ -578,7 +569,7 @@ fn "serde_serialize_struct.wado/serde_serialize_struct.wado/JsonStructSerializer
         }
         start_19 = out_11.used;
         out_11.used = new_used_18;
-        builtin::array_copy<u8>(out_11.repr, start_19, other_7.repr, 0, 1);
+        builtin::array_copy<u8>(out_11.repr, start_19, global:serde_serialize_struct.wado::$const_obj_23, 0, 1);
     }
     $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $local_3_3.used = 1;

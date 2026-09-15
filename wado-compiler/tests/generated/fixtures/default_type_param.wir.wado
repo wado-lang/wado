@@ -20,31 +20,36 @@ struct core:prelude/types.wado//Box<core:value/Value> {  // TypeId(6)
     mut value: ref "core:value//Value",
 }
 
-struct core:prelude/string.wado//StrSlice {  // TypeId(7)
+struct core:value//ValueStructSerializer {  // TypeId(7)
+    mut out: ref "core:prelude/types.wado//Box<core:value/Value>",
+    mut entries: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>",
+}
+
+struct core:prelude/string.wado//StrSlice {  // TypeId(8)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-struct core:prelude/string.wado//StrCharIter {  // TypeId(8)
+struct core:prelude/string.wado//StrCharIter {  // TypeId(9)
     mut repr: ref Array<u8>,
     mut used: i32,
     mut byte_index: i32,
 }
 
-array Array<u8> (mut u8);  // TypeId(9)
+array Array<u8> (mut u8);  // TypeId(10)
 
-struct core:prelude/string.wado//String {  // TypeId(10)
+struct core:prelude/string.wado//String {  // TypeId(11)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:serde//SerializeError {  // TypeId(11)
+struct core:serde//SerializeError {  // TypeId(12)
     mut kind: "core:serde//enum:SerializeErrorKind",
     mut message: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(12)
+struct core:prelude/format.wado//Formatter {  // TypeId(13)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -56,28 +61,28 @@ struct core:prelude/format.wado//Formatter {  // TypeId(12)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:json//JsonMapSerializer {  // TypeId(13)
+struct core:json//JsonMapSerializer {  // TypeId(14)
     mut buf: ref "core:prelude/string.wado//String",
     mut count: i32,
     mut need_value: bool,
 }
 
-struct core:json//JsonSeqSerializer {  // TypeId(14)
+struct core:json//JsonSeqSerializer {  // TypeId(15)
     mut buf: ref "core:prelude/string.wado//String",
     mut count: i32,
 }
 
-struct core:prelude/int128.wado//i128 {  // TypeId(15)
+struct core:prelude/int128.wado//i128 {  // TypeId(16)
     mut low: u64,
     mut high: i64,
 }
 
-struct core:prelude/int128.wado//u128 {  // TypeId(16)
+struct core:prelude/int128.wado//u128 {  // TypeId(17)
     mut low: u64,
     mut high: u64,
 }
 
-variant core:value//Value {  // TypeId(17)
+variant core:value//Value {  // TypeId(18)
     Null,
     Bool(bool),
     Int(i64),
@@ -93,87 +98,79 @@ variant core:value//Value {  // TypeId(17)
     Unknown(ref "core:prelude//List<u8>"),
 }
 
-struct core:value//Value::Bool {  // TypeId(18)
+struct core:value//Value::Bool {  // TypeId(19)
     discriminant: i32,
     payload_0: bool,
 }
 
-struct core:value//Value::Int {  // TypeId(19)
+struct core:value//Value::Int {  // TypeId(20)
     discriminant: i32,
     payload_0: i64,
 }
 
-struct core:value//Value::UInt {  // TypeId(20)
+struct core:value//Value::UInt {  // TypeId(21)
     discriminant: i32,
     payload_0: u64,
 }
 
-struct core:value//Value::Int128 {  // TypeId(21)
+struct core:value//Value::Int128 {  // TypeId(22)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//i128",
 }
 
-struct core:value//Value::UInt128 {  // TypeId(22)
+struct core:value//Value::UInt128 {  // TypeId(23)
     discriminant: i32,
     payload_0: ref "core:prelude/int128.wado//u128",
 }
 
-struct core:value//Value::Float {  // TypeId(23)
+struct core:value//Value::Float {  // TypeId(24)
     discriminant: i32,
     payload_0: f64,
 }
 
-struct core:value//Value::String {  // TypeId(24)
+struct core:value//Value::String {  // TypeId(25)
     discriminant: i32,
     payload_0: ref "core:prelude/string.wado//String",
 }
 
-struct core:value//Value::Bytes {  // TypeId(25)
+struct core:value//Value::Bytes {  // TypeId(26)
     discriminant: i32,
     payload_0: ref "core:prelude//List<u8>",
 }
 
-struct core:value//Value::List {  // TypeId(26)
+struct core:value//Value::List {  // TypeId(27)
     discriminant: i32,
     payload_0: ref "core:prelude//List<core:value/Value>",
 }
 
-struct core:value//Value::Object {  // TypeId(27)
+struct core:value//Value::Object {  // TypeId(28)
     discriminant: i32,
     payload_0: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>",
 }
 
-struct core:value//Value::Unknown {  // TypeId(28)
+struct core:value//Value::Unknown {  // TypeId(29)
     discriminant: i32,
     payload_0: ref "core:prelude//List<u8>",
 }
 
-struct tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>] {  // TypeId(29)
+struct tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>] {  // TypeId(30)
     mut 0: ref "core:prelude/string.wado//String",
     mut 1: ref "core:prelude/types.wado//Box<core:value/Value>",
 }
 
-struct default_type_param.wado//$anon_{a:i32} {  // TypeId(30)
+struct default_type_param.wado//$anon_{a:i32} {  // TypeId(31)
     mut a: i32,
 }
 
-struct default_type_param.wado//NoFields {  // TypeId(31)}
+struct default_type_param.wado//NoFields {  // TypeId(32)}
 
-array Array<u64> (mut u64);  // TypeId(32)
+array Array<u64> (mut u64);  // TypeId(33)
 
-array Array<core:value/Value> (mut ref "core:value//Value");  // TypeId(33)
+array Array<core:value/Value> (mut ref "core:value//Value");  // TypeId(34)
 
-array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(34)
+array Array<core:collections/TreeMapNode<core:prelude/string.wado/String>> (mut ref "core:collections//TreeMapNode<core:prelude/string.wado/String>");  // TypeId(35)
 
-array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(35)
-
-struct core:prelude/traits.wado//StructField<default_type_param.wado/$anon_{a:i32},i32> {  // TypeId(36)
-    mut index: i32,
-    mut field_name: ref "core:prelude/string.wado//String",
-    mut wire_override: ref null "core:prelude/string.wado//String",
-    mut has_default: bool,
-    mut is_secret: bool,
-}
+array Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>> (mut ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>");  // TypeId(36)
 
 struct core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value> {  // TypeId(37)
     mut key: ref "core:prelude/string.wado//String",
@@ -461,29 +458,31 @@ type "functype//core:prelude/primitive.wado/f64::inspect_into$scalar" = fn(f64, 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(154)
 
-type "functype//core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar" = fn(ref "default_type_param.wado//$anon_{a:i32}", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(155)
+type "functype//core:value/core:value/ValueStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar" = fn(ref "core:value//ValueStructSerializer", ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(155)
 
-type "functype//core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(156)
+type "functype//core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar" = fn(ref "default_type_param.wado//$anon_{a:i32}", ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(156)
 
-type "functype//core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0" = fn(ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(157)
+type "functype//core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar" = fn(ref "core:prelude/types.wado//Box<core:value/Value>", ref "core:prelude/string.wado//String") -> ref null "core:serde//SerializeError";  // TypeId(157)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(158)
+type "functype//core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0" = fn(ref "core:prelude/types.wado//Box<core:value/Value>") -> ref null "core:serde//SerializeError";  // TypeId(158)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(159)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(159)
 
-type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/string.wado//String", bool);  // TypeId(160)
+type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" = fn(f64, ref "core:prelude/string.wado//String");  // TypeId(160)
 
-type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(161)
+type "functype//core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitude$spec0$scalar" = fn(ref "core:prelude/int128.wado//u128", ref "core:prelude/string.wado//String", bool);  // TypeId(161)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar" = fn(i64, ref "core:prelude/string.wado//String");  // TypeId(162)
+type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar" = fn(u64, ref "core:prelude/string.wado//String");  // TypeId(162)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(163)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar" = fn(i64, ref "core:prelude/string.wado//String");  // TypeId(163)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(164)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(164)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(165)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(165)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(166)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(166)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(167)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -509,7 +508,7 @@ global global:core:prelude/bytes.wado::$const_obj_10: ref null "core:prelude/str
 global global:core:prelude/format.wado::$const_obj_13: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::$const_obj_15: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
 global global:core:prelude/fpfmt.wado::$const_obj_16: ref null Array<u8> = array.new_fixed<u8>(45);
-global global:core:prelude/fpfmt.wado::$const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101), used: 1 };
+global global:core:prelude/fpfmt.wado::$const_obj_17: ref null Array<u8> = array.new_fixed<u8>(101);
 global global:core:prelude/fpfmt.wado::$const_obj_18: ref null Array<u8> = array.new_fixed<u8>(48);
 global global:core:prelude/int128.wado::$const_obj_19: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 49, 50, 56, 32, 100, 105, 118, 105, 115, 105, 111, 110, 32, 98, 121, 32, 122, 101, 114, 111), used: 21 };
 global global:core:prelude/int128.wado::$const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
@@ -2188,7 +2187,6 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd) {
     let buf_40: ref Array<u8>;
     let v_44: u64;
     let idx_45: i32;
-    let other_53: ref "core:prelude/string.wado//String";
     let new_used_64: i32;
     let start_65: i32;
     let new_used_77: i32;
@@ -2238,7 +2236,6 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd) {
             };
         };
     }
-    other_53 = global:core:prelude/fpfmt.wado::$const_obj_17;
     new_used_64 = buf.used + 1;
     if @unlikely(new_used_64 > builtin::array_len(buf.repr)) {
         cold_path;
@@ -2246,7 +2243,7 @@ fn "core:prelude/fpfmt.wado/write_exp"(buf, d, p, nd) {
     }
     start_65 = buf.used;
     buf.used = new_used_64;
-    builtin::array_copy<u8>(buf.repr, start_65, other_53.repr, 0, 1);
+    builtin::array_copy<u8>(buf.repr, start_65, global:core:prelude/fpfmt.wado::$const_obj_17, 0, 1);
     if exp < 0 {
         new_used_77 = buf.used + 1;
         if @unlikely(new_used_77 > builtin::array_len(buf.repr)) {
@@ -2782,61 +2779,49 @@ fn "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(
     let n_2: i32;
     let i: i32;
     let b: u8;
-    let new_used_17: i32;
-    let start_18: i32;
-    let self_26: i32;
-    let new_used_29: i32;
-    let start_30: i32;
-    let self_32: ref Array<u8>;
-    let self_45: ref "core:prelude/string.wado//StrSlice";
-    let self_47: ref Array<u8>;
-    let repr_50: ref Array<u8>;
-    let $licm_repr_53: ref Array<u8>;
-    let $licm_used_54: i32;
-    let $av_55: i32;
-    $av_55 = s.used;
-    drop(s.repr);
-    n_2 = $av_55 - 0;
+    let new_used_16: i32;
+    let start_17: i32;
+    let self_25: i32;
+    let new_used_28: i32;
+    let start_29: i32;
+    let self_31: ref Array<u8>;
+    let $licm_repr_45: ref Array<u8>;
+    n_2 = s.used;
     i = 0;
-    $licm_repr_53 = s.repr;
-    $licm_used_54 = s.used;
+    $licm_repr_45 = s.repr;
     b263: block {
         l264: loop {
             break_if b263 i >= n_2;
-            repr_50 = $licm_repr_53;
-            self_45 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_50, start: 0, end: $licm_used_54 };
-            self_47 = self_45.repr;
-            b = builtin::array_get_value<u8>(self_47, 0 + i);
+            b = builtin::array_get_value<u8>($licm_repr_45, i);
             if select i32(select i32(b >=u 32, b != 34, 0), b != 92, 0) {
                 i = i + 1;
                 continue l264;
             }
             "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/String>"(buf, s, i);
-            $licm_repr_53 = s.repr;
-            $licm_used_54 = s.used;
+            $licm_repr_45 = s.repr;
             return;
             continue l264;
         };
     };
-    new_used_17 = buf.used + 1;
-    if @unlikely(new_used_17 > builtin::array_len(buf.repr)) {
+    new_used_16 = buf.used + 1;
+    if @unlikely(new_used_16 > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_17);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_16);
     }
-    start_18 = buf.used;
-    buf.used = new_used_17;
-    builtin::array_set_u8(buf.repr, start_18, 34);
-    self_26 = s.used;
-    new_used_29 = buf.used + (1 + self_26);
-    if @unlikely(new_used_29 > builtin::array_len(buf.repr)) {
+    start_17 = buf.used;
+    buf.used = new_used_16;
+    builtin::array_set_u8(buf.repr, start_17, 34);
+    self_25 = s.used;
+    new_used_28 = buf.used + (1 + self_25);
+    if @unlikely(new_used_28 > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_29);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_28);
     }
-    start_30 = buf.used;
-    buf.used = new_used_29;
-    self_32 = buf.repr;
-    builtin::array_copy<u8>(self_32, start_30, s.repr, 0, self_26);
-    builtin::array_set_u8(buf.repr, start_30 + self_26, 34);
+    start_29 = buf.used;
+    buf.used = new_used_28;
+    self_31 = buf.repr;
+    builtin::array_copy<u8>(self_31, start_29, s.repr, 0, self_25);
+    builtin::array_set_u8(buf.repr, start_29 + self_25, 34);
 }
 
 fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/String>"(buf, s, first) {
@@ -2846,20 +2831,16 @@ fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/Stri
     let b_6: u8;
     let new_used_12: i32;
     let start_13: i32;
-    let self_27: ref "core:prelude/string.wado//StrSlice";
-    let other: ref "core:prelude/string.wado//StrSlice";
-    let self_36: ref "core:prelude/string.wado//StrSlice";
-    let n_46: i32;
-    let new_used_51: i32;
-    let start_52: i32;
-    let new_used_59: i32;
-    let start_60: i32;
-    let $licm_repr_68: ref Array<u8>;
-    let $licm_used_69: i32;
-    let repr_73: ref Array<u8>;
-    let self_76: ref Array<u8>;
-    let repr_79: ref Array<u8>;
-    let $av_82: i32;
+    let self_34: ref "core:prelude/string.wado//StrSlice";
+    let n_44: i32;
+    let new_used_49: i32;
+    let start_50: i32;
+    let new_used_57: i32;
+    let start_58: i32;
+    let repr: ref Array<u8>;
+    let $licm_repr_72: ref Array<u8>;
+    let $sroa_other_repr: ref Array<u8>;
+    let $sroa_other_start: i32;
     new_used_12 = buf.used + 1;
     if @unlikely(new_used_12 > builtin::array_len(buf.repr)) {
         cold_path;
@@ -2868,58 +2849,52 @@ fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/Stri
     start_13 = buf.used;
     buf.used = new_used_12;
     builtin::array_set_u8(buf.repr, start_13, 34);
-    $av_82 = s.used;
-    drop(s.repr);
-    n_3 = $av_82 - 0;
+    n_3 = s.used;
     run_start = 0;
     i = first;
-    $licm_repr_68 = s.repr;
-    $licm_used_69 = s.used;
+    $licm_repr_72 = s.repr;
     b269: block {
         l270: loop {
             break_if b269 @likely(i >= n_3);
             $for_0_body: block {
-                repr_73 = $licm_repr_68;
-                self_27 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_73, start: 0, end: $licm_used_69 };
-                self_76 = self_27.repr;
-                b_6 = builtin::array_get_value<u8>(self_76, 0 + i);
+                b_6 = builtin::array_get_value<u8>($licm_repr_72, i);
                 break_if $for_0_body @likely(select i32(select i32(b_6 >=u 32, b_6 != 34, 0), b_6 != 92, 0));
                 cold_path;
                 "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, run_start, i, b_6);
-                $licm_repr_68 = s.repr;
-                $licm_used_69 = s.used;
+                $licm_repr_72 = s.repr;
                 run_start = i + 1;
             };
             i = i + 1;
             continue l270;
         };
     };
-    $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__12: block {
-        break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__12 n_3 <= run_start;
-        repr_79 = s.repr;
-        self_36 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_79, start: 0, end: s.used };
-        other = struct.new "core:prelude/string.wado//StrSlice" { repr: self_36.repr, start: 0 + run_start, end: 0 + n_3 };
-        $inline_core_prelude_string_wado_String__internal_push_view_18: block {
-            n_46 = other.end - other.start;
-            break_if $inline_core_prelude_string_wado_String__internal_push_view_18 n_46 == 0;
-            new_used_51 = buf.used + n_46;
-            if @unlikely(new_used_51 > builtin::array_len(buf.repr)) {
+    $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__10: block {
+        break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__10 n_3 <= run_start;
+        repr = s.repr;
+        self_34 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: s.used };
+        $sroa_other_repr = self_34.repr;
+        $sroa_other_start = 0 + run_start;
+        $inline_core_prelude_string_wado_String__internal_push_view_16: block {
+            n_44 = (0 + n_3) - $sroa_other_start;
+            break_if $inline_core_prelude_string_wado_String__internal_push_view_16 n_44 == 0;
+            new_used_49 = buf.used + n_44;
+            if @unlikely(new_used_49 > builtin::array_len(buf.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_51);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_49);
             }
-            start_52 = buf.used;
-            buf.used = new_used_51;
-            builtin::array_copy<u8>(buf.repr, start_52, other.repr, other.start, n_46);
+            start_50 = buf.used;
+            buf.used = new_used_49;
+            builtin::array_copy<u8>(buf.repr, start_50, $sroa_other_repr, $sroa_other_start, n_44);
         };
     };
-    new_used_59 = buf.used + 1;
-    if @unlikely(new_used_59 > builtin::array_len(buf.repr)) {
+    new_used_57 = buf.used + 1;
+    if @unlikely(new_used_57 > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_59);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_57);
     }
-    start_60 = buf.used;
-    buf.used = new_used_59;
-    builtin::array_set_u8(buf.repr, start_60, 34);
+    start_58 = buf.used;
+    buf.used = new_used_57;
+    builtin::array_set_u8(buf.repr, start_58, 34);
 }
 
 fn "core:value/core/value/to_value<default_type_param.wado/NoFields>"() {
@@ -2936,7 +2911,6 @@ fn "core:value/core/value/to_value<default_type_param.wado/NoFields>"() {
 fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, run_start, i, b) {
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
-    let other_13: ref "core:prelude/string.wado//StrSlice";
     let self_14: ref "core:prelude/string.wado//StrSlice";
     let n_24: i32;
     let new_used_29: i32;
@@ -2959,13 +2933,16 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
     let start_133: i32;
     let new_used_143: i32;
     let start_144: i32;
+    let $sroa_other_repr_146: ref Array<u8>;
+    let $sroa_other_start: i32;
     $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0: block {
         break_if $inline_core_prelude_string_wado_String__push_str_range_unchecked__core_prelude_string_wado_String__0 i <= run_start;
         repr = s.repr;
         self_14 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: s.used };
-        other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: self_14.repr, start: 0 + run_start, end: 0 + i };
+        $sroa_other_repr_146 = self_14.repr;
+        $sroa_other_start = 0 + run_start;
         $inline_core_prelude_string_wado_String__internal_push_view_6: block {
-            n_24 = other_13.end - other_13.start;
+            n_24 = (0 + i) - $sroa_other_start;
             break_if $inline_core_prelude_string_wado_String__internal_push_view_6 n_24 == 0;
             new_used_29 = buf.used + n_24;
             if @unlikely(new_used_29 > builtin::array_len(buf.repr)) {
@@ -2974,7 +2951,7 @@ fn "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(
             }
             start_30 = buf.used;
             buf.used = new_used_29;
-            builtin::array_copy<u8>(buf.repr, start_30, other_13.repr, other_13.start, n_24);
+            builtin::array_copy<u8>(buf.repr, start_30, $sroa_other_repr_146, $sroa_other_start, n_24);
         };
     };
     if b == 34 {
@@ -5497,7 +5474,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
-    let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -5506,6 +5482,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let repr: ref Array<u8>;
+    let end: i32;
     let self_21: ref "core:prelude/string.wado//String";
     let new_used_26: i32;
     let start_27: i32;
@@ -5587,18 +5564,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let start_292: i32;
     let new_used_299: i32;
     let start_300: i32;
-    let $av_308: bool;
-    let $av_309: i32;
-    let $av_310: i32;
+    let $av_311: bool;
+    let $av_312: i32;
     repr = alt_prefix.repr;
-    $av_310 = alt_prefix.used;
-    prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
-    $av_308 = self.sign_plus;
-    sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    end = alt_prefix.used;
+    $av_311 = self.sign_plus;
+    sign_len = select i32(select i32(is_negative, 1, $av_311), 1, 0);
+    prefix_len = select i32(self.alternate, end - 0, 0);
     content_len = (sign_len + prefix_len) + digit_count;
-    $av_309 = self.width;
-    if select i32($av_309 <= 0, 1, content_len >= $av_309) {
+    $av_312 = self.width;
+    if select i32($av_312 <= 0, 1, content_len >= $av_312) {
         if is_negative {
             self_21 = self.buf;
             new_used_26 = self_21.used + 1;
@@ -5609,7 +5584,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_27 = self_21.used;
             self_21.used = new_used_26;
             builtin::array_set_u8(self_21.repr, start_27, 45);
-        } else if $av_308 {
+        } else if $av_311 {
             self_35 = self.buf;
             new_used_40 = self_35.used + 1;
             if @unlikely(new_used_40 > builtin::array_len(self_35.repr)) {
@@ -5623,7 +5598,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_49 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_17: block {
-                n_57 = $av_310 - 0;
+                n_57 = end - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_17 n_57 == 0;
                 new_used_62 = self_49.used + n_57;
                 if @unlikely(new_used_62 > builtin::array_len(self_49.repr)) {
@@ -5632,7 +5607,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_63 = self_49.used;
                 self_49.used = new_used_62;
-                builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
+                builtin::array_copy<u8>(self_49.repr, start_63, repr, 0, n_57);
             };
         }
         return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
@@ -5666,7 +5641,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_100 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_37: block {
-                n_108 = $av_310 - 0;
+                n_108 = end - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_37 n_108 == 0;
                 new_used_113 = self_100.used + n_108;
                 if @unlikely(new_used_113 > builtin::array_len(self_100.repr)) {
@@ -5675,7 +5650,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_114 = self_100.used;
                 self_100.used = new_used_113;
-                builtin::array_copy<u8>(self_100.repr, start_114, prefix.repr, 0, n_108);
+                builtin::array_copy<u8>(self_100.repr, start_114, repr, 0, n_108);
             };
         }
         self_116 = self.buf;
@@ -5726,7 +5701,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_155 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_58: block {
-                n_163 = $av_310 - 0;
+                n_163 = end - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_58 n_163 == 0;
                 new_used_168 = self_155.used + n_163;
                 if @unlikely(new_used_168 > builtin::array_len(self_155.repr)) {
@@ -5735,7 +5710,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_169 = self_155.used;
                 self_155.used = new_used_168;
-                builtin::array_copy<u8>(self_155.repr, start_169, prefix.repr, 0, n_163);
+                builtin::array_copy<u8>(self_155.repr, start_169, repr, 0, n_163);
             };
         }
         self_171 = self.buf;
@@ -5796,7 +5771,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_214 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_80: block {
-                n_222 = $av_310 - 0;
+                n_222 = end - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_80 n_222 == 0;
                 new_used_227 = self_214.used + n_222;
                 if @unlikely(new_used_227 > builtin::array_len(self_214.repr)) {
@@ -5805,7 +5780,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_228 = self_214.used;
                 self_214.used = new_used_227;
-                builtin::array_copy<u8>(self_214.repr, start_228, prefix.repr, 0, n_222);
+                builtin::array_copy<u8>(self_214.repr, start_228, repr, 0, n_222);
             };
         }
         self_230 = self.buf;
@@ -5864,7 +5839,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_273 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_102: block {
-                n_281 = $av_310 - 0;
+                n_281 = end - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_102 n_281 == 0;
                 new_used_286 = self_273.used + n_281;
                 if @unlikely(new_used_286 > builtin::array_len(self_273.repr)) {
@@ -5873,7 +5848,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_287 = self_273.used;
                 self_273.used = new_used_286;
-                builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
+                builtin::array_copy<u8>(self_273.repr, start_287, repr, 0, n_281);
             };
         }
         return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
@@ -6626,84 +6601,72 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
-fn "core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar"(self, s) {
-    let $qm_e_11: ref "core:serde//SerializeError";
-    let v_26: i32;
-    let v_30: ref "core:prelude/types.wado//Box<core:value/Value>";
-    let key_40: ref "core:prelude/string.wado//String";
-    let value_41: ref "core:value//Value";
-    let self_44: ref "core:prelude/string.wado//StrSlice";
+fn "core:value/core:value/ValueStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(self, name, value) {
+    let v_3: ref "core:prelude/types.wado//Box<core:value/Value>";
+    let self_12: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";
+    let key_13: ref "core:prelude/string.wado//String";
+    let value_14: ref "core:value//Value";
     let existing_index: i32;
     let $v1: i32;
     let new_index: i32;
-    let self_60: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let value_61: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
+    let self_33: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    let value_34: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
     let used: i32;
-    let elements_70: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let elements_71: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let s_73: ref "core:prelude/string.wado//String";
-    let self_90: ref "core:prelude/string.wado//StrSlice";
-    let repr_158: ref Array<u8>;
-    let repr_161: ref Array<u8>;
-    let part_164: ref Array<u8>;
-    let repr_171: ref Array<u8>;
-    let part_174: ref Array<u8>;
-    let v_176: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let v_177: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let $sroa_members_0: ref "core:prelude/traits.wado//StructField<default_type_param.wado/$anon_{a:i32},i32>";
-    let $sroa_st_entries: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";
-    let $av_190: i32;
-    $sroa_members_0 = struct.new "core:prelude/traits.wado//StructField<default_type_param.wado/$anon_{a:i32},i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
-    $sroa_st_entries = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_70 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_70, used: 0 }), entries: ref.as_non_null(elements_71 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_71, used: 0 }), size: 0, deleted_count: 0 };
-    s_73 = $sroa_members_0.field_name;
-    repr_158 = s_73.repr;
-    self_90 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_158, start: 0, end: 1 };
-    repr_161 = self_90.repr;
-    part_164 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>(part_164, 0, repr_161, 0, 1);
-    let $array_clone_dst_2: ref Array<u8>;
-    $array_clone_dst_2 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>($array_clone_dst_2, 0, part_164, 0, 1);
-    v_26 = self.a;
-    v_30 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
-    v_30.value = struct.new "core:value//Value::Int" { discriminant: 2, payload_0: builtin::i64_extend_i32_s(v_26) };
-    self_44 = struct.new "core:prelude/string.wado//StrSlice" { repr: $array_clone_dst_2, start: 0, end: 1 };
-    repr_171 = self_44.repr;
-    part_174 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>(part_174, 0, repr_171, 0, 1);
-    key_40 = struct.new "core:prelude/string.wado//String" { repr: part_174, used: 1 };
-    value_41 = "default_type_param.wado/$value_copy$core:value/Value"(v_30.value);
-    $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_16: block {
-        existing_index = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"($sroa_st_entries, key_40);
+    let $av_42: i32;
+    let $av_43: i32;
+    v_3 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
+    v_3.value = struct.new "core:value//Value::Int" { discriminant: 2, payload_0: builtin::i64_extend_i32_s(value) };
+    self_12 = self.entries;
+    $av_42 = name.used;
+    key_13 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_42); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_42); $array_clone_dst_2), used: $av_42 };
+    value_14 = "default_type_param.wado/$value_copy$core:value/Value"(v_3.value);
+    $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_6: block {
+        existing_index = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"(self_12, key_13);
         if existing_index >= 0 {
-            $v1 = $sroa_st_entries.entries.used; if @unlikely(existing_index >= $v1) {
+            $v1 = self.entries.entries.used; if @unlikely(existing_index >= $v1) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(existing_index, $v1);
                 unreachable;
-            }; builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">($sroa_st_entries.entries.repr, existing_index).value = value_41;
-            break $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_16;
+            }; builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(self.entries.entries.repr, existing_index).value = value_14;
+            break $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_6;
         }
-        new_index = $sroa_st_entries.entries.used;
-        self_60 = $sroa_st_entries.entries;
-        $av_190 = key_40.used;
-        value_61 = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = key_40.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_190); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_190); $array_clone_dst_5), used: $av_190 }, value: value_41, deleted: 0 };
-        used = self_60.used;
-        if @unlikely(used >= builtin::array_len(self_60.repr)) {
+        new_index = self.entries.entries.used;
+        self_33 = self_12.entries;
+        $av_43 = key_13.used;
+        value_34 = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = key_13.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_43); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_43); $array_clone_dst_5), used: $av_43 }, value: value_14, deleted: 0 };
+        used = self_33.used;
+        if @unlikely(used >= builtin::array_len(self_33.repr)) {
             cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::grow"(self_60);
+            "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::grow"(self_33);
         }
-        builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(self_60.repr, used, value_61);
-        self_60.used = used + 1;
-        $sroa_st_entries.root = ref.as_non_null("core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node$scalar"($sroa_st_entries.nodes, $sroa_st_entries.root, key_40, new_index));
-        $sroa_st_entries.size = $sroa_st_entries.size + 1;
+        builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(self_33.repr, used, value_34);
+        self_33.used = used + 1;
+        self_12.root = ref.as_non_null("core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node$scalar"(self_12.nodes, self_12.root, key_13, new_index));
+        self_12.size = self_12.size + 1;
     };
-    if @likely(ref.is_null(ref.null none)) {
+    return ref.null none;
+}
+
+fn "core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar"(self, s) {
+    let st: ref "core:value//ValueStructSerializer";
+    let name_8: ref "core:prelude/string.wado//String";
+    let $qm_e_11: ref "core:serde//SerializeError";
+    let $match_14: ref null "core:serde//SerializeError";
+    let v_29: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";
+    let elements_30: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let elements_31: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    let v_34: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let v_35: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    st = struct.new "core:value//ValueStructSerializer" { out: s, entries: struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_30 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_30, used: 0 }), entries: ref.as_non_null(elements_31 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_31, used: 0 }), size: 0, deleted_count: 0 } };
+    name_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    $match_14 = "core:value/core:value/ValueStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(st, name_8, self.a);
+    if @likely(ref.is_null($match_14)) {
     } else {
-        $qm_e_11 = ref.as_non_null(ref.null none);
+        $qm_e_11 = ref.as_non_null($match_14);
         cold_path;
         return $qm_e_11;
     }
-    return s.value = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: $sroa_st_entries.root, nodes: ref.as_non_null(v_176 = $sroa_st_entries.nodes; struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(v_176.repr, v_176.used)), used: v_176.used }), entries: ref.as_non_null(v_177 = $sroa_st_entries.entries; struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(v_177.repr, v_177.used)), used: v_177.used }), size: $sroa_st_entries.size, deleted_count: $sroa_st_entries.deleted_count } }, ref.null none;
+    return st.out.value = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null(v_29 = st.entries; struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: v_29.root, nodes: ref.as_non_null(v_34 = v_29.nodes; struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(v_34.repr, v_34.used)), used: v_34.used }), entries: ref.as_non_null(v_35 = v_29.entries; struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(v_35.repr, v_35.used)), used: v_35.used }), size: v_29.size, deleted_count: v_29.deleted_count }) }, ref.null none;
 }
 
 fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSerializer>$scalar"(self, s) {
@@ -6745,9 +6708,9 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
     let self_145: ref "core:prelude/string.wado//String";
     let new_used_155: i32;
     let start_156: i32;
+    let $sroa_v_entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
     let $sroa_$iter_0_repr: ref "Array<core:value/Value>";
     let $sroa_$iter_0_index: i32;
-    let $sroa_v_entries: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
     return let $match_scrut_0: ref "core:value//Value", $match_scrut_0 = self.value, (if $match_scrut_0.discriminant == 0 -> ref null "core:serde//SerializeError" {
         "core:json/write_json_null"(s);
     } else if ref.test "core:value//Value::Bool"($match_scrut_0) -> ref null "core:serde//SerializeError" {
@@ -6902,81 +6865,25 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
 }
 
 fn "core:serde/default_type_param.wado/$anon_{a:i32}^core:serde/Serialize::serialize<core:value/ValueSerializer>$scalar$spec0"(s) {
+    let st: ref "core:value//ValueStructSerializer";
+    let name_7: ref "core:prelude/string.wado//String";
     let $qm_e_10: ref "core:serde//SerializeError";
-    let v_29: ref "core:prelude/types.wado//Box<core:value/Value>";
-    let key_39: ref "core:prelude/string.wado//String";
-    let value_40: ref "core:value//Value";
-    let self_43: ref "core:prelude/string.wado//StrSlice";
-    let existing_index: i32;
-    let $v1: i32;
-    let new_index: i32;
-    let self_59: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let value_60: ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>";
-    let used: i32;
-    let elements_69: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let elements_70: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let s_72: ref "core:prelude/string.wado//String";
-    let self_89: ref "core:prelude/string.wado//StrSlice";
-    let repr_157: ref Array<u8>;
-    let repr_160: ref Array<u8>;
-    let part_163: ref Array<u8>;
-    let repr_170: ref Array<u8>;
-    let part_173: ref Array<u8>;
-    let v_175: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
-    let v_176: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
-    let $sroa_members_0: ref "core:prelude/traits.wado//StructField<default_type_param.wado/$anon_{a:i32},i32>";
-    let $sroa_st_entries: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";
-    let $av_189: i32;
-    $sroa_members_0 = struct.new "core:prelude/traits.wado//StructField<default_type_param.wado/$anon_{a:i32},i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
-    $sroa_st_entries = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_69 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_69, used: 0 }), entries: ref.as_non_null(elements_70 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_70, used: 0 }), size: 0, deleted_count: 0 };
-    s_72 = $sroa_members_0.field_name;
-    repr_157 = s_72.repr;
-    self_89 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_157, start: 0, end: 1 };
-    repr_160 = self_89.repr;
-    part_163 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>(part_163, 0, repr_160, 0, 1);
-    let $array_clone_dst_2: ref Array<u8>;
-    $array_clone_dst_2 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>($array_clone_dst_2, 0, part_163, 0, 1);
-    v_29 = struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value" { 0 } };
-    v_29.value = struct.new "core:value//Value::Int" { discriminant: 2, payload_0: 1_i64 };
-    self_43 = struct.new "core:prelude/string.wado//StrSlice" { repr: $array_clone_dst_2, start: 0, end: 1 };
-    repr_170 = self_43.repr;
-    part_173 = builtin::array_new<u8>(1);
-    builtin::array_copy<u8>(part_173, 0, repr_170, 0, 1);
-    key_39 = struct.new "core:prelude/string.wado//String" { repr: part_173, used: 1 };
-    value_40 = "default_type_param.wado/$value_copy$core:value/Value"(v_29.value);
-    $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_16: block {
-        existing_index = "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::find_index"($sroa_st_entries, key_39);
-        if existing_index >= 0 {
-            $v1 = $sroa_st_entries.entries.used; if @unlikely(existing_index >= $v1) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(existing_index, $v1);
-                unreachable;
-            }; builtin::array_get_value<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">($sroa_st_entries.entries.repr, existing_index).value = value_40;
-            break $inline_core_collections_TreeMap_core_prelude_string_wado_String_core_value_Value___insert_16;
-        }
-        new_index = $sroa_st_entries.entries.used;
-        self_59 = $sroa_st_entries.entries;
-        $av_189 = key_39.used;
-        value_60 = struct.new "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>" { key: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = key_39.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_189); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_189); $array_clone_dst_5), used: $av_189 }, value: value_40, deleted: 0 };
-        used = self_59.used;
-        if @unlikely(used >= builtin::array_len(self_59.repr)) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>::grow"(self_59);
-        }
-        builtin::array_set<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(self_59.repr, used, value_60);
-        self_59.used = used + 1;
-        $sroa_st_entries.root = ref.as_non_null("core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>::insert_node$scalar"($sroa_st_entries.nodes, $sroa_st_entries.root, key_39, new_index));
-        $sroa_st_entries.size = $sroa_st_entries.size + 1;
-    };
-    if @likely(ref.is_null(ref.null none)) {
+    let $match_14: ref null "core:serde//SerializeError";
+    let v_28: ref "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>";
+    let elements_29: ref "Array<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let elements_30: ref "Array<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    let v_33: ref "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>";
+    let v_34: ref "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>";
+    st = struct.new "core:value//ValueStructSerializer" { out: s, entries: struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: ref.as_non_null(elements_29 = array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(); struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: elements_29, used: 0 }), entries: ref.as_non_null(elements_30 = array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(); struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: elements_30, used: 0 }), size: 0, deleted_count: 0 } };
+    name_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
+    $match_14 = "core:value/core:value/ValueStructSerializer^core:serde/SerializeStruct::field<i32,&core:prelude/string.wado/String>$scalar"(st, name_7, 1);
+    if @likely(ref.is_null($match_14)) {
     } else {
-        $qm_e_10 = ref.as_non_null(ref.null none);
+        $qm_e_10 = ref.as_non_null($match_14);
         cold_path;
         return $qm_e_10;
     }
-    return s.value = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: $sroa_st_entries.root, nodes: ref.as_non_null(v_175 = $sroa_st_entries.nodes; struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(v_175.repr, v_175.used)), used: v_175.used }), entries: ref.as_non_null(v_176 = $sroa_st_entries.entries; struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(v_176.repr, v_176.used)), used: v_176.used }), size: $sroa_st_entries.size, deleted_count: $sroa_st_entries.deleted_count } }, ref.null none;
+    return st.out.value = struct.new "core:value//Value::Object" { discriminant: 10, payload_0: ref.as_non_null(v_28 = st.entries; struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: v_28.root, nodes: ref.as_non_null(v_33 = v_28.nodes; struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(v_33.repr, v_33.used)), used: v_33.used }), entries: ref.as_non_null(v_34 = v_28.entries; struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: ref.as_non_null(builtin::array_clone_deep_prefix<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(v_34.repr, v_34.used)), used: v_34.used }), size: v_28.size, deleted_count: v_28.deleted_count }) }, ref.null none;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
@@ -7126,14 +7033,14 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
         pos_27 = (end - 38) + 19;
         t_28 = mid;
         i_29 = 0;
-        b736: block {
-            l737: loop {
-                break_if b736 i_29 >= 19;
+        b733: block {
+            l734: loop {
+                break_if b733 i_29 >= 19;
                 pos_27 = pos_27 - 1;
                 builtin::array_set_u8(arr_15, pos_27, (48 + builtin::i32_wrap_i64(t_28 %u 10_i64)) & 255);
                 t_28 = t_28 /u 10_i64;
                 i_29 = i_29 + 1;
-                continue l737;
+                continue l734;
             };
         };
     }
@@ -7141,28 +7048,28 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::fmt_decimal_magnitud
         pos_34 = (end - 19) + 19;
         t_35 = bottom;
         i_36 = 0;
-        b739: block {
-            l740: loop {
-                break_if b739 i_36 >= 19;
+        b736: block {
+            l737: loop {
+                break_if b736 i_36 >= 19;
                 pos_34 = pos_34 - 1;
                 builtin::array_set_u8(arr_15, pos_34, (48 + builtin::i32_wrap_i64(t_35 %u 10_i64)) & 255);
                 t_35 = t_35 /u 10_i64;
                 i_36 = i_36 + 1;
-                continue l740;
+                continue l737;
             };
         };
     }
     pos_41 = offset_14 + top_digits;
     t_42 = top;
     i_43 = 0;
-    b741: block {
-        l742: loop {
-            break_if b741 i_43 >= top_digits;
+    b738: block {
+        l739: loop {
+            break_if b738 i_43 >= top_digits;
             pos_41 = pos_41 - 1;
             builtin::array_set_u8(arr_15, pos_41, (48 + builtin::i32_wrap_i64(t_42 %u 10_i64)) & 255);
             t_42 = t_42 /u 10_i64;
             i_43 = i_43 + 1;
-            continue l742;
+            continue l739;
         };
     };
 }
@@ -7180,14 +7087,14 @@ fn "core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_3 + digit_count_2;
     t = self;
     i = 0;
-    b743: block {
-        l744: loop {
-            break_if b743 i >= digit_count_2;
+    b740: block {
+        l741: loop {
+            break_if b740 i >= digit_count_2;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l744;
+            continue l741;
         };
     };
 }
@@ -7208,14 +7115,14 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_6 + digit_count_5;
     t = abs_val;
     i = 0;
-    b745: block {
-        l746: loop {
-            break_if b745 i >= digit_count_5;
+    b742: block {
+        l743: loop {
+            break_if b742 i >= digit_count_5;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l746;
+            continue l743;
         };
     };
 }

@@ -79,7 +79,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:./variant_import_struct_module.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 };
+global global:./variant_import_struct_module.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(32);
 global global:variant_import_struct.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(93);
 global global:variant_import_struct.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(91);
 
@@ -212,15 +212,12 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
     let rpad: ref "core:prelude/string.wado//String";
     let i_9: i32;
     let i_10: i32;
-    let other_15: ref "core:prelude/string.wado//String";
     let new_used_26: i32;
     let start_27: i32;
     let result_31: ref "core:prelude/string.wado//String";
     let result_34: ref "core:prelude/string.wado//String";
-    let other_38: ref "core:prelude/string.wado//String";
     let new_used_49: i32;
     let start_50: i32;
-    let other_53: ref "core:prelude/string.wado//String";
     let new_used_64: i32;
     let start_65: i32;
     let result_69: ref "core:prelude/string.wado//String";
@@ -246,7 +243,6 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
     b5: block {
         l6: loop {
             break_if b5 i_4 >= pad_len;
-            other_15 = global:./variant_import_struct_module.wado::$const_obj_0;
             new_used_26 = pad.used + 1;
             if @unlikely(new_used_26 > builtin::array_len(pad.repr)) {
                 cold_path;
@@ -254,7 +250,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
             }
             start_27 = pad.used;
             pad.used = new_used_26;
-            builtin::array_copy<u8>(pad.repr, start_27, other_15.repr, 0, 1);
+            builtin::array_copy<u8>(pad.repr, start_27, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
             i_4 = i_4 + 1;
             continue l6;
         };
@@ -278,7 +274,6 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         b10: block {
             l11: loop {
                 break_if b10 i_9 >= left;
-                other_38 = global:./variant_import_struct_module.wado::$const_obj_0;
                 new_used_49 = lpad.used + 1;
                 if @unlikely(new_used_49 > builtin::array_len(lpad.repr)) {
                     cold_path;
@@ -286,7 +281,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
                 }
                 start_50 = lpad.used;
                 lpad.used = new_used_49;
-                builtin::array_copy<u8>(lpad.repr, start_50, other_38.repr, 0, 1);
+                builtin::array_copy<u8>(lpad.repr, start_50, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
                 i_9 = i_9 + 1;
                 continue l11;
             };
@@ -295,7 +290,6 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         b13: block {
             l14: loop {
                 break_if b13 i_10 >= right;
-                other_53 = global:./variant_import_struct_module.wado::$const_obj_0;
                 new_used_64 = rpad.used + 1;
                 if @unlikely(new_used_64 > builtin::array_len(rpad.repr)) {
                     cold_path;
@@ -303,7 +297,7 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
                 }
                 start_65 = rpad.used;
                 rpad.used = new_used_64;
-                builtin::array_copy<u8>(rpad.repr, start_65, other_53.repr, 0, 1);
+                builtin::array_copy<u8>(rpad.repr, start_65, global:./variant_import_struct_module.wado::$const_obj_0, 0, 1);
                 i_10 = i_10 + 1;
                 continue l14;
             };

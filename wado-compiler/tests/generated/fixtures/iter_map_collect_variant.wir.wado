@@ -196,30 +196,34 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let buf_2: ref "core:prelude/string.wado//String";
     let i: i32;
     let item: ref "core:prelude/string.wado//String";
-    let n_18: i32;
     let new_used: i32;
     let start_23: i32;
     let $licm_used_27: i32;
     let $licm_repr_28: ref "Array<core:prelude/string.wado/String>";
+    let $licm_used_29: i32;
+    let $licm_repr_30: ref Array<u8>;
+    let $licm_arith_44: bool;
     buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used * 8), used: 0 };
     i = 0;
     $licm_used_27 = self.used;
     $licm_repr_28 = self.repr;
+    $licm_used_29 = separator.used;
+    $licm_repr_30 = separator.repr;
+    $licm_arith_44 = $licm_used_29 == 0;
     b5: block {
         l6: loop {
             break_if b5 i >= $licm_used_27;
             if i > 0 {
                 $inline_core_prelude_string_wado_String__internal_push_string_6: block {
-                    n_18 = separator.used;
-                    break_if $inline_core_prelude_string_wado_String__internal_push_string_6 n_18 == 0;
-                    new_used = buf_2.used + n_18;
+                    break_if $inline_core_prelude_string_wado_String__internal_push_string_6 $licm_arith_44;
+                    new_used = buf_2.used + $licm_used_29;
                     if @unlikely(new_used > builtin::array_len(buf_2.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used);
                     }
                     start_23 = buf_2.used;
                     buf_2.used = new_used;
-                    builtin::array_copy<u8>(buf_2.repr, start_23, separator.repr, 0, n_18);
+                    builtin::array_copy<u8>(buf_2.repr, start_23, $licm_repr_30, 0, $licm_used_29);
                 };
             }
             item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_28, i);

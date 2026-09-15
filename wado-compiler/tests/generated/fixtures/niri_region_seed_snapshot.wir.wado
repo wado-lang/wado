@@ -64,7 +64,7 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:niri_region_seed_snapshot.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
+global global:niri_region_seed_snapshot.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(99);
 global global:niri_region_seed_snapshot.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(120);
 
 fn "niri_region_seed_snapshot.wado/run"() with Stdout {
@@ -72,7 +72,6 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_27: i32;
     let start_28: i32;
-    let other_31: ref "core:prelude/string.wado//String";
     let new_used_42: i32;
     let start_43: i32;
     let handle_48: i32;
@@ -99,7 +98,6 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
         $local_2.used = new_used_27;
         builtin::array_copy<u8>($local_2.repr, start_28, s.repr, 0, 2);
     };
-    other_31 = global:niri_region_seed_snapshot.wado::$const_obj_0;
     new_used_42 = 2 + 1;
     if @unlikely(new_used_42 > builtin::array_len(s.repr)) {
         cold_path;
@@ -107,7 +105,7 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     }
     start_43 = s.used;
     s.used = new_used_42;
-    builtin::array_copy<u8>(s.repr, start_43, other_31.repr, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_43, global:niri_region_seed_snapshot.wado::$const_obj_0, 0, 1);
     rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
     tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
     handle_48 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
