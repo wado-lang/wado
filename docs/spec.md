@@ -353,7 +353,15 @@ global mut counter: i32 = 0;
 pub global VERSION: i32 = 1;
 ```
 
-Any type is supported. Any pure expression (no effects) can be used as an initializer.
+Any type is supported. Any pure expression (no effects) can be used as an
+initializer. An initializer runs at module initialization, with no handler
+installed for it and in an order it does not choose. It declares no `with`
+clause and has nowhere to declare one, so calling a function that declares an
+effect is an error, as is dispatching an operation backed by the host.
+
+A user-defined effect's operation is answered by an installed handler and traps
+where none is, in an initializer as in a function body, so an initializer may
+dispatch one. It may also install its own handler.
 
 #### Mutability
 

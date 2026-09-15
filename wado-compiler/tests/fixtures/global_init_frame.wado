@@ -1,0 +1,43 @@
+// An initializer's frame travels with its body. `&mut x` on a primitive local
+// makes codegen box that local, and the fact lives in `address_taken_locals`,
+// not in the body — so reify hands the whole frame to the `$init$` function and
+// lowering shifts it alongside the locals when it merges initializers.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) {
+    *x = *x + 5;
+}
+
+// Two of them, so the second is merged at a non-zero local offset and its
+// address-taken index has to shift with its locals.
+global FIRST: i32 = hold: {
+    let mut x = 1;
+    bump(&mut x);
+    break hold: x
+};
+
+global SECOND: i32 = hold: {
+    let mut y = 100;
+    bump(&mut y);
+    bump(&mut y);
+    break hold: y
+};
+
+fn in_fn() -> i32 {
+    let mut x = 1;
+    bump(&mut x);
+    return x;
+}
+
+export fn run() with Stdout {
+    assert FIRST == 6;
+    assert SECOND == 110;
+    assert FIRST == in_fn();
+    println(`${FIRST} ${SECOND}`);
+}
+
+__DATA__
+{
+    "stdout": "6 110\n"
+}

@@ -189,8 +189,7 @@ pub(super) fn assoc_const_owner_of_path(
     ident: &ast::IdentExpr,
     resolutions: &Resolutions,
 ) -> Option<DefId> {
-    let owner = ident.segments.len().checked_sub(2)?;
-    match resolutions.get(ident.segments[owner].id) {
+    match resolutions.get(ident.owner_segment()?.id) {
         Resolution::Def(def) => Some(def),
         _ => None,
     }

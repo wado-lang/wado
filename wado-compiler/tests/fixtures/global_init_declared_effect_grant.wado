@@ -1,0 +1,43 @@
+// A `with … do` grants the effect it installs to its body, and nothing beyond
+// it. `tick` declares `with Counter`, so the call outside the install is an
+// effect the initializer cannot answer.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Tally {
+    value: i32,
+}
+
+impl Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+fn tick() -> i32 with Counter {
+    return Counter::next();
+}
+
+global INSIDE: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: tick()
+    }
+    break hold: 0
+};
+
+global OUTSIDE: i32 = tick();
+
+export fn run() with Stdout {
+    println(`${INSIDE} ${OUTSIDE}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializer must be pure (no effects), but calls effectful function 'tick'"
+}

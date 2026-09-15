@@ -1,0 +1,49 @@
+// A global initializer may install its own handler, which answers the
+// operations its body dispatches and nothing beyond it — a later initializer
+// starts from its own. See WEP: Global Variables.
+
+use { println, Stdout } from "core:cli";
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct Tally {
+    value: i32,
+}
+
+impl Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+global COUNTED: i32 = hold: {
+    let mut tally = Tally { value: 10 };
+    with Counter => &mut tally do {
+        break hold: Counter::next() + Counter::next()
+    }
+    break hold: 0
+};
+
+// The handler is installed for the initializer alone, so a later one starts
+// from its own.
+global AGAIN: i32 = hold: {
+    let mut tally = Tally { value: 100 };
+    with Counter => &mut tally do {
+        break hold: Counter::next()
+    }
+    break hold: 0
+};
+
+export fn run() with Stdout {
+    assert COUNTED == 23;
+    assert AGAIN == 101;
+    println(`${COUNTED} ${AGAIN}`);
+}
+
+__DATA__
+{
+    "stdout": "23 101\n"
+}

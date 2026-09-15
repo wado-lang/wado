@@ -5718,6 +5718,78 @@ impl<E> GlobalInit<E> {
     }
 }
 
+/// Whether the Wasm slot can hold this value directly. Under-approximates: the
+/// classifier on the lowered Wasm value promotes back what this defers.
+#[must_use]
+pub fn is_constant_initializer(expr: &TirExpr, type_table: &TypeTable) -> bool {
+    match &expr.kind {
+        TirExprKind::IntLiteral { .. }
+        | TirExprKind::FloatLiteral { .. }
+        | TirExprKind::BoolLiteral(_)
+        | TirExprKind::CharLiteral(_)
+        | TirExprKind::Unit
+        | TirExprKind::Null => true,
+        TirExprKind::Cast { expr: inner, .. } => is_constant_initializer(inner, type_table),
+        TirExprKind::Unary { op, expr: inner } => {
+            matches!(op, TirUnaryOp::Neg) && is_constant_initializer(inner, type_table)
+        }
+        TirExprKind::Binary { op, left, right } => {
+            matches!(op, TirBinaryOp::Add | TirBinaryOp::Sub | TirBinaryOp::Mul)
+                && is_wasm_width_int(expr.type_id, type_table)
+                && is_constant_initializer(left, type_table)
+                && is_constant_initializer(right, type_table)
+        }
+        _ => false,
+    }
+}
+
+/// An integer whose Wado width matches the Wasm operand it lowers to, so
+/// wrapping needs no masking. Wasm folds `add` / `sub` / `mul` on these alone.
+fn is_wasm_width_int(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(type_id),
+        ResolvedType::Primitive(
+            PrimitiveType::I32 | PrimitiveType::U32 | PrimitiveType::I64 | PrimitiveType::U64
+        )
+    )
+}
+
+/// The placeholder a deferred global's slot holds until its initialization
+/// function assigns the declared value.
+#[must_use]
+pub fn placeholder_value(type_id: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let kind = match type_table.get(type_id) {
+        ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64) => {
+            TirExprKind::FloatLiteral {
+                value: 0.0,
+                repr: "0.0".to_string(),
+            }
+        }
+        ResolvedType::Primitive(PrimitiveType::Bool) => TirExprKind::BoolLiteral(false),
+        ResolvedType::Primitive(PrimitiveType::Char) => TirExprKind::CharLiteral('\0'),
+        ResolvedType::Primitive(_) => TirExprKind::IntLiteral {
+            value: 0,
+            repr: "0".to_string(),
+        },
+        ResolvedType::Unit => TirExprKind::Unit,
+        // String, List, a struct — every reference type starts null.
+        _ => TirExprKind::Null,
+    };
+    TirExpr::new(kind, type_id, span)
+}
+
+/// A global initializer function's body: `{ return <value>; }`.
+#[must_use]
+pub fn initializer_body(value: TirExpr, span: Span) -> TirBlock {
+    TirBlock {
+        stmts: vec![TirStmt::new(
+            TirStmtKind::Return { value: Some(value) },
+            span,
+        )],
+        span,
+    }
+}
+
 /// Global variable declaration in TIR
 #[derive(Debug, Clone)]
 pub struct TirGlobal {
@@ -5734,10 +5806,6 @@ pub struct TirGlobal {
     /// Module where this global is defined
     pub module_source: ModuleSource,
     pub span: Span,
-    /// Per-local metadata for the initializer expression. Populated when
-    /// the initializer is non-trivial (e.g. a literal coercion). Indexed by
-    /// local index, like `TirFunction::locals`.
-    pub locals: Vec<TirLocal>,
 }
 
 #[derive(Debug, Clone)]
@@ -5941,7 +6009,111 @@ pub struct BuiltinDeclaration {
     pub stores: Vec<usize>,
 }
 
+/// A body's local frame. Taken and given whole, so a caller moving a body
+/// between functions cannot carry the locals and leave what describes them.
+#[derive(Debug, Clone, Default)]
+pub struct LocalFrame {
+    pub locals: Vec<TirLocal>,
+    /// Indices of the locals something takes the address of (`&x` / `&mut x`),
+    /// which codegen boxes so a write through the reference is seen.
+    pub address_taken: IndexSet<u32>,
+}
+
+impl LocalFrame {
+    /// Append `other`, renumbering its locals to follow this frame's.
+    pub fn absorb(&mut self, other: LocalFrame, shift: impl FnOnce(u32)) {
+        let count = u32::try_from(other.locals.len()).expect("local count fits in u32");
+        assert!(
+            other.address_taken.iter().all(|&i| i < count),
+            "an address-taken index names a local of its own frame"
+        );
+        let offset = u32::try_from(self.locals.len()).expect("local count fits in u32");
+        if offset > 0 && !other.locals.is_empty() {
+            shift(offset);
+        }
+        self.locals.extend(other.locals);
+        self.address_taken
+            .extend(other.address_taken.into_iter().map(|i| i + offset));
+    }
+}
+
 impl TirFunction {
+    /// Take the body's frame, leaving an empty one. The counterpart of
+    /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
+    /// describes its locals with it.
+    pub fn take_frame(&mut self) -> LocalFrame {
+        self.local_count = 0;
+        LocalFrame {
+            locals: std::mem::take(&mut self.locals),
+            address_taken: std::mem::take(&mut self.address_taken_locals),
+        }
+    }
+
+    /// Give the body a whole new frame. The three fields describing one are
+    /// replaced together, so a caller swapping a body cannot leave one of them
+    /// describing the body it replaced.
+    pub fn set_frame(&mut self, frame: LocalFrame) {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
+        self.local_count = u32::try_from(locals.len()).expect("local count fits in u32");
+        self.locals = locals;
+        self.address_taken_locals = address_taken;
+    }
+
+    /// A parameterless function the compiler mints for itself: no declaration,
+    /// no generics, no effects.
+    #[must_use]
+    pub fn synthesized(
+        module_source: ModuleSource,
+        name: String,
+        return_type: TypeId,
+        body: TirBlock,
+        frame: LocalFrame,
+        span: Span,
+    ) -> Self {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
+        Self {
+            module_source,
+            def_id: None,
+            is_async: false,
+            name,
+            visibility: Visibility::Public,
+            is_export: false,
+            type_params: Vec::new(),
+            impl_type_params: Vec::new(),
+            monomorph_info: None,
+            method_info: None,
+            params: Vec::new(),
+            return_type,
+            task_return_type: None,
+            effects: Vec::new(),
+            stores: Vec::new(),
+            body: Some(body),
+            span,
+            local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
+            locals,
+            address_taken_locals: address_taken,
+            stores_aliased_locals: IndexSet::default(),
+            is_cm_binding: false,
+            is_dispatch_wrapper: false,
+            is_cm_export: false,
+            is_ambient: false,
+            benign_effects: Vec::new(),
+            inline_hint: InlineHint::Auto,
+            compiler_item: None,
+            export_name: None,
+            allocator_tag: None,
+            declared_return_convention: None,
+            kind: FunctionKind::Regular,
+            return_abi: ReturnAbi::default(),
+        }
+    }
+
     /// Returns true if this is a method (belongs to a struct)
     #[inline]
     pub fn is_method(&self) -> bool {

@@ -330,10 +330,30 @@ pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
 /// passes treat it as a root, so producer and consumers share this name.
 pub const MODULE_INIT_FUNCTION: &str = "$initialize_module";
 
+/// The function holding one global's initializer. Lowering splices these into
+/// [`MODULE_INIT_FUNCTION`] and drops them.
+#[must_use]
+pub fn global_init_function(global: &str) -> String {
+    format!("{INTERNAL_PREFIX}init{INTERNAL_PREFIX}{global}")
+}
+
+/// The global a [`global_init_function`] initializes, or `None` for any other
+/// name.
+#[must_use]
+pub fn global_init_target(name: &str) -> Option<&str> {
+    name.strip_prefix(INTERNAL_PREFIX)?
+        .strip_prefix("init")?
+        .strip_prefix(INTERNAL_PREFIX)
+}
+
 /// Aggregate initializer that calls every module's [`MODULE_INIT_FUNCTION`].
 /// Shares the [`MODULE_INIT_FUNCTION`] prefix, so a `starts_with`
 /// over the latter still covers both.
 pub const MODULES_INIT_FUNCTION: &str = "$initialize_modules";
+
+/// The global [`MODULES_INIT_FUNCTION`] sets once, so a second entry into the
+/// component re-runs no initializer.
+pub const MODULES_INIT_FLAG: &str = "$modules_initialized";
 
 /// Prefix the const-object globalization pass stamps on the globals it hoists
 /// constant aggregates into (`$const_obj_0`, …). It both mints and rescans

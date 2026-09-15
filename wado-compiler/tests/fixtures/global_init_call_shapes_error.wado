@@ -1,0 +1,35 @@
+// An initializer answers for a call whatever spelling it wears. A tagged
+// template is a call on its tag, and a call through a function-typed value is a
+// call on what that value's type declares — one resolver reads both, so neither
+// reaches module init unchecked.
+
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("noisy");
+    return 7;
+}
+
+fn shout<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> i32 with Stdout {
+    println("tag");
+    return 1;
+}
+
+global TAGGED: i32 = shout`hello ${1}`;
+
+global INDIRECT: i32 = hold: {
+    let f: fn() -> i32 with Stdout = noisy;
+    break hold: f()
+};
+
+export fn run() with Stdout {
+    println(`${TAGGED} ${INDIRECT}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializer must be pure (no effects), but calls effectful function 'shout'",
+    "compile_errors_contains": [
+        "global initializer must be pure (no effects), but calls effectful function '(indirect call)'"
+    ]
+}

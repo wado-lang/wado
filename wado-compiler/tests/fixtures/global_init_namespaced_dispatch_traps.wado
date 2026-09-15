@@ -1,0 +1,18 @@
+// The purity check reads the same segment the elaborator does, so an operation
+// reached through a namespace alias resolves to its interface and gets the same
+// answer a bare spelling does: it compiles, and traps with no handler installed.
+
+use { println, Stdout } from "core:cli";
+use c from "./sub/ns_counter.wado";
+
+global COUNTED: i32 = c::Counter::next();
+
+export fn run() with Stdout {
+    println(`${COUNTED}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["no handler installed for `Counter::next`"]
+}

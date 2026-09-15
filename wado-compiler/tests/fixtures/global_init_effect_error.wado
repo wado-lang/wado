@@ -1,0 +1,22 @@
+// An effect a global initializer does not itself discharge has no semantics
+// there: it runs before the program installs anything, in an order the program
+// does not choose. See WEP: Global Variables.
+
+use { println, Stdout } from "core:cli";
+
+fn noisy() -> i32 with Stdout {
+    println("initializing");
+    return 1;
+}
+
+// Calls a function that declares an effect.
+global FROM_EFFECTFUL_FN: i32 = noisy();
+
+export fn run() with Stdout {
+    println(`${FROM_EFFECTFUL_FN}`);
+}
+
+__DATA__
+{
+    "compile_error": "global initializer must be pure (no effects), but calls effectful function 'noisy'"
+}
