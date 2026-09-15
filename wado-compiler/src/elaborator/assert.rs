@@ -486,9 +486,8 @@ impl CaptureScanner {
             }
             Expr::ComparisonChain(chain) => {
                 self.scan(&chain.first);
-                for (idx, cmp) in chain.comparisons.iter().enumerate() {
-                    // `a < b < c` runs as `(a < b) && (b < c)`.
-                    self.conditional = conditional || idx >= 1;
+                // A chain evaluates every term, so none of them is conditional.
+                for cmp in &chain.comparisons {
                     self.scan(&cmp.right);
                 }
                 self.conditional = conditional;

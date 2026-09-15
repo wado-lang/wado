@@ -1,0 +1,26 @@
+// A chain evaluates every operand once, left to right, and then tests them.
+// `bump()` runs even though `0 <= -1` already decided the answer, so the
+// counter reaches 2 — `&&` is what skips an operand on a path.
+
+use { println, Stdout } from "core:cli";
+
+struct Counter { hits: i32 }
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.hits += 1;
+        return 10;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { hits: 0 };
+    let a = 0 <= builtin::black_box(-1) < c.bump();
+    let b = 0 <= builtin::black_box(5) < c.bump();
+    println(`${a} ${b} ${c.hits}`);
+}
+
+__DATA__
+{
+    "stdout": "false true 2\n"
+}

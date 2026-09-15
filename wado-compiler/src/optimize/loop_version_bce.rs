@@ -14,7 +14,7 @@ use crate::nir_value_graph::ValueKind;
 use crate::tir::TypeTable;
 use crate::token::Span;
 
-use super::arena_query::block_contains_loop;
+use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
     eliminate_condition, induction_entry, negated_operand, node_modifies, opaque_local,
@@ -27,7 +27,9 @@ use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
-use crate::optimize::arena_query::is_pure_operand;
+use crate::optimize::arena_query::{
+    expr_node_may_trap_typed, is_pure_operand, local_written_by, mentions_local_except,
+};
 use crate::optimize::mod_ref::compute_fn_effects;
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
@@ -57,6 +59,7 @@ struct Plan {
 /// `if`'s then-block (holding exactly the fast `Loop` stmt) and the fast loop's
 /// body. The guard fields the fill idiom needs live on the paired [`Plan`].
 struct FastArm {
+    version_if: StmtId,
     then_block: BlockId,
     fast_body: BlockId,
 }
@@ -439,6 +442,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     engine.set_block_stmts(plan.parent, stmts);
 
     FastArm {
+        version_if: if_stmt,
         then_block,
         fast_body,
     }
@@ -671,12 +675,9 @@ fn try_fill_idiom(
         },
         Operand::Value(_) => return false,
     };
-    // Middle statements survive verbatim, re-run once with `i` at its last
-    // iterated value — which is the final iteration, so their finals come out
-    // right without anyone classifying what they compute. Each must write only
-    // locals, and must not read one the sequence writes at or after it: that
-    // would be state carried between iterations, which one re-run cannot
-    // rebuild.
+    // Middle statements are replayed verbatim at the last iterated `i`, so a
+    // read of a local the sequence writes at or after it would see the wrong
+    // iteration's value.
     let middle: Vec<StmtId> = stmts[1..n - 2].to_vec();
     let reserved = [var, arr_local, h];
     let mut effects: Vec<Effects> = Vec::new();
@@ -691,6 +692,16 @@ fn try_fill_idiom(
         if e.reads.iter().any(carried) {
             return false;
         }
+    }
+    // A branch-guarded write is not the last iteration's to make, so it
+    // survives only where nothing can tell which iteration made it last: the
+    // slow arm alone names the local, and the version `if` runs once.
+    let mut conditional = effects.iter().flat_map(|e| &e.conditional).peekable();
+    if conditional.peek().is_some()
+        && (block_repeats(engine.body, plan.parent)
+            || conditional.any(|&l| !confined_to(engine, l, arm.version_if)))
+    {
+        return false;
     }
     let span = engine.body.stmts[loop_stmt].span;
     let ty = engine.locals()[var as usize].type_id;
@@ -816,16 +827,20 @@ fn try_fill_idiom(
 struct Effects {
     reads: Vec<u32>,
     writes: Vec<u32>,
+    /// The writes a branch guards, which the last iteration need not have made.
+    conditional: Vec<u32>,
 }
 
 /// What `stmt` reads and writes, or `None` when running it once cannot stand
-/// for the loop's last iteration: it must write nothing but locals, leave
-/// `reserved` alone, and neither call nor jump.
+/// for the loop's last iteration. A trap is the effect of the iteration that
+/// raises it, so a statement that may trap is not replayable either.
 fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option<Effects> {
     let body = &engine.body;
+    let types = engine.value_graph_type_table();
     let mut eff = Effects {
         reads: Vec::new(),
         writes: Vec::new(),
+        conditional: Vec::new(),
     };
     // A block that binds a local and yields it reads that local only to yield
     // it, so the read is its own write and not a value carried from before.
@@ -833,21 +848,7 @@ fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option
     let mut roots = vec![NodeRef::Stmt(stmt)];
     while let Some(root) = roots.pop() {
         let rejected = body.walk_nodes_under::<()>(root, |n| {
-            let mut constant_operands = true;
-            body.for_each_operand(n, |op| {
-                if let Operand::Value(v) = op
-                    && !matches!(
-                        body.values.kind(v),
-                        ValueKind::Int(..)
-                            | ValueKind::Float(..)
-                            | ValueKind::Bool(_)
-                            | ValueKind::Char(_)
-                    )
-                {
-                    constant_operands = false;
-                }
-            });
-            if !constant_operands {
+            if !pooled_operands_are_literal(body, n) {
                 return ControlFlow::Break(());
             }
             match n {
@@ -857,7 +858,11 @@ fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option
                 NodeRef::Pat(_) => return ControlFlow::Break(()),
                 NodeRef::Stmt(s) => match &body.stmts[s].kind {
                     StmtKind::Let { local_index, .. } => eff.writes.push(*local_index),
-                    StmtKind::Expr(_) | StmtKind::If { .. } | StmtKind::LabeledBlock { .. } => {}
+                    StmtKind::If { .. } => collect_writes(body, n, &mut eff.conditional),
+                    StmtKind::LabeledBlock { label, .. } if has_break_to(body, n, label) => {
+                        collect_writes(body, n, &mut eff.conditional);
+                    }
+                    StmtKind::Expr(_) | StmtKind::LabeledBlock { .. } => {}
                     _ => return ControlFlow::Break(()),
                 },
                 NodeRef::Expr(e) => match &body.exprs[e].kind {
@@ -884,11 +889,30 @@ fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option
                         }
                         return ControlFlow::Continue(false);
                     }
-                    ExprKind::LabeledBlock { .. } => {
+                    ExprKind::LabeledBlock { label, .. } => {
                         if let Some((l, _)) = capture_block_binding(engine, Operand::Expr(e))
                             && local_read_count(body, NodeRef::Stmt(stmt), l) == 1
                         {
                             captured.push(l);
+                        }
+                        // A block nothing breaks out of runs to its end, so its
+                        // writes are as unconditional as the block is.
+                        if has_break_to(body, n, label) {
+                            collect_writes(body, n, &mut eff.conditional);
+                        }
+                    }
+                    ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Switch { .. } => {
+                        collect_writes(body, n, &mut eff.conditional);
+                    }
+                    // `&&` / `||` short-circuit, so the right side runs only on
+                    // the iterations the left side let through.
+                    ExprKind::Binary {
+                        op: NirBinaryOp::And | NirBinaryOp::Or,
+                        right,
+                        ..
+                    } => {
+                        if let Some(re) = right.as_expr() {
+                            collect_writes(body, NodeRef::Expr(re), &mut eff.conditional);
                         }
                     }
                     ExprKind::Dead
@@ -897,6 +921,7 @@ fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option
                     | ExprKind::CmRawCall { .. }
                     | ExprKind::IndirectCall { .. }
                     | ExprKind::ClosureToCanonical { .. } => return ControlFlow::Break(()),
+                    _ if expr_node_may_trap_typed(body, e, types) => return ControlFlow::Break(()),
                     _ => {}
                 },
             }
@@ -911,6 +936,66 @@ fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option
     }
     eff.reads.retain(|r| !captured.contains(r));
     Some(eff)
+}
+
+/// Whether every pooled operand of `node` is a literal. Anything else is a
+/// promoted expression, which hides reads and writes from a skeleton walk.
+fn pooled_operands_are_literal(body: &Body, node: NodeRef) -> bool {
+    let mut literal = true;
+    body.for_each_operand(node, |op| {
+        if let Operand::Value(v) = op {
+            literal &= matches!(
+                body.values.kind(v),
+                ValueKind::Int(..) | ValueKind::Float(..) | ValueKind::Bool(_) | ValueKind::Char(_)
+            );
+        }
+    });
+    literal
+}
+
+/// Every local written anywhere under `node`.
+fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
+    body.for_each_node_under(node, |n| {
+        if let Some(l) = local_written_by(body, n) {
+            out.push(l);
+        }
+        if let NodeRef::Stmt(s) = n
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        {
+            out.push(*local_index);
+        }
+    });
+}
+
+/// Whether local `l` is named nowhere in the body but under `version_if`. The
+/// slow arm is then its only other reader, and an arm the fast one replaced
+/// does not run.
+fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
+    let body = &engine.body;
+    let root = NodeRef::Block(body.root);
+    !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
+}
+
+/// Whether `block` sits inside a loop, and so may run more than once.
+fn block_repeats(body: &Body, block: BlockId) -> bool {
+    body.find_in_nodes_under(NodeRef::Block(body.root), |n| {
+        let NodeRef::Stmt(s) = n else { return None };
+        let StmtKind::Loop { body: inner } = &body.stmts[s].kind else {
+            return None;
+        };
+        block_under(body, *inner, block).then_some(())
+    })
+    .is_some()
+}
+
+/// Whether `block` is `root` or nested under it.
+fn block_under(body: &Body, root: BlockId, block: BlockId) -> bool {
+    root == block
+        || body
+            .find_in_nodes_under(NodeRef::Block(root), |n| {
+                (n == NodeRef::Block(block)).then_some(())
+            })
+            .is_some()
 }
 
 /// How many times `root` reads local `l`. An assignment's target names a place

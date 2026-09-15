@@ -1,5 +1,5 @@
-// A chained comparison in the check must cost what the single comparison
-// costs. `!(0 <= i && i < xs.len())` is a negated conjunction, so the check
+// A two-sided check must cost what the one-sided check costs.
+// `!(0 <= i && i < xs.len())` is a negated conjunction, so the check
 // is dead only when both halves are proven: the loop guard refutes the upper
 // one, and the counting loop (`i = 0`, `i += 1`, `<` guard) floors the lower
 // one. At O2 nothing of the guard survives.

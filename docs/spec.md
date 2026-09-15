@@ -492,13 +492,18 @@ Wado supports mathematical comparison chaining similar to Python, allowing natur
 
 ```wado
 // Valid chains (same direction)
-a < b < c       // Equivalent to: a < b && b < c
-a > b > c       // Equivalent to: a > b && b > c
-a <= b <= c     // Equivalent to: a <= b && b <= c
-a >= b >= c     // Equivalent to: a >= b && b >= c
-a == b == c     // Equivalent to: a == b && b == c
+a < b < c       // Equivalent to: (a < b) & (b < c)
+a > b > c       // Equivalent to: (a > b) & (b > c)
+a <= b <= c     // Equivalent to: (a <= b) & (b <= c)
+a >= b >= c     // Equivalent to: (a >= b) & (b >= c)
+a == b == c     // Equivalent to: (a == b) & (b == c)
 0 <= x <= 100   // Natural range check
 ```
+
+A chain evaluates every operand exactly once, left to right, and then tests
+them. It does not short-circuit, so a later operand runs even where an earlier
+comparison already decided the answer. Write `&&` where an operand must not run
+on that path.
 
 ```wado
 // Invalid chains (semantic error)

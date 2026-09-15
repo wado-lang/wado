@@ -63,8 +63,8 @@ Short-circuits are the same corollary seen from the other side. A capture is
 **unconditional** when no short-circuit lies between it and the condition root. A
 capture below one is **conditional** and is taken where the operand sits, so the
 short-circuit still decides whether it runs. The boundaries are the right operand
-of `&&` and `||`, and every operand of a comparison chain past the first
-comparison (`a < b < c` runs as `(a < b) && (b < c)`).
+of `&&` and `||`. A comparison chain is not one: it evaluates every operand, so
+a failed `0 <= i < n` reports `n` as well as `i`.
 
 ### 2. Rendering reports reach, not just value
 

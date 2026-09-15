@@ -7,13 +7,13 @@
 use crate::builtin_registry::BuiltinRegistry;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::nir;
 use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
-use crate::optimize::arena_query::expr_node_may_trap;
+use crate::optimize::arena_query::{cast_truncates_a_float, expr_node_may_trap};
 use crate::tir::TypeTable;
-use crate::{nir, tir};
 
 /// Read / write flags for a single state channel (e.g., GC heap or
 /// linear memory).
@@ -140,24 +140,6 @@ fn field_receiver_nonnull(body: &Body, scope: &AccumScope<'_>, base: Operand) ->
         Some(ResolvedType::GenericInstance { .. }) => types.as_option(ty).is_none(),
         _ => false,
     }
-}
-
-/// The one trapping cast: `wir_build::translate_cast` lowers a float-to-integer
-/// conversion to the non-saturating `I*TruncF*`, which traps on NaN and on an
-/// out-of-range magnitude. Every other conversion it emits is total — integer to
-/// integer of any width or signedness, integer to float, float to float — and a
-/// cast between non-numeric types is a representation no-op, never a `ref.cast`.
-/// Provable only with a type table.
-fn cast_truncates_a_float(
-    body: &Body,
-    scope: &AccumScope<'_>,
-    inner: Operand,
-    target: tir::TypeId,
-) -> bool {
-    let Some(types) = scope.types else {
-        return true;
-    };
-    types.is_float(body.operand_type(inner)) && types.is_integer(target)
 }
 
 impl ModRef {
@@ -348,7 +330,7 @@ impl ModRef {
             }
             ExprKind::Cast { expr, target_type } => {
                 let (expr, target_type) = (*expr, *target_type);
-                self.may_trap |= cast_truncates_a_float(body, scope, expr, target_type);
+                self.may_trap |= cast_truncates_a_float(body, scope.types, expr, target_type);
                 self.accumulate_operand(body, expr, scope);
             }
 

@@ -1840,8 +1840,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
             // The `&&` joining two comparisons is synthesised, so its right
             // operand is the comparison the chain just built, not written text.
-            acc =
-                self.resolve_binary_op(acc, BinaryOp::And, cmp_type, cmp.op_span, chain.span, None);
+            acc = self.resolve_binary_op(
+                acc,
+                BinaryOp::BitAnd,
+                cmp_type,
+                cmp.op_span,
+                chain.span,
+                None,
+            );
             prev = right;
         }
 

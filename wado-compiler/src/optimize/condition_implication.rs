@@ -189,7 +189,7 @@ pub(super) fn resolve(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
 pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) -> Operand {
     let mut cur = op;
     for _ in 0..MAX_BIND_CHAIN {
-        let Some(next) = capture_block_value(engine, resolve(engine, binds, cur)) else {
+        let Some((_, next)) = capture_block_binding(engine, resolve(engine, binds, cur)) else {
             break;
         };
         cur = next;
@@ -197,15 +197,9 @@ pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) ->
     cur
 }
 
-/// The operand a block yields when it yields a local its own statements write
-/// exactly once. Anything weaker leaves which write reaches the tail to control
-/// flow, and then the block does not stand for that operand at all.
-fn capture_block_value(engine: &Engine, op: Operand) -> Option<Operand> {
-    Some(capture_block_binding(engine, op)?.1)
-}
-
-/// [`capture_block_value`] with the local the block binds, for a caller that has
-/// to account for that local's own writes.
+/// The local a block binds and the operand it yields for it, when its own
+/// statements write that local exactly once. Anything weaker leaves which write
+/// reaches the tail to control flow, and the block stands for no operand.
 pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32, Operand)> {
     let Operand::Expr(e) = op else { return None };
     let ExprKind::LabeledBlock { block, .. } = &engine.body.exprs[e].kind else {
@@ -640,13 +634,13 @@ fn eq_zero_operand(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> Op
 pub(super) enum Conjunct {
     /// Holds when `left < right` — the shape every bounds check has.
     Lt(Operand, Operand),
-    /// Holds when `floor <= var + off` — the lower half of a chained
-    /// comparison, which no upper-bound `BoundKey` can express.
+    /// Holds when `floor <= var + off` — a range check's lower half, which no
+    /// upper-bound `BoundKey` can express.
     AtLeast(u32, i64, i64),
 }
 
 /// The conjuncts of the predicate a panic guard `if <cond> { panic }` refutes.
-/// A plain bounds check gives one. `!(A && B)` — what `assert 0 <= i < n`
+/// A plain bounds check gives one. `!(A & B)` — what `assert 0 <= i < n`
 /// lowers to — gives one per conjunct, and the guard is dead only when every
 /// one of them holds. `None` when some conjunct is not a comparison this can
 /// classify, so a caller never proves a subset and calls it the whole.
@@ -667,8 +661,7 @@ pub(super) fn check_conjuncts(
         .collect()
 }
 
-/// Flatten a short-circuit `&&` tree (skeleton, or the promoted `Select` its
-/// value form takes) into its leaf operands. `None` when the tree is not one.
+/// Flatten a conjunction tree into its leaf operands.
 fn collect_and_operands(engine: &Engine, binds: &Binds, op: Operand, out: &mut Vec<Operand>) {
     let Some((left, right)) = and_operands(engine, binds, op) else {
         out.push(op);
@@ -678,9 +671,9 @@ fn collect_and_operands(engine: &Engine, binds: &Binds, op: Operand, out: &mut V
     collect_and_operands(engine, binds, right, out);
 }
 
-/// The two operands of a short-circuit `&&`: the skeleton `Binary(And)`, the
-/// `if a { b } else { false }` a captured operand turns it into, or the pooled
-/// `Select(a, b, false)` the promoted form takes.
+/// The two operands of a conjunction, in every form one takes: `&&` or a
+/// bool `&`, the `if a { b } else { false }` a captured operand turns `&&`
+/// into, and the pooled `Select(a, b, false)` of the promoted form.
 fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, Operand)> {
     match resolve_through_opaque(engine, binds, op) {
         Operand::Expr(e) => match &engine.body.exprs[e].kind {
@@ -689,6 +682,13 @@ fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand,
                 op: NirBinaryOp::And,
                 right,
             } => Some((*left, *right)),
+            // `&` on two bools is `&&` without the short-circuit, so it splits
+            // the same way. On integers it is not a conjunction at all.
+            ExprKind::Binary {
+                left,
+                op: NirBinaryOp::BitAnd,
+                right,
+            } if engine.body.exprs[e].type_id == TypeTable::BOOL => Some((*left, *right)),
             ExprKind::If {
                 condition,
                 then_branch,
@@ -706,6 +706,20 @@ fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand,
                 let (cond, then, else_) = (*cond, *then, *else_);
                 (parse_const_i64(engine, binds, Operand::Value(else_)) == Some(0))
                     .then_some((Operand::Value(cond), Operand::Value(then)))
+            }
+            ValueKind::Binary {
+                op: NirBinaryOp::And,
+                lhs,
+                rhs,
+                ..
+            } => Some((Operand::Value(*lhs), Operand::Value(*rhs))),
+            ValueKind::Binary {
+                op: NirBinaryOp::BitAnd,
+                lhs,
+                rhs,
+                ..
+            } if engine.body.values.type_of(v) == Some(TypeTable::BOOL) => {
+                Some((Operand::Value(*lhs), Operand::Value(*rhs)))
             }
             _ => None,
         },

@@ -11,8 +11,8 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, S
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
-use crate::optimize::arena_query::binary_op_may_trap;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::optimize::arena_query::{binary_op_may_trap, cast_truncates_a_float};
+use crate::tir::{TypeId, TypeTable};
 
 /// Run select lowering on all functions, driven by the rewrite engine.
 pub fn select_lowering(project: &mut NirPackage) -> bool {
@@ -213,33 +213,9 @@ fn is_select_eligible(body: &Body, id: ExprId, type_table: &TypeTable) -> bool {
             expr: inner,
             target_type,
         } => {
-            !is_trapping_cast(body.operand_type(*inner), *target_type, type_table)
+            !cast_truncates_a_float(body, Some(type_table), *inner, *target_type)
                 && is_select_eligible_operand(body, *inner, type_table)
         }
         _ => false,
     }
-}
-
-/// True when an `as` cast from `src` to `dst` lowers to a trapping Wasm
-/// instruction — only float → integer; everything else wraps, extends,
-/// converts, or is the identity. Deliberately finer than the shared
-/// `arena_query::expr_node_may_trap`, which marks every `Cast` trap-capable, and
-/// kept local so the other consumers' classification is unchanged.
-fn is_trapping_cast(src: TypeId, dst: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        (type_table.get(src), type_table.get(dst)),
-        (
-            ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64),
-            ResolvedType::Primitive(
-                PrimitiveType::I8
-                    | PrimitiveType::U8
-                    | PrimitiveType::I16
-                    | PrimitiveType::U16
-                    | PrimitiveType::I32
-                    | PrimitiveType::U32
-                    | PrimitiveType::I64
-                    | PrimitiveType::U64
-            ),
-        )
-    )
 }
