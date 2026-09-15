@@ -189,8 +189,13 @@ it the destination is unknown, which is the conservative reading. Every form
 names a parameter rather than a position, reusing the `key = parameter` shape
 `part_of` already has, and reports an argument that names none.
 
-Silence is the conservative reading of whichever consumer asks — for
-`#[returns]` that is "allocates", which elides copies.
+Silence is not uniformly the safe reading. `#[returns]` is the exception: the
+plan phase takes a missing one for "allocates", which elides copies and is wrong
+for a declaration that does hand out an argument's storage. `core:builtin` is
+compiler-owned, so `link` asserts that a builtin reading through a reference and
+returning storage declared one — a missing declaration there is the compiler's
+bug, not a program's. Extending the attributes past `core:builtin` has to answer
+that assert, which roadmap item 2 carries.
 
 Where each is accepted:
 
@@ -204,10 +209,10 @@ Where each is accepted:
 A trait method requirement has no body of its own, but every call to it is
 statically dispatched to an impl that has one, and monomorphization resolves
 that before the fixpoint runs — so an attribute there would never be read, and
-one contradicting the impl would never be caught. The seven requirements
+one contradicting the impl would never be caught. The eleven requirements
 carrying a `stores` clause today (`AsStrSlice`, `AsSlice`, `AsByteSlice`, and
-four in `core:serde`) all state borrow-out their impls already state, so they
-lose it rather than convert it.
+eight across `Serializer` and `Deserializer` in `core:serde`) all state
+borrow-out their impls already state, so they lose it rather than convert it.
 
 A program has no body-less function of its own to put these on — the one it can
 write is a [declared absence](./wep-2026-09-13-declared-absence.md), which
@@ -551,13 +556,21 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
 ## Roadmap
 
 1. [ ] Add `#[retain(...)]`, accepted on a body-less declaration and reported on
-       one with a body or on a trait requirement (§4). Done when
-       `BuiltinDeclaration` is fed from the attribute and `array_set` /
-       `array_fill` carry the same fact they carry today.
+       one with a body or on a trait requirement (§4). Its `into` and
+       `elements_of` parse and reach `BuiltinDeclaration` here but have no reader
+       until items 11 and 12, so `array_set` and `array_fill` keep exactly the
+       fact their `with stores[value]` carries today. Done when the clause on
+       those two is gone and nothing downstream has changed.
 2. [ ] Snapshot the declarations of every body-less function at link, not only
-       `core:builtin`'s. Done when `record_builtin_declaration` keys on the
-       absence of a body, so a CM import or a `.wasm` / `.wat` asset import can
-       carry §4's attributes.
+       the ones `ms.is_core_builtin()` admits, so a CM import or a `.wasm` /
+       `.wat` asset import can carry §4's attributes. The gate is that check,
+       not the body test beside it, which already holds. Widening it puts
+       user-supplied declarations under the assert that a builtin reading
+       through a reference and returning storage declared `#[returns]` — written
+       when only compiler-owned code reached it, so a missing declaration was a
+       compiler bug. Done when that assert is a diagnostic against the
+       declaration for everything outside `core:builtin`, and a panic for
+       nothing.
 3. [ ] Measure what a conservative reading of an indirect call would cost, at the
        seventeen exposed signatures §4 names. Done when the number is known: it
        says how much item 4 is worth, and how much the gap below it leaves.
