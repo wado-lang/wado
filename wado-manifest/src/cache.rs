@@ -26,8 +26,7 @@ pub fn registry_cache_relative(
 }
 
 /// The cache-root-relative directory holding every cached version of one
-/// artifact: [`registry_cache_relative`] without the `{version}/component.wasm`
-/// tail. Listing it is how an offline resolution discovers what is cached.
+/// artifact. Listing it is how an offline resolution finds what is cached.
 #[must_use]
 pub fn registry_cache_dir_relative(
     registry_url: &str,

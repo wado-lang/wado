@@ -7,12 +7,13 @@
 //! `wado check` command".
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
+use crate::build;
 use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
@@ -22,7 +23,9 @@ use crate::manifest;
 
 #[derive(Debug)]
 pub struct CheckOptions {
-    pub input: String,
+    /// The file to check. `None` checks every world `wado.toml` declares, the
+    /// way `wado build` builds them.
+    pub input: Option<String>,
     /// `false` (default) → Kiln warnings produce a non-zero exit. `true`
     /// → keep them as warnings (developer-friendly local triage).
     pub warn_only: bool,
@@ -69,11 +72,13 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado check [options] <file.wado>").unwrap();
+    writeln!(buf, "Usage: wado check [options] [file.wado]").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "Verify a Wado source file (and its Kiln generators) without emitting Wasm.",
+        "Verify Wado sources (and their Kiln generators) without emitting Wasm.\n\
+         With no file, checks every world wado.toml declares — the targets\n\
+         `wado build` builds — and stops after the analysis.",
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -122,7 +127,6 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
             return Err(args::unexpected_arg(arg, &usage));
         }
     }
-    let input = args::require_input(input, &usage)?;
     Ok(CheckOptions {
         input,
         warn_only,
@@ -132,7 +136,59 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
 }
 
 pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
-    let path = Path::new(&opts.input);
+    let Some(input) = opts.input.clone() else {
+        return check_declared_worlds(&opts).await;
+    };
+    let path = PathBuf::from(&input);
+    let world = check_world(
+        opts.target_world.as_deref(),
+        &path,
+        load_nearest_manifest(&path).as_ref(),
+    );
+    check_entry(&path, world, &opts).await
+}
+
+/// Check every world `wado.toml` declares, selected the way `wado build`
+/// selects its targets. Same analysis as a single file, once per entry.
+async fn check_declared_worlds(opts: &CheckOptions) -> Result<(), CliExit> {
+    let cwd = std::env::current_dir()
+        .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+    let project = manifest::discover(&cwd)
+        .map_err(CliExit::error)?
+        .ok_or_else(|| {
+            CliExit::error(
+                "no wado.toml found; name a file to check \
+                 (`wado check <file.wado>`) or run from a project directory",
+            )
+        })?;
+    manifest::emit_manifest_warnings(&project);
+
+    let mut targets = build::declared_worlds(&project)?;
+    if let Some(world_fq) = &opts.target_world {
+        targets.retain(|t| t.target_world.as_deref() == Some(world_fq.as_str()));
+        if targets.is_empty() {
+            return Err(CliExit::error(format!(
+                "wado.toml declares no [world].\"{world_fq}\" to check"
+            )));
+        }
+    }
+    if targets.is_empty() {
+        return Err(CliExit::error(
+            "no world to check; declare [package].lib or a [world] entry in wado.toml",
+        ));
+    }
+    for target in targets {
+        let world = match (&target.lib_world, &target.target_world) {
+            (Some(fq), _) => CheckWorld::Lib(fq.clone()),
+            (_, Some(fq)) => CheckWorld::Target(fq.clone()),
+            _ => unreachable!("a build target names exactly one world"),
+        };
+        check_entry(&target.entry, world, opts).await?;
+    }
+    Ok(())
+}
+
+async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Result<(), CliExit> {
     let base_path = path
         .parent()
         .map(std::path::Path::to_path_buf)
@@ -140,8 +196,7 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let source = std::fs::read_to_string(path)
         .map_err(|e| CliExit::error(format!("reading '{}': {e}", path.display())))?;
     let manifest_pair = load_nearest_manifest(path);
-    let (target_world, lib_world) =
-        check_world(opts.target_world.as_deref(), path, manifest_pair.as_ref()).options();
+    let (target_world, lib_world) = world.options();
     let host = attach_manifest_and_component_deps(
         FilesystemCompilerHost::with_log_level(base_path.clone(), opts.knobs.log_level),
         manifest_pair.as_ref(),
@@ -177,19 +232,22 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
 
     let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();
 
-    // Drive the rest of the compile pipeline so type/resolve errors also
-    // gate `wado check`. The produced wasm is discarded; skipping codegen
-    // is a follow-up.
+    // Drive the rest of the compile pipeline so type/resolve errors also gate
+    // `wado check`. At `O0`, since the component is discarded: the optimization
+    // loop reports nothing, and on a large program it is most of the run. The
+    // phases around it stay, so every diagnostic a build produces still lands.
     let compiler_options = wado_compiler::CompilerOptions {
         log_level: Some(opts.knobs.log_level),
         target_world,
         lib_world,
+        opt_level: wado_compiler::OptLevel::O0,
         analysis_only: true,
         invocations: outcome.invocations.clone(),
         ..Default::default()
     };
+    let entry_name = path.to_string_lossy().into_owned();
     let compile_result =
-        wado_compiler::compile_with_options(&source, &host, Some(&opts.input), compiler_options)
+        wado_compiler::compile_with_options(&source, &host, Some(&entry_name), compiler_options)
             .await;
 
     let has_compile_errors = host.has_errors() || compile_result.is_err();

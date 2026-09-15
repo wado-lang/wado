@@ -140,6 +140,23 @@ Rules that keep this consistent:
 - `compile` is the sole primitive that consumes but never resolves (`rustc`),
   the deterministic seam of [Command Tiers](#command-tiers-compile-vs-build).
 
+#### What `check` checks
+
+`check` takes `build`'s targets and runs them at `O0`. With no file it checks
+every world `wado.toml` declares — `[package].lib` and each `[world]` entry —
+so what it gates is what `build` would produce.
+
+It runs every phase a build does, including codegen, so no diagnostic is lost;
+it just discards the component, which is what lets it drop the optimization
+level. The optimization loop reports nothing and on a large program is most of
+the run, which is what makes the lighter command worth having.
+
+Naming a file checks that file alone. Its world is the one whose `[world]` entry
+names it, and otherwise the library world, which requires no entry point: a
+module that is no world's entry is a library, and demanding `export fn run` of
+one made `check` unusable on it (issue #2059). `--world <name>` opts into a
+world's contract in either mode.
+
 #### Acquisition tiers — how far a command goes for a cold cache
 
 Consuming the graph still leaves open how a dependency the cache lacks is
@@ -153,15 +170,15 @@ acquired. Two tiers answer it, and every consuming command picks one:
 `check` is a terminal command a person or CI runs, so it acquires like the build
 it gates. A tree where `wado run` works is a tree where `wado check` works.
 
-Only `query` is held back, for one reason. A live version listing would repeat
-on every document version, and an editor request must never wait on one.
+`query` is the one command held back. A live version listing would run again on
+every document version, and an editor request must never wait on one.
 
 The cache pins what the lock does not. Offline resolution takes the `wado.lock`
 entry where there is one, and otherwise the newest cached version the requirement
 admits. A project that ran `wado fetch` resolves in every tier without ever
 writing a lock.
 
-The language server sits below both tiers. It resolves offline, and hands its
+The language server sits below both tiers. It resolves offline and hands its
 pinned-but-cold dependencies to a prefetcher, which `wado lsp` installs. The
 prefetcher warms them in the background, so a later request resolves what this
 one could not.

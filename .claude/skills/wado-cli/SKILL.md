@@ -41,10 +41,9 @@ Global options:
   --version  Show version information
 ```
 
-`build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile` and
-`check` take exactly one source file; `dump`, `doc`, and `format` take several.
-`run`, `serve`, and `wit` fall back to the manifest's entry point when given no
-path.
+`build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile`
+takes exactly one source file; `dump`, `doc`, and `format` take several.
+`check`, `run`, `serve`, and `wit` fall back to the manifest when given no path.
 
 ## Target World
 
@@ -100,12 +99,18 @@ To inspect invalid Wasm when debugging codegen bugs, skip validation:
 wado compile --no-validate --wat-to-stdout file.wado
 ```
 
-`wado check` verifies a source file — and re-runs its Kiln generators, comparing
-the output against the committed source — without emitting Wasm. It resolves
-dependencies exactly as `compile` / `run` do, fetching what the cache lacks.
+`wado check` verifies Wado sources — and re-runs their Kiln generators,
+comparing the output against the committed source — without emitting Wasm. It
+resolves dependencies exactly as `compile` / `run` do, fetching what the cache
+lacks.
 
-Its world default is its own. It takes the world whose `[world]` entry names the
-file, and otherwise the library world, which requires no entry point. So a
+With no file it checks every world `wado.toml` declares, exactly the targets
+`wado build` builds. It runs at `O0` since it throws the component away, so it
+reports everything a build would and skips the optimization loop, which is most
+of a large build's time.
+
+Naming a file checks that file alone, against the world whose `[world]` entry
+names it and otherwise the library world, which requires no entry point. So a
 library module checks as itself; `--world <name>` opts into a world's contract.
 
 ## Run
@@ -259,7 +264,7 @@ span. They are info-level, so the default `warn` hides them — ask when chasing
 why something is slower or larger than expected, not on every build.
 
 ```sh
-wado check --log-level info file.wado              # no Wasm emitted; fastest
+wado check --log-level info file.wado              # runs at O0; fastest
 wado check --world test --log-level info lib.wado  # a library with test blocks
 ```
 

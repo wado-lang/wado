@@ -11,7 +11,7 @@
 //!   lock-pinned via [`wado_lsp::host::discovery::registry_component_needs`],
 //!   keyed by the manifest specifier.
 //! - A single-file inline `use … from "ns:pkg@ver" with { registry }` clause
-//!   ([`fetch_inline_component_dependencies`]) — no lock, an exact pin, keyed by
+//!   ([`resolve_inline_component_dependencies`]) — no lock, an exact pin, keyed by
 //!   the verbatim specifier.
 //!
 //! Components land in the shared `~/wado/` cache (see [`crate::cache`]); a
@@ -138,27 +138,24 @@ pub async fn resolve_inline_component_dependencies(
     tier: Acquisition,
 ) -> Result<Resolution, String> {
     let deps = collect_inline_deps(source, manifest)?;
-    let mut resolved = Vec::new();
-    let mut unresolved = Vec::new();
+    let mut out = Resolution::default();
     for dep in deps {
         let path = component_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         if path.is_file() {
-            resolved.push((dep.specifier, path.display().to_string()));
+            out.resolved
+                .push((dep.specifier, path.display().to_string()));
             continue;
         }
         match pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await {
-            Ok(abs) => resolved.push((dep.specifier, abs)),
-            Err(_) if tier == Acquisition::Analysis => unresolved.push((
+            Ok(abs) => out.resolved.push((dep.specifier, abs)),
+            Err(_) if tier == Acquisition::Analysis => out.unresolved.push((
                 dep.specifier,
                 format!("{:?} is not cached; run `wado fetch`", dep.coordinate),
             )),
             Err(e) => return Err(e),
         }
     }
-    Ok(Resolution {
-        resolved,
-        unresolved,
-    })
+    Ok(out)
 }
 
 /// Resolve every inline `use … from "<name>" with { git }` clause in `source`.

@@ -9,10 +9,12 @@ use std::path::{Path, PathBuf};
 
 use wado_manifest::dependency::{
     RegistryComponentNeed, best_matching_version, git_pins, registry_component_needs_locked,
-    registry_lock_id, registry_pins,
+    registry_lock_id, registry_pins as locked_registry_pins,
 };
 use wado_manifest::workspace::{MANIFEST_FILENAME, workspace_governs};
-use wado_manifest::{DependencySource, LockFile, Manifest, ManifestError, read_workspace_members};
+use wado_manifest::{
+    DependencySource, LockFile, Manifest, ManifestError, read_workspace_members, registry_url,
+};
 
 use crate::host::prefetch;
 
@@ -108,11 +110,9 @@ pub fn resolve_all(
     manifest: &Manifest,
     manifest_dir: &Path,
 ) -> Vec<(String, Result<DependencyEntry, String>)> {
-    let git = read_lock(manifest_dir)
-        .as_ref()
-        .map(git_pins)
-        .unwrap_or_default();
-    let registry = registry_pins_for(manifest, manifest_dir);
+    let lock = read_lock(manifest_dir);
+    let git = lock.as_ref().map(git_pins).unwrap_or_default();
+    let registry = registry_pins(manifest, lock.as_ref());
 
     let mut out: Vec<(String, Result<DependencyEntry, String>)> = manifest
         .dependencies
@@ -166,23 +166,19 @@ pub fn registry_component_needs(
     manifest: &Manifest,
     manifest_dir: &Path,
 ) -> Vec<Result<RegistryComponentNeed, (String, String)>> {
-    let locked = registry_pins_for(manifest, manifest_dir);
+    let locked = registry_pins(manifest, read_lock(manifest_dir).as_ref());
     registry_component_needs_locked(manifest, &locked, cache_root().as_deref())
 }
 
 /// `lock id -> version` for every registry dependency: the `wado.lock` pins
-/// first, then the warm cache for whatever the lock leaves out. A project that
-/// ran `wado fetch` but never wrote a lock resolves offline this way, instead of
-/// reporting a lockfile the rest of the toolchain never asked for (issue #2059).
-fn registry_pins_for(manifest: &Manifest, manifest_dir: &Path) -> BTreeMap<String, String> {
-    let locked = read_lock(manifest_dir)
-        .as_ref()
-        .map(registry_pins)
-        .unwrap_or_default();
+/// first, then the warm cache for whatever the lock leaves out, so a project
+/// that ran `wado fetch` and never wrote a lock still resolves (issue #2059).
+fn registry_pins(manifest: &Manifest, lock: Option<&LockFile>) -> BTreeMap<String, String> {
+    let locked = lock.map(locked_registry_pins).unwrap_or_default();
     pins_with_cached(manifest, locked, cache_root().as_deref())
 }
 
-/// [`registry_pins_for`] with the lock pins and the cache root supplied, so the
+/// [`registry_pins`] with the lock pins and the cache root supplied, so the
 /// cache scan is testable without an environment.
 fn pins_with_cached(
     manifest: &Manifest,
@@ -201,10 +197,7 @@ fn pins_with_cached(
         else {
             continue;
         };
-        let Some(url) = manifest
-            .registries
-            .get(registry.as_deref().unwrap_or("default"))
-        else {
+        let Some(url) = registry_url(&manifest.registries, registry.as_deref()) else {
             continue;
         };
         let id = registry_lock_id(url, package);

@@ -52,6 +52,7 @@ use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::lexer::lex;
 use wado_compiler::token::canonical_token_bytes;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
+use wado_manifest::registry_url;
 
 use crate::build_dep::{
     GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
@@ -907,13 +908,13 @@ impl CliGeneratorProvider {
 
     /// Resolve a registry alias (`None` → `default`) to its `oci://…` URL.
     fn registry_url(&self, alias: Option<&str>) -> Result<String, ProviderError> {
-        let alias = alias.unwrap_or("default");
-        self.registry
-            .registries
-            .get(alias)
+        registry_url(&self.registry.registries, alias)
             .cloned()
             .ok_or_else(|| ProviderError::Unsupported {
-                message: format!("kiln: no `[registries].{alias}` to fetch the generator from"),
+                message: format!(
+                    "kiln: no `[registries].{}` to fetch the generator from",
+                    alias.unwrap_or("default")
+                ),
             })
     }
 

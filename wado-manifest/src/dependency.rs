@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::cache::registry_cache_relative;
-use crate::{DependencySource, LockFile, Manifest, Version, VersionSpecifier};
+use crate::{DependencySource, LockFile, Manifest, Version, VersionSpecifier, registry_url};
 
 /// A registry `[dependencies]` entry resolved to its exact lock-pinned version
 /// and shared-cache location — the single source of truth shared by the LSP
@@ -64,11 +64,10 @@ pub fn registry_component_need(
     locked: &std::collections::BTreeMap<String, String>,
     cache_root: Option<&Path>,
 ) -> Result<RegistryComponentNeed, String> {
-    let alias = registry.unwrap_or("default");
-    let registry_url = manifest
-        .registries
-        .get(alias)
-        .ok_or_else(|| format!("no `[registries].{alias}` for {package:?}"))?;
+    let registry_url = registry_url(&manifest.registries, registry).ok_or_else(|| {
+        let alias = registry.unwrap_or("default");
+        format!("no `[registries].{alias}` for {package:?}")
+    })?;
     // Match by the full lock id (`registry+<url>/<coordinate>`), not the bare
     // coordinate, so the same package hosted on two registries stays distinct.
     let id = registry_lock_id(registry_url, package);
@@ -91,17 +90,15 @@ pub fn registry_component_need(
     })
 }
 
-/// The lock id a registry dependency pins under — the key
-/// [`registry_component_need`] looks up, so a cache-derived pin lands where a
-/// lock-derived one would.
+/// The lock id a registry dependency pins under. One implementation, so a pin
+/// derived from the cache lands where a lock-derived one would.
 #[must_use]
 pub fn registry_lock_id(registry_url: &str, package: &str) -> String {
     format!("registry+{registry_url}/{package}")
 }
 
-/// The newest of `candidates` satisfying `specifier`, or `None` when none does.
-/// A candidate that is not semver is skipped, so a stray cache directory cannot
-/// resolve a dependency.
+/// The newest of `candidates` satisfying `specifier`. A candidate that is not
+/// semver is skipped, so a stray cache directory resolves nothing.
 pub fn best_matching_version<'a>(
     specifier: &str,
     candidates: impl IntoIterator<Item = &'a str>,

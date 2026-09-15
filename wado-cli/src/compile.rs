@@ -494,10 +494,9 @@ async fn manifest_and_component_index(
     entry_source: &str,
     tier: Acquisition,
 ) -> Result<wado_compiler::DependencyIndex, String> {
-    // Materialize any locked-but-cold git worktrees first, so the offline git arm
-    // below resolves them without a separate `wado fetch`. Lock-pinned, so the
-    // analysis tier joins in — but a clone that fails there is a hint, not an
-    // aborted query.
+    // Materialize any locked-but-cold git worktrees first, so the offline git
+    // arm below resolves them without a separate `wado fetch`. The analysis tier
+    // joins in, and leaves a clone that failed for that arm to report.
     if let Some(project) = project {
         let materialized = materialize_git_dependencies(&project.manifest, &project.root).await;
         if tier == Acquisition::Build {

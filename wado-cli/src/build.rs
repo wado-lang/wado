@@ -155,7 +155,7 @@ pub struct BuildTarget {
 /// each `[world]` entry. Unlike publish, `build` builds all of them regardless
 /// of a world's `publish = false` — opting out of publishing does not opt out
 /// of building.
-fn declared_worlds(project: &manifest::ProjectManifest) -> Result<Vec<BuildTarget>, CliExit> {
+pub fn declared_worlds(project: &manifest::ProjectManifest) -> Result<Vec<BuildTarget>, CliExit> {
     let pkg = project
         .manifest
         .package

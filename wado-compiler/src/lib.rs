@@ -775,6 +775,33 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     }
 }
 
+/// The first resource an exported library signature names. Every Wado
+/// `resource` binds one another interface owns, so the library's own instance
+/// type has no export for it to point at.
+fn resource_in_lib_sig<'a>(
+    registry: &'a component_model::CmInterfaceRegistry,
+    ty: &ast::Type,
+) -> Option<&'a str> {
+    use crate::ast::Type;
+    match ty {
+        Type::Named(named) => {
+            let source = registry.resolve_cm_source_for(named, None)?;
+            registry.get_resource_cm_name_by_source(&source, &named.name)
+        }
+        Type::Generic(g) => g
+            .args
+            .iter()
+            .find_map(|arg| resource_in_lib_sig(registry, arg)),
+        Type::Tuple(elems) => elems
+            .iter()
+            .find_map(|el| resource_in_lib_sig(registry, el)),
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            resource_in_lib_sig(registry, inner)
+        }
+        _ => None,
+    }
+}
+
 /// Select the allocator: tag the `#[allocator("<mode>")]` function matching the
 /// chosen mode as the `realloc` export and clear the export from the others.
 /// `None` picks the world's default (debug for test, freelist for HTTP/library,
@@ -1086,18 +1113,18 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    // Source-level unused diagnostics. Reads the liveness computed during
-    // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
+    // Source-level lint warnings. `--no-unused` names the unused lints alone,
+    // so `shadowed_name` is emitted either way; it is waived per binder and per
+    // module by `allow` instead.
+    let mut lints = shadowing_diagnostics(&sem);
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
-        for diag in unused_diagnostics(&sem, is_test_world)
-            .into_iter()
-            .chain(shadowing_diagnostics(&sem))
-        {
-            match diag.span {
-                Some(span) => logger.warn_at(diag.code, diag.message, span),
-                None => logger.warn(diag.code, diag.message),
-            }
+        lints.extend(unused_diagnostics(&sem, is_test_world));
+    }
+    for diag in lints {
+        match diag.span {
+            Some(span) => logger.warn_at(diag.code, diag.message, span),
+            None => logger.warn(diag.code, diag.message),
         }
     }
 
@@ -1334,6 +1361,42 @@ fn compile_after_load<H: CompilerHost>(
             span: None,
         });
         return Err(Bail);
+    }
+
+    // A library's exported signature cannot name a resource: every Wado
+    // `resource` binds one another interface owns, so the library's own
+    // instance type has no export for the handle to point at. The emitter used
+    // to reach that missing entry and panic.
+    if options.lib_world.is_some()
+        && let Some(world) = lib_world_info.as_ref()
+        && let Some(registry) = sem.cm_interface_registry()
+    {
+        let mut refused = false;
+        for export in &world.exports {
+            let types = export
+                .params
+                .iter()
+                .map(|(_, ty)| ty)
+                .chain(export.return_type.as_ref());
+            for ty in types {
+                if let Some(name) = resource_in_lib_sig(registry, ty) {
+                    refused = true;
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::CodegenError,
+                        message: format!(
+                            "`export fn {}` names the resource `{name}`, which another interface \
+                             owns; a library's public API cannot carry a resource handle",
+                            export.name
+                        ),
+                        span: None,
+                    });
+                }
+            }
+        }
+        if refused {
+            return Err(Bail);
+        }
     }
 
     // Capture the entry module so its own named types can be registered into

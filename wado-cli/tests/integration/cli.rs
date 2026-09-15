@@ -498,6 +498,62 @@ fn test_check_named_world_requires_its_entry_point() {
 }
 
 #[test]
+fn test_check_with_no_file_checks_every_declared_world() {
+    // `check` takes `build`'s targets: the library world and each `[world]`
+    // entry, each against its own contract. The CLI world's entry is missing
+    // its `run`, which is what the check has to catch.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         name = \"checkall\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n\n\
+         [world.\"wasi:cli/command\"]\n\
+         entry = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "export fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("main.wado"), "fn helper() -> i32 { return 1; }\n").unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("run"));
+
+    // The library world alone is satisfied, so selecting it passes.
+    std::fs::write(dir.join("main.wado"), "export fn run() { let _ = 1; }\n").unwrap();
+    wado().current_dir(dir).arg("check").assert().success();
+}
+
+#[test]
+fn test_library_export_naming_a_resource_is_refused() {
+    // A handle from another interface has no export index in the library's own
+    // instance type, and the CM emitter used to panic on the missing entry.
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("lib.wado");
+    std::fs::write(
+        &src,
+        "use { Descriptor } from \"wasi:filesystem\";\n\
+         export fn take(d: Descriptor) -> i32 { return 1; }\n",
+    )
+    .unwrap();
+    wado()
+        .args(["check", src.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot carry a resource handle"));
+}
+
+#[test]
 fn test_run_hello() {
     wado()
         .args(["run", "example/hello.wado"])
