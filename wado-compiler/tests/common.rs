@@ -233,10 +233,9 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
                 is_todo_module: false,
             }
         } else {
-            // All other errors. Only the first diagnostic's span reaches the
-            // header, so every later one carries its own: without it two faults
-            // reading alike render as one message said twice, which is what
-            // `compile_error_count` exists to tell apart.
+            // Only the first diagnostic's span reaches the header, so every
+            // later one carries its own: without it two faults reading alike
+            // render as the one message `compile_error_count` counts twice.
             let all_messages: Vec<String> = errors
                 .iter()
                 .enumerate()

@@ -2502,7 +2502,7 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
     let mut params: List<SqlParam> = [];
     for let h of ReflectTemplate::<T>::members() {
-        query.push_str(h.lit());               // literal text before this hole
+        query.push_str(h.lit());                // literal text before this hole
         query.push_str("?");
         params.push(h.get(&t).to_sql_param());  // the value, storage shared
     }
@@ -3490,9 +3490,9 @@ The `==` and `!=` operators use `Eq::eq`:
 - `a == b` desugars to `Eq::eq(&a, &b)`
 - `a != b` desugars to `!Eq::eq(&a, &b)`
 
-The right operand selects among a type's `Eq<Rhs>` impls the way it does among
-its `Add<Rhs>` impls, so `==` can span two types: `StrSlice` and `String` compare
-directly, in either order, with nothing copied.
+`==` can span two types. The right operand picks among a type's `Eq<Rhs>` impls
+exactly as it picks among its `Add<Rhs>` impls, so `StrSlice` and `String`
+compare directly, in either order, with nothing copied.
 
 #### Ordering Enum
 

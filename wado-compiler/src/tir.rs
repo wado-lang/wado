@@ -2038,10 +2038,9 @@ impl TypeTable {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
-        // An optimizer pass reads these off a function record, whose parameter
-        // types outlive the entries a prune keeps. A type this table no longer
-        // carries is not the one `item` declares, so answer that rather than
-        // panicking through `peel_refs`.
+        // A dead declaration's body is cleared in place and its signature types
+        // go with the prune, so an optimizer pass reading one off a function
+        // record holds an id this table no longer carries.
         let Some(id) = self.try_peel_refs(id) else {
             return false;
         };
@@ -2601,9 +2600,8 @@ impl TypeTable {
         }
     }
 
-    /// [`Self::peel_refs`] for a caller holding an id from another table, as
-    /// [`Self::try_get`] is for [`Self::get`]. An id this table does not carry
-    /// answers `None` rather than panicking.
+    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
         loop {
             match self.try_get(type_id)? {

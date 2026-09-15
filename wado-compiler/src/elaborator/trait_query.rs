@@ -2757,24 +2757,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `output_type` to the receiver type absent a `type Output`. The set and
         // the types come from `TypeSystem::auto_derive_by_trait`.
         //
-        // The right operand selects among the receiver's `Eq<Rhs>` impls the way
-        // it does among its `Add<Rhs>` impls (WEP 2026-07-31). Admitting none is
-        // not an answer: falling back to the unselected lookup leaves the single
-        // `Eq<Self>` impl to type-check the operand and report the mismatch it
-        // is, rather than "type does not implement `Eq`".
+        // Falling back to the unselected lookup when `rhs` selects nothing is
+        // what leaves the single `Eq<Self>` impl to type-check the operand and
+        // report the mismatch, rather than "type does not implement `Eq`".
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
-        let selected = rhs.and_then(|rhs| {
-            self.find_arithmetic_trait_impl(
-                struct_name,
-                lookup_type_id,
-                trait_,
-                method_name,
-                Some(rhs),
-            )
-        });
-        let written = selected.or_else(|| {
-            self.find_arithmetic_trait_impl(struct_name, lookup_type_id, trait_, method_name, None)
-        });
+        let written = rhs
+            .and_then(|rhs| {
+                self.find_arithmetic_trait_impl(
+                    struct_name,
+                    lookup_type_id,
+                    trait_,
+                    method_name,
+                    Some(rhs),
+                )
+            })
+            .or_else(|| {
+                self.find_arithmetic_trait_impl(
+                    struct_name,
+                    lookup_type_id,
+                    trait_,
+                    method_name,
+                    None,
+                )
+            });
         let (info_trait_name, self_kind, param_types, return_type, impl_def) =
             if let Some(info) = written {
                 let return_type = auto_derive.map_or(info.output_type, |(_, ty)| ty);

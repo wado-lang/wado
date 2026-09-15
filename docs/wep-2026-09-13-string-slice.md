@@ -66,10 +66,11 @@ What follows:
   fields would take the fields instead.
 - `String::push_str_range_unchecked` still takes a `(text, start, end)` triple
   rather than a view, and Kiln's generated parsers call it.
-- `StrSlice` carries no string search or comparison beyond `Eq` / `Ord`:
-  `contains`, `starts_with`, `split` and the trims stay on `String`, so working
-  on part of a string still copies it out for those. Closing it means porting
-  each one to a view and having `String`'s own delegate.
+- `StrSlice` carries the search and split surface — `contains`, `starts_with`,
+  `find`, `split`, `split_once`, the trims and `strip_*` — and `String`'s own
+  delegate to it. The ones that answer with part of their input return a view,
+  so working on part of a string no longer copies it out. `to_string` is where
+  a caller that wants an owned string asks for one.
 - A cast between two references whose referents share one representation head
   (`&ByteSlice` to `&Slice<u8>`) is not dropped, so it still hides the operand's
   shape from the rules that match on one. Only the unreferenced case is covered.

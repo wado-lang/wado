@@ -23,9 +23,7 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 
 pub(super) struct Ctx {
     /// The `push_str` instances a fused run absorbs: those appending a whole
-    /// `String`, one per `AsStrSlice` source type the program instantiates. A
-    /// view starts at an offset, which `write_str_at` — copying from byte 0 —
-    /// has nowhere to put.
+    /// `String`, since `write_str_at` copies from byte 0 and a view starts past it.
     push_str_ids: IndexSet<FuncId>,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: FuncId,
@@ -558,10 +556,8 @@ fn local_operand(engine: &mut Engine, local: u32, span: Span) -> Operand {
     Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, TypeTable::I32, span))
 }
 
-/// The byte length of a `"literal"` argument, or `None` when the argument is
-/// not a string literal. `push_str` takes its text by value, so the literal
-/// reaches it bare; a `&"literal"` elsewhere in the chain reaches it behind one
-/// `Ref`.
+/// The byte length of a string literal argument, bare or behind one `Ref`, or
+/// `None` when the argument is not one.
 fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
     let literal = match &body.exprs[arg].kind {
         ExprKind::Unary {
