@@ -1,0 +1,35 @@
+// A requirement is dispatched to an impl, and the impl has the body that
+// answers both attributes. Stating either on the requirement would bind every
+// call site to a promise no implementation makes.
+
+struct Item {
+    v: i32,
+}
+
+struct Bag {
+    item: &Item,
+}
+
+trait Keeper {
+    #[retain(item)]
+    fn keep(&self, item: &Item) -> Bag;
+
+    #[returns(owned)]
+    fn fresh(&self) -> Bag;
+}
+
+interface Sink {
+    #[retain(item)]
+    fn take(item: &Item);
+}
+
+export fn run() {}
+
+__DATA__
+{
+    "compile_error": "`Keeper::keep` cannot declare `#[retain]`",
+    "compile_errors_contains": [
+        "`Keeper::fresh` cannot declare `#[returns]`",
+        "`Sink::take` cannot declare `#[retain]`"
+    ]
+}

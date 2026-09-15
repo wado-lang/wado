@@ -1,0 +1,23 @@
+// A body says what it retains, so the attribute there would state a second
+// answer with nothing to reconcile it against. `#[retain]` belongs to a
+// declaration that has no body to read — a builtin, or a Component Model
+// import.
+
+struct Item {
+    v: i32,
+}
+
+#[retain(value)]
+fn keep(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+export fn run() {
+    let mut dst = Array::<Item>::new(1);
+    keep(&mut dst, Item { v: 1 });
+}
+
+__DATA__
+{
+    "compile_error": "#[retain] belongs to a declaration with no body; a body states what it retains"
+}

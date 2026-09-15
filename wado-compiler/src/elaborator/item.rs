@@ -1675,6 +1675,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
+            scope.reject_retention_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
             method_scope
                 .annotate_ctx
@@ -2048,6 +2049,38 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span,
                 });
             }
+            self.reject_retention_attrs_on_requirement(owner, method);
+        }
+    }
+
+    /// Reject `#[retain(...)]` and `#[returns(...)]` on a method requirement, in
+    /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
+    /// and that impl's body is what answers both.
+    pub(super) fn reject_retention_attrs_on_requirement(
+        &mut self,
+        owner: &str,
+        method: &ast::Function,
+    ) {
+        for attr in &method.attrs {
+            let detail = match attr.name.as_str() {
+                "retain" => {
+                    "cannot declare `#[retain]`: the impl it dispatches to has the body that \
+                     says what it keeps, so stating it here binds every call site to a promise \
+                     no implementation makes"
+                }
+                "returns" => {
+                    "cannot declare `#[returns]`: the impl it dispatches to has the body that \
+                     says what its result is made of, so stating it here binds every call site \
+                     to a promise no implementation makes"
+                }
+                _ => continue,
+            };
+            let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                owner: owner.to_string(),
+                operation: method.name.clone(),
+                detail,
+                span: attr.span,
+            });
         }
     }
 

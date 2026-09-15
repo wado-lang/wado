@@ -273,6 +273,10 @@ impl<'a> NirUnparser<'a> {
             self.output.push_str(attr);
             self.output.push('\n');
         }
+        for retained in &f.retains {
+            self.write_indent();
+            self.output.push_str(&format!("#[retain({retained})]\n"));
+        }
         self.write_indent();
         self.emit_kw_if(f.visibility.is_public(), "pub ");
         self.emit_kw_if(f.is_export, "export ");
@@ -303,7 +307,7 @@ impl<'a> NirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
-        self.unparse_nir_with_clause(&f.effects, &f.retains);
+        self.unparse_nir_with_clause(&f.effects);
 
         if let Some(body) = &f.body {
             let root = body.root;
@@ -314,11 +318,8 @@ impl<'a> NirUnparser<'a> {
         }
     }
 
-    fn unparse_nir_with_clause(&mut self, effects: &[EffectRef], stores: &[String]) {
-        let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
-        if !stores.is_empty() {
-            items.push(format!("stores[{}]", stores.join(", ")));
-        }
+    fn unparse_nir_with_clause(&mut self, effects: &[EffectRef]) {
+        let items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         unparse_with_row_into(&items, &mut self.output);
     }
 

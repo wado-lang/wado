@@ -161,7 +161,6 @@ pub fn analyze_ownership(
         all_locals.insert(i);
     }
 
-    let param_locals: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut a = Analyzer {
         stored_params,
         mut_receiver_methods,
@@ -170,7 +169,6 @@ pub fn analyze_ownership(
         mod_ref: &plan.mod_ref,
         resolver,
         type_table,
-        param_locals,
         non_final: IndexSet::default(),
         aliases_live: IndexSet::default(),
         alias_sites: Vec::new(),
@@ -769,9 +767,6 @@ struct Analyzer<'a> {
     /// the return-path walk rather than re-derived from syntax here.
     resolver: &'a Resolver<'a>,
     type_table: &'a TypeTable,
-    /// This function's own parameters. Only a functor parameter's `stores` is
-    /// checked against every argument, so an indirect call trusts only that one.
-    param_locals: IndexSet<u32>,
     non_final: IndexSet<u32>,
     aliases_live: IndexSet<u32>,
     /// Each binding, the root its value was read out of, and what is live there.
@@ -915,43 +910,11 @@ impl Analyzer<'_> {
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
     }
 
-    /// The positions an indirect callee may store, from the functor type's
-    /// `stores`. `None` where nothing checked it, so every position may.
-    fn functor_stores(&self, callee: &TirExpr) -> Option<IndexSet<u32>> {
-        let TirExprKind::Local { index, .. } = &callee.kind else {
-            return None;
-        };
-        if !self.param_locals.contains(index) {
-            return None;
-        }
-        match self.type_table.get(callee.type_id) {
-            ResolvedType::Function {
-                stores,
-                return_type,
-                ..
-            } => {
-                if matches!(
-                    self.type_table.get(*return_type),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                ) {
-                    return None;
-                }
-                Some(stores.iter().copied().collect())
-            }
-            _ => None,
-        }
-    }
-
-    /// An indirect-call argument. A `&`/`&mut` is transient unless the functor
-    /// may store that position; unknown `stores` escapes every position.
-    fn walk_indirect_arg(
-        &mut self,
-        arg: &TirExpr,
-        pos: usize,
-        stores: &Option<IndexSet<u32>>,
-        live: &mut IndexSet<u32>,
-        record: bool,
-    ) {
+    /// An indirect-call argument. Its referent always escapes: retention is no
+    /// part of a function's type, so nothing here names the body that will run.
+    // WEP 2026-01-12 roadmap item 4 gives the functor type's row an inferred
+    // source, and a transient borrow through one becomes provable again.
+    fn walk_indirect_arg(&mut self, arg: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if let TirExprKind::Unary {
             op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
             expr: place,
@@ -961,14 +924,7 @@ impl Analyzer<'_> {
                 self.record_mutation(place, live);
             }
             let referent = self.borrow_read(place, live, record);
-            let escapes = match stores {
-                Some(s) => s.contains(&u32::try_from(pos).unwrap()),
-                None => true,
-            };
-            if record
-                && escapes
-                && let Some(r) = referent
-            {
+            if record && let Some(r) = referent {
                 self.mark_escaped(r, top_field_of(place));
             }
         } else {
@@ -1622,13 +1578,12 @@ impl Analyzer<'_> {
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let stores = self.functor_stores(callee);
                 if record {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
-                for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_indirect_arg(arg, pos, &stores, live, record);
+                for arg in args.iter().rev() {
+                    self.walk_indirect_arg(arg, live, record);
                 }
                 self.walk_expr(callee, live, record);
             }
