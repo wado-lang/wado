@@ -1283,6 +1283,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Resolve `expr` with every subscript `target` projects through standing as
+    /// a `&mut` place. `Err` is the refusal, already reported: one of those
+    /// subscripts hands out something no write can reach the element through.
+    fn resolve_place_receiver(
+        &mut self,
+        expr: &ast::Expr,
+        target: &ast::Expr,
+        ctx: &mut FunctionContext,
+    ) -> Result<TypeId, ()> {
+        let projected = projected_subscripts_of_place(target);
+        let marked = Self::mark_mut_place_subscripts(&projected, ctx);
+        let resolved = self.resolve_expr(expr, ctx, None);
+        Self::unmark_mut_place_subscripts(&marked, ctx);
+        if let Some(refusal) = projected
+            .iter()
+            .find_map(|id| self.subscript_write_refusal(*id))
+        {
+            let _ = self.emit(TypeError::CannotAssign {
+                message: refusal.to_string(),
+                span: target.span(),
+            });
+            return Err(());
+        }
+        Ok(resolved)
+    }
+
     /// Why a write cannot reach the element this subscript names, if it cannot.
     /// Only `IndexRefMut`'s `&mut Output` can be written through: `IndexRef`
     /// hands out a shared alias, and `IndexValue` hands out a copy, which the
@@ -1392,13 +1418,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         // Check for index assignment on custom types: arr[i] = value -> arr.index_assign(i, value)
         if let ast::Expr::Index(index_expr) = target_ast {
-            // The receiver is resolved here, so the `&mut` marks have to be up
-            // before it: a subscript under this one (`o[i][j] = v`) is a place
-            // the write reaches through, not a value read.
-            let projected = projected_subscripts_of_place(target_ast);
-            let marked = Self::mark_mut_place_subscripts(&projected, ctx);
-            let indexed_type = self.resolve_expr(&index_expr.expr, ctx, None);
-            Self::unmark_mut_place_subscripts(&marked, ctx);
+            let Ok(indexed_type) = self.resolve_place_receiver(&index_expr.expr, target_ast, ctx)
+            else {
+                return TypeTable::ERROR;
+            };
 
             let indexed_immutable = matches!(
                 self.tysys.type_table.borrow().get(indexed_type),
@@ -1536,20 +1559,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Standard assignment handling. Fall through here happens when the
         // target isn't `Expr::Index`, or when the IndexAssign trait lookup
         // returned None — `value` was not consumed on either of those paths.
-        let projected = projected_subscripts_of_place(target_ast);
-        let marked = Self::mark_mut_place_subscripts(&projected, ctx);
-        let target_type = self.resolve_expr(target_ast, ctx, None);
-        Self::unmark_mut_place_subscripts(&marked, ctx);
-        if let Some(refusal) = projected
-            .iter()
-            .find_map(|id| self.subscript_write_refusal(*id))
-        {
-            let _ = self.emit(TypeError::CannotAssign {
-                message: refusal.to_string(),
-                span: target_ast.span(),
-            });
+        let Ok(target_type) = self.resolve_place_receiver(target_ast, target_ast, ctx) else {
             return TypeTable::ERROR;
-        }
+        };
         let value_span = value.span();
         let value_type = match value {
             AssignValue::Ast(expr) => self.resolve_expr(expr, ctx, Some(target_type)),
