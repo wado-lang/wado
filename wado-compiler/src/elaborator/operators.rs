@@ -1272,34 +1272,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.assign_to_target(&assign.target, AssignValue::Ast(&assign.value), ctx)
     }
 
-    /// Mark `subscript` as a `&mut` place for the walks that follow, answering
-    /// what [`Self::unmark_mut_place_subscript`] takes back. One already marked
-    /// answers `None`, so a nested walk does not unmark its caller's.
-    fn mark_mut_place_subscript(
-        subscript: Option<AstId>,
-        ctx: &mut FunctionContext,
-    ) -> Option<AstId> {
-        subscript.filter(|id| ctx.mut_place_subscripts.insert(*id))
+    /// Mark `subscripts` as `&mut` places for the walks that follow, answering
+    /// what [`Self::unmark_mut_place_subscripts`] takes back. One already
+    /// marked is left out, so a nested walk does not unmark its caller's.
+    fn mark_mut_place_subscripts(subscripts: &[AstId], ctx: &mut FunctionContext) -> Vec<AstId> {
+        subscripts
+            .iter()
+            .copied()
+            .filter(|id| ctx.mut_place_subscripts.insert(*id))
+            .collect()
     }
 
-    fn unmark_mut_place_subscript(marked: Option<AstId>, ctx: &mut FunctionContext) {
-        if let Some(id) = marked {
-            ctx.mut_place_subscripts.swap_remove(&id);
+    fn unmark_mut_place_subscripts(marked: &[AstId], ctx: &mut FunctionContext) {
+        for id in marked {
+            ctx.mut_place_subscripts.swap_remove(id);
         }
     }
 
-    /// Whether the subscript resolved to a shared alias — `IndexRef`'s
-    /// `&Output`, which a write through the element cannot reach. The `&mut`
-    /// `IndexRefMut` hands out, and a by-value read, both answer `false`.
-    fn subscript_aliases_shared(&self, index_id: AstId) -> bool {
-        let Some(dispatch) = self.sem.types.operator_dispatch.get(&index_id) else {
-            return false;
-        };
-        dispatch.needs_deref
-            && matches!(
-                self.tysys.type_table.borrow().get(dispatch.return_type),
-                ResolvedType::Ref(_)
-            )
+    /// Why a write cannot reach the element this subscript names, if it cannot.
+    /// Only `IndexRefMut`'s `&mut Output` can be written through: `IndexRef`
+    /// hands out a shared alias, and `IndexValue` hands out a copy, which the
+    /// write would land on and then discard.
+    fn subscript_write_refusal(&self, index_id: AstId) -> Option<&'static str> {
+        let dispatch = self.sem.types.operator_dispatch.get(&index_id)?;
+        if !dispatch.needs_deref {
+            return Some("cannot assign through a by-value index; the container hands out a copy");
+        }
+        matches!(
+            self.tysys.type_table.borrow().get(dispatch.return_type),
+            ResolvedType::Ref(_)
+        )
+        .then_some("cannot assign through immutable reference")
     }
 
     /// Whether an `Index` assignment target reaching `assign_to_target`'s general
@@ -1534,15 +1537,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Standard assignment handling. Fall through here happens when the
         // target isn't `Expr::Index`, or when the IndexAssign trait lookup
         // returned None — `value` was not consumed on either of those paths.
-        let projected = projected_subscript_of_place(target_ast);
-        let marked = Self::mark_mut_place_subscript(projected, ctx);
+        let projected = projected_subscripts_of_place(target_ast);
+        let marked = Self::mark_mut_place_subscripts(&projected, ctx);
         let target_type = self.resolve_expr(target_ast, ctx, None);
-        Self::unmark_mut_place_subscript(marked, ctx);
-        if let Some(id) = projected
-            && self.subscript_aliases_shared(id)
+        Self::unmark_mut_place_subscripts(&marked, ctx);
+        if let Some(refusal) = projected
+            .iter()
+            .find_map(|id| self.subscript_write_refusal(*id))
         {
             let _ = self.emit(TypeError::CannotAssign {
-                message: "cannot assign through immutable reference".to_string(),
+                message: refusal.to_string(),
                 span: target_ast.span(),
             });
             return TypeTable::ERROR;
@@ -1691,7 +1695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `h[0].n += 3` reads and writes one place, so the read side takes the
         // same `&mut` subscript the write side does.
         let marked =
-            Self::mark_mut_place_subscript(projected_subscript_of_place(&compound.target), ctx);
+            Self::mark_mut_place_subscripts(&projected_subscripts_of_place(&compound.target), ctx);
         let saved_hoist_types = std::mem::take(&mut ctx.compound_hoist_types);
         let mut hoists: Vec<CompoundHoist<'_>> = Vec::new();
         collect_compound_hoists(&compound.target, &mut hoists);
@@ -1730,7 +1734,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ctx,
         );
         ctx.compound_hoist_types = saved_hoist_types;
-        Self::unmark_mut_place_subscript(marked, ctx);
+        Self::unmark_mut_place_subscripts(&marked, ctx);
         ctx.exit_scope();
         result
     }
@@ -2028,20 +2032,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// The subscript an assignment target projects through, as in `h[0].n` — the
-/// one place a subscript names a `&mut` rather than a value read. `None` for a
-/// target that is the subscript itself, which `IndexAssign` writes into.
-fn projected_subscript_of_place(target: &ast::Expr) -> Option<AstId> {
+/// Every subscript an assignment target projects through, as in `h[0].n` or
+/// `o[0][0].n` — the one place a subscript names a `&mut` rather than a value
+/// read. A target that is the subscript itself is excluded: `IndexAssign`
+/// writes into that one.
+fn projected_subscripts_of_place(target: &ast::Expr) -> Vec<AstId> {
     let mut at = match target {
         ast::Expr::FieldAccess(field) => &field.expr,
         ast::Expr::Index(index) => &index.expr,
-        _ => return None,
+        _ => return Vec::new(),
     };
+    let mut subscripts = Vec::new();
     loop {
         match at {
-            ast::Expr::Index(index) => return Some(index.id),
+            ast::Expr::Index(index) => {
+                subscripts.push(index.id);
+                at = &index.expr;
+            }
             ast::Expr::FieldAccess(field) => at = &field.expr,
-            _ => return None,
+            _ => return subscripts,
         }
     }
 }

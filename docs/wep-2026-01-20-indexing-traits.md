@@ -60,13 +60,15 @@ A use site dispatches on the traits provided: `&c[i]` and a `&self` receiver tak
 (`IndexAssign`). `c[i].mutating_method()` on a value-only container is a compile
 error — a copy cannot be mutated in place.
 
-Assigning _into_ the element rather than over it — `c[i].f = v`, and the
-compound `c[i].f += v` — writes through the element, so the subscript under it
-is the `&mut` place a `&mut self` receiver takes and dispatches to
-`IndexRefMut`. It falls back the way that receiver does, to `IndexRef` and then
-to a value copy. A container that only hands out `IndexRef`'s `&Output` refuses
-it: writing through a shared reference is the same error the direct target
-`c[i] = v` reports.
+`c[i].f = v` assigns into the element rather than over it, and so does the
+compound `c[i].f += v`. Both write through the element, so every subscript the
+target projects through — `o[i][j].f` has two — is a `&mut` place and takes
+`IndexRefMut`, exactly as a `&mut self` receiver does. That trait alone: a write
+needs the `&mut` the element is reached by, and neither fallback provides one. A
+container offering only `IndexRef` hands out a shared `&Output`, which is the
+write through a shared reference the direct target `c[i] = v` already refuses.
+One offering only `IndexValue` hands out a copy, which the write would land on
+and then discard. Both are errors.
 
 ## The `Ref` and `RefMut` markers
 

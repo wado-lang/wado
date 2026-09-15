@@ -2,7 +2,8 @@
 // `&mut` place and takes `IndexRefMut` — the same route `&mut h[0]` and a
 // `&mut self` method on `h[0]` already take. It resolved as a value read
 // instead, so a container offering only `IndexRefMut` reported no `Index` impl
-// at all.
+// at all. Every subscript on the path is such a place, not just the innermost:
+// `o[0][0].n = v` writes through both.
 
 struct Cell {
     n: i32,
@@ -21,12 +22,32 @@ impl<T> IndexRefMut<i32> for Holder<T> {
     }
 }
 
+struct Outer {
+    inner: Holder<i32>,
+}
+
+impl IndexRefMut<i32> for Outer {
+    type Output = Holder<i32>;
+
+    fn index_ref_mut(&mut self, _idx: i32) -> &mut Self::Output {
+        return &mut self.inner;
+    }
+}
+
 test "a field assignment through a subscript writes into the element" {
     let mut h = Holder { item: 1, cell: Cell { n: 1 } };
     h[0].n = 7;
     assert h.cell.n == 7;
     h[0].n += 3;
     assert h.cell.n == 10;
+}
+
+test "a chain of subscripts writes through every one of them" {
+    let mut o = Outer { inner: Holder { item: 1, cell: Cell { n: 1 } } };
+    o[0][0].n = 7;
+    assert o.inner.cell.n == 7;
+    o[0][0].n += 3;
+    assert o.inner.cell.n == 10;
 }
 
 __DATA__
