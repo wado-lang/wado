@@ -63,7 +63,8 @@ Serializes a value to a pretty JSON string. Convenience over
 ### `pub fn from_string<T: Deserialize, S: AsStrSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON string. Convenience wrapper over
-`from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
+`from_bytes`, which every text source reaches through its own UTF-8 bytes;
+serde I/O is bytes-primary.
 
 ### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 

@@ -54,7 +54,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
@@ -79,7 +79,6 @@ import fn wasi/task-return from "wasi/task-return";
 
 global global:tmpl_hoist_escape_unsafe.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(121, 61);
 global global:tmpl_hoist_escape_unsafe.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(120, 61);
-global global:core:prelude/primitive.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
     let kept: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -88,20 +87,20 @@ fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/string.wado//String";
     let elements: ref "Array<core:prelude/string.wado/String>";
-    let new_used_20: i32;
-    let start_21: i32;
-    let used_30: i32;
-    let used_37: i32;
-    let new_used_46: i32;
-    let start_47: i32;
-    let end_62: i32;
+    let new_used_23: i32;
+    let start_24: i32;
+    let used_33: i32;
+    let used_40: i32;
+    let new_used_52: i32;
+    let start_53: i32;
+    let end_68: i32;
     let ref_val: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
-    let rx_73: i32;
-    let tx_74: i32;
+    let rx_79: i32;
+    let tx_80: i32;
     let new_repr: ref Array<u8>;
-    let self_83: i32;
+    let self_89: i32;
     let $sroa_$iter_2_repr: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_2_index: i32;
     elements = array.new_fixed<ref "core:prelude/string.wado//String">();
@@ -111,22 +110,22 @@ fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
         l1: loop {
             break_if b0 i_1 >= 3;
             $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-            new_used_20 = 0 + 2;
-            if @unlikely(new_used_20 > builtin::array_len($local_6.repr)) {
+            new_used_23 = 0 + 2;
+            if @unlikely(new_used_23 > builtin::array_len($local_6.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_20);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_23);
             }
-            start_21 = $local_6.used;
-            $local_6.used = new_used_20;
-            builtin::array_copy<u8>($local_6.repr, start_21, global:tmpl_hoist_escape_unsafe.wado::$const_obj_2, 0, 2);
+            start_24 = $local_6.used;
+            $local_6.used = new_used_23;
+            builtin::array_copy<u8>($local_6.repr, start_24, global:tmpl_hoist_escape_unsafe.wado::$const_obj_2, 0, 2);
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_1, $local_6);
-            used_30 = kept.used;
-            if @unlikely(used_30 >= builtin::array_len(kept.repr)) {
+            used_33 = kept.used;
+            if @unlikely(used_33 >= builtin::array_len(kept.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(kept);
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">(kept.repr, used_30, $local_6);
-            kept.used = used_30 + 1;
+            builtin::array_set<ref "core:prelude/string.wado//String">(kept.repr, used_33, $local_6);
+            kept.used = used_33 + 1;
             i_1 = i_1 + 1;
             continue l1;
         };
@@ -136,42 +135,42 @@ fn "tmpl_hoist_escape_unsafe.wado/run"() with Stdout {
         l5: loop {
             break_if b4 i_3 >= 3;
             $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
-            new_used_46 = 0 + 2;
-            if @unlikely(new_used_46 > builtin::array_len($local_8.repr)) {
+            new_used_52 = 0 + 2;
+            if @unlikely(new_used_52 > builtin::array_len($local_8.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_46);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_52);
             }
-            start_47 = $local_8.used;
-            $local_8.used = new_used_46;
-            builtin::array_copy<u8>($local_8.repr, start_47, global:tmpl_hoist_escape_unsafe.wado::$const_obj_1, 0, 2);
+            start_53 = $local_8.used;
+            $local_8.used = new_used_52;
+            builtin::array_copy<u8>($local_8.repr, start_53, global:tmpl_hoist_escape_unsafe.wado::$const_obj_1, 0, 2);
             "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i_3, $local_8);
-            used_37 = kept.used;
-            if @unlikely(used_37 >= builtin::array_len(kept.repr)) {
+            used_40 = kept.used;
+            if @unlikely(used_40 >= builtin::array_len(kept.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(kept);
             }
-            builtin::array_set<ref "core:prelude/string.wado//String">(kept.repr, used_37, $local_8);
-            kept.used = used_37 + 1;
+            builtin::array_set<ref "core:prelude/string.wado//String">(kept.repr, used_40, $local_8);
+            kept.used = used_40 + 1;
             i_3 = i_3 + 1;
             continue l5;
         };
     };
-    end_62 = kept.used;
+    end_68 = kept.used;
     $sroa_$iter_2_repr = kept.repr;
     $sroa_$iter_2_index = 0;
     b8: block {
         l9: loop {
-            break_if b8 $sroa_$iter_2_index >= end_62;
+            break_if b8 $sroa_$iter_2_index >= end_68;
             ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_2_repr, $sroa_$iter_2_index);
             $sroa_$iter_2_index = $sroa_$iter_2_index + 1;
-            rx_73 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-            tx_74 = builtin::i32_wrap_i64(packed >> 32_i64);
-            handle = "tmpl_hoist_escape_unsafe.wado/$cm_binding__Stdout_write_via_stream"(rx_73);
-            new_repr = builtin::array_new<u8>(local.tee self_83(ref_val.used) + 1);
-            builtin::array_copy<u8>(new_repr, 0, ref_val.repr, 0, self_83);
-            builtin::array_set_u8(new_repr, self_83, 10);
-            "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_74, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_83 + 1 });
-            "wasi/stream-drop-writable"(tx_74);
+            rx_79 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+            tx_80 = builtin::i32_wrap_i64(packed >> 32_i64);
+            handle = "tmpl_hoist_escape_unsafe.wado/$cm_binding__Stdout_write_via_stream"(rx_79);
+            new_repr = builtin::array_new<u8>(local.tee self_89(ref_val.used) + 1);
+            builtin::array_copy<u8>(new_repr, 0, ref_val.repr, 0, self_89);
+            builtin::array_set_u8(new_repr, self_89, 10);
+            "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_80, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_89 + 1 });
+            "wasi/stream-drop-writable"(tx_80);
             "wasi/future-drop-readable:transmission-cli"(handle);
             continue l9;
         };
@@ -362,7 +361,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_5, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -379,26 +378,26 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     if is_negative {
-        new_used_21 = self.used + 1;
-        if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_22 = self.used;
-        self.used = new_used_21;
-        builtin::array_set_u8(self.repr, start_22, 45);
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_56 = self.used + digit_count, if @unlikely(new_used_56 > builtin::array_len(self.repr)) {
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
-    }, start_57 = self.used, self.used = new_used_56, start_57;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 export fn "tmpl_hoist_escape_unsafe.wado/$cm_export__run" as "run"
