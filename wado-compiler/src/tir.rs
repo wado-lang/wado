@@ -6051,7 +6051,6 @@ impl LocalFrame {
 }
 
 impl TirFunction {
-<<<<<<< HEAD
     /// Whether a `#[retain(...)]` names this parameter as the retained one.
     #[must_use]
     pub fn retains_param(&self, name: &str) -> bool {
@@ -6061,8 +6060,8 @@ impl TirFunction {
     /// The parameters `#[retain(...)]` names, in declaration order.
     pub fn retained_param_names(&self) -> impl Iterator<Item = &str> {
         self.retains.iter().map(|r| r.source.as_str())
-||||||| 953ec307a
-=======
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6117,7 +6116,7 @@ impl TirFunction {
             return_type,
             task_return_type: None,
             effects: Vec::new(),
-            stores: Vec::new(),
+            retains: Vec::new(),
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
@@ -6137,7 +6136,6 @@ impl TirFunction {
             kind: FunctionKind::Regular,
             return_abi: ReturnAbi::default(),
         }
->>>>>>> origin/main
     }
 
     /// Returns true if this is a method (belongs to a struct)

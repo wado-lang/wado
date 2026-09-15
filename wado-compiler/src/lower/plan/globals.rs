@@ -142,39 +142,6 @@ fn build_module_init_function(
 
     TirFunction::synthesized(
         module_source,
-<<<<<<< HEAD
-        def_id: None,
-        is_async: false,
-        name: MODULE_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Public,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        retains: vec![],
-        body: Some(init_body),
-||||||| 953ec307a
-        def_id: None,
-        is_async: false,
-        name: MODULE_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Public,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(init_body),
-=======
         MODULE_INIT_FUNCTION.to_string(),
         TypeTable::UNIT,
         TirBlock {
@@ -182,7 +149,6 @@ fn build_module_init_function(
             span,
         },
         merged,
->>>>>>> origin/main
         span,
     )
 }
@@ -612,50 +578,12 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         span,
     };
 
-<<<<<<< HEAD
-    let init_modules_func = TirFunction {
-        module_source: entry_source.clone(),
-        def_id: None,
-        is_async: false,
-        name: MODULES_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Private,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        retains: vec![],
-        body: Some(init_body),
-||||||| 953ec307a
-    let init_modules_func = TirFunction {
-        module_source: entry_source.clone(),
-        def_id: None,
-        is_async: false,
-        name: MODULES_INIT_FUNCTION.to_string(),
-        visibility: Visibility::Private,
-        is_export: false,
-        type_params: Vec::new(),
-        impl_type_params: Vec::new(),
-        monomorph_info: None,
-        method_info: None,
-        params: Vec::new(),
-        return_type: TypeTable::UNIT,
-        task_return_type: None,
-        effects: Vec::new(),
-        stores: vec![],
-        body: Some(init_body),
-=======
     let init_modules_func = TirFunction::synthesized(
         entry_source.clone(),
         MODULES_INIT_FUNCTION.to_string(),
         TypeTable::UNIT,
         init_body,
         LocalFrame::default(),
->>>>>>> origin/main
         span,
     );
     flat.functions

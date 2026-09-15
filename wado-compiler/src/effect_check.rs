@@ -1,21 +1,7 @@
-<<<<<<< HEAD
-//! Effect and default-purity checking for Wado (Design B): that every call
-//! holds the effects its callee requires, and that defaults are pure. Both
-//! read [`Semantics`] rather than the emitted TIR, so they see every source
-//! function and run on the LSP path. Violations are returned, not emitted.
-||||||| 953ec307a
-//! Effect, stores, and default-purity checking for Wado (Design B): that every
-//! call holds the effects its callee requires, that an escaping reference
-//! parameter declares `stores[param]`, and that defaults are pure. All three
-//! read [`Semantics`] rather than the emitted TIR, so they see every source
-//! function and run on the LSP path. Violations are returned, not emitted.
-=======
-//! Effect, stores, and purity checking for Wado (Design B): that every call
-//! holds the effects its callee requires, that an escaping reference parameter
-//! declares `stores[param]`, and that defaults and global initializers are
-//! pure. All three read [`Semantics`] rather than the emitted TIR, so they see
-//! every source function and run on the LSP path. Violations are returned.
->>>>>>> origin/main
+//! Effect and purity checking for Wado (Design B): that every call holds the
+//! effects its callee requires, and that defaults and global initializers are
+//! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
+//! source function and run on the LSP path. Violations are returned.
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -84,55 +70,6 @@ impl From<EffectError> for Diagnostic {
     }
 }
 
-<<<<<<< HEAD
-/// Error from default-value purity checking
-||||||| 953ec307a
-/// Error from stores checking
-#[derive(Debug, Clone)]
-pub struct StoresError {
-    /// Description of the violation
-    pub message: String,
-    /// Source location
-    pub span: Span,
-    pub module: String,
-}
-
-impl From<StoresError> for Diagnostic {
-    fn from(e: StoresError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::TypeMismatch,
-            message: e.message.clone(),
-            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
-        }
-    }
-}
-
-/// Error from default-value purity checking
-=======
-/// Error from stores checking
-#[derive(Debug, Clone)]
-pub struct StoresError {
-    /// Description of the violation
-    pub message: String,
-    /// Source location
-    pub span: Span,
-    pub module: String,
-}
-
-impl From<StoresError> for Diagnostic {
-    fn from(e: StoresError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::TypeMismatch,
-            message: e.message.clone(),
-            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
-        }
-    }
-}
-
 /// A position whose expression must be pure. The diagnostic names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PureContext {
@@ -150,7 +87,6 @@ impl PureContext {
 }
 
 /// Why an expression that must be pure is rejected, as the diagnostic words it.
->>>>>>> origin/main
 #[derive(Debug, Clone)]
 pub enum Impurity {
     /// The named callee declares an effect.
@@ -367,15 +303,7 @@ pub fn check_semantics(
 #[derive(Default)]
 pub struct SemanticDiagnostics {
     pub effects: Vec<EffectError>,
-<<<<<<< HEAD
-    pub purity: Vec<DefaultPurityError>,
-||||||| 953ec307a
-    pub stores: Vec<StoresError>,
-    pub purity: Vec<DefaultPurityError>,
-=======
-    pub stores: Vec<StoresError>,
     pub purity: Vec<PurityError>,
->>>>>>> origin/main
 }
 
 impl SemanticDiagnostics {

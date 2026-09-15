@@ -106,17 +106,8 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-<<<<<<< HEAD
-    DefaultPurityError, EffectError, SemanticDiagnostics, check_default_purity_semantic,
-    check_effects_semantic, check_semantics,
-||||||| 953ec307a
-    DefaultPurityError, EffectError, SemanticDiagnostics, StoresError,
-    check_default_purity_semantic, check_effects_semantic, check_semantics, check_stores_semantic,
-=======
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
-    StoresError, check_effects_semantic, check_purity_semantic, check_semantics,
-    check_stores_semantic,
->>>>>>> origin/main
+    check_effects_semantic, check_purity_semantic, check_semantics,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -1165,16 +1156,8 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-<<<<<<< HEAD
-    // === Phase 6b: Effect and Default-Purity Checks ===
+    // === Phase 6b: Effect and Purity Checks ===
     // Both are produced from `Semantics` (AST + recorded facts), not the
-||||||| 953ec307a
-    // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===
-    // All three are produced from `Semantics` (AST + recorded facts), not the
-=======
-    // === Phase 6b: Effect, Stores, and Purity Checks (Design B) ===
-    // All three are produced from `Semantics` (AST + recorded facts), not the
->>>>>>> origin/main
     // emitted TIR, so they see every source function regardless of what reify
     // emits and share their logic with the LSP.
     {
