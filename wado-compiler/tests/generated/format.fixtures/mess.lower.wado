@@ -8180,6 +8180,14 @@ fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::interna
     out."core:prelude/string.wado/String::internal_push_string"(self);
 }
 
+fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::len"(self: &String) -> i32 {
+    return self.used;
+}
+
+fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::get_byte_unchecked"(self: &String, index: i32) -> u8 {
+    return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
+}
+
 fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &StrSlice) -> StrSlice with stores[self] {
     return *self;
 }
