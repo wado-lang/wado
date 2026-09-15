@@ -12,7 +12,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::tir;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::TypeTable;
 use crate::token::Span;
 
 /// Resolve the whole-package context for the append rules, or `None` when the
@@ -22,10 +22,10 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 }
 
 pub(super) struct Ctx {
-    /// The `push_str` instances a fused run absorbs — one per `AsStrSlice`
-    /// source type the program appends from, minus the views: the fused form
-    /// writes through `write_str_at`, which copies from byte 0 of a whole
-    /// `String`.
+    /// The `push_str` instances a fused run absorbs: those appending a whole
+    /// `String`, one per `AsStrSlice` source type the program instantiates. A
+    /// view starts at an offset, which `write_str_at` — copying from byte 0 —
+    /// has nowhere to put.
     push_str_ids: IndexSet<FuncId>,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: FuncId,
@@ -57,15 +57,11 @@ impl Ctx {
         let mut set_byte_id: Option<FuncId> = None;
         let mut write_str_id: Option<FuncId> = None;
         let type_table = project.type_table.borrow();
-        let string_name = type_table
-            .compiler_items()
-            .struct_name(CompilerItem::String)
-            .to_string();
         let appends_a_string = |f: &NirFunction| {
             let [_receiver, text] = f.params.as_slice() else {
                 return false;
             };
-            is_string(text.type_id, &type_table, &string_name)
+            type_table.is_string(type_table.peel_refs(text.type_id))
         };
         for func_rc in &project.functions {
             let f = func_rc.borrow();
@@ -108,40 +104,6 @@ impl Ctx {
             push_ascii_id,
             fused,
         })
-    }
-}
-
-/// True when `type_id` is the `String` struct, behind any number of references.
-/// A `StrSlice` answers `false`: it starts at an offset the fused copy, which
-/// reads from byte 0, has nowhere to put.
-fn is_string(type_id: TypeId, type_table: &TypeTable, string_name: &str) -> bool {
-    let Some(resolved) = type_table.try_get(type_id) else {
-        return false;
-    };
-    match resolved {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-            is_string(*inner, type_table, string_name)
-        }
-        ResolvedType::Struct { def, .. } => type_table.struct_head_name(*def) == string_name,
-        ResolvedType::Primitive(_)
-        | ResolvedType::Unit
-        | ResolvedType::Never
-        | ResolvedType::Enum { .. }
-        | ResolvedType::Resource { .. }
-        | ResolvedType::Variant { .. }
-        | ResolvedType::GenericResource { .. }
-        | ResolvedType::Function { .. }
-        | ResolvedType::Reactive(_)
-        | ResolvedType::TypeParam { .. }
-        | ResolvedType::InferVar(_)
-        | ResolvedType::TypePack { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::AssocTypeProjection { .. }
-        | ResolvedType::BuiltinArray(_)
-        | ResolvedType::Newtype { .. }
-        | ResolvedType::Flags { .. }
-        | ResolvedType::Unknown
-        | ResolvedType::Error => false,
     }
 }
 

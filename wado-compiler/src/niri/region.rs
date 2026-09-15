@@ -63,7 +63,7 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
 /// [`materialization_pair`] where an expression did. A global stored twice is
 /// left out: a second store is a mutation, not a materialization.
 #[must_use]
-pub fn materialized_globals(body: &Body, block: BlockId) -> Vec<niri::GlobalKey> {
+pub(super) fn materialized_globals(body: &Body, block: BlockId) -> Vec<niri::GlobalKey> {
     let mut once: Vec<niri::GlobalKey> = Vec::new();
     let mut twice: Vec<niri::GlobalKey> = Vec::new();
     for stmt in &body.blocks[block].stmts {
@@ -98,10 +98,8 @@ fn stmt_global_store(body: &Body, stmt: StmtId) -> Option<niri::GlobalKey> {
 
 /// The global a block materializes: exactly `{ G = v; G }`, the shape
 /// constant-object globalization leaves where it names a constant at a use site.
-///
-/// The pair itself is never a region: it would fold, and the fold is the loss.
 #[must_use]
-pub fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalKey> {
+fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalKey> {
     let [set, get] = body.blocks[block].stmts.as_slice() else {
         return None;
     };
@@ -115,7 +113,7 @@ pub fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalK
 
 /// The global an expression names, whether it reads or writes it.
 #[must_use]
-pub fn global_mention(body: &Body, e: ExprId) -> Option<niri::GlobalKey> {
+pub(super) fn global_mention(body: &Body, e: ExprId) -> Option<niri::GlobalKey> {
     match &body.exprs[e].kind {
         ExprKind::GlobalVarGet {
             module_source,

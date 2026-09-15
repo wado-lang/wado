@@ -131,11 +131,12 @@ Reads of other globals are excluded — a non-const value cannot promote.
 #### Gate: allocating initializer
 
 A `let` whose value reduces to one local read through `&`, `*` and casts names
-storage that already exists. Its global would alias whatever holds that storage
-— itself a candidate — so the literal ends up in two globals, one pointing at
-the other. `aliases_one_binding` declines it, leaving the binding that does
-allocate to hoist. A `&String` argument reaching a `S: AsStrSlice` parameter
-wears exactly this shape after the blanket `impl AsStrSlice for &T` inlines.
+storage that already exists. Its global would alias whatever holds that storage,
+and that binding is a candidate of its own, so the literal ends up in two
+globals with one pointing at the other. `aliases_one_binding` declines it,
+leaving the binding that does allocate to hoist. A `&String` argument reaching
+an `S: AsStrSlice` parameter has exactly this shape once the blanket
+`impl AsStrSlice for &T` inlines.
 
 #### Gate: read-only
 
