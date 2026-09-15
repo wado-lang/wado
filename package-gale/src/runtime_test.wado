@@ -8,13 +8,13 @@ use {
     highlight_html,
 } from "./runtime/highlight.wado";
 
-fn ls(text: String) -> LexerSlice {
+fn ls<S: AsStrSlice>(text: S) -> LexerSlice {
     return LexerSlice::from_string(text);
 }
 
 /// Build a TokenStream over `src` from `[kind, start, end]` token specs (no
 /// trivia). The returned stream borrows a fresh char list; GC keeps it alive.
-fn stream_of(src: String, specs: List<[i32, i32, i32]>) -> TokenStream {
+fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
     let chars: List<char> = src.chars().collect();
     let mut ts = TokenStream::new(&chars);
     for let s of &specs {

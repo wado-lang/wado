@@ -110,8 +110,8 @@ pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     }
 }
 
-fn seen_contains(seen: &List<String>, text: &String) -> bool {
-    return seen.iter_ref().any(|item| *item == *text);
+fn seen_contains<S: AsStrSlice>(seen: &List<String>, text: S) -> bool {
+    return seen.iter_ref().any(|item| *item == text.to_string());
 }
 
 pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken> {
@@ -130,18 +130,18 @@ pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken>
 /// would emit duplicate globals / `try_lit_*` fns / `token_kind_name` arms and
 /// break compilation, so the second and later occurrences get a numeric
 /// suffix (`TK_LIT_AND`, `TK_LIT_AND_2`, …). Deterministic in source order.
-fn disambiguate_const_name(base: &String, result: &List<LitToken>) -> String {
-    let mut candidate = *base;
+fn disambiguate_const_name<S: AsStrSlice>(base: S, result: &List<LitToken>) -> String {
+    let mut candidate = base.to_string();
     let mut n = 2;
     while const_name_taken(result, &candidate) {
-        candidate = `${*base}_${n}`;
+        candidate = `${base.to_string()}_${n}`;
         n += 1;
     }
     return candidate;
 }
 
-fn const_name_taken(result: &List<LitToken>, name: &String) -> bool {
-    return result.iter_ref().any(|lit| lit.const_name == *name);
+fn const_name_taken<S: AsStrSlice>(result: &List<LitToken>, name: S) -> bool {
+    return result.iter_ref().any(|lit| lit.const_name == name.to_string());
 }
 
 fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>, result: &mut List<LitToken>) {
@@ -286,7 +286,7 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
 /// `i32` (the runtime token-kind type). Anything else — a token name, an
 /// overflowing value, an empty string — returns `None` so the caller can
 /// defer to the regular `TK_<name>` path.
-fn parse_token_type_numeric(s: &String) -> Option<i32> {
+fn parse_token_type_numeric<S: AsStrSlice>(s: S) -> Option<i32> {
     if s.is_empty() {
         return null;
     }
@@ -303,18 +303,18 @@ fn parse_token_type_numeric(s: &String) -> Option<i32> {
     return Option::<i32>::Some(acc as i32);
 }
 
-fn rule_name_exists(lexer_rules: &List<LexerRule>, name: &String) -> bool {
-    return lexer_rules.iter_ref().any(|rule| !rule.is_fragment && rule.name == *name);
+fn rule_name_exists<S: AsStrSlice>(lexer_rules: &List<LexerRule>, name: S) -> bool {
+    return lexer_rules.iter_ref().any(|rule| !rule.is_fragment && rule.name == name.to_string());
 }
 
-pub fn gen_lexer(
+pub fn gen_lexer<S: AsStrSlice>(
     w: &mut CodeWriter,
     grammar: &Grammar,
     lit_tokens: &List<LitToken>,
     atn_class: &TreeMap<String, i32>,
     members: &MemberDecls,
     has_members: bool,
-    sc_name: &String,
+    sc_name: S,
     sc_ops: &List<SuperOp>,
     mode_use: &ModeAttrUse,
 ) {
@@ -445,7 +445,8 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     ImplSpec::new(&"Lexer").emit_begin(w);
 
     let mut f = FnSpec::new(&"new");
-    f.add_param(&"input", &"&String");
+    f.add_generic(&"S: AsStrSlice");
+    f.add_param(&"input", &"S");
     f.set_return_type(&"Lexer");
     f.emit_begin(w);
     w.line(&"return Lexer { chars: input.to_chars(), pos: 0 };");
@@ -595,9 +596,9 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface)
     lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
 }
 
-fn gen_current_mode_write(w: &mut CodeWriter, surface: &LexerSurface, value: &String) {
+fn gen_current_mode_write<S: AsStrSlice>(w: &mut CodeWriter, surface: &LexerSurface, value: S) {
     if surface.current_mode {
-        w.line(&`self.${LEXER_MODE_FIELD} = ${*value};`);
+        w.line(&`self.${LEXER_MODE_FIELD} = ${value.to_string()};`);
     }
 }
 
@@ -626,33 +627,33 @@ fn gen_one_mode_command_assert(w: &mut CodeWriter) {
     );
 }
 
-fn lexer_reader(w: &mut CodeWriter, name: &String, field: &String, vis: Vis) {
+fn lexer_reader<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field: S1, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver(&"&self");
     f.set_return_type(&"i32");
     f.emit_begin(w);
-    w.line(&`return self.${*field};`);
+    w.line(&`return self.${field.to_string()};`);
     w.end();
 }
 
-fn lexer_setter(w: &mut CodeWriter, name: &String, arg: &String, field: &String, vis: Vis) {
+fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, arg: S1, field: S2, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver(&"&mut self");
     f.add_param(arg, &"i32");
     f.emit_begin(w);
-    w.line(&`self.${*field} = ${*arg};`);
+    w.line(&`self.${field.to_string()} = ${arg.to_string()};`);
     w.end();
 }
 
-fn lexer_flag(w: &mut CodeWriter, name: &String, field: &String, vis: Vis) {
+fn lexer_flag<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field: S1, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
     f.set_receiver(&"&mut self");
     f.emit_begin(w);
-    w.line(&`self.${*field} = true;`);
+    w.line(&`self.${field.to_string()} = true;`);
     w.end();
 }
 
-fn gen_lexer_match_fns(
+fn gen_lexer_match_fns<S: AsStrSlice>(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
     keywords: &List<KeywordInfo>,
@@ -661,7 +662,7 @@ fn gen_lexer_match_fns(
     atn_class: &TreeMap<String, i32>,
     ea: bool,
     hm: bool,
-    sc_name: &String,
+    sc_name: S,
 ) {
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
@@ -852,8 +853,8 @@ pub fn fragment_is_recursive(rule: &LexerRule, all_rules: &List<LexerRule>) -> b
     return fragment_refs_self(&rule.name, &rule.body, all_rules, &mut visited);
 }
 
-fn fragment_refs_self(
-    target: &String,
+fn fragment_refs_self<S: AsStrSlice>(
+    target: S,
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     visited: &mut List<String>,
@@ -868,15 +869,15 @@ fn fragment_refs_self(
     return false;
 }
 
-fn fragment_elem_refs_self(
-    target: &String,
+fn fragment_elem_refs_self<S: AsStrSlice>(
+    target: S,
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
     visited: &mut List<String>,
 ) -> bool {
     match *elem {
         RuleRef(name) => {
-            if name == *target {
+            if name == target.to_string() {
                 return true;
             }
             if visited.iter_ref().any(|v: &String| *v == name) {
@@ -910,8 +911,8 @@ fn fragment_elem_refs_self(
 /// preserving case keeps distinct rules distinct (`ID` vs `Id` →
 /// `try_ID` / `try_Id`) without any collision-resolution bookkeeping.
 /// Single source of truth so every emit site agrees on the name.
-pub fn lexer_try_fn_name(name: &String) -> String {
-    return `try_${*name}`;
+pub fn lexer_try_fn_name<S: AsStrSlice>(name: S) -> String {
+    return `try_${name.to_string()}`;
 }
 
 /// Whether some lexer rule reaches `rule` through a generated `try_` call rather
@@ -933,13 +934,13 @@ pub fn lexer_rule_is_called(rule: &LexerRule, all_rules: &List<LexerRule>) -> bo
     return false;
 }
 
-fn lexer_alt_refs_rule(alt: &LexerAlternative, name: &String) -> bool {
+fn lexer_alt_refs_rule<S: AsStrSlice>(alt: &LexerAlternative, name: S) -> bool {
     return alt.elements.iter_ref().any(|e| lexer_elem_refs_rule(e, name));
 }
 
-fn lexer_elem_refs_rule(elem: &LexerElement, name: &String) -> bool {
+fn lexer_elem_refs_rule<S: AsStrSlice>(elem: &LexerElement, name: S) -> bool {
     return match *elem {
-        RuleRef(n) => n == *name,
+        RuleRef(n) => n == name.to_string(),
         Group(alts) => {
             for let a of &alts {
                 if lexer_alt_refs_rule(a, name) {
@@ -954,7 +955,7 @@ fn lexer_elem_refs_rule(elem: &LexerElement, name: &String) -> bool {
     };
 }
 
-fn gen_lexer_match_fn(
+fn gen_lexer_match_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
@@ -962,7 +963,7 @@ fn gen_lexer_match_fn(
     atn_class: &TreeMap<String, i32>,
     ea: bool,
     hm: bool,
-    sc_name: &String,
+    sc_name: S,
 ) {
     let fn_name = lexer_try_fn_name(&rule.name);
     let ci = resolve_ci(grammar_opts, &rule.options);
@@ -1017,7 +1018,7 @@ fn gen_lexer_match_fn(
 /// rule / group / fragment (a false predicate falls through to the next alt).
 /// `gen_lexer_alt_seq` drives this over every `before_index` (alt-initial, mid,
 /// trailing), so predicates at any position in an alt are placed.
-fn gen_lexer_rule_predicates(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool, fail_action: &String) {
+fn gen_lexer_rule_predicates<S: AsStrSlice>(w: &mut CodeWriter, actions: &List<AltAction>, before: i32, ea: bool, fail_action: S) {
     if !ea {
         return;
     }
@@ -1200,7 +1201,7 @@ fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
 ///
 /// The rule re-runs its own match with the actions dropped in at their cursors —
 /// every emit the match can take replays, restructured repeats included.
-fn gen_lexer_apply_fns(w: &mut CodeWriter, grammar: &Grammar, has_members: bool, sc_name: &String) {
+fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has_members: bool, sc_name: S) {
     let executes = lexer_grammar_executes_actions(grammar);
     for let rule of &grammar.lexer_rules {
         let mut ids: List<i32> = [];
@@ -1248,7 +1249,7 @@ fn gen_lexer_apply_replay_body(
 
 /// Emit a staged lexer-action body as a statement, normalizing the trailing
 /// separator so a body written with or without `;` yields exactly one.
-fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
+fn emit_lexer_action_stmt<S: AsStrSlice>(w: &mut CodeWriter, body: S) {
     let trimmed = body.trim();
     if trimmed.ends_with(";") || trimmed.ends_with("}") {
         w.line(&trimmed);
@@ -1257,8 +1258,8 @@ fn emit_lexer_action_stmt(w: &mut CodeWriter, body: &String) {
     }
 }
 
-fn apply_fn_name(rule_name: &String) -> String {
-    return `apply_${*rule_name}_actions`;
+fn apply_fn_name<S: AsStrSlice>(rule_name: S) -> String {
+    return `apply_${rule_name.to_string()}_actions`;
 }
 
 /// Emit the post-tournament replay dispatch: for the winning rule (`best_act`),
@@ -1436,12 +1437,12 @@ fn push_all_lexer_element_action_ids(elem: &LexerElement, out: &mut List<i32>) {
 /// Emit a body of alternatives — a rule's own, a group's, or an inlined
 /// fragment's — as the plan shapes it. One alternative is not an alternation, so
 /// it goes straight to the sequence.
-fn gen_lexer_body(
+fn gen_lexer_body<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerBodyPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -1453,12 +1454,12 @@ fn gen_lexer_body(
     }
 }
 
-fn gen_lexer_alts(
+fn gen_lexer_alts<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerAltsPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -1498,12 +1499,12 @@ fn gen_lexer_alts(
 /// without backtracking precisely because nothing follows the alternation, so
 /// the alternative's length is the rule's length — an alternation with a suffix
 /// keeps the first-match emit, where a longer arm could strand the suffix.
-fn gen_lexer_alts_longest(
+fn gen_lexer_alts_longest<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerAltsPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -1528,12 +1529,12 @@ fn gen_lexer_alts_longest(
 /// with its actions in place. Selection mirrors `gen_lexer_alts` exactly
 /// (longest in tail position, first-match otherwise), so the replay lands on the
 /// alternative the tournament actually matched.
-fn gen_lexer_alts_replay(
+fn gen_lexer_alts_replay<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     plan: &LexerAltsPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -1565,7 +1566,7 @@ fn gen_lexer_alts_replay(
             w.end();
         }
     }
-    w.line(&`if sel_alt_${id} < 0 { ${*fail_action}; }`);
+    w.line(&`if sel_alt_${id} < 0 { ${fail_action.to_string()}; }`);
     w.line(&`pos = sel_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
@@ -1836,12 +1837,12 @@ fn probe_ea(replay: bool, ea: bool) -> bool {
 /// the match evaluated them. Every arm-scoring and first-match selection goes
 /// through here, so none can hand the enclosing body's `ea` to a decision and
 /// score an arm the match had ruled out.
-fn gen_lexer_arm_probe(
+fn gen_lexer_arm_probe<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2192,13 +2193,13 @@ fn plan_elem(elem: &LexerElement, all_rules: &List<LexerRule>, ci: bool, tail: b
 /// Emit `alt` from element `from` on, taking every strategy from `plan`. `from`
 /// lets an emit re-lower the tail of a sequence — a scored alternation peeks it,
 /// a lookahead-aware repeat peeks then commits it — from those same steps.
-fn gen_lexer_alt_seq(
+fn gen_lexer_alt_seq<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2272,7 +2273,7 @@ enum SeqFlow {
 
 /// Emit the repeat at `alt.elements[index]`, and say how much of what follows it
 /// took with it.
-fn gen_lexer_repeat_step(
+fn gen_lexer_repeat_step<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
@@ -2280,7 +2281,7 @@ fn gen_lexer_repeat_step(
     rep: &LexerRepeatElement,
     rp: &LexerRepeatPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2766,7 +2767,7 @@ fn lexer_alt_is_peek_safe(alt: &LexerAlternative, all_rules: &List<LexerRule>, v
 /// On the replay path the scan stays match-only and a second walk re-runs the
 /// iterations it kept — never the ones it tried and gave back — then the rest,
 /// so every action lands at the cursor it was written at.
-fn gen_lexer_repeat_lookahead_aware(
+fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
@@ -2774,7 +2775,7 @@ fn gen_lexer_repeat_lookahead_aware(
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2821,7 +2822,7 @@ fn gen_lexer_repeat_lookahead_aware(
     w.end();
 
     w.begin(&`if ${accept_var} < 0`);
-    w.line(&`${*fail_action};`);
+    w.line(&`${fail_action.to_string()};`);
     w.end();
 
     if replay {
@@ -2853,21 +2854,21 @@ fn gen_lexer_repeat_lookahead_aware(
 /// that set `bound` already proved every iteration up to it matches, so a
 /// mismatch — or a cursor landing anywhere but `bound` — is a codegen bug, and
 /// traps loudly rather than degrading to a "rule rejected" verdict.
-fn gen_lexer_replay_to(
+fn gen_lexer_replay_to<S: AsStrSlice>(
     w: &mut CodeWriter,
     inner: &LexerElement,
     inner_plan: &LexerElemPlan,
     all_rules: &List<LexerRule>,
-    bound: &String,
+    bound: S,
     ci: bool,
     hm: bool,
 ) {
     let msg = `lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted`;
     let fail = `panic("${msg}")`;
-    w.begin(&`while pos < ${*bound}`);
+    w.begin(&`while pos < ${bound.to_string()}`);
     gen_lexer_elem(w, inner, inner_plan, all_rules, &fail, ci, /*ea=*/ false, hm, /*replay=*/ true);
     w.end();
-    w.line(&`if pos != ${*bound} { ${fail}; }`);
+    w.line(&`if pos != ${bound.to_string()} { ${fail}; }`);
 }
 
 /// Maximal-munch emit for an alternation that has a suffix after it.
@@ -2883,7 +2884,7 @@ fn gen_lexer_replay_to(
 /// Same single-pass accept-state tracking as
 /// `gen_lexer_repeat_lookahead_aware`, and no try-fail-retry: the selection
 /// scan is match-only, so a losing arm never runs an action.
-fn gen_lexer_alts_lookahead_aware(
+fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     w: &mut CodeWriter,
     alts: &List<LexerAlternative>,
     arms: &List<LexerSeqPlan>,
@@ -2891,7 +2892,7 @@ fn gen_lexer_alts_lookahead_aware(
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2929,7 +2930,7 @@ fn gen_lexer_alts_lookahead_aware(
         w.end();
         w.end();
     }
-    w.line(&`if la_win_${id} < 0 { ${*fail_action}; }`);
+    w.line(&`if la_win_${id} < 0 { ${fail_action.to_string()}; }`);
     if !replay {
         w.line(&`pos = la_end_${id};`);
         return;
@@ -2957,13 +2958,13 @@ fn gen_lexer_alts_lookahead_aware(
 /// The alternative's own actions stay with the alternative: the emit that cuts
 /// here either breaks out to the post-loop pass or replays the whole sequence,
 /// so this pass carries the elements alone.
-fn gen_lexer_suffix_seq(
+fn gen_lexer_suffix_seq<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -2980,13 +2981,13 @@ fn gen_lexer_suffix_seq(
 /// `record_end` picks which position: a repeat wants where the suffix would
 /// START, to resume its cursor there; an alternation wants where it would END,
 /// which is how far the whole rule reaches through the arm being scored.
-fn gen_lexer_suffix_peek(
+fn gen_lexer_suffix_peek<S: AsStrSlice>(
     w: &mut CodeWriter,
     alt: &LexerAlternative,
     plan: &LexerSeqPlan,
     from: i32,
     all_rules: &List<LexerRule>,
-    accept_var: &String,
+    accept_var: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3011,16 +3012,16 @@ fn gen_lexer_suffix_peek(
     w.end();
     w.line(&`pos = ${save_var};`);
     w.begin(&`if ${matched_var}`);
-    w.line(&`${*accept_var} = ${if record_end { end_var } else { save_var }};`);
+    w.line(&`${accept_var.to_string()} = ${if record_end { end_var } else { save_var }};`);
     w.end();
 }
 
-fn gen_lexer_elem(
+fn gen_lexer_elem<S: AsStrSlice>(
     w: &mut CodeWriter,
     elem: &LexerElement,
     plan: &LexerElemPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3067,7 +3068,7 @@ fn elem_inlined_body(elem: &LexerElement, all_rules: &List<LexerRule>) -> List<L
 
 /// An element the emit consumes without descending into it: a literal, a char
 /// class or range, `.`, `EOF`, or a rule reached by its own `try_*` fn.
-fn gen_lexer_leaf(w: &mut CodeWriter, elem: &LexerElement, fail_action: &String, ci: bool, hm: bool) {
+fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_action: S, ci: bool, hm: bool) {
     let call_ctx = if hm { "lx" } else { "chars" };
     match *elem {
         Literal(text) => {
@@ -3120,13 +3121,13 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
     return CharClass { ranges: expanded, negated: cc.negated };
 }
 
-fn gen_char_class(w: &mut CodeWriter, cc: &CharClass, fail_action: &String) {
+fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action: S) {
     w.line(&`if pos >= chars.len() { ${fail_action}; }`);
     let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.line(&`if ${cond} { ${*fail_action}; }`);
+        w.line(&`if ${cond} { ${fail_action.to_string()}; }`);
     } else {
-        w.line(&`if !(${cond}) { ${*fail_action}; }`);
+        w.line(&`if !(${cond}) { ${fail_action.to_string()}; }`);
     }
     w.line(&"pos += 1;");
 }
@@ -3150,12 +3151,12 @@ fn char_class_disjunction(cc: &CharClass) -> String {
     return s;
 }
 
-fn gen_lexer_repeat(
+fn gen_lexer_repeat<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3203,12 +3204,12 @@ fn gen_lexer_repeat(
 
 /// One iteration of a repeat: the inner element, and on the replay path a
 /// match-only probe of it first, so a non-matching iteration runs no action.
-fn gen_lexer_repeat_iteration(
+fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3226,7 +3227,7 @@ fn gen_lexer_repeat_iteration(
         gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, pea, hm, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
-        w.line(&`if pos > end { ${*fail_action}; }`);
+        w.line(&`if pos > end { ${fail_action.to_string()}; }`);
         return;
     }
     let probe = `rep_probe_${id}`;
@@ -3238,7 +3239,7 @@ fn gen_lexer_repeat_iteration(
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
     // is not part of the match, however the match pass came to stop there.
-    w.line(&`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${*fail_action}; }`);
+    w.line(&`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action.to_string()}; }`);
     w.line(&`pos = ${probe}_saved;`);
     gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, true);
 }
@@ -3272,14 +3273,14 @@ fn lexer_alt_has_any_action(alt: &LexerAlternative, all_rules: &List<LexerRule>)
 /// On the replay path the exit try stays match-only and the rest is re-run once
 /// after the loop, from the position that ended it — so the rest's actions fire
 /// for the iteration that exits and for no other.
-fn gen_lexer_non_greedy_repeat(
+fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
     w: &mut CodeWriter,
     rep: &LexerRepeatElement,
     inner: &LexerElemPlan,
     rest: &LexerAlternative,
     rest_plan: &LexerSeqPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3325,12 +3326,12 @@ fn gen_lexer_non_greedy_repeat(
     }
 }
 
-fn gen_lexer_not(
+fn gen_lexer_not<S: AsStrSlice>(
     w: &mut CodeWriter,
     not_elem: &LexerNotElement,
     inner: &LexerElemPlan,
     all_rules: &List<LexerRule>,
-    fail_action: &String,
+    fail_action: S,
     ci: bool,
     ea: bool,
     hm: bool,
@@ -3358,8 +3359,8 @@ fn gen_lexer_not(
     w.line(&"pos += 1;");
 }
 
-pub fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name && r.is_fragment);
+pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
+    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.to_string() && r.is_fragment);
 }
 
 /// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).
@@ -3697,8 +3698,8 @@ fn keyword_carrier_admits(
     return carrier;
 }
 
-fn is_keyword_rule_name(name: &String, keywords: &List<KeywordInfo>) -> bool {
-    return keywords.iter_ref().any(|kw| kw.rule_name == *name);
+fn is_keyword_rule_name<S: AsStrSlice>(name: S, keywords: &List<KeywordInfo>) -> bool {
+    return keywords.iter_ref().any(|kw| kw.rule_name == name.to_string());
 }
 
 /// Extracts the fixed literal text from a lexer rule, if it's a pure literal sequence.
@@ -3932,7 +3933,7 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
     }
 }
 
-fn lit_try_fn_name(const_name: &String) -> String {
+fn lit_try_fn_name<S: AsStrSlice>(const_name: S) -> String {
     let mut result = String::with_capacity(const_name.len() + 4);
     result.push_str(&"try_lit_");
     let chars: List<char> = const_name.chars().collect();
@@ -4680,16 +4681,16 @@ fn gen_group_calls(
 
 /// Index of `name` in `names`, or -1. Small linear scan — the executed-action
 /// rule list is short.
-fn index_of_name(names: &List<String>, name: &String) -> i32 {
+fn index_of_name<S: AsStrSlice>(names: &List<String>, name: S) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == *name {
+        if names[i] == name.to_string() {
             return i;
         }
     }
     return -1;
 }
 
-fn gen_tokenize_fn(
+fn gen_tokenize_fn<S: AsStrSlice>(
     w: &mut CodeWriter,
     lexer_rules: &List<LexerRule>,
     lit_tokens: &List<LitToken>,
@@ -4698,7 +4699,7 @@ fn gen_tokenize_fn(
     grammar_opts: &List<GrammarOption>,
     act_rule_names: &List<String>,
     has_members: bool,
-    sc_name: &String,
+    sc_name: S,
     surface: &LexerSurface,
 ) {
     let has_actions = !act_rule_names.is_empty();
@@ -4715,7 +4716,8 @@ fn gen_tokenize_fn(
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
     let mut f = FnSpec::new(&"tokenize", Vis::Pub);
-    f.add_param(&"input", &"&String");
+    f.add_generic(&"S: AsStrSlice");
+    f.add_param(&"input", &"S");
     f.set_return_type(&"TokenStream");
     // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the effect.
     if !sc_name.is_empty() {
@@ -4977,9 +4979,9 @@ fn gen_tokenize_fn(
 /// Call the base's `emit` hook for a token that will be pushed. Placed after
 /// the skip / more decision, so a suppressed match never reaches the base and a
 /// non-default channel still does. The hook may retype the token.
-fn gen_lexer_emit_hook(
+fn gen_lexer_emit_hook<S: AsStrSlice>(
     w: &mut CodeWriter,
-    sc_name: &String,
+    sc_name: S,
     has_skip: bool,
     has_more_rules: bool,
     has_channel_rules: bool,
@@ -5010,8 +5012,8 @@ fn gen_lexer_emit_hook(
 
 /// Emit a default-channel token commit: push it with the pending leading-trivia
 /// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
-fn emit_token_commit(w: &mut CodeWriter, kind: &String, start: &String, end: &String) {
-    w.line(&`ts.push_token(${*kind}, ${*start}, ${*end}, triv_lo, ts.trivia_mark());`);
+fn emit_token_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, kind: S, start: S1, end: S2) {
+    w.line(&`ts.push_token(${kind.to_string()}, ${start.to_string()}, ${end.to_string()}, triv_lo, ts.trivia_mark());`);
     w.line(&"triv_lo = ts.trivia_mark();");
 }
 
@@ -5029,12 +5031,12 @@ pub fn vocab_display_names(
     return out;
 }
 
-fn vocab_display_name(kind_name: &String, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
+fn vocab_display_name<S: AsStrSlice>(kind_name: S, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
     // `lit_name`, not hand-quoting: `token_kind_name` renders a literal through
     // it, and the two are one vocabulary — a `'` or a newline in the text has to
     // come back escaped the same way in both.
     for let lit of lit_tokens {
-        if lit.const_name == *kind_name {
+        if lit.const_name == kind_name.to_string() {
             return `${lit_name(lit.text)}`;
         }
     }
@@ -5048,7 +5050,7 @@ fn vocab_display_name(kind_name: &String, lexer_rules: &List<LexerRule>, lit_tok
         }
         return rule_name;
     }
-    return *kind_name;
+    return kind_name.to_string();
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {

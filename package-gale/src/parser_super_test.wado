@@ -8,13 +8,13 @@ use { Diagnostic, DiagnosticKind } from "./gir.wado";
 
 global OPTS: GenerateOptions = GenerateOptions {};
 
-fn gen_source(src: &String) -> String {
-    let mut g = parse(*src).unwrap();
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &OPTS).source;
 }
 
-fn unsupported_count(src: &String) -> i32 {
-    let mut g = parse(*src).unwrap();
+fn unsupported_count<S: AsStrSlice>(src: S) -> i32 {
+    let mut g = parse(src.to_string()).unwrap();
     let mut n = 0;
     for let d of &generate(&mut g, &OPTS).diagnostics {
         if d.kind matches { UnsupportedAction } {
@@ -45,7 +45,7 @@ options { superClass = PBase; language = Wado; }
 shr : GT { this.next_gt() }? GT ;
 GT : '>' ;
 ");
-    assert src.contains("pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult with PBase"), "a caller that installs no handler must fail to compile";
+    assert src.contains("pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult with PBase"), "a caller that installs no handler must fail to compile";
     assert src.contains("fn _parse_shr(p: &mut Parser) -> () with PBase"), "the rule carrying the predicate declares it";
 }
 
@@ -83,7 +83,7 @@ A : 'a' ;
 ";
     assert unsupported_count(src) == 0, "a literal argument settles the signature";
     let out = gen_source(src);
-    assert out.contains("fn p(p: &Parser, a0: String) -> bool;"), out;
+    assert out.contains("fn p<S: AsStrSlice>(p: &Parser, a0: S) -> bool;"), out;
     assert out.contains("PBase::p(p, \"of\")"), out;
 }
 

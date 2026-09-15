@@ -61,14 +61,14 @@ impl RustParserBase for RustPBase {
     }
 }
 
-fn rlex_tok(input: &String) -> rust::TokenStream {
+fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
     let mut base = RustBase {};
     with RustLexerBase => &mut base do {
         return rust::tokenize(input);
     };
 }
 
-fn rlex_prs(input: &String) -> rust::ParseResult {
+fn rlex_prs<S: AsStrSlice>(input: S) -> rust::ParseResult {
     let mut base = RustBase {};
     let mut pbase = RustPBase {};
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
@@ -208,11 +208,11 @@ test "tree: glob `use` path (probe continuation past the enclosing group)" {
     }
 }
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = rlex_prs(input);
     let actual = rust::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input.to_string()}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "tree: operator precedence" {

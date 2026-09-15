@@ -21,7 +21,7 @@ use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
 
-fn parse_grammar(input: String) -> Grammar {
+fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
     let mut g = parse(input).unwrap();
     g.source_files.push("(test)");
     return g;
@@ -117,7 +117,7 @@ test "collect_literal_tokens: literal inside Wildcard is ignored" {
     assert names[0] == "TK_LIT_X", names[0];
 }
 
-fn token_globals_for(input: String) -> String {
+fn token_globals_for<S: AsStrSlice>(input: S) -> String {
     let g = parse_grammar(input);
     let lits = collect_literal_tokens(&g.parser_rules);
     let mut w = CodeWriter::new();
@@ -125,13 +125,13 @@ fn token_globals_for(input: String) -> String {
     return w.to_string();
 }
 
-fn count_occurrences(haystack: &String, needle: String) -> i32 {
+fn count_occurrences<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let needle_len = needle.len();
     if needle_len == 0 {
         return 0;
     }
     let mut count = 0;
-    let mut remainder = *haystack;
+    let mut remainder = haystack.to_string();
     loop {
         match remainder.find(needle) {
             Some(idx) => {
@@ -169,7 +169,7 @@ test "gen_lexer: case-colliding rule names emit distinct try fns" {
     assert out.contains("fn try_Id("), out;
 }
 
-fn lexer_source(src: String) -> String {
+fn lexer_source<S: AsStrSlice>(src: S) -> String {
     let g = parse_grammar(src);
     let lits: List<LitToken> = [];
     let mut w = CodeWriter::new();
@@ -266,29 +266,29 @@ fn ranges_contain(ranges: &List<[char, char]>, c: char) -> bool {
     return false;
 }
 
-fn rule_first_chars(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
+fn rule_first_chars<S: AsStrSlice>(g: &Grammar, name: S) -> [bool, List<[char, char]>] {
     for let rule of &g.lexer_rules {
-        if rule.name == *name {
+        if rule.name == name.to_string() {
             let mut out: List<[char, char]> = [];
             let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, false, &g.options);
             return [r.0, out];
         }
     }
-    panic(`lexer rule ${*name} not found`);
+    panic(`lexer rule ${name.to_string()} not found`);
 }
 
 /// `rule_first_chars` with the rule's real folding, as `build_rule_try_call`
 /// resolves it. Needed to exercise a per-rule `caseInsensitive`.
-fn rule_first_chars_resolved(g: &Grammar, name: &String) -> [bool, List<[char, char]>] {
+fn rule_first_chars_resolved<S: AsStrSlice>(g: &Grammar, name: S) -> [bool, List<[char, char]>] {
     for let rule of &g.lexer_rules {
-        if rule.name == *name {
+        if rule.name == name.to_string() {
             let mut out: List<[char, char]> = [];
             let ci = resolve_ci(&g.options, &rule.options);
             let r = compute_elem_first_chars(&rule.body, &g.lexer_rules, &mut out, ci, &g.options);
             return [r.0, out];
         }
     }
-    panic(`lexer rule ${*name} not found`);
+    panic(`lexer rule ${name.to_string()} not found`);
 }
 
 test "compute_elem_first_chars: nullable leading element keeps a bounded first set" {

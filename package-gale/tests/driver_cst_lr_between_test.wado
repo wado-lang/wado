@@ -8,16 +8,16 @@ use g from "./grammars/lr_between.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_between" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `parse failed for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `parse failed for ${input.to_string()}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `parse failed for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `parse failed for ${input.to_string()}: ${g::to_string_tree(&result)}`;
 }
 
 // The canonical case: between's mandatory `'and'` must survive the binary

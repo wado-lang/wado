@@ -42,7 +42,7 @@ impl LexerSlice {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
-    pub fn from_string(s: String) -> LexerSlice {
+    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
         let chars = s.chars().collect();
         return LexerSlice { chars: &chars, start: 0, end: chars.len() };
     }
@@ -67,7 +67,7 @@ impl LexerSlice {
         return s;
     }
 
-    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+    pub fn eq_str<S: AsStrSlice>(a: S, b: &LexerSlice) -> bool {
         let a_chars = a.chars();
         let mut a_iter = a_chars;
         let mut i = b.start;
@@ -350,12 +350,12 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
-        return ParseError { message, span, expected };
+    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected };
     }
 
-    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
-        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    pub fn at<S: AsStrSlice>(message: S, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected, line, col, rule_stack: [] };
     }
 
     pub fn full_message(&self) -> String {
@@ -477,11 +477,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
             code,
-            message,
+            message: message.to_string(),
             span,
             line,
             col,
@@ -2100,22 +2100,22 @@ pub struct HighlightVisitor {
     pub captures: List<HighlightCapture>,
 }
 
-fn name_index(names: &List<String>, value: &String) -> i32 {
+fn name_index<S: AsStrSlice>(names: &List<String>, value: S) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == *value {
+        if names[i] == value.to_string() {
             return i;
         }
     }
     return -1;
 }
 
-fn capture_id_of(names: &mut List<String>, classes: &mut List<String>, capture: &String) -> i32 {
+fn capture_id_of<S: AsStrSlice>(names: &mut List<String>, classes: &mut List<String>, capture: S) -> i32 {
     let found = name_index(names, capture);
     if found >= 0 {
         return found;
     }
     classes.push(class_text(capture));
-    names.push(*capture);
+    names.push(capture.to_string());
     return names.len() - 1;
 }
 
@@ -2231,7 +2231,7 @@ struct HtmlCursor {
     char_index: i32,
 }
 
-fn push_escaped_upto(out: &mut String, source: &String, cur: &mut HtmlCursor, target: i32) {
+fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlCursor, target: i32) {
     let n = source.len();
     let mut bi = cur.byte_index;
     let mut pos = cur.char_index;
@@ -2269,7 +2269,7 @@ fn push_escaped_upto(out: &mut String, source: &String, cur: &mut HtmlCursor, ta
     cur.char_index = pos;
 }
 
-fn class_text(capture: &String) -> String {
+fn class_text<S: AsStrSlice>(capture: S) -> String {
     let mut out = String::with_capacity(capture.len());
     for let c of capture.chars() {
         if c == '.' {
@@ -2281,7 +2281,7 @@ fn class_text(capture: &String) -> String {
     return out;
 }
 
-pub fn highlight_html(source: &String, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
+pub fn highlight_html<S: AsStrSlice>(source: S, captures: &List<HighlightCapture>, classes: &List<String>) -> String {
     let mut out = String::with_capacity(source.len() * 5);
     let mut cur = HtmlCursor { byte_index: 0, char_index: 0 };
     for let cap of captures {
@@ -2342,7 +2342,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: &String) -> Lexer {
+    fn new<S: AsStrSlice>(input: S) -> Lexer {
         return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
@@ -2538,7 +2538,7 @@ fn try_lit_null(chars: &List<char>, start: i32) -> i32 {
     return pos + 4;
 }
 
-pub fn tokenize(input: &String) -> TokenStream {
+pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
@@ -3255,7 +3255,7 @@ fn _parse_value(p: &mut Parser) -> () {
     }
 }
 
-fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
+fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult {
     assert max_errors >= 1, `max_errors must be >= 1, got ${max_errors}`;
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
@@ -3272,27 +3272,27 @@ fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> 
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
 
-pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return parse_json(input, max_errors);
 }
 
-pub fn parse_json(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_json<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_json(p));
 }
 
-pub fn parse_obj(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_obj<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_obj(p));
 }
 
-pub fn parse_pair(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_pair<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_pair(p));
 }
 
-pub fn parse_arr(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_arr<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_arr(p));
 }
 
-pub fn parse_value(input: &String, max_errors: i32 = i32::MAX) -> ParseResult {
+pub fn parse_value<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult {
     return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_value(p));
 }
 
@@ -3308,10 +3308,10 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
-pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
+pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String {
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
-        if RULE_NAMES[i] == *rule {
+        if rule.eq_str(RULE_NAMES[i]) {
             _kind = i;
             break;
         }
@@ -3365,7 +3365,7 @@ pub fn capture_vocabulary() -> List<String> {
     ];
 }
 
-pub fn highlight_result(result: &ParseResult, input: &String) -> String {
+pub fn highlight_result<S: AsStrSlice>(result: &ParseResult, input: S) -> String {
     let mapping = highlight_mapping();
     let mut visitor = HighlightVisitor::new(mapping);
     highlight_walk(&mut visitor, &result.tokens, &result.cst);
@@ -3373,7 +3373,7 @@ pub fn highlight_result(result: &ParseResult, input: &String) -> String {
     return highlight_html(input, &visitor.captures, &visitor.capture_classes);
 }
 
-pub fn highlight(input: &String) -> String {
+pub fn highlight<S: AsStrSlice>(input: S) -> String {
     let result = parse(input);
     return highlight_result(&result, input);
 }

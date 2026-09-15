@@ -262,7 +262,7 @@ fn owned_slice(buf: List<char>) -> LexerSlice {
 
 /// Compare an owned char buffer against a keyword literal. Callers gate on
 /// `buf.len()` first, so this only runs for length-matched candidates.
-fn buf_eq(buf: &List<char>, lit: &String) -> bool {
+fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
     let mut i = 0;
     for let c of lit.chars() {
         if i >= buf.len() || buf[i] != c {

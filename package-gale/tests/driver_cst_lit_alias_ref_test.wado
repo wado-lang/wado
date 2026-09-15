@@ -8,9 +8,9 @@ use g from "./grammars/lit_alias_ref.g4"
     };
 use { TK_EOF } from "./grammars/lit_alias_ref.g4";
 
-fn tree(input: &String) -> String {
+fn tree<S: AsStrSlice>(input: S) -> String {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     return g::to_string_tree(&result);
 }
 

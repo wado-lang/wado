@@ -1060,6 +1060,14 @@ impl TypeTable {
         id
     }
 
+    /// [`Self::get`] for a caller holding an id from another table — an
+    /// optimizer pass reading a function record, say. A type this table does
+    /// not carry answers `None` rather than panicking.
+    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
+        let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types.get(id)
+    }
+
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types

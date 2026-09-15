@@ -368,6 +368,6 @@ test "an operation's inferred arguments reach its interface and its call sites" 
     ];
     let mut w = CodeWriter::new();
     gen_parser_super_interface(&mut w, &"TsBase", &ops);
-    assert w.to_string().contains("fn p(p: &Parser, a0: String) -> bool;"), `interface: ${w.to_string()}`;
+    assert w.to_string().contains("fn p<S: AsStrSlice>(p: &Parser, a0: S) -> bool;"), `interface: ${w.to_string()}`;
     assert rewrite_this_calls(&"this.p(\"of\")", &"TsBase", SuperSite::ParserPredicate) == "TsBase::p(p, \"of\")";
 }

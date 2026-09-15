@@ -478,7 +478,6 @@ fn build_template_block(
     let buf = BufLocal {
         index: buf_index,
         string_type,
-        ref_string_type: tt.borrow_mut().make_ref(string_type),
         span,
     };
 
@@ -486,6 +485,7 @@ fn build_template_block(
     let with_capacity_call = string_call(
         CompilerItem::StringWithCapacity,
         None,
+        vec![],
         vec![CallArg::new(int_literal(capacity_estimate, span), false)],
         string_type,
         span,
@@ -617,7 +617,6 @@ fn build_template_block(
 struct BufLocal {
     index: u32,
     string_type: TypeId,
-    ref_string_type: TypeId,
     span: Span,
 }
 
@@ -645,20 +644,13 @@ impl BufLocal {
         )
     }
 
-    /// `$r.push_str(&value)`.
+    /// `$r.push_str::<String>(value)`.
     fn push_str(&self, value: TirExpr, ctx: &TemplateCtx) -> TirStmt {
-        let arg = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(value),
-            },
-            self.ref_string_type,
-            self.span,
-        );
         let call = string_call(
             CompilerItem::StringPushStr,
             Some(self.read()),
-            vec![CallArg::new(arg, false)],
+            vec![self.string_type],
+            vec![CallArg::new(value, false)],
             TypeTable::UNIT,
             self.span,
             ctx,
@@ -694,6 +686,7 @@ fn int_literal(value: i64, span: Span) -> TirExpr {
 fn string_call(
     item: CompilerItem,
     receiver: Option<TirExpr>,
+    type_args: Vec<TypeId>,
     args: Vec<CallArg>,
     return_type: TypeId,
     span: Span,
@@ -717,10 +710,10 @@ fn string_call(
         method_info: Some(method_info),
     };
     let kind = match receiver {
-        Some(receiver) => TirExprKind::method_call(Box::new(receiver), func, vec![], args),
+        Some(receiver) => TirExprKind::method_call(Box::new(receiver), func, type_args, args),
         None => TirExprKind::Call {
             func: Box::new(func),
-            type_args: vec![],
+            type_args,
             args,
             has_receiver: false,
         },

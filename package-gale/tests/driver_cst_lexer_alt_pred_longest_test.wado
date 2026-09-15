@@ -12,7 +12,7 @@ use g from "./grammars/lexer_alt_pred_longest.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_alt_pred_longest" },
     };
 
-fn kinds(input: &String) -> List<String> {
+fn kinds<S: AsStrSlice>(input: S) -> List<String> {
     let tokens = g::tokenize(input);
     let mut out: List<String> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -21,9 +21,9 @@ fn kinds(input: &String) -> List<String> {
     return out;
 }
 
-fn assert_kinds(input: &String, expected: &List<String>) {
+fn assert_kinds<S: AsStrSlice>(input: S, expected: &List<String>) {
     let actual = kinds(input);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == *expected, `\ninput:    ${input.to_string()}\nexpected: ${*expected}\nactual:   ${actual}`;
 }
 
 // The hit case: the predicate-carrying arm matches `1.` and the other reaches

@@ -68,11 +68,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
             code,
-            message,
+            message: message.to_string(),
             span,
             line,
             col,

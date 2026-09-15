@@ -13,8 +13,8 @@ use { Diagnostic } from "./gir.wado";
 
 global OPTS: GenerateOptions = GenerateOptions {};
 
-fn gen_source(src: &String) -> String {
-    let mut g = parse(*src).unwrap();
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &OPTS).source;
 }
 
@@ -28,8 +28,8 @@ fn count_unsupported(diags: &List<Diagnostic>) -> i32 {
     return n;
 }
 
-fn unsupported_count(src: &String) -> i32 {
-    let mut g = parse(*src).unwrap();
+fn unsupported_count<S: AsStrSlice>(src: S) -> i32 {
+    let mut g = parse(src.to_string()).unwrap();
     return count_unsupported(&generate(&mut g, &OPTS).diagnostics);
 }
 
@@ -539,13 +539,13 @@ B : 'b' ;
 }
 
 /// How many times `needle` appears in `haystack`.
-fn count_occurrences(haystack: &String, needle: &String) -> i32 {
+fn count_occurrences<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     assert !needle.is_empty(), "count_occurrences needs a needle to advance past";
     let mut n = 0;
     let mut pos = 0;
     loop {
         let rest = haystack.substr_bytes(pos, haystack.len());
-        let found = rest.find(*needle);
+        let found = rest.find(needle.to_string());
         if found matches { None } {
             return n;
         }
@@ -743,7 +743,7 @@ WS : ' ' -> skip ;
     assert src.contains("pub interface B {"), "a hook-only base still gets an interface";
     assert src.contains("fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {"), "the hook is declared";
     assert src.contains("::emit(LexerView"), "the tokenize loop calls it";
-    assert src.contains("pub fn tokenize(input: &String) -> TokenStream with B"), "tokenize carries the effect";
+    assert src.contains("pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream with B"), "tokenize carries the effect";
 }
 
 test "a grammar with no base has no emit hook" {

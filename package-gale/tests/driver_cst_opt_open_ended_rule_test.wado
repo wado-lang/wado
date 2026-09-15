@@ -10,11 +10,11 @@ use ooe from "./grammars/opt_open_ended_rule.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_opt_open_ended_rule" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = ooe::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = ooe::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "optional over an open-ended rule: the follow token is left alone" {

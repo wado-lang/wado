@@ -18,8 +18,8 @@ use { generate, GenerateOptions } from "./codegen.wado";
 use { parse } from "./g4/parser.wado";
 
 /// Run the front-end the way `cmd_dump` does, then render the lexer report.
-fn lexer_dump(input: &String) -> String {
-    let mut merged = merge_grammars([parse(*input).unwrap()]);
+fn lexer_dump<S: AsStrSlice>(input: S) -> String {
+    let mut merged = merge_grammars([parse(input.to_string()).unwrap()]);
     synthesize_implicit_tokens(&mut merged);
     alias_parser_literals(&mut merged);
     canonicalize_empty_alt_groups(&mut merged);
@@ -28,7 +28,7 @@ fn lexer_dump(input: &String) -> String {
     return render_lexer_dump(&merged);
 }
 
-fn str_contains(haystack: &String, needle: &String) -> bool {
+fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -49,7 +49,7 @@ fn str_contains(haystack: &String, needle: &String) -> bool {
     return false;
 }
 
-fn str_count(haystack: &String, needle: &String) -> i32 {
+fn str_count<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len == 0 || n_len > h_len {

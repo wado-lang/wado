@@ -47,9 +47,9 @@ use {
     alt_class_first_set,
 } from "./gir.wado";
 
-fn empty_grammar(name: &String) -> Grammar {
+fn empty_grammar<S: AsStrSlice>(name: S) -> Grammar {
     return Grammar {
-        name: *name,
+        name: name.to_string(),
         kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
@@ -66,7 +66,7 @@ fn no_lit_tokens() -> List<LitToken> {
     return [];
 }
 
-fn str_contains(haystack: &String, needle: &String) -> bool {
+fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {

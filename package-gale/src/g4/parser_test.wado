@@ -304,8 +304,8 @@ ID : [\\p{L}0-9_] ;";
     }
 }
 
-fn class_of(input: &String) -> CharClass {
-    let g = parse(*input).unwrap();
+fn class_of<S: AsStrSlice>(input: S) -> CharClass {
+    let g = parse(input.to_string()).unwrap();
     if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
         return cc;
     }
@@ -1962,7 +1962,7 @@ CMT : '//' .*? '\\n' CMT?? ;";
     }
 }
 
-fn assert_option_ident(opt: &GrammarOption, expected: String) {
+fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Ident(v) = &opt.value {
         assert *v == expected, `option '${opt.name}': expected Ident('${expected}'), got Ident('${*v}')`;
     } else {
@@ -1970,7 +1970,7 @@ fn assert_option_ident(opt: &GrammarOption, expected: String) {
     }
 }
 
-fn assert_option_str(opt: &GrammarOption, expected: String) {
+fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Str(v) = &opt.value {
         assert *v == expected, `option '${opt.name}': expected Str('${expected}'), got Str('${*v}')`;
     } else {

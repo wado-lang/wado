@@ -3,7 +3,7 @@ use { parse, highlight } from "./lib.wado";
 /// The visible text of a highlight fragment: strip the `<span>` tags and
 /// unescape the entities the highlighter emits (`&amp;` last, so an escaped
 /// `&` in the source round-trips).
-fn visible_text(html: &String) -> String {
+fn visible_text<S: AsStrSlice>(html: S) -> String {
     let mut out = String::new();
     let mut in_tag = false;
     for let c of html.chars() {
@@ -23,10 +23,10 @@ fn visible_text(html: &String) -> String {
 /// A highlighter must parse the source and reproduce it losslessly: stripping
 /// the emitted spans yields exactly the input, so no token is dropped,
 /// duplicated, or reordered.
-fn assert_highlights(src: &String) {
+fn assert_highlights<S: AsStrSlice>(src: S) {
     assert parse(src).ok(), "parse failed";
-    let html = highlight(*src);
-    assert visible_text(&html) == *src, "highlighting is not text-preserving";
+    let html = highlight(src.to_string());
+    assert visible_text(&html) == src.to_string(), "highlighting is not text-preserving";
 }
 
 test "highlight template interpolation expression" {

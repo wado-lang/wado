@@ -81,14 +81,14 @@ fn finalize_attr() -> String {
 
 /// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
 /// `stage_a` / `stage_b` / `stage_b_oracle`.
-fn triage_doc_line(axis: &String) -> String {
-    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${*axis}_*]).`;
+fn triage_doc_line<S: AsStrSlice>(axis: S) -> String {
+    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${axis.to_string()}_*]).`;
 }
 
 // ===== Descriptor format =====
 
-fn is_known_section(name: &String) -> bool {
-    return match *name {
+fn is_known_section<S: AsStrSlice>(name: S) -> bool {
+    return match name.to_string() {
         "notes" | "type" | "grammar" | "slaveGrammar" | "start" | "input" | "output" | "errors" | "flags" | "skip" => true,
         _ => false,
     };
@@ -130,18 +130,18 @@ struct ParsedDescriptor {
 
 /// The recognizer a `[type]` names. A `Composite*` one is the same recognizer
 /// with its grammar spread over more than one file.
-fn recognizer_type(declared: &String) -> String {
-    return match *declared {
+fn recognizer_type<S: AsStrSlice>(declared: S) -> String {
+    return match declared.to_string() {
         "CompositeParser" => "Parser",
         "CompositeLexer" => "Lexer",
-        _ => *declared,
+        _ => declared.to_string(),
     };
 }
 
 /// Mirrors `RuntimeTestDescriptorParser.parse` — section detection plus the
 /// triple-quote / trailing-newline post-processing applied to each value.
 /// We only return the fields we care about (grammar text + slave grammars).
-fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
+fn parse_descriptor_text<S: AsStrSlice>(text: S) -> ParsedDescriptor {
     let mut pairs: List<DescriptorPair> = [];
     let mut current_name: String = "";
     let mut have_current = false;
@@ -232,7 +232,7 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
 /// We deliberately leave non-delimiter backslash sequences (`\n`, `\u…`,
 /// `\t`, …) intact: ST's text mode does not interpret them, so passing
 /// them through preserves the upstream-equivalent input for the g4 lexer.
-fn unescape_st_text(s: &String) -> String {
+fn unescape_st_text<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     let chars: List<char> = s.chars().collect();
     let n = chars.len();
@@ -254,7 +254,7 @@ fn unescape_st_text(s: &String) -> String {
 }
 
 /// If `line` is a known `[section]` header, return the section name.
-fn section_header_of(line: &String) -> Option<String> {
+fn section_header_of<S: AsStrSlice>(line: S) -> Option<String> {
     if line.len() <= 2 {
         return null;
     }
@@ -275,7 +275,7 @@ fn section_header_of(line: &String) -> Option<String> {
 
 /// Apply the same trim / triple-quote / trailing-newline rules as
 /// RuntimeTestDescriptorParser.parse.
-fn post_process(raw: &String) -> String {
+fn post_process<S: AsStrSlice>(raw: S) -> String {
     let trimmed = raw.trim();
     if trimmed.starts_with("\"\"\"") {
         return trimmed.replace("\"\"\"", "");
@@ -312,9 +312,9 @@ impl TriageMap {
         return TriageMap { entries: [] };
     }
 
-    pub fn lookup(&self, key: &String) -> Triage {
+    pub fn lookup<S: AsStrSlice>(&self, key: S) -> Triage {
         for let e of &self.entries {
-            if e.key == *key {
+            if e.key == key.to_string() {
                 return e.triage;
             }
         }
@@ -427,19 +427,19 @@ fn load_triage_maps(content: &Option<String>) -> TriageMaps {
     return TriageMaps { category, stage_a, stage_b, stage_b_oracle, stage_c };
 }
 
-fn unquote(s: &String) -> String {
+fn unquote<S: AsStrSlice>(s: S) -> String {
     if s.len() >= 2 && s.starts_with("\"") && s.ends_with("\"") {
         return s.substr_bytes(1, s.len() - 1);
     }
-    return *s;
+    return s.to_string();
 }
 
 // ===== File system helpers =====
 
-fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorCode> {
+fn read_file_to_string<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<String, ErrorCode> {
     let opened = match dir.open_at(
         PathFlags::none(),
-        *path,
+        path.to_string(),
         OpenFlags::none(),
         DescriptorFlags::Read,
     ).wait() {
@@ -464,10 +464,10 @@ fn read_file_to_string(dir: &Descriptor, path: &String) -> Result<String, ErrorC
     };
 }
 
-fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Result<(), ErrorCode> {
+fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, content: S1) -> Result<(), ErrorCode> {
     let file = match dir.open_at(
         PathFlags::none(),
-        *path,
+        path.to_string(),
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
     ).wait() {
@@ -495,10 +495,10 @@ fn write_file_string(dir: &Descriptor, path: &String, content: &String) -> Resul
 /// extracted grammar into their Java-target form. Unknown helpers are left
 /// verbatim; each one is reported to stderr so it can be added to the
 /// table in `src/g4/action_templates.wado` or triaged into `[skip]`.
-fn expand_grammar_templates(key: &String, grammar: &String) -> String with Stderr {
+fn expand_grammar_templates<S: AsStrSlice, S1: AsStrSlice>(key: S, grammar: S1) -> String with Stderr {
     let outcome = expand_action_templates(grammar);
     for let w of outcome.warnings {
-        eprintln(`extract: ${*key}: ${w}`);
+        eprintln(`extract: ${key.to_string()}: ${w}`);
     }
     return outcome.text;
 }
@@ -506,38 +506,38 @@ fn expand_grammar_templates(key: &String, grammar: &String) -> String with Stder
 /// Remove a regular file. `Err(NoEntry)` is treated like other errors — the
 /// caller decides whether a missing file is fatal (typical use is "best
 /// effort cleanup", where any failure is silently ignored).
-fn remove_file(dir: &Descriptor, path: &String) -> Result<(), ErrorCode> {
-    return dir.unlink_file_at(*path).wait();
+fn remove_file<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), ErrorCode> {
+    return dir.unlink_file_at(path.to_string()).wait();
 }
 
-fn ensure_dir(parent: &Descriptor, name: &String) -> Result<Descriptor, ErrorCode> {
+fn ensure_dir<S: AsStrSlice>(parent: &Descriptor, name: S) -> Result<Descriptor, ErrorCode> {
     // Ignore "exists" — we just want the directory to be present.
-    let _ = parent.create_directory_at(*name).wait();
+    let _ = parent.create_directory_at(name.to_string()).wait();
     return parent.open_at(
         PathFlags::none(),
-        *name,
+        name.to_string(),
         OpenFlags::Directory,
         DescriptorFlags::Read | DescriptorFlags::MutateDirectory,
     ).wait();
 }
 
-fn open_dir(parent: &Descriptor, name: &String, mutate: bool) -> Result<Descriptor, ErrorCode> {
+fn open_dir<S: AsStrSlice>(parent: &Descriptor, name: S, mutate: bool) -> Result<Descriptor, ErrorCode> {
     let flags = if mutate { DescriptorFlags::Read | DescriptorFlags::MutateDirectory } else { DescriptorFlags::Read };
     return parent.open_at(
         PathFlags::none(),
-        *name,
+        name.to_string(),
         OpenFlags::Directory,
         flags,
     ).wait();
 }
 
-fn list_files_with_suffix(dir: &Descriptor, suffix: &String) -> List<String> {
+fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<String> {
     let mut out: List<String> = [];
     let [stream, done] = dir.read_directory();
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
         for let e of chunk.items {
-            if e.type matches { RegularFile } && e.name.ends_with(*suffix) {
+            if e.type matches { RegularFile } && e.name.ends_with(suffix.to_string()) {
                 out.push(e.name);
             }
         }
@@ -575,7 +575,7 @@ fn list_subdirs(dir: &Descriptor) -> List<String> {
 
 
 /// Escape a string so it can sit between Wado `"..."` quotes.
-fn escape_for_wado_str(s: &String) -> String {
+fn escape_for_wado_str<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         match c {
@@ -607,12 +607,12 @@ struct DescriptorEntry {
     triage: Triage,
 }
 
-fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry>) -> String {
+fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<DescriptorEntry>) -> String {
     let mut w = CodeWriter::new();
     w.line(&generator_attr());
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
-    w.line(&`// Source category: ${*category} (ANTLR4 runtime-testsuite).`);
+    w.line(&`// Source category: ${category.to_string()} (ANTLR4 runtime-testsuite).`);
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
     w.blank();
     let imports = claim_a_imports(entries);
@@ -640,7 +640,7 @@ fn emit_test_file_for_category(category: &String, entries: &List<DescriptorEntry
             },
         }
         needs_separator = true;
-        w.begin(&`test "${*category}/${e.name}"`);
+        w.begin(&`test "${category.to_string()}/${e.name}"`);
         if e.slave_relpaths.is_empty() {
             w.line(&`let input = #include_str("./grammars/${e.g4_relpath}");`);
             w.line(&"let result = parse(input);");
@@ -728,14 +728,14 @@ global DESCRIPTORS_PER_FILE: i32 = 10;
 /// The module namespace a descriptor's grammar is imported under. Descriptor
 /// names are plain identifiers and unique within a category, so this is what
 /// lets one module carry many grammars.
-fn chunk_namespace(name: &String) -> String {
-    return `t_${*name}`;
+fn chunk_namespace<S: AsStrSlice>(name: S) -> String {
+    return `t_${name.to_string()}`;
 }
 
 /// Where the descriptor's `i`-th `[slaveGrammar]` lands, for both the writer
 /// and the `inputs` that name it.
-fn slave_filename(base: &String, i: i32) -> String {
-    return `${*base}.slave${i + 1}.g4`;
+fn slave_filename<S: AsStrSlice>(base: S, i: i32) -> String {
+    return `${base.to_string()}.slave${i + 1}.g4`;
 }
 
 fn emit_test_chunk(spec: &TestChunkSpec, body: fn(&mut CodeWriter, &String)) -> TestChunk {
@@ -772,7 +772,7 @@ fn emit_test_chunk(spec: &TestChunkSpec, body: fn(&mut CodeWriter, &String)) -> 
 }
 
 /// Wrap `chunks` as one entry module for `category`.
-fn emit_category_test_file(attr: &String, category: &String, chunks: Slice<TestChunk>) -> String {
+fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1, chunks: Slice<TestChunk>) -> String {
     let mut helpers: List<String> = [];
     for let chunk of chunks {
         for let helper of &chunk.tree_helpers {
@@ -785,7 +785,7 @@ fn emit_category_test_file(attr: &String, category: &String, chunks: Slice<TestC
     w.line(attr);
     w.line(&"// Do not edit by hand — re-run the generator to regenerate.");
     w.line(&"//");
-    w.line(&`// Source category: ${*category} (ANTLR4 runtime-testsuite).`);
+    w.line(&`// Source category: ${category.to_string()} (ANTLR4 runtime-testsuite).`);
     w.line(&"// Triage data: package-gale/tests/antlr4-compat/status.toml");
     if !helpers.is_empty() {
         w.blank();
@@ -802,10 +802,10 @@ fn emit_category_test_file(attr: &String, category: &String, chunks: Slice<TestC
 /// `DESCRIPTORS_PER_FILE` descriptors each, and delete every other test file in
 /// `dir`. One place decides which files a category has, so a descriptor that
 /// stops being eligible leaves nothing behind.
-fn write_category_test_files(
+fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     dir: &Descriptor,
-    attr: &String,
-    category: &String,
+    attr: S,
+    category: S1,
     chunks: &List<TestChunk>,
 ) -> i32 with Stderr {
     let mut written: List<String> = [];
@@ -813,10 +813,10 @@ fn write_category_test_files(
     let mut index = 0;
     for let group of chunks.chunks(DESCRIPTORS_PER_FILE) {
         index += 1;
-        let filename = `${*category}_${index}_test.wado`;
+        let filename = `${category.to_string()}_${index}_test.wado`;
         let src = emit_category_test_file(attr, category, group);
         if let Err(_) = write_file_string(dir, &filename, &src) {
-            eprintln(`extract: cannot write ${*category}/${filename}`);
+            eprintln(`extract: cannot write ${category.to_string()}/${filename}`);
             failed = true;
         } else {
             written.push(filename);
@@ -850,17 +850,17 @@ fn descriptor_deletes_tokens(parsed: &ParsedDescriptor) -> bool {
 /// compares whatever the grammar's actions printed, and a tree normaliser let
 /// loose on arbitrary action text is a category error: it would rewrite any
 /// ` <skip … >` the actions themselves emit.
-fn output_is_tree_print(output: &String) -> bool {
+fn output_is_tree_print<S: AsStrSlice>(output: S) -> bool {
     return output.trim().starts_with("(");
 }
 
 /// The expression a tree compare reads its actual value from, wrapped in the
 /// marker normaliser when the descriptor deletes a token.
-fn actual_expr(inner: &String, strip: bool) -> String {
+fn actual_expr<S: AsStrSlice>(inner: S, strip: bool) -> String {
     if strip {
-        return `strip_skip_markers(&${*inner})`;
+        return `strip_skip_markers(&${inner.to_string()})`;
     }
-    return *inner;
+    return inner.to_string();
 }
 
 fn join_names(names: &List<String>) -> String {
@@ -901,12 +901,12 @@ fn strip_doc_lines(strip: bool) -> List<String> {
 /// `Skip` callers should not invoke this function at all; `Todo` causes
 /// the test to be `#[TODO]`-marked so a known-failing assertion is
 /// recorded on a separate axis from real failures (matches Stage A).
-fn emit_stage_b_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    start: &String,
-    expected_tree: &String,
+fn emit_stage_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice, S4: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    start: S3,
+    expected_tree: S4,
     strip: bool,
     triage: &Triage,
     slave_count: i32,
@@ -916,8 +916,8 @@ fn emit_stage_b_test_chunk(
         doc_lines.push(*line);
     }
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
         tree_helpers: tree_import_names(strip),
@@ -947,27 +947,27 @@ fn emit_stage_b_test_chunk(
 /// root rule name (extracted via `extract_root_rule_name`) must differ
 /// from `[start]`. The emitted test navigates from the full tree down
 /// to the first child node of that name via `find_first_child_node`.
-fn emit_stage_sub_b_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    start: &String,
-    expected_tree: &String,
-    sub_rule: &String,
+fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice, S4: AsStrSlice, S5: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    start: S3,
+    expected_tree: S4,
+    sub_rule: S5,
     strip: bool,
     triage: &Triage,
     slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
-        triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${*sub_rule}' subtree,`,
+        triage_doc_line(&"stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${sub_rule.to_string()}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {
         doc_lines.push(*line);
     }
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_b",
         tree_helpers: tree_import_names(strip),
@@ -979,7 +979,7 @@ fn emit_stage_sub_b_test_chunk(
         w.line(&`let input = "${escape_for_wado_str(input)}";`);
         w.line(&`let expected = "${escape_for_wado_str(expected_tree)}";`);
         w.line(&`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
-        w.line(&`let actual = ${actual_expr(&`${*ns}::to_string_subtree(&result, &"${*sub_rule}")`, strip)};`);
+        w.line(&`let actual = ${actual_expr(&`${*ns}::to_string_subtree(&result, &"${sub_rule.to_string()}")`, strip)};`);
         w.line(&"let norm = normalize_tree(&expected);");
         w.line(&"assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
@@ -996,17 +996,17 @@ fn emit_stage_sub_b_test_chunk(
 ///
 /// Triage (`[stage_a_todo]` / `[stage_a_skip]`) decorates the emission
 /// the same way Stage B does.
-fn emit_stage_a_parse_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    start: &String,
+fn emit_stage_a_parse_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    start: S3,
     triage: &Triage,
     slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: [
             triage_doc_line(&"stage_a"), "//", "// Stage A claim (b): the generated parser must accept the descriptor's",
             "// [input] without returning an error. No parse-tree shape comparison.",
@@ -1067,12 +1067,12 @@ fn descriptor_prints(parsed: &ParsedDescriptor) -> bool {
 /// is host-language action-print text (rejected by `normalize_output_for_stage_b`
 /// as a non-tree). Reuses the Stage A generated parser (`antlr4_compat_a`) — the
 /// parser is identical; only the assertion differs.
-fn emit_stage_c_output_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    output: &String,
-    start: &String,
+fn emit_stage_c_output_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice, S4: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    output: S3,
+    start: S4,
     strip: bool,
     triage: &Triage,
     slave_count: i32,
@@ -1085,8 +1085,8 @@ fn emit_stage_c_output_test_chunk(
         doc_lines.push(*line);
     }
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: doc_lines,
         output_subdir: "antlr4_compat_a",
         tree_helpers: if strip { ["strip_skip_markers"] } else { [] as List<String> },
@@ -1113,7 +1113,7 @@ fn emit_stage_c_output_test_chunk(
 /// `parse_<snake_case(start)>` otherwise — Gale's codegen normalises
 /// rule names to snake_case (e.g. `cppCompilationUnit` →
 /// `parse_cpp_compilation_unit`).
-fn parse_call_for_start(start: &String) -> String {
+fn parse_call_for_start<S: AsStrSlice>(start: S) -> String {
     let trimmed = start.trim();
     if trimmed.is_empty() {
         return "parse";
@@ -1126,8 +1126,8 @@ fn parse_call_for_start(start: &String) -> String {
 /// `[errors]` blocks for ambiguity reports, predicate failures, or
 /// other diagnostics that don't actually fail the parse — those are
 /// not parse-must-error candidates.
-fn stage_a_err_category_eligible(category: &String) -> bool {
-    return match *category {
+fn stage_a_err_category_eligible<S: AsStrSlice>(category: S) -> bool {
+    return match category.to_string() {
         "ParserErrors" | "LexerErrors" => true,
         _ => false,
     };
@@ -1156,7 +1156,7 @@ fn stage_a_err_category_eligible(category: &String) -> bool {
 /// immediately by its transition (`-`) or accept (`=>`) marker. It describes
 /// ANTLR's own simulator rather than the token stream, so it is not part of what
 /// a Gale-generated lexer can ever produce.
-fn is_lexer_dfa_row_start(line: &String) -> bool {
+fn is_lexer_dfa_row_start<S: AsStrSlice>(line: S) -> bool {
     let cs: List<char> = line.trim().chars().collect();
     let mut i = 0;
     if i < cs.len() && cs[i] == ':' {
@@ -1184,7 +1184,7 @@ fn is_lexer_dfa_row_start(line: &String) -> bool {
 /// A row's transition char is quoted verbatim, so a transition on a newline
 /// (`s0-'\n'->:s2=>3`) spans two physical lines. A row therefore ends at the
 /// line carrying its `->`, not necessarily at the line it started on.
-fn strip_lexer_dfa_dump(raw: &String) -> String {
+fn strip_lexer_dfa_dump<S: AsStrSlice>(raw: S) -> String {
     let mut lines: List<String> = [];
     for let line of raw.lines() {
         lines.push(line);
@@ -1211,7 +1211,7 @@ fn strip_lexer_dfa_dump(raw: &String) -> String {
     return out;
 }
 
-fn classify_output_for_tokens(input: &String) -> Option<String> {
+fn classify_output_for_tokens<S: AsStrSlice>(input: S) -> Option<String> {
     let raw = &strip_lexer_dfa_dump(input);
     let mut seen_token_line = false;
     for let line of raw.lines() {
@@ -1254,18 +1254,18 @@ fn classify_output_for_tokens(input: &String) -> Option<String> {
 /// Eligibility is decided by the caller (Parser/Lexer type, non-empty
 /// `[input]`, non-empty `[errors]`, category in the
 /// whitelist via `stage_a_err_category_eligible`).
-fn emit_stage_a_err_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    start: &String,
+fn emit_stage_a_err_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    start: S3,
     is_lexer: bool,
     triage: &Triage,
     slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: [
             triage_doc_line(&"stage_a"), "//",
             "// Stage A claim (c): the generated parser/lexer must report an error for [input].",
@@ -1307,17 +1307,17 @@ fn emit_stage_a_err_test_chunk(
 /// Eligibility is decided by the caller (Lexer type, non-empty
 /// `[input]`, non-empty `[output]`, empty `[errors]`,
 /// output is a clean `[@…]` dump).
-fn emit_stage_a_tokens_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    expected: &String,
+fn emit_stage_a_tokens_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    expected: S3,
     triage: &Triage,
     slave_count: i32,
 ) -> TestChunk {
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: [
             triage_doc_line(&"stage_a"), "//",
             "// Stage A claim (d): tokenize(&input) renders to the same ANTLR4-format",
@@ -1990,10 +1990,10 @@ fn stage_b_oracle_eligible(parsed: &ParsedDescriptor) -> bool {
 
 /// On failure, rolls back the partial write so the caller sees an
 /// all-or-nothing manifest entry.
-fn write_oracle_pending_files(
+fn write_oracle_pending_files<S: AsStrSlice, S1: AsStrSlice>(
     dir: &Descriptor,
-    input_filename: &String,
-    start_filename: &String,
+    input_filename: S,
+    start_filename: S1,
     parsed: &ParsedDescriptor,
 ) -> Result<(), ErrorCode> {
     if let Err(e) = write_file_string(dir, input_filename, &parsed.input) {
@@ -2133,7 +2133,7 @@ fn finalize_stage_b_oracle(root: &Descriptor) with (Stdout, Stderr, Environment,
 /// Gale's `to_string_tree()` shape (which omits EOF). The match
 /// requires the closing `)` so token text containing `<EOF>` mid-tree
 /// stays untouched.
-fn strip_eof_marker(raw: &String) -> String {
+fn strip_eof_marker<S: AsStrSlice>(raw: S) -> String {
     let trimmed = raw.trim();
     return strip_tail_eof_marker(&trimmed);
 }
@@ -2151,7 +2151,7 @@ fn strip_eof_marker(raw: &String) -> String {
 /// tree). Trailing whitespace is skipped over but preserved, so a Stage C
 /// `[output]` keeps its exact trailing newline (Stage B trims first, so it is
 /// unaffected).
-fn strip_tail_eof_marker(s: &String) -> String {
+fn strip_tail_eof_marker<S: AsStrSlice>(s: S) -> String {
     let chars: List<char> = s.chars().collect();
     let mut end = chars.len();
     while end > 0 && chars[end - 1].is_ascii_whitespace() {
@@ -2164,13 +2164,13 @@ fn strip_tail_eof_marker(s: &String) -> String {
     // A tree tail has at least one closing paren after the marker; without one
     // this is not a tree, so leave a trailing ` <EOF>` in place.
     if close == end || close < 6 {
-        return *s;
+        return s.to_string();
     }
     // " <EOF>" is 6 chars; check chars[close-6 .. close] spell it.
     let marker: List<char> = [' ', '<', 'E', 'O', 'F', '>'];
     for let mut i = 0; i < 6; i += 1 {
         if chars[close - 6 + i] != marker[i] {
-            return *s;
+            return s.to_string();
         }
     }
     let mut out = String::with_capacity(s.len());
@@ -2186,22 +2186,22 @@ fn strip_tail_eof_marker(s: &String) -> String {
 /// is already one line, so collapsing whitespace can only lose information,
 /// and it does whenever a token's own text carries whitespace
 /// (`BREAK: 'break '` renders `break  break `).
-fn emit_stage_b_oracle_test_chunk(
-    category: &String,
-    name: &String,
-    input: &String,
-    start: &String,
-    expected_tree: &String,
+fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStrSlice, S4: AsStrSlice, S5: AsStrSlice>(
+    category: S,
+    name: S1,
+    input: S2,
+    start: S3,
+    expected_tree: S4,
     triage: &Triage,
-    oracle_version: &String,
+    oracle_version: S5,
 ) -> TestChunk {
     // `stage_b_oracle_eligible` excludes a composite, so no Stage B′ candidate
     // brings slaves.
     let spec = TestChunkSpec {
-        category: *category,
-        name: *name,
+        category: category.to_string(),
+        name: name.to_string(),
         doc_lines: [
-            `// Expected tree: antlr-${*oracle_version}-complete.jar on the action-body-stripped grammar.`,
+            `// Expected tree: antlr-${oracle_version.to_string()}-complete.jar on the action-body-stripped grammar.`,
             triage_doc_line(&"stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
@@ -2244,7 +2244,7 @@ fn emit_stage_b_oracle_test_chunk(
 /// parse-tree node, and the descriptor is rejected. Likewise, `${…}`
 /// always denotes an action-block reference. False rejections are
 /// triaged as `[stage_b_todo]` once the underlying capability lands.
-fn normalize_output_for_stage_b(raw: &String) -> Option<String> {
+fn normalize_output_for_stage_b<S: AsStrSlice>(raw: S) -> Option<String> {
     let s = raw.trim();
     if s.is_empty() {
         return null;
@@ -2310,7 +2310,7 @@ fn is_tree_node_name_continue(c: char) -> bool {
 /// Used by Stage B sub-tree dispatch: when the descriptor's root rule
 /// differs from `[start]`, the test must navigate down to the sub-tree
 /// rooted at this name before comparing.
-fn extract_root_rule_name(s: &String) -> Option<String> {
+fn extract_root_rule_name<S: AsStrSlice>(s: S) -> Option<String> {
     let chars: List<char> = s.chars().collect();
     if chars.len() < 2 || chars[0] != '(' || !is_tree_node_name_start(chars[1]) {
         return null;
@@ -2462,8 +2462,8 @@ test "normalize: line-noise output starting with paren but no name is rejected" 
 
 // ===== Stage B: status.toml triage parser =====
 
-fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
-    return match *axis {
+fn lookup_for_axis<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1) -> Triage {
+    return match axis.to_string() {
         "cat" => maps.category.lookup(key),
         "a" => maps.stage_a.lookup(key),
         "oracle" => maps.stage_b_oracle.lookup(key),
@@ -2471,24 +2471,24 @@ fn lookup_for_axis(maps: &TriageMaps, axis: &String, key: &String) -> Triage {
     };
 }
 
-fn assert_triage_skip(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
+fn assert_triage_skip<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1, expected_reason: S2) {
     if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == *expected_reason, `axis ${*axis} key '${*key}': expected Skip('${*expected_reason}'), got Skip('${*reason}')`;
+        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string()}'), got Skip('${*reason}')`;
     } else {
-        panic(`axis ${*axis} key '${*key}': expected Skip, got other`);
+        panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Skip, got other`);
     }
 }
 
-fn assert_triage_todo(maps: &TriageMaps, axis: &String, key: &String, expected_reason: &String) {
+fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1, expected_reason: S2) {
     if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == *expected_reason, `axis ${*axis} key '${*key}': expected Todo('${*expected_reason}'), got Todo('${*reason}')`;
+        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string()}'), got Todo('${*reason}')`;
     } else {
-        panic(`axis ${*axis} key '${*key}': expected Todo, got other`);
+        panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Todo, got other`);
     }
 }
 
-fn assert_triage_pass(maps: &TriageMaps, axis: &String, key: &String) {
-    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis ${*axis} key '${*key}': expected Pass, got other`;
+fn assert_triage_pass<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1) {
+    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis ${axis.to_string()} key '${key.to_string()}': expected Pass, got other`;
 }
 
 test "triage: missing file yields empty maps on all axes" {

@@ -14,14 +14,14 @@ use { GenContext } from "./gen_context.wado";
 use { Diagnostic } from "./gir.wado";
 use { CodeWriter } from "./wadopoet.wado";
 
-fn parse_grammar(input: String) -> Grammar {
+fn parse_grammar<S: AsStrSlice>(input: S) -> Grammar {
     let mut g = parse(input).unwrap();
     g.source_files.push("(test)");
     return g;
 }
 
 /// The generated text and the diagnostics one query run produced.
-fn highlight_run(input: String, query_src: String) -> [String, List<Diagnostic>] {
+fn highlight_run<S: AsStrSlice, S1: AsStrSlice>(input: S, query_src: S1) -> [String, List<Diagnostic>] {
     let mut g = parse_grammar(input);
     // Mirror `generate()`, whose `lit_tokens` never see an aliased text.
     alias_parser_literals(&mut g);
@@ -36,11 +36,11 @@ fn highlight_run(input: String, query_src: String) -> [String, List<Diagnostic>]
     ];
 }
 
-fn highlight_output_q(input: String, query_src: String) -> String {
+fn highlight_output_q<S: AsStrSlice, S1: AsStrSlice>(input: S, query_src: S1) -> String {
     return highlight_run(input, query_src).0;
 }
 
-fn highlight_output(input: String) -> String {
+fn highlight_output<S: AsStrSlice>(input: S) -> String {
     return highlight_output_q(input, "");
 }
 
@@ -51,20 +51,20 @@ fn assert_capture_refused(run: &[String, List<Diagnostic>]) {
     assert index_of(&run.0, "HighlightOverride {") == -1, run.0;
 }
 
-fn index_of(haystack: &String, needle: String) -> i32 {
+fn index_of<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     return match haystack.find(needle) {
         Some(idx) => idx,
         None => -1,
     };
 }
 
-fn count_occurrences(haystack: &String, needle: String) -> i32 {
+fn count_occurrences<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let needle_len = needle.len();
     if needle_len == 0 {
         return 0;
     }
     let mut count = 0;
-    let mut remainder = *haystack;
+    let mut remainder = haystack.to_string();
     loop {
         match remainder.find(needle) {
             Some(idx) => {

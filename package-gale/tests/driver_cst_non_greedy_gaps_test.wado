@@ -6,8 +6,8 @@ use ng from "./grammars/non_greedy_gaps.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_non_greedy_gaps" },
     };
 
-fn assert_parses(input: &String) {
-    assert ng::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn assert_parses<S: AsStrSlice>(input: S) {
+    assert ng::parse(input).ok(), `unexpected diagnostics for ${input.to_string()}`;
 }
 
 test "non-greedy-gaps: bare constant" {

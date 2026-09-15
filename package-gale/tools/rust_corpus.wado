@@ -50,7 +50,7 @@ impl RustParserBase for RustPBase {
     }
 }
 
-pub fn parse_rust(source: &String) -> rust::ParseResult {
+pub fn parse_rust<S: AsStrSlice>(source: S) -> rust::ParseResult {
     let mut base = RustBase {};
     let mut pbase = RustPBase {};
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {

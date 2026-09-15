@@ -1,7 +1,7 @@
 use { parse_document } from "./fmt_parse_block.wado";
 use { Node, FrontMatterKind, ColumnAlign } from "./fmt_ast.wado";
 
-fn doc_children(source: &String) -> List<Node> {
+fn doc_children<S: AsStrSlice>(source: S) -> List<Node> {
     return match parse_document(source) {
         Node::Document(children) => children,
         _ => panic("parse_document did not return a Document node"),

@@ -42,7 +42,7 @@ impl LexerSlice {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
-    pub fn from_string(s: String) -> LexerSlice {
+    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
         let chars = s.chars().collect();
         return LexerSlice { chars: &chars, start: 0, end: chars.len() };
     }
@@ -67,7 +67,7 @@ impl LexerSlice {
         return s;
     }
 
-    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+    pub fn eq_str<S: AsStrSlice>(a: S, b: &LexerSlice) -> bool {
         let a_chars = a.chars();
         let mut a_iter = a_chars;
         let mut i = b.start;
@@ -350,12 +350,12 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
-        return ParseError { message, span, expected };
+    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected };
     }
 
-    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
-        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    pub fn at<S: AsStrSlice>(message: S, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected, line, col, rule_stack: [] };
     }
 
     pub fn full_message(&self) -> String {
@@ -477,11 +477,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
             code,
-            message,
+            message: message.to_string(),
             span,
             line,
             col,
@@ -1101,7 +1101,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(input: &String) -> Lexer {
+    fn new<S: AsStrSlice>(input: S) -> Lexer {
         return Lexer { chars: input.to_chars(), pos: 0 };
     }
 
@@ -1154,7 +1154,7 @@ fn try_WS(chars: &List<char>, start: i32) -> i32 {
     return pos;
 }
 
-pub fn tokenize(input: &String) -> TokenStream {
+pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
     let mut lexer = Lexer::new(input);
     let mut ts = TokenStream::new(&lexer.chars);
     let mut triv_lo = ts.trivia_mark();
@@ -1471,10 +1471,10 @@ pub fn to_string_tree(result: &ParseResult) -> String {
     return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());
 }
 
-pub fn to_string_subtree(result: &ParseResult, rule: &String) -> String {
+pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String {
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
-        if RULE_NAMES[i] == *rule {
+        if rule.eq_str(RULE_NAMES[i]) {
             _kind = i;
             break;
         }

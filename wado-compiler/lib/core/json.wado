@@ -73,7 +73,7 @@ fn json_plain_byte(b: u8) -> bool {
 
 /// True when `s` holds no byte JSON must escape. Pure and closed over `s`, so a
 /// constant key folds this away at compile time.
-fn json_escape_free(s: &String) -> bool {
+fn json_escape_free<S: AsStrSlice>(s: S) -> bool {
     let n = s.len();
     for let mut i = 0; i < n; i += 1 {
         if json_plain_byte(s.get_byte_unchecked(i)) {
@@ -87,7 +87,7 @@ fn json_escape_free(s: &String) -> bool {
 /// Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
 /// `\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
 /// UTF-8 copies through unchanged.
-pub fn write_escaped_string(buf: &mut String, s: &String) {
+pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S) {
     // Scanning first leaves the common escape-free case a plain append run,
     // which the NIR append fusion collapses.
     let n = s.len();
@@ -108,7 +108,7 @@ pub fn write_escaped_string(buf: &mut String, s: &String) {
 /// Write the plain run ending at `i`, then the escape `b` needs. Separate from
 /// its caller, a byte scan whose escape arm is taken rarely, so the scan carries
 /// a call instead of a range append and a six-arm match with a format in it.
-fn flush_run_and_escape(buf: &mut String, s: &String, run_start: i32, i: i32, b: u8) {
+fn flush_run_and_escape<S: AsStrSlice>(buf: &mut String, s: S, run_start: i32, i: i32, b: u8) {
     buf.push_str_range_unchecked(s, run_start, i);
     match b {
         0x22 => buf.push_str(&"\\\""),
@@ -125,7 +125,7 @@ fn flush_run_and_escape(buf: &mut String, s: &String, run_start: i32, i: i32, b:
 
 /// Escaping tail of `write_escaped_string`, entered once the scan reaches
 /// `first`, the index of the first byte JSON must escape.
-fn write_escaped_string_from(buf: &mut String, s: &String, first: i32) {
+fn write_escaped_string_from<S: AsStrSlice>(buf: &mut String, s: S, first: i32) {
     buf.push('"');
     let n = s.len();
     let mut run_start = 0;
@@ -235,7 +235,7 @@ fn write_json_char(buf: &mut String, v: char) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
-fn write_json_string(buf: &mut String, v: &String) -> Result<(), SerializeError> {
+fn write_json_string<S: AsStrSlice>(buf: &mut String, v: S) -> Result<(), SerializeError> {
     write_escaped_string(buf, v);
     return Result::Ok(());
 }
@@ -274,7 +274,7 @@ pub struct JsonSerializer {
     buf: &mut String,
 }
 
-fn write_pretty_newline_and_indent(buf: &mut String, indent: &String, depth: i32) {
+fn write_pretty_newline_and_indent<S: AsStrSlice>(buf: &mut String, indent: S, depth: i32) {
     buf.push('\n');
     for let mut i = 0; i < depth; i += 1 {
         buf.push_str(indent);
@@ -330,7 +330,7 @@ impl SerializeMap for JsonMapSerializer {
 
 /// Writes `"name":`, preceded by `,` when the struct already has a field. Each
 /// arm repeats the tail so it stays one append run, which fuses to one check.
-fn write_plain_key(buf: &mut String, name: &String, count: i32) {
+fn write_plain_key<S: AsStrSlice>(buf: &mut String, name: S, count: i32) {
     if count > 0 {
         buf.push_str(&",\"");
         buf.push_str(name);
@@ -342,7 +342,7 @@ fn write_plain_key(buf: &mut String, name: &String, count: i32) {
     buf.push_str(&"\":");
 }
 
-fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
+fn write_escaping_key<S: AsStrSlice>(buf: &mut String, name: S, count: i32) {
     if count > 0 {
         buf.push(',');
     }
@@ -352,7 +352,7 @@ fn write_escaping_key(buf: &mut String, name: &String, count: i32) {
 
 /// The indented twins, on the same plain/escaping split so a constant key folds
 /// here too.
-fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+fn write_pretty_plain_key<S: AsStrSlice, S1: AsStrSlice>(buf: &mut String, name: S, count: i32, indent: S1, depth: i32) {
     if count > 0 {
         buf.push(',');
     }
@@ -362,7 +362,13 @@ fn write_pretty_plain_key(buf: &mut String, name: &String, count: i32, indent: &
     buf.push_str(&"\": ");
 }
 
-fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent: &String, depth: i32) {
+fn write_pretty_escaping_key<S: AsStrSlice, S1: AsStrSlice>(
+    buf: &mut String,
+    name: S,
+    count: i32,
+    indent: S1,
+    depth: i32,
+) {
     if count > 0 {
         buf.push(',');
     }
@@ -372,7 +378,7 @@ fn write_pretty_escaping_key(buf: &mut String, name: &String, count: i32, indent
 }
 
 impl SerializeStruct for JsonStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         if json_escape_free(name) {
             write_plain_key(self.buf, name, self.count);
         } else {
@@ -447,7 +453,7 @@ impl Serializer for JsonSerializer {
         return write_json_char(self.buf, v);
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         return write_json_string(self.buf, v);
     }
 
@@ -476,7 +482,7 @@ impl Serializer for JsonSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
         self.buf.push_str(&"{");
         return Result::Ok(JsonStructSerializer {
             buf: self.buf,
@@ -484,20 +490,20 @@ impl Serializer for JsonSerializer {
         });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<JsonVariantSerializer, SerializeError> {
         self.buf.push_str(&"{");
@@ -610,7 +616,7 @@ impl SerializeMap for PrettyJsonMapSerializer {
 }
 
 impl SerializeStruct for PrettyJsonStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         if json_escape_free(name) {
             write_pretty_plain_key(self.buf, name, self.count, self.indent, self.depth);
         } else {
@@ -701,7 +707,7 @@ impl Serializer for PrettyJsonSerializer {
         return write_json_char(self.buf, v);
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         return write_json_string(self.buf, v);
     }
 
@@ -734,7 +740,11 @@ impl Serializer for PrettyJsonSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<PrettyJsonStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        fields: i32,
+    ) -> Result<PrettyJsonStructSerializer, SerializeError> {
         self.buf.push_str(&"{");
         return Result::Ok(PrettyJsonStructSerializer {
             buf: self.buf,
@@ -744,20 +754,20 @@ impl Serializer for PrettyJsonSerializer {
         });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<PrettyJsonVariantSerializer, SerializeError> {
         self.buf.push_str(&"{");
@@ -871,7 +881,7 @@ global I64_SAFE_DIGITS: i32 = 18;
 
 /// True when a raw number token has a '.' or an exponent marker, i.e. it
 /// needs the float-based integer fallback.
-fn has_exp_or_dot(raw: &String) -> bool {
+fn has_exp_or_dot<S: AsStrSlice>(raw: S) -> bool {
     for let mut i = 0; i < raw.len(); i += 1 {
         let b = raw.get_byte_unchecked(i) as i32;
         if b == b'.' || b == b'e' || b == b'E' {
@@ -887,7 +897,13 @@ fn has_exp_or_dot(raw: &String) -> bool {
 /// round up out of the i64 / u64 range) are rejected. Shared by every JSON
 /// number → integer path that falls back through f64 (scientific notation or a
 /// fractional token, whether scanned directly or string-encoded).
-fn checked_int_f64(v: f64, min: f64, over: f64, range_msg: String, start: i64) -> Result<f64, DeserializeError> {
+fn checked_int_f64<S: AsStrSlice>(
+    v: f64,
+    min: f64,
+    over: f64,
+    range_msg: S,
+    start: i64,
+) -> Result<f64, DeserializeError> {
     if v != f64::floor(v) {
         builtin::cold_path();
         return Result::Err(DeserializeError::unexpected_type("expected integer, got float", start));
@@ -900,7 +916,7 @@ fn checked_int_f64(v: f64, min: f64, over: f64, range_msg: String, start: i64) -
 }
 
 /// Maps an integer `from_str` failure onto a deserialize error.
-fn int_from_str_error(kind: IntErrorKind, range_msg: String, start: i64) -> DeserializeError {
+fn int_from_str_error<S: AsStrSlice>(kind: IntErrorKind, range_msg: S, start: i64) -> DeserializeError {
     return match kind {
         PosOverflow | NegOverflow => DeserializeError::overflow(range_msg, start),
         _ => DeserializeError::invalid_value("invalid digit in number", start),
@@ -909,7 +925,7 @@ fn int_from_str_error(kind: IntErrorKind, range_msg: String, start: i64) -> Dese
 
 /// Parses a string-encoded JSON integer (e.g. an i64 beyond the f64
 /// safe-integer range, which `write_json_i64` emits as a string).
-fn parse_i64_from(raw: &String, start: i64) -> Result<i64, DeserializeError> {
+fn parse_i64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<i64, DeserializeError> {
     if has_exp_or_dot(raw) {
         // Reconstruct via f64 for scientific notation (e.g. 1e2 → 100).
         return match f64::from_str(raw) {
@@ -934,7 +950,7 @@ fn parse_i64_from(raw: &String, start: i64) -> Result<i64, DeserializeError> {
 
 /// Parses a string-encoded JSON unsigned integer (the string form
 /// `write_json_u64` emits beyond the f64 safe-integer range).
-fn parse_u64_from(raw: &String, start: i64) -> Result<u64, DeserializeError> {
+fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeError> {
     if raw.len() > 0 && raw.get_byte_unchecked(0) as i32 == b'-' {
         builtin::cold_path();
         return Result::Err(DeserializeError::overflow("negative value for u64", start));
@@ -2299,9 +2315,9 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(
+    fn begin_struct<S: AsStrSlice>(
         &mut self,
-        name: &String,
+        name: S,
         num_fields: i32,
     ) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
         self.expect_char(b'{')?;
@@ -2313,9 +2329,9 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice>(
         &mut self,
-        type_name: &String,
+        type_name: S,
         num_cases: i32,
     ) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
         let lead = self.peek_after_whitespace();
@@ -2496,7 +2512,7 @@ impl SerializeMap for CanonicalMapSerializer {
 }
 
 impl SerializeStruct for CanonicalStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         let mut kbuf = String::with_capacity(name.len() + 2);
         write_escaped_string(&mut kbuf, name);
         let vbuf = canonical_encode(value)?;
@@ -2570,7 +2586,7 @@ impl Serializer for CanonicalJsonSerializer {
         return write_json_char(self.buf, v);
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         return write_json_string(self.buf, v);
     }
 
@@ -2598,27 +2614,27 @@ impl Serializer for CanonicalJsonSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<CanonicalStructSerializer, SerializeError> {
         return Result::Ok(CanonicalStructSerializer {
             buf: self.buf,
             entries: [],
         });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         write_escaped_string(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<CanonicalVariantSerializer, SerializeError> {
         self.buf.push('{');
@@ -2690,7 +2706,10 @@ pub fn to_string_pretty<T: Serialize>(value: &T, trailing_char: Option<char> = n
 
 /// Deserializes a value from a JSON string. Convenience wrapper over
 /// `from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
-pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError> {
+pub fn from_string<T: Deserialize, S: AsStrSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
     return from_bytes(input, max_depth);
 }
 

@@ -87,14 +87,15 @@ impl Level {
 impl LenientFromStr for Level {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<Level, LenientParseError> {
-        return match s.to_ascii_lowercase() {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Level, LenientParseError> {
+        let text = s.as_str_slice().to_string();
+        return match text.to_ascii_lowercase() {
             "trace" => Result::Ok(Level::Trace),
             "debug" => Result::Ok(Level::Debug),
             "info" => Result::Ok(Level::Info),
             "warn" => Result::Ok(Level::Warn),
             "error" => Result::Ok(Level::Error),
-            _ => Result::Err(LenientParseError::new(`unknown log level: ${*s}`)),
+            _ => Result::Err(LenientParseError::new(`unknown log level: ${text}`)),
         };
     }
 }

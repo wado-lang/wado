@@ -3,9 +3,9 @@ use g from "./grammars/lexer_seq_nullable_ref.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_seq_nullable_ref" },
     };
 
-fn assert_ok(input: &String) {
+fn assert_ok<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
 }
 
 test "both nullable calls take a dash" {

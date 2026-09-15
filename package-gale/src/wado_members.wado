@@ -1,6 +1,6 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
 
-pub fn translate_wado_members(body: &String) -> Result<MemberDecls, String> {
+pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut fields: List<MemberField> = [];
@@ -66,7 +66,7 @@ fn is_ident_char(c: char) -> bool {
     return 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' || c == '_';
 }
 
-fn word_at(chars: &List<char>, i: i32, n: i32, word: &String) -> bool {
+fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {
     let wc: List<char> = word.chars().collect();
     if i + wc.len() > n {
         return false;

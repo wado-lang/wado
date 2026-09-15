@@ -144,7 +144,7 @@ fn api_name(call: ApiCall) -> String {
 
 /// The expression a recognizer-API call emits, or a loud error where the body
 /// cannot reach it. Every spelling of every special goes through here.
-fn api_expr(env: &JEnv, call: ApiCall, expr: String) -> Result<String, String> {
+fn api_expr<S: AsStrSlice>(env: &JEnv, call: ApiCall, expr: S) -> Result<String, String> {
     let wrong_host = match api_host(call) {
         Parser => env.lexer,
         Lexer => !env.lexer,
@@ -161,14 +161,14 @@ fn api_expr(env: &JEnv, call: ApiCall, expr: String) -> Result<String, String> {
             `java2wado: @members: '${api_name(call)}' reads the match window, which a member method stands outside of`,
         );
     }
-    return Result::Ok(expr);
+    return Result::Ok(expr.to_string());
 }
 
 /// Translate a lexer `{ ... }` action body. The lexer has no enclosing parser
 /// rule, so the parser-only context (rule, sibling rules, value channel, label
 /// bindings) is empty — any body that reaches for it fails loudly through the
 /// same paths a parser body would.
-pub fn translate_java_lexer_stmts(body: &String, env: &JEnv) -> Result<String, String> {
+pub fn translate_java_lexer_stmts<S: AsStrSlice>(body: S, env: &JEnv) -> Result<String, String> {
     let rule = lexer_body_rule();
     let rules: List<ParserRule> = [];
     let bindings: List<AltBinding> = [];
@@ -191,7 +191,7 @@ pub fn declared_local_names(stmts: &List<JStmt>) -> List<String> {
 }
 
 /// Translate a lexer `{ ... }?` predicate body to a Wado boolean expression.
-pub fn translate_java_lexer_expr(body: &String, env: &JEnv) -> Result<String, String> {
+pub fn translate_java_lexer_expr<S: AsStrSlice>(body: S, env: &JEnv) -> Result<String, String> {
     let mut env = *env;
     env.sink = false;
     env.read_only = true;
@@ -209,10 +209,10 @@ fn lexer_body_rule() -> ParserRule {
     return ParserRule::new("", Visibility::Public, opts, alts);
 }
 
-pub fn translate_java_expr(
+pub fn translate_java_expr<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    body: &String,
+    body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -222,10 +222,10 @@ pub fn translate_java_expr(
     return emit_expr(rule, rules, &expr, vals_in_scope, bindings, env);
 }
 
-pub fn translate_java_stmts(
+pub fn translate_java_stmts<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    body: &String,
+    body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -376,7 +376,7 @@ fn emit_print(
 
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
-pub fn map_java_type(ty: &String) -> Option<String> {
+pub fn map_java_type<S: AsStrSlice>(ty: S) -> Option<String> {
     return match ty.trim() {
         "int" => Option::Some("i32"),
         "short" => Option::Some("i16"),
@@ -516,22 +516,22 @@ fn emit_call(
 /// A call on the recognizer itself, written bare (`m()`) or through `this.` —
 /// one resolution for both spellings, so a rule about a call (which API it
 /// belongs to, whether the body may reach it) holds however it is written.
-fn emit_recognizer_call(env: &JEnv, name: &String, args_w: &String) -> Result<String, String> {
-    if *name == "getText" {
+fn emit_recognizer_call<S: AsStrSlice, S1: AsStrSlice>(env: &JEnv, name: S, args_w: S1) -> Result<String, String> {
+    if name.eq_str("getText") {
         return api_expr(env, ApiCall::Text, if env.lexer {
             lexer_matched_text_expr();
         } else {
             `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
         });
     }
-    if *name == "getCharPositionInLine" {
+    if name.eq_str("getCharPositionInLine") {
         return api_expr(env, ApiCall::CharPos, lexer_cursor_column_expr());
     }
-    if *name == "getRuleInvocationStack" {
+    if name.eq_str("getRuleInvocationStack") {
         return api_expr(env, ApiCall::RuleStack, `${env.this_bind}.rule_stack()`);
     }
     check_member_call_reachable(env, name)?;
-    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${*args_w})`);
+    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${args_w.to_string()})`);
 }
 
 /// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
@@ -568,7 +568,7 @@ fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv
 }
 
 /// Whether the current alternative binds a token named `name`.
-fn token_is_bound(bindings: &List<AltBinding>, name: &String) -> bool {
+fn token_is_bound<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> bool {
     return bindings.iter_ref().any(|b: &AltBinding| b.is_token && b.base == binding_name(name));
 }
 
@@ -613,12 +613,12 @@ fn emit_ctx_child(
     return Result::Ok(rule_binding_for(bindings, &m.name));
 }
 
-fn emit_member_call(
+fn emit_member_call<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     m: &JMember,
     raw_args: &List<JExpr>,
-    args_w: &String,
+    args_w: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     env: &JEnv,
@@ -648,10 +648,10 @@ fn emit_member_call(
         return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, &"_input") {
-        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${*args_w})`);
+        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${args_w.to_string()})`);
     }
     if meth == "LT" && name_is(&m.recv, &"_input") {
-        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${*args_w})`);
+        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${args_w.to_string()})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -663,7 +663,7 @@ fn emit_member_call(
     }
     check_member_call_reachable(env, &meth)?;
     let recv_w = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-    return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${*args_w})`);
+    return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${args_w.to_string()})`);
 }
 
 /// What a name at a *name* position denotes — Java's variable namespace, which
@@ -681,11 +681,11 @@ enum NameTarget {
     Unknown,
 }
 
-fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
-    if env.locals.contains(name) {
+fn resolve_name<S: AsStrSlice>(env: &JEnv, name: S) -> NameTarget {
+    if env.locals.contains(&name.to_string()) {
         return NameTarget::Local;
     }
-    if env.args.contains(name) {
+    if env.args.contains(&name.to_string()) {
         return NameTarget::RuleArg;
     }
     if env.fields.contains(&to_snake_case(name)) {
@@ -696,33 +696,33 @@ fn resolve_name(env: &JEnv, name: &String) -> NameTarget {
 
 /// Whether a `@members` method declares `name`. Java's namespaces are separate
 /// — `int depth = 0; int depth() {}` is legal — so a variable never hides one.
-fn method_declared(env: &JEnv, name: &String) -> bool {
+fn method_declared<S: AsStrSlice>(env: &JEnv, name: S) -> bool {
     return env.methods.contains(&to_snake_case(name));
 }
 
 /// The access a name emits, or a loud error. What a lexer body has left over is
 /// an ANTLR field Gale does not model (`_input`, ...), which emitted verbatim
 /// would reference nothing; a parser body keeps it as the rule's own scope.
-fn name_expr(
+fn name_expr<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    name: &String,
+    name: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    if *name == "_tokenStartCharPositionInLine" {
+    if name.eq_str("_tokenStartCharPositionInLine") {
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {
         Local => Result::Ok(escape_ident(name)),
-        RuleArg => resolve_attr_ref(rule, rules, &`$${*name}`, vals_in_scope, bindings, &env.this_bind),
+        RuleArg => resolve_attr_ref(rule, rules, &`$${name.to_string()}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
         Unknown => if env.lexer {
             builtin::cold_path();
-            Result::Err(`java2wado: unsupported lexer name '${*name}': not a @members field`);
+            Result::Err(`java2wado: unsupported lexer name '${name.to_string()}': not a @members field`);
         } else {
-            Result::Ok(*name);
+            Result::Ok(name.to_string());
         },
     };
 }
@@ -730,18 +730,18 @@ fn name_expr(
 /// The access `this.<name>` emits. `this.` reaches a field and nothing else in
 /// Java — never a local, never an argument — so the resolution that admits those
 /// is not the one this site may take.
-fn this_field_expr(env: &JEnv, name: &String) -> Result<String, String> {
+fn this_field_expr<S: AsStrSlice>(env: &JEnv, name: S) -> Result<String, String> {
     let snake = to_snake_case(name);
     if env.fields.contains(&snake) || !env.lexer {
         return Result::Ok(`${env.this_bind}.${snake}`);
     }
     builtin::cold_path();
-    return Result::Err(`java2wado: unsupported lexer name 'this.${*name}': not a @members field`);
+    return Result::Err(`java2wado: unsupported lexer name 'this.${name.to_string()}': not a @members field`);
 }
 
 /// Refuse a member call this body cannot make. Both spellings — `this.m()` and
 /// the bare `m()` — reach the same method, so both come through here.
-fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> {
+fn check_member_call_reachable<S: AsStrSlice>(env: &JEnv, meth: S) -> Result<(), String> {
     if !method_declared(env, meth) {
         builtin::cold_path();
         return Result::Err(unknown_method_err(meth));
@@ -751,14 +751,14 @@ fn check_member_call_reachable(env: &JEnv, meth: &String) -> Result<(), String> 
     if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
         builtin::cold_path();
         return Result::Err(
-            `java2wado: @members method '${*meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
+            `java2wado: @members method '${meth.to_string()}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
         );
     }
     return Result::Ok(());
 }
 
-fn unknown_method_err(name: &String) -> String {
-    return `java2wado: unsupported method '${*name}': not a @members method or a recognizer API method`;
+fn unknown_method_err<S: AsStrSlice>(name: S) -> String {
+    return `java2wado: unsupported method '${name.to_string()}': not a @members method or a recognizer API method`;
 }
 
 /// Whether `e` names the grammar's own parser / lexer class (`<Name>Parser` /
@@ -796,16 +796,16 @@ fn emit_args(
 }
 
 /// Whether `e` is a no-argument call of `name` (`getExpectedTokens()`).
-fn call_names(e: &JExpr, name: &String) -> bool {
+fn call_names<S: AsStrSlice>(e: &JExpr, name: S) -> bool {
     if let Call(c) = e {
         return name_is(&c.callee, name) && c.args.is_empty();
     }
     return false;
 }
 
-fn name_is(e: &JExpr, s: &String) -> bool {
+fn name_is<S: AsStrSlice>(e: &JExpr, s: S) -> bool {
     return match e {
-        Name(n) => *n == *s,
+        Name(n) => *n == s.to_string(),
         _ => false,
     };
 }
@@ -823,7 +823,7 @@ fn is_system_out(e: &JExpr) -> bool {
 
 /// An all-uppercase identifier (`NL`, `ELSE`, `LL_EXACT`): a token-type constant
 /// when qualified (`TParser.NL`). Digits and `_` allowed; needs one A-Z.
-fn is_upper_ident(name: &String) -> bool {
+fn is_upper_ident<S: AsStrSlice>(name: S) -> bool {
     let mut has_alpha = false;
     for let c of name.chars() {
         if c.is_ascii_uppercase() {
@@ -913,7 +913,7 @@ fn append_interp(
 /// Escape a string-literal part for Wado template text. Only `$` (which could
 /// start a `${` interpolation) and the backtick carry template meaning; braces
 /// are literal. Java `\`-escapes pass through unchanged.
-fn escape_template(content: &String) -> String {
+fn escape_template<S: AsStrSlice>(content: S) -> String {
     let mut out = String::with_capacity(content.chars().count());
     for let c of content.chars() {
         if c == '$' || c == '`' {

@@ -540,9 +540,9 @@ fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
 /// anywhere reachable through `Repeat` / `Group` / `OptionalLookahead`.
 /// Pre-check for the deep walkers so they skip subtrees with no
 /// self-ref (Wado value semantics make the rebuild a deep clone).
-fn scan_element_contains_self_ref(se: &ScanElement, rule_snake: &String) -> bool {
+fn scan_element_contains_self_ref<S: AsStrSlice>(se: &ScanElement, rule_snake: S) -> bool {
     return match se {
-        RuleCall(rc) => rc.target_snake == *rule_snake,
+        RuleCall(rc) => rc.target_snake == rule_snake.to_string(),
         Repeat(r) => scan_element_contains_self_ref(&r.body, rule_snake),
         Group(g) => {
             let mut found = false;
@@ -1009,10 +1009,10 @@ fn fixed_token_const_name(elem: &Element) -> Option<String> {
 /// precedence is computed once from the parse-side ops (whose
 /// neighbour tokens drive the BETWEEN…AND decision) and then
 /// stamped onto whichever side carries a self-ref at that position.
-fn stamp_lr_self_ref_min_prec(
+fn stamp_lr_self_ref_min_prec<S: AsStrSlice, S1: AsStrSlice>(
     lr_alts: &mut List<LrAlt>,
-    rule_name: &String,
-    rule_snake: &String,
+    rule_name: S,
+    rule_snake: S1,
     ctx: &mut GenContext,
     atn_class: bool,
 ) -> bool {
@@ -1178,12 +1178,12 @@ fn rebind_self_ref_lr_cont(op: Op, lr_cont_mask: i32) -> Op {
 }
 
 /// Scan mirror of `rebind_self_ref_lr_cont`.
-fn rebind_scan_self_ref_lr_cont(se: ScanElement, rule_snake: &String, lr_cont_mask: i32) -> ScanElement {
+fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, lr_cont_mask: i32) -> ScanElement {
     if lr_cont_mask < 0 {
         return se;
     }
     if let RuleCall(rc) = se {
-        if rc.target_snake == *rule_snake {
+        if rc.target_snake == rule_snake.to_string() {
             return ScanElement::RuleCall(ScanRuleCallElement { ..rc, lr_cont_mask });
         }
     }
@@ -1196,9 +1196,9 @@ fn rebind_scan_self_ref_lr_cont(se: ScanElement, rule_snake: &String, lr_cont_ma
 /// disambiguates the climb. The call's `follow_arg` is preserved
 /// as-is; the runtime `follow` is threaded independently of the
 /// precedence argument.
-fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32) -> ScanElement {
+fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, prec: i32) -> ScanElement {
     if let RuleCall(mut rc) = se {
-        if rc.target_snake == *rule_snake {
+        if rc.target_snake == rule_snake.to_string() {
             rc.min_prec_arg = Option::Some(prec);
             return ScanElement::RuleCall(rc);
         }
@@ -1206,9 +1206,9 @@ fn rebind_scan_self_ref_min_prec(se: ScanElement, rule_snake: &String, prec: i32
     return se;
 }
 
-fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
+fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> with stores[op] {
     return match op {
-        RuleCall(rc) => if rc.target_name == *rule_name { Option::Some(rc) } else { null },
+        RuleCall(rc) => if rc.target_name == rule_name.to_string() { Option::Some(rc) } else { null },
         ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
         Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) => null,
     };
@@ -1220,9 +1220,9 @@ fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> w
 /// `stamp_lr_self_ref_min_prec` to skip the deep-walker rebuild for
 /// subtrees that don't carry a self-ref — Wado's value semantics
 /// turn the rebuild into a deep copy.
-fn op_subtree_contains_self_ref(op: &Op, rule_name: &String) -> bool {
+fn op_subtree_contains_self_ref<S: AsStrSlice>(op: &Op, rule_name: S) -> bool {
     return match *op {
-        RuleCall(rc) => rc.target_name == *rule_name,
+        RuleCall(rc) => rc.target_name == rule_name.to_string(),
         ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
         Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
         Group(g) => {
@@ -1336,17 +1336,17 @@ fn seq_first_has_lr(ops: &List<Op>, idx: i32, lr_first: &List<String>, tail_has:
 /// operator can follow THIS op. The scan-side mirror `stamp_scan_follow`
 /// computes the same decision over its own tree (no cross-walk coupling).
 /// Replaces the former blanket-`conflict_min` walk.
-fn stamp_op_follow(
+fn stamp_op_follow<S: AsStrSlice, S1: AsStrSlice>(
     op: Op,
-    rule_name: &String,
-    rule_snake: &String,
+    rule_name: S,
+    rule_snake: S1,
     lr_first: &List<String>,
     conflict_min: i32,
     follow_has: bool,
 ) -> Op {
     return match op {
         RuleCall(mut rc) => {
-            if rc.target_name == *rule_name {
+            if rc.target_name == rule_name.to_string() {
                 rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             Op::RuleCall(rc);
@@ -1475,16 +1475,16 @@ fn scan_seq_first_has_lr(elements: &List<ScanElement>, idx: i32, lr_first: &List
 /// scan tree independently of the parse side — both mirror the same surface
 /// alt, so they agree without any ordinal coupling. Preserves each call's
 /// `follow_arg` (a nested self-ref isn't an LR climb).
-fn stamp_scan_follow(
+fn stamp_scan_follow<S: AsStrSlice>(
     se: ScanElement,
-    rule_snake: &String,
+    rule_snake: S,
     lr_first: &List<String>,
     conflict_min: i32,
     follow_has: bool,
 ) -> ScanElement {
     return match se {
         RuleCall(mut rc) => {
-            if rc.target_snake == *rule_snake {
+            if rc.target_snake == rule_snake.to_string() {
                 rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             ScanElement::RuleCall(rc);
@@ -1685,11 +1685,11 @@ fn lower_lr_alt(
     };
 }
 
-fn lower_lr_alt_suffix(
+fn lower_lr_alt_suffix<S: AsStrSlice, S1: AsStrSlice>(
     rule: &ParserRule,
     alt_index: i32,
-    case_name: &String,
-    struct_name: &String,
+    case_name: S,
+    struct_name: S1,
     ctx: &mut GenContext,
     alt_gc_starts: &List<i32>,
 ) -> AltBody {
@@ -1754,8 +1754,8 @@ fn lower_lr_alt_suffix(
 
     return AltBody {
         alt_index: alt_index,
-        case_name: *case_name,
-        struct_name: *struct_name,
+        case_name: case_name.to_string(),
+        struct_name: struct_name.to_string(),
         ops: ops,
         fields: fields,
         prefix_self_ref_min_prec: 0,
@@ -1786,7 +1786,7 @@ fn lower_lr_alt_scan_suffix(rule: &ParserRule, alt_index: i32, ctx: &mut GenCont
 /// the ONLY self-ref. Mirrors what emit needs to know about
 /// trailing self-refs (`expr op expr` has a trailing one;
 /// `expr '++' ` does not).
-fn find_last_self_ref_idx(alt: &Alternative, rule_name: &String) -> i32 {
+fn find_last_self_ref_idx<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> i32 {
     let mut last: i32 = -1;
     // Index 0 is the leading prefix self-ref (already known to
     // exist for an LR alt); we count any self-ref at i >= 1 as
@@ -2066,7 +2066,7 @@ fn has_left_recursive_alt(rule: &ParserRule) -> bool {
 /// RuleRef self-ref, possibly wrapped in a Label; we mirror the
 /// surface-IR `element_to_field` shape so emit's CST struct lays out
 /// the same field as before the GIR migration.
-fn lr_prefix_field_decl(elem: &Element, rule_name: &String) -> FieldDecl {
+fn lr_prefix_field_decl<S: AsStrSlice>(elem: &Element, rule_name: S) -> FieldDecl {
     let type_str = rule_type_name(rule_name);
     return match *elem {
         RuleRef(r) => FieldDecl {
@@ -2083,16 +2083,16 @@ fn lr_prefix_field_decl(elem: &Element, rule_name: &String) -> FieldDecl {
     };
 }
 
-fn alt_is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+fn alt_is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
     if alt.elements.is_empty() {
         return false;
     }
     return element_is_self_ref(&alt.elements[0], rule_name);
 }
 
-pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
+pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     return match *elem {
-        RuleRef(r) => r.name == *rule_name,
+        RuleRef(r) => r.name == rule_name.to_string(),
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
         TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };
@@ -2109,7 +2109,7 @@ pub fn element_is_self_ref(elem: &Element, rule_name: &String) -> bool {
 /// The scan side has no field bindings, no struct construction, and
 /// no name dedup — it only produces a token-stream walk that
 /// returns the new `pos`.
-fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, reaches_rule_tail: bool) -> ScanBody {
+fn lower_scan_body<S: AsStrSlice>(alt: &Alternative, ctx: &mut GenContext, rule_name: S, reaches_rule_tail: bool) -> ScanBody {
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
@@ -2118,7 +2118,7 @@ fn lower_scan_body(alt: &Alternative, ctx: &mut GenContext, rule_name: &String, 
             ctx,
             reaches_rule_tail,
             true,
-            rule_name,
+            &rule_name.to_string(),
         ));
     }
     return ScanBody {
@@ -3092,10 +3092,10 @@ fn lower_alt_body(
 /// `SingleAlt` / `General` groups can fill in their `owner_rule`
 /// slot (the rule whose monomorph table the group's struct names
 /// live under).
-fn lower_op(
+fn lower_op<S: AsStrSlice>(
     elem: &Element,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -3180,10 +3180,10 @@ fn lower_op(
 /// Lower a `Group` element into the `GroupShape` `classify_group` names.
 /// Inner ops share the surrounding alt's `name_counts` only for `Transparent`,
 /// whose wrapping is purely syntactic; every storable shape gets its own scope.
-fn lower_group_op(
+fn lower_group_op<S: AsStrSlice>(
     g: &GroupElement,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -3240,10 +3240,10 @@ fn lower_group_op(
 
 /// Single-element single-alt: `(e)` lowers to `e` with no struct of
 /// its own. The binding nests in the surrounding alt's name table.
-fn lower_transparent_group(
+fn lower_transparent_group<S: AsStrSlice>(
     inner: &Element,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -3310,11 +3310,11 @@ fn lower_transparent_group(
 /// read the same per-position `FollowArg` and stay in lockstep. `owner_rule`
 /// names the monomorph table nested groups bake into; `rule_name` is the
 /// enclosing rule, which the Repeat post-pass reports diagnostics under.
-fn lower_group_alt(
+fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
     alt: &Alternative,
     name_counts: &mut List<[String, i32]>,
-    owner_rule: &String,
-    rule_name: &String,
+    owner_rule: S,
+    rule_name: S1,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     enclosing_at_tail: bool,
@@ -3428,10 +3428,10 @@ fn rewrap_op_repeat(op: Op, patched: Op) -> Op {
 /// `owner_rule` records the surrounding rule's name so a nested `General`
 /// group inside this body resolves its monomorph table key
 /// (`<RuleName>Group<idx>`).
-fn lower_single_alt_group(
+fn lower_single_alt_group<S: AsStrSlice>(
     alt: &Alternative,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     enclosing_at_tail: bool = true,
@@ -3758,10 +3758,10 @@ fn apply_empty_alt_admits(classes: &mut List<AltClass>, admits: &Option<EmptyAlt
 /// names inside the group's struct, not the outer alt. The shared
 /// `group_counter` is bumped before lowering inner alts so any
 /// nested general groups get the next sequential ids.
-fn lower_general_group(
+fn lower_general_group<S: AsStrSlice>(
     alts: &List<Alternative>,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -3810,7 +3810,7 @@ fn lower_general_group(
         scan_bodies.push(ScanBody { elements: scan_elements });
     }
     let owner = DiagnosticOwner {
-        rule: *rule_name,
+        rule: rule_name.to_string(),
         site: DiagnosticSite::GeneralGroup(group_index),
     };
     return group_op(
@@ -3855,10 +3855,10 @@ fn compute_repeat_outer_field(rep: &RepeatElement, name_counts: &mut List<[Strin
 /// The inner Op uses a fresh `name_counts`: a binding name inside a
 /// loop body is local to that iteration and does not dedup against the
 /// surrounding alt's bindings.
-fn lower_repeat_op(
+fn lower_repeat_op<S: AsStrSlice>(
     rep: &RepeatElement,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -3903,7 +3903,7 @@ fn lower_repeat_op(
     if !rep.non_greedy {
         if let Optional = rep.kind {
             let owner = DiagnosticOwner {
-                rule: *rule_name,
+                rule: rule_name.to_string(),
                 site: DiagnosticSite::Optional(outer_field),
             };
             opt_specialised = pick_optional_specialised(
@@ -4459,7 +4459,7 @@ pub fn non_greedy_static_undecided(
 /// every alt-walker post-pass — `lower_alt_body`, `lower_lr_alt_suffix`,
 /// `lower_single_alt_group`, `lower_general_group` — so a future
 /// `RepeatOp` field addition only needs to touch this builder.
-fn patch_repeat_op_caller_follow(
+fn patch_repeat_op_caller_follow<S: AsStrSlice>(
     rep_op: &RepeatOp,
     caller_follow_first: List<String>,
     caller_follow_second: List<String>,
@@ -4467,7 +4467,7 @@ fn patch_repeat_op_caller_follow(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
-    rule_name: &String,
+    rule_name: S,
 ) -> RepeatOp {
     let mut continuation_scan: List<ScanElement> = [];
     let mut continuation_scannable = false;
@@ -4512,7 +4512,7 @@ fn patch_repeat_op_caller_follow(
 /// the parse's `RepeatOp` and the scan's `ScanRepeatElement` build their duties
 /// from the same body. Two calls with the same arguments cannot disagree, which
 /// is the invariant the mirrored stamps could only assert.
-fn lower_iteration_duties(
+fn lower_iteration_duties<S: AsStrSlice>(
     non_greedy: bool,
     kind: RepeatKind,
     loop_first: &List<String>,
@@ -4520,7 +4520,7 @@ fn lower_iteration_duties(
     index: i32,
     ctx: &mut GenContext,
     reaches_rule_tail: bool,
-    rule_name: &String,
+    rule_name: S,
 ) -> IterationDuties {
     let mut duties = IterationDuties {};
     if let Some(scan) = lower_reserve_scan(non_greedy, kind, loop_first, alt_elements, index, ctx) {
@@ -4733,10 +4733,10 @@ fn repeat_inner_group_base_name(g: &GroupElement, gc_speculative: i32) -> String
 /// emission would have produced its own field name, but the label
 /// rebinds the value under `lab.field_name`. A list label (`+=`) needs a
 /// `List<...>`-typed wrapper field, which the CST `FieldDecl` enumeration adds.
-fn lower_label_op(
+fn lower_label_op<S: AsStrSlice>(
     lab: &LabelElement,
     name_counts: &mut List<[String, i32]>,
-    rule_name: &String,
+    rule_name: S,
     ctx: &mut GenContext,
     group_counter: &mut i32,
     outer_follow: &List<String>,
@@ -5022,35 +5022,35 @@ fn transparent_group_inner_decl(_g: &GroupOp) -> Option<FieldDecl> {
 /// * `ListLabel` carries `dedup_base` itself; rebinding the outer
 ///   field here updates `dedup_base` to `new_dedup_base` for the same
 ///   reason as the leaf arms.
-pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> Op {
+pub fn rebind_op_field<S: AsStrSlice, S1: AsStrSlice>(op: Op, new_field: S, new_dedup_base: S1) -> Op {
     return match op {
         Token(mut t) => {
-            t.field = *new_field;
-            t.dedup_base = *new_dedup_base;
+            t.field = new_field.to_string();
+            t.dedup_base = new_dedup_base.to_string();
             Op::Token(t);
         },
         Literal(mut l) => {
-            l.field = *new_field;
-            l.dedup_base = *new_dedup_base;
+            l.field = new_field.to_string();
+            l.dedup_base = new_dedup_base.to_string();
             Op::Literal(l);
         },
         RuleCall(mut r) => {
-            r.field = *new_field;
-            r.dedup_base = *new_dedup_base;
+            r.field = new_field.to_string();
+            r.dedup_base = new_dedup_base.to_string();
             Op::RuleCall(r);
         },
         Wildcard(mut w) => {
-            w.field = *new_field;
-            w.dedup_base = *new_dedup_base;
+            w.field = new_field.to_string();
+            w.dedup_base = new_dedup_base.to_string();
             Op::Wildcard(w);
         },
         Excluded(mut e) => {
-            e.field = *new_field;
-            e.dedup_base = *new_dedup_base;
+            e.field = new_field.to_string();
+            e.dedup_base = new_dedup_base.to_string();
             Op::Excluded(e);
         },
         Repeat(mut rep) => {
-            rep.field = *new_field;
+            rep.field = new_field.to_string();
             Op::Repeat(rep);
         },
         Group(mut g) => {
@@ -5058,30 +5058,30 @@ pub fn rebind_op_field(op: Op, new_field: &String, new_dedup_base: &String) -> O
             Op::Group(g);
         },
         ListLabel(mut ll) => {
-            ll.field = *new_field;
-            ll.dedup_base = *new_dedup_base;
+            ll.field = new_field.to_string();
+            ll.dedup_base = new_dedup_base.to_string();
             Op::ListLabel(ll);
         },
     };
 }
 
-fn rebind_group_shape(shape: GroupShape, new_field: &String) -> GroupShape {
+fn rebind_group_shape<S: AsStrSlice>(shape: GroupShape, new_field: S) -> GroupShape {
     return match shape {
         Transparent => GroupShape::Transparent,
         TokenOnly(mut to) => {
-            to.field = *new_field;
+            to.field = new_field.to_string();
             GroupShape::TokenOnly(to);
         },
         SimpleCst(mut scst) => {
-            scst.field = *new_field;
+            scst.field = new_field.to_string();
             GroupShape::SimpleCst(scst);
         },
         SingleAlt(mut sa) => {
-            sa.field = *new_field;
+            sa.field = new_field.to_string();
             GroupShape::SingleAlt(sa);
         },
         General(mut gen) => {
-            gen.field = *new_field;
+            gen.field = new_field.to_string();
             GroupShape::General(gen);
         },
     };

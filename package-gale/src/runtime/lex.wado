@@ -40,7 +40,7 @@ impl LexerSlice {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
-    pub fn from_string(s: String) -> LexerSlice {
+    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
         let chars = s.chars().collect();
         return LexerSlice { chars: &chars, start: 0, end: chars.len() };
     }
@@ -65,7 +65,7 @@ impl LexerSlice {
         return s;
     }
 
-    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+    pub fn eq_str<S: AsStrSlice>(a: S, b: &LexerSlice) -> bool {
         let a_chars = a.chars();
         let mut a_iter = a_chars;
         let mut i = b.start;
@@ -348,12 +348,12 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
-        return ParseError { message, span, expected };
+    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected };
     }
 
-    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
-        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    pub fn at<S: AsStrSlice>(message: S, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected, line, col, rule_stack: [] };
     }
 
     pub fn full_message(&self) -> String {

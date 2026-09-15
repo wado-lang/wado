@@ -262,7 +262,7 @@ test "FnSpec signature string" {
     f.set_return_type(&"String");
 
     let sig = f.signature();
-    assert sig == "pub fn transform(&self, input: &String, scale: f64) -> String", `got: ${sig}`;
+    assert sig == "pub fn transform<S: AsStrSlice>(&self, input: S, scale: f64) -> String", `got: ${sig}`;
 }
 
 test "FnSpec export with effects" {
@@ -366,7 +366,7 @@ test "struct + impl + fn composition" {
 
     w.end();
 
-    let expected = "struct Lexer {\n    chars: List<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new(input: &String) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
+    let expected = "struct Lexer {\n    chars: List<char>,\n    pos: i32,\n}\n\nimpl Lexer {\n    fn new<S: AsStrSlice>(input: S) -> Lexer {\n        return Lexer { chars: input.chars().collect(), pos: 0 };\n    }\n\n    fn at_end(&self) -> bool {\n        return self.pos >= self.chars.len();\n    }\n}\n";
     assert w.to_string() == expected, `got: ${w.to_string()}`;
 }
 

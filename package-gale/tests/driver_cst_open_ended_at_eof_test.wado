@@ -9,11 +9,11 @@ use oae from "./grammars/open_ended_at_eof.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_open_ended_at_eof" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = oae::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = oae::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "open-ended at EOF: an optional over an open-ended rule declines" {

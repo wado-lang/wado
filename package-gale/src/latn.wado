@@ -142,8 +142,8 @@ fn calls_recursive_ng_rule(
 /// `CMT : '//' .*? '\n' CMT*` ends its loop at `'\n'` at any depth, and
 /// `A : '#' A? .*? '#'` is static under this test and without it alike. Both
 /// were checked against `antlr4-oracle.sh`.
-fn recursion_and_non_greedy_are_siblings(
-    rn: &String,
+fn recursion_and_non_greedy_are_siblings<S: AsStrSlice>(
+    rn: S,
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
 ) -> bool {
@@ -154,7 +154,7 @@ fn recursion_and_non_greedy_are_siblings(
         let mut self_visited: List<String> = [];
         // Seeded with the rule, so the recursion being established here is not
         // itself walked looking for the loop.
-        let mut ng_visiting: List<String> = [*rn];
+        let mut ng_visiting: List<String> = [rn.to_string()];
         if refs_rule_in_alts(rn, &one, all_rules, &mut self_visited) {
             recursing.push(i);
         }
@@ -262,7 +262,7 @@ fn scan_undecidable_arms_elem(
     }
 }
 
-fn scan_recursive_ng(name: &String, alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
+fn scan_recursive_ng<S: AsStrSlice>(name: S, alts: &List<LexerAlternative>, all_rules: &List<LexerRule>) -> bool {
     for let alt of alts {
         for let elem of &alt.elements {
             if scan_recursive_ng_elem(name, elem, all_rules) {
@@ -273,7 +273,7 @@ fn scan_recursive_ng(name: &String, alts: &List<LexerAlternative>, all_rules: &L
     return false;
 }
 
-fn scan_recursive_ng_elem(name: &String, elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
+fn scan_recursive_ng_elem<S: AsStrSlice>(name: S, elem: &LexerElement, all_rules: &List<LexerRule>) -> bool {
     match *elem {
         Repeat(rep) => {
             if rep.non_greedy {
@@ -298,10 +298,10 @@ fn scan_recursive_ng_elem(name: &String, elem: &LexerElement, all_rules: &List<L
 
 /// Does `elem` transitively reference the rule named `target` (directly or
 /// through other lexer rules / fragments)? `visited` guards rule cycles.
-fn elem_refs_rule(target: &String, elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
+fn elem_refs_rule<S: AsStrSlice>(target: S, elem: &LexerElement, all_rules: &List<LexerRule>, visited: &mut List<String>) -> bool {
     match *elem {
         RuleRef(rn) => {
-            if rn == *target {
+            if rn == target.to_string() {
                 return true;
             }
             for let v of visited {
@@ -330,8 +330,8 @@ fn elem_refs_rule(target: &String, elem: &LexerElement, all_rules: &List<LexerRu
     return false;
 }
 
-fn refs_rule_in_alts(
-    target: &String,
+fn refs_rule_in_alts<S: AsStrSlice>(
+    target: S,
     alts: &List<LexerAlternative>,
     all_rules: &List<LexerRule>,
     visited: &mut List<String>,
@@ -424,18 +424,18 @@ pub fn build_latn(grammar: &Grammar) -> LatnResult {
 
 /// Add `name` and every rule it transitively references to `incl` (build
 /// order; `seen` dedups).
-fn collect_reachable(name: &String, all_rules: &List<LexerRule>, incl: &mut List<String>, seen: &mut List<String>) {
+fn collect_reachable<S: AsStrSlice>(name: S, all_rules: &List<LexerRule>, incl: &mut List<String>, seen: &mut List<String>) {
     for let s of seen {
-        if *s == *name {
+        if *s == name.to_string() {
             return;
         }
     }
-    seen.push(*name);
+    seen.push(name.to_string());
     let rule = find_lexer_rule(all_rules, name);
     if rule matches { None } {
         return;
     }
-    incl.push(*name);
+    incl.push(name.to_string());
     if let Some(r) = rule {
         let mut refs: List<String> = [];
         collect_refs_in_alts(&r.body, &mut refs);
@@ -529,7 +529,7 @@ fn ci_ranges(ci: bool, lo: char, hi: char) -> List<[i32, i32]> {
     return folded.iter_ref().map(|f: &CharRange| [f.start as i32, f.end as i32]).collect();
 }
 
-fn build_literal(b: &mut LatnBuilder, text: &String) -> [i32, i32] {
+fn build_literal<S: AsStrSlice>(b: &mut LatnBuilder, text: S) -> [i32, i32] {
     let chars: List<char> = text.chars().collect();
     let from = b.new_state(ATN_BASIC);
     if chars.is_empty() {
@@ -558,10 +558,10 @@ fn ranges_segment(b: &mut LatnBuilder, ranges: &List<[i32, i32]>) -> [i32, i32] 
     return [from, to];
 }
 
-fn rule_segment(b: &mut LatnBuilder, name: &String) -> [i32, i32] {
+fn rule_segment<S: AsStrSlice>(b: &mut LatnBuilder, name: S) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC);
     let to = b.new_state(ATN_BASIC);
-    let ri = if let Some(idx) = b.name_to_idx.get(*name) {
+    let ri = if let Some(idx) = b.name_to_idx.get(name.to_string()) {
         idx;
     } else {
         -1;

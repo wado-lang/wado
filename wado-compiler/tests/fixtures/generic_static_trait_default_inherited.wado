@@ -1,0 +1,55 @@
+// Regression: a generic *static* trait method the impl inherits — a default
+// body it does not override — got no type arguments and was never
+// monomorphized, so WIR build met the call unresolved and reported
+// "type `Box` does not implement trait `Measure`".
+//
+// `infer_static_method_type_args` resolves the callee through the impl method
+// indices, and an inherited default belongs to no impl's method list. The other
+// three shapes (inherent static, impl-provided trait static, instance-method
+// default) all index normally, so only this one reproduces.
+
+struct Box { n: i32 }
+
+impl Box {
+    fn inherent<S: AsStrSlice>(s: S) -> i32 {
+        return s.as_str_slice().len();
+    }
+}
+
+trait Measure {
+    fn unit(s: &StrSlice) -> i32;
+
+    fn measure<S: AsStrSlice>(s: S) -> i32 {
+        return Self::unit(&s.as_str_slice());
+    }
+
+    fn measure_twice<S: AsStrSlice>(s: S) -> i32;
+}
+
+impl Measure for Box {
+    fn unit(s: &StrSlice) -> i32 {
+        return s.len();
+    }
+
+    fn measure_twice<S: AsStrSlice>(s: S) -> i32 {
+        return s.as_str_slice().len() * 2;
+    }
+}
+
+test "generic static inherent method" {
+    assert Box::inherent("abc") == 3;
+}
+
+test "generic static trait method the impl provides" {
+    assert Box::measure_twice("abcd") == 8;
+}
+
+test "generic static trait method the impl inherits" {
+    assert Box::measure("abcde") == 5;
+}
+
+test "an inherited generic static takes one instantiation per argument type" {
+    let owned: String = "abcdef";
+    assert Box::measure(owned) == 6;
+    assert Box::measure("abcdefg".as_str_slice()) == 7;
+}

@@ -242,7 +242,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     );
 }
 
-fn table_fn_name(property: &String) -> String {
+fn table_fn_name<S: AsStrSlice>(property: S) -> String {
     let mut out = String::with_capacity(property.len() + 7);
     for let c of property.chars() {
         out.push(c.to_ascii_lowercase());
@@ -253,7 +253,7 @@ fn table_fn_name(property: &String) -> String {
 
 /// The folded names that select one property's table (`lb`, `linebreak`),
 /// from `PropertyAliases.txt`.
-fn property_keys(aliases: &List<NamedRanges>, property: &String) -> List<String> {
+fn property_keys<S: AsStrSlice>(aliases: &List<NamedRanges>, property: S) -> List<String> {
     for let alias of aliases {
         if !names_contain_folded(alias, property) {
             continue;
@@ -267,13 +267,13 @@ fn property_keys(aliases: &List<NamedRanges>, property: &String) -> List<String>
         }
         return keys;
     }
-    panic(`PropertyAliases.txt names no property '${*property}'`);
+    panic(`PropertyAliases.txt names no property '${property.to_string()}'`);
 }
 
 /// Property matching ignores case, `_`, `-` and spaces (UAX #44 loose
 /// matching), so every table key is emitted folded and the consumer folds the
 /// name it looks up the same way.
-fn normalize_name(name: &String) -> String {
+fn normalize_name<S: AsStrSlice>(name: S) -> String {
     let mut out = String::with_capacity(name.len());
     for let c of name.chars() {
         if c == '_' || c == '-' || c == ' ' {
@@ -285,7 +285,7 @@ fn normalize_name(name: &String) -> String {
 }
 
 /// `#`-comment stripped, leading / trailing space removed.
-fn strip_comment(line: &String) -> String {
+fn strip_comment<S: AsStrSlice>(line: S) -> String {
     let mut out = String::with_capacity(line.len());
     for let c of line.chars() {
         if c == '#' {
@@ -296,7 +296,7 @@ fn strip_comment(line: &String) -> String {
     return out.trim();
 }
 
-fn parse_prop_runs(content: &String) -> List<PropRun> {
+fn parse_prop_runs<S: AsStrSlice>(content: S) -> List<PropRun> {
     let mut runs: List<PropRun> = [];
     for let line of content.lines() {
         let body = strip_comment(&line);
@@ -320,7 +320,7 @@ fn parse_prop_runs(content: &String) -> List<PropRun> {
 
 /// Like `parse_prop_runs`, taking the value from `field` — `ArabicShaping.txt`
 /// writes `CODE; NAME; JOINING_TYPE; JOINING_GROUP`.
-fn parse_prop_runs_at(content: &String, field: i32) -> List<PropRun> {
+fn parse_prop_runs_at<S: AsStrSlice>(content: S, field: i32) -> List<PropRun> {
     let mut runs: List<PropRun> = [];
     for let line of content.lines() {
         let body = strip_comment(&line);
@@ -340,7 +340,7 @@ fn parse_prop_runs_at(content: &String, field: i32) -> List<PropRun> {
     return runs;
 }
 
-fn parse_bounds(text: &String) -> [i32, i32] {
+fn parse_bounds<S: AsStrSlice>(text: S) -> [i32, i32] {
     let mut bounds = text.split("..");
     let start = i32::from_str_hex(&bounds.next().unwrap()).unwrap();
     let end = match bounds.next() {
@@ -357,13 +357,13 @@ fn parse_bounds(text: &String) -> [i32, i32] {
 /// `\P{...}` complements what `\p` selects, so a code point left without a
 /// value would be admitted rather than merely missed. The partition is
 /// asserted, not assumed.
-fn partition_runs(
-    content: &String,
+fn partition_runs<S: AsStrSlice, S1: AsStrSlice>(
+    content: S,
     field: i32,
     gc_default: bool,
     categories: &List<CategoryRun>,
     aliases: &List<NamedRanges>,
-    property: &String,
+    property: S1,
 ) -> List<PropRun> {
     let mut names: List<String> = [];
     let mut slot: List<i32> = List::filled(CODE_POINT_MAX + 1, 0);
@@ -376,7 +376,7 @@ fn partition_runs(
     // (`DerivedBidiClass.txt` gives whole blocks their own default), but none
     // of them overrides a code point the file lists.
     let missing = parse_missing(content);
-    assert missing.is_empty() == gc_default, `${*property}: expected either @missing lines or the General_Category default rule, not both or neither`;
+    assert missing.is_empty() == gc_default, `${property.to_string()}: expected either @missing lines or the General_Category default rule, not both or neither`;
     let mut widest = missing;
     widest.sort_by(|a: &PropRun, b: &PropRun| (b.end - b.start).cmp(&(a.end - a.start)));
     let mut default_slot: List<i32> = List::filled(CODE_POINT_MAX + 1, 0);
@@ -414,7 +414,7 @@ fn partition_runs(
     let mut runs: List<PropRun> = [];
     let mut start = 0;
     for let mut c = 0; c <= CODE_POINT_MAX; c += 1 {
-        assert slot[c] != 0, `${*property}: U+${c:X} has no value; the values do not partition the code-point space`;
+        assert slot[c] != 0, `${property.to_string()}: U+${c:X} has no value; the values do not partition the code-point space`;
         if c == CODE_POINT_MAX || slot[c + 1] != slot[c] {
             runs.push(PropRun { start, end: c, value: names[slot[c] - 1] });
             start = c + 1;
@@ -432,30 +432,30 @@ fn fill(slot: &mut List<i32>, start: i32, end: i32, id: i32) {
 /// The alias row's canonical name, so a data line's `AL` and an `@missing`
 /// line's `Arabic_Letter` intern as one value instead of splitting the
 /// property in two.
-fn canonical_value(aliases: &List<NamedRanges>, value: &String) -> String {
+fn canonical_value<S: AsStrSlice>(aliases: &List<NamedRanges>, value: S) -> String {
     for let alias of aliases {
         if names_contain_folded(alias, value) {
             return alias.names[0];
         }
     }
-    return *value;
+    return value.to_string();
 }
 
 /// 1-based so 0 stays free as "no value yet".
-fn intern(names: &mut List<String>, value: &String) -> i32 {
+fn intern<S: AsStrSlice>(names: &mut List<String>, value: S) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == *value {
+        if names[i] == value.to_string() {
             return i + 1;
         }
     }
-    names.push(*value);
+    names.push(value.to_string());
     return names.len();
 }
 
 /// `# @missing: START..END; VALUE` — the value a code point the file does not
 /// list takes. Most files carry one line covering the whole space;
 /// `DerivedBidiClass.txt` adds narrower ones for the RTL and Arabic blocks.
-fn parse_missing(content: &String) -> List<PropRun> {
+fn parse_missing<S: AsStrSlice>(content: S) -> List<PropRun> {
     let mut out: List<PropRun> = [];
     for let line of content.lines() {
         if !line.trim().starts_with("#") {
@@ -481,7 +481,7 @@ fn parse_missing(content: &String) -> List<PropRun> {
 /// is `PROPERTY ; SHORT ; LONG [; …]`, read by passing the property (`sc`,
 /// `blk`). Either way the long name is canonical and everything else on the
 /// line resolves to it.
-fn parse_alias_lines(content: &String, prefix: &String) -> List<NamedRanges> {
+fn parse_alias_lines<S: AsStrSlice, S1: AsStrSlice>(content: S, prefix: S1) -> List<NamedRanges> {
     let mut out: List<NamedRanges> = [];
     for let line of content.lines() {
         let body = strip_comment(&line);
@@ -493,7 +493,7 @@ fn parse_alias_lines(content: &String, prefix: &String) -> List<NamedRanges> {
             fields.push(f.trim());
         }
         let first = if prefix.is_empty() { 0 } else { 1 };
-        if fields.len() < first + 2 || !prefix.is_empty() && fields[0] != *prefix {
+        if fields.len() < first + 2 || !prefix.is_empty() && fields[0] != prefix.to_string() {
             continue;
         }
         let mut names: List<String> = [fields[first + 1]];
@@ -508,7 +508,7 @@ fn parse_alias_lines(content: &String, prefix: &String) -> List<NamedRanges> {
     return out;
 }
 
-fn names_contain_folded(entry: &NamedRanges, name: &String) -> bool {
+fn names_contain_folded<S: AsStrSlice>(entry: &NamedRanges, name: S) -> bool {
     let folded = normalize_name(name);
     for let n of &entry.names {
         if normalize_name(n) == folded {
@@ -571,7 +571,7 @@ fn named_ranges(runs: &List<PropRun>, aliases: &List<NamedRanges>) -> List<Named
     return out;
 }
 
-fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
+fn read_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Exit) {
     return match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) => {
@@ -581,7 +581,7 @@ fn read_file(path: &String) -> String with (Stderr, Preopens, Exit) {
     };
 }
 
-fn parse_runs(content: &String) -> List<CategoryRun> {
+fn parse_runs<S: AsStrSlice>(content: S) -> List<CategoryRun> {
     let mut runs: List<CategoryRun> = [];
     let mut range_start = -1;
     for let line of content.lines() {
@@ -615,10 +615,10 @@ fn parse_runs(content: &String) -> List<CategoryRun> {
 
 /// Ranges of `category`, adjacent runs merged. UnicodeData.txt is in code-point
 /// order, so a single forward pass suffices.
-fn ranges_of(runs: &List<CategoryRun>, category: &String) -> List<[i32, i32]> {
+fn ranges_of<S: AsStrSlice>(runs: &List<CategoryRun>, category: S) -> List<[i32, i32]> {
     let mut out: List<[i32, i32]> = [];
     for let run of runs {
-        if run.category != *category {
+        if run.category != category.to_string() {
             continue;
         }
         if !out.is_empty() && out[out.len() - 1].1 + 1 >= run.start {
@@ -677,17 +677,17 @@ fn push_varint(bytes: &mut ByteList, value: i32) {
     bytes.push(rest as u8);
 }
 
-fn emit_module(
+fn emit_module<S: AsStrSlice>(
     runs: &List<CategoryRun>,
     scripts: &List<NamedRanges>,
     blocks: &List<NamedRanges>,
     binary: &List<NamedRanges>,
     enumerated: &List<EnumeratedTable>,
-    version: &String,
+    version: S,
 ) -> String {
     let mut w = CodeWriter::with_capacity(1024 * 1024);
     emit_module_doc(&mut w, version);
-    GlobalSpec::new(&"UNICODE_VERSION", &"String", &wado`"${*version}"`, Vis::Pub).emit(&mut w);
+    GlobalSpec::new(&"UNICODE_VERSION", &"String", &wado`"${version.to_string()}"`, Vis::Pub).emit(&mut w);
     w.blank();
     emit_category_ranges(&mut w, runs);
     w.blank();
@@ -758,14 +758,14 @@ fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) 
 /// Emit `fn <name>(name: &String) -> String` as a match over folded keys. A
 /// key already claimed by an earlier arm is dropped: match arms must stay
 /// unique, and the first table entry to claim a name owns it.
-fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &List<NamedRanges>) {
+fn emit_named_table<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, doc: S1, entries: &List<NamedRanges>) {
     for let line of doc.lines() {
         w.line(&line);
     }
     let mut spec = FnSpec::new(name, Vis::Pub);
     spec.add_param(&"name", &"&String").set_return_type(&"String");
     spec.emit_begin(w);
-    w.begin(&"return match *name");
+    w.begin(&"return match name.to_string()");
     let mut claimed: List<String> = [];
     for let entry of entries {
         let mut keys = String::with_capacity(64);
@@ -787,7 +787,7 @@ fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &L
             // would be unreachable and `\p{...}` would call it unsupported.
             // The UCD has no such collision today; one appearing needs a
             // resolution rule, not a silent drop.
-            panic(`unicode table ${*name}: ${entry.names[0]} has no unclaimed key`);
+            panic(`unicode table ${name.to_string()}: ${entry.names[0]} has no unclaimed key`);
         }
         w.line(&wado`${keys} => "${encode(&entry.ranges)}",`);
     }
@@ -796,13 +796,13 @@ fn emit_named_table(w: &mut CodeWriter, name: &String, doc: &String, entries: &L
     w.end();
 }
 
-fn emit_module_doc(w: &mut CodeWriter, version: &String) {
+fn emit_module_doc<S: AsStrSlice>(w: &mut CodeWriter, version: S) {
     w.line(&wado`#![generated(by = "scripts/regen-unicode-tables.sh", sources = [])]`);
     w.line(&"//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
     w.line(&"//! categories, scripts, blocks, binary properties, and the enumerated");
     w.line(&"//! `Property=Value` names ANTLR4 answers.");
     w.line(&"//!");
-    w.line(&`//! Do not edit by hand — regenerate from UCD ${*version} with`);
+    w.line(&`//! Do not edit by hand — regenerate from UCD ${version.to_string()} with`);
     w.line(&"//! `scripts/regen-unicode-tables.sh`.");
     w.line(&"//!");
     w.line(&"//! A property's ranges are base64 over `(gap from the previous range's");

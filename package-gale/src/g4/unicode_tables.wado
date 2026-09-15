@@ -17,8 +17,8 @@ pub global UNICODE_VERSION: String = "17.0.0";
 /// Ranges of one general category (`Lu`, `Nd`, …), or an empty string when
 /// the name is not a general category. Group letters (`L`, `N`, …) are
 /// unions of their subcategories and are resolved by the caller.
-pub fn general_category_ranges(name: &String) -> String {
-    return match *name {
+pub fn general_category_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "cc" | "control" => "AR6/AR8=",
         "cf" | "format" => "2gKlFQQsgANigQYAoAHWPPkfAzUDYwMDCJ76BvMDAYJDHsWNAQ7BoQQCn1MGjLphPV4=",
         "cn" | "unassigned" => "8Q0ADQIOAiiaBk0AZQAGbwY3Ag0JnAR5AMsBDHcAYwAeOQACFwNFA9oDEQAFACwOAwEJABMABQAJBgMCBAsAMwAGDQIFACwOBAQFAAILAgUABwEDBQgDBSMIBhIGLA4ECwAUBgcAAw0JABkFDgYRAAUALA4ECwATAAUABwUHAgQLACUIBA0BBgkBBAIFAQUBBwEZAgsBBgkAAwQDDCsDGgYuIQASBgkFBAYFAAkAFQUsBi4UCwASBgkFBQMGCQAUBwoaBmYGDQIhADQGJQEwEgMADwEDAgwCEQQVAAcKdQI7IwQCCjACLwAKAg4VAAkekAFJAk5IHhsjjAMDAwMA8gUJAA4CCQBSCQBCCQAOAgkAHnIJAIcBAEEBNQStAQANALsKAbMBBS0HMQcpChoGBQq9AQAVBBUENQSzAQVXA40BCD4ZAhkCAwFVAAsJWQI1BBcBfQCCATsAFwQVBB0AXQAZEpoBzQIGeQEfAX0DVwAXBlcDrQgADQBNAA0AEAICAj8Aah4dAAwnAAYSygEZADYbAUUMQw2ZAgK1ChQXE6kcAP0FA1oDAwMAcQUFDDEHDg4ODg4ODg79ASA0swEKrQMYoAGtAQDPAQNWvAGtAQdg28kDAW8HuQUS8QIGuwMSeQEVBHEGjQEGGQTpAQk9AZwBFwJCbwcdABUAzwEWOQgNAA0ADQcODnkC/QEAFQTJrgEKLwJjAt2JAQDVASQPCgsDNAoCBASVCh5VBGYmCQIKjwIAAv0CAQ0ADQANAAcBDg8ICwAYNCYEHwAdIPcBAwcCWwGwARsBAy1dgAE7AWMNOQJJBz0DVwM8SwIdKL0CABUESQJJAlEGaQkYHg4EFh4OBQFpCu8EBy0IERYMVBNDDQACWAUBAwAukQEGEy4mBQNDATcDNyRxAikAZAUDEAY7AAcCFQUTBYEBHk8CGQdtATsANwM1BQkKD06TATVnC2cFXQYVBE0BOwYFzgE+VAcABQ4NBhMfXQZVFDUkORIvB50BAkkHiQEIAwAzBRUEaiUGTwfAASkJJF88DgIIHhcEdwMVBAgRAAUALA4EChUABQAHAAMEAwMPAA8BCwkUAwACTBQDAAIIFAUGBRu4AQsckQEGFaQBbQBNIIsBCRUEGxF1BBUEKRo3AB8CL7cBeWKnAQoRAAMAEAQ8BQAZBxVEEQBdABcZkQEGpwELkwEFFVQRVkUMFQQSWh0IOwFBACwdRw4EWQECBBMGFQQMBEoEDQUVBFkCFfQBMwUiUwE7UwMNZQu3DmTeAQsJiQPKFMcBC60RCLc+A48JtzV1xA3zCAU+FQKiARUEPQANCI0BCBQOKwMnrgN1xAG3AQMzADMqlwECcwUjPgsJDwetcydBX+cB+0MIDgTHBA0DGwcAAwwJBpkGghLXAQMbARMFFQAR2h77AwHpBgQvDSMNXQAvB+kBOu0DCE8AhQMTjQF4KQopCq8BBzOFAaoBjgEFAAMABQAIGAIOggEJABAOOAgKAwEOqQUAyQQA/QoNCh/OCD8EDdMBDiMADgQLA30fA25bAR0AFQIFvgI/D3UDA84DVdQBVwIDvgE+LQYF3gEOCAQeiwMAISeZAQIVAgWPBokBSnvAAQg2BAMAAhQIAgMEAwICAgIGBAMAAgICAgIEAwAIDggIAhQjAwYKIzIFjAJZAskBCh8AHh5LCN0CNjsLWQITBQUMDZgBsw8BIwEbAbUDBBkCAw0ZAnEGFQRRBj0AGQIFDBMlsQUGHQAbARcBcgMCIQAZAhUFpgLPAYMIwZsFHr1EAJ1aAON0Dd0JoBO9COALl00D1YQBhZcrAxzBAX7hA478A/3/BwD9/wcA",
@@ -55,8 +55,8 @@ pub fn general_category_ranges(name: &String) -> String {
 
 /// Subcategories of a general-category group letter (`L` -> `Lu`, `Ll`, …),
 /// or an empty list when the name is not a group.
-pub fn general_category_group(name: &String) -> List<String> {
-    return match *name {
+pub fn general_category_group<S: AsStrSlice>(name: S) -> List<String> {
+    return match name.to_string() {
         "l" | "letter" => ["ll", "lm", "lo", "lt", "lu"],
         "m" | "mark" => ["mc", "me", "mn"],
         "n" | "number" => ["nd", "nl", "no"],
@@ -70,8 +70,8 @@ pub fn general_category_group(name: &String) -> List<String> {
 
 /// Ranges of one script (`Greek`, `Grek`, …), or an empty string when the
 /// name is not a script.
-pub fn script_ranges(name: &String) -> String {
-    return match *name {
+pub fn script_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "common" | "zyyy" => "AT81BDUtAw0DAy4+gwclCwMFEugBEgwC+gkMHAZAuAKICIMCALITqwYCxATfFwGPAQCXAwACmhMaDwIDBAMBBIsMCgVVAwkHCQMNIyB9JAMBBQQDGQMPUwEJmAUtCSueB4EE8gQFiAGBCFylBhMCAxcfBgkCtwEABrUBAKcCDkEkEmE+P09esQGmAYFnPoHkAiDNAQHLAgjoA8AClgYdAKXHAgChAwgtIQMRAwKmAgMeNQQ1CRRbAIEBBQMFFQOFBAEJKwcHoQELZyvJAxnJ5gUCuT37AQeyAw0VHw+/AXJ59AEVJQU8Bw8RAA8cCTurAxIZEhlVExePAlMDRQMABAUABQIDCgIDBQM/AwIFBgMFAxoDAgMDAgcFA9ICBaICBTDjUUKZATuFCyoJYhkNBQ0DDQMjFawBcRgDABsqCQcPAB0EtQLXBwcPBwsH2AENCggfCgk2EQgNJhEcBQoJAB0HT9YCEQwFCwcJBzcCCQ4FCgkID5EBA2WMkGA9Xg==",
         "latin" | "latn" => "gwEYDRheHgsVAx0DvwNPA7doJA0vCwILCwNEgwH+AeIFGiELmwIADDYjJ68rHsXqA2QHUCkN4QwpAwcDAq2+AgW1EBgNGMsgBAMoAweL3QYdDQQ=",
         "bopomofo" | "bopo" => "1QsAs7gBKeEBHg==",
@@ -254,8 +254,8 @@ pub fn script_ranges(name: &String) -> String {
 /// Ranges of one block, addressed without the `In` prefix a grammar writes
 /// (`\p{InGreek}` → `greekandcoptic`), or an empty string when the name is
 /// not a block.
-pub fn block_ranges(name: &String) -> String {
-    return match *name {
+pub fn block_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "basiclatin" | "ascii" => "AX4=",
         "latin1supplement" | "latin1sup" | "latin1" => "gQJ+",
         "latinextendeda" | "latinexta" => "gQR+",
@@ -609,8 +609,8 @@ pub fn block_ranges(name: &String) -> String {
 
 /// Ranges of one binary property (`White_Space`, `Pattern_Syntax`, …), or
 /// an empty string when the name is not one.
-pub fn binary_property_ranges(name: &String) -> String {
-    return match *name {
+pub fn binary_property_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "whitespace" | "wspace" | "space" => "EwMkyAE0vlf/JQk7AApewD4=",
         "bidicontrol" | "bidic" => "uBjjZwA1A28C",
         "joincontrol" | "joinc" => "mYABAA==",
@@ -680,8 +680,8 @@ pub fn binary_property_ranges(name: &String) -> String {
 
 /// Ranges of one `Bidi_Class` value, or an empty string when the name
 /// is not one of its values.
-pub fn bidi_class_ranges(name: &String) -> String {
-    return match *name {
+pub fn bidi_class_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "boundaryneutral" | "bn" => "AQcLDMcBBAMYGsBd+R8BpQEECQTB9QYengThAwcLAMHyBQKfUwaHugEA/f8HAP3/BwD9/wcA/f8HAP3/BwD9/wcA/f8HAP3/BwD9/wcA/f8HAP3/BwD9/weAAuEDjhz9vwcA/f8HAP3/BwA=",
         "segmentseparator" | "s" => "EgIm",
         "paragraphseparator" | "b" => "FAQdAcwBxn4=",
@@ -711,8 +711,8 @@ pub fn bidi_class_ranges(name: &String) -> String {
 
 /// Ranges of one `Line_Break` value, or an empty string when the name
 /// is not one of its values.
-pub fn line_break_ranges(name: &String) -> String {
-    return match *name {
+pub fn line_break_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "combiningmark" | "cm" => "AQcLEL8BBAMYwQlaDwunBAWPBCsCAwADAAKRAQkCXRMgywEFBQQFAAMCRj0ZtwEJdQcSMQIDBwMBAwNXAXcHVRYDH20BAxADBRUAOwFwAwUFAAUBEhUANAUBcAMDCQAFAQY9AAYXAXADBgMBAwEpAC0EAwFwAwUFAAUBDwEVADx3AwcBAwISUQNuAwUDAQMCDwAXADsBcAMFAwEDAg8AFwAeGQJvAAMFAwEDAhIVADsBjAEJBAIDBiUAyQQANgICCQBjDAMDAwALCQMiEq0OAeUOAjkBOwA9AK8CAQLrAQBE7QEKCQq3AwPGAWEsBQkrA18OTwcZAT0LcQplErECAQMTCAwFAY0DCwMsAwGYCAMANQNvCMEBH/0vAZoCwQEe1QgECscBAKnXAwIDCEEAoQEAoAQGCC8DCKcBAGUQNRAaTQYzC1kCXwvTAQwYEQC7AgMLANkDBgMA4LwCwwsOIgICBAICBJMHAYIIxAOrAgONGgEDAAsCUQEIywIA+wgCgwED+wQAmwEEjQEJYwL1AQFrDFQFABcBWwkOewFJDCEAWBkBYQwRAgMAuQEKDAS7AgorAm8AAwUFAAUAFBUABQUHA4cBBwIEAwIDAgQdAKUBEC6jARLXAwUFBzcApQEP1QEL6QUN6wMEAwAFAQQDAJsCBQUFBjkIUQUDAhATCV0OjQMGjwMGAwalARQDDPUBBAYDAAMFAoUBAwMAAwO3BQITAAJhBQcCMMpTDQ2RswEQgScDdwWwEAM1DwK7AQDXsgIAAwK5SSwFFb0IAwcUBQU9AqkCAfceNQkwEBwtAwMNoRUFAw8FBQMAAwPIAcECBe4FewL5BwL9AwDmAwQPAAq1BwXbAQXs2mA9XoEC7gE=",
         "breakafter" | "ba" => "EuQBYO0iAOkTAN4CUJQBCnEAJO8BAKoMvAzVAQGPAQC7AgAEAlMAkQ0AFQADAjkB9wIDfQCBDgUDAThcAwIDAcAe8xMBBOABuwIGBiECBQADAA8BBAMGAgMA4Ab70wMAmgQCxwMDrQcAvQEArwIBCuEBAQMGIwGhAgDyA6nUAgG4CmCMEo4D4QQGsQIEhwEFoA7tBQDrAQL9AQKDAgACKQGxAQADANgBpgI+2wMCFwDNBQALDdMBAPMDAYsIAfUDAqsBAQkAvQYD2AoJAJUBAPQC4RED85cCAIoCgwEBFNMIAM8EAIy4As93Ag==",
         "linefeed" | "lf" => "FA==",
@@ -768,8 +768,8 @@ pub fn line_break_ranges(name: &String) -> String {
 
 /// Ranges of one `Word_Break` value, or an empty string when the name
 /// is not one of its values.
-pub fn word_break_ranges(name: &String) -> String {
-    return match *name {
+pub fn word_break_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "other" | "xx" => "AQgJEAIDAgMCAgIZAzUCAjUIAyIDAAMFAgQDAy4+wQcErgIFAA0ECgIopgGWAtoCTQAIWwRaAgQEAwY3Ag0JDQQFABYDAZQBBMwBEhQnAAMNeQDLAQxtAAIDAAMAXRA5AhcDMBMDmwMAFCYRAAUALA4DAQkAEwAFAAkGAwIECwAZCAIDAAYNAgUALA4EBAUAAgsCBQAHAQMFCAMFIQkGEgYsDgQLABQGBwADDQkAFQcOBhEABQAsDgQLABMABQAHBQcCBAsAFAMOBA0BBgkBBAIFAQUBBwEZAgsBBgkAAwQDDBUOGgYuIQASBgkFBAYFAAkAFQ4IEAYuFAsAEgYJBQUDBgkAFAcKGgZmBgsDCQULABUIDAYlATASAwAPAQMCDAIRBBUABTsDAA8KEBVVAwATCQ4VJAMVBQQVCQICAwIUSQIoJEkHA2IoFQoJAgYHAA8BCQsYHwBMAwMDAFaaBQkADgIJAFIJAEIJAA4CCQAecgkAhwEABx4hDq0BAA0B2QkAWQOXAQEXBS0HLQkpChoGBT5BBwMAFR8fBLMBBVcDjQEIPhkCGQgVfhcjOTcUOwAXBBUUXQAZEpsBARUPEwrpAQpxBhUBYwAXA1cABw4GTwOtCAANAE0ADQAQAgICPwBqDgMBBg8BCQANAhsDBg8BDgYJBgUIAwATDQUBAw0DCAwUAwsDDhsxQw8DAgMAFAMBCwQCAgIIFwAJAwsCAw9TqwZplA7LAwQTCkwDAwMAcQUDDTEHDg4ODg4ODg5BLQPOAwMCAyIMCwMFWgkBtgEJA1a9AQ9BLiHOAV6xAabZAZsSQV0AmwQBORJmFOcBFKsDEm8CAxFpCo0BCBUEMQECYwBJCjsBgwEMFwkDCBUEbwcdABUfBzACBwAFAwQDHCEACwgNAA0ADQcODnUE9gEFABUEya4BCi8CY4JGDwoLAxgaCgIEBNkBH9cFEIEBAG0mGQIhAQMKIQEFFggCBRgKjwIAAwUDAgICGQM1AgI1CbMBAQ0ADQANAAcaBwIYNCYEHwAdIPcBQ2uGAQOAATsBYw0DHUELPQNXAz0ASQIQCyi9AgAVBEkCSQJRBmkKFh4OBBYeDgUBaQrvBActCBEWDFQTQw0AAlgFAQMALwgvBz8/JgUILQg1BDUkcQQFPggFAxAGOwAHAgMeOwE7IRA9F20ILQgnCyVskwE1ZwtnC1EGFQRNAQov+AFUBQEFDg0wRwgDBkMdLSgrGS8HjwEdIQd5AAMCAwgDADMFFQRqFQIJBkkAAweLAQIIGgMhJEsECTwOAggeFQV3AxUECBEABQAsDgQKFQAFAAcAAwQDAw8ADwELCRQDAAJMFAMAAggRCwUblwEDFQIJHIwBAwYVpAFtABMVDSCDAQEDCRUkcwUVBCk3HwIVxAF3Y5UBExEAAwAQBDwFABMKFUQRAF0AEAUZfwYDBpUBAQMQkwFlEVZDDRUEEloTDRUWPQAsHUcOBFkBAgQTBhUEDARKBA0FFQRZAhX0AS8HIlMBCwsXUwNNtQ5k3wEPiQPKFMMBDa0RCLc+A48JtzV1xA3zCAU+FQSeARUEPQALCW8HCQoVBysDJ64DWwEVxAGBAR4zADMqlwECcwUjPgQFCQX8fwgOBAOdAgcwAwwJlhXXAQMbARMFFQEECcogFYQEXQAvnAQLAS0ADxwJkgEHuQOqAY4BBQADAAUACBgCDoIBCQAQDjgICgMBDqkFADIyPjI+Mj4yPjIRAGX+A28CZQYDDAMUCh/OCD8EDdMBDiMADgQLA30fA25bAR0AFQIDvwI/D3XUA1XUAVfDAT4tBgXeAQ4IBB6LAwkPJ5kBAhWkCQg2BAMAAhQIAgMEAwICAgIGBAMAAgICAgIEAwAIDggIAhQjAwYKI/IENQQ1BDVaNfkDC+4PFYWIMAMcwQF+4QOO/As=",
         "lf" => "FA==",
         "newline" | "nl" => "FwDwAcV+AA==",
@@ -795,8 +795,8 @@ pub fn word_break_ranges(name: &String) -> String {
 
 /// Ranges of one `Sentence_Break` value, or an empty string when the name
 /// is not one of its values.
-pub fn sentence_break_ranges(name: &String) -> String {
-    return match *name {
+pub fn sentence_break_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "other" | "xx" => "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",
         "sp" => "EgMAJv4Bvlf/JQlIXsA+",
         "lf" => "FA==",
@@ -818,8 +818,8 @@ pub fn sentence_break_ranges(name: &String) -> String {
 
 /// Ranges of one `Grapheme_Cluster_Break` value, or an empty string when the name
 /// is not one of its values.
-pub fn grapheme_cluster_break_ranges(name: &String) -> String {
-    return match *name {
+pub fn grapheme_cluster_break_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "control" | "cn" => "AQgDAAMQvwEfGtwV4kf4HwUAMQVjDp76BuEDCunQAQ7BoQQCn1MGi7phHsEBfuEDjhw=",
         "lf" => "FA==",
         "cr" => "Gg==",
@@ -840,8 +840,8 @@ pub fn grapheme_cluster_break_ranges(name: &String) -> String {
 
 /// Ranges of one `Numeric_Type` value, or an empty string when the name
 /// is not one of its values.
-pub fn numeric_type_ranges(name: &String) -> String {
-    return match *name {
+pub fn numeric_type_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "none" => "AS4VdgUDAwAHnwsVhAEVxAEVmgMVdBUCDWoVdBV0FQANbBtxFQYPZRVmDwUnaxVeFXQVRCmKAhVEFc0FKe8GB+0BFQQVFBWqAhV+F6MBFQQVtAEVVBWEARUEFZQIAwENBBXEAWcAC9QFeUwt9AQ95woDhwYDFxMMB9UCCYgBFRwQHx4VJR/DAgN7A6QHA6AGA7AlAwADAQIDGAM2AywDBQIDEwMQBRwDBgMiA2ADdgMaA/sBAz8DIAICA9EDAgcEA3IJlAYDkwQDBQP+CgOBAQUKBgO9BwMrA0sDgwkDyQoD5QMDjQkD5QUDFAPVBgOWDQOjBwP/EAMCA3oD2wkDmAUD9QIDIgMDAykDewOnHhW6ARW+Ag2YARUkFcQBFRQVVBWUAxXvmgEDBQMCAzcDHAIDJwOQChXrA1sKcw8F0wI3IgkbAwYDhAELyAEVrAcRFw8lE0kLFA2eAQUAIQBdPhMyBRwHSQtmERYRJw/IAg0uFQQVlAI/nAEVKAluD4QBPX4VOhWOARUFKfkBFdQCFXQV9AIVZBUEKUoZogMnWxWUBRVUO+EBFUQVNBXkAhVkK2EFPQOqAwMCA90BAgOJAQNk3wG/eRWkEhVUFYQBFA+MBBWEAi/bAgf3uQEVxAspCilqM9MIZb4SFaQDFfQDFfUBFcoFE34VlQZ2BglKWh/ABxvhFRWFCANgA3sDPAOGEANWAwYDDQPLAgMQAxkD9DADhQwDgCMDz04DoKwCA+2OOA==",
         "decimal" | "de" => "YQjNGAiNAgiNAwi5BgjtAQjtAQjtAQjtAQjtAQjtAQjtAQjtAQjtAQjBAQjtAQiNAQitBAiNAQiNHQhNCNkECIECCM0CCA0I7QIIrQEIjQIIDQiNpwQIzQoITQiNAwgtCK0BCK0GCK3MAgiNFgiNIggNCLkMCIECCHkIoQIIrQQIrQUI7QEI7QUIzQEIDRKZAQjNBgjNAQitCgitAQjtAwiNAQhtCM0FCK2HAgjNJAitAQiNAgitCAjt/QIIqSswgSUIzQYI7QcI7wMIqw0IrUoI",
         "digit" | "di" => "5QIACt9KB9AZqhoHBA0IrQ8HFwcXB7IBFQcC7QkHAwcDB9uKBwK5EAfTBwfLggcJ",
@@ -852,8 +852,8 @@ pub fn numeric_type_ranges(name: &String) -> String {
 
 /// Ranges of one `East_Asian_Width` value, or an empty string when the name
 /// is not one of its values.
-pub fn east_asian_width_ranges(name: &String) -> String {
-    return match *name {
+pub fn east_asian_width_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "neutral" | "n" => "AR6/ASAQAhIKCQQDBwMEBQMJAgIGBQACBQEIAgMAAw0CAwUDCAUBAwMHAgMECAMBCAMCBRAFAQNgAgICAgICAgNyAw0DYAMAAgYDAAMFCAIDHuEBHyIPBSIPNQMMgAEDrBnBAa4dAwAIBQAFAAYJBgIEAwMDAAMzAwgCCSIDAANUAgMBAwcDAAMIBQEDAgMlBQQIGQIVDQMEFRwFFgIDEAMWAgUBBQADAQIDAQMCAwAJAAICDAMDCQIFCAMBAwMDCwUACQAFAAUQBQAFCwMBAwkDFwNQAwUFCwW8AQkBAwADapQCwwECSQohAAkIBA8GBQAFAgUABQIHAAMACQ4JBwMLBQQFAAMCBQIFBAIDDxEGAgMDGQoEBggEAw0DCA0BAwgEAwYFDwcCPAMCMQMDAgUaAxIDDAIDAgYDHBUTBxYDDAMkEZUDBZIDBTEDAgukBjSzAQqtAxifAQCtAQDPAQNWvAGtAQdg28kDAW+XCTuBBcmuAdoQgWz+BTUURiYJkwH9AgENAA0ADQAHAQ4PDAPg3wELCQ8HrXMnQV/nAftDCA4ExwQNAxsHAAMMCQaZBoJArwEHL4s5A8gBAy4XAz0AdQR7UQcLWQITBQUMDZgBQwoSjAEtClcCCwojAQMBjgEC9wIAfwsIMRADGAULA1SrAS6NAQQDAQcACQEJCQUFE+EBGQIDmQJeFPMCbhsBFwFyAwIhABkCFYUK/f8HAP3/B4CCKOEDjvwD/f8HAP3/BwA=",
         "narrow" | "na" => "QV1HAAMACgTtnAEGrwYA",
         "ambiguous" | "a" => "wgIEBQACBQADAwMDAwIMEg0ACwIIAwEDAAQDAAcCAgIEHgIOFQAGCwEIDQICBwICCQAlAAbEAQICAgICAgLoAR7EAQQDAQIEDwICAkFuQw8DBQ8PAwVuHT4C/G4FAgMABQAFAQMCEAMAAgoEahQDAk6sAQIGEgQVAAYITwANAgMKCQgeDQg9ADACJDADAAcABAYCBggFAgQCAwQCCwIJABQGChsABQIFAAUAJQAFABoGFjKkAZsFiAEDXwkiGQ4FAhUAAwURAAUACQAFAAkBBAUCIQISKwAECQAYAkICOwADAQMCAwACXQA+DQYDAwMLAgkAAwUEAwIDAAMAenEIrQ8C3RsG4bYF/jGBFA7aB4XEBwkLHAU4DRwDABUQp71g7gGh+Af8/wMF/P8D",
@@ -866,8 +866,8 @@ pub fn east_asian_width_ranges(name: &String) -> String {
 
 /// Ranges of one `Hangul_Syllable_Type` value, or an empty string when the name
 /// is not one of its values.
-pub fn hangul_syllable_type_ranges(name: &String) -> String {
-    return match *name {
+pub fn hangul_syllable_type_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "notapplicable" | "na" => "Af4hgQTergI7gQXJrgEKLwJjgtBA",
         "leadingjamo" | "l" => "gURegeAEGw==",
         "voweljamo" | "v" => "wUVGkZgGFQ==",
@@ -880,8 +880,8 @@ pub fn hangul_syllable_type_ranges(name: &String) -> String {
 
 /// Ranges of one `Joining_Type` value, or an empty string when the name
 /// is not one of its values.
-pub fn joining_type_ranges(name: &String) -> String {
-    return match *name {
+pub fn joining_type_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "nonjoining" | "u" => "AasBA9AE4QGRAg+FAloCBAQDRhYDAQJ9DAy+AREADQAEDQgHAAMNeQBnJBcXVQQDAAMWCBIGCxA5AgIICQMvAA8FLDYwQTUCAwIRAgMBDwgFGwM4AwIJBgMSBRgDAAU3AwIFAgUABwEDHAUBAwkFNwMCCgUCAxIFFAwDOAMAAgkGAwUFCQUcAzsDCgMwAwEDNQIHAwYJBQUJBRsDOAMAAwQDAwUSBRoFNwUCCQYDEgUbA0YDBQYDWAMADwoRYAMAEwkPRwUZAgIDNRwKBQMWSQcDZAgMBQAFFwUCBw4JCwMABQQDDQO9BQewBwcbBRwFHAU+BA8GAwAXBwMnAwAIAw6zAQpNcwcCBQcDBAfZAQUAAzgCDgIDABEEFQADLl0AGRIJLgIKAwMDJhMKBR4JAAQHNgIFAQIHOBEABZYBBhoPAgMEAwEFxAGBAYkEAgcYCy8LAw1eQ/wXB4sBA15BqAQJaQXS6wEIFR4FTgWOAgMBAwIDFwUDAxFnTwUYJQsDJBEXFywHLgMACQAFJQNBDQAFAAUKAwYDLQMxAgcABQMEAygFBgPsAQMAAwIDrp4BA98FIQ4hzQED9wEH/wMD4AEDkwELhA0GBQMJJgcCA34MAgUAKwAHAguOASUVDc8CUT8LuwIFEwYFMA0uKh8ZLSgCChAJAgczAzQfJwMABQgHLwkABQUDOwciChE8AwoFMhMICQADXQcAAgUEAwADmwEDARETBTcFAQMjDwELRA0LAgIDDAVTEQAGAxUDUgwDAgQF7AEJBAQFGQVTEQACBWgCAwAMA2MCAwAIC4ECEgX+AQQDAgOOAQkABQIDHhUmDQAJBgMHDQAHLBoFxAECBgPHAQ4MA1AtAA4EBXgNAQIEDgNGBQECA9kCBQkFMgsDAgMVA9MpIwQfxlkZAQe+Ews5D5YIAz0JTwO2mQEECdokXQAvngQHByEADxwJkgEHuQ9vAmUGAwwDFAofzgoOIwAOBAtiA54BD/UCAzsJ+gMJ/AEF8QEDAAMFBQMD2AMPJ5kBs60wAxzBAX7hA478Cw==",
         "transparent" | "t" => "2gKlCW6nBAWPBCsCAwADAAKRAQkCXRMgywEFBQQFAAMCQgI9GbcBCXUHEjECAwcDAQMDVwF3B1UWAx5uAgkGCAcFFQA6dAkCECkANAUAcgkACQAFAQY9AAYXAHIJAwMACCkALQQCdAQDAhAPABcAPHoYZAZuAwELAQMCDwAXADp0BAwLACkAOQBzAAkCECkAOpABDwECtAEFBRkGxAEFBxcFkwEANgICbwwDAwMACwkDIhLNAQIDBAMABQAzAAkBIQIaBQAMHv8KAeUOATsAPQA9AIEBAAMFEAUJElsBAusBAETtAQEJABINAbcDAAR0AwUCAgUGDQgEYSwFCikCYAMDAgpRBxkAQQIFAAMBcAMABgMBdQYFALECAQMLAwUIDAcAjQM+lggFADUDYwMLBMEBH/0vAZoCwQEe1QgC1wEAqdcDAgMIQQChAQCgBAYIMwAKrwIANRAaTQYzCV0BYAUCBQBOhwEEBQAFABgQXmYDAQUACwACVQAQ3AMECOC8AsMLDiEOngPzAwGCCMQDqwIDjRoBAwALAlEBCMsCAPsIAoMBA/sEAJsBBI0BCWMC9gFtDVIFABUBYwIFAA57AUkDAwZ8GQBpBxUCBL8BAQQDAAwEugIHBisAcwAGSwUHA40BBBoCAh0AqwEGBQECLqkBBAIJAAMA3QMCDQADADcAqwEGBAMA1AECBQQCygECBQIDA4cEBwMAgQQAAgihAgIFAAhBCFEEBQIQEwQFAV0LAwCMAwMBApMDBQMEAqUBFAUFAwADAPUBBAYDAAMFApEBAAYCtwUAFwBpAwoCLqtTDw0NkbMBCgcBgScDdwWwEH8CogHxsgIAAwK5SSwFFcEIARMOBQU9AqkCAfceNQkwEBwtAwMNoRUFAw8FBQMAAwPIAcECBe4FewL5BwL9AwDmAwQPAAq1BwXbAQbq2mA9XoEC7gE=",
         "dualjoining" | "d" => "wBgKAgMDCQsDBQMARwARDiUkAwASAgMAUQEEJQELAgMHAgIDAD8JBw0FAgIFAQUElQEfrQEDBAMIAhQDAgQ6BQMCIQgLAAUEAw38PDFXHSACq74EMJ2JAwMdAgMDAwEVAqICAgcBAwACBDkApQUfAr8GAAMA0QEBAw8ZATkCBQpcAwAIBQADAAIECuvkBkI=",
@@ -894,8 +894,8 @@ pub fn joining_type_ranges(name: &String) -> String {
 
 /// Ranges of one `Indic_Syllabic_Category` value, or an empty string when the name
 /// is not one of its values.
-pub fn indic_syllabic_category_ranges(name: &String) -> String {
-    return match *name {
+pub fn indic_syllabic_category_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "other" => "ASsDABVkAw8FIQOmEKABBQAfABUAJBEABQAsDgMBCQATAAUACQYDAgQLABkIAgMABg0CBQAsDgQEBQACCwIFAAcBAwUIAwUcAwkGEgYsDgQLABQGBxAJABUHDgYRAAUALA4ECwATAAUABwUHAgQLABQDDgQNAQYJAQQCBQEFAQcBGQILAQYJBwMMFQ4aBi4hABIGCQUEBwADAAkAFQ4IEAYuFAsAEgYJBQUEBAkAFAcKGgZmBgsDCQULABUIDAYlATASAwAPAQMCDAIRBBUABQtcFwMMEBUlBAIKMAIQHQALAQgEFQAJPigCAgMEEEkCKwAgSQcDN5QBAwACnQHgDC0HLQkpChoGBQppAD0GBQAVlAI+GQIZCFEACwlZAjUEFyM5An47ABcEFWSbAQEVJOkBCnEGFQEHfgYdDhP+AQOOBAUAC10DCwdpA9kJA7GEAlECAxFpCo0BCBUEKQhhAEkqgwENFQQMMG8HHQAVBCANAZMBGyEDBccBVgUAFYS8AQgFAxAGOwAHAhW1C48BCUkHeQUDO2oVAgkGSQqJAQMIGQUpCSRLBAk8DgIIHhUFdwMVBAgRAAUALA4EChUABQAHBwMEDQAPAQsJFAMAAkwUAwACCA8MBRuRAQYVAgkdiQEJFaQBbQATFQ0ggwENFSRzBRUEKRo3AB8CGQIPtwF3wwEPAAMAEAQ8BQATChVEEQBdABEAAxmBAQMCAwaVAQEDwAERlgESWhMNOwM9ACwdRw4EWQECBBMGFQQMBEoECwYVtAIvByJTAQsLF6ODAXWEGFsBFYSlPg==",
         "consonantplaceholder" => "WuQBbNAi4wMArhcE1jKrDAPuFs+SBAGQvwMK2BI=",
         "number" => "YQjZJAjtAQjtAQjtAQjtAQjtAQjtAQjtAQjtAQjtAQjBAQjtAQiNARKZBAiNAQiNHQi5BQiBAgnLAggNCO0CCK0BCI0CCI2yBAhNCI0DCC0IrQEIrQYIjfkCB7sYCI0DCKECCA8S9wMIrQUI7QEI7QUIzQEIDRKZAQqpCAjtCxvHAwiNAQjNBgithwII7TAI",
@@ -939,8 +939,8 @@ pub fn indic_syllabic_category_ranges(name: &String) -> String {
 
 /// Ranges of one `Decomposition_Type` value, or an empty string when the name
 /// is not one of its values.
-pub fn decomposition_type_ranges(name: &String) -> String {
-    return match *name {
+pub fn decomposition_type_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "none" => "AZ4BAwUCAwIDAAkABgYMEg0ACwAMEg0ACiMAKQASDBEADwANACUAMR4FCwURMg0AIQBJAAUEHXoTHQ0AC1kEBS0DAwMBAwMOAgcXDxcKDxcGBQEDBAQDAQMCBwgDHQMUBAMBAwIHFQVHBQsJAAUADQANABkABYsBA5gBC0wJRQIDDgPTBAMFAwADIRFpBQ0EA1EDAAMgBwAD5wEDAAUNBTQDMwd5A3UDBAQFfAeLAQIHUgN9AyYFLAM0AwcDAgMCAwIDCgMHAgsFAw8DBwMCAwIDAgMKA2oD0wEDhxQCAgICAwEDJgIDAAQD5gMGFiQ5CwMgSz65AgK1AQQtAA0ATQANABACAgI/AGoeHQAMJwAGEhcEAwMDCgcGAwEEBQICAwYHCwMFAw4FADYbCQNVCAYWBQALAAYCAgIIBg4NAgsEYQcDDgUQAxwHMgMCAwADFQIDAwQFDgMAAwACAxQCAwgLAAUABQQFAAUABSAJLgkECTkFswKXAp8KA2UHYwOdAwXvAQOtAgNRAwqtAygDMwIHDwICAgICAgICAgICAwACAgMEBAQEBAUUAwQEBQoCAgICAgICAgICAgMAAgIDBAQEBAQFFAMACQEFL70BAR1ePlEGXoEGmuUBBdABA34JAQXgBgkHA5QBya4B2kKdBAACAwAUAgMABQGJAQDVASQPCgsDAjAKAgQE2QEf1wUQgQEAbSYbERUUKwAYJgkCBgKPAgL9AgENAA0ADQAHAQ4P2AsDGAOaAwpUE90RAgMMA4ABBZkEBTQCAwYDAAMxAgXwAQQD+QEF+gYD5o8BEb0YB+m+AUniCA9UDb0EqgGOAQUAAwAFAAgYAg6CAQkAEA44CAoDAQ6pBQDJBABlrhB9kBsINgQDAAIUCAIDBAMCAgICBgQDAAICAgICBAMACA4ICAIUIwMGCiPCBBcDPkEYByEDbQcLWQITBQWcExWE+AO9COCLOA==",
         "nobreak" | "nb" => "wALWOfRDEjo=",
         "compat" | "com" => "0AIMCQAE8wEAFwAQaokBB0kByQMEuAISlwEBBQAzAQMABpoG2wMC9B7+AVEAsgICwDzEBAMAegcDAwEYGQEZAAMACAIRARoOkAGvAQACAwECGBQnAgRJHtkCAAMAhwlArBXPAQHQEKYBGdQBwAEDAcEBAKkCXOMBHQMi+QEKmQIX3wEdg5wGBRkDbvMLBeHKBwkLGasEBw==",
@@ -965,8 +965,8 @@ pub fn decomposition_type_ranges(name: &String) -> String {
 
 /// Ranges of one `Vertical_Orientation` value, or an empty string when the name
 /// is not one of its values.
-pub fn vertical_orientation_ranges(name: &String) -> String {
-    return match *name {
+pub fn vertical_orientation_ranges<S: AsStrSlice>(name: S) -> String {
+    return match name.to_string() {
         "rotated" | "r" => "AaUBAgMCAwADCAcWAx0D8AMFkhyBBP8D/wmuBKEBlA4CBQAFAAUMBQcFAwMCBwUDEQN1CAcZBA8DAwEEBQQMAgIDAgMEFwMMBHcACYwBAxMFyAERAikCEU89ISACFwSCAbkDngH1AQSRBQw9/AY9HhU7Ax40MwIhzgQFLKHZA44JQf4EgbAB/g+BbI4GIQ4zBRAVAhOPARgdAYUBfREGEwEFgBNB3heBAv4HgQO+KoFa3lLBeO5DoQy+N6EELoEI3gHBAv4I4QrOKoEg/gGBCP4J/f8HAP3/B4CALP3/BwD9/wcA",
         "upright" | "u" => "zgICCAQVATA+5QcAqTj+AYMI/QThCE6sHBMAHQATAAoJAQ4m7wECAwE3AAMFCgcAAwANBAICAggNCQsEAwADOQUCnAIrAJUDBgkSCQMEowEcRw4CAwkNPwPaAcECeA3GAh0c/Q0cQQh6QRgDFwkOoQkAXf8CBQMVABkOAw4CAgICAxcDHQICAwQDBAUCBQEEAgICAxcDHQICAwQDBAUDAygDigEJAQMyIf0BswEhC87iAaESHoEK/leBIP41oQwOIRcVAw8CCQelAgQFAAcJDRkCAgMZiwIBAwIRBwcAhSYewS9+gRC+AYFV/izBpQGePOGHAcACAxsHAAMMCZYDgW+OAmH+A8EDngGBEq4FoVX+AwX8C4EE/gOBFPz/AwX8/wOFgFj8/wMF/P8D",
         "transformedrotated" | "tr" => "sYABAAUAlwwAuzMIBQog3gG2Abm1BgTTAgAhAD4CAjcEhAI=",
@@ -978,8 +978,8 @@ pub fn vertical_orientation_ranges(name: &String) -> String {
 /// Ranges of one enumerated property's value (`\p{lb=AL}`), or an empty
 /// string when the property is not one of these or the value is not one of
 /// its own. `General_Category`, `Script` and `Block` have their own tables.
-pub fn enumerated_property_ranges(property: &String, value: &String) -> String {
-    return match *property {
+pub fn enumerated_property_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> String {
+    return match property.to_string() {
         "bidiclass" | "bc" => bidi_class_ranges(value),
         "linebreak" | "lb" => line_break_ranges(value),
         "wordbreak" | "wb" => word_break_ranges(value),

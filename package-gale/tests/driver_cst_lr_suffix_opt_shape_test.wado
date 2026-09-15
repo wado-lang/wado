@@ -7,11 +7,11 @@ use g from "./grammars/lr_suffix_opt_shape.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_opt_shape" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "the group is skipped when only the trailing element is present" {

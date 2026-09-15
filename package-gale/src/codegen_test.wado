@@ -548,7 +548,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert str_contains(&output, &"scan_expr(tokens, pos, 1)");
 }
 
-fn parse_grammar(input: String, path: String) -> Grammar {
+fn parse_grammar<S: AsStrSlice, S1: AsStrSlice>(input: S, path: S1) -> Grammar {
     let mut g = parse(input).unwrap();
     g.source_files.push(path);
     return g;
@@ -654,14 +654,14 @@ b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_a(input: &String");
-    assert str_contains(&output, &"pub fn parse_b(input: &String");
+    assert str_contains(&output, &"pub fn parse_a<S: AsStrSlice>(input: S");
+    assert str_contains(&output, &"pub fn parse_b<S: AsStrSlice>(input: S");
     // Each `parse_<rule>` is a thin wrapper that hands the rule's
     // `_parse_<rule>` entry to the shared `_run_parse_entry` helper as a fn value;
     // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
     assert str_contains(
         &output,
-        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
+        &"fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
@@ -685,7 +685,7 @@ b : 'y' ;
         &traced,
         &"use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";",
     );
-    assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
+    assert str_contains(&traced, &"fn trace_enter<S: AsStrSlice>(p: &Parser, rule: S)");
     assert str_contains(&traced, &"pub fn trace_to_stderr<T, effect E>");
     assert str_contains(&traced, &"trace_depth: i32,");
     assert str_contains(&traced, &"trace_enter(p, &\"a\");");
@@ -751,7 +751,7 @@ Z : 'Z' ;
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
     assert str_contains(&traced, &"trace_scan_alt(p, &\"a\",");
     assert str_contains(&traced, &"trace_pick(p, &\"a\", _sd_best_i);");
-    assert str_contains(&traced, &"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32)");
+    assert str_contains(&traced, &"fn trace_scan_alt<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, end: i32)");
 
     // Default generation (trace off) emits none of the decision-point hooks.
     let mut grammar2 = parse_grammar(input, "test.g4");
@@ -792,7 +792,7 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_expr(input: &String");
+    assert str_contains(&output, &"pub fn parse_expr<S: AsStrSlice>(input: S");
     assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));");
 }
 
@@ -815,7 +815,7 @@ a : 'a' ('b' | 'c') 'd' ;
     assert !str_contains(&body, &"p.advance();");
 }
 
-fn extract_fn_body(output: &String, header: &String) -> String {
+fn extract_fn_body<S: AsStrSlice, S1: AsStrSlice>(output: S, header: S1) -> String {
     let start = find_substr(output, header);
     if start < 0 {
         return "";
@@ -827,11 +827,11 @@ fn extract_fn_body(output: &String, header: &String) -> String {
     return output.substr_bytes(start, end);
 }
 
-fn find_substr(haystack: &String, needle: &String) -> i32 {
+fn find_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     return find_substr_from(haystack, needle, 0);
 }
 
-fn find_substr_from(haystack: &String, needle: &String, from: i32) -> i32 {
+fn find_substr_from<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1, from: i32) -> i32 {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -1292,7 +1292,7 @@ B : 'b' ;
     assert scans_b == 2, `alts 1 and 2 name 'b' once each; scanned it ${scans_b} times`;
 }
 
-fn str_contains(haystack: &String, needle: &String) -> bool {
+fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -1438,7 +1438,7 @@ test "ATN-class LR grammar keeps the decoder's LR tables" {
     assert str_contains(&output, &"\", true);");
 }
 
-fn count_substr(haystack: &String, needle: &String) -> i32 {
+fn count_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let mut n = 0;
     let mut at = find_substr(haystack, needle);
     while at >= 0 {

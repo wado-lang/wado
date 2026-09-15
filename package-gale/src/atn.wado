@@ -227,8 +227,8 @@ impl AtnBuilder {
         self.states[from].transitions.push(t);
     }
 
-    fn kind_of(&self, name: &String) -> i32 {
-        if let Some(k) = self.kinds.get(*name) {
+    fn kind_of<S: AsStrSlice>(&self, name: S) -> i32 {
+        if let Some(k) = self.kinds.get(name.to_string()) {
             return k;
         }
         return -1;
@@ -406,11 +406,11 @@ fn build_lr_body(
 /// Build the suffix of one LR alt (`alt.elements[1..]`, the leading self-ref
 /// stripped) as a sequence, returning `[entry, exit]`. Each element's self-ref
 /// precedence is decided by `build_lr_suffix_element` from its own follow.
-fn build_lr_suffix(
+fn build_lr_suffix<S: AsStrSlice>(
     b: &mut AtnBuilder,
     alt: &Alternative,
     lr_alt: &LrAlt,
-    rule_name: &String,
+    rule_name: S,
     lr_first: &List<String>,
     r: i32,
     rule_index: &TreeMap<String, i32>,
@@ -444,10 +444,10 @@ fn build_lr_suffix(
 /// through its container so each occurrence is decided from its own follow.
 /// Mirrors the static path's `stamp_lr_self_ref_min_prec`, so the ATN models
 /// the same language the parser does. Non-self-ref elements build generically.
-fn build_lr_suffix_element(
+fn build_lr_suffix_element<S: AsStrSlice>(
     b: &mut AtnBuilder,
     elem: &Element,
-    rule_name: &String,
+    rule_name: S,
     lr_first: &List<String>,
     conflict_min: i32,
     follow_has: bool,
@@ -516,10 +516,10 @@ fn build_lr_suffix_element(
 }
 
 /// Follow-aware mirror of `build_alternation` for an LR suffix subrule.
-fn build_alternation_prec(
+fn build_alternation_prec<S: AsStrSlice>(
     b: &mut AtnBuilder,
     alts: &List<Alternative>,
-    rule_name: &String,
+    rule_name: S,
     lr_first: &List<String>,
     conflict_min: i32,
     follow_has: bool,
@@ -545,10 +545,10 @@ fn build_alternation_prec(
 
 /// Follow-aware mirror of `build_sequence`: each element's follow within the
 /// sequence (and `seq_tail_has` past it) decides its self-refs' precedence.
-fn build_sequence_prec(
+fn build_sequence_prec<S: AsStrSlice>(
     b: &mut AtnBuilder,
     elements: &List<Element>,
-    rule_name: &String,
+    rule_name: S,
     lr_first: &List<String>,
     conflict_min: i32,
     seq_tail_has: bool,
@@ -643,9 +643,9 @@ fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List
 /// including nested inside a Group / Repeat / Not / Label. Used to detect
 /// a nested self-ref in an LR suffix (the top-level case is
 /// `element_is_self_ref`).
-fn element_contains_self_ref(elem: &Element, rule_name: &String) -> bool {
+fn element_contains_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     return match *elem {
-        RuleRef(rr) => rr.name == *rule_name,
+        RuleRef(rr) => rr.name == rule_name.to_string(),
         Label(lab) => element_contains_self_ref(&lab.element, rule_name),
         Repeat(rep) => element_contains_self_ref(&rep.element, rule_name),
         Not(n) => element_contains_self_ref(&n.element, rule_name),

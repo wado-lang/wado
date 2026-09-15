@@ -123,12 +123,12 @@ pub fn is_lexer_members(act: &NamedAction, kind: &GrammarKind) -> bool {
 
 /// Whether a named action is a `@members` block for one recognizer: scoped to it
 /// explicitly, or bare in a grammar whose kind names it.
-fn is_members(act: &NamedAction, scope: &String, bare_is_mine: bool) -> bool {
+fn is_members<S: AsStrSlice>(act: &NamedAction, scope: S, bare_is_mine: bool) -> bool {
     if act.name != "members" {
         return false;
     }
     return match &act.scope {
-        Some(s) => *s == *scope,
+        Some(s) => *s == scope.to_string(),
         None => bare_is_mine,
     };
 }
@@ -447,9 +447,9 @@ fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), P
     return Result::Ok(());
 }
 
-fn epsilon_closure_error(rule_name: &String) -> ParseError {
+fn epsilon_closure_error<S: AsStrSlice>(rule_name: S) -> ParseError {
     return ParseError::new(
-        `rule "${*rule_name}" contains a closure with at least one alternative that can match an empty string`,
+        `rule "${rule_name.to_string()}" contains a closure with at least one alternative that can match an empty string`,
         Span::new(0, 0),
         ["a closure whose body always consumes at least one token"],
     );
@@ -500,8 +500,8 @@ fn lexer_nullable_table(rules: &List<LexerRule>) -> TreeMap<String, bool> {
     return nullable;
 }
 
-fn lexer_rule_nullable(name: &String, nullable: &TreeMap<String, bool>) -> bool {
-    return match nullable.get(*name) {
+fn lexer_rule_nullable<S: AsStrSlice>(name: S, nullable: &TreeMap<String, bool>) -> bool {
+    return match nullable.get(name.to_string()) {
         Some(n) => n,
         None => false,
     };
@@ -673,16 +673,16 @@ fn collect_element_corners(
     }
 }
 
-fn alt_leads_with_self_ref(elements: &List<Element>, name: &String) -> bool {
+fn alt_leads_with_self_ref<S: AsStrSlice>(elements: &List<Element>, name: S) -> bool {
     if elements.is_empty() {
         return false;
     }
     return element_leads_self_ref(&elements[0], name);
 }
 
-fn element_leads_self_ref(elem: &Element, name: &String) -> bool {
+fn element_leads_self_ref<S: AsStrSlice>(elem: &Element, name: S) -> bool {
     return match elem {
-        RuleRef(r) => r.name == *name,
+        RuleRef(r) => r.name == name.to_string(),
         Label(l) => element_leads_self_ref(&l.element, name),
         _ => false,
     };
@@ -815,8 +815,8 @@ pub struct ParserRule {
 }
 
 impl ParserRule {
-    pub fn new(
-        name: String,
+    pub fn new<S: AsStrSlice>(
+        name: S,
         visibility: Visibility,
         options: List<GrammarOption>,
         alternatives: List<Alternative>,
@@ -824,7 +824,7 @@ impl ParserRule {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
         let type_name = `${to_pascal_case(&name)}Node`;
-        return ParserRule { name, visibility, options, alternatives, snake_name, field_name, type_name };
+        return ParserRule { name: name.to_string(), visibility, options, alternatives, snake_name, field_name, type_name };
     }
 }
 
@@ -920,14 +920,14 @@ pub struct RuleRefElement {
 }
 
 impl RuleRefElement {
-    pub fn new(name: String) -> RuleRefElement {
+    pub fn new<S: AsStrSlice>(name: S) -> RuleRefElement {
         return RuleRefElement::with_options(name, []);
     }
 
-    pub fn with_options(name: String, options: List<GrammarOption>) -> RuleRefElement {
+    pub fn with_options<S: AsStrSlice>(name: S, options: List<GrammarOption>) -> RuleRefElement {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
-        return RuleRefElement { name, options, snake_name, field_name };
+        return RuleRefElement { name: name.to_string(), options, snake_name, field_name };
     }
 }
 
@@ -946,14 +946,14 @@ pub struct TokenRefElement {
 }
 
 impl TokenRefElement {
-    pub fn new(name: String) -> TokenRefElement {
+    pub fn new<S: AsStrSlice>(name: S) -> TokenRefElement {
         return TokenRefElement::with_options(name, []);
     }
 
-    pub fn with_options(name: String, options: List<GrammarOption>) -> TokenRefElement {
+    pub fn with_options<S: AsStrSlice>(name: S, options: List<GrammarOption>) -> TokenRefElement {
         let lower_name = to_lower(&name);
         let field_name = escape_ident(&lower_name);
-        return TokenRefElement { name, options, lower_name, field_name };
+        return TokenRefElement { name: name.to_string(), options, lower_name, field_name };
     }
 }
 
@@ -967,8 +967,8 @@ pub struct LiteralElement {
 }
 
 impl LiteralElement {
-    pub fn new(text: String) -> LiteralElement {
-        return LiteralElement { text, options: [] };
+    pub fn new<S: AsStrSlice>(text: S) -> LiteralElement {
+        return LiteralElement { text: text.to_string(), options: [] };
     }
 }
 
@@ -1028,10 +1028,10 @@ pub struct LabelElement {
 }
 
 impl LabelElement {
-    pub fn new(name: String, list: bool, element: Element) -> LabelElement {
+    pub fn new<S: AsStrSlice>(name: S, list: bool, element: Element) -> LabelElement {
         let snake_name = to_snake_case(&name);
         let field_name = escape_ident(&snake_name);
-        return LabelElement { name, list, element, snake_name, field_name };
+        return LabelElement { name: name.to_string(), list, element, snake_name, field_name };
     }
 }
 
@@ -1087,9 +1087,9 @@ pub struct LexerRule {
 }
 
 impl LexerRule {
-    pub fn new(name: String, is_fragment: bool, skip: bool, body: List<LexerAlternative>) -> LexerRule {
+    pub fn new<S: AsStrSlice>(name: S, is_fragment: bool, skip: bool, body: List<LexerAlternative>) -> LexerRule {
         return LexerRule {
-            name,
+            name: name.to_string(),
             visibility: Visibility::Default,
             is_fragment,
             skip,
@@ -1107,7 +1107,7 @@ impl LexerRule {
     }
 
     /// Construct a virtual lexer rule entry from a `tokens { }` declaration.
-    pub fn virtual_token(name: String) -> LexerRule {
+    pub fn virtual_token<S: AsStrSlice>(name: S) -> LexerRule {
         let mut rule = LexerRule::new(name, false, false, []);
         rule.is_virtual = true;
         return rule;
@@ -1390,21 +1390,21 @@ fn delegate_order(
     return Result::Ok(order);
 }
 
-fn visit_delegate(
-    name: &String,
+fn visit_delegate<S: AsStrSlice>(
+    name: S,
     grammars: &List<Grammar>,
     by_name: &TreeMap<String, i32>,
     order: &mut List<i32>,
     visited: &mut List<String>,
 ) -> Result<(), ParseError> {
-    if visited.contains(name) {
+    if visited.contains(&name.to_string()) {
         return Result::Ok(());
     }
-    visited.push(*name);
-    let Some(found) = by_name.get(*name) else {
+    visited.push(name.to_string());
+    let Some(found) = by_name.get(name.to_string()) else {
         return Result::Err(
             ParseError::new(
-                `imported grammar "${*name}" is not among the supplied inputs`,
+                `imported grammar "${name.to_string()}" is not among the supplied inputs`,
                 Span::new(0, 0),
                 ["a supplied grammar declaring that name"],
             ),
@@ -1502,21 +1502,21 @@ fn drop_empty_modes(g: &mut Grammar) {
     }
 }
 
-fn find_parser_rule(all_rules: &List<ParserRule>, name: &String) -> Option<&ParserRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &ParserRule| r.name == *name);
+fn find_parser_rule<S: AsStrSlice>(all_rules: &List<ParserRule>, name: S) -> Option<&ParserRule> with stores[all_rules] {
+    return all_rules.iter_ref().find(|r: &ParserRule| r.name == name.to_string());
 }
 
-fn find_lexer_rule_index(all_rules: &List<LexerRule>, name: &String) -> i32 {
+fn find_lexer_rule_index<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> i32 {
     for let mut i = 0; i < all_rules.len(); i += 1 {
-        if all_rules[i].name == *name {
+        if all_rules[i].name == name.to_string() {
             return i;
         }
     }
     return -1;
 }
 
-pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name);
+pub fn find_lexer_rule<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
+    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.to_string());
 }
 
 /// `g`'s lexer rules with their mode indices and channel ids rebased onto the
@@ -1554,25 +1554,25 @@ fn rebase_lexer_rules(g: &Grammar, modes: &mut List<String>, channels: &mut List
     return out;
 }
 
-fn find_or_add_mode(modes: &mut List<String>, name: &String) -> i32 {
+fn find_or_add_mode<S: AsStrSlice>(modes: &mut List<String>, name: S) -> i32 {
     for let mut i = 0; i < modes.len(); i += 1 {
-        if modes[i] == *name {
+        if modes[i] == name.to_string() {
             return i;
         }
     }
-    modes.push(*name);
+    modes.push(name.to_string());
     return modes.len() - 1;
 }
 
 /// Allocate a channel id for `name`. User channel ids start at 2
 /// (0=DEFAULT, 1=HIDDEN are predefined by ANTLR4).
-fn find_or_add_channel(channels: &mut List<String>, name: &String) -> i32 {
+fn find_or_add_channel<S: AsStrSlice>(channels: &mut List<String>, name: S) -> i32 {
     for let mut i = 0; i < channels.len(); i += 1 {
-        if channels[i] == *name {
+        if channels[i] == name.to_string() {
             return i + 2;
         }
     }
-    channels.push(*name);
+    channels.push(name.to_string());
     return channels.len() - 1 + 2;
 }
 
@@ -1670,9 +1670,9 @@ pub fn alias_parser_literals(grammar: &mut Grammar) {
     }
 }
 
-fn index_of_text(texts: &List<String>, text: &String) -> i32 {
+fn index_of_text<S: AsStrSlice>(texts: &List<String>, text: S) -> i32 {
     for let mut i = 0; i < texts.len(); i += 1 {
-        if texts[i] == *text {
+        if texts[i] == text.to_string() {
             return i;
         }
     }
@@ -2094,10 +2094,10 @@ pub fn assert_canonical_shape(grammar: &Grammar) {
     }
 }
 
-fn assert_canonical_element(elem: &Element, rule: &String) {
+fn assert_canonical_element<S: AsStrSlice>(elem: &Element, rule: S) {
     match elem {
         Repeat(rep) => {
-            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${*rule}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
+            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${rule.to_string()}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
             assert_canonical_element(&rep.element, rule);
         },
         Group(g) => {

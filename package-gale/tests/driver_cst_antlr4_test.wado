@@ -102,14 +102,14 @@ fn new_antlr4_base() -> Antlr4Base {
     return Antlr4Base { begins: 0, ends: 0 };
 }
 
-fn a4_tokenize(input: &String) -> antlr4::TokenStream {
+fn a4_tokenize<S: AsStrSlice>(input: S) -> antlr4::TokenStream {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         return antlr4::tokenize(input);
     };
 }
 
-fn a4_parse(input: &String) -> antlr4::ParseResult {
+fn a4_parse<S: AsStrSlice>(input: S) -> antlr4::ParseResult {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         return antlr4::parse(input);

@@ -114,12 +114,12 @@ fn found_desc(tok: &Token) -> String {
     return `got "${tok.text}"`;
 }
 
-fn first_char(s: &String) -> Option<char> {
+fn first_char<S: AsStrSlice>(s: S) -> Option<char> {
     let mut iter = s.chars();
     return iter.next();
 }
 
-fn is_lexer_rule_name(name: &String) -> bool {
+fn is_lexer_rule_name<S: AsStrSlice>(name: S) -> bool {
     if let Some(c) = first_char(name) {
         return 'A' <= c <= 'Z';
     }
@@ -415,7 +415,7 @@ impl G4Parser {
         return Result::<(), ParseError>::Ok(());
     }
 
-    fn parse_id_list_block(&mut self, kw: &String) -> Result<List<String>, ParseError> {
+    fn parse_id_list_block<S: AsStrSlice>(&mut self, kw: S) -> Result<List<String>, ParseError> {
         let mut names: List<String> = [];
         if !self.is_kind(G4Token::LBrace) {
             let tok = self.peek();
@@ -718,10 +718,10 @@ impl G4Parser {
         return Result::<List<GrammarOption>, ParseError>::Ok(out);
     }
 
-    fn parse_parser_rule(&mut self, name: String) -> Result<ParserRule, ParseError> {
+    fn parse_parser_rule<S: AsStrSlice>(&mut self, name: S) -> Result<ParserRule, ParseError> {
         let prequel = self.parse_rule_prequel();
         self.expect(G4Token::Colon)?;
-        self.current_rule = name;
+        self.current_rule = name.to_string();
         let alternatives = self.parse_alternatives()?;
         self.current_rule = "";
         self.expect(G4Token::Semicolon)?;
@@ -1074,16 +1074,16 @@ impl G4Parser {
         };
     }
 
-    fn parse_lexer_rule(
+    fn parse_lexer_rule<S: AsStrSlice>(
         &mut self,
-        name: String,
+        name: S,
         is_fragment: bool,
         mode: i32,
         mode_names: &mut List<String>,
     ) -> Result<LexerRule, ParseError> {
         let options = self.parse_rule_prequel().options;
         self.expect(G4Token::Colon)?;
-        self.current_rule = name;
+        self.current_rule = name.to_string();
         let body = self.parse_lexer_alternatives()?;
         self.current_rule = "";
 
@@ -1096,7 +1096,7 @@ impl G4Parser {
         self.expect(G4Token::Semicolon)?;
         return Result::<LexerRule, ParseError>::Ok(
             LexerRule {
-                name,
+                name: name.to_string(),
                 visibility: Visibility::Default,
                 is_fragment,
                 skip: actions.skip,
@@ -1118,7 +1118,7 @@ impl G4Parser {
     /// `type`, which ANTLR4 lets you give as a literal type number
     /// (`-> type(65535)`); a `mode` / `pushMode` argument names a declared
     /// mode, where a number means nothing.
-    fn parse_lexer_command_arg(&mut self, command: &String, allow_int: bool) -> Result<String, ParseError> {
+    fn parse_lexer_command_arg<S: AsStrSlice>(&mut self, command: S, allow_int: bool) -> Result<String, ParseError> {
         self.expect(G4Token::LParen)?;
         let ok = self.is_kind(G4Token::Identifier) || allow_int && self.is_kind(G4Token::IntLit);
         if !ok {
@@ -1126,7 +1126,7 @@ impl G4Parser {
             let expected: List<String> = if allow_int { ["identifier", "int"] } else { ["identifier"] };
             return Result::<String, ParseError>::Err(
                 ParseError::new(
-                    `${found_desc(tok)} as the argument of \`${*command}\``,
+                    `${found_desc(tok)} as the argument of \`${command.to_string()}\``,
                     tok.span,
                     expected,
                 ),
@@ -1427,7 +1427,7 @@ fn property_range_error(span: Span) -> ParseError {
     );
 }
 
-fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> {
+fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, ParseError> {
     let chars = text.chars().collect();
     let end = chars.len() - 1;
     let mut pos = 1;
@@ -1568,7 +1568,7 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// instead; the enumerated properties (`lb=`, `bc=`, …) are reachable only
 /// that way, their single-letter values being ones a bare-name lookup would
 /// collide with.
-fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
+fn expand_unicode_property<S: AsStrSlice>(name: S, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
     let head = parts.next().unwrap();
@@ -1628,18 +1628,18 @@ fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange
 /// Ranges for a table entry this file names literally. The key is a constant,
 /// so an empty entry is generator drift, not user input — except `gc=Cs`,
 /// whose surrogates `clip_to_scalars` drops on the way in.
-fn required_ranges(encoded: &String, name: &String) -> List<CharRange> {
-    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${*name}'`;
+fn required_ranges<S: AsStrSlice, S1: AsStrSlice>(encoded: S, name: S1) -> List<CharRange> {
+    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${name.to_string()}'`;
     let mut out: List<CharRange> = [];
     push_encoded_ranges(encoded, &mut out);
     return out;
 }
 
-fn gc_set(key: &String) -> List<CharRange> {
+fn gc_set<S: AsStrSlice>(key: S) -> List<CharRange> {
     return required_ranges(&general_category_ranges(key), key);
 }
 
-fn binary_set(key: &String) -> List<CharRange> {
+fn binary_set<S: AsStrSlice>(key: S) -> List<CharRange> {
     return required_ranges(&binary_property_ranges(key), key);
 }
 
@@ -1654,7 +1654,7 @@ fn binary_set(key: &String) -> List<CharRange> {
 /// `Alpha`, `Lower`, `Upper` and `Space` are POSIX names too, but each is a
 /// UCD alias (`Alphabetic`, `Lowercase`, `Uppercase`, `White_Space`) the
 /// binary-property table already answers with the same set.
-fn expand_posix_property(key: &String, ranges: &mut List<CharRange>) -> bool {
+fn expand_posix_property<S: AsStrSlice>(key: S, ranges: &mut List<CharRange>) -> bool {
     if let Some(set) = posix_property_ranges(key) {
         for let r of &set {
             ranges.push(*r);
@@ -1664,7 +1664,7 @@ fn expand_posix_property(key: &String, ranges: &mut List<CharRange>) -> bool {
     return false;
 }
 
-fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
+fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
     return match key {
         "cntrl" => Option::Some(gc_set(&"cc")),
         "digit" => Option::Some(gc_set(&"nd")),
@@ -1708,7 +1708,7 @@ fn posix_print_ranges() -> List<CharRange> {
 /// `lexer-rules.md` defines the three values). Derived from `Emoji` and
 /// `Emoji_Presentation`, both of which `emoji-data.txt` already gives the
 /// table; measured against the jar like the POSIX set.
-fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bool {
+fn expand_emoji_presentation<S: AsStrSlice>(value: S, ranges: &mut List<CharRange>) -> bool {
     let emoji = binary_set(&"emoji");
     let set = match value {
         // Colourful by default.
@@ -1730,7 +1730,7 @@ fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bo
 
 /// A general category (`Lu`), or a group letter (`L`) as the union of its
 /// subcategories.
-fn expand_general_category(key: &String, ranges: &mut List<CharRange>) -> bool {
+fn expand_general_category<S: AsStrSlice>(key: S, ranges: &mut List<CharRange>) -> bool {
     let group = general_category_group(key);
     if !group.is_empty() {
         for let sub of &group {
@@ -1741,7 +1741,7 @@ fn expand_general_category(key: &String, ranges: &mut List<CharRange>) -> bool {
     return push_property_ranges(&general_category_ranges(key), ranges);
 }
 
-fn push_property_ranges(encoded: &String, ranges: &mut List<CharRange>) -> bool {
+fn push_property_ranges<S: AsStrSlice>(encoded: S, ranges: &mut List<CharRange>) -> bool {
     if encoded.is_empty() {
         return false;
     }
@@ -1752,7 +1752,7 @@ fn push_property_ranges(encoded: &String, ranges: &mut List<CharRange>) -> bool 
 /// Fold a property name to its table key. UAX #44 matches property and value
 /// names ignoring case, `_`, `-` and spaces, and `scripts/gen_unicode_tables`
 /// emits every key folded the same way.
-fn normalize_property_name(name: &String) -> String {
+fn normalize_property_name<S: AsStrSlice>(name: S) -> String {
     let mut out = String::with_capacity(name.len());
     for let c of name.chars() {
         if c == '_' || c == '-' || c == ' ' {
@@ -1763,7 +1763,7 @@ fn normalize_property_name(name: &String) -> String {
     return out;
 }
 
-fn drop_prefix(name: &String, count: i32) -> String {
+fn drop_prefix<S: AsStrSlice>(name: S, count: i32) -> String {
     let mut out = String::with_capacity(name.len());
     let mut i = 0;
     for let c of name.chars() {
@@ -1778,8 +1778,8 @@ fn drop_prefix(name: &String, count: i32) -> String {
 /// Decode a range list from the generated tables: base64 over a varint stream
 /// whose every range is the gap from the previous range's end, shifted up one
 /// bit saying whether a length varint follows.
-fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
-    let bytes = base64_decode(encoded).unwrap();
+fn push_encoded_ranges<S: AsStrSlice>(encoded: S, ranges: &mut List<CharRange>) {
+    let bytes = base64_decode(&encoded.as_bytes()).unwrap();
     let mut pos = 0;
     let mut prev = -1;
     while pos < bytes.len() {
@@ -1805,13 +1805,13 @@ fn read_varint(bytes: &ByteList, pos: &mut i32) -> i32 {
     }
 }
 
-fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {
+fn intern_mode<S: AsStrSlice>(mode_names: &mut List<String>, name: S) -> i32 {
     for let mut i = 0; i < mode_names.len(); i += 1 {
-        if mode_names[i] == *name {
+        if mode_names[i] == name.to_string() {
             return i;
         }
     }
-    mode_names.push(*name);
+    mode_names.push(name.to_string());
     return mode_names.len() - 1;
 }
 
@@ -1851,7 +1851,7 @@ struct RulePrequel {
     after_action: Option<ActionSource> = null,
 }
 
-fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
+fn parse_attr_decls<S: AsStrSlice>(body: S, list_span: Span) -> List<AttrDecl> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out: List<AttrDecl> = [];
@@ -1884,7 +1884,7 @@ fn parse_attr_decls(body: &String, list_span: Span) -> List<AttrDecl> {
     return out;
 }
 
-fn split_attr_decl(seg: &String, span: Span) -> Option<AttrDecl> {
+fn split_attr_decl<S: AsStrSlice>(seg: S, span: Span) -> Option<AttrDecl> {
     let chars: List<char> = seg.chars().collect();
     let full = chars.len();
     let mut n = full;
@@ -1936,7 +1936,7 @@ fn scan_balanced_or_end(chars: &List<char>, start: i32, open: char, close: char)
     };
 }
 
-fn parse_int_literal(text: &String) -> i32 {
+fn parse_int_literal<S: AsStrSlice>(text: S) -> i32 {
     let mut value: i32 = 0;
     for let c of text.chars() {
         let digit = c as i32 - '0' as i32;
@@ -1945,7 +1945,7 @@ fn parse_int_literal(text: &String) -> i32 {
     return value;
 }
 
-pub fn parse(input: String) -> Result<Grammar, ParseError> {
+pub fn parse<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
     let chars: List<char> = input.chars().collect();
     let tokens = tokenize_chars(&chars);
     let mut parser = G4Parser::new(tokens, chars);
@@ -1963,7 +1963,7 @@ fn finish_grammar(grammar: &mut Grammar) -> Result<(), ParseError> {
 }
 
 #[allow(dead_code)]
-pub fn parse_checked(input: String) -> Result<Grammar, ParseError> {
+pub fn parse_checked<S: AsStrSlice>(input: S) -> Result<Grammar, ParseError> {
     let mut grammar = parse(input)?;
     finish_grammar(&mut grammar)?;
     return Result::<Grammar, ParseError>::Ok(grammar);

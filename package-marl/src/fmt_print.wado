@@ -177,13 +177,13 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
     }
 }
 
-fn fence_string(code: &String) -> String {
+fn fence_string<S: AsStrSlice>(code: S) -> String {
     let run = longest_backtick_run(code);
     let len = if run > 2 { run } else { 2 } + 1;
     return "`".repeat(len);
 }
 
-fn longest_backtick_run(code: &String) -> i32 {
+fn longest_backtick_run<S: AsStrSlice>(code: S) -> i32 {
     let mut max_run = 0;
     let mut run = 0;
     for let c of code.chars() {
@@ -224,7 +224,7 @@ fn print_list(list: &MdList, out: &mut String) {
     }
 }
 
-fn print_item(item: &MdItem, marker: &String, out: &mut String) {
+fn print_item<S: AsStrSlice>(item: &MdItem, marker: S, out: &mut String) {
     out.push_str(marker);
     out.push(' ');
     // Continuation lines are indented to `marker.len() + 1` regardless of a
@@ -430,7 +430,7 @@ fn print_emphasis(em: &EmphasisNode, out: &mut String) {
     out.push_str(&marker);
 }
 
-fn print_code_span(s: &String, out: &mut String) {
+fn print_code_span<S: AsStrSlice>(s: S, out: &mut String) {
     let has_backtick = s.contains("`");
     let backtick_text = if has_backtick { "``" } else { "`" };
     let needs_space = has_backtick && (s.starts_with("`") || s.ends_with("`"));
@@ -445,7 +445,7 @@ fn print_code_span(s: &String, out: &mut String) {
     out.push_str(&backtick_text);
 }
 
-fn print_dest_and_title(url: &String, title: &String, out: &mut String) {
+fn print_dest_and_title<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {
     out.push_str(&"(");
     out.push_str(url);
     if title.len() > 0 {

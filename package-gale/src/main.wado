@@ -166,7 +166,7 @@ fn cmd_gen(paths: List<String>, output: &Option<String>, trace: bool) with (Stdo
 
 /// Write the generated parser source to `path`, inside the first granted
 /// directory.
-fn write_output(path: &String, source: &String) with (Stderr, Preopens, Exit) {
+fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) with (Stderr, Preopens, Exit) {
     let file = create_granted(path);
     let bytes: List<u8> = source.bytes().collect();
     let [rx, tx] = Stream::<u8>::new();
@@ -176,7 +176,7 @@ fn write_output(path: &String, source: &String) with (Stderr, Preopens, Exit) {
     // Await the completion future so a partial or failed write is reported
     // rather than silently treated as success.
     if let Some(Err(_)) = sub.read() {
-        eprintln(`gale: ${*path}: write failed`);
+        eprintln(`gale: ${path.to_string()}: write failed`);
         exit(1);
     }
     sub.drop();
@@ -267,19 +267,19 @@ fn load_and_merge(paths: &List<String>) -> Grammar with (Stdout, Stderr, Preopen
 
 /// Read one source file to a UTF-8 string. Any failure prints a message and
 /// exits with code 1.
-fn read_source_file(path: &String) -> String with (Stderr, Preopens, Exit) {
+fn read_source_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Exit) {
     let file = open_granted(path);
     let bytes = match read_all(&file) {
         Ok(b) => b,
         Err(_) => {
-            eprintln(`gale: ${*path}: read error`);
+            eprintln(`gale: ${path.to_string()}: read error`);
             exit(1);
         },
     };
     return match String::from_utf8(bytes) {
         Ok(s) => s,
         Err(_) => {
-            eprintln(`gale: ${*path}: not valid UTF-8`);
+            eprintln(`gale: ${path.to_string()}: not valid UTF-8`);
             exit(1);
         },
     };
@@ -291,13 +291,13 @@ fn read_source_file(path: &String) -> String with (Stderr, Preopens, Exit) {
 /// A path resolves inside a preopened directory, so `--dir` bounds what the
 /// program can reach. Reading searches every grant — the file sits under one or
 /// under none — and names why nothing matched instead of "no such file".
-fn open_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
+fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     let mut grants: List<String> = [];
     let mut denied = false;
     for let mut i = 0; i < dirs.len(); i += 1 {
         let root = dirs[i].0;
-        match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
+        match root.open_at(PathFlags::none(), path.to_string(), OpenFlags::none(), DescriptorFlags::Read).wait() {
             Ok(file) => {
                 return file;
             },
@@ -309,7 +309,7 @@ fn open_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
         }
         grants.push(dirs[i].1);
     }
-    eprintln(`gale: ${*path}: cannot open file`);
+    eprintln(`gale: ${path.to_string()}: cannot open file`);
     if grants.is_empty() {
         eprintln("gale: no directory was granted to this program (try without --no-dir)");
     } else if path.starts_with("/") {
@@ -330,24 +330,24 @@ fn open_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
 ///
 /// Reading may search every grant, but creating cannot: the file does not exist
 /// yet, so a search would let grant order pick the output directory.
-fn create_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
+fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     if dirs.is_empty() {
-        eprintln(`gale: ${*path}: cannot open for writing`);
+        eprintln(`gale: ${path.to_string()}: cannot open for writing`);
         eprintln("gale: no directory was granted to this program (try without --no-dir)");
         exit(1);
     }
     let root = dirs[0].0;
     let opened = root.open_at(
         PathFlags::none(),
-        *path,
+        path.to_string(),
         OpenFlags::Create | OpenFlags::Truncate,
         DescriptorFlags::Read | DescriptorFlags::Write,
     ).wait();
     if let Ok(file) = opened {
         return file;
     }
-    eprintln(`gale: ${*path}: cannot open for writing`);
+    eprintln(`gale: ${path.to_string()}: cannot open for writing`);
     if path.starts_with("/") {
         eprintln(
             `gale: a path opens inside a granted directory, so an absolute path never does: ${grant_hint(path)}`,
@@ -360,7 +360,7 @@ fn create_granted(path: &String) -> Descriptor with (Stderr, Preopens, Exit) {
 
 /// The `wado run` invocation that would grant `path`'s own directory and name
 /// the file relative to it.
-fn grant_hint(path: &String) -> String {
+fn grant_hint<S: AsStrSlice>(path: S) -> String {
     let cut = path.rfind("/").unwrap();
     let dir = if cut == 0 { "/" } else { path.substr_bytes(0, cut) };
     let name = path.substr_bytes(cut + 1, path.len());

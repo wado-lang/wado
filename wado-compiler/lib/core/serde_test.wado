@@ -89,11 +89,11 @@ impl SerializeMap for MockMapSerializer {
 }
 
 impl SerializeStruct for MockStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> with stores[self] {
         if self.count > 0 {
             self.w.buf.push_str(&",");
         }
-        self.w.buf.push_str(&`"${*name}":`);
+        self.w.buf.push_str(&`"${name.to_string()}":`);
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         self.count += 1;
@@ -169,8 +169,8 @@ impl Serializer for MockSerializer {
         return Result::Ok(());
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"${*v}"`);
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        self.w.buf.push_str(&`"${v.to_string()}"`);
         return Result::Ok(());
     }
 
@@ -189,32 +189,32 @@ impl Serializer for MockSerializer {
         return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_struct(
+    fn begin_struct<S: AsStrSlice>(
         &mut self,
-        name: &String,
+        name: S,
         fields: i32,
     ) -> Result<MockStructSerializer, SerializeError> with stores[self] {
         self.w.buf.push_str(&"{");
         return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"${*variant_name}"`);
+        self.w.buf.push_str(&`"${variant_name.to_string()}"`);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
-        self.w.buf.push_str(&`{"${*variant_name}":`);
+        self.w.buf.push_str(&`{"${variant_name.to_string()}":`);
         return Result::Ok(MockVariantSerializer { w: self.w });
     }
 }

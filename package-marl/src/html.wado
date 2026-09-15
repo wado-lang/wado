@@ -1,17 +1,17 @@
 //! HTML escaping and URL sanitization helpers.
 
 /// Escape text for use in HTML element content: `&`, `<`, `>`.
-export fn escape_text(s: String) -> String {
+export fn escape_text<S: AsStrSlice>(s: S) -> String {
     return escape_text_ref(&s);
 }
 
 /// Escape text for use in a double-quoted HTML attribute value:
 /// element-content escapes plus `"`.
-export fn escape_attr(s: String) -> String {
+export fn escape_attr<S: AsStrSlice>(s: S) -> String {
     return escape_attr_ref(&s);
 }
 
-internal fn escape_text_ref(s: &String) -> String {
+internal fn escape_text_ref<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, false);
@@ -19,7 +19,7 @@ internal fn escape_text_ref(s: &String) -> String {
     return out;
 }
 
-internal fn escape_attr_ref(s: &String) -> String {
+internal fn escape_attr_ref<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, true);

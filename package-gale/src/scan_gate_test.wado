@@ -27,8 +27,8 @@ fn gate_fields(g: &Grammar) -> List<String> {
     return *ctx.scan_gate_fields();
 }
 
-fn gen_source(src: &String) -> String {
-    let mut g = parse(*src).unwrap();
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &GEN_OPTS).source;
 }
 
@@ -36,11 +36,11 @@ fn gen_source(src: &String) -> String {
 // and either can come back empty on its own. A block the translator refuses
 // declares nothing, so the fields its actions name have no type to copy — the
 // gate has to go unsimulated, which is warn-and-degrade, not a dead emit.
-fn members_grammar(members: &String) -> String {
+fn members_grammar<S: AsStrSlice>(members: S) -> String {
     return `grammar C;
 options { language = Java; }
 @parser::members {
-${*members}
+${members.to_string()}
 }
 r : A { n = 1; } A ;
 A : 'a' ;
@@ -245,8 +245,8 @@ global HEAD_BODY: String = "A { noStruct = 1; } A";
 /// Written as source and parsed, not built as IR: a rule reaches `$sv` through
 /// its `locals`, and the translator that resolves it is what the gate analysis
 /// now reads.
-fn gate_source(
-    init: &String,
+fn gate_source<S: AsStrSlice>(
+    init: S,
     after: &String = &"",
     scope_body: &String = &SCOPE_BODY,
     head_body: &String = &HEAD_BODY,
@@ -258,7 +258,7 @@ options { language = Java; }
 r : scope | head ;
 scope
 locals [int sv]
-@init { ${*init} }
+@init { ${init.to_string()} }
 ${after_clause}
  : ${*scope_body} ;
 head : ${*head_body} ;
@@ -266,8 +266,8 @@ A : 'a' ;
 `;
 }
 
-fn gate_fields_of(src: &String) -> List<String> {
-    let g = parse(*src).unwrap();
+fn gate_fields_of<S: AsStrSlice>(src: S) -> List<String> {
+    let g = parse(src.to_string()).unwrap();
     return gate_fields(&g);
 }
 

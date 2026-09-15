@@ -7,7 +7,7 @@ use g from "./grammars/unicode_prop_kinds.g4"
     };
 
 /// Token kind names, without the trailing `Eof` every stream ends with.
-fn kinds(input: &String) -> List<String> {
+fn kinds<S: AsStrSlice>(input: S) -> List<String> {
     let tokens = g::tokenize(input);
     let mut out: List<String> = [];
     for let mut i = 0; i < tokens.kinds.len() - 1; i += 1 {
@@ -16,9 +16,9 @@ fn kinds(input: &String) -> List<String> {
     return out;
 }
 
-fn assert_kinds(input: &String, expected: &List<String>) {
+fn assert_kinds<S: AsStrSlice>(input: S, expected: &List<String>) {
     let actual = kinds(input);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected:?}\nactual:   ${actual:?}`;
+    assert actual == *expected, `\ninput:    ${input.to_string()}\nexpected: ${*expected:?}\nactual:   ${actual:?}`;
 }
 
 // U+03B1 is in both the script and the block, so the tie goes to the rule

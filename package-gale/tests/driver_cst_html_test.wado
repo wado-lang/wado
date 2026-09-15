@@ -9,14 +9,14 @@ use html from "./grammars/HTMLLexer.g4"
 use { normalize_tree } from "./support/tree_compare.wado";
 use { TK_TAG_WHITESPACE, TK_TAG_NAME } from "./grammars/HTMLLexer.g4";
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = html::parse(input);
     let actual = html::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input.to_string()}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = html::parse(input);
     if !result.ok() {
         panic(`parse failed: ${result.diagnostics[0].message}`);

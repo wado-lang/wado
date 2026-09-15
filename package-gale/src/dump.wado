@@ -450,9 +450,9 @@ fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
 /// action-scoped diagnostics inline here too. Grammar-level hosts
 /// (`@members`, the highlight query, …) carry no rule and surface in the
 /// summary only.
-fn render_rule_diagnostics(out: &mut String, rule_name: &String, lowered: &LoweredGrammar) {
+fn render_rule_diagnostics<S: AsStrSlice>(out: &mut String, rule_name: S, lowered: &LoweredGrammar) {
     for let d of &lowered.diagnostics {
-        if d.owner.rule != *rule_name {
+        if d.owner.rule != rule_name.to_string() {
             continue;
         }
         out.push_str(&"  ! warning: ");

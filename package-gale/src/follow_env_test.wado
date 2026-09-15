@@ -13,11 +13,11 @@ use { GenContext } from "./gen_context.wado";
 use { LitToken } from "./lexer_gen.wado";
 use { FollowEnv, FollowSet, build } from "./follow_env.wado";
 
-fn tk(name: String) -> Element {
+fn tk<S: AsStrSlice>(name: S) -> Element {
     return Element::TokenRef(TokenRefElement::new(name));
 }
 
-fn rr(name: String) -> Element {
+fn rr<S: AsStrSlice>(name: S) -> Element {
     return Element::RuleRef(RuleRefElement::new(name));
 }
 
@@ -37,7 +37,7 @@ fn alt(elements: List<Element>) -> Alternative {
     return Alternative::new(elements);
 }
 
-fn mk_rule(name: String, alts: List<Alternative>) -> ParserRule {
+fn mk_rule<S: AsStrSlice>(name: S, alts: List<Alternative>) -> ParserRule {
     return ParserRule::new(name, Visibility::Private, [], alts);
 }
 

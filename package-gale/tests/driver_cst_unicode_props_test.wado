@@ -3,8 +3,8 @@ use g from "./grammars/unicode_props.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_unicode_props" },
     };
-fn ok(input: &String) {
-    assert g::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn ok<S: AsStrSlice>(input: S) {
+    assert g::parse(input).ok(), `unexpected diagnostics for ${input.to_string()}`;
 }
 test "unicode: ascii word" {
     ok(&"hello");

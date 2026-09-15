@@ -116,7 +116,7 @@ test "highlighting is text-preserving" {
 }
 
 /// The highlighted text with its spans stripped and its entities unescaped.
-fn plain_text(html: &String) -> String {
+fn plain_text<S: AsStrSlice>(html: S) -> String {
     let mut text = String::new();
     let mut in_tag = false;
     for let c of html.chars() {

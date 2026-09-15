@@ -7,10 +7,10 @@ use css3 from "./grammars/css3Lexer.g4"
         },
     };
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = css3::parse(input);
     if !result.ok() {
-        panic(`parse failed for [${*input}]: ${result.diagnostics[0].message}`);
+        panic(`parse failed for [${input.to_string()}]: ${result.diagnostics[0].message}`);
     }
 }
 

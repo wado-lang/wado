@@ -11,12 +11,12 @@ struct WordBase {
 }
 
 impl ArgBase for WordBase {
-    fn word(&self, p: &Parser, a0: String) -> bool {
+    fn word<S: AsStrSlice>(&self, p: &Parser, a0: S) -> bool {
         resume p.token_text(p.lt(1)) == a0;
     }
 }
 
-fn parse_kw(input: &String) -> String {
+fn parse_kw<S: AsStrSlice>(input: S) -> String {
     let mut base = WordBase {};
     with ArgBase => &mut base do {
         return sa::parse_kw(input).output;

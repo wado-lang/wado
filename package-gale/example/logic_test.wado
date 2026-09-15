@@ -5,13 +5,13 @@
 
 use { eval } from "./logic.wado";
 
-fn assert_eval(input: &String, expected: i64) {
+fn assert_eval<S: AsStrSlice>(input: S, expected: i64) {
     match eval(input) {
         Ok(v) => {
-            assert v == expected, `${*input} = ${v}, expected ${expected}`;
+            assert v == expected, `${input.to_string()} = ${v}, expected ${expected}`;
         },
         Err(m) => {
-            assert false, `${*input}: unexpected error: ${m}`;
+            assert false, `${input.to_string()}: unexpected error: ${m}`;
         },
     }
 }

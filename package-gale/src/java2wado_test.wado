@@ -11,8 +11,8 @@ global NO_BINDINGS: List<AltBinding> = [];
 global NO_MEMBERS: MemberNames = MemberNames {};
 global GEN_OPTS: GenerateOptions = GenerateOptions {};
 
-fn gen(src: &String) -> GeneratedOutput {
-    let mut g = parse(*src).unwrap();
+fn gen<S: AsStrSlice>(src: S) -> GeneratedOutput {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &GEN_OPTS);
 }
 
@@ -20,13 +20,13 @@ fn unsupported_count(diags: &List<Diagnostic>) -> i32 {
     return diags.iter_ref().filter(|d: &Diagnostic| d.kind matches { UnsupportedAction }).count();
 }
 
-fn java_pred(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+fn java_pred<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> String {
     return java_pred_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
 }
 
-fn java_pred_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
+fn java_pred_m<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
-${*rule_src}
+${rule_src.to_string()}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_predicate(
@@ -41,9 +41,9 @@ ${*rule_src}
     ).unwrap();
 }
 
-fn java_pred_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Result<String, String> {
+fn java_pred_res<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> Result<String, String> {
     let g = parse(`grammar T;
-${*rule_src}
+${rule_src.to_string()}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_predicate(
@@ -354,13 +354,13 @@ r returns [i32 v] : ID { $v = 1; } ;
     assert out == " vals.v = 1; ", `out: '${out}'`;
 }
 
-fn java_action(src: &String, rule_src: &String, vals_in_scope: bool) -> String {
+fn java_action<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> String {
     return java_action_m(src, rule_src, vals_in_scope, &NO_MEMBERS);
 }
 
-fn java_action_m(src: &String, rule_src: &String, vals_in_scope: bool, members: &MemberNames) -> String {
+fn java_action_m<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool, members: &MemberNames) -> String {
     let g = parse(`grammar T;
-${*rule_src}
+${rule_src.to_string()}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_action(
@@ -375,9 +375,9 @@ ${*rule_src}
     ).unwrap();
 }
 
-fn java_action_res(src: &String, rule_src: &String, vals_in_scope: bool) -> Result<String, String> {
+fn java_action_res<S: AsStrSlice, S1: AsStrSlice>(src: S, rule_src: S1, vals_in_scope: bool) -> Result<String, String> {
     let g = parse(`grammar T;
-${*rule_src}
+${rule_src.to_string()}
 `).unwrap();
     let lang = ActionLanguage::Java;
     return translate_action(

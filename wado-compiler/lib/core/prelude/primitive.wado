@@ -350,7 +350,8 @@ impl () {
 
 impl bool {
     fn fmt_into(&self, f: &mut Formatter) {
-        f.pad(if *self { "true" } else { "false" });
+        let text: String = if *self { "true" } else { "false" };
+        f.pad(text);
     }
 
     pub fn to_string(&self) -> String {
@@ -364,11 +365,12 @@ impl bool {
 impl LenientFromStr for bool {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<bool, LenientParseError> {
-        if s.eq_ignore_ascii_case("true") || *s == "1" {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bool, LenientParseError> {
+        let text = s.as_str_slice();
+        if text.eq_ignore_ascii_case("true") || text.eq_ignore_ascii_case("1") {
             return Result::Ok(true);
         }
-        if s.eq_ignore_ascii_case("false") || *s == "0" {
+        if text.eq_ignore_ascii_case("false") || text.eq_ignore_ascii_case("0") {
             return Result::Ok(false);
         }
         return Result::Err(LenientParseError::new("invalid boolean string"));
@@ -568,8 +570,8 @@ impl char {
 impl LenientFromStr for char {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<char, LenientParseError> {
-        let mut iter = s.chars();
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError> {
+        let mut iter = s.as_str_slice().chars();
         let Some(first) = iter.next() else {
             return Result::Err(LenientParseError::new("expected exactly one character, got none"));
         };
@@ -609,11 +611,11 @@ impl i8 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<i8, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError> {
         return i8::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<i8, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError> {
         return match parse_i64_radix(&s.as_str_slice(), radix, 127, 128) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
@@ -635,14 +637,14 @@ impl FromStr for i8 {
 impl LenientFromStr for i8 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<i8, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match i8::from_str_radix(&cleaned, radix) {
+        return match i8::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -730,11 +732,11 @@ impl u8 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<u8, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError> {
         return u8::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<u8, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError> {
         return match parse_u64_radix(&s.as_str_slice(), radix, 255) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
@@ -756,14 +758,14 @@ impl FromStr for u8 {
 impl LenientFromStr for u8 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<u8, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match u8::from_str_radix(&cleaned, radix) {
+        return match u8::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -799,11 +801,11 @@ impl i16 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<i16, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError> {
         return i16::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<i16, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError> {
         return match parse_i64_radix(&s.as_str_slice(), radix, 32767, 32768) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
@@ -825,14 +827,14 @@ impl FromStr for i16 {
 impl LenientFromStr for i16 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<i16, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match i16::from_str_radix(&cleaned, radix) {
+        return match i16::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -868,11 +870,11 @@ impl u16 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<u16, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError> {
         return u16::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<u16, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError> {
         return match parse_u64_radix(&s.as_str_slice(), radix, 65535) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
@@ -894,14 +896,14 @@ impl FromStr for u16 {
 impl LenientFromStr for u16 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<u16, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match u16::from_str_radix(&cleaned, radix) {
+        return match u16::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -960,11 +962,11 @@ impl i32 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<i32, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError> {
         return i32::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<i32, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError> {
         return match parse_i64_radix(&s.as_str_slice(), radix, 2147483647, 2147483648) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
@@ -986,14 +988,14 @@ impl FromStr for i32 {
 impl LenientFromStr for i32 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<i32, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match i32::from_str_radix(&cleaned, radix) {
+        return match i32::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -1036,11 +1038,11 @@ impl u32 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<u32, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError> {
         return u32::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<u32, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError> {
         return match parse_u64_radix(&s.as_str_slice(), radix, 4294967295) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
@@ -1062,14 +1064,14 @@ impl FromStr for u32 {
 impl LenientFromStr for u32 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<u32, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match u32::from_str_radix(&cleaned, radix) {
+        return match u32::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -1129,11 +1131,11 @@ impl i64 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<i64, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError> {
         return i64::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<i64, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError> {
         return parse_i64_radix(&s.as_str_slice(), radix, 9223372036854775807, 9223372036854775808);
     }
 }
@@ -1149,14 +1151,14 @@ impl FromStr for i64 {
 impl LenientFromStr for i64 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<i64, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match i64::from_str_radix(&cleaned, radix) {
+        return match i64::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -1223,11 +1225,11 @@ impl u64 {
         return buf;
     }
 
-    pub fn from_str_hex(s: &String) -> Result<u64, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError> {
         return u64::from_str_radix(s, 16);
     }
 
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<u64, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError> {
         return parse_u64_radix(&s.as_str_slice(), radix, u64::MAX);
     }
 }
@@ -1243,14 +1245,14 @@ impl FromStr for u64 {
 impl LenientFromStr for u64 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<u64, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match u64::from_str_radix(&cleaned, radix) {
+        return match u64::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -1589,9 +1591,9 @@ impl FromStr for f32 {
 impl LenientFromStr for f32 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<f32, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f32::from_str(&cleaned) {
+        return match f32::from_str(cleaned) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_float_error(e)),
         };
@@ -1979,9 +1981,9 @@ impl FromStr for f64 {
 impl LenientFromStr for f64 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<f64, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f64::from_str(&cleaned) {
+        return match f64::from_str(cleaned) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_float_error(e)),
         };

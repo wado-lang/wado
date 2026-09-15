@@ -22,6 +22,11 @@ use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
+/// The non-generic `Formatter` entry point a lowered body writes through.
+/// `write_str` is generic over `AsStrSlice`, and lowering runs after
+/// monomorphization, so a call minted here would never be instantiated.
+const FORMATTER_WRITE_LITERAL: &str = "internal_write_literal";
+
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {
     /// The signature `|i32| -> i32`, or the source `|x: i32| (x + 1)` under
@@ -843,12 +848,12 @@ impl ClosureLowerer {
                         Box::new(fmt_local.clone()),
                         FunctionRef {
                             module_source: ModuleSource::format(),
-                            name: format!("{formatter_fq}::write_str"),
+                            name: format!("{formatter_fq}::{FORMATTER_WRITE_LITERAL}"),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 formatter_fq.clone(),
                                 None,
-                                "write_str".to_string(),
+                                FORMATTER_WRITE_LITERAL.to_string(),
                             )),
                         },
                         vec![],

@@ -8,11 +8,11 @@ use de from "./grammars/lr_dangling_else.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_dangling_else" },
     };
 
-fn chk(input: &String, expected: &String) {
+fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = de::parse(input);
-    assert r.ok(), `unexpected diagnostics for ${*input}: ${de::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${input.to_string()}: ${de::to_string_tree(&r)}`;
     let a = de::to_string_tree(&r);
-    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
+    assert a == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${a}`;
 }
 
 test "dangling-else: no else" {

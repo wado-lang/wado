@@ -1586,10 +1586,8 @@ pub trait FromStr {
     /// Parse the view as `Self`.
     fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
 
-    /// Parse the entire string as `Self`. Takes `&String` because callers
-    /// already holding one (e.g. the JSON deserializer threading the input
-    /// buffer through) should not have to dereference and copy.
-    fn from_str(s: &String) -> Result<Self, Self::Err> {
+    /// Parse the whole of any `AsStrSlice` text as `Self`.
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err> {
         return Self::from_str_slice(&s.as_str_slice());
     }
 }
@@ -1622,5 +1620,5 @@ pub trait LenientFromStr {
     type Err;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.
-    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }

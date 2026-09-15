@@ -73,12 +73,12 @@ fn empty_scan_body() -> ScanBody {
     return ScanBody { elements: [] };
 }
 
-fn empty_header(name: &String) -> RuleHeader {
+fn empty_header<S: AsStrSlice>(name: S) -> RuleHeader {
     return RuleHeader {
-        name: *name,
-        snake_name: *name,
-        field_name: *name,
-        type_name: `${*name}Node`,
+        name: name.to_string(),
+        snake_name: name.to_string(),
+        field_name: name.to_string(),
+        type_name: `${name.to_string()}Node`,
         visibility: Visibility::Default,
         case_names: [],
     };

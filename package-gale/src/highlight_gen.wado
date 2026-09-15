@@ -28,8 +28,9 @@ pub fn gen_highlight(
     );
     if grammar.parser_rules.len() > 0 {
         let mut fr = FnSpec::new(&"highlight_result", Vis::Pub);
+        fr.add_generic(&"S: AsStrSlice");
         fr.add_param(&"result", &"&ParseResult");
-        fr.add_param(&"input", &"&String");
+        fr.add_param(&"input", &"S");
         fr.set_return_type(&"String");
         fr.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
@@ -41,7 +42,8 @@ pub fn gen_highlight(
         w.blank();
 
         let mut f = FnSpec::new(&"highlight", Vis::Pub);
-        f.add_param(&"input", &"&String");
+        f.add_generic(&"S: AsStrSlice");
+        f.add_param(&"input", &"S");
         f.set_return_type(&"String");
         f.emit_begin(w);
         w.line(&"let result = parse(input);");
@@ -50,7 +52,8 @@ pub fn gen_highlight(
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
         let mut f = FnSpec::new(&"highlight", Vis::Pub);
-        f.add_param(&"input", &"&String");
+        f.add_generic(&"S: AsStrSlice");
+        f.add_param(&"input", &"S");
         f.set_return_type(&"String");
         f.emit_begin(w);
         w.line(&"let mapping = highlight_mapping();");
@@ -124,9 +127,9 @@ fn selector_desc(sel: &TokenSelector) -> String {
 
 /// Position of the named parser rule, or -1. An index rather than a reference:
 /// the caller reads the rule out of the list it already holds.
-fn parser_rule_index(parser_rules: &List<ParserRule>, name: &String) -> i32 {
+fn parser_rule_index<S: AsStrSlice>(parser_rules: &List<ParserRule>, name: S) -> i32 {
     for let mut i = 0; i < parser_rules.len(); i += 1 {
-        if parser_rules[i].name == *name {
+        if parser_rules[i].name == name.to_string() {
             return i;
         }
     }
@@ -136,12 +139,12 @@ fn parser_rule_index(parser_rules: &List<ParserRule>, name: &String) -> i32 {
 /// `(rule) @capture` — every token the rule accepts, captured within it. The
 /// runtime keys an override by (rule, token kind), so each alternative has to
 /// be one token, or a delegation to a rule that is.
-fn expand_rule_capture(
+fn expand_rule_capture<S: AsStrSlice>(
     overrides: &mut List<ResolvedOverride>,
     rule: &ParserRule,
     parser_rules: &List<ParserRule>,
     idx: &KindIndex,
-    capture: String,
+    capture: S,
     ctx: &mut GenContext,
 ) {
     let mut visiting: List<String> = [rule.name];
@@ -217,14 +220,14 @@ fn rule_token_kinds(
 /// Record an override for (rule, token), last-wins: a later query rule for the
 /// same pair replaces an earlier one (matching the default table's last-wins
 /// and tree-sitter's convention), rather than being dead behind it.
-fn push_override(overrides: &mut List<ResolvedOverride>, rule_name: String, token_kind: i32, capture: String) {
+fn push_override<S: AsStrSlice, S1: AsStrSlice>(overrides: &mut List<ResolvedOverride>, rule_name: S, token_kind: i32, capture: S1) {
     for let mut i = 0; i < overrides.len(); i += 1 {
-        if overrides[i].rule_name == rule_name && overrides[i].token_kind == token_kind {
-            overrides[i] = ResolvedOverride { rule_name, token_kind, capture };
+        if overrides[i].rule_name == rule_name.to_string() && overrides[i].token_kind == token_kind {
+            overrides[i] = ResolvedOverride { rule_name: rule_name.to_string(), token_kind, capture: capture.to_string() };
             return;
         }
     }
-    overrides.push(ResolvedOverride { rule_name, token_kind, capture });
+    overrides.push(ResolvedOverride { rule_name: rule_name.to_string(), token_kind, capture: capture.to_string() });
 }
 
 fn slot_comment(slot: &TokenSlot, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) -> String {
@@ -392,9 +395,9 @@ fn gen_capture_vocabulary(
     w.blank();
 }
 
-fn push_unique(out: &mut List<String>, value: String) {
-    if !out.contains(&value) {
-        out.push(value);
+fn push_unique<S: AsStrSlice>(out: &mut List<String>, value: S) {
+    if !out.contains(&value.to_string()) {
+        out.push(value.to_string());
     }
 }
 

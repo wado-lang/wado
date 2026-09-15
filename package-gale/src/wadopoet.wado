@@ -27,7 +27,7 @@ impl CodeWriter {
     }
 
     /// Write text with auto-indentation at line starts.
-    pub fn write(&mut self, text: &String) {
+    pub fn write<S: AsStrSlice>(&mut self, text: S) {
         for let c of text.chars() {
             if c == '\n' {
                 self.buf.push('\n');
@@ -43,7 +43,7 @@ impl CodeWriter {
     }
 
     /// Write a complete line (auto-indented, with trailing newline).
-    pub fn line(&mut self, text: &String) {
+    pub fn line<S: AsStrSlice>(&mut self, text: S) {
         self.write_indent();
         self.buf.push_str(text);
         self.buf.push('\n');
@@ -57,7 +57,7 @@ impl CodeWriter {
     }
 
     /// Begin a block: emits "opener {" and increases indentation.
-    pub fn begin(&mut self, opener: &String) {
+    pub fn begin<S: AsStrSlice>(&mut self, opener: S) {
         self.write_indent();
         self.buf.push_str(opener);
         self.buf.push_str(&" {\n");
@@ -74,7 +74,7 @@ impl CodeWriter {
     }
 
     /// End a block with a trailing suffix, e.g. "," or "\n".
-    pub fn end_with(&mut self, suffix: &String) {
+    pub fn end_with<S: AsStrSlice>(&mut self, suffix: S) {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push('}');
@@ -85,7 +85,7 @@ impl CodeWriter {
 
     /// Close the current block and open a new one: "} opener {".
     /// Useful for else-if chains: `w.else_begin("else if cond")`.
-    pub fn else_begin(&mut self, opener: &String) {
+    pub fn else_begin<S: AsStrSlice>(&mut self, opener: S) {
         self.indent_level -= 1;
         self.write_indent();
         self.buf.push_str(&"} ");
@@ -113,7 +113,7 @@ impl CodeWriter {
     }
 
     /// Append raw text with no indentation handling.
-    pub fn raw(&mut self, text: &String) {
+    pub fn raw<S: AsStrSlice>(&mut self, text: S) {
         self.buf.push_str(text);
         if text.len() > 0 {
             let chars: List<char> = text.chars().collect();
@@ -208,7 +208,7 @@ fn open(c: char) -> Ctx {
 /// Advance the lexical state over one literal segment. Kept apart from `step`
 /// so both fit the inliner's budget: the whole walk then folds to a constant at
 /// -O2 and the tag pays nothing for it.
-fn advance(ctx: Ctx, lit: &String) -> Ctx {
+fn advance<S: AsStrSlice>(ctx: Ctx, lit: S) -> Ctx {
     let mut cur = ctx;
     for let c of lit.chars() {
         cur = step(cur, c);
@@ -314,7 +314,7 @@ pub type LitName = String;
 /// Tag `text` as a grammar literal's display name: `lit_name("+")` formats to
 /// `'+'`. `LitToken.text` holds the literal with its escapes already resolved,
 /// so this puts them back — a readable rendering, not a round-trip.
-pub fn lit_name(text: String) -> LitName {
+pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
     return text as LitName;
 }
 
@@ -372,12 +372,12 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
-    pub fn new(name: &String, type_str: &String) -> FieldSpec {
-        return FieldSpec { name: *name, type_str: *type_str, is_pub: false };
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
+        return FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: false };
     }
 
-    pub fn new_pub(name: &String, type_str: &String) -> FieldSpec {
-        return FieldSpec { name: *name, type_str: *type_str, is_pub: true };
+    pub fn new_pub<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> FieldSpec {
+        return FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: true };
     }
 }
 
@@ -388,27 +388,27 @@ pub struct StructSpec {
 }
 
 impl StructSpec {
-    pub fn new(name: &String, visibility: Vis = Vis::Private) -> StructSpec {
-        return StructSpec { name: *name, fields: [], visibility };
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> StructSpec {
+        return StructSpec { name: name.to_string(), fields: [], visibility };
     }
 
-    pub fn add_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
+    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec with stores[self] {
         self.fields.push(FieldSpec::new(name, type_str));
         return self;
     }
 
-    pub fn add_pub_field(&mut self, name: &String, type_str: &String) -> &mut StructSpec with stores[self] {
+    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec with stores[self] {
         self.fields.push(FieldSpec::new_pub(name, type_str));
         return self;
     }
 
-    pub fn add_field_default(
+    pub fn add_field_default<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         &mut self,
-        name: &String,
-        type_str: &String,
-        default: &String,
+        name: S,
+        type_str: S1,
+        default: S2,
     ) -> &mut StructSpec with stores[self] {
-        self.fields.push(FieldSpec { name: *name, type_str: *type_str, is_pub: false, default: Option::Some(*default) });
+        self.fields.push(FieldSpec { name: name.to_string(), type_str: type_str.to_string(), is_pub: false, default: Option::Some(default.to_string()) });
         return self;
     }
 
@@ -442,19 +442,19 @@ pub struct VariantSpec {
 }
 
 impl VariantSpec {
-    pub fn new(name: &String, visibility: Vis = Vis::Private) -> VariantSpec {
-        return VariantSpec { name: *name, cases: [], visibility };
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> VariantSpec {
+        return VariantSpec { name: name.to_string(), cases: [], visibility };
     }
 
-    pub fn add_case(&mut self, name: &String) -> &mut VariantSpec with stores[self] {
-        self.cases.push(VariantCase { name: *name, payload: null });
+    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec with stores[self] {
+        self.cases.push(VariantCase { name: name.to_string(), payload: null });
         return self;
     }
 
-    pub fn add_case_with_payload(&mut self, name: &String, payload: &String) -> &mut VariantSpec with stores[self] {
+    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec with stores[self] {
         self.cases.push(VariantCase {
-            name: *name,
-            payload: Option::<String>::Some(*payload),
+            name: name.to_string(),
+            payload: Option::<String>::Some(payload.to_string()),
         });
         return self;
     }
@@ -484,19 +484,19 @@ pub struct EnumSpec {
 }
 
 impl EnumSpec {
-    pub fn new(name: &String, visibility: Vis = Vis::Private) -> EnumSpec {
-        return EnumSpec { name: *name, members: [], visibility };
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> EnumSpec {
+        return EnumSpec { name: name.to_string(), members: [], visibility };
     }
 
-    pub fn add_member(&mut self, name: &String) -> &mut EnumSpec with stores[self] {
-        self.members.push(EnumMember { name: *name, trailing_comment: null });
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec with stores[self] {
+        self.members.push(EnumMember { name: name.to_string(), trailing_comment: null });
         return self;
     }
 
-    pub fn add_member_with_comment(&mut self, name: &String, comment: &String) -> &mut EnumSpec with stores[self] {
+    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec with stores[self] {
         self.members.push(EnumMember {
-            name: *name,
-            trailing_comment: Option::<String>::Some(*comment),
+            name: name.to_string(),
+            trailing_comment: Option::<String>::Some(comment.to_string()),
         });
         return self;
     }
@@ -522,8 +522,8 @@ pub struct ParamSpec {
 }
 
 impl ParamSpec {
-    pub fn new(name: &String, type_str: &String) -> ParamSpec {
-        return ParamSpec { name: *name, type_str: *type_str };
+    pub fn new<S: AsStrSlice, S1: AsStrSlice>(name: S, type_str: S1) -> ParamSpec {
+        return ParamSpec { name: name.to_string(), type_str: type_str.to_string() };
     }
 }
 
@@ -560,9 +560,9 @@ pub struct FnSpec {
 }
 
 impl FnSpec {
-    pub fn new(name: &String, visibility: Vis = Vis::Private) -> FnSpec {
+    pub fn new<S: AsStrSlice>(name: S, visibility: Vis = Vis::Private) -> FnSpec {
         return FnSpec {
-            name: *name,
+            name: name.to_string(),
             params: [],
             return_type: null,
             visibility,
@@ -581,27 +581,27 @@ impl FnSpec {
         return self;
     }
 
-    pub fn add_generic(&mut self, generic: &String) -> &mut FnSpec with stores[self] {
-        self.generics.push(*generic);
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec with stores[self] {
+        self.generics.push(generic.to_string());
         return self;
     }
 
-    pub fn add_effect(&mut self, effect_name: &String) -> &mut FnSpec with stores[self] {
-        self.effects.push(*effect_name);
+    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec with stores[self] {
+        self.effects.push(effect_name.to_string());
         return self;
     }
 
-    pub fn add_stores(&mut self, param_name: &String) -> &mut FnSpec with stores[self] {
-        self.stores.push(*param_name);
+    pub fn add_stores<S: AsStrSlice>(&mut self, param_name: S) -> &mut FnSpec with stores[self] {
+        self.stores.push(param_name.to_string());
         return self;
     }
 
-    pub fn set_receiver(&mut self, recv: &String) -> &mut FnSpec with stores[self] {
-        self.receiver = Option::<String>::Some(*recv);
+    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec with stores[self] {
+        self.receiver = Option::<String>::Some(recv.to_string());
         return self;
     }
 
-    pub fn add_param(&mut self, name: &String, type_str: &String) -> &mut FnSpec with stores[self] {
+    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec with stores[self] {
         self.params.push(ParamSpec::new(name, type_str));
         return self;
     }
@@ -611,8 +611,8 @@ impl FnSpec {
         return self;
     }
 
-    pub fn set_return_type(&mut self, type_str: &String) -> &mut FnSpec with stores[self] {
-        self.return_type = Option::<String>::Some(*type_str);
+    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec with stores[self] {
+        self.return_type = Option::<String>::Some(type_str.to_string());
         return self;
     }
 
@@ -683,19 +683,19 @@ pub struct GlobalSpec {
 }
 
 impl GlobalSpec {
-    pub fn new(name: &String, type_str: &String, initializer: &String, visibility: Vis = Vis::Private) -> GlobalSpec {
+    pub fn new<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(name: S, type_str: S1, initializer: S2, visibility: Vis = Vis::Private) -> GlobalSpec {
         return GlobalSpec {
-            name: *name,
-            type_str: *type_str,
-            initializer: *initializer,
+            name: name.to_string(),
+            type_str: type_str.to_string(),
+            initializer: initializer.to_string(),
             visibility,
             is_mut: false,
             trailing_comment: null,
         };
     }
 
-    pub fn set_trailing_comment(&mut self, comment: &String) -> &mut GlobalSpec with stores[self] {
-        self.trailing_comment = Option::<String>::Some(*comment);
+    pub fn set_trailing_comment<S: AsStrSlice>(&mut self, comment: S) -> &mut GlobalSpec with stores[self] {
+        self.trailing_comment = Option::<String>::Some(comment.to_string());
         return self;
     }
 
@@ -717,14 +717,14 @@ pub struct ImplSpec {
 }
 
 impl ImplSpec {
-    pub fn new(type_name: &String) -> ImplSpec {
-        return ImplSpec { type_name: *type_name, trait_name: null };
+    pub fn new<S: AsStrSlice>(type_name: S) -> ImplSpec {
+        return ImplSpec { type_name: type_name.to_string(), trait_name: null };
     }
 
-    pub fn new_trait(trait_name: &String, type_name: &String) -> ImplSpec {
+    pub fn new_trait<S: AsStrSlice, S1: AsStrSlice>(trait_name: S, type_name: S1) -> ImplSpec {
         return ImplSpec {
-            type_name: *type_name,
-            trait_name: Option::<String>::Some(*trait_name),
+            type_name: type_name.to_string(),
+            trait_name: Option::<String>::Some(trait_name.to_string()),
         };
     }
 

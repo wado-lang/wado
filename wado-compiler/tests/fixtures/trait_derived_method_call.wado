@@ -39,7 +39,7 @@ impl SerializeMap for MapSink {
 }
 
 impl SerializeStruct for StructSink {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
     fn end(&mut self) -> Result<(), SerializeError> {
@@ -93,7 +93,7 @@ impl Serializer for Sink {
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
@@ -105,14 +105,14 @@ impl Serializer for Sink {
     fn begin_map(&mut self, len: i32) -> Result<MapSink, SerializeError> with stores[self] {
         return Result::Ok(MapSink {});
     }
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<StructSink, SerializeError> with stores[self] {
-        self.out = *name;
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<StructSink, SerializeError> with stores[self] {
+        self.out = name.to_string();
         return Result::Ok(StructSink {});
     }
-    fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError> {
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<VariantSink, SerializeError> with stores[self] {
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<VariantSink, SerializeError> with stores[self] {
         return Result::Ok(VariantSink {});
     }
 }

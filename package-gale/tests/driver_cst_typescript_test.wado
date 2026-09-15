@@ -67,12 +67,12 @@ impl TypeScriptParserBase for TsParserBase {
     }
 
     /// The token just consumed is `a0` — `for (x of xs)` asks it of `of`.
-    fn p(&self, p: &Parser, a0: String) -> bool {
+    fn p<S: AsStrSlice>(&self, p: &Parser, a0: S) -> bool {
         resume p.token_text(p.lt(0)) == a0;
     }
 
     /// The next token is `a0` — a getter / setter asks it of `get` / `set`.
-    fn n(&self, p: &Parser, a0: String) -> bool {
+    fn n<S: AsStrSlice>(&self, p: &Parser, a0: S) -> bool {
         resume p.token_text(p.lt(1)) == a0;
     }
 }
@@ -171,14 +171,14 @@ fn new_ts_base() -> TsBase {
     return TsBase { interp_braces: [], template_marks: [], strict: false };
 }
 
-fn ts_tokenize(input: &String) -> ts::TokenStream {
+fn ts_tokenize<S: AsStrSlice>(input: S) -> ts::TokenStream {
     let mut base = new_ts_base();
     with TypeScriptLexerBase => &mut base do {
         return ts::tokenize(input);
     };
 }
 
-fn ts_parse(input: &String) -> ts::ParseResult {
+fn ts_parse<S: AsStrSlice>(input: S) -> ts::ParseResult {
     let mut base = new_ts_base();
     let mut pbase = TsParserBase {};
     with TypeScriptLexerBase => &mut base do {
@@ -188,14 +188,14 @@ fn ts_parse(input: &String) -> ts::ParseResult {
     };
 }
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = ts_parse(input);
     let actual = ts::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input.to_string()}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = ts_parse(input);
     if !result.ok() {
         panic(`parse failed: ${result.diagnostics[0].message}`);

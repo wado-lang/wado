@@ -96,7 +96,7 @@ fn locate(chars: &List<char>, roots: &List<[i32, String]>) -> List<InlinePath> {
 
 /// Every inline path in `source`, or why it could not be parsed: recovery drops
 /// tokens, so a count taken from a broken tree would license what it missed.
-pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
+pub fn find_inline_paths<S: AsStrSlice>(source: S) -> Result<List<InlinePath>, String> {
     let result = parse_rust(source);
     if result.diagnostics.len() > 0 {
         let first = result.diagnostics[0];
@@ -107,7 +107,7 @@ pub fn find_inline_paths(source: &String) -> Result<List<InlinePath>, String> {
 
 /// The inline paths `path` carries. A file that cannot be read or parsed lands
 /// in `failed`, never in a clean count.
-fn scan(path: &String, failed: &mut i32) -> List<InlinePath> with (Stderr, Preopens) {
+fn scan<S: AsStrSlice>(path: S, failed: &mut i32) -> List<InlinePath> with (Stderr, Preopens) {
     let source = match fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -119,7 +119,7 @@ fn scan(path: &String, failed: &mut i32) -> List<InlinePath> with (Stderr, Preop
     return match find_inline_paths(&source) {
         Ok(hits) => hits,
         Err(why) => {
-            eprintln(`error: ${*path}: ${why}`);
+            eprintln(`error: ${path.to_string()}: ${why}`);
             *failed += 1;
             return [];
         },

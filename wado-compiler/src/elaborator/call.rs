@@ -3285,8 +3285,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) =
-            self.static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+        let Some(sig) = self
+            .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+            .or_else(|| {
+                let owned;
+                let key = match receiver_key {
+                    Some(key) => key,
+                    None => {
+                        owned = self.impl_target(struct_name);
+                        &owned
+                    }
+                };
+                self.inherited_default_method_sig(key, method_name)
+            })
         else {
             return (vec![], vec![]);
         };
@@ -3483,6 +3494,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
+    }
+
+    /// The signature of a trait default body `key` inherits without overriding
+    /// it, rebased on the receiver: the trait's own slots — `Self` and its
+    /// arguments — are fixed by the receiver and the impl header, so only the
+    /// method's own remain to solve.
+    ///
+    /// Such a method belongs to no impl block's method list, so every index
+    /// keyed by the impl misses it, and a generic default then resolved with
+    /// none of its slots bound and reached WIR build uninstantiated.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.tysys.trait_env;
+        let mut sig = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_ref)
+            .find_map(|trait_decl| {
+                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method.default_body.as_ref()?;
+                Some(method.sig.clone())
+            })?;
+        let split = sig.declaring_split();
+        sig.decl.type_params.drain(..split);
+        sig.declaring_slot_count = 0;
+        sig.method_slot_base = 0;
+        Some(sig)
     }
 
     /// `Type::method()` reaching a value blanket's static, which is indexed

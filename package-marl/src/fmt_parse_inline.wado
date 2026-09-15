@@ -51,7 +51,7 @@ internal struct OpenTok {
     internal keep_asterisk: bool,
 }
 
-pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
+pub fn parse_inline<S: AsStrSlice>(text: S, refs: &RefTable) -> List<Node> {
     let chars = text.to_chars();
     return parse_inline_chars(StrCursor::over(&chars), refs);
 }
@@ -543,7 +543,7 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     return null;
 }
 
-fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i32]> {
+fn try_html_to_close<S: AsStrSlice>(cur: &StrCursor, i: i32, closer: S) -> Option<[Node, i32]> {
     let end = cur.end();
     let closer_len = closer.to_chars().len();
     let mut j = i;
@@ -556,7 +556,7 @@ fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i
     return null;
 }
 
-fn starts_with_at(cur: &StrCursor, i: i32, pat: String) -> bool {
+fn starts_with_at<S: AsStrSlice>(cur: &StrCursor, i: i32, pat: S) -> bool {
     let mut k = 0;
     for let pc of pat.chars() {
         if !cur.is_at(i + k, pc) {

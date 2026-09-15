@@ -11,13 +11,13 @@ use g from "./grammars/label_list_collision.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_label_list_collision" },
     };
 
-fn assert_tree_of(result: &g::ParseResult, input: &String, expected: &String) {
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+fn assert_tree_of<S: AsStrSlice, S1: AsStrSlice>(result: &g::ParseResult, input: S, expected: S1) {
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = g::to_string_tree(result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     assert_tree_of(&g::parse(input), input, expected);
 }
 

@@ -3,9 +3,9 @@ use g from "./grammars/lr_scan_caller.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_scan_caller" },
     };
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `parse failed for ${*input}`;
+    assert result.ok(), `parse failed for ${input.to_string()}`;
 }
 
 // The crux: `a and b !` must parse — the caller's mandatory `'and'`

@@ -43,7 +43,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 }
 
 /// The source line containing byte offset `at`, trimmed.
-fn snippet(src: &String, at: i32) -> String {
+fn snippet<S: AsStrSlice>(src: S, at: i32) -> String {
     let mut start = at;
     if start > src.len() {
         start = src.len();

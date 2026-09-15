@@ -165,11 +165,11 @@ fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
 }
 
 /// A called rule keeps its own matcher on top of whatever else covers its text.
-fn also_matcher_suffix(also: bool, try_fn: &String) -> String {
+fn also_matcher_suffix<S: AsStrSlice>(also: bool, try_fn: S) -> String {
     if !also {
         return "";
     }
-    return ` + matcher ${*try_fn} (another rule calls it)`;
+    return ` + matcher ${try_fn.to_string()} (another rule calls it)`;
 }
 
 /// Whether the rule's body is emitted somewhere, so its decisions belong under
@@ -327,7 +327,7 @@ fn render_elem_body(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, body: &
     o.scope = saved;
 }
 
-fn decision_line(o: &mut DumpOut, text: &String) {
+fn decision_line<S: AsStrSlice>(o: &mut DumpOut, text: S) {
     o.text.push_str(&"  ");
     o.text.push_str(&o.scope);
     o.text.push_str(text);
@@ -454,7 +454,7 @@ fn repeat_suffix(rep: &LexerRepeatElement) -> String {
     return if rep.non_greedy { `${kind}?` } else { kind };
 }
 
-fn literal_text(text: &String) -> String {
+fn literal_text<S: AsStrSlice>(text: S) -> String {
     let mut s = String::with_capacity(text.len() + 2);
     s.push('\'');
     for let c of text.chars() {

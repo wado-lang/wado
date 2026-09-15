@@ -7,8 +7,8 @@ use { Diagnostic, DiagnosticKind } from "./gir.wado";
 
 global OPTS: GenerateOptions = GenerateOptions {};
 
-fn gen_diagnostics(src: &String) -> List<Diagnostic> {
-    let mut g = parse(*src).unwrap();
+fn gen_diagnostics<S: AsStrSlice>(src: S) -> List<Diagnostic> {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &OPTS).diagnostics;
 }
 
@@ -65,8 +65,8 @@ B : 'b' ;
     assert out.contains("failed semantic predicate"), `the first iteration must answer the predicate: ${out}`;
 }
 
-fn gen_source(src: &String) -> String {
-    let mut g = parse(*src).unwrap();
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &OPTS).source;
 }
 

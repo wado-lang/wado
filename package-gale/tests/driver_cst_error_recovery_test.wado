@@ -9,9 +9,9 @@ use errrec from "./grammars/error_recovery.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_error_recovery" },
     };
 
-fn first_diag_col(input: &String) -> i32 {
+fn first_diag_col<S: AsStrSlice>(input: S) -> i32 {
     let r = errrec::parse(input);
-    assert !r.ok(), `expected a diagnostic for ${*input}`;
+    assert !r.ok(), `expected a diagnostic for ${input.to_string()}`;
     return r.diagnostics[0].col;
 }
 
@@ -30,10 +30,10 @@ test "error position: non-item token stays put" {
 // `<missing>`, delete -> `<skip>`, unrecoverable run -> `<error>`). A clean
 // parse keeps these markers absent. (A scan-gated `item*` cannot commit edits —
 // see the diagnostic-position tests above — so these use the mandatory entry.)
-fn assert_single(input: &String, expected: &String) {
+fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)

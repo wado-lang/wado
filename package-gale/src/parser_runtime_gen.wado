@@ -143,7 +143,7 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenCo
     // caller parse from any rule (ANTLR4 lets you pick a start rule; the
     // ANTLR4-compat descriptors name one), mirroring the typed parser.
     let start = rule_header(&lowered.parser_rules[0]);
-    w.begin(&`pub fn parse(input: &String, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(ctx)}`);
+    w.begin(&`pub fn parse<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(ctx)}`);
     w.line(&`return parse_${start.snake_name}(input, max_errors);`);
     w.end();
     w.blank();
@@ -159,7 +159,7 @@ pub fn gen_parse_entry(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &GenCo
 /// propagated error and `p.pending`).
 fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
     w.begin(
-        &`fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(ctx)}) -> ParseResult${superclass_clause(
+        &`fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)${parser_super_fn_clause(ctx)}) -> ParseResult${superclass_clause(
             ctx,
         )}`,
     );
@@ -207,7 +207,7 @@ fn gen_run_parse_entry(w: &mut CodeWriter, ctx: &GenContext) {
 fn gen_parse_rule_entry(w: &mut CodeWriter, rule: &Rule, ctx: &GenContext) {
     let header = rule_header(rule);
     w.begin(
-        &`pub fn parse_${header.snake_name}(input: &String, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
+        &`pub fn parse_${header.snake_name}<S: AsStrSlice>(input: S, max_errors: i32 = i32::MAX) -> ParseResult${superclass_clause(
             ctx,
         )}`,
     );
@@ -247,14 +247,14 @@ fn emit_diag_prologue(w: &mut CodeWriter) {
     w.line(&"let lc = line_col(self.tokens.chars, span.start);");
 }
 
-pub fn gen_parser_struct(
+pub fn gen_parser_struct<S: AsStrSlice>(
     w: &mut CodeWriter,
     trace: bool,
     needs_atn: bool,
     emit_actions: bool,
     fragment_recovery: bool,
     members: &MemberDecls,
-    parser_base: &String,
+    parser_base: S,
 ) {
     let base_api = !parser_base.is_empty();
     // A parser base handler names the recognizer in its operation signature.
@@ -980,60 +980,60 @@ pub fn gen_trace_helpers(w: &mut CodeWriter) {
     w.dedent();
     w.line(&"}");
     w.blank();
-    w.line(&"fn trace_enter(p: &Parser, rule: &String) {");
+    w.line(&"fn trace_enter<S: AsStrSlice>(p: &Parser, rule: S) {");
     w.indent();
     gen_trace_gate(w);
     w.line(
-        &"trace(`${trace_pad(p.trace_depth)}enter ${*rule} @${p.pos} ${trace_tok(p)}`, { rule: *rule, pos: p.pos }, TRACE_TARGET);",
+        &"trace(`${trace_pad(p.trace_depth)}enter ${rule.to_string()} @${p.pos} ${trace_tok(p)}`, { rule: rule.to_string(), pos: p.pos }, TRACE_TARGET);",
     );
     w.dedent();
     w.line(&"}");
     w.blank();
-    w.line(&"fn trace_ok(p: &Parser, rule: &String) {");
+    w.line(&"fn trace_ok<S: AsStrSlice>(p: &Parser, rule: S) {");
     w.indent();
     gen_trace_gate(w);
-    w.line(&"trace(`${trace_pad(p.trace_depth)}ok ${*rule}`, { rule: *rule }, TRACE_TARGET);");
+    w.line(&"trace(`${trace_pad(p.trace_depth)}ok ${rule.to_string()}`, { rule: rule.to_string() }, TRACE_TARGET);");
     w.dedent();
     w.line(&"}");
     w.blank();
-    w.line(&"fn trace_fail(p: &Parser, rule: &String, msg: &String) {");
+    w.line(&"fn trace_fail<S: AsStrSlice, S1: AsStrSlice>(p: &Parser, rule: S, msg: S1) {");
     w.indent();
     gen_trace_gate(w);
-    w.line(&"trace(`${trace_pad(p.trace_depth)}FAIL ${*rule}: ${*msg}`, { rule: *rule, reason: *msg }, TRACE_TARGET);");
+    w.line(&"trace(`${trace_pad(p.trace_depth)}FAIL ${rule.to_string()}: ${msg.to_string()}`, { rule: rule.to_string(), reason: msg.to_string() }, TRACE_TARGET);");
     w.dedent();
     w.line(&"}");
     w.blank();
     // Decision-point helpers: which alternative a multi-alt / tournament
     // rule committed to, the per-alt scan lengths a longest-match
     // tournament weighed, and the outcome of each speculative try.
-    w.line(&"fn trace_pick(p: &Parser, rule: &String, alt: i32) {");
+    w.line(&"fn trace_pick<S: AsStrSlice>(p: &Parser, rule: S, alt: i32) {");
     w.indent();
     gen_trace_gate(w);
     w.line(
-        &"if alt < 0 { trace(`${trace_pad(p.trace_depth)}  pick ${*rule}: no alt matched`, { rule: *rule, alt }, TRACE_TARGET); }",
+        &"if alt < 0 { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()}: no alt matched`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
     );
     w.line(
-        &"else { trace(`${trace_pad(p.trace_depth)}  pick ${*rule} alt#${alt}`, { rule: *rule, alt }, TRACE_TARGET); }",
+        &"else { trace(`${trace_pad(p.trace_depth)}  pick ${rule.to_string()} alt#${alt}`, { rule: rule.to_string(), alt }, TRACE_TARGET); }",
     );
     w.dedent();
     w.line(&"}");
     w.blank();
-    w.line(&"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32) {");
+    w.line(&"fn trace_scan_alt<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, end: i32) {");
     w.indent();
     gen_trace_gate(w);
     w.line(&"let r = if end < 0 { String::from(\"fail\") } else { `-> @${end}` };");
     w.line(
-        &"trace(`${trace_pad(p.trace_depth)}  scan ${*rule} alt#${alt}: ${r}`, { rule: *rule, alt, end }, TRACE_TARGET);",
+        &"trace(`${trace_pad(p.trace_depth)}  scan ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, end }, TRACE_TARGET);",
     );
     w.dedent();
     w.line(&"}");
     w.blank();
-    w.line(&"fn trace_try(p: &Parser, rule: &String, alt: i32, ok: bool) {");
+    w.line(&"fn trace_try<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, ok: bool) {");
     w.indent();
     gen_trace_gate(w);
     w.line(&"let r = if ok { String::from(\"ok\") } else { String::from(\"rewind\") };");
     w.line(
-        &"trace(`${trace_pad(p.trace_depth)}  try ${*rule} alt#${alt}: ${r}`, { rule: *rule, alt, ok }, TRACE_TARGET);",
+        &"trace(`${trace_pad(p.trace_depth)}  try ${rule.to_string()} alt#${alt}: ${r}`, { rule: rule.to_string(), alt, ok }, TRACE_TARGET);",
     );
     w.dedent();
     w.line(&"}");

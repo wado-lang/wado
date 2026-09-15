@@ -26,7 +26,7 @@ impl PsBase for GapBase {
     }
 }
 
-fn parse(input: &String) -> prs::ParseResult {
+fn parse<S: AsStrSlice>(input: S) -> prs::ParseResult {
     let mut base = GapBase { first: true };
     with PsBase => &mut base do {
         return prs::parse(input);
@@ -34,7 +34,7 @@ fn parse(input: &String) -> prs::ParseResult {
 }
 
 /// `[parsed, times the gate was consulted]`.
-fn pick(input: &String, first: bool) -> [bool, i32] {
+fn pick<S: AsStrSlice>(input: S, first: bool) -> [bool, i32] {
     let mut base = GapBase { first };
     let mut ok = false;
     with PsBase => &mut base do {
