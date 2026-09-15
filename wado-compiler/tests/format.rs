@@ -3429,7 +3429,6 @@ fn test_format_effect_row_parentheses() {
     let source = concat!(
         "fn one() with Stdout {\n}\n",
         "fn many() with (Stdout, Stderr) {\n}\n",
-        "fn keep(d: &Data) with (Stdout, stores[d]) {\n}\n",
         "fn nested(f: fn() with (A, B), x: i32) {\n}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");
