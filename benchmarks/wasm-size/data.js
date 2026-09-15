@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789422357648,
+  "lastUpdate": 1789456805882,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56069,6 +56069,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/953ec307ab99ae647e88ca9cf8ffa175293b15a3"
         },
         "date": 1789422356962,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285344,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5aa6d2b4e13df6e0f473abda11ea477b76d61c44",
+          "message": "Merge pull request #2062 from wado-lang/claude/shadowed-name-lint\n\nfeat: warn when a binder shadows a known name, and check every declared world",
+          "timestamp": "2026-09-15T16:02:02+09:00",
+          "tree_id": "36f873e99a0c954c34ae481916514ffd0e18e56f",
+          "url": "https://github.com/wado-lang/wado/commit/5aa6d2b4e13df6e0f473abda11ea477b76d61c44"
+        },
+        "date": 1789456805326,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
