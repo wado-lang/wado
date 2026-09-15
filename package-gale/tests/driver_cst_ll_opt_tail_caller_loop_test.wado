@@ -24,38 +24,38 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "a lone segment takes neither the optional nor the loop" {
-    assert_tree(&"a", &"(start (path (seg a)))");
+    assert_tree("a", "(start (path (seg a)))");
 }
 
 test "the caller loop claims a separator the callee cannot use" {
-    assert_tree(&"a::b", &"(start (path (seg a) :: (seg b)))");
+    assert_tree("a::b", "(start (path (seg a) :: (seg b)))");
 }
 
 // The `seg` at the loop body's own tail continues into another iteration, which
 // its element list does not mention — `lower_repeat_op` hands it the prefix
 // after lowering the body, being the only place that knows those ops are one.
 test "the loop keeps claiming separators past its first iteration" {
-    assert_tree(&"a::b::c", &"(start (path (seg a) :: (seg b) :: (seg c)))");
+    assert_tree("a::b::c", "(start (path (seg a) :: (seg b) :: (seg c)))");
 }
 
 test "the optional keeps a separator its own body continues" {
-    assert_tree(&"a::<b>", &"(start (path (seg a :: (args < b >))))");
+    assert_tree("a::<b>", "(start (path (seg a :: (args < b >))))");
 }
 
 test "the optional keeps a separator its other alternative continues" {
-    assert_tree(&"a::()", &"(start (path (seg a :: (fn_ ( )))))");
+    assert_tree("a::()", "(start (path (seg a :: (fn_ ( )))))");
 }
 
 test "the two readings alternate along one path" {
     assert_tree(
-        &"a::<b>::c",
-        &"(start (path (seg a :: (args < b >)) :: (seg c)))",
+        "a::<b>::c",
+        "(start (path (seg a :: (args < b >)) :: (seg c)))",
     );
 }
 
 test "the loop runs past a segment that took its own separator" {
     assert_tree(
-        &"a::b::<c>",
-        &"(start (path (seg a) :: (seg b :: (args < c >))))",
+        "a::b::<c>",
+        "(start (path (seg a) :: (seg b :: (args < c >))))",
     );
 }

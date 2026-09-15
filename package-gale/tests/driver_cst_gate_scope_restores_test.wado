@@ -21,8 +21,8 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // form and the `{ b }` is the block the `if` owes.
 test "the ban resumes after a scope inside the head" {
     assert_tree(
-        &"if f(x) || a { b }",
-        &"(start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))",
+        "if f(x) || a { b }",
+        "(start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))",
     );
 }
 
@@ -30,11 +30,11 @@ test "the ban resumes after a scope inside the head" {
 // any head it was never on.
 test "inside the scope the braced form is allowed" {
     assert_tree(
-        &"if f(a { b }) { c }",
-        &"(start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))",
+        "if f(a { b }) { c }",
+        "(start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))",
     );
 }
 
 test "outside a head the braced form still wins" {
-    assert_tree(&"a { b } ;", &"(start (stmt (expr a { b }) ;))");
+    assert_tree("a { b } ;", "(start (stmt (expr a { b }) ;))");
 }

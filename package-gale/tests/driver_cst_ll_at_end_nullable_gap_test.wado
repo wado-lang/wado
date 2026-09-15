@@ -11,9 +11,9 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "tree: nullable rule between x and its stolen token yields c to caller" {
-    assert_tree(&"a b c", &"(s (x a b) nb c)");
+    assert_tree("a b c", "(s (x a b) nb c)");
 }
 
 test "tree: continuing alt still wins when nb consumes its token" {
-    assert_tree(&"a b w c", &"(s (x a b) (nb w) c)");
+    assert_tree("a b w c", "(s (x a b) (nb w) c)");
 }

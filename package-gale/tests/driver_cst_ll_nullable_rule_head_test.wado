@@ -18,17 +18,17 @@ fn assert_parses<S: AsStrSlice>(input: S) {
 // Control: the nullable rule matches something, so `FIRST` never has to see
 // past it.
 test "a present modifier reaches the fn" {
-    assert_parses(&"pub fn a;");
+    assert_parses("pub fn a;");
 }
 
 test "an absent modifier still reaches the fn" {
-    assert_parses(&"fn a;");
+    assert_parses("fn a;");
 }
 
 test "the sibling alternative is unaffected" {
-    assert_parses(&"type T;");
+    assert_parses("type T;");
 }
 
 test "both members in one file" {
-    assert_parses(&"type T; fn a; pub fn b;");
+    assert_parses("type T; fn a; pub fn b;");
 }

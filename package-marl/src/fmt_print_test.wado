@@ -7,47 +7,47 @@ fn roundtrip<S: AsStrSlice>(source: S) -> String {
 }
 
 test "print_document prints a paragraph with a trailing newline" {
-    assert roundtrip(&"hello world") == "hello world\n";
+    assert roundtrip("hello world") == "hello world\n";
 }
 
 test "print_document preserves soft line breaks (text_wrap: Maintain)" {
-    assert roundtrip(&"line one\nline two") == "line one\nline two\n";
+    assert roundtrip("line one\nline two") == "line one\nline two\n";
 }
 
 test "print_document separates paragraphs with exactly one blank line" {
-    assert roundtrip(&"first\n\n\n\nsecond") == "first\n\nsecond\n";
+    assert roundtrip("first\n\n\n\nsecond") == "first\n\nsecond\n";
 }
 
 test "print_document prints ATX headings" {
-    assert roundtrip(&"# Title") == "# Title\n";
-    assert roundtrip(&"##   Spaced   ##") == "## Spaced\n";
+    assert roundtrip("# Title") == "# Title\n";
+    assert roundtrip("##   Spaced   ##") == "## Spaced\n";
 }
 
 test "print_document normalizes a thematic break to ---" {
-    assert roundtrip(&"first\n\n* * *\n\nsecond") == "first\n\n---\n\nsecond\n";
+    assert roundtrip("first\n\n* * *\n\nsecond") == "first\n\n---\n\nsecond\n";
 }
 
 test "print_document normalizes single emphasis to underscores" {
-    assert roundtrip(&"a *word* b") == "a _word_ b\n";
+    assert roundtrip("a *word* b") == "a _word_ b\n";
 }
 
 test "print_document keeps the asterisk when it abuts an alphanumeric" {
-    assert roundtrip(&"*word*s") == "*word*s\n";
+    assert roundtrip("*word*s") == "*word*s\n";
 }
 
 test "print_document keeps strong emphasis as asterisks" {
-    assert roundtrip(&"a __bold__ b") == "a **bold** b\n";
+    assert roundtrip("a __bold__ b") == "a **bold** b\n";
 }
 
 test "print_document nests emphasis inside strong for a triple run" {
     // Strong stays asterisks (the default); the outer single emphasis
     // normalizes to underscore since nothing alphanumeric follows its
     // closing `*` (the GitHub-compatibility exception doesn't apply here).
-    assert roundtrip(&"***bold***") == "_**bold**_\n";
+    assert roundtrip("***bold***") == "_**bold**_\n";
 }
 
 test "print_document normalizes a fenced code block to backticks" {
-    assert roundtrip(&"```wado\nlet x = 1;\n```") == "```wado\nlet x = 1;\n```\n";
+    assert roundtrip("```wado\nlet x = 1;\n```") == "```wado\nlet x = 1;\n```\n";
 }
 
 test "print_document widens the fence when the body has its own backtick run" {
@@ -58,24 +58,24 @@ test "print_document widens the fence when the body has its own backtick run" {
 }
 
 test "print_document normalizes indented code to a 4-space-indented fenced-free block" {
-    assert roundtrip(&"    a\n    b") == "    a\n    b\n";
+    assert roundtrip("    a\n    b") == "    a\n    b\n";
 }
 
 test "print_document normalizes bullet markers to a dash" {
-    assert roundtrip(&"* a\n* b\n* c") == "- a\n- b\n- c\n";
+    assert roundtrip("* a\n* b\n* c") == "- a\n- b\n- c\n";
 }
 
 test "print_document renumbers an ordered list from its start index" {
-    assert roundtrip(&"3. a\n4. b") == "3. a\n4. b\n";
+    assert roundtrip("3. a\n4. b") == "3. a\n4. b\n";
 }
 
 test "print_document keeps a blank line between loose list items" {
-    let printed = roundtrip(&"- a\n\n- b");
+    let printed = roundtrip("- a\n\n- b");
     assert printed == "- a\n\n- b\n";
 }
 
 test "print_document indents a nested list under its parent item" {
-    let printed = roundtrip(&"- a\n  - nested\n- b");
+    let printed = roundtrip("- a\n  - nested\n- b");
     assert printed == "- a\n  - nested\n- b\n";
 }
 
@@ -131,7 +131,7 @@ test "print_document keeps a blank line between a table and a trailing paragraph
 }
 
 test "print_document normalizes a task list checkbox" {
-    assert roundtrip(&"- [ ] todo\n- [x] done") == "- [ ] todo\n- [x] done\n";
+    assert roundtrip("- [ ] todo\n- [x] done") == "- [ ] todo\n- [x] done\n";
 }
 
 test "print_document indents task list content to the bullet's own column" {
@@ -139,12 +139,12 @@ test "print_document indents task list content to the bullet's own column" {
     // continuation lines to align under it would leave residual indentation
     // on reparse relative to the parser's own (checkbox-agnostic)
     // `content_col` — see `print_item`.
-    let printed = roundtrip(&"- [ ] a\n  continued");
+    let printed = roundtrip("- [ ] a\n  continued");
     assert printed == "- [ ] a\n  continued\n";
 }
 
 test "print_document reproduces a blockquote with a > marker per line" {
-    assert roundtrip(&"> a\n> b") == "> a\n> b\n";
+    assert roundtrip("> a\n> b") == "> a\n> b\n";
 }
 
 test "print_document aligns a GFM table" {
@@ -188,7 +188,7 @@ test "print_document reproduces a raw HTML block verbatim" {
 }
 
 test "print_document keeps a code span's backslash escape verbatim" {
-    assert roundtrip(&"1\\. not a list") == "1\\. not a list\n";
+    assert roundtrip("1\\. not a list") == "1\\. not a list\n";
 }
 
 test "print_document reproduces an inline link with a title" {

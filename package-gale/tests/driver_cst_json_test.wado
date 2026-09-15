@@ -13,16 +13,16 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "json: number" {
-    assert_tree(&"42", &"(json (value 42))");
+    assert_tree("42", "(json (value 42))");
 }
 
 test "json: nested object with array" {
     assert_tree(
-        &"{\"a\":[1,true,null]}",
-        &"(json (value (obj { (pair \"a\" : (value (arr [ (value 1) , (value true) , (value null) ]))) })))",
+        "{\"a\":[1,true,null]}",
+        "(json (value (obj { (pair \"a\" : (value (arr [ (value 1) , (value true) , (value null) ]))) })))",
     );
 }
 
 test "json: empty object" {
-    assert_tree(&"{}", &"(json (value (obj { })))");
+    assert_tree("{}", "(json (value (obj { })))");
 }

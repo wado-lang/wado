@@ -11,9 +11,9 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "tree: multi-alt x yields trailing c to caller" {
-    assert_tree(&"a b c", &"(s (x a b) c)");
+    assert_tree("a b c", "(s (x a b) c)");
 }
 
 test "tree: multi-alt x takes the longer alt when caller has no c" {
-    assert_tree(&"a b c c", &"(s (x a b c) c)");
+    assert_tree("a b c c", "(s (x a b c) c)");
 }

@@ -14,19 +14,19 @@ fn dump<S: AsStrSlice>(input: S) -> String {
 }
 
 test "a char outside the intersection still reaches its own rule" {
-    let actual = dump(&"a1 z2");
+    let actual = dump("a1 z2");
     let expected = "[@0,0:1='a1',<1>,1:0]\n[@1,3:4='z2',<2>,1:3]\n[@2,5:4='<EOF>',<-1>,1:5]\n";
     assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
 }
 
 test "a char in the range intersection reaches the later rule" {
-    let actual = dump(&"e2");
+    let actual = dump("e2");
     let expected = "[@0,0:1='e2',<2>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n";
     assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
 }
 
 test "a char in the range intersection still prefers the earlier rule" {
-    let actual = dump(&"e1");
+    let actual = dump("e1");
     let expected = "[@0,0:1='e1',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n";
     assert actual == expected, `actual:\n${actual}\nexpected:\n${expected}`;
 }

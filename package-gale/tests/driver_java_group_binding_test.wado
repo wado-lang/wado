@@ -7,7 +7,7 @@ use t from "./grammars/java_group_binding.g4"
     };
 
 test "a group's action reads the group's own binding" {
-    let r = t::parse(&"b c");
+    let r = t::parse("b c");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
     assert r.output == "c\n", `output:\n${r.output}`;
 }

@@ -24,18 +24,18 @@ fn assert_parses<S: AsStrSlice>(input: S) {
 }
 
 test "the ambiguous inputs parse" {
-    assert_parses(&"x null");
-    assert_parses(&"x null null");
+    assert_parses("x null");
+    assert_parses("x null null");
 }
 
 test "ambiguous optional takes the shared token" {
-    assert_tree(&"x null", &"(s x (t null))");
+    assert_tree("x null", "(s x (t null))");
 }
 
 test "ambiguous optional takes the first shared token, the loop the rest" {
-    assert_tree(&"x null null", &"(s x (t null) (c null))");
+    assert_tree("x null null", "(s x (t null) (c null))");
 }
 
 test "optional is skipped when it cannot match" {
-    assert_tree(&"x", &"(s x)");
+    assert_tree("x", "(s x)");
 }

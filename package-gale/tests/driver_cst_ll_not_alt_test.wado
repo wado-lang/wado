@@ -24,19 +24,19 @@ fn tree_b<S: AsStrSlice>(input: S) -> String {
 }
 
 test "a `~X` alt catches what the concrete alt cannot parse" {
-    assert_tree(&tree_a(&"x=10; abc"), &"x=10; abc", &"(a (assign x = 10 ;) abc)");
+    assert_tree(&tree_a("x=10; abc"), "x=10; abc", "(a (assign x = 10 ;) abc)");
 }
 
 test "a `~X` alt still yields to the concrete alt" {
-    assert_tree(&tree_a(&"y=99;"), &"y=99;", &"(a (assign y = 99 ;))");
+    assert_tree(&tree_a("y=99;"), "y=99;", "(a (assign y = 99 ;))");
 }
 
 // `';'` in `assign` and `SEMI` in `~SEMI` are one token, so the complement
 // excludes a stray `;` — ANTLR4 reports "extraneous input ';'" (issue #1752).
 test "a `~X` alt does not catch the literal spelling of X" {
-    assert !g::parse_a(&"x=1; ;").ok(), g::to_string_tree(&g::parse_a(&"x=1; ;"));
+    assert !g::parse_a("x=1; ;").ok(), g::to_string_tree(&g::parse_a("x=1; ;"));
 }
 
 test "a labelled, wrapped wildcard alt catches what the concrete alt cannot" {
-    assert_tree(&tree_b(&"x=10; abc;"), &"x=10; abc;", &"(b (assign x = 10 ;) abc ;)");
+    assert_tree(&tree_b("x=10; abc;"), "x=10; abc;", "(b (assign x = 10 ;) abc ;)");
 }

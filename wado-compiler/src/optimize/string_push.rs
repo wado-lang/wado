@@ -69,9 +69,6 @@ impl Ctx {
         };
         for func_rc in &project.functions {
             let f = func_rc.borrow();
-            if f.is_dead {
-                continue;
-            }
             match f.compiler_item {
                 Some(CompilerItem::StringPushStr) if appends_a_string(&f) => {
                     push_str_ids.insert(f.id.expect("func_id assigned at lower"));

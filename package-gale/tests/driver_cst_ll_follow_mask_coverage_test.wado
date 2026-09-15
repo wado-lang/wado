@@ -24,13 +24,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "a mandatory continuation takes the token" {
-    assert_tree(&"keep X Y ;", &"(prog (stmt keep (a X) (t Y) ;))");
+    assert_tree("keep X Y ;", "(prog (stmt keep (a X) (t Y) ;))");
 }
 
 test "an optional continuation does not" {
-    assert_tree(&"free X Y ;", &"(prog (stmt free (a X Y) ;))");
+    assert_tree("free X Y ;", "(prog (stmt free (a X Y) ;))");
 }
 
 test "with nothing to compete for, both alternatives parse" {
-    assert_tree(&"free X ;", &"(prog (stmt free (a X) ;))");
+    assert_tree("free X ;", "(prog (stmt free (a X) ;))");
 }

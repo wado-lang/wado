@@ -12,15 +12,15 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The two opaque alts: expansion of `a` / `b` separates them on the second token.
 test "tree: X Y enters the first opaque rule" {
-    assert_tree(&"X Y", &"(r (e (a X Y)))");
+    assert_tree("X Y", "(r (e (a X Y)))");
 }
 
 test "tree: X Z enters the second opaque rule" {
-    assert_tree(&"X Z", &"(r (e (b X Z)))");
+    assert_tree("X Z", "(r (e (b X Z)))");
 }
 
 // The at-end alt: complete after `X`, so no branch of the expanded
 // dispatch claims it.
 test "tree: a bare X takes the at-end alt" {
-    assert_tree(&"X", &"(r (e X))");
+    assert_tree("X", "(r (e X))");
 }

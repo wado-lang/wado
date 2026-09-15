@@ -16,17 +16,17 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "lr-overlap: bare atom" {
-    assert_tree(&"5", &"(e 5)");
+    assert_tree("5", "(e 5)");
 }
 
 test "lr-overlap: indexed picks the INT-second alt" {
-    assert_tree(&"5[3]", &"(e (e 5) [ (e 3) ])");
+    assert_tree("5[3]", "(e (e 5) [ (e 3) ])");
 }
 
 test "lr-overlap: empty index picks the ']'-second alt" {
-    assert_tree(&"5[]", &"(e (e 5) [ ])");
+    assert_tree("5[]", "(e (e 5) [ ])");
 }
 
 test "lr-overlap: left-associative chain mixes both suffixes" {
-    assert_tree(&"5[][3]", &"(e (e (e 5) [ ]) [ (e 3) ])");
+    assert_tree("5[][3]", "(e (e (e 5) [ ]) [ (e 3) ])");
 }

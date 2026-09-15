@@ -1263,7 +1263,7 @@ impl LenientFromStr for u64 {
 fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_repr: String) {
     let mark = f.mark();
     if kind matches { NaN } {
-        f.buf.push_str(&"NaN");
+        f.buf.push_str("NaN");
     } else if kind matches { Inf } {
         f.buf.push_str(&if is_neg { "-inf" } else { "inf" });
     } else {
@@ -1276,9 +1276,9 @@ fn fmt_float_special(f: &mut Formatter, is_neg: bool, kind: SpecialKind, zero_re
 /// Write sign prefix ("-" or "+").
 fn fmt_float_sign(f: &mut Formatter, is_neg: bool) {
     if is_neg {
-        f.buf.push_str(&"-");
+        f.buf.push_str("-");
     } else if f.sign_plus {
-        f.buf.push_str(&"+");
+        f.buf.push_str("+");
     }
 }
 
@@ -1341,7 +1341,7 @@ impl f32 {
             write_exp(f.buf, d, p, n_digits, false);
         } else if p >= 0 {
             write_decimal(f.buf, d, p, n_digits);
-            f.buf.push_str(&".0");
+            f.buf.push_str(".0");
         } else {
             write_decimal(f.buf, d, p, n_digits);
         }
@@ -1667,7 +1667,7 @@ impl f64 {
             write_exp(f.buf, d, p, n_digits, false);
         } else if p >= 0 {
             write_decimal(f.buf, d, p, n_digits);
-            f.buf.push_str(&".0");
+            f.buf.push_str(".0");
         } else {
             write_decimal(f.buf, d, p, n_digits);
         }
@@ -1684,9 +1684,9 @@ impl f64 {
             }
             let mark = f.mark();
             fmt_float_sign(f, is_neg);
-            f.buf.push_str(&"0");
+            f.buf.push_str("0");
             if precision > 0 {
-                f.buf.push_str(&".");
+                f.buf.push_str(".");
                 f.buf.append_byte_filled(b'0', precision);
             }
             f.apply_padding(mark);
@@ -1714,13 +1714,13 @@ impl f64 {
             }
             let mark = f.mark();
             fmt_float_sign(f, is_neg);
-            f.buf.push_str(&"0");
+            f.buf.push_str("0");
             if precision > 0 {
-                f.buf.push_str(&".");
+                f.buf.push_str(".");
                 f.buf.append_byte_filled(b'0', precision);
             }
             f.buf.push_str(&if upper_bool { "E" } else { "e" });
-            f.buf.push_str(&"0");
+            f.buf.push_str("0");
             f.apply_padding(mark);
             return;
         }
@@ -1992,7 +1992,7 @@ impl LenientFromStr for f64 {
 
 impl Display for () {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&"()");
+        f.write_str("()");
     }
 }
 
@@ -2076,7 +2076,7 @@ impl Display for f64 {
 
 impl Inspect for () {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"()");
+        f.write_str("()");
     }
 }
 
@@ -2099,7 +2099,7 @@ impl Ord for () {
 /// so no canonical lane interpretation exists to print.
 impl Inspect for v128 {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"v128(0x");
+        f.write_str("v128(0x");
         for let mut i = 0; i < 16; i += 1 {
             // A lane index is an immediate operand, so the sixteen are spelled
             // out rather than computed.
@@ -2121,7 +2121,7 @@ impl Inspect for v128 {
                 14 => builtin::i8x16_extract_lane_u(14, *self),
                 _ => builtin::i8x16_extract_lane_u(15, *self),
             }) as u8;
-            f.write_str(&`${byte:02x}`);
+            f.write_str(`${byte:02x}`);
         }
         f.write_char(')');
     }

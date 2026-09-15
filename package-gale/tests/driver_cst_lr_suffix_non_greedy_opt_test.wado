@@ -17,17 +17,17 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "no suffix: the else belongs to the caller" {
-    assert_tree(&"a else c", &"(s (e a) else c)");
+    assert_tree("a else c", "(s (e a) else c)");
 }
 
 test "the suffix's ?? skips so the caller gets its else" {
-    assert_tree(&"a if b else c", &"(s (e (e a) if (e b)) else c)");
+    assert_tree("a if b else c", "(s (e (e a) if (e b)) else c)");
 }
 
 test "the suffix's ?? enters when a second else covers the caller" {
-    assert_tree(&"a if b else c else d", &"(s (e (e a) if (e b) else (e c)) else d)");
+    assert_tree("a if b else c else d", "(s (e (e a) if (e b) else (e c)) else d)");
 }
 
 test "a climbing suffix leaves the else for the caller" {
-    assert_tree(&"a if b if c else d", &"(s (e (e a) if (e (e b) if (e c))) else d)");
+    assert_tree("a if b if c else d", "(s (e (e a) if (e (e b) if (e c))) else d)");
 }

@@ -15,13 +15,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "tournament: assignment wins on '='" {
-    assert_tree(&"x = 5", &"(prog (stat x = (expr 5)))");
+    assert_tree("x = 5", "(prog (stat x = (expr 5)))");
 }
 
 test "tournament: bare identifier expr" {
-    assert_tree(&"x", &"(prog (stat (expr x)))");
+    assert_tree("x", "(prog (stat (expr x)))");
 }
 
 test "tournament: bare integer expr" {
-    assert_tree(&"42", &"(prog (stat (expr 42)))");
+    assert_tree("42", "(prog (stat (expr 42)))");
 }

@@ -10,11 +10,11 @@ use jm from "./grammars/java_lex_members.g4"
     };
 
 test "a java lexer member gates a predicate and is written by an action" {
-    let deep = jm::parse_s(&"aab");
+    let deep = jm::parse_s("aab");
     assert deep.ok(), "clean parse";
     assert deep.output == "aaB", `two pushes let the predicate through, got '${deep.output}'`;
 
-    let shallow = jm::parse_s(&"ab");
+    let shallow = jm::parse_s("ab");
     assert shallow.ok(), "clean parse";
     assert shallow.output == "ac", `one push leaves the predicate false, got '${shallow.output}'`;
 }

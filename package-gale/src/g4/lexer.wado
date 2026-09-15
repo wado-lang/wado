@@ -165,8 +165,8 @@ impl G4Lexer {
         // skips the char comparison for the overwhelming majority of
         // identifiers, which are neither 7 nor 8 chars long.
         let kind = match buf.len() {
-            7 => if buf_eq(&buf, &"grammar") { G4Token::Grammar } else { G4Token::Identifier },
-            8 => if buf_eq(&buf, &"fragment") { G4Token::Fragment } else { G4Token::Identifier },
+            7 => if buf_eq(&buf, "grammar") { G4Token::Grammar } else { G4Token::Identifier },
+            8 => if buf_eq(&buf, "fragment") { G4Token::Fragment } else { G4Token::Identifier },
             _ => G4Token::Identifier,
         };
         return Token::new(kind as i32, owned_slice(buf), Span::new(start, self.pos));

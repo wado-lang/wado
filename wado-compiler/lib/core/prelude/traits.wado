@@ -490,12 +490,12 @@ impl<T, F> Member for StructField<T, F> {
 internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
     match v {
         Option::Some(s) => {
-            f.write_str(&"Option::Some(");
+            f.write_str("Option::Some(");
             s.inspect(f);
-            f.write_str(&")");
+            f.write_str(")");
         },
         Option::None => {
-            f.write_str(&"Option::None");
+            f.write_str("Option::None");
         },
     }
 }
@@ -507,7 +507,7 @@ internal fn struct_open(f: &mut Formatter, name: String) {
         return;
     }
     f.write_str(&name);
-    f.write_str(&" { ");
+    f.write_str(" { ");
 }
 
 /// Writes the separator before a field, then its `name: ` label.
@@ -515,16 +515,16 @@ internal fn struct_field(f: &mut Formatter, name: String, first: bool) {
     if f.alternate {
         f.write_newline_indent();
     } else if !first {
-        f.write_str(&", ");
+        f.write_str(", ");
     }
     f.write_str(&name);
-    f.write_str(&": ");
+    f.write_str(": ");
 }
 
 /// Closes the field a `struct_field` label opened.
 internal fn struct_field_end(f: &mut Formatter) {
     if f.alternate {
-        f.write_str(&",");
+        f.write_str(",");
     }
 }
 
@@ -534,7 +534,7 @@ internal fn struct_close(f: &mut Formatter) {
         f.close_brace("}");
         return;
     }
-    f.write_str(&" }");
+    f.write_str(" }");
 }
 
 impl<T, F> Inspect for StructField<T, F> {
@@ -825,25 +825,25 @@ fn inspect_struct_alternate<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect>(
             }
             f.write_newline_indent();
             f.write_str(&field.name());
-            f.write_str(&": ");
+            f.write_str(": ");
             field.get(v).inspect(f);
-            f.write_str(&",");
+            f.write_str(",");
         }
     }
     if wrote_field {
         if has_secret {
             f.write_newline_indent();
-            f.write_str(&"..");
+            f.write_str("..");
         }
         f.close_brace("}");
         return;
     }
     f.write_str(&Reflect::<S>::type_name());
     if has_secret {
-        f.write_str(&" { .. }");
+        f.write_str(" { .. }");
         return;
     }
-    f.write_str(&" {}");
+    f.write_str(" {}");
 }
 
 impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
@@ -860,25 +860,25 @@ impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for S {
                 has_secret = true;
             } else {
                 if wrote_field {
-                    f.write_str(&", ");
+                    f.write_str(", ");
                 } else {
-                    f.write_str(&" { ");
+                    f.write_str(" { ");
                     wrote_field = true;
                 }
                 f.write_str(&field.name());
-                f.write_str(&": ");
+                f.write_str(": ");
                 field.get(self).inspect(f);
             }
         }
         if wrote_field {
             if has_secret {
-                f.write_str(&", ..");
+                f.write_str(", ..");
             }
-            f.write_str(&" }");
+            f.write_str(" }");
         } else if has_secret {
-            f.write_str(&" { .. }");
+            f.write_str(" { .. }");
         } else {
-            f.write_str(&" {}");
+            f.write_str(" {}");
         }
     }
 }
@@ -890,7 +890,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
         for let case of ReflectEnum::<E>::members() {
             if case.holds(self) {
                 f.write_str(&Reflect::<E>::type_name());
-                f.write_str(&"::");
+                f.write_str("::");
                 f.write_str(&case.name());
             }
         }
@@ -904,13 +904,13 @@ fn inspect_variant_payload<P: Inspect>(payload: &P, f: &mut Formatter) {
         f.open_brace("(");
         f.write_newline_indent();
         payload.inspect(f);
-        f.write_str(&",");
+        f.write_str(",");
         f.close_brace(")");
         return;
     }
-    f.write_str(&"(");
+    f.write_str("(");
     payload.inspect(f);
-    f.write_str(&")");
+    f.write_str(")");
 }
 
 /// Variant debug formatting derived over `ReflectVariant` (WEP 2026-06-13):
@@ -920,7 +920,7 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> Inspect for V {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
                 f.write_str(&Reflect::<V>::type_name());
-                f.write_str(&"::");
+                f.write_str("::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
                     inspect_variant_payload(&case.extract(self), f);
@@ -938,17 +938,17 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
         for let bit of ReflectFlags::<L>::members() {
             if bit.is_set(self) {
                 if wrote_bit {
-                    f.write_str(&" | ");
+                    f.write_str(" | ");
                 }
                 f.write_str(&Reflect::<L>::type_name());
-                f.write_str(&"::");
+                f.write_str("::");
                 f.write_str(&bit.name());
                 wrote_bit = true;
             }
         }
         if !wrote_bit {
             f.write_str(&Reflect::<L>::type_name());
-            f.write_str(&"::none()");
+            f.write_str("::none()");
         }
     }
 }
@@ -963,7 +963,7 @@ impl<N: ReflectNewtype<Base = B>, B: Inspect> Inspect for N {
     fn inspect(&self, f: &mut Formatter) {
         let base = *self as B;
         base.inspect(f);
-        f.write_str(&" as ");
+        f.write_str(" as ");
         f.write_str(&Reflect::<N>::type_name());
     }
 }

@@ -16,13 +16,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "at-end: paren entry with a bare typespec" {
-    assert_tree(&"( A )", &"(prog (entry ( (typespec A) )))");
+    assert_tree("( A )", "(prog (entry ( (typespec A) )))");
 }
 
 test "at-end: `new` entry, typespec stops before the array suffix" {
-    assert_tree(&"new A [ 5 ]", &"(prog (entry new (typespec A) [ 5 ]))");
+    assert_tree("new A [ 5 ]", "(prog (entry new (typespec A) [ 5 ]))");
 }
 
 test "at-end: typespec takes its own array suffix" {
-    assert_tree(&"( A [ ] )", &"(prog (entry ( (typespec A [ ]) )))");
+    assert_tree("( A [ ] )", "(prog (entry ( (typespec A [ ]) )))");
 }

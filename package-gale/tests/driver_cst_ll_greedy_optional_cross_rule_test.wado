@@ -28,26 +28,26 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // Control: with no inner `if`, the `else` is unambiguously the statement's.
 test "the statement claims an else it alone can take" {
-    assert_tree(&"let e = 1 else { 2 } ;", &"(prog (stmt let e = (expression 1) else (block { 2 }) ;))");
+    assert_tree("let e = 1 else { 2 } ;", "(prog (stmt let e = (expression 1) else (block { 2 }) ;))");
 }
 
 test "the inner if claims the else, and the chain continues" {
     assert_tree(
-        &"let e = if z { 1 } else { 2 } / 3 ;",
-        &"(prog (stmt let e = (expression (expression (ifExpr if z (block { 1 }) else (block { 2 }))) / (expression 3)) ;))",
+        "let e = if z { 1 } else { 2 } / 3 ;",
+        "(prog (stmt let e = (expression (expression (ifExpr if z (block { 1 }) else (block { 2 }))) / (expression 3)) ;))",
     );
 }
 
 test "the inner if claims the else with nothing after it" {
     assert_tree(
-        &"let e = if z { 1 } else { 2 } ;",
-        &"(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) ;))",
+        "let e = if z { 1 } else { 2 } ;",
+        "(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) ;))",
     );
 }
 
 test "two elses: the inner if takes the first, the statement the second" {
     assert_tree(
-        &"let e = if z { 1 } else { 2 } else { 3 } ;",
-        &"(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) else (block { 3 }) ;))",
+        "let e = if z { 1 } else { 2 } else { 3 } ;",
+        "(prog (stmt let e = (expression (ifExpr if z (block { 1 }) else (block { 2 }))) else (block { 3 }) ;))",
     );
 }

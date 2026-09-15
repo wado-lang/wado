@@ -125,89 +125,89 @@ test "every strategy the dump reports is one the emitter emitted" {
 }
 
 test "lexer dump names the grammar and summarizes strategies" {
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, &"grammar T (lexer)"), report;
-    assert str_contains(&report, &"rule ID — matcher try_ID"), report;
-    assert str_contains(&report, &"strategies:"), report;
-    assert str_contains(&report, &"routes: matcher 1"), report;
+    assert str_contains(&report, "grammar T (lexer)"), report;
+    assert str_contains(&report, "rule ID — matcher try_ID"), report;
+    assert str_contains(&report, "strategies:"), report;
+    assert str_contains(&report, "routes: matcher 1"), report;
 }
 
 test "lexer dump reports a tail alternation as maximal munch" {
     // `('0' | [1-9] [0-9]*)` — the arms reach different lengths, and nothing
     // follows, so every arm is scanned and the longest wins.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : INT ;
 INT : '0' | [1-9] [0-9]* ;");
 
-    assert str_contains(&report, &"maximal munch"), report;
-    assert str_contains(&report, &"maximal munch 1"), report;
+    assert str_contains(&report, "maximal munch"), report;
+    assert str_contains(&report, "maximal munch 1"), report;
 }
 
 test "lexer dump reports equal-length arms as first-match" {
     // Both arms consume exactly one char, so longest and first-match coincide
     // and the cheaper emit stays byte-identical.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : AB ;
 AB : 'a' | 'b' ;");
 
-    assert str_contains(&report, &"first-match: every arm consumes the same fixed length"), report;
+    assert str_contains(&report, "first-match: every arm consumes the same fixed length"), report;
 }
 
 test "lexer dump reports a called rule's alternation as not-tail" {
     // `B` is entered from `A` with `'z'` still to consume, so its body
     // alternation cannot take maximal munch however long an arm reaches.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : A ;
 A : B 'z' ;
 B : 'a' | 'ab' ;");
 
-    assert str_contains(&report, &"first-match: not in tail position"), report;
+    assert str_contains(&report, "first-match: not in tail position"), report;
 }
 
 test "lexer dump reports a greedy repeat whose inner cannot eat the suffix" {
     // `~'*'` is provably disjoint from the `'*'`-led suffix, so the plain loop
     // already stops where the suffix must start.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : CMT ;
 CMT : '/*' ~'*'* '*/' ;");
 
-    assert str_contains(&report, &"repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
-    assert str_contains(&report, &"plain 1, lookahead-aware 0"), report;
+    assert str_contains(&report, "repeat ~'*'* then '*/' — plain loop: the inner cannot eat the suffix's first char"), report;
+    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports a lookahead-aware greedy repeat" {
     // `.` matches the `'c'` the suffix needs, so a plain greedy loop would eat
     // it and strand the suffix at end-of-input — the over-shoot the forward
     // scan with accept-state tracking exists for.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .+ 'c' ;");
 
-    assert str_contains(&report, &"lookahead-aware: the inner can eat a char the suffix needs"), report;
-    assert str_contains(&report, &"lookahead-aware 1"), report;
+    assert str_contains(&report, "lookahead-aware: the inner can eat a char the suffix needs"), report;
+    assert str_contains(&report, "lookahead-aware 1"), report;
 }
 
 test "lexer dump reports a non-greedy repeat" {
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : CMT ;
 CMT : '/*' .*? '*/' ;");
 
-    assert str_contains(&report, &"non-greedy: min-match loop"), report;
-    assert str_contains(&report, &"non-greedy repeat: 1"), report;
+    assert str_contains(&report, "non-greedy: min-match loop"), report;
+    assert str_contains(&report, "non-greedy repeat: 1"), report;
 }
 
 test "lexer dump reports arm scoring for an alternation with a suffix" {
     // `('a' | 'ab') 'bc'` on `abbc` needs the second arm, which is neither the
     // first to match nor decidable without the suffix.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | 'ab') 'bc' ;");
 
-    assert str_contains(&report, &"alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
-    assert str_contains(&report, &"arm scoring 1"), report;
+    assert str_contains(&report, "alternation ('a' | 'ab') then 'bc' — arm scoring"), report;
+    assert str_contains(&report, "arm scoring 1"), report;
 }
 
 test "lexer dump reports a scored alternation's suffix once" {
@@ -215,12 +215,12 @@ test "lexer dump reports a scored alternation's suffix once" {
     // and the element loop `continue`s, so the sequence commits it exactly once.
     // Reporting it from both places would double every construct behind a
     // scored alternation, and double the summary's tally with it.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | 'ab') [0-9]* 'z' ;");
 
-    assert str_count(&report, &"repeat [0-9]* then 'z'") == 1, report;
-    assert str_contains(&report, &"greedy repeat: plain 1"), report;
+    assert str_count(&report, "repeat [0-9]* then 'z'") == 1, report;
+    assert str_contains(&report, "greedy repeat: plain 1"), report;
 }
 
 test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
@@ -228,88 +228,88 @@ test "lexer dump sees a predicate re-based onto a non-greedy repeat's rest" {
     // so it carries the alt's later predicates onto the rest alternative. The
     // `{true}?` therefore lands between the `.*` and the alt's end, which is
     // what keeps that repeat on the plain loop.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : S ;
 S : 'a' .*? .* {true}? 'x' ;");
 
-    assert str_contains(&report, &"repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
-    assert str_contains(&report, &"plain 1, lookahead-aware 0"), report;
+    assert str_contains(&report, "repeat .* then 'x' — plain loop: a semantic predicate follows the repeat"), report;
+    assert str_contains(&report, "plain 1, lookahead-aware 0"), report;
 }
 
 test "lexer dump reports disjoint arms with a suffix as first-match" {
     // The arms cannot both match at the same position, so which one wins is
     // not a decision and the scoring scan is not needed.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | 'bcd') 'z' ;");
 
-    assert str_contains(&report, &"first-match: no two arms can match at the same position"), report;
+    assert str_contains(&report, "first-match: no two arms can match at the same position"), report;
 }
 
 test "lexer dump reports the keyword classifier and its carrier" {
     // `IF` is a fixed per-char pattern, reclassified out of a match by the
     // later, wider `ID`.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : IF ID ;
 IF : [iI] [fF] ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, &"rule IF — keyword classifier (carrier ID)"), report;
-    assert str_contains(&report, &"keyword classifier 1"), report;
+    assert str_contains(&report, "rule IF — keyword classifier (carrier ID)"), report;
+    assert str_contains(&report, "keyword classifier 1"), report;
 }
 
 test "lexer dump reports a rule the shared literal matcher covers" {
     // A concatenated body is deduped, not aliased, so the literal covers it.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : 'xy' X ;
 X : 'x' 'y' ;");
 
-    assert str_contains(&report, &"shared literal matcher (TK_LIT_XY)"), report;
+    assert str_contains(&report, "shared literal matcher (TK_LIT_XY)"), report;
 }
 
 test "lexer dump reports a rule the parser also writes inline keeping its matcher" {
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : 'x' X ;
 X : 'x' ;");
 
-    assert str_contains(&report, &"rule X"), report;
-    assert !str_contains(&report, &"shared literal matcher"), report;
+    assert str_contains(&report, "rule X"), report;
+    assert !str_contains(&report, "shared literal matcher"), report;
 }
 
 test "lexer dump separates inlined from recursive fragments" {
     // `NEST` references itself, so it keeps a matcher; `D` is inlined at the
     // use site and its constructs are reported there, under the `D › ` prefix.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : N ;
 N : NEST ;
 fragment NEST : '(' NEST* ')' ;
 fragment D : [0-9] ;
 NUM : D+ ;");
 
-    assert str_contains(&report, &"rule NEST — recursive fragment: matcher try_NEST"), report;
-    assert str_contains(&report, &"rule D — fragment: inlined at each use site"), report;
-    assert str_contains(&report, &"recursive fragment 1"), report;
+    assert str_contains(&report, "rule NEST — recursive fragment: matcher try_NEST"), report;
+    assert str_contains(&report, "rule D — fragment: inlined at each use site"), report;
+    assert str_contains(&report, "recursive fragment 1"), report;
 }
 
 test "lexer dump reports a tokens-block entry as a virtual token" {
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 tokens { VT }
 r : ID ;
 ID : [a-z]+ ;");
 
-    assert str_contains(&report, &"rule VT — virtual token: no text to match"), report;
-    assert str_contains(&report, &"virtual 1"), report;
+    assert str_contains(&report, "rule VT — virtual token: no text to match"), report;
+    assert str_contains(&report, "virtual 1"), report;
 }
 
 test "lexer dump reports an ATN-class rule as routed to latn_match" {
     // A non-greedy repeat whose body recurses into its own rule is the class
     // static lexing cannot decide.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : CMT ;
 CMT : '/*' (CMT | .)+? '*/' ;");
 
-    assert str_contains(&report, &"rule CMT — ATN-class: latn_match (latn rule 0)"), report;
-    assert str_contains(&report, &"ATN-class 1"), report;
+    assert str_contains(&report, "rule CMT — ATN-class: latn_match (latn rule 0)"), report;
+    assert str_contains(&report, "ATN-class 1"), report;
 }
 
 test "lexer dump scores a predicate-carrying alternation by length" {
@@ -317,19 +317,19 @@ test "lexer dump scores a predicate-carrying alternation by length" {
     // arm matches — never how the arms compare on length. The carve-out in
     // `lexer_alts_scan` answers the routing question, where `latn_match` cannot
     // run a predicate; both emit decisions read `lexer_alts_lengths`.
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : I ;
 I : ('a' | {true}? 'ab') 'bc' ;");
 
-    assert !str_contains(&report, &"an arm carries a semantic predicate"), report;
-    assert str_contains(&report, &"arm scoring"), report;
+    assert !str_contains(&report, "an arm carries a semantic predicate"), report;
+    assert str_contains(&report, "arm scoring"), report;
 }
 
 test "lexer dump names a rule's constructs with its own element text" {
-    let report = lexer_dump(&"grammar T;
+    let report = lexer_dump("grammar T;
 r : WS ;
 WS : [ \\t\\r\\n]+ -> skip ;");
 
-    assert str_contains(&report, &"repeat [ \\t\\r\\n]+"), report;
-    assert str_contains(&report, &"plain loop: nothing follows the repeat"), report;
+    assert str_contains(&report, "repeat [ \\t\\r\\n]+"), report;
+    assert str_contains(&report, "plain loop: nothing follows the repeat"), report;
 }

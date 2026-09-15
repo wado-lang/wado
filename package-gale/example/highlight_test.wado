@@ -37,16 +37,16 @@ test "an identifier is a parameter or a variable by a token past a nested paren"
     // `=>` that separates them is reachable only by matching brackets. That is
     // past a lexer, which classifies the identifier before the `=>` exists, and
     // past a regex, whose `[^)]*` stops at the inner `)`.
-    let param = highlight_page(&"<script>let f = (a = (1)) => a;</script>");
+    let param = highlight_page("<script>let f = (a = (1)) => a;</script>");
     assert param.contains(`<span class="variable parameter">a</span>`), param;
 
-    let variable = highlight_page(&"<script>let f = ((a));</script>");
+    let variable = highlight_page("<script>let f = ((a));</script>");
     assert !variable.contains("parameter"), variable;
     assert variable.contains(`<span class="variable">a</span>`), variable;
 }
 
 test "one CSS identifier token takes three classes by position" {
-    let html = highlight_page(&"<style>color { color: color; }</style>");
+    let html = highlight_page("<style>color { color: color; }</style>");
     assert html.contains(`<span class="type">color</span>`), html;
     assert html.contains(`<span class="property">color</span>`), html;
     assert html.contains(`<span class="constant">color</span>`), html;
@@ -56,10 +56,10 @@ test "each language keeps its own token space" {
     // `;` is `CSS_SEMI` inside `<style>` and `JS_SEMI` inside `<script>`. The
     // lexer modes keep them apart; without them one language's rules would
     // classify the other's text.
-    let css = highlight_page(&"<style>a { b: c; }</style>");
+    let css = highlight_page("<style>a { b: c; }</style>");
     assert css.contains(`<span class="type">a</span>`), css;
 
-    let js = highlight_page(&"<script>a;</script>");
+    let js = highlight_page("<script>a;</script>");
     assert js.contains(`<span class="variable">a</span>`), js;
 }
 
@@ -76,7 +76,7 @@ test "every form CSS allows keeps its classes" {
         assert html.contains(`<span class="property">b</span>`), html;
         assert html.contains(`<span class="constant">c</span>`), html;
     }
-    let empty = highlight_page(&"<style>a { }</style>");
+    let empty = highlight_page("<style>a { }</style>");
     assert empty.contains(`<span class="type">a</span>`), empty;
 }
 
@@ -84,7 +84,7 @@ test "a context capture needs its enclosing rule to have parsed" {
     // What classifying from a parse costs, on input the language really does
     // reject. `b` keeps no class because nothing placed it under `declaration`;
     // the defaults and the text survive, so the file stays readable while typed.
-    let half_written = highlight_page(&"<style>a { b: }</style>");
+    let half_written = highlight_page("<style>a { b: }</style>");
     assert !half_written.contains(`<span class="property">b</span>`), half_written;
     assert half_written.contains(`<span class="punctuation delimiter">:</span>`), half_written;
     assert plain_text(&half_written) == "<style>a { b: }</style>", plain_text(&half_written);
@@ -95,16 +95,16 @@ test "a closing tag ends its block from inside a comment or a string" {
     // visible; otherwise the mode never pops and the rest of the document is
     // lexed as CSS or JavaScript. See "Embedding a language" in `import.md`.
     let tail = `<span class="tag">&lt;p&gt;</span>x<span class="tag">&lt;/p&gt;</span>`;
-    let line_comment = highlight_page(&"<script>// note </script><p>x</p>");
+    let line_comment = highlight_page("<script>// note </script><p>x</p>");
     assert line_comment.ends_with(tail), line_comment;
-    let string = highlight_page(&`<script>let s = "</script><p>x</p>`);
+    let string = highlight_page(`<script>let s = "</script><p>x</p>`);
     assert string.ends_with(tail), string;
-    let block_comment = highlight_page(&"<style>a { /* x </style><p>x</p>");
+    let block_comment = highlight_page("<style>a { /* x </style><p>x</p>");
     assert block_comment.ends_with(tail), block_comment;
 }
 
 test "an ordinary comment and string still take their classes" {
-    let page = highlight_page(&`<style>a { /* c */ b: c }</style><script>let s = "hi";</script>`);
+    let page = highlight_page(`<style>a { /* c */ b: c }</style><script>let s = "hi";</script>`);
     assert page.contains(`<span class="comment">/* c */</span>`), page;
     assert page.contains(`<span class="string">&quot;hi&quot;</span>`), page;
 }

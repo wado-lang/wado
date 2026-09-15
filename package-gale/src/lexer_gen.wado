@@ -222,7 +222,7 @@ pub fn token_slot_order(lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToke
         }
     }
     slots.push(TokenSlot::Eof);
-    if !rule_name_exists(lexer_rules, &"ERROR") {
+    if !rule_name_exists(lexer_rules, "ERROR") {
         slots.push(TokenSlot::Error);
     }
     for let mut i = 0; i < lit_tokens.len(); i += 1 {
@@ -240,15 +240,15 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
             Rule(ri) => {
                 let rule = &lexer_rules[ri];
                 let name = `TK_${rule.name}`;
-                let mut g = GlobalSpec::new(&name, &"i32", &init, Vis::Pub);
+                let mut g = GlobalSpec::new(&name, "i32", &init, Vis::Pub);
                 if rule.is_virtual {
-                    g.set_trailing_comment(&"virtual");
+                    g.set_trailing_comment("virtual");
                 }
                 g.emit(w);
             },
-            Eof => GlobalSpec::new(&"TK_EOF", &"i32", &init, Vis::Pub).emit(w),
-            Error => GlobalSpec::new(&"TK_ERROR", &"i32", &init, Vis::Pub).emit(w),
-            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, &"i32", &init, Vis::Pub).emit(w),
+            Eof => GlobalSpec::new("TK_EOF", "i32", &init, Vis::Pub).emit(w),
+            Error => GlobalSpec::new("TK_ERROR", "i32", &init, Vis::Pub).emit(w),
+            Lit(li) => GlobalSpec::new(&lit_tokens[li].const_name, "i32", &init, Vis::Pub).emit(w),
         }
         idx += 1;
     }
@@ -268,13 +268,13 @@ pub fn gen_token_constants(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, li
                 if n < 1 {
                     continue;
                 }
-                if rule_name_exists(lexer_rules, &`${n}`) {
+                if rule_name_exists(lexer_rules, `${n}`) {
                     continue;
                 }
                 if emitted_numeric.contains(&n) {
                     continue;
                 }
-                GlobalSpec::new(&`TK_${n}`, &"i32", &`${n - 1}`, Vis::Pub).emit(w);
+                GlobalSpec::new(`TK_${n}`, "i32", `${n - 1}`, Vis::Pub).emit(w);
                 emitted_numeric.push(n);
             }
         }
@@ -412,63 +412,63 @@ pub fn lexer_surface(
 
 fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSurface) {
     let vis = if surface.base_driven { Vis::Pub } else { Vis::Private };
-    let mut s = StructSpec::new(&"Lexer", vis);
-    s.add_field(&"chars", &"List<char>");
-    s.add_field(&"pos", &"i32");
+    let mut s = StructSpec::new("Lexer", vis);
+    s.add_field("chars", "List<char>");
+    s.add_field("pos", "i32");
     for let mf of &members.fields {
         s.add_field_default(&mf.name, &mf.ty, &mf.init);
     }
     if surface.sink {
-        s.add_field_default(&"act_output", &"String", &"\"\"");
+        s.add_field_default("act_output", "String", "\"\"");
     }
     if surface.commit_latches {
-        s.add_field_default(&"act_type", &"i32", &"-1");
-        s.add_field_default(&"act_channel", &"i32", &"-1");
-        s.add_field_default(&"act_skip", &"bool", &"false");
-        s.add_field_default(&"act_more", &"bool", &"false");
+        s.add_field_default("act_type", "i32", "-1");
+        s.add_field_default("act_channel", "i32", "-1");
+        s.add_field_default("act_skip", "bool", "false");
+        s.add_field_default("act_more", "bool", "false");
     }
     if surface.mode_commands {
-        s.add_field_default(&"act_push_mode", &"i32", &"-1");
-        s.add_field_default(&"act_pop_mode", &"bool", &"false");
-        s.add_field_default(&LEXER_SET_MODE_FIELD, &"i32", &"-1");
+        s.add_field_default("act_push_mode", "i32", "-1");
+        s.add_field_default("act_pop_mode", "bool", "false");
+        s.add_field_default(&LEXER_SET_MODE_FIELD, "i32", "-1");
         // ANTLR's `_modeStack.size()`, which a base branches on.
-        s.add_field_default(&"act_mode_depth", &"i32", &"0");
+        s.add_field_default("act_mode_depth", "i32", "0");
     }
     if surface.current_mode {
         // ANTLR's `_mode`: the mode the token is being matched in, seeded per
         // token. Only a body that reads `$mode` needs it.
-        s.add_field_default(&LEXER_MODE_FIELD, &"i32", &"0");
+        s.add_field_default(&LEXER_MODE_FIELD, "i32", "0");
     }
     s.emit(w);
     w.blank();
 
-    ImplSpec::new(&"Lexer").emit_begin(w);
+    ImplSpec::new("Lexer").emit_begin(w);
 
-    let mut f = FnSpec::new(&"new");
-    f.add_generic(&"S: AsStrSlice");
-    f.add_param(&"input", &"S");
-    f.set_return_type(&"Lexer");
+    let mut f = FnSpec::new("new");
+    f.add_generic("S: AsStrSlice");
+    f.add_param("input", "S");
+    f.set_return_type("Lexer");
     f.emit_begin(w);
-    w.line(&"return Lexer { chars: input.to_chars(), pos: 0 };");
+    w.line("return Lexer { chars: input.to_chars(), pos: 0 };");
     w.end();
     w.blank();
 
-    let mut f2 = FnSpec::new(&"at_end");
-    f2.set_receiver(&"&self");
-    f2.set_return_type(&"bool");
+    let mut f2 = FnSpec::new("at_end");
+    f2.set_receiver("&self");
+    f2.set_return_type("bool");
     f2.emit_begin(w);
-    w.line(&"return self.pos >= self.chars.len();");
+    w.line("return self.pos >= self.chars.len();");
     w.end();
     w.blank();
 
-    let mut f3 = FnSpec::new(&"slice");
-    f3.set_receiver(&"&self");
-    f3.add_param(&"start", &"i32");
-    f3.add_param(&"end", &"i32");
-    f3.set_return_type(&"LexerSlice");
-    f3.add_stores(&"self");
+    let mut f3 = FnSpec::new("slice");
+    f3.set_receiver("&self");
+    f3.add_param("start", "i32");
+    f3.add_param("end", "i32");
+    f3.set_return_type("LexerSlice");
+    f3.add_stores("self");
     f3.emit_begin(w);
-    w.line(&"return LexerSlice::new(&self.chars, start, end);");
+    w.line("return LexerSlice::new(&self.chars, start, end);");
     w.end();
 
     if surface.commit_latches {
@@ -490,11 +490,11 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
 /// `reset_actions`: the sink is the whole run's output, not one token's.
 fn gen_lexer_emit_fn(w: &mut CodeWriter, vis: Vis) {
     w.blank();
-    let mut fe = FnSpec::new(&"emit", vis);
-    fe.set_receiver(&"&mut self");
-    fe.add_param(&"s", &"String");
+    let mut fe = FnSpec::new("emit", vis);
+    fe.set_receiver("&mut self");
+    fe.add_param("s", "String");
     fe.emit_begin(w);
-    w.line(&"self.act_output.push_str(&s);");
+    w.line("self.act_output.push_str(&s);");
     w.end();
 }
 
@@ -505,40 +505,40 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis
     // The type / channel latches are seeded with what the tournament decided, so
     // an action reading `$type` sees the token's current type as ANTLR's would,
     // and one that writes neither leaves the outcome unchanged.
-    let mut fr = FnSpec::new(&"reset_actions");
-    fr.set_receiver(&"&mut self");
-    fr.add_param(&"kind", &"i32");
-    fr.add_param(&"channel", &"i32");
+    let mut fr = FnSpec::new("reset_actions");
+    fr.set_receiver("&mut self");
+    fr.add_param("kind", "i32");
+    fr.add_param("channel", "i32");
     if surface.mode_commands {
-        fr.add_param(&"depth", &"i32");
+        fr.add_param("depth", "i32");
         if surface.current_mode {
-            fr.add_param(&"mode", &"i32");
+            fr.add_param("mode", "i32");
         }
     }
     fr.emit_begin(w);
-    w.line(&"self.act_type = kind;");
-    w.line(&"self.act_channel = channel;");
-    w.line(&"self.act_skip = false;");
-    w.line(&"self.act_more = false;");
+    w.line("self.act_type = kind;");
+    w.line("self.act_channel = channel;");
+    w.line("self.act_skip = false;");
+    w.line("self.act_more = false;");
     if surface.mode_commands {
-        w.line(&"self.act_push_mode = -1;");
-        w.line(&"self.act_pop_mode = false;");
-        w.line(&`self.${LEXER_SET_MODE_FIELD} = -1;`);
-        w.line(&"self.act_mode_depth = depth;");
+        w.line("self.act_push_mode = -1;");
+        w.line("self.act_pop_mode = false;");
+        w.line(`self.${LEXER_SET_MODE_FIELD} = -1;`);
+        w.line("self.act_mode_depth = depth;");
         if surface.current_mode {
-            w.line(&`self.${LEXER_MODE_FIELD} = mode;`);
+            w.line(`self.${LEXER_MODE_FIELD} = mode;`);
         }
     }
     w.end();
     w.blank();
 
-    lexer_setter(w, &"set_type", &"t", &"act_type", vis);
+    lexer_setter(w, "set_type", "t", "act_type", vis);
     w.blank();
-    lexer_setter(w, &"set_channel", &"c", &"act_channel", vis);
+    lexer_setter(w, "set_channel", "c", "act_channel", vis);
     w.blank();
-    lexer_flag(w, &"skip", &"act_skip", vis);
+    lexer_flag(w, "skip", "act_skip", vis);
     w.blank();
-    lexer_flag(w, &"more", &"act_more", vis);
+    lexer_flag(w, "more", "act_more", vis);
 
     if surface.mode_commands {
         w.blank();
@@ -559,33 +559,33 @@ fn gen_lexer_action_methods(w: &mut CodeWriter, surface: &LexerSurface, vis: Vis
 /// field instead, so a read after it fails loudly rather than answering the mode
 /// just left.
 fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface) {
-    let mut fp = FnSpec::new(&"push_mode", vis);
-    fp.set_receiver(&"&mut self");
-    fp.add_param(&"m", &"i32");
+    let mut fp = FnSpec::new("push_mode", vis);
+    fp.set_receiver("&mut self");
+    fp.add_param("m", "i32");
     fp.emit_begin(w);
     gen_one_mode_command_assert(w);
-    w.line(&"self.act_push_mode = m;");
-    w.line(&"self.act_mode_depth += 1;");
-    gen_current_mode_write(w, surface, &"m");
+    w.line("self.act_push_mode = m;");
+    w.line("self.act_mode_depth += 1;");
+    gen_current_mode_write(w, surface, "m");
     w.end();
     w.blank();
 
-    let mut fo = FnSpec::new(&"pop_mode", vis);
-    fo.set_receiver(&"&mut self");
+    let mut fo = FnSpec::new("pop_mode", vis);
+    fo.set_receiver("&mut self");
     fo.emit_begin(w);
     gen_one_mode_command_assert(w);
-    w.line(&"self.act_pop_mode = true;");
-    w.line(&"self.act_mode_depth -= 1;");
-    gen_current_mode_write(w, surface, &"-1");
+    w.line("self.act_pop_mode = true;");
+    w.line("self.act_mode_depth -= 1;");
+    gen_current_mode_write(w, surface, "-1");
     w.end();
     w.blank();
 
-    let mut fs = FnSpec::new(&"set_mode", vis);
-    fs.set_receiver(&"&mut self");
-    fs.add_param(&"m", &"i32");
+    let mut fs = FnSpec::new("set_mode", vis);
+    fs.set_receiver("&mut self");
+    fs.add_param("m", "i32");
     fs.emit_begin(w);
     gen_one_mode_command_assert(w);
-    w.line(&`self.${LEXER_SET_MODE_FIELD} = m;`);
+    w.line(`self.${LEXER_SET_MODE_FIELD} = m;`);
     w.end();
     w.blank();
 
@@ -593,12 +593,12 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface)
         gen_current_mode_reader(w, vis);
         w.blank();
     }
-    lexer_reader(w, &"mode_depth", &"act_mode_depth", vis);
+    lexer_reader(w, "mode_depth", "act_mode_depth", vis);
 }
 
 fn gen_current_mode_write<S: AsStrSlice>(w: &mut CodeWriter, surface: &LexerSurface, value: S) {
     if surface.current_mode {
-        w.line(&`self.${LEXER_MODE_FIELD} = ${value.to_string()};`);
+        w.line(`self.${LEXER_MODE_FIELD} = ${value.to_string()};`);
     }
 }
 
@@ -610,46 +610,46 @@ fn gen_current_mode_write<S: AsStrSlice>(w: &mut CodeWriter, surface: &LexerSurf
 /// restore target.
 fn gen_current_mode_reader(w: &mut CodeWriter, vis: Vis) {
     let mut f = FnSpec::new(&LEXER_MODE_READER, vis);
-    f.set_receiver(&"&self");
-    f.set_return_type(&"i32");
+    f.set_receiver("&self");
+    f.set_return_type("i32");
     f.emit_begin(w);
-    w.line(&`if self.${LEXER_SET_MODE_FIELD} >= 0 { return self.${LEXER_SET_MODE_FIELD}; }`);
+    w.line(`if self.${LEXER_SET_MODE_FIELD} >= 0 { return self.${LEXER_SET_MODE_FIELD}; }`);
     w.line(
-        &`assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
+        `assert self.${LEXER_MODE_FIELD} >= 0, "\$mode after pop_mode reads a mode only the mode stack holds";`,
     );
-    w.line(&`return self.${LEXER_MODE_FIELD};`);
+    w.line(`return self.${LEXER_MODE_FIELD};`);
     w.end();
 }
 
 fn gen_one_mode_command_assert(w: &mut CodeWriter) {
     w.line(
-        &`assert self.act_push_mode < 0 && !self.act_pop_mode && self.${LEXER_SET_MODE_FIELD} < 0, "a lexer action may issue at most one mode command per token";`,
+        `assert self.act_push_mode < 0 && !self.act_pop_mode && self.${LEXER_SET_MODE_FIELD} < 0, "a lexer action may issue at most one mode command per token";`,
     );
 }
 
 fn lexer_reader<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field: S1, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
-    f.set_receiver(&"&self");
-    f.set_return_type(&"i32");
+    f.set_receiver("&self");
+    f.set_return_type("i32");
     f.emit_begin(w);
-    w.line(&`return self.${field.to_string()};`);
+    w.line(`return self.${field.to_string()};`);
     w.end();
 }
 
 fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, arg: S1, field: S2, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
-    f.set_receiver(&"&mut self");
-    f.add_param(arg, &"i32");
+    f.set_receiver("&mut self");
+    f.add_param(arg, "i32");
     f.emit_begin(w);
-    w.line(&`self.${field.to_string()} = ${arg.to_string()};`);
+    w.line(`self.${field.to_string()} = ${arg.to_string()};`);
     w.end();
 }
 
 fn lexer_flag<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field: S1, vis: Vis) {
     let mut f = FnSpec::new(name, vis);
-    f.set_receiver(&"&mut self");
+    f.set_receiver("&mut self");
     f.emit_begin(w);
-    w.line(&`self.${field.to_string()} = true;`);
+    w.line(`self.${field.to_string()} = true;`);
     w.end();
 }
 
@@ -970,42 +970,42 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(&fn_name);
     if hm {
-        f.add_param(&"lx", &"&Lexer");
+        f.add_param("lx", "&Lexer");
     } else {
-        f.add_param(&"chars", &"&List<char>");
+        f.add_param("chars", "&List<char>");
     }
-    f.add_param(&"start", &"i32");
-    f.set_return_type(&"i32");
+    f.add_param("start", "i32");
+    f.set_return_type("i32");
     // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
     // view literal stores the char-stream ref, so declare both `with Foo` and
     // `stores` for that ref.
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
         if hm {
-            f.add_stores(&"lx");
+            f.add_stores("lx");
         } else {
-            f.add_stores(&"chars");
+            f.add_stores("chars");
         }
     }
     f.emit_begin(w);
     if hm {
-        w.line(&"let chars = &lx.chars;");
+        w.line("let chars = &lx.chars;");
     }
     // ATN-class rule: the static single-pass emitter cannot decide it, so
     // delegate to the runtime lexer simulator.
     if let Some(idx) = atn_class.get(rule.name) {
         let longest = !lexer_rule_has_non_greedy(rule, all_rules);
-        w.line(&`return latn_match(&LATN_SIM, ${idx}, chars, start, ${longest});`);
+        w.line(`return latn_match(&LATN_SIM, ${idx}, chars, start, ${longest});`);
         w.end();
         w.blank();
         return;
     }
-    w.line(&"let mut pos = start;");
+    w.line("let mut pos = start;");
     // gen_lexer_alt_seq places the alt's predicates; a false one returns -1 so
     // the tokenizer tries the next rule.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
-    gen_lexer_body(w, &rule.body, &plan, all_rules, &"return -1", ci, ea, hm, false);
-    w.line(&"return pos;");
+    gen_lexer_body(w, &rule.body, &plan, all_rules, "return -1", ci, ea, hm, false);
+    w.line("return pos;");
     w.end();
     w.blank();
 }
@@ -1027,7 +1027,7 @@ fn gen_lexer_rule_predicates<S: AsStrSlice>(w: &mut CodeWriter, actions: &List<A
             continue;
         }
         if a.kind matches { Predicate } {
-            w.line(&`if !(${a.source.text}) { ${fail_action}; }`);
+            w.line(`if !(${a.source.text}) { ${fail_action}; }`);
         }
     }
 }
@@ -1190,7 +1190,7 @@ pub fn executed_action_rule_names(grammar: &Grammar) -> List<String> {
 /// Only emitted for a `mode` grammar that runs actions.
 fn gen_mode_constants(w: &mut CodeWriter, mode_names: &List<String>) {
     for let mut i = 0; i < mode_names.len(); i += 1 {
-        GlobalSpec::new(&`MODE_${mode_names[i]}`, &"i32", &`${i}`, Vis::Pub).emit(w);
+        GlobalSpec::new(`MODE_${mode_names[i]}`, "i32", `${i}`, Vis::Pub).emit(w);
     }
     w.blank();
 }
@@ -1214,12 +1214,12 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has
         // stores the char-stream ref in its `LexerView`, as in `try_`.
         let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
-        f.add_param(&"lx", &"&mut Lexer");
-        f.add_param(&"start", &"i32");
-        f.add_param(&"end", &"i32");
+        f.add_param("lx", "&mut Lexer");
+        f.add_param("start", "i32");
+        f.add_param("end", "i32");
         if replay_super {
             f.add_effect(sc_name);
-            f.add_stores(&"lx");
+            f.add_stores("lx");
         }
         f.emit_begin(w);
         gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, &grammar.options, ci, has_members);
@@ -1238,13 +1238,13 @@ fn gen_lexer_apply_replay_body(
     ci: bool,
     has_members: bool,
 ) {
-    w.line(&"let chars = &lx.chars;");
-    w.line(&"let mut pos = start;");
+    w.line("let chars = &lx.chars;");
+    w.line("let mut pos = start;");
     // `ea` here only re-selects the arm the match took; a single-alt body has
     // nothing to select, so it never re-evaluates a predicate.
     let plan = lexer_rule_plan(rule, all_rules, grammar_opts);
     let ea = plan matches { Alts(_) };
-    gen_lexer_body(w, &rule.body, &plan, all_rules, &"return", ci, ea, has_members, true);
+    gen_lexer_body(w, &rule.body, &plan, all_rules, "return", ci, ea, has_members, true);
 }
 
 /// Emit a staged lexer-action body as a statement, normalizing the trailing
@@ -1254,7 +1254,7 @@ fn emit_lexer_action_stmt<S: AsStrSlice>(w: &mut CodeWriter, body: S) {
     if trimmed.ends_with(";") || trimmed.ends_with("}") {
         w.line(&trimmed);
     } else {
-        w.line(&`${trimmed};`);
+        w.line(`${trimmed};`);
     }
 }
 
@@ -1273,19 +1273,19 @@ fn gen_lexer_action_replay(
     has_set_mode_rules: bool,
     surface: &LexerSurface,
 ) {
-    w.begin(&"if best_act >= 0");
+    w.begin("if best_act >= 0");
     if use_modes {
         let mode_seed = if surface.current_mode { ", current_mode" } else { "" };
-        w.line(&`lexer.reset_actions(best_kind, best_channel, mode_stack.len()${mode_seed});`);
+        w.line(`lexer.reset_actions(best_kind, best_channel, mode_stack.len()${mode_seed});`);
     } else {
-        w.line(&"lexer.reset_actions(best_kind, best_channel);");
+        w.line("lexer.reset_actions(best_kind, best_channel);");
     }
     for let mut i = 0; i < act_rule_names.len(); i += 1 {
         let call = `${apply_fn_name(&act_rule_names[i])}(&mut lexer, start, best_end);`;
         if i == 0 {
-            w.begin(&`if best_act == ${i}`);
+            w.begin(`if best_act == ${i}`);
         } else {
-            w.else_begin(&`else if best_act == ${i}`);
+            w.else_begin(`else if best_act == ${i}`);
         }
         w.line(&call);
     }
@@ -1295,10 +1295,10 @@ fn gen_lexer_action_replay(
     // `best_act_skip` feeds the `is_skip` decision below. The type / channel
     // latches were seeded with these values, so an action that wrote neither
     // hands them straight back.
-    w.line(&"best_kind = lexer.act_type;");
-    w.line(&"best_channel = lexer.act_channel;");
-    w.line(&"if lexer.act_more { best_more = true; }");
-    w.line(&"if lexer.act_skip { best_act_skip = true; }");
+    w.line("best_kind = lexer.act_type;");
+    w.line("best_channel = lexer.act_channel;");
+    w.line("if lexer.act_more { best_more = true; }");
+    w.line("if lexer.act_skip { best_act_skip = true; }");
     if use_modes {
         // The commit applies the latches in a fixed push-pop-set order, so two
         // of them would silently reorder. Every command method guards what it
@@ -1308,13 +1308,13 @@ fn gen_lexer_action_replay(
         // exists.
         if surface.mode_write_guard {
             w.line(
-                &`assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.${LEXER_SET_MODE_FIELD} >= 0 { 1 } else { 0 }) <= 1, "a lexer action may issue at most one mode command per token";`,
+                `assert (if lexer.act_push_mode >= 0 { 1 } else { 0 }) + (if lexer.act_pop_mode { 1 } else { 0 }) + (if lexer.${LEXER_SET_MODE_FIELD} >= 0 { 1 } else { 0 }) <= 1, "a lexer action may issue at most one mode command per token";`,
             );
         }
-        w.line(&"if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
-        w.line(&"if lexer.act_pop_mode { best_pop_mode = true; }");
+        w.line("if lexer.act_push_mode >= 0 { best_push_mode = lexer.act_push_mode; }");
+        w.line("if lexer.act_pop_mode { best_pop_mode = true; }");
         if has_set_mode_rules {
-            w.line(&`if lexer.${LEXER_SET_MODE_FIELD} >= 0 { best_set_mode = lexer.${LEXER_SET_MODE_FIELD}; }`);
+            w.line(`if lexer.${LEXER_SET_MODE_FIELD} >= 0 { best_set_mode = lexer.${LEXER_SET_MODE_FIELD}; }`);
         }
     }
     w.end();
@@ -1474,23 +1474,23 @@ fn gen_lexer_alts<S: AsStrSlice>(
         return;
     }
     let id = w.next_id();
-    w.line(&`let alts_saved_${id} = pos;`);
-    w.line(&`let mut alts_ok_${id} = false;`);
+    w.line(`let alts_saved_${id} = pos;`);
+    w.line(`let mut alts_ok_${id} = false;`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            w.begin(&`if !alts_ok_${id}`);
+            w.begin(`if !alts_ok_${id}`);
         }
         let label = `alts_${id}_${i}`;
-        w.begin(&`${label}:`);
-        w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
-        w.line(&`alts_ok_${id} = true;`);
+        w.begin(`${label}:`);
+        w.line(`pos = alts_saved_${id};`);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
+        w.line(`alts_ok_${id} = true;`);
         w.end();
     }
     for let mut i = 1; i < alts.len(); i += 1 {
         w.end();
     }
-    w.line(&`if !alts_ok_${id} { ${fail_action}; }`);
+    w.line(`if !alts_ok_${id} { ${fail_action}; }`);
 }
 
 /// Maximal-munch emit for an alternation in tail position: every alternative is
@@ -1510,18 +1510,18 @@ fn gen_lexer_alts_longest<S: AsStrSlice>(
     hm: bool,
 ) {
     let id = w.next_id();
-    w.line(&`let alts_saved_${id} = pos;`);
-    w.line(&`let mut alts_best_${id} = -1;`);
+    w.line(`let alts_saved_${id} = pos;`);
+    w.line(`let mut alts_best_${id} = -1;`);
     for let mut i = 0; i < alts.len(); i += 1 {
         let label = `alts_${id}_${i}`;
-        w.begin(&`${label}:`);
-        w.line(&`pos = alts_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ false);
-        w.line(&`if pos > alts_best_${id} { alts_best_${id} = pos; }`);
+        w.begin(`${label}:`);
+        w.line(`pos = alts_saved_${id};`);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ false);
+        w.line(`if pos > alts_best_${id} { alts_best_${id} = pos; }`);
         w.end();
     }
-    w.line(&`if alts_best_${id} < 0 { ${fail_action}; }`);
-    w.line(&`pos = alts_best_${id};`);
+    w.line(`if alts_best_${id} < 0 { ${fail_action}; }`);
+    w.line(`pos = alts_best_${id};`);
 }
 
 /// Replay an alternation: first pick the arm the match picked — scanning
@@ -1541,23 +1541,23 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
 ) {
     let id = w.next_id();
     let longest = plan.emit matches { MaximalMunch };
-    w.line(&`let sel_saved_${id} = pos;`);
-    w.line(&`let mut sel_alt_${id} = -1;`);
+    w.line(`let sel_saved_${id} = pos;`);
+    w.line(`let mut sel_alt_${id} = -1;`);
     if longest {
-        w.line(&`let mut sel_best_${id} = -1;`);
+        w.line(`let mut sel_best_${id} = -1;`);
     }
     for let mut i = 0; i < alts.len(); i += 1 {
         if !longest && i > 0 {
-            w.begin(&`if sel_alt_${id} < 0`);
+            w.begin(`if sel_alt_${id} < 0`);
         }
         let label = `sel_${id}_${i}`;
-        w.begin(&`${label}:`);
-        w.line(&`pos = sel_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, &`break ${label}`, ci, ea, hm, /*replay=*/ true);
+        w.begin(`${label}:`);
+        w.line(`pos = sel_saved_${id};`);
+        gen_lexer_arm_probe(w, &alts[i], &plan.arms[i], all_rules, `break ${label}`, ci, ea, hm, /*replay=*/ true);
         if longest {
-            w.line(&`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
+            w.line(`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
         } else {
-            w.line(&`sel_alt_${id} = ${i};`);
+            w.line(`sel_alt_${id} = ${i};`);
         }
         w.end();
     }
@@ -1566,13 +1566,13 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
             w.end();
         }
     }
-    w.line(&`if sel_alt_${id} < 0 { ${fail_action.to_string()}; }`);
-    w.line(&`pos = sel_saved_${id};`);
+    w.line(`if sel_alt_${id} < 0 { ${fail_action.to_string()}; }`);
+    w.line(`pos = sel_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
-            w.begin(&`if sel_alt_${id} == ${i}`);
+            w.begin(`if sel_alt_${id} == ${i}`);
         } else {
-            w.else_begin(&`else if sel_alt_${id} == ${i}`);
+            w.else_begin(`else if sel_alt_${id} == ${i}`);
         }
         // `ea = false`: the selection pass already evaluated this arm. Running a
         // state-dependent predicate twice could reject here what it accepted
@@ -2789,9 +2789,9 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     let pea = probe_ea(replay, ea);
 
     if replay {
-        w.line(&`let la_start_${id} = pos;`);
+        w.line(`let la_start_${id} = pos;`);
     }
-    w.line(&`let mut ${accept_var}: i32 = -1;`);
+    w.line(`let mut ${accept_var}: i32 = -1;`);
 
     // Star: zero iterations is a valid endpoint, so the suffix may
     // legally start at the current position even before any inner
@@ -2810,19 +2810,19 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     // re-peeks the suffix. `accept_<id>` always holds the latest
     // position where the suffix could start; once the inner can no
     // longer match we exit the loop and resume from that position.
-    w.begin(&"loop");
-    w.line(&`let la_saved_${id} = pos;`);
-    w.begin(&`${loop_label}:`);
-    gen_lexer_elem(w, &rep.element, inner, all_rules, &`break ${loop_label}`, ci, pea, hm, false);
+    w.begin("loop");
+    w.line(`let la_saved_${id} = pos;`);
+    w.begin(`${loop_label}:`);
+    gen_lexer_elem(w, &rep.element, inner, all_rules, `break ${loop_label}`, ci, pea, hm, false);
     gen_lexer_suffix_peek(w, alt, plan, from, all_rules, &accept_var, ci, pea, hm);
-    w.line(&"continue;");
+    w.line("continue;");
     w.end();
-    w.line(&`pos = la_saved_${id};`);
-    w.line(&"break;");
+    w.line(`pos = la_saved_${id};`);
+    w.line("break;");
     w.end();
 
-    w.begin(&`if ${accept_var} < 0`);
-    w.line(&`${fail_action.to_string()};`);
+    w.begin(`if ${accept_var} < 0`);
+    w.line(`${fail_action.to_string()};`);
     w.end();
 
     if replay {
@@ -2830,12 +2830,12 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
         // the alternative emit otherwise), so the accept position alone says how
         // many of them the match kept.
         assert lexer_element_can_consume_simple(&rep.element), "a lookahead-aware repeat's inner consumes exactly one char per iteration";
-        w.line(&`pos = la_start_${id};`);
+        w.line(`pos = la_start_${id};`);
         gen_lexer_replay_to(w, &rep.element, inner, all_rules, &accept_var, ci, hm);
         gen_lexer_alt_seq(w, alt, plan, from, all_rules, fail_action, ci, ea, hm, /*replay=*/ true);
         return;
     }
-    w.line(&`pos = ${accept_var};`);
+    w.line(`pos = ${accept_var};`);
 
     // Re-consume the suffix to advance `pos` past it. The peek that
     // recorded `accept_var` already proved every suffix element
@@ -2865,10 +2865,10 @@ fn gen_lexer_replay_to<S: AsStrSlice>(
 ) {
     let msg = `lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted`;
     let fail = `panic("${msg}")`;
-    w.begin(&`while pos < ${bound.to_string()}`);
+    w.begin(`while pos < ${bound.to_string()}`);
     gen_lexer_elem(w, inner, inner_plan, all_rules, &fail, ci, /*ea=*/ false, hm, /*replay=*/ true);
     w.end();
-    w.line(&`if pos != ${bound.to_string()} { ${fail}; }`);
+    w.line(`if pos != ${bound.to_string()} { ${fail}; }`);
 }
 
 /// Maximal-munch emit for an alternation that has a suffix after it.
@@ -2899,51 +2899,51 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
     replay: bool,
 ) {
     let id = w.next_id();
-    w.line(&`let la_saved_${id} = pos;`);
-    w.line(&`let mut la_reach_${id}: i32 = -1;`);
-    w.line(&`let mut la_end_${id}: i32 = -1;`);
-    w.line(&`let mut la_win_${id}: i32 = -1;`);
+    w.line(`let la_saved_${id} = pos;`);
+    w.line(`let mut la_reach_${id}: i32 = -1;`);
+    w.line(`let mut la_end_${id}: i32 = -1;`);
+    w.line(`let mut la_win_${id}: i32 = -1;`);
     for let mut i = 0; i < alts.len(); i += 1 {
         let label = `la_alt_${id}_${i}`;
-        w.begin(&`${label}:`);
-        w.line(&`pos = la_saved_${id};`);
-        gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, &`break ${label}`, ci, ea, hm, replay);
-        w.line(&`let la_arm_${id}_${i} = pos;`);
-        w.line(&`let mut la_tot_${id}_${i}: i32 = -1;`);
+        w.begin(`${label}:`);
+        w.line(`pos = la_saved_${id};`);
+        gen_lexer_arm_probe(w, &alts[i], &arms[i], all_rules, `break ${label}`, ci, ea, hm, replay);
+        w.line(`let la_arm_${id}_${i} = pos;`);
+        w.line(`let mut la_tot_${id}_${i}: i32 = -1;`);
         gen_lexer_suffix_peek(
             w,
             alt,
             plan,
             from,
             all_rules,
-            &`la_tot_${id}_${i}`,
+            `la_tot_${id}_${i}`,
             ci,
             probe_ea(replay, ea),
             hm,
             /*record_end=*/ true,
         );
         // Strict `>` over arms in source order gives ANTLR4's tie-break.
-        w.begin(&`if la_tot_${id}_${i} > la_reach_${id}`);
-        w.line(&`la_reach_${id} = la_tot_${id}_${i};`);
-        w.line(&`la_end_${id} = la_arm_${id}_${i};`);
-        w.line(&`la_win_${id} = ${i};`);
+        w.begin(`if la_tot_${id}_${i} > la_reach_${id}`);
+        w.line(`la_reach_${id} = la_tot_${id}_${i};`);
+        w.line(`la_end_${id} = la_arm_${id}_${i};`);
+        w.line(`la_win_${id} = ${i};`);
         w.end();
         w.end();
     }
-    w.line(&`if la_win_${id} < 0 { ${fail_action.to_string()}; }`);
+    w.line(`if la_win_${id} < 0 { ${fail_action.to_string()}; }`);
     if !replay {
-        w.line(&`pos = la_end_${id};`);
+        w.line(`pos = la_end_${id};`);
         return;
     }
     // Re-run the winner so its actions fire at the cursor they were written at.
     // `ea = false`: re-evaluating a state-dependent predicate could reject here
     // what the selection pass accepted.
-    w.line(&`pos = la_saved_${id};`);
+    w.line(`pos = la_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
-            w.begin(&`if la_win_${id} == ${i}`);
+            w.begin(`if la_win_${id} == ${i}`);
         } else {
-            w.else_begin(&`else if la_win_${id} == ${i}`);
+            w.else_begin(`else if la_win_${id} == ${i}`);
         }
         gen_lexer_alt_seq(w, &alts[i], &arms[i], 0, all_rules, fail_action, ci, false, hm, true);
     }
@@ -2998,21 +2998,21 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     let matched_var = `peek_ok_${id}`;
     let end_var = `peek_end_${id}`;
     let label = `peek_${id}`;
-    w.line(&`let ${save_var} = pos;`);
-    w.line(&`let mut ${matched_var} = false;`);
+    w.line(`let ${save_var} = pos;`);
+    w.line(`let mut ${matched_var} = false;`);
     if record_end {
-        w.line(&`let mut ${end_var}: i32 = -1;`);
+        w.line(`let mut ${end_var}: i32 = -1;`);
     }
-    w.begin(&`${label}:`);
-    gen_lexer_suffix_seq(w, alt, plan, from, all_rules, &`break ${label}`, ci, ea, hm);
+    w.begin(`${label}:`);
+    gen_lexer_suffix_seq(w, alt, plan, from, all_rules, `break ${label}`, ci, ea, hm);
     if record_end {
-        w.line(&`${end_var} = pos;`);
+        w.line(`${end_var} = pos;`);
     }
-    w.line(&`${matched_var} = true;`);
+    w.line(`${matched_var} = true;`);
     w.end();
-    w.line(&`pos = ${save_var};`);
-    w.begin(&`if ${matched_var}`);
-    w.line(&`${accept_var.to_string()} = ${if record_end { end_var } else { save_var }};`);
+    w.line(`pos = ${save_var};`);
+    w.begin(`if ${matched_var}`);
+    w.line(`${accept_var.to_string()} = ${if record_end { end_var } else { save_var }};`);
     w.end();
 }
 
@@ -3074,9 +3074,9 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
         Literal(text) => {
             let chars: List<char> = text.chars().collect();
             for let mut i = 0; i < chars.len(); i += 1 {
-                let mismatch = gen_char_mismatch(&`chars[pos]`, chars[i], ci);
-                w.line(&`if pos >= chars.len() || ${mismatch} { ${fail_action}; }`);
-                w.line(&"pos += 1;");
+                let mismatch = gen_char_mismatch(`chars[pos]`, chars[i], ci);
+                w.line(`if pos >= chars.len() || ${mismatch} { ${fail_action}; }`);
+                w.line("pos += 1;");
             }
         },
         CharRange(pair) => {
@@ -3087,9 +3087,9 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
                 gen_char_class(w, &cc, fail_action);
             } else {
                 w.line(
-                    &`if pos >= chars.len() || !(chars[pos] matches { ${char_range_pat(pair.0..=pair.1)} }) { ${fail_action}; }`,
+                    `if pos >= chars.len() || !(chars[pos] matches { ${char_range_pat(pair.0..=pair.1)} }) { ${fail_action}; }`,
                 );
-                w.line(&"pos += 1;");
+                w.line("pos += 1;");
             }
         },
         CharClass(cc) => {
@@ -3097,16 +3097,16 @@ fn gen_lexer_leaf<S: AsStrSlice>(w: &mut CodeWriter, elem: &LexerElement, fail_a
             gen_char_class(w, &expanded, fail_action);
         },
         AnyChar => {
-            w.line(&`if pos >= chars.len() { ${fail_action}; }`);
-            w.line(&"pos += 1;");
+            w.line(`if pos >= chars.len() { ${fail_action}; }`);
+            w.line("pos += 1;");
         },
         RuleRef(name) => {
             if name == "EOF" {
-                w.line(&`if pos < chars.len() { ${fail_action}; }`);
+                w.line(`if pos < chars.len() { ${fail_action}; }`);
             } else {
                 let fn_name = lexer_try_fn_name(&name);
-                w.line(&`pos = ${fn_name}(${call_ctx}, pos);`);
-                w.line(&`if pos < 0 { ${fail_action}; }`);
+                w.line(`pos = ${fn_name}(${call_ctx}, pos);`);
+                w.line(`if pos < 0 { ${fail_action}; }`);
             }
         },
         Group(_) | Repeat(_) | Not(_) => panic("a composite element planned as a leaf"),
@@ -3122,14 +3122,14 @@ fn expand_char_class_ci(cc: &CharClass) -> CharClass {
 }
 
 fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action: S) {
-    w.line(&`if pos >= chars.len() { ${fail_action}; }`);
+    w.line(`if pos >= chars.len() { ${fail_action}; }`);
     let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.line(&`if ${cond} { ${fail_action.to_string()}; }`);
+        w.line(`if ${cond} { ${fail_action.to_string()}; }`);
     } else {
-        w.line(&`if !(${cond}) { ${fail_action.to_string()}; }`);
+        w.line(`if !(${cond}) { ${fail_action.to_string()}; }`);
     }
-    w.line(&"pos += 1;");
+    w.line("pos += 1;");
 }
 
 /// Build `(chars[pos] matches { 'x' | 'lo'..='hi' | ... })` for a char class.
@@ -3138,16 +3138,16 @@ fn char_class_disjunction(cc: &CharClass) -> String {
         return "(false)";
     }
     let mut s = String::with_capacity(64);
-    s.push_str(&"(chars[pos] matches { ");
+    s.push_str("(chars[pos] matches { ");
     let mut first = true;
     for let range of &cc.ranges {
         if !first {
-            s.push_str(&" | ");
+            s.push_str(" | ");
         }
         first = false;
-        s.push_str(&`${char_range_pat(range.start..=range.end)}`);
+        s.push_str(`${char_range_pat(range.start..=range.end)}`);
     }
-    s.push_str(&" })");
+    s.push_str(" })");
     return s;
 }
 
@@ -3166,14 +3166,14 @@ fn gen_lexer_repeat<S: AsStrSlice>(
     let label = `rep_${id}`;
     let break_label = `break ${label}`;
     if let Star = rep.kind {
-        w.begin(&"loop");
-        w.line(&`let rep_saved_${id} = pos;`);
-        w.begin(&`${label}:`);
+        w.begin("loop");
+        w.line(`let rep_saved_${id} = pos;`);
+        w.begin(`${label}:`);
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, id);
-        w.line(&"continue;");
+        w.line("continue;");
         w.end();
-        w.line(&`pos = rep_saved_${id};`);
-        w.line(&"break;");
+        w.line(`pos = rep_saved_${id};`);
+        w.line("break;");
         w.end();
     }
     if let Plus = rep.kind {
@@ -3181,24 +3181,24 @@ fn gen_lexer_repeat<S: AsStrSlice>(
         // The loop's own probe names, minted rather than derived: two iterations
         // in one fn must not share a `rep_probe_`.
         let loop_id = w.next_id();
-        w.begin(&"loop");
-        w.line(&`let rep_saved_${id} = pos;`);
-        w.begin(&`${label}:`);
+        w.begin("loop");
+        w.line(`let rep_saved_${id} = pos;`);
+        w.begin(`${label}:`);
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, loop_id);
-        w.line(&"continue;");
+        w.line("continue;");
         w.end();
-        w.line(&`pos = rep_saved_${id};`);
-        w.line(&"break;");
+        w.line(`pos = rep_saved_${id};`);
+        w.line("break;");
         w.end();
     }
     if let Optional = rep.kind {
-        w.line(&`let opt_saved_${id} = pos;`);
-        w.line(&`let mut opt_ok_${id} = false;`);
-        w.begin(&`${label}:`);
+        w.line(`let opt_saved_${id} = pos;`);
+        w.line(`let mut opt_ok_${id} = false;`);
+        w.begin(`${label}:`);
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, &break_label, ci, ea, hm, replay, id);
-        w.line(&`opt_ok_${id} = true;`);
+        w.line(`opt_ok_${id} = true;`);
         w.end();
-        w.line(&`if !opt_ok_${id} { pos = opt_saved_${id}; }`);
+        w.line(`if !opt_ok_${id} { pos = opt_saved_${id}; }`);
     }
 }
 
@@ -3227,20 +3227,20 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
         gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, pea, hm, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
-        w.line(&`if pos > end { ${fail_action.to_string()}; }`);
+        w.line(`if pos > end { ${fail_action.to_string()}; }`);
         return;
     }
     let probe = `rep_probe_${id}`;
-    w.line(&`let ${probe}_saved = pos;`);
-    w.line(&`let mut ${probe}_ok = false;`);
-    w.begin(&`${probe}:`);
-    gen_lexer_elem(w, &rep.element, inner, all_rules, &`break ${probe}`, ci, pea, hm, false);
-    w.line(&`${probe}_ok = true;`);
+    w.line(`let ${probe}_saved = pos;`);
+    w.line(`let mut ${probe}_ok = false;`);
+    w.begin(`${probe}:`);
+    gen_lexer_elem(w, &rep.element, inner, all_rules, `break ${probe}`, ci, pea, hm, false);
+    w.line(`${probe}_ok = true;`);
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
     // is not part of the match, however the match pass came to stop there.
-    w.line(&`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action.to_string()}; }`);
-    w.line(&`pos = ${probe}_saved;`);
+    w.line(`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action.to_string()}; }`);
+    w.line(`pos = ${probe}_saved;`);
     gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, true);
 }
 
@@ -3301,23 +3301,23 @@ fn gen_lexer_non_greedy_repeat<S: AsStrSlice>(
         gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, plus_id);
     }
     // Loop: try matching the rest first (non-greedy), otherwise consume one more
-    w.begin(&"loop");
+    w.begin("loop");
     // Try exit: match rest of elements
-    w.line(&`let ng_saved_${id} = pos;`);
-    w.line(&`let mut ng_exit_${id} = false;`);
-    w.begin(&`${label}:`);
-    gen_lexer_alt_seq(w, rest, rest_plan, 0, all_rules, &`break ${label}`, ci, pea, hm, false);
-    w.line(&`ng_exit_${id} = true;`);
+    w.line(`let ng_saved_${id} = pos;`);
+    w.line(`let mut ng_exit_${id} = false;`);
+    w.begin(`${label}:`);
+    gen_lexer_alt_seq(w, rest, rest_plan, 0, all_rules, `break ${label}`, ci, pea, hm, false);
+    w.line(`ng_exit_${id} = true;`);
     w.end();
     if replay {
-        w.line(&`pos = ng_saved_${id};`);
+        w.line(`pos = ng_saved_${id};`);
     }
-    w.begin(&`if ng_exit_${id}`);
-    w.line(&"break;");
+    w.begin(`if ng_exit_${id}`);
+    w.line("break;");
     w.end();
     // Exit failed, restore pos and consume one element
     if !replay {
-        w.line(&`pos = ng_saved_${id};`);
+        w.line(`pos = ng_saved_${id};`);
     }
     gen_lexer_repeat_iteration(w, rep, inner, all_rules, fail_action, ci, ea, hm, replay, iter_id);
     w.end();
@@ -3347,16 +3347,16 @@ fn gen_lexer_not<S: AsStrSlice>(
     }
     let id = w.next_id();
     let label = `not_${id}`;
-    w.line(&`if pos >= chars.len() { ${fail_action}; }`);
-    w.line(&`let not_saved_${id} = pos;`);
-    w.line(&`let mut not_matched_${id} = false;`);
-    w.begin(&`${label}:`);
-    gen_lexer_elem(w, &not_elem.element, inner, all_rules, &`break ${label}`, ci, ea, hm, false);
-    w.line(&`not_matched_${id} = true;`);
+    w.line(`if pos >= chars.len() { ${fail_action}; }`);
+    w.line(`let not_saved_${id} = pos;`);
+    w.line(`let mut not_matched_${id} = false;`);
+    w.begin(`${label}:`);
+    gen_lexer_elem(w, &not_elem.element, inner, all_rules, `break ${label}`, ci, ea, hm, false);
+    w.line(`not_matched_${id} = true;`);
     w.end();
-    w.line(&`pos = not_saved_${id};`);
-    w.line(&`if not_matched_${id} { ${fail_action}; }`);
-    w.line(&"pos += 1;");
+    w.line(`pos = not_saved_${id};`);
+    w.line(`if not_matched_${id} { ${fail_action}; }`);
+    w.line("pos += 1;");
 }
 
 pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
@@ -3764,14 +3764,14 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         return;
     }
 
-    let mut f = FnSpec::new(&"classify_keyword");
-    f.add_param(&"chars", &"&List<char>");
-    f.add_param(&"start", &"i32");
-    f.add_param(&"end", &"i32");
-    f.set_return_type(&"i32");
+    let mut f = FnSpec::new("classify_keyword");
+    f.add_param("chars", "&List<char>");
+    f.add_param("start", "i32");
+    f.add_param("end", "i32");
+    f.set_return_type("i32");
     f.emit_begin(w);
 
-    w.line(&"let len = end - start;");
+    w.line("let len = end - start;");
 
     // Find min/max keyword length (ASCII keywords: byte len == char count)
     let mut min_len = KEYWORD_LEN_SENTINEL;
@@ -3800,10 +3800,10 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         }
 
         if first_len {
-            w.begin(&`if len == ${target_len}`);
+            w.begin(`if len == ${target_len}`);
             first_len = false;
         } else {
-            w.else_begin(&`else if len == ${target_len}`);
+            w.else_begin(`else if len == ${target_len}`);
         }
 
         // Group keywords of this length by first character for dispatch
@@ -3833,12 +3833,12 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         if first_chars.len() > 1 {
             let mut first_fc = true;
             for let fc of &first_chars {
-                let guard = gen_char_guard(&"chars[start]", *fc, true);
+                let guard = gen_char_guard("chars[start]", *fc, true);
                 if first_fc {
-                    w.begin(&`if ${guard}`);
+                    w.begin(`if ${guard}`);
                     first_fc = false;
                 } else {
-                    w.else_begin(&`else if ${guard}`);
+                    w.else_begin(`else if ${guard}`);
                 }
                 for let kw of &len_keywords {
                     if kw.lowercase_text.chars().next().unwrap() != *fc {
@@ -3858,27 +3858,29 @@ fn gen_keyword_classifier_fn(w: &mut CodeWriter, keywords: &List<KeywordInfo>) {
         w.end();
     }
 
-    w.line(&"return -1;");
+    w.line("return -1;");
     w.end();
     w.blank();
 }
 
-fn gen_char_guard(access: &String, c: char, ci: bool) -> String {
+fn gen_char_guard<S: AsStrSlice>(access: S, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
+    let expr = access.to_string();
     if ci && lower != upper {
-        return wado`${access}.eq_ignore_ascii_case(&'${lower}')`;
+        return wado`${expr}.eq_ignore_ascii_case(&'${lower}')`;
     }
-    return wado`${access} == '${c}'`;
+    return wado`${expr} == '${c}'`;
 }
 
-fn gen_char_mismatch(access: &String, c: char, ci: bool) -> String {
+fn gen_char_mismatch<S: AsStrSlice>(access: S, c: char, ci: bool) -> String {
     let lower = c.to_ascii_lowercase();
     let upper = c.to_ascii_uppercase();
+    let expr = access.to_string();
     if ci && lower != upper {
-        return wado`!${access}.eq_ignore_ascii_case(&'${lower}')`;
+        return wado`!${expr}.eq_ignore_ascii_case(&'${lower}')`;
     }
-    return wado`${access} != '${c}'`;
+    return wado`${expr} != '${c}'`;
 }
 
 /// The caller's `chars[start]` dispatch guard is always case-insensitive, so
@@ -3887,13 +3889,13 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched
     let kw_chars: List<char> = kw.lowercase_text.chars().collect();
     let start_at = if first_char_dispatched && kw.char_ci[0] { 1 } else { 0 };
     if start_at >= kw_chars.len() {
-        w.line(&`return TK_${kw.rule_name};`);
+        w.line(`return TK_${kw.rule_name};`);
         return;
     }
-    w.write(&"if ");
+    w.write("if ");
     for let mut kc = start_at; kc < kw_chars.len(); kc += 1 {
         if kc > start_at {
-            w.write(&" && ");
+            w.write(" && ");
         }
         let lower = kw_chars[kc];
         if kw.char_ci[kc] {
@@ -3902,7 +3904,7 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched
             w.write(&wado`chars[start + ${kc}] == '${lower}'`);
         }
     }
-    w.write(&` { return TK_${kw.rule_name}; }\n`);
+    w.write(` { return TK_${kw.rule_name}; }\n`);
 }
 
 fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bool, hm: bool) {
@@ -3911,23 +3913,23 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
         let fn_name = lit_try_fn_name(&lit.const_name);
         let mut f = FnSpec::new(&fn_name);
         if hm {
-            f.add_param(&"lx", &"&Lexer");
+            f.add_param("lx", "&Lexer");
         } else {
-            f.add_param(&"chars", &"&List<char>");
+            f.add_param("chars", "&List<char>");
         }
-        f.add_param(&"start", &"i32");
-        f.set_return_type(&"i32");
+        f.add_param("start", "i32");
+        f.set_return_type("i32");
         f.emit_begin(w);
         if hm {
-            w.line(&"let chars = &lx.chars;");
+            w.line("let chars = &lx.chars;");
         }
-        w.line(&"let pos = start;");
+        w.line("let pos = start;");
         for let mut i = 0; i < chars.len(); i += 1 {
-            let mismatch = gen_char_mismatch(&`chars[pos + ${i}]`, chars[i], ci);
-            w.line(&`if pos + ${i} >= chars.len() || ${mismatch} { return -1; }`);
+            let mismatch = gen_char_mismatch(`chars[pos + ${i}]`, chars[i], ci);
+            w.line(`if pos + ${i} >= chars.len() || ${mismatch} { return -1; }`);
         }
         let len = chars.len();
-        w.line(&`return pos + ${len};`);
+        w.line(`return pos + ${len};`);
         w.end();
         w.blank();
     }
@@ -3935,7 +3937,7 @@ fn gen_literal_match_fns(w: &mut CodeWriter, lit_tokens: &List<LitToken>, ci: bo
 
 fn lit_try_fn_name<S: AsStrSlice>(const_name: S) -> String {
     let mut result = String::with_capacity(const_name.len() + 4);
-    result.push_str(&"try_lit_");
+    result.push_str("try_lit_");
     let chars: List<char> = const_name.chars().collect();
     for let mut i = 7; i < chars.len(); i += 1 {
         result.push(chars[i].to_ascii_lowercase());
@@ -4036,35 +4038,35 @@ fn best_state_extras(
     let mut s = String::with_capacity(64);
     if emit_modes {
         if push_mode >= 0 {
-            s.push_str(&` best_push_mode = ${push_mode};`);
+            s.push_str(` best_push_mode = ${push_mode};`);
         } else {
-            s.push_str(&" best_push_mode = -1;");
+            s.push_str(" best_push_mode = -1;");
         }
         if pop_mode {
-            s.push_str(&" best_pop_mode = true;");
+            s.push_str(" best_pop_mode = true;");
         } else {
-            s.push_str(&" best_pop_mode = false;");
+            s.push_str(" best_pop_mode = false;");
         }
     }
     if has_set_mode_rules {
         if set_mode >= 0 {
-            s.push_str(&` best_set_mode = ${set_mode};`);
+            s.push_str(` best_set_mode = ${set_mode};`);
         } else {
-            s.push_str(&" best_set_mode = -1;");
+            s.push_str(" best_set_mode = -1;");
         }
     }
     if has_more_rules {
         if more {
-            s.push_str(&" best_more = true;");
+            s.push_str(" best_more = true;");
         } else {
-            s.push_str(&" best_more = false;");
+            s.push_str(" best_more = false;");
         }
     }
     if has_channel_rules {
         if channel != 0 {
-            s.push_str(&` best_channel = ${channel};`);
+            s.push_str(` best_channel = ${channel};`);
         } else {
-            s.push_str(&" best_channel = 0;");
+            s.push_str(" best_channel = 0;");
         }
     }
     return s;
@@ -4422,7 +4424,7 @@ fn coalesce_equal_groups(groups: &mut List<DispatchGroup>) {
     for let g of groups {
         let last = merged.len() - 1;
         if last >= 0 && merged[last].calls == g.calls {
-            merged[last].pattern.push_str(&` | ${g.pattern}`);
+            merged[last].pattern.push_str(` | ${g.pattern}`);
         } else {
             merged.push(*g);
         }
@@ -4638,11 +4640,11 @@ fn gen_dispatch_groups(
                 gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
                 continue;
             }
-            w.else_begin(&"else");
+            w.else_begin("else");
         } else if first_group {
-            w.begin(&`if first_char matches { ${g.pattern} }`);
+            w.begin(`if first_char matches { ${g.pattern} }`);
         } else {
-            w.else_begin(&`else if first_char matches { ${g.pattern} }`);
+            w.else_begin(`else if first_char matches { ${g.pattern} }`);
         }
         first_group = false;
         gen_group_calls(w, calls, &g.calls, needs_extras, has_actions, has_members);
@@ -4665,16 +4667,16 @@ fn gen_group_calls(
     // literals are not hand-inlined — the wado compiler folds the tiny bodies.
     for let call_idx of indices {
         let call = &calls[*call_idx];
-        w.line(&`end = ${call.fn_name}(${ctx}, start);`);
+        w.line(`end = ${call.fn_name}(${ctx}, start);`);
         // Under `has_actions` EVERY winner block reassigns `best_act` — the
         // rule's replay index, or -1 for a literal / non-action rule — so a
         // longer non-action match that supersedes an earlier action match does
         // not leave `best_act` pointing at the losing action rule.
         let act = if has_actions { ` best_act = ${call.act_index};` } else { String::new() };
         if needs_extras {
-            w.line(&`if end > best_end { best_end = end; best_kind = ${call.token_kind};${call.extra}${act} }`);
+            w.line(`if end > best_end { best_end = end; best_kind = ${call.token_kind};${call.extra}${act} }`);
         } else {
-            w.line(&`if end > best_end { best_end = end; best_kind = ${call.token_kind};${act} }`);
+            w.line(`if end > best_end { best_end = end; best_kind = ${call.token_kind};${act} }`);
         }
     }
 }
@@ -4715,62 +4717,62 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     let empty_opts: List<GrammarOption> = [];
     let grammar_ci = resolve_ci(grammar_opts, &empty_opts);
 
-    let mut f = FnSpec::new(&"tokenize", Vis::Pub);
-    f.add_generic(&"S: AsStrSlice");
-    f.add_param(&"input", &"S");
-    f.set_return_type(&"TokenStream");
+    let mut f = FnSpec::new("tokenize", Vis::Pub);
+    f.add_generic("S: AsStrSlice");
+    f.add_param("input", "S");
+    f.set_return_type("TokenStream");
     // `tokenize` calls the op-carrying `try_<rule>` fns, so it propagates the effect.
     if !sc_name.is_empty() {
         f.add_effect(sc_name);
     }
     f.emit_begin(w);
-    w.line(&"let mut lexer = Lexer::new(input);");
+    w.line("let mut lexer = Lexer::new(input);");
     // Struct-of-arrays token storage: the lexer pushes flat i32s, never a
     // per-token aggregate. `triv_lo` marks where the current token's leading
     // trivia begins; it advances to the next mark after each emitted token.
-    w.line(&"let mut ts = TokenStream::new(&lexer.chars);");
-    w.line(&"let mut triv_lo = ts.trivia_mark();");
+    w.line("let mut ts = TokenStream::new(&lexer.chars);");
+    w.line("let mut triv_lo = ts.trivia_mark();");
 
     if has_more_rules {
         // Tracks the start position of a pending `more` sequence; -1 means
         // no pending `more` data. When a non-`more` rule emits, it uses
         // `more_start` as the token start so the emitted text includes
         // all previously-`more`'d characters.
-        w.line(&"let mut more_start: i32 = -1;");
+        w.line("let mut more_start: i32 = -1;");
     }
 
     if use_modes {
-        w.line(&"let mut mode_stack: List<i32> = [];");
-        w.line(&"let mut current_mode: i32 = 0;");
+        w.line("let mut mode_stack: List<i32> = [];");
+        w.line("let mut current_mode: i32 = 0;");
     }
 
-    w.begin(&"while !lexer.at_end()");
-    w.line(&"let start = lexer.pos;");
-    w.line(&"let mut best_end: i32 = -1;");
-    w.line(&"let mut best_kind: i32 = TK_ERROR;");
-    w.line(&"let mut end: i32 = -1;");
+    w.begin("while !lexer.at_end()");
+    w.line("let start = lexer.pos;");
+    w.line("let mut best_end: i32 = -1;");
+    w.line("let mut best_kind: i32 = TK_ERROR;");
+    w.line("let mut end: i32 = -1;");
     if has_actions {
         // Which winning rule's `apply_<rule>_actions` to replay post-tournament
         // (-1 = none). Set in the winner block alongside `best_end`/`best_kind`.
-        w.line(&"let mut best_act: i32 = -1;");
+        w.line("let mut best_act: i32 = -1;");
         // Latched by an action's `lx.skip()` (no `best_skip` tournament var
         // exists — skip is otherwise decided by `best_kind`).
-        w.line(&"let mut best_act_skip = false;");
+        w.line("let mut best_act_skip = false;");
     }
-    w.line(&"let first_char = lexer.chars[start];");
+    w.line("let first_char = lexer.chars[start];");
 
     if use_modes {
-        w.line(&"let mut best_push_mode: i32 = -1;");
-        w.line(&"let mut best_pop_mode = false;");
+        w.line("let mut best_push_mode: i32 = -1;");
+        w.line("let mut best_pop_mode = false;");
     }
     if has_set_mode_rules {
-        w.line(&"let mut best_set_mode: i32 = -1;");
+        w.line("let mut best_set_mode: i32 = -1;");
     }
     if has_more_rules {
-        w.line(&"let mut best_more = false;");
+        w.line("let mut best_more = false;");
     }
     if has_channel_rules {
-        w.line(&"let mut best_channel: i32 = 0;");
+        w.line("let mut best_channel: i32 = 0;");
     }
 
     // Under `use_modes` every winner block assigns `best_push_mode` /
@@ -4779,9 +4781,9 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     if use_modes {
         for let mut mi = 0; mi < mode_names.len(); mi += 1 {
             if mi == 0 {
-                w.begin(&`if current_mode == ${mi}`);
+                w.begin(`if current_mode == ${mi}`);
             } else {
-                w.else_begin(&`else if current_mode == ${mi}`);
+                w.else_begin(`else if current_mode == ${mi}`);
             }
             let calls = build_mode_try_calls(
                 mi,
@@ -4821,9 +4823,9 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     // Keyword reclassification: check if the matched text is actually a keyword.
     // classify_keyword does length-based dispatch internally, so no first-char guard needed.
     if !keywords.is_empty() {
-        w.begin(&"if best_end > start");
-        w.line(&"let kw_kind = classify_keyword(&lexer.chars, start, best_end);");
-        w.line(&"if kw_kind >= 0 { best_kind = kw_kind; }");
+        w.begin("if best_end > start");
+        w.line("let kw_kind = classify_keyword(&lexer.chars, start, best_end);");
+        w.line("if kw_kind >= 0 { best_kind = kw_kind; }");
         w.end();
     }
 
@@ -4839,16 +4841,16 @@ fn gen_tokenize_fn<S: AsStrSlice>(
         // `best_set_mode` only when the grammar has a `mode(X)` rule.
         let mut stalled = String::from("best_push_mode < 0 && !best_pop_mode");
         if has_set_mode_rules {
-            stalled.push_str(&" && best_set_mode < 0");
+            stalled.push_str(" && best_set_mode < 0");
         }
         `best_end < start || (best_end == start && ${stalled})`;
     } else {
         String::from("best_end <= start");
     };
-    w.begin(&`if ${no_match_guard}`);
-    emit_token_commit(w, &"TK_ERROR", &"start", &"start + 1");
-    w.line(&"lexer.pos = start + 1;");
-    w.else_begin(&"else");
+    w.begin(`if ${no_match_guard}`);
+    emit_token_commit(w, "TK_ERROR", "start", "start + 1");
+    w.line("lexer.pos = start + 1;");
+    w.else_begin("else");
 
     // Winner-replay: the chosen rule's `{ ... }` actions run once, here, on the
     // committed match — never for a losing candidate. Placed after keyword
@@ -4862,9 +4864,9 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     // is the earliest start position of the current pending `more` chain,
     // or `start` if no `more` is pending.
     if has_more_rules {
-        w.line(&"let tok_start = if more_start >= 0 { more_start } else { start };");
+        w.line("let tok_start = if more_start >= 0 { more_start } else { start };");
     } else {
-        w.line(&"let tok_start = start;");
+        w.line("let tok_start = start;");
     }
 
     let skip_names: List<String> = lexer_rules.iter_ref().filter(|rule: &LexerRule| rule.skip).map(
@@ -4877,17 +4879,17 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     let has_skip = !skip_names.is_empty() || has_actions;
     if skip_names.is_empty() {
         if has_skip {
-            w.line(&`let is_skip = false${act_skip};`);
+            w.line(`let is_skip = false${act_skip};`);
         }
     } else {
-        w.write(&"let is_skip = best_kind matches { ");
+        w.write("let is_skip = best_kind matches { ");
         for let mut i = 0; i < skip_names.len(); i += 1 {
             if i > 0 {
-                w.write(&" | ");
+                w.write(" | ");
             }
             w.write(&skip_names[i]);
         }
-        w.write(&` }${act_skip};\n`);
+        w.write(` }${act_skip};\n`);
     }
 
     gen_lexer_emit_hook(w, sc_name, has_skip, has_more_rules, has_channel_rules);
@@ -4895,83 +4897,83 @@ fn gen_tokenize_fn<S: AsStrSlice>(
     if has_more_rules {
         // A `more` match suppresses emission and remembers the starting
         // position so the next non-`more` match covers the full span.
-        w.begin(&"if best_more");
-        w.line(&"if more_start < 0 { more_start = start; }");
+        w.begin("if best_more");
+        w.line("if more_start < 0 { more_start = start; }");
         if has_skip {
-            w.else_begin(&"else if is_skip");
-            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
-            w.line(&"more_start = -1;");
+            w.else_begin("else if is_skip");
+            w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
+            w.line("more_start = -1;");
         }
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
-            w.else_begin(&"else if best_channel != 0");
-            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
-            w.line(&"more_start = -1;");
+            w.else_begin("else if best_channel != 0");
+            w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+            w.line("more_start = -1;");
         }
-        w.else_begin(&"else");
-        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
-        w.line(&"more_start = -1;");
+        w.else_begin("else");
+        emit_token_commit(w, "best_kind", "tok_start", "best_end");
+        w.line("more_start = -1;");
         w.end();
     } else if has_skip || has_channel_rules {
         if has_skip {
-            w.begin(&"if is_skip");
-            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, 0);");
+            w.begin("if is_skip");
+            w.line("ts.push_trivia(best_kind, tok_start, best_end, 0);");
         }
         if has_channel_rules {
             // Non-default channels are invisible to the parser — route to
             // trivia with the channel id preserved. ANTLR4 treats any
             // non-DEFAULT channel the same way at the parser boundary.
             if has_skip {
-                w.else_begin(&"else if best_channel != 0");
+                w.else_begin("else if best_channel != 0");
             } else {
-                w.begin(&"if best_channel != 0");
+                w.begin("if best_channel != 0");
             }
-            w.line(&"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+            w.line("ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
         }
-        w.else_begin(&"else");
-        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
+        w.else_begin("else");
+        emit_token_commit(w, "best_kind", "tok_start", "best_end");
         w.end();
     } else {
-        emit_token_commit(w, &"best_kind", &"tok_start", &"best_end");
+        emit_token_commit(w, "best_kind", "tok_start", "best_end");
     }
 
     if use_modes {
-        w.begin(&"if best_push_mode >= 0");
-        w.line(&"mode_stack.push(current_mode);");
-        w.line(&"current_mode = best_push_mode;");
-        w.line(&"best_push_mode = -1;");
+        w.begin("if best_push_mode >= 0");
+        w.line("mode_stack.push(current_mode);");
+        w.line("current_mode = best_push_mode;");
+        w.line("best_push_mode = -1;");
         w.end();
-        w.begin(&"if best_pop_mode");
-        w.begin(&"if mode_stack.is_empty()");
-        w.line(&"current_mode = 0;");
-        w.else_begin(&"else");
-        w.line(&"current_mode = mode_stack[mode_stack.len() - 1];");
-        w.line(&"mode_stack.pop();");
+        w.begin("if best_pop_mode");
+        w.begin("if mode_stack.is_empty()");
+        w.line("current_mode = 0;");
+        w.else_begin("else");
+        w.line("current_mode = mode_stack[mode_stack.len() - 1];");
+        w.line("mode_stack.pop();");
         w.end();
-        w.line(&"best_pop_mode = false;");
+        w.line("best_pop_mode = false;");
         w.end();
         if has_set_mode_rules {
             // `mode(X)` replaces the current mode directly — no stack push.
-            w.begin(&"if best_set_mode >= 0");
-            w.line(&"current_mode = best_set_mode;");
-            w.line(&"best_set_mode = -1;");
+            w.begin("if best_set_mode >= 0");
+            w.line("current_mode = best_set_mode;");
+            w.line("best_set_mode = -1;");
             w.end();
         }
     }
 
-    w.line(&"lexer.pos = best_end;");
+    w.line("lexer.pos = best_end;");
     w.end();  // else
     w.end();  // while
     // EOF sentinel: zero-length, carrying any trailing trivia. No reset
     // follows (the stream ends here), so this stays inline rather than
     // using `emit_token_commit`.
-    w.line(&"ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
+    w.line("ts.push_token(TK_EOF, lexer.pos, lexer.pos, triv_lo, ts.trivia_mark());");
     if surface.sink {
-        w.line(&"ts.output = lexer.act_output;");
+        w.line("ts.output = lexer.act_output;");
     }
-    w.line(&"return ts;");
+    w.line("return ts;");
     w.end();  // fn
     w.blank();
 }
@@ -4991,13 +4993,13 @@ fn gen_lexer_emit_hook<S: AsStrSlice>(
     }
     let mut guard = String::new();
     if has_skip {
-        guard.push_str(&"!is_skip");
+        guard.push_str("!is_skip");
     }
     if has_more_rules {
         if !guard.is_empty() {
-            guard.push_str(&" && ");
+            guard.push_str(" && ");
         }
-        guard.push_str(&"!best_more");
+        guard.push_str("!best_more");
     }
     let channel = if has_channel_rules { "best_channel" } else { "0" };
     let call = `best_kind = ${super_emit_hook_expr(sc_name, &channel)};`;
@@ -5005,7 +5007,7 @@ fn gen_lexer_emit_hook<S: AsStrSlice>(
         w.line(&call);
         return;
     }
-    w.begin(&`if ${guard}`);
+    w.begin(`if ${guard}`);
     w.line(&call);
     w.end();
 }
@@ -5013,8 +5015,8 @@ fn gen_lexer_emit_hook<S: AsStrSlice>(
 /// Emit a default-channel token commit: push it with the pending leading-trivia
 /// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
 fn emit_token_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, kind: S, start: S1, end: S2) {
-    w.line(&`ts.push_token(${kind.to_string()}, ${start.to_string()}, ${end.to_string()}, triv_lo, ts.trivia_mark());`);
-    w.line(&"triv_lo = ts.trivia_mark();");
+    w.line(`ts.push_token(${kind.to_string()}, ${start.to_string()}, ${end.to_string()}, triv_lo, ts.trivia_mark());`);
+    w.line("triv_lo = ts.trivia_mark();");
 }
 
 /// The display names ANTLR4's `Vocabulary` gives the token kinds, by kind id: a
@@ -5054,12 +5056,12 @@ fn vocab_display_name<S: AsStrSlice>(kind_name: S, lexer_rules: &List<LexerRule>
 }
 
 fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit_tokens: &List<LitToken>) {
-    let mut f = FnSpec::new(&"token_kind_name", Vis::Pub);
-    f.add_param(&"kind", &"i32");
-    f.set_return_type(&"String");
+    let mut f = FnSpec::new("token_kind_name", Vis::Pub);
+    f.add_param("kind", "i32");
+    f.set_return_type("String");
     f.emit_begin(w);
 
-    w.line(&"return match kind {");
+    w.line("return match kind {");
     w.indent();
     for let rule of lexer_rules {
         if !rule.is_fragment {
@@ -5067,11 +5069,11 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
             w.line(&wado`TK_${rule.name} => "${rule.name}",${trailer}`);
         }
     }
-    w.line(&"TK_EOF => \"Eof\",");
+    w.line("TK_EOF => \"Eof\",");
     // Mirror the sentinel collapse in `gen_token_constants`: when the
     // user owns `TK_ERROR`, the rule's own arm covers it.
-    if !rule_name_exists(lexer_rules, &"ERROR") {
-        w.line(&"TK_ERROR => \"Error\",");
+    if !rule_name_exists(lexer_rules, "ERROR") {
+        w.line("TK_ERROR => \"Error\",");
     }
     // A literal names itself by its source form, as ANTLR4's
     // `Vocabulary.getDisplayName` does — `'+'`, not the `TK_LIT_PLUS` constant
@@ -5080,9 +5082,9 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     for let lit of lit_tokens {
         w.line(&wado`${lit.const_name} => "${lit_name(lit.text)}",`);
     }
-    w.line(&"_ => \"Unknown\",");
+    w.line("_ => \"Unknown\",");
     w.dedent();
-    w.line(&"};");
+    w.line("};");
     w.end();  // fn
     w.blank();
 }

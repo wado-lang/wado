@@ -18,19 +18,19 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "nullable-alt: its own first set still selects it" {
-    assert_tree(&"k a c", &"(s k a c)");
+    assert_tree("k a c", "(s k a c)");
 }
 
 test "nullable-alt: the group's follow set selects it too" {
-    assert_tree(&"k c", &"(s k c)");
+    assert_tree("k c", "(s k c)");
 }
 
 test "nullable-alt: a later alternative is still reachable" {
-    assert_tree(&"k b c", &"(s k b c)");
+    assert_tree("k b c", "(s k b c)");
 }
 
 test "nullable-alt: nullable through a rule reads the same" {
-    assert_tree(&"m a c", &"(s m (x a) c)");
-    assert_tree(&"m c", &"(s m x c)");
-    assert_tree(&"m b c", &"(s m b c)");
+    assert_tree("m a c", "(s m (x a) c)");
+    assert_tree("m c", "(s m x c)");
+    assert_tree("m b c", "(s m b c)");
 }

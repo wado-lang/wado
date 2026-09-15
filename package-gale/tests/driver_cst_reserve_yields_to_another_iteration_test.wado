@@ -22,20 +22,20 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // The hit cases: the iteration that fails the reserve is followed by one that
 // can still run, so the loop keeps going.
 test "the loop iterates past a position the tail cannot start at" {
-    assert_tree(&"b b a", &"(start (xs b b a))");
+    assert_tree("b b a", "(start (xs b b a))");
 }
 
 test "the loop yields the last token the tail also admits" {
-    assert_tree(&"a a", &"(start (xs a a))");
+    assert_tree("a a", "(start (xs a a))");
 }
 
 // The rejection cases: the reserve still stops a loop with nothing left to
 // iterate on, and a missing tail is still an error.
 test "the loop takes nothing where the tail is all there is" {
-    assert_tree(&"a", &"(start (xs a))");
+    assert_tree("a", "(start (xs a))");
 }
 
 test "a body the tail cannot follow is rejected" {
-    let result = g::parse(&"b b");
+    let result = g::parse("b b");
     assert !result.ok(), `expected a diagnostic: ${g::to_string_tree(&result)}`;
 }

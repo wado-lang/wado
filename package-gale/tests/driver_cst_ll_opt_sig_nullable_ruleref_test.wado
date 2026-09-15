@@ -17,13 +17,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "the optional is taken when the nullable rule spends nothing" {
-    assert_tree(&"a:", &"(start (field a : mods))");
+    assert_tree("a:", "(start (field a : mods))");
 }
 
 test "the optional is taken when the nullable rule spends its token" {
-    assert_tree(&"a: pub", &"(start (field a : (mods pub)))");
+    assert_tree("a: pub", "(start (field a : (mods pub)))");
 }
 
 test "the optional is left alone when its own first token is absent" {
-    assert_tree(&"a", &"(start (field a))");
+    assert_tree("a", "(start (field a))");
 }

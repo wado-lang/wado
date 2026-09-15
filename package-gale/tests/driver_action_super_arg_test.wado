@@ -11,7 +11,7 @@ struct WordBase {
 }
 
 impl ArgBase for WordBase {
-    fn word<S: AsStrSlice>(&self, p: &Parser, a0: S) -> bool {
+    fn word(&self, p: &Parser, a0: String) -> bool {
         resume p.token_text(p.lt(1)) == a0;
     }
 }
@@ -24,7 +24,7 @@ fn parse_kw<S: AsStrSlice>(input: S) -> String {
 }
 
 test "the base sees the argument its call site passed" {
-    assert parse_kw(&"of") == "of", `output: '${parse_kw(&"of")}'`;
-    assert parse_kw(&"in") == "in", `output: '${parse_kw(&"in")}'`;
-    assert parse_kw(&"x") == "other", `output: '${parse_kw(&"x")}'`;
+    assert parse_kw("of") == "of", `output: '${parse_kw("of")}'`;
+    assert parse_kw("in") == "in", `output: '${parse_kw("in")}'`;
+    assert parse_kw("x") == "other", `output: '${parse_kw("x")}'`;
 }

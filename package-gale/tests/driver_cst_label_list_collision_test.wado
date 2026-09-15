@@ -22,41 +22,41 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "label-list: single mandatory label" {
-    assert_tree(&"tag", &"(stream tag)");
+    assert_tree("tag", "(stream tag)");
 }
 test "label-list: first label + one Repeat iter" {
-    assert_tree(&"tag tag", &"(stream tag tag)");
+    assert_tree("tag tag", "(stream tag tag)");
 }
 test "label-list: many iters" {
-    assert_tree(&"tag tag tag tag", &"(stream tag tag tag tag)");
+    assert_tree("tag tag tag tag", "(stream tag tag tag tag)");
 }
 
 test "label-list: list label before a label wanting the element's own name" {
-    assert_tree_of(&g::parse_leading_list(&"tag tag"), &"tag tag", &"(leading_list tag tag)");
+    assert_tree_of(&g::parse_leading_list("tag tag"), "tag tag", "(leading_list tag tag)");
 }
 
 test "label-list: list label after a label wanting the element's own name" {
-    assert_tree_of(&g::parse_trailing_list(&"tag tag"), &"tag tag", &"(trailing_list tag tag)");
+    assert_tree_of(&g::parse_trailing_list("tag tag"), "tag tag", "(trailing_list tag tag)");
 }
 
 test "label-list: group-inner list label after a label named for the group" {
-    assert_tree_of(&g::parse_list_group(&"tag word"), &"tag word", &"(list_group tag word)");
+    assert_tree_of(&g::parse_list_group("tag word"), "tag word", "(list_group tag word)");
 }
 
 test "label-list: a list label whose block holds another labelled element" {
-    assert_tree_of(&g::parse_nested_list(&"tag"), &"tag", &"(nested_list tag)");
+    assert_tree_of(&g::parse_nested_list("tag"), "tag", "(nested_list tag)");
 }
 
 test "non-greedy plus: mandatory first iteration keeps its own scope" {
     assert_tree_of(
-        &g::parse_lazy_plus(&"tag tag word end"),
-        &"tag tag word end",
-        &"(lazy_plus tag tag word end)",
+        &g::parse_lazy_plus("tag tag word end"),
+        "tag tag word end",
+        "(lazy_plus tag tag word end)",
     );
     assert_tree_of(
-        &g::parse_lazy_plus(&"tag tag word tag word end"),
-        &"tag tag word tag word end",
-        &"(lazy_plus tag tag word tag word end)",
+        &g::parse_lazy_plus("tag tag word tag word end"),
+        "tag tag word tag word end",
+        "(lazy_plus tag tag word tag word end)",
     );
 }
 
@@ -65,13 +65,13 @@ test "non-greedy plus: a label after the repeat keeps its own name" {
     // alternative has not bound yet, so the first iteration is scoped either
     // way rather than only when a collision is already visible.
     assert_tree_of(
-        &g::parse_lazy_plus_after(&"tag word end tag"),
-        &"tag word end tag",
-        &"(lazy_plus_after tag word end tag)",
+        &g::parse_lazy_plus_after("tag word end tag"),
+        "tag word end tag",
+        "(lazy_plus_after tag word end tag)",
     );
     assert_tree_of(
-        &g::parse_lazy_plus_list_after(&"tag word end tag"),
-        &"tag word end tag",
-        &"(lazy_plus_list_after tag word end tag)",
+        &g::parse_lazy_plus_list_after("tag word end tag"),
+        "tag word end tag",
+        "(lazy_plus_list_after tag word end tag)",
     );
 }

@@ -90,7 +90,7 @@ pub fn render_lexer_dump(grammar: &Grammar) -> String {
     let mut o = DumpOut {
         text: String::with_capacity(256 + 192 * grammar.lexer_rules.len()),
     };
-    o.text.push_str(&`grammar ${grammar.name} (lexer)\n\n`);
+    o.text.push_str(`grammar ${grammar.name} (lexer)\n\n`);
     for let rule of &grammar.lexer_rules {
         render_rule(&mut o, &ctx, rule);
     }
@@ -124,12 +124,12 @@ fn render_rule(o: &mut DumpOut, ctx: &DumpCtx, rule: &LexerRule) {
         ctx.grammar_ci,
     );
 
-    o.text.push_str(&`rule ${rule.name} — `);
+    o.text.push_str(`rule ${rule.name} — `);
     // An ATN-class rule has a matcher, but its body is one `latn_match` call:
     // the static strategies below never apply to it.
     if let Some(idx) = ctx.atn_class.get(rule.name) {
         o.route_atn += 1;
-        o.text.push_str(&`ATN-class: latn_match (latn rule ${idx})\n`);
+        o.text.push_str(`ATN-class: latn_match (latn rule ${idx})\n`);
         return;
     }
     count_route(o, &route);
@@ -205,7 +205,7 @@ fn render_body(o: &mut DumpOut, ctx: &DumpCtx, alts: &List<LexerAlternative>, pl
                 } else {
                     o.alts_first_match += 1;
                 }
-                decision_line(o, &`alternation ${alts_text(alts, 0)} — ${alts_emit_label(ap.emit)}`);
+                decision_line(o, `alternation ${alts_text(alts, 0)} — ${alts_emit_label(ap.emit)}`);
             }
             for let mut i = 0; i < alts.len(); i += 1 {
                 render_seq(o, ctx, &alts[i], &ap.arms[i]);
@@ -238,7 +238,7 @@ fn render_group(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: i
         }
         decision_line(
             o,
-            &`alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${group_emit_label(plan.emit)}`,
+            `alternation ${alts_text(g_alts, 0)}${suffix_text(alt, index)} — ${group_emit_label(plan.emit)}`,
         );
     }
     match &plan.shape {
@@ -270,7 +270,7 @@ fn render_repeat(o: &mut DumpOut, ctx: &DumpCtx, alt: &LexerAlternative, index: 
     }
     decision_line(
         o,
-        &`repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(plan.emit)}`,
+        `repeat ${elem_text(&alt.elements[index], 0)}${suffix_text(alt, index)} — ${repeat_emit_label(plan.emit)}`,
     );
     render_elem(o, ctx, &rep.element, &plan.inner);
     if let Some(cut) = &plan.rest {
@@ -328,7 +328,7 @@ fn render_elem_body(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, body: &
 }
 
 fn decision_line<S: AsStrSlice>(o: &mut DumpOut, text: S) {
-    o.text.push_str(&"  ");
+    o.text.push_str("  ");
     o.text.push_str(&o.scope);
     o.text.push_str(text);
     o.text.push('\n');
@@ -381,7 +381,7 @@ fn render_summary(o: &mut DumpOut) {
     let repeats = `greedy repeat: plain ${o.repeat_plain}, lookahead-aware ${o.repeat_lookahead}; non-greedy repeat: ${o.repeat_non_greedy}`;
     let groups = `alternation + suffix: first-match ${o.group_first_match}, arm scoring ${o.group_arm_scoring}`;
     let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}`;
-    o.text.push_str(&`\nstrategies:\n  ${routes}\n  ${repeats}\n  ${groups}\n  ${alts}\n`);
+    o.text.push_str(`\nstrategies:\n  ${routes}\n  ${repeats}\n  ${groups}\n  ${alts}\n`);
 }
 
 // ==========================================================================
@@ -401,7 +401,7 @@ fn alts_text(alts: &List<LexerAlternative>, depth: i32) -> String {
     s.push('(');
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            s.push_str(&" | ");
+            s.push_str(" | ");
         }
         s.push_str(&alt_text(&alts[i], depth));
     }
@@ -432,7 +432,7 @@ fn elem_text(elem: &LexerElement, depth: i32) -> String {
         CharRange(pair) => {
             let mut s = String::with_capacity(8);
             push_quoted_char(&mut s, pair.0);
-            s.push_str(&"..");
+            s.push_str("..");
             push_quoted_char(&mut s, pair.1);
             s;
         },
@@ -494,15 +494,15 @@ fn push_quoted_char(s: &mut String, c: char) {
 
 fn push_escaped_char(s: &mut String, c: char) {
     match c {
-        '\n' => s.push_str(&"\\n"),
-        '\r' => s.push_str(&"\\r"),
-        '\t' => s.push_str(&"\\t"),
-        '\\' => s.push_str(&"\\\\"),
-        '\'' => s.push_str(&"\\'"),
+        '\n' => s.push_str("\\n"),
+        '\r' => s.push_str("\\r"),
+        '\t' => s.push_str("\\t"),
+        '\\' => s.push_str("\\\\"),
+        '\'' => s.push_str("\\'"),
         _ => {
             let code = c as i32;
             if code < 0x20 || code == 0x7F {
-                s.push_str(&`\\u{${code:x}}`);
+                s.push_str(`\\u{${code:x}}`);
             } else {
                 s.push(c);
             }

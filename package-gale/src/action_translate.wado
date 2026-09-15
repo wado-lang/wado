@@ -322,7 +322,7 @@ fn parser_special_expr<S: AsStrSlice>(r: &ResolvedAttr, is_lr: bool, handle: S) 
             `${handle.to_string()}.rule_text(${RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
-        "stop" => token_member_of(&`(${handle.to_string()}.pos - 1)`, &r.member, handle),
+        "stop" => token_member_of(`(${handle.to_string()}.pos - 1)`, &r.member, handle),
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
             Result::Ok(`${handle.to_string()}.${method}()`);

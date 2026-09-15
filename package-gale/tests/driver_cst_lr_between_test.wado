@@ -29,24 +29,24 @@ fn assert_parses<S: AsStrSlice>(input: S) {
 // `#[TODO]`, so a regression from "wrong tree" to "rejected" fails instead of
 // staying a pending todo.
 test "between with trailing and parses" {
-    assert_parses(&"between X1 and X2 and X3 ;");
+    assert_parses("between X1 and X2 and X3 ;");
 }
 
 #[TODO]
 test "between with trailing and brackets the middle operand as ANTLR4 does" {
-    assert_tree(&"between X1 and X2 and X3 ;", &"(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
+    assert_tree("between X1 and X2 and X3 ;", "(stat (expr between (expr (expr X1) and (expr X2)) and (expr X3)) ;)");
 }
 
 // Plain binary chains still parse.
 test "binary and/or chain parses" {
     assert_tree(
-        &"X1 and X2 or X3 and X4 ;",
-        &"(stat (expr (expr (expr X1) and (expr X2)) or (expr (expr X3) and (expr X4))) ;)",
+        "X1 and X2 or X3 and X4 ;",
+        "(stat (expr (expr (expr X1) and (expr X2)) or (expr (expr X3) and (expr X4))) ;)",
     );
 }
 
 // between mixed with a binary continuation: with only one `and` in the input the
 // middle operand yields it, and the trailing operand takes the `or`.
 test "between then or continuation parses" {
-    assert_tree(&"between X1 and X2 or X3 ;", &"(stat (expr between (expr X1) and (expr (expr X2) or (expr X3))) ;)");
+    assert_tree("between X1 and X2 or X3 ;", "(stat (expr between (expr X1) and (expr (expr X2) or (expr X3))) ;)");
 }

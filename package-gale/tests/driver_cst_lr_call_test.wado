@@ -16,17 +16,17 @@ fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "call: nested call arg stays a full expr" {
-    chk(&"a(b(c))", &"(prog (e (e a) ( (e (e b) ( (e c) )) )))");
+    chk("a(b(c))", "(prog (e (e a) ( (e (e b) ( (e c) )) )))");
 }
 test "call: lower-precedence arg parses inside the call" {
-    chk(&"a(b+c)", &"(prog (e (e a) ( (e (e b) + (e c)) )))");
+    chk("a(b+c)", "(prog (e (e a) ( (e (e b) + (e c)) )))");
 }
 test "call: comma-separated args" {
-    chk(&"a(b,c)", &"(prog (e (e a) ( (e b) , (e c) )))");
+    chk("a(b,c)", "(prog (e (e a) ( (e b) , (e c) )))");
 }
 test "call: empty arg list" {
-    chk(&"a()", &"(prog (e (e a) ( )))");
+    chk("a()", "(prog (e (e a) ( )))");
 }
 test "call: postfix binds looser than +" {
-    chk(&"a+b(c)", &"(prog (e (e (e a) + (e b)) ( (e c) )))");
+    chk("a+b(c)", "(prog (e (e (e a) + (e b)) ( (e c) )))");
 }

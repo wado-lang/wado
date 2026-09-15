@@ -12,16 +12,16 @@ directory itself, so a walk has a root case.
 ```wado
 use fs from "core:fs";
 
-let source = match fs::read_to_string(&"docs/spec.md") {
+let source = match fs::read_to_string("docs/spec.md") {
     Ok(s) => s,
     Err(e) => {
         eprintln(`error: ${e}`);
         return;
     },
 };
-fs::write(&"build/spec.txt", &source).unwrap();
+fs::write("build/spec.txt", &source).unwrap();
 
-for let entry of fs::read_dir(&"src")? {
+for let entry of fs::read_dir("src")? {
     if entry.type matches { Directory } {
         continue;
     }

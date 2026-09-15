@@ -19,13 +19,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "non-greedy plus takes the minimum when the continuation fits" {
-    assert_tree(&"a a", &"(s (x a) (y a))");
+    assert_tree("a a", "(s (x a) (y a))");
 }
 
 test "non-greedy plus iterates when exiting would strand the continuation" {
-    assert_tree(&"a a a", &"(s (x a) (x a) (y a))");
+    assert_tree("a a a", "(s (x a) (x a) (y a))");
 }
 
 test "non-greedy plus iterates as far as needed" {
-    assert_tree(&"a a a a", &"(s (x a) (x a) (x a) (y a))");
+    assert_tree("a a a a", "(s (x a) (x a) (x a) (y a))");
 }

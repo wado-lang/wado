@@ -20,10 +20,10 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // The hit case: the first candidate raises the ban and fails on its last token,
 // so the second only matches if it started from the parser's gate.
 test "a candidate starts from the parser's gate, not the previous candidate's" {
-    assert_tree(&"x { y } ;", &"(start (pick (expr x { y }) ;))");
+    assert_tree("x { y } ;", "(start (pick (expr x { y }) ;))");
 }
 
 // The rejection case: the first candidate, when it does match, still wins.
 test "the first candidate still wins where it matches" {
-    assert_tree(&"x { y } }", &"(start (pick x { y } }))");
+    assert_tree("x { y } }", "(start (pick x { y } }))");
 }

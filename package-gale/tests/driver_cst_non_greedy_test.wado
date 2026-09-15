@@ -16,19 +16,19 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "non-greedy: `.*?` stops at the first close paren" {
-    assert_tree(&"( a 1 b )", &"(start (seg ( a 1 b )))");
+    assert_tree("( a 1 b )", "(start (seg ( a 1 b )))");
 }
 
 test "non-greedy: `.*?` matches zero inner tokens" {
-    assert_tree(&"( )", &"(start (seg ( )))");
+    assert_tree("( )", "(start (seg ( )))");
 }
 
 test "non-greedy: `.+?` requires one inner token then stops" {
-    assert_tree(&"[ z ]", &"(start (seg [ z ]))");
+    assert_tree("[ z ]", "(start (seg [ z ]))");
 }
 
 test "non-greedy: a sequence of segments mixes both forms" {
-    assert_tree(&"( a ) [ b ]", &"(start (seg ( a )) (seg [ b ]))");
+    assert_tree("( a ) [ b ]", "(start (seg ( a )) (seg [ b ]))");
 }
 
 // Regression: an unterminated `[ .+? ]` reaches EOF inside the non-scannable
@@ -36,6 +36,6 @@ test "non-greedy: a sequence of segments mixes both forms" {
 // advancing. Without the loop's `!p.recovering` guard this spins forever; the
 // parse must instead terminate with a diagnostic.
 test "recovery: unterminated `.+?` terminates instead of hanging" {
-    let r = ng::parse(&"[ a");
+    let r = ng::parse("[ a");
     assert !r.ok(), "expected a diagnostic for the unterminated '['";
 }

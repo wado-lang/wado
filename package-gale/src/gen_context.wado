@@ -977,7 +977,7 @@ impl GenContext {
     /// table (`token_slot_order` emits the Eof slot); the intern lazily
     /// extends only a test-path table built without `set_token_kinds`.
     pub fn eof_kind_id(&mut self) -> i32 {
-        return self.token_kinds.intern(&"TK_EOF");
+        return self.token_kinds.intern("TK_EOF");
     }
 
     /// Kind id for a terminal element, using the resolved `kind_id` when
@@ -987,7 +987,7 @@ impl GenContext {
         if kind_id >= 0 {
             return kind_id;
         }
-        return self.token_kinds.intern(&`TK_${name.to_string()}`);
+        return self.token_kinds.intern(`TK_${name.to_string()}`);
     }
 
     pub fn literal_id<S: AsStrSlice>(&mut self, text: S, kind_id: i32) -> i32 {
@@ -2159,7 +2159,7 @@ impl GenContext {
 
     /// Sugar for `admits_check_str` against `p.peek_kind()`.
     pub fn admits_first_check_str(&mut self, admits: &Admits) -> String {
-        return self.admits_check_str(admits, &"p.peek_kind()");
+        return self.admits_check_str(admits, "p.peek_kind()");
     }
 
     /// Returns the set of token kinds that the rule's body may greedily

@@ -17,17 +17,17 @@ fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "between-call: comma args parse at prec 0" {
-    chk(&"1(2,3)", &"(prog (expr (expr 1) ( (expr 2) , (expr 3) )))");
+    chk("1(2,3)", "(prog (expr (expr 1) ( (expr 2) , (expr 3) )))");
 }
 test "between-call: call binds tighter than and" {
-    chk(&"1(2,3) and 4", &"(prog (expr (expr (expr 1) ( (expr 2) , (expr 3) )) and (expr 4)))");
+    chk("1(2,3) and 4", "(prog (expr (expr (expr 1) ( (expr 2) , (expr 3) )) and (expr 4)))");
 }
 test "between-call: and binds tighter than call" {
-    chk(&"1 and 2(3)", &"(prog (expr (expr (expr 1) and (expr 2)) ( (expr 3) )))");
+    chk("1 and 2(3)", "(prog (expr (expr (expr 1) and (expr 2)) ( (expr 3) )))");
 }
 test "between-call: call applies to a between expression" {
-    chk(&"between 1 and 2(3)", &"(prog (expr (expr between (expr 1) and (expr 2)) ( (expr 3) )))");
+    chk("between 1 and 2(3)", "(prog (expr (expr between (expr 1) and (expr 2)) ( (expr 3) )))");
 }
 test "between-call: lower-precedence arg parses inside the call" {
-    chk(&"1(2 and 3)", &"(prog (expr (expr 1) ( (expr (expr 2) and (expr 3)) )))");
+    chk("1(2 and 3)", "(prog (expr (expr 1) ( (expr (expr 2) and (expr 3)) )))");
 }

@@ -116,16 +116,16 @@ fn resolve_one(
         return ok_attr(r, target, &lab.ref_name);
     }
     if contains(&env.attrs, &r.name) {
-        check_member(r, &AttrTarget::RuleAttr, &"", rules)?;
-        return ok_attr(r, AttrTarget::RuleAttr, &"");
+        check_member(r, &AttrTarget::RuleAttr, "", rules)?;
+        return ok_attr(r, AttrTarget::RuleAttr, "");
     }
     if is_parser_special(&r.name) {
-        check_member(r, &AttrTarget::ParserSpecial, &"", rules)?;
-        return ok_attr(r, AttrTarget::ParserSpecial, &"");
+        check_member(r, &AttrTarget::ParserSpecial, "", rules)?;
+        return ok_attr(r, AttrTarget::ParserSpecial, "");
     }
     if contains(&env.token_refs, &r.name) {
-        check_member(r, &AttrTarget::TokenRef, &"", rules)?;
-        return ok_attr(r, AttrTarget::TokenRef, &"");
+        check_member(r, &AttrTarget::TokenRef, "", rules)?;
+        return ok_attr(r, AttrTarget::TokenRef, "");
     }
     if contains(&env.rule_refs, &r.name) {
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;

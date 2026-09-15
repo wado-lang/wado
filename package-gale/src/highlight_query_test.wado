@@ -19,14 +19,14 @@ fn parse_err<S: AsStrSlice>(src: S) -> String {
 
 fn is_name<S: AsStrSlice>(sel: &TokenSelector, expected: S) -> bool {
     return match sel {
-        Name(n) => *n == expected,
+        Name(n) => expected.eq_str(*n),
         Literal(_) => false,
     };
 }
 
 fn is_literal<S: AsStrSlice>(sel: &TokenSelector, expected: S) -> bool {
     return match sel {
-        Literal(t) => *t == expected,
+        Literal(t) => expected.eq_str(*t),
         Name(_) => false,
     };
 }

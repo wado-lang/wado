@@ -23,7 +23,7 @@ pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, Str
 /// receiver, so the source says which those are.
 fn method_head(chars: &List<char>, start: i32, n: i32) -> [String, bool] {
     let mut i = skip_ws(chars, start, n);
-    if word_at(chars, i, n, &"pub") {
+    if word_at(chars, i, n, "pub") {
         i = skip_ws(chars, i + 3, n);
     }
     i = skip_ws(chars, i + 2, n);
@@ -39,11 +39,11 @@ fn method_head(chars: &List<char>, start: i32, n: i32) -> [String, bool] {
         return [name, false];
     }
     let mut r = skip_ws(chars, i + 1, n);
-    if !word_at(chars, r, n, &"&mut") {
+    if !word_at(chars, r, n, "&mut") {
         return [name, false];
     }
     r = skip_ws(chars, r + 4, n);
-    return [name, word_at(chars, r, n, &"self")];
+    return [name, word_at(chars, r, n, "self")];
 }
 
 fn skip_ws_semi(chars: &List<char>, start: i32, n: i32) -> i32 {
@@ -81,12 +81,12 @@ fn word_at<S: AsStrSlice>(chars: &List<char>, i: i32, n: i32, word: S) -> bool {
 }
 
 fn is_method_start(chars: &List<char>, i: i32, n: i32) -> bool {
-    if word_at(chars, i, n, &"fn") {
+    if word_at(chars, i, n, "fn") {
         return true;
     }
-    if word_at(chars, i, n, &"pub") {
+    if word_at(chars, i, n, "pub") {
         let j = skip_ws(chars, i + 3, n);
-        return word_at(chars, j, n, &"fn");
+        return word_at(chars, j, n, "fn");
     }
     return false;
 }
@@ -132,7 +132,7 @@ fn skip_balanced(chars: &List<char>, open_idx: i32, n: i32, open: char, close: c
 
 fn parse_field(chars: &List<char>, start: i32, n: i32, fields: &mut List<MemberField>) -> Result<i32, String> {
     let mut i = skip_ws(chars, start, n);
-    if word_at(chars, i, n, &"pub") {
+    if word_at(chars, i, n, "pub") {
         i = skip_ws(chars, i + 3, n);
     }
     let name_start = i;

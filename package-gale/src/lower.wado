@@ -1652,7 +1652,7 @@ fn lower_lr_alt(
     // threaded in by `lower_lr_rule` so they are computed once, not
     // once per LR alt.
     let type_name = rule.type_name;
-    let base = strip_suffix(&type_name, &"Node");
+    let base = strip_suffix(&type_name, "Node");
     let case_name = case_names[alt_index];
     let struct_name = `${base}${case_name}`;
 
@@ -2030,9 +2030,9 @@ fn join_kind_list(indices: &List<i32>) -> String {
     let mut out = String::with_capacity(indices.len() * 3);
     for let mut i = 0; i < indices.len(); i += 1 {
         if i > 0 {
-            out.push_str(&", ");
+            out.push_str(", ");
         }
-        out.push_str(&`${indices[i]}`);
+        out.push_str(`${indices[i]}`);
     }
     return out;
 }
@@ -2043,7 +2043,7 @@ fn join_kind_set(kinds: &List<String>) -> String {
     out.push('{');
     for let mut i = 0; i < kinds.len(); i += 1 {
         if i > 0 {
-            out.push_str(&", ");
+            out.push_str(", ");
         }
         out.push_str(&kinds[i]);
     }
@@ -3000,7 +3000,7 @@ fn lower_alt_body(
     let mut case_name: String = "";
     let mut struct_name: String = type_name;
     if rule.alternatives.len() != 1 {
-        let base = strip_suffix(&type_name, &"Node");
+        let base = strip_suffix(&type_name, "Node");
         case_name = case_names[idx];
         struct_name = `${base}${case_names[idx]}`;
     }
@@ -3129,7 +3129,7 @@ fn lower_op<S: AsStrSlice>(
             arg_action: r.arg_action,
         }),
         Wildcard(_) => Op::Wildcard(WildcardOp {
-            field: dedup_name(&"wildcard", name_counts),
+            field: dedup_name("wildcard", name_counts),
             dedup_base: "wildcard",
         }),
         Not(ne) => {
@@ -4666,7 +4666,7 @@ pub fn peel_repeat_body_label(elem: &Element) -> &Element with stores[elem] {
 /// Outer struct field base name for a Repeat. `Star` / `Plus`
 /// take a `_list` suffix on the inner element's base; `Optional`
 /// uses the inner base unchanged. Mirrors `parser_gen`'s
-/// `dedup_name(&"<inner>_list", ...)` / `dedup_name(&"<inner>", ...)`
+/// `dedup_name("<inner>_list", ...)` / `dedup_name("<inner>", ...)`
 /// pattern at field-info call sites.
 ///
 /// `gc_speculative` is the speculative group counter for a

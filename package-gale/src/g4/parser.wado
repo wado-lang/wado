@@ -216,10 +216,10 @@ impl G4Parser {
         let mut is_parser_grammar = false;
         if self.is_kind(G4Token::Identifier) {
             let text = &self.peek().text;
-            if LexerSlice::eq_str(&"lexer", text) {
+            if LexerSlice::eq_str("lexer", text) {
                 is_lexer_grammar = true;
                 self.advance();
-            } else if LexerSlice::eq_str(&"parser", text) {
+            } else if LexerSlice::eq_str("parser", text) {
                 is_parser_grammar = true;
                 self.advance();
             }
@@ -246,7 +246,7 @@ impl G4Parser {
         let mut current_mode: i32 = DEFAULT_MODE;
 
         while !self.at_eof() {
-            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"mode", &self.peek().text) {
+            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str("mode", &self.peek().text) {
                 if is_parser_grammar {
                     let tok = self.peek();
                     let expected: List<String> = ["rule definition"];
@@ -275,17 +275,17 @@ impl G4Parser {
                 }
                 if self.is_kind(G4Token::Identifier) {
                     let text = &self.peek().text;
-                    if LexerSlice::eq_str(&"public", text) {
+                    if LexerSlice::eq_str("public", text) {
                         visibility = Visibility::Public;
                         self.advance();
                         continue;
                     }
-                    if LexerSlice::eq_str(&"private", text) {
+                    if LexerSlice::eq_str("private", text) {
                         visibility = Visibility::Private;
                         self.advance();
                         continue;
                     }
-                    if LexerSlice::eq_str(&"protected", text) {
+                    if LexerSlice::eq_str("protected", text) {
                         visibility = Visibility::Protected;
                         self.advance();
                         continue;
@@ -381,17 +381,17 @@ impl G4Parser {
         loop {
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
-                if LexerSlice::eq_str(&"tokens", text) {
+                if LexerSlice::eq_str("tokens", text) {
                     self.advance();
                     self.parse_tokens_block(virtual_tokens)?;
                     continue;
                 }
-                if LexerSlice::eq_str(&"channels", text) {
+                if LexerSlice::eq_str("channels", text) {
                     self.advance();
                     self.parse_channels_block()?;
                     continue;
                 }
-                if LexerSlice::eq_str(&"options", text) {
+                if LexerSlice::eq_str("options", text) {
                     self.advance();
                     let opts = self.parse_options_block();
                     for let o of opts {
@@ -399,7 +399,7 @@ impl G4Parser {
                     }
                     continue;
                 }
-                if LexerSlice::eq_str(&"import", text) {
+                if LexerSlice::eq_str("import", text) {
                     self.advance();
                     self.parse_delegate_grammars()?;
                     continue;
@@ -420,9 +420,9 @@ impl G4Parser {
         if !self.is_kind(G4Token::LBrace) {
             let tok = self.peek();
             let mut msg = String::with_capacity(24);
-            msg.push_str(&"expected `{` after `");
+            msg.push_str("expected `{` after `");
             msg.push_str(kw);
-            msg.push_str(&"`");
+            msg.push_str("`");
             return Result::<List<String>, ParseError>::Err(
                 ParseError::new(msg, tok.span, ["{"]),
             );
@@ -448,9 +448,9 @@ impl G4Parser {
         }
         if !self.is_kind(G4Token::RBrace) {
             let mut msg = String::with_capacity(56);
-            msg.push_str(&"unterminated `");
+            msg.push_str("unterminated `");
             msg.push_str(kw);
-            msg.push_str(&" { ... }` block — expected `}` before end of file");
+            msg.push_str(" { ... }` block — expected `}` before end of file");
             return Result::<List<String>, ParseError>::Err(
                 ParseError::new(msg, brace_span, ["}"]),
             );
@@ -460,7 +460,7 @@ impl G4Parser {
     }
 
     fn parse_channels_block(&mut self) -> Result<(), ParseError> {
-        let names = self.parse_id_list_block(&"channels")?;
+        let names = self.parse_id_list_block("channels")?;
         for let name of names {
             let mut dup = false;
             for let existing of &self.channels {
@@ -613,7 +613,7 @@ impl G4Parser {
     }
 
     fn parse_tokens_block(&mut self, virtual_tokens: &mut List<String>) -> Result<(), ParseError> {
-        let names = self.parse_id_list_block(&"tokens")?;
+        let names = self.parse_id_list_block("tokens")?;
         for let name of names {
             virtual_tokens.push(name);
         }
@@ -747,8 +747,8 @@ impl G4Parser {
             }
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
-                let is_returns = LexerSlice::eq_str(&"returns", text);
-                let is_locals = LexerSlice::eq_str(&"locals", text);
+                let is_returns = LexerSlice::eq_str("returns", text);
+                let is_locals = LexerSlice::eq_str("locals", text);
                 if is_returns || is_locals {
                     self.advance();
                     if self.is_kind(G4Token::CharClass) {
@@ -763,14 +763,14 @@ impl G4Parser {
                     }
                     continue;
                 }
-                if LexerSlice::eq_str(&"throws", text) {
+                if LexerSlice::eq_str("throws", text) {
                     self.advance();
                     for let q of self.parse_qualified_id_list() {
                         p.throws.push(q);
                     }
                     continue;
                 }
-                if LexerSlice::eq_str(&"options", text) {
+                if LexerSlice::eq_str("options", text) {
                     self.advance();
                     let opts = self.parse_options_block();
                     for let o of opts {
@@ -824,7 +824,7 @@ impl G4Parser {
                 break;
             }
             let text = &self.peek().text;
-            if LexerSlice::eq_str(&"catch", text) {
+            if LexerSlice::eq_str("catch", text) {
                 self.advance();
                 let mut decl_text = "";
                 if self.is_kind(G4Token::CharClass) {
@@ -837,7 +837,7 @@ impl G4Parser {
                 g.catches.push(CatchClause { decl_text, body });
                 continue;
             }
-            if LexerSlice::eq_str(&"finally", text) {
+            if LexerSlice::eq_str("finally", text) {
                 self.advance();
                 if self.is_kind(G4Token::LBrace) {
                     g.finally_action = Option::<ActionSource>::Some(self.extract_action('{', '}'));
@@ -1023,7 +1023,7 @@ impl G4Parser {
         let mut options: List<GrammarOption> = [];
         let mut consumed = false;
         loop {
-            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str(&"options", &self.peek().text) {
+            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str("options", &self.peek().text) {
                 self.advance();
                 let opts = self.parse_options_block();
                 for let o of opts {
@@ -1157,23 +1157,23 @@ impl G4Parser {
                     actions.skip = true;
                 },
                 "pushMode" => {
-                    let mode_name = self.parse_lexer_command_arg(&"pushMode", false)?;
+                    let mode_name = self.parse_lexer_command_arg("pushMode", false)?;
                     actions.push_mode = intern_mode(mode_names, &mode_name);
                 },
                 "popMode" => {
                     actions.pop_mode = true;
                 },
                 "mode" => {
-                    let mode_name = self.parse_lexer_command_arg(&"mode", false)?;
+                    let mode_name = self.parse_lexer_command_arg("mode", false)?;
                     actions.set_mode = intern_mode(mode_names, &mode_name);
                 },
                 "channel" => {
                     self.expect(G4Token::LParen)?;
                     let arg = self.advance();
                     self.expect(G4Token::RParen)?;
-                    if LexerSlice::eq_str(&"DEFAULT_TOKEN_CHANNEL", &arg.text) {
+                    if LexerSlice::eq_str("DEFAULT_TOKEN_CHANNEL", &arg.text) {
                         actions.channel = DEFAULT_CHANNEL;
-                    } else if LexerSlice::eq_str(&"HIDDEN", &arg.text) {
+                    } else if LexerSlice::eq_str("HIDDEN", &arg.text) {
                         actions.channel = HIDDEN_CHANNEL;
                     } else if arg.kind == G4Token::IntLit as i32 {
                         actions.channel = parse_int_literal(&arg.text.to_string());
@@ -1200,7 +1200,7 @@ impl G4Parser {
                 },
                 "type" => {
                     actions.type_override = Option::<String>::Some(
-                        self.parse_lexer_command_arg(&"type", true)?,
+                        self.parse_lexer_command_arg("type", true)?,
                     );
                 },
                 "more" => {
@@ -1666,10 +1666,10 @@ fn expand_posix_property<S: AsStrSlice>(key: S, ranges: &mut List<CharRange>) ->
 
 fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
     return match key {
-        "cntrl" => Option::Some(gc_set(&"cc")),
-        "digit" => Option::Some(gc_set(&"nd")),
-        "alnum" => Option::Some(union_char_ranges(&binary_set(&"alphabetic"), &gc_set(&"nd"))),
-        "xdigit" => Option::Some(union_char_ranges(&gc_set(&"nd"), &binary_set(&"hexdigit"))),
+        "cntrl" => Option::Some(gc_set("cc")),
+        "digit" => Option::Some(gc_set("nd")),
+        "alnum" => Option::Some(union_char_ranges(&binary_set("alphabetic"), &gc_set("nd"))),
+        "xdigit" => Option::Some(union_char_ranges(&gc_set("nd"), &binary_set("hexdigit"))),
         "blank" => Option::Some(posix_blank_ranges()),
         "graph" => Option::Some(posix_graph_ranges()),
         "print" => Option::Some(posix_print_ranges()),
@@ -1679,18 +1679,18 @@ fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
 
 /// Horizontal whitespace: `White_Space` less the characters that end a line.
 fn posix_blank_ranges() -> List<CharRange> {
-    let mut vertical = union_char_ranges(&gc_set(&"zl"), &gc_set(&"zp"));
+    let mut vertical = union_char_ranges(&gc_set("zl"), &gc_set("zp"));
     for let c of ['\n', '\u{000B}', '\u{000C}', '\r', '\u{0085}'] {
         vertical.push(CharRange::single(c));
     }
-    return subtract_char_ranges(&binary_set(&"whitespace"), &vertical);
+    return subtract_char_ranges(&binary_set("whitespace"), &vertical);
 }
 
 /// Everything with a visible glyph: not whitespace, not a control, not a
 /// surrogate, not unassigned. Format characters (`Cf`) stay in — ANTLR4 keeps
 /// them, and `gc=Cs` is empty here anyway since no `char` is a surrogate.
 fn posix_graph_ranges() -> List<CharRange> {
-    let mut invisible = binary_set(&"whitespace");
+    let mut invisible = binary_set("whitespace");
     for let key of ["cc", "cs", "cn"] {
         invisible = union_char_ranges(&invisible, &gc_set(&key));
     }
@@ -1701,7 +1701,7 @@ fn posix_graph_ranges() -> List<CharRange> {
 /// but a tab, being `Cc`, does not.
 fn posix_print_ranges() -> List<CharRange> {
     let visible = union_char_ranges(&posix_graph_ranges(), &posix_blank_ranges());
-    return subtract_char_ranges(&visible, &gc_set(&"cc"));
+    return subtract_char_ranges(&visible, &gc_set("cc"));
 }
 
 /// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
@@ -1709,12 +1709,12 @@ fn posix_print_ranges() -> List<CharRange> {
 /// `Emoji_Presentation`, both of which `emoji-data.txt` already gives the
 /// table; measured against the jar like the POSIX set.
 fn expand_emoji_presentation<S: AsStrSlice>(value: S, ranges: &mut List<CharRange>) -> bool {
-    let emoji = binary_set(&"emoji");
+    let emoji = binary_set("emoji");
     let set = match value {
         // Colourful by default.
-        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set("emojipresentation"))),
         // Emoji-capable, but drawn as text unless asked otherwise.
-        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set("emojipresentation"))),
         // Text-only: never emoji at all.
         "text" => Option::Some(complement_char_ranges(&emoji)),
         _ => null,

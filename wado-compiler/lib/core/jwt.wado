@@ -145,7 +145,7 @@ impl Deserialize for Header;
 pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
     let mut header_json = `{"alg":`;
     write_escaped_string(&mut header_json, &key.alg());
-    header_json.push_str(&`,"typ":"JWT"}`);
+    header_json.push_str(`,"typ":"JWT"}`);
     let header = encode_url(&header_json);
     let signing_input = `${header}.${encode_url(payload)}`;
     let bytes: ByteList = signing_input.bytes().collect();

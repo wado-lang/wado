@@ -19,21 +19,21 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The hit case: `# a` is not a `stmt`, so the whole input is the one `expr`.
 test "a mandatory group that matches nothing is not a match" {
-    assert_tree(&"{ # a x }", &"(start (block { (body (expr (attr # a) x)) }))");
+    assert_tree("{ # a x }", "(start (block { (body (expr (attr # a) x)) }))");
 }
 
 // The rejection cases: the same group, found. A repair that made every group
 // strict, or that stopped scanning the prefix, fails these.
 test "the group found is still a statement" {
     assert_tree(
-        &"{ # a let y; }",
-        &"(start (block { (body (stmt (attr # a) (decl let y ;))) }))",
+        "{ # a let y; }",
+        "(start (block { (body (stmt (attr # a) (decl let y ;))) }))",
     );
 }
 
 test "a statement and a trailing expression" {
     assert_tree(
-        &"{ let y; # a x }",
-        &"(start (block { (body (stmt (decl let y ;)) (expr (attr # a) x)) }))",
+        "{ let y; # a x }",
+        "(start (block { (body (stmt (decl let y ;)) (expr (attr # a) x)) }))",
     );
 }

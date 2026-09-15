@@ -314,7 +314,7 @@ impl Visitor for ValueVisitor {
 /// inherent `impl` on a variant.
 fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
     match value {
-        Null => f.write_str(&"null"),
+        Null => f.write_str("null"),
         Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
         Int(n) => (*n).inspect(f),
         UInt(n) => (*n).inspect(f),
@@ -323,12 +323,12 @@ fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
         Float(n) => (*n).inspect(f),
         String(s) => (*s).inspect(f),
         Bytes(b) => {
-            f.write_str(&"0x");
+            f.write_str("0x");
             f.write_str(&b.to_hex());
         },
         List(arr) => {
             if arr.is_empty() {
-                f.write_str(&"[]");
+                f.write_str("[]");
                 return;
             }
             f.open_brace("[");
@@ -341,22 +341,22 @@ fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
         },
         Object(map) => {
             if map.is_empty() {
-                f.write_str(&"{}");
+                f.write_str("{}");
                 return;
             }
             f.open_brace("{");
             for let [k, v] of map.entries() {
                 f.write_newline_indent();
                 k.inspect(f);
-                f.write_str(&": ");
+                f.write_str(": ");
                 v.inspect(f);
                 f.write_char(',');
             }
             f.close_brace("}");
         },
-        Undefined => f.write_str(&"undefined"),
+        Undefined => f.write_str("undefined"),
         Unknown(b) => {
-            f.write_str(&"unknown(0x");
+            f.write_str("unknown(0x");
             f.write_str(&b.to_hex());
             f.write_char(')');
         },
@@ -370,7 +370,7 @@ impl Inspect for Value {
             return;
         }
         match self {
-            Null => f.write_str(&"null"),
+            Null => f.write_str("null"),
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Int(n) => (*n).inspect(f),
             UInt(n) => (*n).inspect(f),
@@ -379,14 +379,14 @@ impl Inspect for Value {
             Float(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
             Bytes(b) => {
-                f.write_str(&"0x");
+                f.write_str("0x");
                 f.write_str(&b.to_hex());
             },
             List(arr) => {
                 f.write_char('[');
                 for let mut i = 0; i < arr.len(); i += 1 {
                     if i > 0 {
-                        f.write_str(&", ");
+                        f.write_str(", ");
                     }
                     arr[i].inspect(f);
                 }
@@ -397,18 +397,18 @@ impl Inspect for Value {
                 let mut first = true;
                 for let [k, v] of map.entries() {
                     if !first {
-                        f.write_str(&", ");
+                        f.write_str(", ");
                     }
                     first = false;
                     k.inspect(f);
-                    f.write_str(&": ");
+                    f.write_str(": ");
                     v.inspect(f);
                 }
                 f.write_char('}');
             },
-            Undefined => f.write_str(&"undefined"),
+            Undefined => f.write_str("undefined"),
             Unknown(b) => {
-                f.write_str(&"unknown(0x");
+                f.write_str("unknown(0x");
                 f.write_str(&b.to_hex());
                 f.write_char(')');
             },

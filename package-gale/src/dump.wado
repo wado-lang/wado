@@ -72,7 +72,7 @@ pub fn render_dump(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenCon
     let estimated = 256 + 512 * lowered.parser_rules.len();
     let mut out = String::with_capacity(estimated);
 
-    out.push_str(&"grammar ");
+    out.push_str("grammar ");
     out.push_str(&lowered.name);
     out.push('\n');
     out.push('\n');
@@ -89,9 +89,9 @@ pub fn render_dump(grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenCon
 fn render_rule(out: &mut String, rule: &Rule, grammar: &Grammar, lowered: &LoweredGrammar, ctx: &mut GenContext) {
     let header = rule_header(rule);
 
-    out.push_str(&"rule ");
+    out.push_str("rule ");
     out.push_str(&header.name);
-    out.push_str(&" — ");
+    out.push_str(" — ");
     out.push_str(&rule_shape_label(rule));
     out.push('\n');
 
@@ -121,29 +121,29 @@ fn rule_shape_label(rule: &Rule) -> String {
 fn render_simple(out: &mut String, s: &SimpleRule) {
     // Simple rules carry a single body; the per-alt breakdown is
     // covered by the repeats section below. Nothing alt-shaped to list.
-    out.push_str(&"  single alternative\n");
+    out.push_str("  single alternative\n");
 }
 
 fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
     match m.dispatch {
         Direct(d) => {
-            out.push_str(&"  dispatch: Direct (token-led)\n");
+            out.push_str("  dispatch: Direct (token-led)\n");
             for let branch of &d.branches {
-                out.push_str(&"  alt ");
-                out.push_str(&`${branch.alt_index}`);
-                out.push_str(&" first=");
+                out.push_str("  alt ");
+                out.push_str(`${branch.alt_index}`);
+                out.push_str(" first=");
                 push_token_set(out, &alt_class_first_set(&branch.alt_class));
                 out.push('\n');
             }
         },
         Tournament(t) => {
-            out.push_str(&"  dispatch: Tournament (longest-match scan)\n");
+            out.push_str("  dispatch: Tournament (longest-match scan)\n");
             for let mut i = 0; i < t.alts.len(); i += 1 {
-                out.push_str(&"  alt ");
-                out.push_str(&`${t.alts[i]}`);
-                out.push_str(&" (tournament order ");
-                out.push_str(&`${i}`);
-                out.push_str(&")\n");
+                out.push_str("  alt ");
+                out.push_str(`${t.alts[i]}`);
+                out.push_str(" (tournament order ");
+                out.push_str(`${i}`);
+                out.push_str(")\n");
             }
         },
     }
@@ -151,46 +151,46 @@ fn render_multi_alt(out: &mut String, m: &MultiAltRule) {
 
 fn render_left_recursive(out: &mut String, l: &LeftRecursiveRule) {
     // Atom alts: the non-LR alternatives, lowered as a multi-alt body.
-    out.push_str(&"  atom alts:\n");
+    out.push_str("  atom alts:\n");
     match l.atom.dispatch {
         Direct(d) => {
             for let branch of &d.branches {
-                out.push_str(&"    alt ");
-                out.push_str(&`${branch.alt_index}`);
-                out.push_str(&" first=");
+                out.push_str("    alt ");
+                out.push_str(`${branch.alt_index}`);
+                out.push_str(" first=");
                 push_token_set(out, &alt_class_first_set(&branch.alt_class));
                 out.push('\n');
             }
         },
         Tournament(t) => {
             for let mut i = 0; i < t.alts.len(); i += 1 {
-                out.push_str(&"    alt ");
-                out.push_str(&`${t.alts[i]}`);
-                out.push_str(&" (tournament order ");
-                out.push_str(&`${i}`);
-                out.push_str(&")\n");
+                out.push_str("    alt ");
+                out.push_str(`${t.alts[i]}`);
+                out.push_str(" (tournament order ");
+                out.push_str(`${i}`);
+                out.push_str(")\n");
             }
         },
     }
 
     // LR alts: each carries precedence and associativity.
-    out.push_str(&"  lr alts:\n");
+    out.push_str("  lr alts:\n");
     for let lr of &l.lr_alts {
-        out.push_str(&"    alt ");
-        out.push_str(&`${lr.alt_index}`);
-        out.push_str(&" (");
+        out.push_str("    alt ");
+        out.push_str(`${lr.alt_index}`);
+        out.push_str(" (");
         out.push_str(&lr.case_name);
-        out.push_str(&") prec=");
-        out.push_str(&`${lr.own_prec}`);
-        out.push_str(&" conflict-min=");
-        out.push_str(&`${lr.conflict_min}`);
+        out.push_str(") prec=");
+        out.push_str(`${lr.own_prec}`);
+        out.push_str(" conflict-min=");
+        out.push_str(`${lr.conflict_min}`);
         out.push(' ');
         if lr.right_associative {
-            out.push_str(&"right-assoc");
+            out.push_str("right-assoc");
         } else {
-            out.push_str(&"left-assoc");
+            out.push_str("left-assoc");
         }
-        out.push_str(&" suffix-first=");
+        out.push_str(" suffix-first=");
         push_token_set(out, &lr.suffix_first);
         out.push('\n');
     }
@@ -212,21 +212,21 @@ fn render_lr_loop_entry(out: &mut String, l: &LeftRecursiveRule) {
     if d.valid_lr_alts.is_empty() {
         return;
     }
-    out.push_str(&"  loop-entry:\n");
+    out.push_str("  loop-entry:\n");
     for let group of &d.groups {
-        out.push_str(&"    group [");
+        out.push_str("    group [");
         for let mut i = 0; i < group.len(); i += 1 {
             if i > 0 {
-                out.push_str(&", ");
+                out.push_str(", ");
             }
             // group entries index into valid_lr_alts, which indexes lr_alts.
             let lr = &l.lr_alts[d.valid_lr_alts[group[i]]];
-            out.push_str(&`alt ${lr.alt_index} `);
+            out.push_str(`alt ${lr.alt_index} `);
             push_token_set(out, &lr.suffix_first);
         }
         out.push(']');
         if group.len() >= 2 {
-            out.push_str(&" — overlapping suffix first-sets: precedence-disambiguated loop entry");
+            out.push_str(" — overlapping suffix first-sets: precedence-disambiguated loop entry");
         }
         out.push('\n');
     }
@@ -266,17 +266,17 @@ fn render_prediction(out: &mut String, rule: &Rule, grammar: &Grammar, ctx: &mut
         let tree = build_group_prediction_tree_from_order(&surface.alternatives, &real_indices, ctx);
 
         if !printed_header {
-            out.push_str(&"  prediction:\n");
+            out.push_str("  prediction:\n");
             printed_header = true;
         }
-        out.push_str(&"    overlap group [");
+        out.push_str("    overlap group [");
         for let mut i = 0; i < real_indices.len(); i += 1 {
             if i > 0 {
-                out.push_str(&", ");
+                out.push_str(", ");
             }
-            out.push_str(&`alt ${real_indices[i]}`);
+            out.push_str(`alt ${real_indices[i]}`);
         }
-        out.push_str(&"]:\n");
+        out.push_str("]:\n");
         render_prediction_node(out, &tree, 6);
     }
 }
@@ -285,32 +285,32 @@ fn render_prediction_node(out: &mut String, node: &PredictionNode, indent: i32) 
     push_spaces(out, indent);
     match node {
         Leaf(idx) => {
-            out.push_str(&`Leaf(alt ${*idx})\n`);
+            out.push_str(`Leaf(alt ${*idx})\n`);
         },
         Ambiguous(a) => {
-            out.push_str(&"Ambiguous([");
+            out.push_str("Ambiguous([");
             for let mut i = 0; i < a.alts.len(); i += 1 {
                 if i > 0 {
-                    out.push_str(&", ");
+                    out.push_str(", ");
                 }
-                out.push_str(&`alt ${a.alts[i]}`);
+                out.push_str(`alt ${a.alts[i]}`);
             }
-            out.push_str(&"]) — ");
+            out.push_str("]) — ");
             out.push_str(&ambiguity_reason_label(&a.reason));
             out.push('\n');
         },
         Consume(c) => {
-            out.push_str(&"Consume(");
+            out.push_str("Consume(");
             out.push_str(&prediction_element_label(&c.element));
-            out.push_str(&")\n");
+            out.push_str(")\n");
             render_prediction_node(out, &c.child, indent + 2);
         },
         Dispatch(d) => {
-            out.push_str(&`Dispatch[d=${d.depth}]\n`);
+            out.push_str(`Dispatch[d=${d.depth}]\n`);
             for let branch of &d.branches {
                 push_spaces(out, indent + 2);
                 push_token_set(out, &branch.tokens);
-                out.push_str(&" →\n");
+                out.push_str(" →\n");
                 render_prediction_node(out, &branch.child, indent + 4);
             }
         },
@@ -377,9 +377,9 @@ fn render_repeats(out: &mut String, rule: &Rule) {
     if lines.is_empty() {
         return;
     }
-    out.push_str(&"  repeats:\n");
+    out.push_str("  repeats:\n");
     for let line of &lines {
-        out.push_str(&"    ");
+        out.push_str("    ");
         out.push_str(line);
         out.push('\n');
     }
@@ -455,9 +455,9 @@ fn render_rule_diagnostics<S: AsStrSlice>(out: &mut String, rule_name: S, lowere
         if d.owner.rule != rule_name.to_string() {
             continue;
         }
-        out.push_str(&"  ! warning: ");
+        out.push_str("  ! warning: ");
         out.push_str(&diagnostic_kind_label(&d.kind));
-        out.push_str(&": ");
+        out.push_str(": ");
         out.push_str(&d.message);
         out.push('\n');
     }
@@ -475,16 +475,16 @@ fn diagnostic_kind_label(kind: &DiagnosticKind) -> String {
 
 fn render_summary(out: &mut String, lowered: &LoweredGrammar) {
     if lowered.diagnostics.is_empty() {
-        out.push_str(&"warnings: none\n");
+        out.push_str("warnings: none\n");
         return;
     }
-    out.push_str(&"warnings (");
-    out.push_str(&`${lowered.diagnostics.len()}`);
-    out.push_str(&"):\n");
+    out.push_str("warnings (");
+    out.push_str(`${lowered.diagnostics.len()}`);
+    out.push_str("):\n");
     for let d of &lowered.diagnostics {
-        out.push_str(&"  ");
+        out.push_str("  ");
         out.push_str(&d.owner.label());
-        out.push_str(&": ");
+        out.push_str(": ");
         out.push_str(&d.message);
         out.push('\n');
     }
@@ -499,7 +499,7 @@ fn push_token_set(out: &mut String, tokens: &List<String>) {
     out.push('[');
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
-            out.push_str(&", ");
+            out.push_str(", ");
         }
         out.push_str(&tokens[i]);
     }

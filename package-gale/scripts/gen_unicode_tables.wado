@@ -192,24 +192,24 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
     let version = arguments[0];
 
-    let categories = parse_runs(&read_file(&"UnicodeData.txt"));
-    let value_aliases = read_file(&"PropertyValueAliases.txt");
-    let script_aliases = parse_alias_lines(&value_aliases, &"sc");
-    let block_aliases = parse_alias_lines(&value_aliases, &"blk");
+    let categories = parse_runs(&read_file("UnicodeData.txt"));
+    let value_aliases = read_file("PropertyValueAliases.txt");
+    let script_aliases = parse_alias_lines(&value_aliases, "sc");
+    let block_aliases = parse_alias_lines(&value_aliases, "blk");
     // `Script` and `Block` partition the space too: ANTLR4 answers
     // `\p{sc=Zzzz}` / `\p{blk=NB}` from their `@missing` default.
-    let scripts = partition_runs(&read_file(&"Scripts.txt"), 1, false, &categories, &script_aliases, &"Script");
-    let blocks = partition_runs(&read_file(&"Blocks.txt"), 1, false, &categories, &block_aliases, &"Block");
-    let mut binary = parse_prop_runs(&read_file(&"PropList.txt"));
-    for let run of parse_prop_runs(&read_file(&"DerivedCoreProperties.txt")) {
+    let scripts = partition_runs(&read_file("Scripts.txt"), 1, false, &categories, &script_aliases, "Script");
+    let blocks = partition_runs(&read_file("Blocks.txt"), 1, false, &categories, &block_aliases, "Block");
+    let mut binary = parse_prop_runs(&read_file("PropList.txt"));
+    for let run of parse_prop_runs(&read_file("DerivedCoreProperties.txt")) {
         binary.push(run);
     }
     // `Extended_Pictographic` and the `Emoji*` properties live in the emoji
     // data file, and ANTLR4's documented property surface includes them.
-    for let run of parse_prop_runs(&read_file(&"emoji-data.txt")) {
+    for let run of parse_prop_runs(&read_file("emoji-data.txt")) {
         binary.push(run);
     }
-    let prop_aliases = parse_alias_lines(&read_file(&"PropertyAliases.txt"), &"");
+    let prop_aliases = parse_alias_lines(&read_file("PropertyAliases.txt"), "");
 
     let mut enumerated: List<EnumeratedTable> = [];
     for let prop of &ENUMERATED {
@@ -247,7 +247,7 @@ fn table_fn_name<S: AsStrSlice>(property: S) -> String {
     for let c of property.chars() {
         out.push(c.to_ascii_lowercase());
     }
-    out.push_str(&"_ranges");
+    out.push_str("_ranges");
     return out;
 }
 
@@ -393,8 +393,8 @@ fn partition_runs<S: AsStrSlice, S1: AsStrSlice>(
     if gc_default {
         // ArabicShaping.txt: a code point it does not list is Joining_Type=T
         // when its General_Category is Mn, Me or Cf, and U otherwise.
-        let transparent = intern(&mut names, &canonical_value(aliases, &"T"));
-        let non_joining = intern(&mut names, &canonical_value(aliases, &"U"));
+        let transparent = intern(&mut names, &canonical_value(aliases, "T"));
+        let non_joining = intern(&mut names, &canonical_value(aliases, "U"));
         let mut is_transparent: List<bool> = List::filled(CODE_POINT_MAX + 1, false);
         for let run of categories {
             if run.category != "Mn" && run.category != "Me" && run.category != "Cf" {
@@ -687,7 +687,7 @@ fn emit_module<S: AsStrSlice>(
 ) -> String {
     let mut w = CodeWriter::with_capacity(1024 * 1024);
     emit_module_doc(&mut w, version);
-    GlobalSpec::new(&"UNICODE_VERSION", &"String", &wado`"${version.to_string()}"`, Vis::Pub).emit(&mut w);
+    GlobalSpec::new("UNICODE_VERSION", "String", &wado`"${version.to_string()}"`, Vis::Pub).emit(&mut w);
     w.blank();
     emit_category_ranges(&mut w, runs);
     w.blank();
@@ -695,22 +695,22 @@ fn emit_module<S: AsStrSlice>(
     w.blank();
     emit_named_table(
         &mut w,
-        &"script_ranges",
-        &"/// Ranges of one script (`Greek`, `Grek`, …), or an empty string when the\n/// name is not a script.",
+        "script_ranges",
+        "/// Ranges of one script (`Greek`, `Grek`, …), or an empty string when the\n/// name is not a script.",
         scripts,
     );
     w.blank();
     emit_named_table(
         &mut w,
-        &"block_ranges",
-        &"/// Ranges of one block, addressed without the `In` prefix a grammar writes\n/// (`\\p{InGreek}` → `greekandcoptic`), or an empty string when the name is\n/// not a block.",
+        "block_ranges",
+        "/// Ranges of one block, addressed without the `In` prefix a grammar writes\n/// (`\\p{InGreek}` → `greekandcoptic`), or an empty string when the name is\n/// not a block.",
         blocks,
     );
     w.blank();
     emit_named_table(
         &mut w,
-        &"binary_property_ranges",
-        &"/// Ranges of one binary property (`White_Space`, `Pattern_Syntax`, …), or\n/// an empty string when the name is not one.",
+        "binary_property_ranges",
+        "/// Ranges of one binary property (`White_Space`, `Pattern_Syntax`, …), or\n/// an empty string when the name is not one.",
         binary,
     );
     for let table of enumerated {
@@ -718,7 +718,7 @@ fn emit_module<S: AsStrSlice>(
         emit_named_table(
             &mut w,
             &table.fn_name,
-            &`/// Ranges of one \`${table.name}\` value, or an empty string when the name\n/// is not one of its values.`,
+            `/// Ranges of one \`${table.name}\` value, or an empty string when the name\n/// is not one of its values.`,
             &table.entries,
         );
     }
@@ -731,19 +731,19 @@ fn emit_module<S: AsStrSlice>(
 /// answers the value. One flat table keyed by `property=value` would carry the
 /// cross product of both alias sets.
 fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) {
-    w.line(&"/// Ranges of one enumerated property's value (`\\p{lb=AL}`), or an empty");
-    w.line(&"/// string when the property is not one of these or the value is not one of");
-    w.line(&"/// its own. `General_Category`, `Script` and `Block` have their own tables.");
-    let mut spec = FnSpec::new(&"enumerated_property_ranges", Vis::Pub);
-    spec.add_param(&"property", &"&String").add_param(&"value", &"&String").set_return_type(&"String");
+    w.line("/// Ranges of one enumerated property's value (`\\p{lb=AL}`), or an empty");
+    w.line("/// string when the property is not one of these or the value is not one of");
+    w.line("/// its own. `General_Category`, `Script` and `Block` have their own tables.");
+    let mut spec = FnSpec::new("enumerated_property_ranges", Vis::Pub);
+    spec.add_param("property", "&String").add_param("value", "&String").set_return_type("String");
     spec.emit_begin(w);
-    w.begin(&"return match *property");
+    w.begin("return match *property");
     for let table of tables {
         let mut keys = String::with_capacity(64);
         let mut first = true;
         for let key of &table.keys {
             if !first {
-                keys.push_str(&" | ");
+                keys.push_str(" | ");
             }
             first = false;
             keys.push_str(&wado`"${*key}"`);
@@ -751,7 +751,7 @@ fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) 
         w.line(&wado`${keys} => ${table.fn_name}(value),`);
     }
     w.line(&wado`_ => "",`);
-    w.end_with(&";");
+    w.end_with(";");
     w.end();
 }
 
@@ -763,9 +763,9 @@ fn emit_named_table<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, 
         w.line(&line);
     }
     let mut spec = FnSpec::new(name, Vis::Pub);
-    spec.add_param(&"name", &"&String").set_return_type(&"String");
+    spec.add_param("name", "&String").set_return_type("String");
     spec.emit_begin(w);
-    w.begin(&"return match name.to_string()");
+    w.begin("return match name.to_string()");
     let mut claimed: List<String> = [];
     for let entry of entries {
         let mut keys = String::with_capacity(64);
@@ -777,7 +777,7 @@ fn emit_named_table<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, 
             }
             claimed.push(key);
             if !first {
-                keys.push_str(&" | ");
+                keys.push_str(" | ");
             }
             first = false;
             keys.push_str(&wado`"${key}"`);
@@ -792,35 +792,35 @@ fn emit_named_table<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, 
         w.line(&wado`${keys} => "${encode(&entry.ranges)}",`);
     }
     w.line(&wado`_ => "",`);
-    w.end_with(&";");
+    w.end_with(";");
     w.end();
 }
 
 fn emit_module_doc<S: AsStrSlice>(w: &mut CodeWriter, version: S) {
     w.line(&wado`#![generated(by = "scripts/regen-unicode-tables.sh", sources = [])]`);
-    w.line(&"//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
-    w.line(&"//! categories, scripts, blocks, binary properties, and the enumerated");
-    w.line(&"//! `Property=Value` names ANTLR4 answers.");
-    w.line(&"//!");
-    w.line(&`//! Do not edit by hand — regenerate from UCD ${version.to_string()} with`);
-    w.line(&"//! `scripts/regen-unicode-tables.sh`.");
-    w.line(&"//!");
-    w.line(&"//! A property's ranges are base64 over `(gap from the previous range's");
-    w.line(&"//! end, length)` varint pairs, and its keys are folded (lowercase, no");
-    w.line(&"//! `_` / `-` / space) as UAX #44 matches them. `\\P` complements what");
-    w.line(&"//! `\\p` selects, so an approximate table would admit real members of the");
-    w.line(&"//! property, not merely miss some.");
+    w.line("//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
+    w.line("//! categories, scripts, blocks, binary properties, and the enumerated");
+    w.line("//! `Property=Value` names ANTLR4 answers.");
+    w.line("//!");
+    w.line(`//! Do not edit by hand — regenerate from UCD ${version.to_string()} with`);
+    w.line("//! `scripts/regen-unicode-tables.sh`.");
+    w.line("//!");
+    w.line("//! A property's ranges are base64 over `(gap from the previous range's");
+    w.line("//! end, length)` varint pairs, and its keys are folded (lowercase, no");
+    w.line("//! `_` / `-` / space) as UAX #44 matches them. `\\P` complements what");
+    w.line("//! `\\p` selects, so an approximate table would admit real members of the");
+    w.line("//! property, not merely miss some.");
     w.blank();
 }
 
 fn emit_category_ranges(w: &mut CodeWriter, runs: &List<CategoryRun>) {
-    w.line(&"/// Ranges of one general category (`Lu`, `Nd`, …), or an empty string when");
-    w.line(&"/// the name is not a general category. Group letters (`L`, `N`, …) are");
-    w.line(&"/// unions of their subcategories and are resolved by the caller.");
-    let mut spec = FnSpec::new(&"general_category_ranges", Vis::Pub);
-    spec.add_param(&"name", &"&String").set_return_type(&"String");
+    w.line("/// Ranges of one general category (`Lu`, `Nd`, …), or an empty string when");
+    w.line("/// the name is not a general category. Group letters (`L`, `N`, …) are");
+    w.line("/// unions of their subcategories and are resolved by the caller.");
+    let mut spec = FnSpec::new("general_category_ranges", Vis::Pub);
+    spec.add_param("name", "&String").set_return_type("String");
     spec.emit_begin(w);
-    w.begin(&"return match *name");
+    w.begin("return match *name");
     for let cat of &CATEGORIES {
         let ranges = if cat.0 == "Cn" { unassigned_ranges(runs) } else { ranges_of(runs, &cat.0) };
         w.line(
@@ -828,17 +828,17 @@ fn emit_category_ranges(w: &mut CodeWriter, runs: &List<CategoryRun>) {
         );
     }
     w.line(&wado`_ => "",`);
-    w.end_with(&";");
+    w.end_with(";");
     w.end();
 }
 
 fn emit_category_groups(w: &mut CodeWriter) {
-    w.line(&"/// Subcategories of a general-category group letter (`L` -> `Lu`, `Ll`, …),");
-    w.line(&"/// or an empty list when the name is not a group.");
-    let mut spec = FnSpec::new(&"general_category_group", Vis::Pub);
-    spec.add_param(&"name", &"&String").set_return_type(&"List<String>");
+    w.line("/// Subcategories of a general-category group letter (`L` -> `Lu`, `Ll`, …),");
+    w.line("/// or an empty list when the name is not a group.");
+    let mut spec = FnSpec::new("general_category_group", Vis::Pub);
+    spec.add_param("name", "&String").set_return_type("List<String>");
     spec.emit_begin(w);
-    w.begin(&"return match *name");
+    w.begin("return match *name");
     for let group of &GROUPS {
         let mut subs = String::with_capacity(64);
         let mut first = true;
@@ -847,14 +847,14 @@ fn emit_category_groups(w: &mut CodeWriter) {
                 continue;
             }
             if !first {
-                subs.push_str(&", ");
+                subs.push_str(", ");
             }
             first = false;
             subs.push_str(&wado`"${normalize_name(&cat.0)}"`);
         }
         w.line(&wado`"${normalize_name(&group.0)}" | "${normalize_name(&group.1)}" => [${subs}],`);
     }
-    w.line(&"_ => [],");
-    w.end_with(&";");
+    w.line("_ => [],");
+    w.end_with(";");
     w.end();
 }

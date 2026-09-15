@@ -97,9 +97,9 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         // carries over. Java stringifies any expression there; dropping one
         // would weaken the assertion silently, so it is refused instead.
         let mut msg: Option<String> = null;
-        if punct_is(tokens, *pos, &":") {
+        if punct_is(tokens, *pos, ":") {
             *pos += 1;
-            if let Some(s) = string_at(tokens, *pos) && punct_is(tokens, *pos + 1, &";") {
+            if let Some(s) = string_at(tokens, *pos) && punct_is(tokens, *pos + 1, ";") {
                 msg = Option::Some(s);
                 *pos += 1;
             } else {
@@ -112,7 +112,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
     if ident_at(tokens, *pos) matches { Some("return") } {
         *pos += 1;
         let mut val: Option<JExpr> = null;
-        if !punct_is(tokens, *pos, &";") {
+        if !punct_is(tokens, *pos, ";") {
             val = Option::Some(parse_or(tokens, pos)?);
         }
         expect_semi(tokens, pos)?;
@@ -123,7 +123,7 @@ fn parse_stmt(tokens: &List<JToken>, pos: &mut i32) -> Result<JStmt, String> {
         let name = ident_at(tokens, *pos + 1).unwrap();
         *pos += 2;
         let mut init: Option<JExpr> = null;
-        if punct_is(tokens, *pos, &"=") {
+        if punct_is(tokens, *pos, "=") {
             *pos += 1;
             init = Option::Some(parse_or(tokens, pos)?);
         }
@@ -164,15 +164,15 @@ fn is_type_keyword<S: AsStrSlice>(name: S) -> bool {
 }
 
 fn is_assign_op(tokens: &List<JToken>, pos: i32) -> bool {
-    return punct_is(tokens, pos, &"=")
-        || punct_is(tokens, pos, &"+=")
-        || punct_is(tokens, pos, &"-=")
-        || punct_is(tokens, pos, &"*=")
-        || punct_is(tokens, pos, &"/=");
+    return punct_is(tokens, pos, "=")
+        || punct_is(tokens, pos, "+=")
+        || punct_is(tokens, pos, "-=")
+        || punct_is(tokens, pos, "*=")
+        || punct_is(tokens, pos, "/=");
 }
 
 fn expect_semi(tokens: &List<JToken>, pos: &mut i32) -> Result<(), String> {
-    if !punct_is(tokens, *pos, &";") {
+    if !punct_is(tokens, *pos, ";") {
         return Result::Err("java2wado: expected ';'");
     }
     *pos += 1;
@@ -195,7 +195,7 @@ pub fn parse_java_expr(tokens: &List<JToken>) -> Result<JExpr, String> {
 
 fn parse_or(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_and(tokens, pos)?;
-    while punct_is(tokens, *pos, &"||") {
+    while punct_is(tokens, *pos, "||") {
         *pos += 1;
         let rhs = parse_and(tokens, pos)?;
         lhs = JExpr::Binary(JBinary { op: "||", lhs, rhs });
@@ -205,7 +205,7 @@ fn parse_or(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 
 fn parse_and(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_eq(tokens, pos)?;
-    while punct_is(tokens, *pos, &"&&") {
+    while punct_is(tokens, *pos, "&&") {
         *pos += 1;
         let rhs = parse_eq(tokens, pos)?;
         lhs = JExpr::Binary(JBinary { op: "&&", lhs, rhs });
@@ -215,7 +215,7 @@ fn parse_and(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 
 fn parse_eq(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_rel(tokens, pos)?;
-    while punct_is(tokens, *pos, &"==") || punct_is(tokens, *pos, &"!=") {
+    while punct_is(tokens, *pos, "==") || punct_is(tokens, *pos, "!=") {
         let op = punct_at(tokens, *pos);
         *pos += 1;
         let rhs = parse_rel(tokens, pos)?;
@@ -226,10 +226,10 @@ fn parse_eq(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 
 fn parse_rel(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_add(tokens, pos)?;
-    while punct_is(tokens, *pos, &"<")
-        || punct_is(tokens, *pos, &">")
-        || punct_is(tokens, *pos, &"<=")
-        || punct_is(tokens, *pos, &">=") {
+    while punct_is(tokens, *pos, "<")
+        || punct_is(tokens, *pos, ">")
+        || punct_is(tokens, *pos, "<=")
+        || punct_is(tokens, *pos, ">=") {
         let op = punct_at(tokens, *pos);
         *pos += 1;
         let rhs = parse_add(tokens, pos)?;
@@ -240,7 +240,7 @@ fn parse_rel(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 
 fn parse_add(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_mul(tokens, pos)?;
-    while punct_is(tokens, *pos, &"+") || punct_is(tokens, *pos, &"-") {
+    while punct_is(tokens, *pos, "+") || punct_is(tokens, *pos, "-") {
         let op = punct_at(tokens, *pos);
         *pos += 1;
         let rhs = parse_mul(tokens, pos)?;
@@ -251,7 +251,7 @@ fn parse_add(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 
 fn parse_mul(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut lhs = parse_unary(tokens, pos)?;
-    while punct_is(tokens, *pos, &"*") || punct_is(tokens, *pos, &"/") || punct_is(tokens, *pos, &"%") {
+    while punct_is(tokens, *pos, "*") || punct_is(tokens, *pos, "/") || punct_is(tokens, *pos, "%") {
         let op = punct_at(tokens, *pos);
         *pos += 1;
         let rhs = parse_unary(tokens, pos)?;
@@ -261,7 +261,7 @@ fn parse_mul(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 }
 
 fn parse_unary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
-    if punct_is(tokens, *pos, &"!") || punct_is(tokens, *pos, &"-") {
+    if punct_is(tokens, *pos, "!") || punct_is(tokens, *pos, "-") {
         let op = punct_at(tokens, *pos);
         *pos += 1;
         let operand = parse_unary(tokens, pos)?;
@@ -275,7 +275,7 @@ fn parse_unary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
 fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
     let mut atom = parse_atom(tokens, pos)?;
     loop {
-        if punct_is(tokens, *pos, &".") {
+        if punct_is(tokens, *pos, ".") {
             match ident_at(tokens, *pos + 1) {
                 Some(name) => {
                     *pos += 2;
@@ -285,7 +285,7 @@ fn parse_primary(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> 
                     return Result::Err("java2wado: expected identifier after '.'");
                 },
             }
-        } else if punct_is(tokens, *pos, &"(") {
+        } else if punct_is(tokens, *pos, "(") {
             let args = parse_args(tokens, pos)?;
             atom = JExpr::Call(JCall { callee: atom, args });
         } else {
@@ -331,7 +331,7 @@ fn parse_atom(tokens: &List<JToken>, pos: &mut i32) -> Result<JExpr, String> {
                 } else {
                     *pos += 1;
                     let inner = parse_or(tokens, pos)?;
-                    if !punct_is(tokens, *pos, &")") {
+                    if !punct_is(tokens, *pos, ")") {
                         return Result::Err("java2wado: expected ')'");
                     }
                     *pos += 1;
@@ -350,7 +350,7 @@ fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
     if ident_at(tokens, pos + 1) matches { None } {
         return false;
     }
-    if !punct_is(tokens, pos + 2, &")") {
+    if !punct_is(tokens, pos + 2, ")") {
         return false;
     }
     let nx = pos + 3;
@@ -370,17 +370,17 @@ fn looks_like_cast(tokens: &List<JToken>, pos: i32) -> bool {
 fn parse_args(tokens: &List<JToken>, pos: &mut i32) -> Result<List<JExpr>, String> {
     *pos += 1;
     let mut args: List<JExpr> = [];
-    if punct_is(tokens, *pos, &")") {
+    if punct_is(tokens, *pos, ")") {
         *pos += 1;
         return Result::Ok(args);
     }
     loop {
         args.push(parse_or(tokens, pos)?);
-        if punct_is(tokens, *pos, &",") {
+        if punct_is(tokens, *pos, ",") {
             *pos += 1;
             continue;
         }
-        if punct_is(tokens, *pos, &")") {
+        if punct_is(tokens, *pos, ")") {
             *pos += 1;
             return Result::Ok(args);
         }

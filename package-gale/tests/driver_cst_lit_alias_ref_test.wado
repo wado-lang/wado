@@ -15,15 +15,15 @@ fn tree<S: AsStrSlice>(input: S) -> String {
 }
 
 test "the alternative led by the rule name is reachable" {
-    assert tree(&"kw x") == "(s kw x)", tree(&"kw x");
+    assert tree("kw x") == "(s kw x)", tree("kw x");
 }
 
 test "the literal-only alternative still parses" {
-    assert tree(&"kw") == "(s kw)", tree(&"kw");
+    assert tree("kw") == "(s kw)", tree("kw");
 }
 
 test "both spellings tokenize to one kind" {
-    let toks = g::tokenize(&"kw");
+    let toks = g::tokenize("kw");
     assert g::to_lexer_string(&toks, TK_EOF) == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", g::to_lexer_string(
         &toks,
         TK_EOF,

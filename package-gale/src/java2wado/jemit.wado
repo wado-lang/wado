@@ -258,7 +258,7 @@ pub fn emit_java_stmts(
     let mut out = String::from("");
     for let mut i = 0; i < stmts.len(); i += 1 {
         if i > 0 {
-            out.push_str(&" ");
+            out.push_str(" ");
         }
         out.push_str(&emit_stmt(rule, rules, &stmts[i], vals_in_scope, bindings, env)?);
     }
@@ -364,7 +364,7 @@ fn emit_print(
         append_parts(rule, rules, &args[0], vals_in_scope, bindings, env, &mut tmpl)?;
     }
     if newline {
-        tmpl.push_str(&"\\n");
+        tmpl.push_str("\\n");
     }
     tmpl.push('`');
     if !env.sink {
@@ -454,7 +454,7 @@ fn emit_member(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    if name_is(&m.recv, &"this") {
+    if name_is(&m.recv, "this") {
         return this_field_expr(env, &m.name);
     }
     if is_upper_ident(&m.name) && is_name(&m.recv) {
@@ -483,8 +483,8 @@ fn emit_call(
         // set and the grammar the vocabulary, so the idiom is one constant. The
         // other `IntervalSet.toString` overloads render token numbers instead,
         // which is not the string codegen has.
-        if m.name == "toString" && call_names(&m.recv, &"getExpectedTokens") {
-            if !(c.args.len() == 1 && call_names(&c.args[0], &"getVocabulary")) {
+        if m.name == "toString" && call_names(&m.recv, "getExpectedTokens") {
+            if !(c.args.len() == 1 && call_names(&c.args[0], "getVocabulary")) {
                 return Result::Err(
                     "java2wado: only getExpectedTokens().toString(getVocabulary()) is supported; the other overloads render token numbers",
                 );
@@ -545,7 +545,7 @@ fn fold_ctx_token_null_test(b: &JBinary, bindings: &List<AltBinding>, env: &JEnv
     if b.op != "!=" && b.op != "==" {
         return null;
     }
-    if !name_is(&b.rhs, &"null") {
+    if !name_is(&b.rhs, "null") {
         return null;
     }
     let call = if let Call(c) = &b.lhs {
@@ -637,20 +637,20 @@ fn emit_member_call<S: AsStrSlice>(
     }
     // `this.m()` is the bare `m()` under another spelling, recognizer API
     // included: `this.getText()` in a lexer is the matched slice, not a token's.
-    if name_is(&m.recv, &"this") {
+    if name_is(&m.recv, "this") {
         return emit_recognizer_call(env, &meth, args_w);
     }
     if meth == "getText" {
-        if name_is(&m.recv, &"_input") {
+        if name_is(&m.recv, "_input") {
             return api_expr(env, ApiCall::InputText, `${env.this_bind}.input_text()`);
         }
         let r = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
         return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
-    if meth == "LA" && name_is(&m.recv, &"_input") {
+    if meth == "LA" && name_is(&m.recv, "_input") {
         return api_expr(env, ApiCall::La, `${env.this_bind}.la(${args_w.to_string()})`);
     }
-    if meth == "LT" && name_is(&m.recv, &"_input") {
+    if meth == "LT" && name_is(&m.recv, "_input") {
         return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${args_w.to_string()})`);
     }
     if meth == "equals" {
@@ -716,7 +716,7 @@ fn name_expr<S: AsStrSlice>(
     }
     return match resolve_name(env, name) {
         Local => Result::Ok(escape_ident(name)),
-        RuleArg => resolve_attr_ref(rule, rules, &`$${name.to_string()}`, vals_in_scope, bindings, &env.this_bind),
+        RuleArg => resolve_attr_ref(rule, rules, `$${name.to_string()}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
         Unknown => if env.lexer {
             builtin::cold_path();
@@ -788,7 +788,7 @@ fn emit_args(
     let mut out = String::from("");
     for let mut i = 0; i < args.len(); i += 1 {
         if i > 0 {
-            out.push_str(&", ");
+            out.push_str(", ");
         }
         out.push_str(&emit_expr(rule, rules, &args[i], vals_in_scope, bindings, env)?);
     }
@@ -816,7 +816,7 @@ fn is_name(e: &JExpr) -> bool {
 
 fn is_system_out(e: &JExpr) -> bool {
     return match e {
-        Member(m) => name_is(&m.recv, &"System") && m.name == "out",
+        Member(m) => name_is(&m.recv, "System") && m.name == "out",
         _ => false,
     };
 }
@@ -904,7 +904,7 @@ fn append_interp(
     out: &mut String,
 ) -> Result<(), String> {
     let expr = emit_expr(rule, rules, e, vals_in_scope, bindings, env)?;
-    out.push_str(&"${");
+    out.push_str("${");
     out.push_str(&expr);
     out.push('}');
     return Result::Ok(());

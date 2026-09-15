@@ -17,14 +17,14 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "open-ended at EOF: an optional over an open-ended rule declines" {
-    assert_tree(&"k", &"(s k)");
+    assert_tree("k", "(s k)");
 }
 
 test "open-ended at EOF: and takes a token where there is one" {
-    assert_tree(&"k a", &"(s k (x a))");
+    assert_tree("k a", "(s k (x a))");
 }
 
 test "open-ended at EOF: written in place reads the same" {
-    assert_tree(&"m", &"(s m)");
-    assert_tree(&"m a", &"(s m a)");
+    assert_tree("m", "(s m)");
+    assert_tree("m a", "(s m a)");
 }

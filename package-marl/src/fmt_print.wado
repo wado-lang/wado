@@ -68,7 +68,7 @@ fn print_block_sequence(nodes: &List<Node>, out: &mut String, tight: bool) {
             } else if tight && !(prev_is_paragraph && is_paragraph) && !is_indented_code && !prev_needs_boundary {
                 out.push('\n');
             } else {
-                out.push_str(&"\n\n");
+                out.push_str("\n\n");
             }
         }
         first = false;
@@ -107,7 +107,7 @@ fn print_block(node: &Node, out: &mut String) {
         Node::CodeBlock(cb) => print_code_block(cb, out),
         Node::List(list) => print_list(list, out),
         Node::Table(t) => print_table(t, out),
-        Node::ThematicBreak => out.push_str(&"---"),
+        Node::ThematicBreak => out.push_str("---"),
         Node::Html(s) => out.push_str(s),
         Node::LinkReferenceDef(def) => print_link_ref_def(def, out),
         _ => panic("marl-format: unexpected node in block position"),
@@ -115,7 +115,7 @@ fn print_block(node: &Node, out: &mut String) {
 }
 
 fn print_heading(h: &Heading, out: &mut String) {
-    out.push_str(&"#".repeat(h.level));
+    out.push_str("#".repeat(h.level));
     out.push(' ');
     print_inline_seq(&h.children, out);
 }
@@ -132,7 +132,7 @@ fn print_blockquote(children: &List<Node>, out: &mut String) {
         if line.len() == 0 {
             out.push('>');
         } else {
-            out.push_str(&"> ");
+            out.push_str("> ");
             out.push_str(&line);
         }
     }
@@ -141,10 +141,10 @@ fn print_blockquote(children: &List<Node>, out: &mut String) {
 fn print_link_ref_def(def: &LinkReferenceDef, out: &mut String) {
     out.push('[');
     out.push_str(&def.label);
-    out.push_str(&"]: ");
+    out.push_str("]: ");
     out.push_str(&def.url);
     if def.title.len() > 0 {
-        out.push_str(&" \"");
+        out.push_str(" \"");
         out.push_str(&def.title);
         out.push('"');
     }
@@ -171,7 +171,7 @@ fn print_code_block(cb: &CodeBlock, out: &mut String) {
                 out.push('\n');
             }
             first = false;
-            out.push_str(&"    ");
+            out.push_str("    ");
             out.push_str(&line);
         }
     }
@@ -329,7 +329,7 @@ fn alignment_colon_count(a: &ColumnAlign) -> i32 {
 fn print_table_row(cells: &List<String>, widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
     for let c of 0..<cells.len() {
         if c == 0 {
-            out.push_str(&"| ");
+            out.push_str("| ");
         } else {
             out.push(' ');
         }
@@ -350,17 +350,17 @@ fn print_table_row(cells: &List<String>, widths: &List<i32>, align: &List<Column
                 right_pad = diff;
             },
         }
-        out.push_str(&" ".repeat(left_pad));
+        out.push_str(" ".repeat(left_pad));
         out.push_str(&text);
-        out.push_str(&" ".repeat(right_pad));
-        out.push_str(&" |");
+        out.push_str(" ".repeat(right_pad));
+        out.push_str(" |");
     }
 }
 
 fn print_delimiter_row(widths: &List<i32>, align: &List<ColumnAlign>, out: &mut String) {
     for let c of 0..<widths.len() {
         if c == 0 {
-            out.push_str(&"| ");
+            out.push_str("| ");
         } else {
             out.push(' ');
         }
@@ -371,11 +371,11 @@ fn print_delimiter_row(widths: &List<i32>, align: &List<ColumnAlign>, out: &mut 
         if has_left {
             out.push(':');
         }
-        out.push_str(&"-".repeat(dashes));
+        out.push_str("-".repeat(dashes));
         if has_right {
             out.push(':');
         }
-        out.push_str(&" |");
+        out.push_str(" |");
     }
 }
 
@@ -391,17 +391,17 @@ fn print_inline_node(node: &Node, out: &mut String) {
     match node {
         Node::Text(s) => out.push_str(s),
         Node::SoftBreak => out.push('\n'),
-        Node::HardBreak => out.push_str(&"\\\n"),
+        Node::HardBreak => out.push_str("\\\n"),
         Node::Emphasis(em) => print_emphasis(em, out),
         Node::Strong(children) => {
-            out.push_str(&"**");
+            out.push_str("**");
             print_inline_seq(children, out);
-            out.push_str(&"**");
+            out.push_str("**");
         },
         Node::Strikethrough(children) => {
-            out.push_str(&"~~");
+            out.push_str("~~");
             print_inline_seq(children, out);
-            out.push_str(&"~~");
+            out.push_str("~~");
         },
         Node::Code(s) => print_code_span(s, out),
         Node::InlineLink(link) => print_inline_link(link, out),
@@ -446,10 +446,10 @@ fn print_code_span<S: AsStrSlice>(s: S, out: &mut String) {
 }
 
 fn print_dest_and_title<S: AsStrSlice, S1: AsStrSlice>(url: S, title: S1, out: &mut String) {
-    out.push_str(&"(");
+    out.push_str("(");
     out.push_str(url);
     if title.len() > 0 {
-        out.push_str(&" \"");
+        out.push_str(" \"");
         out.push_str(title);
         out.push('"');
     }
@@ -466,7 +466,7 @@ fn print_inline_link(link: &LinkNode, out: &mut String) {
 fn print_reference_link(link: &ReferenceLinkNode, out: &mut String) {
     out.push('[');
     print_inline_seq(&link.children, out);
-    out.push_str(&"][");
+    out.push_str("][");
     out.push_str(&link.label);
     out.push(']');
 }
@@ -478,16 +478,16 @@ fn print_shortcut_link(link: &ReferenceLinkNode, out: &mut String) {
 }
 
 fn print_inline_image(img: &ImageNode, out: &mut String) {
-    out.push_str(&"![");
+    out.push_str("![");
     out.push_str(&img.alt);
     out.push(']');
     print_dest_and_title(&img.url, &img.title, out);
 }
 
 fn print_reference_image(img: &ReferenceImageNode, out: &mut String) {
-    out.push_str(&"![");
+    out.push_str("![");
     out.push_str(&img.alt);
-    out.push_str(&"][");
+    out.push_str("][");
     out.push_str(&img.label);
     out.push(']');
 }

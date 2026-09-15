@@ -32,12 +32,12 @@ use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args(), &".wado");
+    let paths = collect_paths(&args(), ".wado");
 
     let mapping = highlight_mapping();
     let mut header = "V";
     for let name of &HighlightVisitor::new(mapping).capture_names {
-        header.push_str(&`\t${*name}`);
+        header.push_str(`\t${*name}`);
     }
     println(header);
 

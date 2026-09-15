@@ -571,7 +571,7 @@ fn build_sequence_prec<S: AsStrSlice>(
 /// is never wrongly dropped to prec 0 when an operator might follow.
 fn element_first_has_lr(elem: &Element, lr_first: &List<String>) -> bool {
     return match *elem {
-        TokenRef(t) => lr_first.contains(&`TK_${t.name}`),
+        TokenRef(t) => lr_first.contains(`TK_${t.name}`),
         Literal(l) => lr_first.contains(&literal_const_name(&l.text)),
         RuleRef(_) => true,
         Wildcard(_) => true,
@@ -733,7 +733,7 @@ fn build_sequence(
 /// Build a single element, returning its `[entry, exit]` state pair.
 fn build_element(b: &mut AtnBuilder, elem: &Element, rule: i32, rule_index: &TreeMap<String, i32>) -> [i32, i32] {
     return match *elem {
-        TokenRef(t) => atom_segment(b, b.kind_of(&`TK_${t.name}`), rule),
+        TokenRef(t) => atom_segment(b, b.kind_of(`TK_${t.name}`), rule),
         Literal(l) => atom_segment(b, b.kind_of(&literal_const_name(&l.text)), rule),
         Wildcard(_) => {
             let from = b.new_state(ATN_BASIC, rule);
@@ -788,7 +788,7 @@ fn not_segment(b: &mut AtnBuilder, inner: &Element, rule: i32) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC, rule);
     let to = b.new_state(ATN_BASIC, rule);
     let label = match *inner {
-        TokenRef(t) => b.kind_of(&`TK_${t.name}`),
+        TokenRef(t) => b.kind_of(`TK_${t.name}`),
         Literal(l) => b.kind_of(&literal_const_name(&l.text)),
         _ => -1,
     };
@@ -1043,16 +1043,16 @@ fn trans_kind_name(kind: i32) -> String {
 /// Human-readable dump of the ATN, surfaced by `gale dump --atn`.
 pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
     let mut out = String::with_capacity(1024);
-    out.push_str(&`ATN: ${atn.states.len()} states, ${atn.decision_state.len()} decisions, ${atn.num_tokens} tokens\n`);
+    out.push_str(`ATN: ${atn.states.len()} states, ${atn.decision_state.len()} decisions, ${atn.num_tokens} tokens\n`);
     for let mut r = 0; r < grammar.parser_rules.len(); r += 1 {
         out.push_str(
-            &`rule ${r} '${grammar.parser_rules[r].name}': start=s${atn.rule_start[r]} stop=s${atn.rule_stop[r]}\n`,
+            `rule ${r} '${grammar.parser_rules[r].name}': start=s${atn.rule_start[r]} stop=s${atn.rule_stop[r]}\n`,
         );
     }
     for let mut i = 0; i < atn.states.len(); i += 1 {
         let st = &atn.states[i];
         let dec = if st.decision >= 0 { ` decision=${st.decision}` } else { String::from("") };
-        out.push_str(&`  s${i} ${state_kind_name(st.kind)} rule=${st.rule}${dec}\n`);
+        out.push_str(`  s${i} ${state_kind_name(st.kind)} rule=${st.rule}${dec}\n`);
         for let t of &st.transitions {
             let mut detail = String::from("");
             if t.kind == ATN_TR_ATOM || t.kind == ATN_TR_NOT_ATOM {
@@ -1062,7 +1062,7 @@ pub fn dump_atn(atn: &Atn, grammar: &Grammar) -> String {
             } else if t.kind == ATN_TR_PRECEDENCE {
                 detail = ` prec=${t.prec}`;
             }
-            out.push_str(&`    -${trans_kind_name(t.kind)}-> s${t.target}${detail}\n`);
+            out.push_str(`    -${trans_kind_name(t.kind)}-> s${t.target}${detail}\n`);
         }
     }
     return out;

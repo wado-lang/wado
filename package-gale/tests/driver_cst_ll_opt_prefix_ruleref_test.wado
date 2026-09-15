@@ -22,20 +22,20 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "a lone segment takes neither the optional nor the loop" {
-    assert_tree(&"a", &"(path (seg a))");
+    assert_tree("a", "(path (seg a))");
 }
 
 test "the loop claims a separator the optional cannot continue" {
-    assert_tree(&"a::b", &"(path (seg a) :: (seg b))");
+    assert_tree("a::b", "(path (seg a) :: (seg b))");
 }
 
 test "the optional claims a separator its body can continue" {
-    assert_tree(&"a::<b>", &"(path (seg a :: (args < b >)))");
+    assert_tree("a::<b>", "(path (seg a :: (args < b >)))");
 }
 
 test "the two decisions alternate along one path" {
     assert_tree(
-        &"a::<b>::c",
-        &"(path (seg a :: (args < b >)) :: (seg c))",
+        "a::<b>::c",
+        "(path (seg a :: (args < b >)) :: (seg c))",
     );
 }

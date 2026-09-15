@@ -12,15 +12,15 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // The caller's `Y` is available, so `e` takes the opaque alt that consumes one.
 test "tree: X Y Y enters the opaque alt" {
-    assert_tree(&"X Y Y", &"(r (e (a X Y)) Y)");
+    assert_tree("X Y Y", "(r (e (a X Y)) Y)");
 }
 
 test "tree: X Z Y enters the second opaque alt" {
-    assert_tree(&"X Z Y", &"(r (e (b X Z)) Y)");
+    assert_tree("X Z Y", "(r (e (b X Z)) Y)");
 }
 
 // Only one `Y`, and the caller needs it: `e` must stop at the at-end alt even
 // though the longer alt matches the lookahead.
 test "tree: X Y leaves the Y to the caller" {
-    assert_tree(&"X Y", &"(r (e X) Y)");
+    assert_tree("X Y", "(r (e X) Y)");
 }

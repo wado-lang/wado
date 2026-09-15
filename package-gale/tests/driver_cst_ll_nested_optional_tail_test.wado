@@ -25,17 +25,17 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 // Control: a single-token initializer leaves nothing for the scan to trip on.
 test "single-token initializer with else" {
-    assert_tree(&"let x = 1 else { } ;", &"(prog (stmt let x = (expr 1) else (block { }) ;))");
+    assert_tree("let x = 1 else { } ;", "(prog (stmt let x = (expr 1) else (block { }) ;))");
 }
 
 test "multi-token initializer with else" {
-    assert_tree(&"let v = at ( i ) else { } ;", &"(prog (stmt let v = (expr at ( i )) else (block { }) ;))");
+    assert_tree("let v = at ( i ) else { } ;", "(prog (stmt let v = (expr at ( i )) else (block { }) ;))");
 }
 
 test "multi-token initializer without else" {
-    assert_tree(&"let v = at ( i ) ;", &"(prog (stmt let v = (expr at ( i )) ;))");
+    assert_tree("let v = at ( i ) ;", "(prog (stmt let v = (expr at ( i )) ;))");
 }
 
 test "no initializer at all" {
-    assert_tree(&"let x ;", &"(prog (stmt let x ;))");
+    assert_tree("let x ;", "(prog (stmt let x ;))");
 }

@@ -15,17 +15,17 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "opt-sep-list: empty list" {
-    assert_tree(&"", &"(prog list)");
+    assert_tree("", "(prog list)");
 }
 
 test "opt-sep-list: single arm" {
-    assert_tree(&"a", &"(prog (list (arm a)))");
+    assert_tree("a", "(prog (list (arm a)))");
 }
 
 test "opt-sep-list: comma-separated arms" {
-    assert_tree(&"a , b", &"(prog (list (arm a) , (arm b)))");
+    assert_tree("a , b", "(prog (list (arm a) , (arm b)))");
 }
 
 test "opt-sep-list: trailing comma yields to the optional `,?`" {
-    assert_tree(&"a , b ,", &"(prog (list (arm a) , (arm b) ,))");
+    assert_tree("a , b ,", "(prog (list (arm a) , (arm b) ,))");
 }

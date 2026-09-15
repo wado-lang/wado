@@ -183,13 +183,13 @@ fn push_escaped_upto<S: AsStrSlice>(out: &mut String, source: S, cur: &mut HtmlC
             if b == b'&' || b == b'<' || b == b'>' || b == b'"' {
                 out.push_str_range_unchecked(source, run, bi);
                 if b == b'&' {
-                    out.push_str(&"&amp;");
+                    out.push_str("&amp;");
                 } else if b == b'<' {
-                    out.push_str(&"&lt;");
+                    out.push_str("&lt;");
                 } else if b == b'>' {
-                    out.push_str(&"&gt;");
+                    out.push_str("&gt;");
                 } else {
-                    out.push_str(&"&quot;");
+                    out.push_str("&quot;");
                 }
                 run = bi + 1;
             }
@@ -219,11 +219,11 @@ pub fn highlight_html<S: AsStrSlice>(source: S, captures: &List<HighlightCapture
     let mut cur = HtmlCursor { byte_index: 0, char_index: 0 };
     for let cap of captures {
         push_escaped_upto(&mut out, source, &mut cur, cap.start);
-        out.push_str(&"<span class=\"");
+        out.push_str("<span class=\"");
         out.push_str(&classes[cap.capture_id]);
-        out.push_str(&"\">");
+        out.push_str("\">");
         push_escaped_upto(&mut out, source, &mut cur, cap.end);
-        out.push_str(&"</span>");
+        out.push_str("</span>");
     }
     push_escaped_upto(&mut out, source, &mut cur, source.len());
     return out;

@@ -36,7 +36,7 @@ use { AltBinding } from "./attr_resolve.wado";
 /// `Java` to java2wado, any other language is a loud error. `grammar_name` and
 /// `members` let the Java front end resolve method calls, field reads and token
 /// constants.
-pub fn translate_action<S: AsStrSlice, S1: AsStrSlice>(
+pub fn translate_action<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
     lang: &ActionLanguage,
     rule: &ParserRule,
     rules: &List<ParserRule>,
@@ -45,7 +45,7 @@ pub fn translate_action<S: AsStrSlice, S1: AsStrSlice>(
     bindings: &List<AltBinding>,
     grammar_name: S1,
     members: &MemberNames,
-    expected: &String = &NO_EXPECTED,
+    expected: S2 = NO_EXPECTED,
     at_alt_end: bool = false,
 ) -> Result<String, String> {
     return match lang {
@@ -57,7 +57,7 @@ pub fn translate_action<S: AsStrSlice, S1: AsStrSlice>(
                 methods: members.methods,
                 fields: members.fields,
                 args: arg_names(rule),
-                expected: *expected,
+                expected: expected.to_string(),
                 at_alt_end,
             };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);

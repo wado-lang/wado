@@ -28,7 +28,7 @@ test "stage_b_sub: ParseTrees/ExtraToken" {
     let input = "xzy";
     let expected = "(a x z y)";
     let result = t_ExtraToken::parse_s(&input);
-    let actual = strip_skip_markers(&t_ExtraToken::to_string_subtree(&result, &"a"));
+    let actual = strip_skip_markers(&t_ExtraToken::to_string_subtree(&result, "a"));
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -53,7 +53,7 @@ test "stage_b_sub: ParseTrees/NoViableAlt" {
     let input = "z";
     let expected = "(a z)";
     let result = t_NoViableAlt::parse_s(&input);
-    let actual = t_NoViableAlt::to_string_subtree(&result, &"a");
+    let actual = t_NoViableAlt::to_string_subtree(&result, "a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -76,7 +76,7 @@ test "stage_b_sub: ParseTrees/RuleRef" {
     let input = "yx";
     let expected = "(a (b y) x)";
     let result = t_RuleRef::parse_s(&input);
-    let actual = t_RuleRef::to_string_subtree(&result, &"a");
+    let actual = t_RuleRef::to_string_subtree(&result, "a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -105,7 +105,7 @@ test "stage_b_sub: ParseTrees/Sync" {
     let input = "xzyy!";
     let expected = "(a x z y y !)";
     let result = t_Sync::parse_s(&input);
-    let actual = strip_skip_markers(&t_Sync::to_string_subtree(&result, &"a"));
+    let actual = strip_skip_markers(&t_Sync::to_string_subtree(&result, "a"));
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -128,7 +128,7 @@ test "stage_b_sub: ParseTrees/Token2" {
     let input = "xy";
     let expected = "(a x y)";
     let result = t_Token2::parse_s(&input);
-    let actual = t_Token2::to_string_subtree(&result, &"a");
+    let actual = t_Token2::to_string_subtree(&result, "a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -151,7 +151,7 @@ test "stage_b_sub: ParseTrees/TwoAltLoop" {
     let input = "xyyxyxz";
     let expected = "(a x y y x y x z)";
     let result = t_TwoAltLoop::parse_s(&input);
-    let actual = t_TwoAltLoop::to_string_subtree(&result, &"a");
+    let actual = t_TwoAltLoop::to_string_subtree(&result, "a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -174,7 +174,7 @@ test "stage_b_sub: ParseTrees/TwoAlts" {
     let input = "y";
     let expected = "(a y)";
     let result = t_TwoAlts::parse_s(&input);
-    let actual = t_TwoAlts::to_string_subtree(&result, &"a");
+    let actual = t_TwoAlts::to_string_subtree(&result, "a");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }

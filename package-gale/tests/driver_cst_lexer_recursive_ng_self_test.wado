@@ -34,15 +34,15 @@ fn assert_kinds<S: AsStrSlice>(input: S, expected: &List<String>) {
 // Unhashed, so the `.*?` has only one `"` to stop at and the static path was
 // already right. The rejection case for a repair that stopped routing here.
 test "an unhashed string is one token" {
-    assert_kinds(&"\"abc\"", &["STR", "Eof"]);
+    assert_kinds("\"abc\"", &["STR", "Eof"]);
 }
 
 // The hit case: the inner quotes are content, and the loop has to run past them
 // to the `"` that the closing `#` follows.
 test "a quoted hash-delimited string is one token" {
-    assert_kinds(&"#\"a \"b\" c\"#", &["STR", "Eof"]);
+    assert_kinds("#\"a \"b\" c\"#", &["STR", "Eof"]);
 }
 
 test "two hashes nest the same way" {
-    assert_kinds(&"##\"a \"#\" b\"##", &["STR", "Eof"]);
+    assert_kinds("##\"a \"#\" b\"##", &["STR", "Eof"]);
 }

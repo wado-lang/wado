@@ -8,7 +8,7 @@ use dr from "./grammars/wado_dedup_ref.g4"
     };
 
 test "$e.v resolves to the deduped rule binding, not the shadowing token" {
-    let result = dr::parse(&"e n");
+    let result = dr::parse("e n");
     assert result.ok(), "clean parse";
     assert result.output == "v=7", `output: '${result.output}'`;
 }

@@ -15,13 +15,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "labelled wildcard alt: bare ID falls through to the wildcard" {
-    assert_tree(&"x=10; abc;", &"(a (assign x = 10 ;) abc ;)");
+    assert_tree("x=10; abc;", "(a (assign x = 10 ;) abc ;)");
 }
 
 test "labelled wildcard alt: assign wins when its full pattern is present" {
-    assert_tree(&"y=99;", &"(a (assign y = 99 ;))");
+    assert_tree("y=99;", "(a (assign y = 99 ;))");
 }
 
 test "labelled wildcard alt: a single bare ID" {
-    assert_tree(&"foo", &"(a foo)");
+    assert_tree("foo", "(a foo)");
 }

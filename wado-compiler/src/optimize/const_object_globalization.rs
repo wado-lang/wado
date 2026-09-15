@@ -91,17 +91,16 @@ enum CandidateKind {
 }
 
 impl CandidateKind {
-    /// Whether the hoisted global gets `prefer_fixed_string_repr`: an in-place
-    /// hoist keeps the value at its original call site, where a lazy
-    /// `array.new_data` global would cost a guard branch per call, so WIR
-    /// raises its eager bound to `INLINE_REF_EAGER_MAX_BYTES`. The in-place
-    /// guard decisions and the global's marking at mutation time derive from
-    /// this one answer.
+    /// Whether the hoisted global gets `prefer_fixed_string_repr`: the hoist
+    /// leaves the value where the body already read it, and a lazy
+    /// `array.new_data` global costs a guard branch every time that place is
+    /// executed, so WIR raises its eager bound to
+    /// `INLINE_REF_EAGER_MAX_BYTES`. Every kind answers the same because the
+    /// shapes are the same value after inlining: a by-value argument becomes
+    /// the callee's parameter `let` in the caller. The in-place guard decisions
+    /// and the global's marking at mutation time derive from this one answer.
     fn prefer_fixed_repr(&self) -> bool {
-        match self {
-            CandidateKind::InlineRef { .. } | CandidateKind::ValueArg { .. } => true,
-            CandidateKind::LetBinding { .. } => false,
-        }
+        true
     }
 
     /// The `let`s this candidate detaches into its own initializer.
@@ -379,14 +378,14 @@ fn collect_candidates(
         {
             // A sibling `let` moves into the initializer at mutation time,
             // so it decides the guard as much as the candidate's own value.
-            let guarded = std::iter::once(s)
-                .chain(sibling_lets.iter().copied())
-                .any(|st| stmt_needs_lazy_guard(body, st, gate, false));
             let kind = CandidateKind::LetBinding {
                 stmt: s,
                 local_index: *local_index,
                 sibling_lets,
             };
+            let guarded = std::iter::once(s)
+                .chain(kind.sibling_lets().iter().copied())
+                .any(|st| stmt_needs_lazy_guard(body, st, gate, kind.prefer_fixed_repr()));
             out.push(Candidate {
                 func_idx,
                 ty: *type_id,
@@ -883,6 +882,12 @@ fn let_stmt_qualifies(
     if !gate.is_reference_type(type_id) {
         return decline("not a reference type");
     }
+    // A `&` / `*` chain over one binding names storage that already exists, so
+    // a global for it aliases whatever holds that storage — itself a candidate
+    // — rather than saving an allocation.
+    if aliases_one_binding(body, value) {
+        return decline("initializer only re-borrows another binding");
+    }
     if !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone()) {
         return decline("initializer is not a closed constant");
     }
@@ -1339,6 +1344,29 @@ fn block_is_const(body: &Body, block: BlockId, gate: &Gate<'_>, bound: &mut Inde
             .as_expr()
             .is_some_and(|e| is_globalizable_const(body, e, gate, bound)),
         _ => false,
+    }
+}
+
+/// Whether `value` reduces to a single local read through `&`, `*` and casts,
+/// which allocate nothing of their own.
+fn aliases_one_binding(body: &Body, value: Operand) -> bool {
+    let Some(mut expr) = value.as_expr() else {
+        return false;
+    };
+    loop {
+        let inner = match &body.exprs[expr].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::Deref | NirUnaryOp::Ref,
+                expr: inner,
+            }
+            | ExprKind::Cast { expr: inner, .. } => *inner,
+            ExprKind::Local { .. } => return true,
+            _ => return false,
+        };
+        let Some(inner) = inner.as_expr() else {
+            return false;
+        };
+        expr = inner;
     }
 }
 

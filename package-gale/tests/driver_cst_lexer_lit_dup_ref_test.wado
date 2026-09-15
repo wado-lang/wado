@@ -12,14 +12,14 @@ fn dump<S: AsStrSlice>(input: S) -> String {
 }
 
 test "the referencing lexer rule matches through it" {
-    assert dump(&"zzkw") == "[@0,0:3='zzkw',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", dump(&"zzkw");
+    assert dump("zzkw") == "[@0,0:3='zzkw',<2>,1:0]\n[@1,4:3='<EOF>',<-1>,1:4]\n", dump("zzkw");
 }
 
 test "the rule tokenizes as itself, not as an anonymous literal token" {
-    assert dump(&"kw") == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", dump(&"kw");
+    assert dump("kw") == "[@0,0:1='kw',<1>,1:0]\n[@1,2:1='<EOF>',<-1>,1:2]\n", dump("kw");
 }
 
 test "both alternatives parse" {
-    assert g::parse(&"kw").ok(), "the literal alternative";
-    assert g::parse(&"zzkw").ok(), "the rule-reference alternative";
+    assert g::parse("kw").ok(), "the literal alternative";
+    assert g::parse("zzkw").ok(), "the rule-reference alternative";
 }

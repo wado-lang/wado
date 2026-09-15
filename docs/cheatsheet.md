@@ -304,7 +304,7 @@ let chars = s.chars().count();           // character count based on Unicode sca
 let mut builder = String::with_capacity(20);
 let part: String = "Hello";
 builder.push_str(&part);
-builder.push_str(&", World!");
+builder.push_str(", World!");
 
 // Iterating over characters
 for let c of "hello".chars() {
@@ -328,7 +328,7 @@ for let c of part.chars() { ... }
 fn byte_len<S: AsStrSlice>(s: &S) -> i32 {
     return s.as_str_slice().len();
 }
-byte_len(&"banana");             // a String, a &String, or a StrSlice
+byte_len("banana");             // a String, a &String, or a StrSlice
 ```
 
 Tagged templates (see [WEP: Tagged Template Literals](./wep-2026-01-10-tagged-template-literals.md)): a path written directly before the backtick calls that function on the template's holes, each in its own type, with the literal text around them as constants.
@@ -338,11 +338,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
     let mut text = "";
     let mut params: List<Param> = [];
     for let h of ReflectTemplate::<T>::members() {   // one unrolled step per hole
-        text.push_str(&h.lit());                     // literal before the hole (constant)
-        text.push_str(&"?");
+        text.push_str(h.lit());                     // literal before the hole (constant)
+        text.push_str("?");
         params.push(h.get(&t).to_param());           // the hole's value, typed
     }
-    text.push_str(&ReflectTemplate::<T>::tail());    // literal after the last hole
+    text.push_str(ReflectTemplate::<T>::tail());    // literal after the last hole
     return Query { text, params };
 }
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
@@ -1222,10 +1222,10 @@ f64::mul_add(x, y, z)
 
 x.is_nan()     x.is_finite()    // where x is f64 or f32
 
-f64::from_str(&"3.14")                  // Result<f64, ParseFloatError>
-i32::from_str(&"42")                    // Result<i32, ParseIntError>
-i32::from_str_hex(&"ff")                // Result<i32, ParseIntError> (radix 16)
-i32::from_str_radix(&"1010", 2)         // Result<i32, ParseIntError> (radix 2..=36)
+f64::from_str("3.14")                  // Result<f64, ParseFloatError>
+i32::from_str("42")                    // Result<i32, ParseIntError>
+i32::from_str_hex("ff")                // Result<i32, ParseIntError> (radix 16)
+i32::from_str_radix("1010", 2)         // Result<i32, ParseIntError> (radix 2..=36)
 i32::from_str_slice(&"xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
@@ -1571,18 +1571,18 @@ current one). `""` and `"."` name that directory. See
 ```wado
 use fs from "core:fs";
 
-let text = fs::read_to_string(&"docs/spec.md")?;   // Result<String, FsError>
-let bytes = fs::read(&"icon.png")?;                // Result<ByteList, FsError>
-fs::write(&"build/out.json", &text)?;              // any AsByteSlice; creates/truncates
-fs::create_dir_all(&"build/reports")?;               // mkdir -p
-fs::create_dir(&"build/reports/today")?;             // one level; parent must exist
-fs::remove_file(&"build/stale.txt")?;
+let text = fs::read_to_string("docs/spec.md")?;   // Result<String, FsError>
+let bytes = fs::read("icon.png")?;                // Result<ByteList, FsError>
+fs::write("build/out.json", &text)?;              // any AsByteSlice; creates/truncates
+fs::create_dir_all("build/reports")?;               // mkdir -p
+fs::create_dir("build/reports/today")?;             // one level; parent must exist
+fs::remove_file("build/stale.txt")?;
 
-for let entry of fs::read_dir(&"src")? {           // DirEntry { name, type }
+for let entry of fs::read_dir("src")? {           // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }
 }
 
-if let Err(e) = fs::read_to_string(&"missing.txt") {
+if let Err(e) = fs::read_to_string("missing.txt") {
     eprintln(`error: ${e}`);            // "missing.txt: no such file or directory"
 }
 

@@ -24,15 +24,15 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // The rejection case first: with the gate open the longer alternative wins, so
 // a repair that simply stopped preferring it fails here.
 test "outside the gate the longer alternative still wins" {
-    assert_tree(&"a { b } ;", &"(start (stmt (expr a { b }) ;))");
+    assert_tree("a { b } ;", "(start (stmt (expr a { b }) ;))");
 }
 
 // The hit case: inside the `IF` head the counter is non-zero, so the braced
 // alternative does not exist and the block goes to `stmt`.
 test "inside the gate the shorter alternative leaves the block to its caller" {
-    assert_tree(&"if a { b }", &"(start (stmt if (expr a) (block { b })))");
+    assert_tree("if a { b }", "(start (stmt if (expr a) (block { b })))");
 }
 
 test "the gate is restored after the head" {
-    assert_tree(&"if a { b } c { d } ;", &"(start (stmt if (expr a) (block { b })) (stmt (expr c { d }) ;))");
+    assert_tree("if a { b } c { d } ;", "(start (stmt if (expr a) (block { b })) (stmt (expr c { d }) ;))");
 }

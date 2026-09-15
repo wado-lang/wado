@@ -96,11 +96,11 @@ pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(body: S, grammar_na
         if pos >= tokens.len() {
             break;
         }
-        let ty = member_ident(&tokens, pos, &"type")?;
+        let ty = member_ident(&tokens, pos, "type")?;
         pos += 1;
-        let name = member_ident(&tokens, pos, &"name")?;
+        let name = member_ident(&tokens, pos, "name")?;
         pos += 1;
-        if punct_is(&tokens, pos, &"(") {
+        if punct_is(&tokens, pos, "(") {
             parsed.push(parse_method(&tokens, &mut pos, &name, &ty)?);
         } else {
             fields.push(parse_field(&tokens, &mut pos, &name, &ty, &env)?);
@@ -287,10 +287,10 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             break;
         }
         pos += 2;
-        if punct_is(tokens, pos, &"(") {
+        if punct_is(tokens, pos, "(") {
             out.methods.push(to_snake_case(&name_opt.unwrap()));
             pos = skip_parens(tokens, pos);
-            if !punct_is(tokens, pos, &"{") {
+            if !punct_is(tokens, pos, "{") {
                 break;
             }
             let close = find_braced_end(tokens, pos);
@@ -300,7 +300,7 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             pos = close.unwrap() + 1;
         } else {
             out.fields.push(to_snake_case(&name_opt.unwrap()));
-            while pos < tokens.len() && !punct_is(tokens, pos, &";") {
+            while pos < tokens.len() && !punct_is(tokens, pos, ";") {
                 pos += 1;
             }
             if pos < tokens.len() {
@@ -314,9 +314,9 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
 fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {
     let mut depth = 0;
     for let mut i = open; i < tokens.len(); i += 1 {
-        if punct_is(tokens, i, &"(") {
+        if punct_is(tokens, i, "(") {
             depth += 1;
-        } else if punct_is(tokens, i, &")") {
+        } else if punct_is(tokens, i, ")") {
             depth -= 1;
             if depth == 0 {
                 return i + 1;
@@ -339,7 +339,7 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
             return Result::Err(`java2wado: @members: unsupported field type '${ty_java.to_string()}'`);
         },
     };
-    let init = if punct_is(tokens, *pos, &"=") {
+    let init = if punct_is(tokens, *pos, "=") {
         *pos += 1;
         let slice = collect_until_semi(tokens, pos);
         let e = parse_java_expr(&slice)?;
@@ -347,7 +347,7 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
     } else {
         return Result::Err(`java2wado: @members: field '${name.to_string()}' needs an initializer`);
     };
-    if !punct_is(tokens, *pos, &";") {
+    if !punct_is(tokens, *pos, ";") {
         return Result::Err(`java2wado: @members: expected ';' after field '${name.to_string()}'`);
     }
     *pos += 1;
@@ -359,7 +359,7 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
 
 fn parse_method<S: AsStrSlice, S1: AsStrSlice>(tokens: &List<JToken>, pos: &mut i32, name: S, ret_java: S1) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
-    if !punct_is(tokens, *pos, &"{") {
+    if !punct_is(tokens, *pos, "{") {
         return Result::Err(`java2wado: @members: expected '{' for method '${name.to_string()}'`);
     }
     let close = find_braced_end(tokens, *pos)?;
@@ -389,7 +389,7 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let recv = if mutates { "&mut self" } else { "&self" };
     let mut sig = `fn ${name.to_string()}(${recv}`;
     for let p of params {
-        sig.push_str(&`, ${escape_ident(&p.0)}: ${p.1}`);
+        sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
     if !ret_java.eq_str("void") {
@@ -399,7 +399,7 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 return Result::Err(`java2wado: @members: unsupported return type '${ret_java.to_string()}'`);
             },
         };
-        sig.push_str(&` -> ${rty}`);
+        sig.push_str(` -> ${rty}`);
     }
     return Result::Ok(`${sig} { ${body_wado.to_string()} }`);
 }
@@ -409,14 +409,14 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
 fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, String]>, String> {
     *pos += 1;
     let mut ps: List<[String, String]> = [];
-    if punct_is(tokens, *pos, &")") {
+    if punct_is(tokens, *pos, ")") {
         *pos += 1;
         return Result::Ok(ps);
     }
     loop {
-        let ty = member_ident(tokens, *pos, &"parameter type")?;
+        let ty = member_ident(tokens, *pos, "parameter type")?;
         *pos += 1;
-        let nm = member_ident(tokens, *pos, &"parameter name")?;
+        let nm = member_ident(tokens, *pos, "parameter name")?;
         *pos += 1;
         let wty = match map_java_type(&ty) {
             Some(t) => t,
@@ -425,11 +425,11 @@ fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, St
             },
         };
         ps.push([nm, wty]);
-        if punct_is(tokens, *pos, &",") {
+        if punct_is(tokens, *pos, ",") {
             *pos += 1;
             continue;
         }
-        if punct_is(tokens, *pos, &")") {
+        if punct_is(tokens, *pos, ")") {
             *pos += 1;
             return Result::Ok(ps);
         }
@@ -461,7 +461,7 @@ fn member_ident<S: AsStrSlice>(tokens: &List<JToken>, pos: i32, what: S) -> Resu
 /// leaves `pos` at the `;`. Field initializers carry no nested `;`.
 fn collect_until_semi(tokens: &List<JToken>, pos: &mut i32) -> List<JToken> {
     let start = *pos;
-    while *pos < tokens.len() && !punct_is(tokens, *pos, &";") {
+    while *pos < tokens.len() && !punct_is(tokens, *pos, ";") {
         *pos += 1;
     }
     return slice_tokens(tokens, start, *pos);
@@ -471,9 +471,9 @@ fn collect_until_semi(tokens: &List<JToken>, pos: &mut i32) -> List<JToken> {
 fn find_braced_end(tokens: &List<JToken>, open: i32) -> Result<i32, String> {
     let mut depth = 0;
     for let mut i = open; i < tokens.len(); i += 1 {
-        if punct_is(tokens, i, &"{") {
+        if punct_is(tokens, i, "{") {
             depth += 1;
-        } else if punct_is(tokens, i, &"}") {
+        } else if punct_is(tokens, i, "}") {
             depth -= 1;
             if depth == 0 {
                 return Result::Ok(i);

@@ -27,20 +27,20 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "an empty name list closes on its own bar" {
-    assert_tree(&"|| b", &"(start (block | | (body b)))");
+    assert_tree("|| b", "(start (block | | (body b)))");
 }
 
 test "one name yields the bar that closes the list" {
-    assert_tree(&"|a| b", &"(start (block | (names (name a)) | (body b)))");
+    assert_tree("|a| b", "(start (block | (names (name a)) | (body b)))");
 }
 
 test "the loop keeps a bar the closer cannot be" {
-    assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | (body c)))");
+    assert_tree("|a|b| c", "(start (block | (names (name a | b)) | (body c)))");
 }
 
 test "a comma-separated list yields the closer too" {
     assert_tree(
-        &"|a, b| c",
-        &"(start (block | (names (name a) , (name b)) | (body c)))",
+        "|a, b| c",
+        "(start (block | (names (name a) , (name b)) | (body c)))",
     );
 }

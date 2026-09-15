@@ -29,13 +29,13 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 #[TODO]
 test "the shape without the multi-token element" {
-    assert_tree(&"let x = @ # ;", &"(prog (stmt let x = @ # ;))");
+    assert_tree("let x = @ # ;", "(prog (stmt let x = @ # ;))");
 }
 
 test "the shape with it" {
-    assert_tree(&"let x = @ ! @ # ;", &"(prog (stmt let x = (m @ !) @ # ;))");
+    assert_tree("let x = @ ! @ # ;", "(prog (stmt let x = (m @ !) @ # ;))");
 }
 
 test "neither shape" {
-    assert_tree(&"let x ;", &"(prog (stmt let x ;))");
+    assert_tree("let x ;", "(prog (stmt let x ;))");
 }

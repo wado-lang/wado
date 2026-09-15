@@ -707,12 +707,12 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         match self {
             Ok(v) => {
-                let mut var = s.begin_variant(&"Result", &"Ok", 0)?;
+                let mut var = s.begin_variant("Result", "Ok", 0)?;
                 var.payload(v)?;
                 return var.end();
             },
             Err(v) => {
-                let mut var = s.begin_variant(&"Result", &"Err", 1)?;
+                let mut var = s.begin_variant("Result", "Err", 1)?;
                 var.payload(v)?;
                 return var.end();
             },
@@ -946,7 +946,7 @@ impl Deserialize for ByteArray {
 
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
-        let mut va = d.begin_variant(&"Result", 2)?;
+        let mut va = d.begin_variant("Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
             let val = va.payload()?;

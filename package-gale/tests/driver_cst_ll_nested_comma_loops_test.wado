@@ -16,35 +16,35 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 test "the inner brace loop keeps its own separator" {
     assert_tree(
-        &"[{a, b}]",
-        &"(start (list [ (elems (alt (item { (fields a , b) }))) ]))",
+        "[{a, b}]",
+        "(start (list [ (elems (alt (item { (fields a , b) }))) ]))",
     );
 }
 
 test "the outer loop still takes the separator that is its own" {
     assert_tree(
-        &"[{a}, b]",
-        &"(start (list [ (elems (alt (item { (fields a) })) , (alt (item b))) ]))",
+        "[{a}, b]",
+        "(start (list [ (elems (alt (item { (fields a) })) , (alt (item b))) ]))",
     );
 }
 
 test "both loops run at once" {
     assert_tree(
-        &"[{a, b}, c]",
-        &"(start (list [ (elems (alt (item { (fields a , b) })) , (alt (item c))) ]))",
+        "[{a, b}, c]",
+        "(start (list [ (elems (alt (item { (fields a , b) })) , (alt (item c))) ]))",
     );
 }
 
 test "the alternation loop between them still takes its own bar" {
     assert_tree(
-        &"[{a, b} | c]",
-        &"(start (list [ (elems (alt (item { (fields a , b) }) | (item c))) ]))",
+        "[{a, b} | c]",
+        "(start (list [ (elems (alt (item { (fields a , b) }) | (item c))) ]))",
     );
 }
 
 test "a brace list with one field is unambiguous either way" {
     assert_tree(
-        &"[{a}]",
-        &"(start (list [ (elems (alt (item { (fields a) }))) ]))",
+        "[{a}]",
+        "(start (list [ (elems (alt (item { (fields a) }))) ]))",
     );
 }

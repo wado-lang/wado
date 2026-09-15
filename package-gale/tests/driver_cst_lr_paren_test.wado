@@ -16,11 +16,11 @@ fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "paren: nested parenthesised self-ref" {
-    chk(&"a(b(c))", &"(prog (e (e a) ( (e (e b) ( (e c) )) )))");
+    chk("a(b(c))", "(prog (e (e a) ( (e (e b) ( (e c) )) )))");
 }
 test "paren: bracketed arg admits higher precedence" {
-    chk(&"a(b*c)", &"(prog (e (e a) ( (e (e b) * (e c)) )))");
+    chk("a(b*c)", "(prog (e (e a) ( (e (e b) * (e c)) )))");
 }
 test "paren: star binds the parenthesised result" {
-    chk(&"a(b)*c", &"(prog (e (e (e a) ( (e b) )) * (e c)))");
+    chk("a(b)*c", "(prog (e (e (e a) ( (e b) )) * (e c)))");
 }

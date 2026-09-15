@@ -15,11 +15,11 @@ use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
 
 test "smoke" {
     // Tiny inline statement; no Preopens needed.
-    assert sqlite::parse(&"SELECT 1;").ok();
+    assert sqlite::parse("SELECT 1;").ok();
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
-    let sql = fs::read_to_string(&"sqlite_parse/queries.sql").unwrap();
+    let sql = fs::read_to_string("sqlite_parse/queries.sql").unwrap();
     let mut b = Benchmark {
         name: "sqlite-parse (Gale)",
         input_size: Option::Some(sql.len()),

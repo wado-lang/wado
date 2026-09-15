@@ -12,33 +12,33 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "tree: optional-lookahead body failure rewinds the scan position" {
-    assert_tree(&"f ( ( ( ( 1 ) ) ) )", &"
+    assert_tree("f ( ( ( ( 1 ) ) ) )", "
         (s (stmt (item (name f) ( (inner ( (inner ( (inner ( (inner 1) )) )) )) ))))
     ");
 }
 
 test "tree: rewind still lets the outer tournament pick the longer alt" {
-    assert_tree(&"f ( ( ( ( 1 ) ) ) ) z", &"
+    assert_tree("f ( ( ( ( 1 ) ) ) ) z", "
         (s (stmt (item (name f) ( (inner ( (inner ( (inner ( (inner 1) )) )) )) )) z))
     ");
 }
 
 test "tree: the body that reaches the input wins over the shorter static prefix" {
-    assert_tree(&"f ( ( ( ( x ) ) ) )", &"
+    assert_tree("f ( ( ( ( x ) ) ) )", "
         (s (stmt (item (name f) (alias ( (alias ( (alias ( (alias ( (alias x) )) )) )) )))))
     ");
 }
 
 test "tree: bare optional shape, then the trailing group" {
-    assert_tree(&"f x idx g", &"(s (stmt (item (name f) (alias x) idx (name g))))");
+    assert_tree("f x idx g", "(s (stmt (item (name f) (alias x) idx (name g))))");
 }
 
 test "tree: 'as' optional shape, then the trailing group" {
-    assert_tree(&"f as ( x ) idx g", &"
+    assert_tree("f as ( x ) idx g", "
         (s (stmt (item (name f) as (alias ( (alias x) )) idx (name g))))
     ");
 }
 
 test "tree: skipped optional, trailing group still matches" {
-    assert_tree(&"f no idx", &"(s (stmt (item (name f) no idx)))");
+    assert_tree("f no idx", "(s (stmt (item (name f) no idx)))");
 }

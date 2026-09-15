@@ -25,7 +25,7 @@ Values within a tick, or across a backwards clock step, are unordered.
 ## Synopsis
 
 ```wado
-assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
+assert Uuid::parse("550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
     && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 ```
 

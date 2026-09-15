@@ -20,12 +20,12 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
     if label == "" {
         return;
     }
-    w.line(&`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
+    w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
 }
 
 pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     let mut result = to_pascal_case(name);
-    result.push_str(&"Node");
+    result.push_str("Node");
     return result;
 }
 
@@ -106,14 +106,14 @@ pub fn literal_field_name<S: AsStrSlice>(text: S) -> String {
         }
     }
     let mut result = String::with_capacity(text.len() + 4);
-    result.push_str(&"lit_");
+    result.push_str("lit_");
     for let c of chars {
         if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
             result.push(c.to_ascii_lowercase());
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(&names.0);
         } else {
-            result.push_str(&"u");
+            result.push_str("u");
             result.push_str(&char_hex_name(c));
         }
     }
@@ -161,13 +161,13 @@ pub fn group_variant_type_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"Or");
+            result.push_str("Or");
         }
         if let RuleRef(r) = &alts[i].elements[0] {
             result.push_str(&to_pascal_case(&r.name));
         }
     }
-    result.push_str(&"Group");
+    result.push_str("Group");
     return result;
 }
 
@@ -175,7 +175,7 @@ pub fn group_field_base_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_or_");
+            result.push_str("_or_");
         }
         if let RuleRef(r) = &alts[i].elements[0] {
             result.push_str(&r.snake_name);
@@ -383,7 +383,7 @@ pub fn single_alt_group_type_name(alt: &Alternative) -> String {
     for let elem of &alt.elements {
         result.push_str(&to_pascal_case(&element_type_base_name(elem)));
     }
-    result.push_str(&"Item");
+    result.push_str("Item");
     return result;
 }
 
@@ -393,7 +393,7 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_");
+            result.push_str("_");
         }
         result.push_str(&element_base_name(&alt.elements[i]));
     }
@@ -406,7 +406,7 @@ pub fn token_group_field_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_or_");
+            result.push_str("_or_");
         }
         result.push_str(&element_base_name(&alts[i].elements[0]));
     }
@@ -415,7 +415,7 @@ pub fn token_group_field_name(alts: &List<Alternative>) -> String {
 
 pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
     let mut result = String::with_capacity(text.len() + 8);
-    result.push_str(&"TK_LIT_");
+    result.push_str("TK_LIT_");
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
             result.push(c.to_ascii_uppercase());
@@ -427,7 +427,7 @@ pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
             // Unknown character: encode the Unicode scalar as hex so distinct
             // characters never collapse to the same name (e.g. `?`, `@`, `#`
             // all used to degenerate to a single `_`).
-            result.push_str(&"U");
+            result.push_str("U");
             result.push_str(&char_hex_name(c));
         }
     }
@@ -690,7 +690,7 @@ pub fn join_kinds(kinds: &List<String>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < kinds.len(); i += 1 {
         if i > 0 {
-            result.push_str(&", ");
+            result.push_str(", ");
         }
         result.push_str(&kinds[i]);
     }

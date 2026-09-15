@@ -525,20 +525,20 @@ impl<C: Clock> TextSink<C> {
         let mut line = String::new();
         if let Some(ts) = C::now() {
             line.push_str(&ts);
-            line.push_str(&" ");
+            line.push_str(" ");
         }
         line.push_str(&event.meta.level.label());
         if self.seq {
             self.next_seq += 1;
-            line.push_str(&` ${self.next_seq}`);
+            line.push_str(` ${self.next_seq}`);
         }
         if let Some(parent) = event.parent {
-            line.push_str(&` span=${parent}`);
+            line.push_str(` span=${parent}`);
         }
-        line.push_str(&` ${event.meta.target}: ${event.message}`);
+        line.push_str(` ${event.meta.target}: ${event.message}`);
         write_fields_text(&event.fields, &mut line);
         if self.location {
-            line.push_str(&` at ${event.meta.file}:${event.meta.line}`);
+            line.push_str(` at ${event.meta.file}:${event.meta.line}`);
         }
         return line;
     }
@@ -904,7 +904,7 @@ impl Log for Filter {
 fn write_fields_text(fields: &Value, out: &mut String) {
     if let Object(map) = fields {
         for let [key, value] of map.entries() {
-            out.push_str(&` ${key}=`);
+            out.push_str(` ${key}=`);
             write_value_text(value, out);
         }
     }
@@ -915,19 +915,19 @@ fn write_fields_text(fields: &Value, out: &mut String) {
 /// keeps the line on one line.
 fn write_value_text(value: &Value, out: &mut String) {
     match value {
-        Null => out.push_str(&"null"),
-        Bool(b) => out.push_str(&`${*b}`),
-        Int(n) => out.push_str(&`${*n}`),
-        UInt(n) => out.push_str(&`${*n}`),
-        Int128(n) => out.push_str(&`${*n}`),
-        UInt128(n) => out.push_str(&`${*n}`),
-        Float(f) => out.push_str(&`${*f}`),
+        Null => out.push_str("null"),
+        Bool(b) => out.push_str(`${*b}`),
+        Int(n) => out.push_str(`${*n}`),
+        UInt(n) => out.push_str(`${*n}`),
+        Int128(n) => out.push_str(`${*n}`),
+        UInt128(n) => out.push_str(`${*n}`),
+        Float(f) => out.push_str(`${*f}`),
         String(s) => out.push_str(s),
-        Undefined => out.push_str(&"undefined"),
+        Undefined => out.push_str("undefined"),
         _ => {
             match to_string(value) {
                 Ok(s) => out.push_str(&s),
-                Err(_) => out.push_str(&"?"),
+                Err(_) => out.push_str("?"),
             }
         },
     }

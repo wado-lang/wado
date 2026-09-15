@@ -239,7 +239,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         let lang = if action_language_is_emittable(grammar) { grammar.action_language } else { ActionLanguage::Wado };
         let msgs = stage_lexer_bodies(grammar, &lang, &member_names(&lexer_members));
         for let msg of &msgs {
-            ctx.warn(&DiagnosticOwner::host(&"lexer action"), DiagnosticKind::UnsupportedAction, *msg);
+            ctx.warn(&DiagnosticOwner::host("lexer action"), DiagnosticKind::UnsupportedAction, *msg);
         }
     }
     let lowered = lower_for_analysis(grammar, &lit_tokens, &mut ctx);
@@ -289,7 +289,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
     }
     gen_header(&mut w, grammar);
     if options.trace {
-        w.line(&"use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";");
+        w.line("use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";");
         w.blank();
     }
     gen_grammar_metadata(&mut w, grammar);
@@ -327,7 +327,7 @@ pub fn generate(grammar: &mut Grammar, options: &GenerateOptions) -> GeneratedOu
         if any_base {
             let base = if ctx.has_superclass() { *ctx.superclass_name() } else { *ctx.parser_superclass_name() };
             ctx.warn(
-                &DiagnosticOwner::host(&"highlight"),
+                &DiagnosticOwner::host("highlight"),
                 DiagnosticKind::UnsupportedAction,
                 `a highlight query with superClass '${base}' is not supported (the highlighter entry cannot install the base handler); skipping the highlighter`,
             );
@@ -385,7 +385,7 @@ fn wire_superclasses(grammar: &mut Grammar, ctx: &mut GenContext) {
     // A refusal already reported the cause; anything `this` left over has not.
     if !lexer_refused && lexer_bodies_name_unwired_base(grammar) {
         ctx.warn(
-            &DiagnosticOwner::host(&"superClass"),
+            &DiagnosticOwner::host("superClass"),
             DiagnosticKind::UnsupportedAction,
             "a lexer action or predicate names 'this' with nothing to receive it; only a `this.m()` call under a lexer superClass lowers to a base operation, and a combined grammar's superClass is the parser's",
         );
@@ -411,7 +411,7 @@ fn wire_parser_superclass(grammar: &mut Grammar, ctx: &mut GenContext) {
             warn_superclass_refused(
                 ctx,
                 &sc,
-                &"is called from a body carrying host code the grammar's action language has no translator for",
+                "is called from a body carrying host code the grammar's action language has no translator for",
             );
         } else {
             ctx.set_parser_superclass(&sc, ops);
@@ -434,7 +434,7 @@ fn parser_bodies_execute<S: AsStrSlice>(grammar: &Grammar, base: S) -> bool {
 
 fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut GenContext, base: S, refusal: S1) {
     ctx.warn(
-        &DiagnosticOwner::host(&"superClass"),
+        &DiagnosticOwner::host("superClass"),
         DiagnosticKind::UnsupportedAction,
         `superClass '${base.to_string()}' ${refusal.to_string()}, so the base is not wired`,
     );
@@ -578,14 +578,14 @@ fn element_has_open_first(e: &Element) -> bool {
 /// inlined runtime decodes once, at construction, into the module-level sim.
 fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
     let lr_tables = if emit_scan_globals { "true" } else { "false" };
-    emit_atn_blob_global(w, atn, &"ATN_SIM", &`, ${lr_tables}`);
+    emit_atn_blob_global(w, atn, "ATN_SIM", `, ${lr_tables}`);
     // The mutable scan caller stack. The scan emit pushes/pops it around
     // operand scans so an ATN-class LR rule's scan loop can route through
     // `atn_lr_loop_decision` exactly like the parse side. Only needed when an
     // ATN-class LR rule exists (a non-greedy-`??`-only grammar uses the
     // simulator but not the scan-side routing).
     if emit_scan_globals {
-        w.line(&"global mut SCAN_STACK: List<i32> = [];");
+        w.line("global mut SCAN_STACK: List<i32> = [];");
     }
     w.blank();
 }
@@ -597,17 +597,17 @@ fn gen_atn_data_global(w: &mut CodeWriter, atn: &Atn, emit_scan_globals: bool) {
 /// The parse seeds it from `p` before each scan, so nothing here has to
 /// survive a scan the tournament abandons.
 fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &MemberDecls) {
-    w.begin(&`struct ${SCAN_GATE_TYPE}`);
+    w.begin(`struct ${SCAN_GATE_TYPE}`);
     for let f of fields {
         // The member's own declared type and initialiser, not `i32 = 0`. The
         // seed is `SCAN_GATE.f = p.f;`, so a `long` member declared here as an
         // `i32` is a type error in the generated parser rather than anything
         // this side would notice.
         let [ty, init] = member_field(members, f);
-        w.line(&`${*f}: ${ty} = ${init},`);
+        w.line(`${*f}: ${ty} = ${init},`);
     }
     w.end();
-    w.line(&`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} {};`);
+    w.line(`global mut ${SCAN_GATE_HANDLE}: ${SCAN_GATE_TYPE} = ${SCAN_GATE_TYPE} {};`);
     w.blank();
 }
 
@@ -626,7 +626,7 @@ fn member_field<S: AsStrSlice>(members: &MemberDecls, name: S) -> [String, Strin
 /// blob format and decoder as the parser ATN; only the atom semantics differ
 /// (char ranges vs token kinds).
 fn gen_latn_data_global(w: &mut CodeWriter, atn: &Atn) {
-    emit_atn_blob_global(w, atn, &"LATN_SIM", &"");
+    emit_atn_blob_global(w, atn, "LATN_SIM", "");
     w.blank();
 }
 
@@ -648,13 +648,13 @@ fn emit_atn_blob_global<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, atn: 
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(&`global ${sim_name.to_string()}: AtnSim = atn_decode(&b"${body}"${extra_args.to_string()});`);
+    w.line(`global ${sim_name.to_string()}: AtnSim = atn_decode(&b"${body}"${extra_args.to_string()});`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for
 /// byte `b` to `out`.
 fn push_hex_byte(out: &mut String, b: u8) {
-    out.push_str(&`\\x${b:02x}`);
+    out.push_str(`\\x${b:02x}`);
 }
 
 /// Append `s` as an attribute string literal's content: the reader unescapes
@@ -683,16 +683,16 @@ fn gen_header(w: &mut CodeWriter, grammar: &Grammar) {
         sources.push(*sf);
     }
     let mut parts = String::with_capacity(32);
-    parts.push_str(&"#![generated(by = \"gale\", sources = [");
+    parts.push_str("#![generated(by = \"gale\", sources = [");
     for let mut i = 0; i < sources.len(); i += 1 {
         if i > 0 {
-            parts.push_str(&", ");
+            parts.push_str(", ");
         }
         parts.push('"');
         push_attr_escaped(&mut parts, &sources[i]);
         parts.push('"');
     }
-    parts.push_str(&"])]");
+    parts.push_str("])]");
     w.line(&parts);
     w.blank();
 }
@@ -783,14 +783,14 @@ fn gen_runtime_fragment<S: AsStrSlice>(w: &mut CodeWriter, src: S) {
             }
         } else {
             w.raw(&line);
-            w.raw(&"\n");
+            w.raw("\n");
         }
     }
     // A well-formed fragment never ends mid-`use`; emit any stray buffer
     // verbatim rather than silently dropping it.
     for let l of &block {
         w.raw(l);
-        w.raw(&"\n");
+        w.raw("\n");
     }
 }
 
@@ -805,7 +805,7 @@ fn flush_use_block(w: &mut CodeWriter, block: &List<String>) {
     }
     for let l of block {
         w.raw(l);
-        w.raw(&"\n");
+        w.raw("\n");
     }
 }
 
@@ -820,25 +820,25 @@ fn gen_grammar_metadata(w: &mut CodeWriter, grammar: &Grammar) {
     if grammar.options.is_empty() && grammar.named_actions.is_empty() {
         return;
     }
-    w.line(&"// Grammar metadata from source .g4 prequels:");
+    w.line("// Grammar metadata from source .g4 prequels:");
     // Two bases do not fit one `options` list — read the resolved slots.
     if !grammar.lexer_superclass.is_empty() {
-        w.line(&`//   option superClass = ${grammar.lexer_superclass} (lexer)`);
+        w.line(`//   option superClass = ${grammar.lexer_superclass} (lexer)`);
     }
     if !grammar.parser_superclass.is_empty() {
-        w.line(&`//   option superClass = ${grammar.parser_superclass} (parser)`);
+        w.line(`//   option superClass = ${grammar.parser_superclass} (parser)`);
     }
     for let opt of &grammar.options {
         if opt.name == "superClass" {
             continue;
         }
-        w.line(&`//   option ${opt.name} = ${format_option_value(&opt.value)}`);
+        w.line(`//   option ${opt.name} = ${format_option_value(&opt.value)}`);
     }
     for let act of &grammar.named_actions {
         if let Some(scope) = &act.scope {
-            w.line(&`//   @${*scope}::${act.name}`);
+            w.line(`//   @${*scope}::${act.name}`);
         } else {
-            w.line(&`//   @${act.name}`);
+            w.line(`//   @${act.name}`);
         }
     }
     w.blank();
@@ -865,18 +865,18 @@ fn format_option_value(v: &OptionValue) -> String {
 
 
 fn gen_token_kind(w: &mut CodeWriter, lexer_rules: &List<LexerRule>) {
-    let mut e = EnumSpec::new(&"TokenKind", Vis::Pub);
+    let mut e = EnumSpec::new("TokenKind", Vis::Pub);
     for let rule of lexer_rules {
         if !rule.is_fragment {
             if rule.is_virtual {
-                e.add_member_with_comment(&rule.name, &"virtual");
+                e.add_member_with_comment(&rule.name, "virtual");
             } else {
                 e.add_member(&rule.name);
             }
         }
     }
-    e.add_member(&"Eof");
-    e.add_member(&"Error");
+    e.add_member("Eof");
+    e.add_member("Error");
     e.emit(w);
     w.blank();
 }

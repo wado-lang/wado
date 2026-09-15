@@ -44,12 +44,12 @@ fn pick<S: AsStrSlice>(input: S, first: bool) -> [bool, i32] {
 }
 
 test "adjacent > > is a shift" {
-    let r = parse(&">>");
+    let r = parse(">>");
     assert r.ok(), `expected a parse, got ${prs::to_string_tree(&r)}`;
 }
 
 test "a gap between the two > fails the predicate" {
-    let r = parse(&"> >");
+    let r = parse("> >");
     assert !r.ok(), "a separated pair is not a shift";
 }
 
@@ -57,6 +57,6 @@ test "a gap between the two > fails the predicate" {
 // guarding inside one alternative. Both alts match the same `ID`, so the tree
 // cannot say which was taken — what this pins is that the gate is reached.
 test "an alt-initial predicate gates the dispatch" {
-    assert pick(&"a", true) == [true, 1], `${pick(&"a", true):?}`;
-    assert pick(&"a", false) == [true, 1], `${pick(&"a", false):?}`;
+    assert pick("a", true) == [true, 1], `${pick("a", true):?}`;
+    assert pick("a", false) == [true, 1], `${pick("a", false):?}`;
 }

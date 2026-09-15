@@ -18,10 +18,10 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "simple-cst nullable: each alternative's own first set selects it" {
-    assert_tree(&"a c", &"(s (x a) c)");
-    assert_tree(&"b c", &"(s (y b) c)");
+    assert_tree("a c", "(s (x a) c)");
+    assert_tree("b c", "(s (y b) c)");
 }
 
 test "simple-cst nullable: the follow set selects the alternative that matches empty" {
-    assert_tree(&"c", &"(s x c)");
+    assert_tree("c", "(s x c)");
 }

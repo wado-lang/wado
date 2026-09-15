@@ -167,7 +167,7 @@ fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Elemen
 
 fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {
     return match *elem {
-        TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(&`TK_${t.name}`) }),
+        TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(`TK_${t.name}`) }),
         Literal(l) => Element::Literal(LiteralElement { ..l, kind_id: kinds.id_of(&literal_const_name(&l.text)) }),
         Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds) }),
         Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds) }),

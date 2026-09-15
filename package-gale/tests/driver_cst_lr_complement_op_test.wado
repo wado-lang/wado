@@ -16,15 +16,15 @@ fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "complement-op: any non-';' token is the infix operator" {
-    chk(&"1 + 2", &"(prog (e (e 1) + (e 2)))");
+    chk("1 + 2", "(prog (e (e 1) + (e 2)))");
 }
 test "complement-op: a higher-precedence '*' wins the overlap" {
-    chk(&"1 * 2", &"(prog (e (e 1) * (e 2)))");
+    chk("1 * 2", "(prog (e (e 1) * (e 2)))");
 }
 test "complement-op: standard precedence ('*' binds tighter)" {
-    chk(&"1 + 2 * 3", &"(prog (e (e 1) + (e (e 2) * (e 3))))");
+    chk("1 + 2 * 3", "(prog (e (e 1) + (e (e 2) * (e 3))))");
 }
 test "complement-op: the excluded ';' is not an operator" {
-    let r = co::parse(&"1 ; 2");
+    let r = co::parse("1 ; 2");
     assert !r.ok(), `';' must not be consumed as an operator, got: ${co::to_string_tree(&r)}`;
 }

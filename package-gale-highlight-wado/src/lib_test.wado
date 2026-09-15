@@ -94,7 +94,7 @@ test "highlight struct literal in interpolation" {
 }
 
 test "highlight nested template string" {
-    assert_highlights(&"fn f() -> String { let n = 1; return `outer ${`inner ${n}`}`; }\n");
+    assert_highlights("fn f() -> String { let n = 1; return `outer ${`inner ${n}`}`; }\n");
 }
 
 test "highlight fragment: unterminated fn body keeps interpolation context" {
@@ -141,47 +141,47 @@ test "highlight __DATA__ section" {
 }
 
 test "highlight flags declaration" {
-    assert_highlights(&"pub flags Perms { Read, Write }\n");
+    assert_highlights("pub flags Perms { Read, Write }\n");
 }
 
 test "highlight unit value and type" {
-    assert_highlights(&"struct S { u: () }\nfn f() -> () { let t = [1, ()]; return (); }\n");
+    assert_highlights("struct S { u: () }\nfn f() -> () { let t = [1, ()]; return (); }\n");
 }
 
 test "highlight labeled block" {
-    assert_highlights(&"fn f() { scope: { break scope; } let r = outer: { break outer: 5; }; }\n");
+    assert_highlights("fn f() { scope: { break scope; } let r = outer: { break outer: 5; }; }\n");
 }
 
 test "highlight mut struct destructuring" {
-    assert_highlights(&"struct P { x: i32, y: i32 }\nfn f(p: P) { let mut { x: mx, y: my } = p; mx += 1; }\n");
+    assert_highlights("struct P { x: i32, y: i32 }\nfn f(p: P) { let mut { x: mx, y: my } = p; mx += 1; }\n");
 }
 
 test "highlight turbofish wildcard type" {
-    assert_highlights(&"fn f() { let x = pick::<_, bool>(1, true); }\n");
+    assert_highlights("fn f() { let x = pick::<_, bool>(1, true); }\n");
 }
 
 test "highlight array type in variant payload" {
-    assert_highlights(&"variant V { Rect([f64, f64]), Pt }\ntype T = Foo<[i32, i32], bool>;\n");
+    assert_highlights("variant V { Rect([f64, f64]), Pt }\ntype T = Foo<[i32, i32], bool>;\n");
 }
 
 test "highlight chained tuple index" {
-    assert_highlights(&"fn f() { let t = [[1, 2], [3, 4]]; assert t.0.0 == 1; }\n");
+    assert_highlights("fn f() { let t = [[1, 2], [3, 4]]; assert t.0.0 == 1; }\n");
 }
 
 test "highlight match arm diverging with a bare return" {
-    assert_highlights(&"fn f(o: Option<i32>) -> i32 { return match o { Some(v) => v, None => return 0 }; }\n");
+    assert_highlights("fn f(o: Option<i32>) -> i32 { return match o { Some(v) => v, None => return 0 }; }\n");
 }
 
 test "highlight range pattern" {
-    assert_highlights(&"fn f(c: char) -> i32 { match c { '0'..='9' => 1, 'a'..<'f' => 2, _ => 0 }; }\n");
+    assert_highlights("fn f(c: char) -> i32 { match c { '0'..='9' => 1, 'a'..<'f' => 2, _ => 0 }; }\n");
 }
 
 test "highlight range inside an or-pattern" {
-    assert_highlights(&"fn f(c: char) -> i32 { match c { '-' | '0'..='9' => 1, _ => 0 }; }\n");
+    assert_highlights("fn f(c: char) -> i32 { match c { '-' | '0'..='9' => 1, _ => 0 }; }\n");
 }
 
 test "highlight fn-type effect before next param" {
-    assert_highlights(&"fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
+    assert_highlights("fn a(f: fn() with Stdout, x: i32) with Stdout { f(); }\n");
 }
 
 // Grammar-coverage: highlight real Wado files and assert lossless

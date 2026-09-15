@@ -2502,11 +2502,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
     let mut params: List<SqlParam> = [];
     for let h of ReflectTemplate::<T>::members() {
-        query.push_str(&h.lit());               // literal text before this hole
-        query.push_str(&"?");
+        query.push_str(h.lit());               // literal text before this hole
+        query.push_str("?");
         params.push(h.get(&t).to_sql_param());  // the value, storage shared
     }
-    query.push_str(&ReflectTemplate::<T>::tail());
+    query.push_str(ReflectTemplate::<T>::tail());
     return SqlQuery { query, params };
 }
 ```
@@ -3599,14 +3599,14 @@ impl Default for Point {
 Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`String`, `char`, the integer types, `f32`/`f64`, `bool`) implement both.
 
 ```wado
-i32::from_str(&"42")              // Ok(42)
-i32::from_str(&"0x2A")            // Err — strict rejects the prefix
+i32::from_str("42")              // Ok(42)
+i32::from_str("0x2A")            // Err — strict rejects the prefix
 
-i32::from_str_lenient(&"0x2A")    // Ok(42)  — radix prefixes 0x/0o/0b
-i32::from_str_lenient(&"1_000")   // Ok(1000) — `_` digit separators
-bool::from_str_lenient(&"TRUE")   // Ok(true) — casing, plus 1/0
-f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
-i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
+i32::from_str_lenient("0x2A")    // Ok(42)  — radix prefixes 0x/0o/0b
+i32::from_str_lenient("1_000")   // Ok(1000) — `_` digit separators
+bool::from_str_lenient("TRUE")   // Ok(true) — casing, plus 1/0
+f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
+i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
 ```
 
 `FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).

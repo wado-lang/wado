@@ -11,11 +11,11 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "tree: X Y picks (a b) when a is left-recursive" {
-    assert_tree(&"X Y", &"(r (a X) (b Y))");
+    assert_tree("X Y", "(r (a X) (b Y))");
 }
 
 // LR rule's binary form should still work: `X + X` parses into a
 // nested `a` tree.
 test "tree: X + X parses through LR suffix" {
-    assert_tree(&"X+X", &"(r (a (a X) + (a X)))");
+    assert_tree("X+X", "(r (a (a X) + (a X)))");
 }

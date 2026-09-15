@@ -85,7 +85,7 @@ pub fn wrapper_arg_forward(rule: &ParserRule, ctx: &GenContext) -> String {
     }
     let mut s = String::new();
     for let a of &rule.args {
-        s.push_str(&", ");
+        s.push_str(", ");
         s.push_str(&arg_param_name(&a.name));
     }
     return s;
@@ -99,7 +99,7 @@ pub fn emit_arg_stores(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) 
         return;
     }
     for let a of &rule.args {
-        w.line(&`vals.${a.name} = ${arg_param_name(&a.name)};`);
+        w.line(`vals.${a.name} = ${arg_param_name(&a.name)};`);
     }
 }
 
@@ -133,7 +133,7 @@ pub fn call_arg_suffix(rc: &RuleCallOp, ctx: &mut GenContext) -> String {
             Some(c) => c,
             None => *e,
         };
-        out.push_str(&", ");
+        out.push_str(", ");
         out.push_str(&code.trim());
     }
     return out;
@@ -295,11 +295,11 @@ pub fn add_parser_super_effect(f: &mut FnSpec, ctx: &GenContext) {
 pub fn gen_predicate_fns(w: &mut CodeWriter, ctx: &GenContext) {
     for let entry of ctx.predicate_fns() {
         let mut f = FnSpec::new(&pred_fn_name(entry.0));
-        f.add_param(&PARSER_HANDLE, &"&Parser");
+        f.add_param(&PARSER_HANDLE, "&Parser");
         add_parser_super_effect(&mut f, ctx);
-        f.set_return_type(&"bool");
+        f.set_return_type("bool");
         f.emit_begin(w);
-        w.line(&`return ${entry.1};`);
+        w.line(`return ${entry.1};`);
         w.end();
         w.blank();
     }
@@ -387,7 +387,7 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &GenContext)
         if !rule_emits_vals(ctx, rule) {
             continue;
         }
-        w.begin(&`struct ${vals_struct_name(rule)}`);
+        w.begin(`struct ${vals_struct_name(rule)}`);
         if rule_threads_args(rule) {
             gen_vals_fields(w, &rule.args);
         }
@@ -404,11 +404,11 @@ pub fn gen_vals_structs(w: &mut CodeWriter, grammar: &Grammar, ctx: &GenContext)
 /// null `$label` renders as empty text.
 fn gen_capture_fields(w: &mut CodeWriter, captures: &RuleCaptures) {
     for let f of &captures.spans {
-        w.line(&`${rule_span_lo_field(f)}: i32 = 0,`);
-        w.line(&`${rule_span_hi_field(f)}: i32 = -1,`);
+        w.line(`${rule_span_lo_field(f)}: i32 = 0,`);
+        w.line(`${rule_span_hi_field(f)}: i32 = -1,`);
     }
     for let f of &captures.nodes {
-        w.line(&`${rule_node_field(f)}: i32 = -1,`);
+        w.line(`${rule_node_field(f)}: i32 = -1,`);
     }
 }
 
@@ -418,7 +418,7 @@ fn gen_vals_fields(w: &mut CodeWriter, decls: &List<AttrDecl>) {
             continue;
         }
         let def = wado_type_default(&d.type_text).expect("gen_vals_fields: field_in_vals/wado_type_default disagree");
-        w.line(&`${d.name}: ${d.type_text} = ${def},`);
+        w.line(`${d.name}: ${d.type_text} = ${def},`);
     }
 }
 
@@ -469,7 +469,7 @@ pub fn gen_parser_member_methods(w: &mut CodeWriter, members: &MemberDecls) {
     if members.methods.is_empty() {
         return;
     }
-    ImplSpec::new(&"Parser").emit_begin(w);
+    ImplSpec::new("Parser").emit_begin(w);
     for let m of &members.methods {
         w.line(&m.source);
     }
@@ -813,9 +813,9 @@ pub fn emit_atn_disabled_seed(
     if gates.is_empty() {
         return String::new();
     }
-    w.line(&"let mut _atn_disabled: List<i32> = [];");
+    w.line("let mut _atn_disabled: List<i32> = [];");
     for let g of &gates {
-        w.line(&`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
+        w.line(`if !(${g.1}) { _atn_disabled.push(${g.0}); }`);
     }
     return String::from(", &_atn_disabled");
 }
@@ -1061,22 +1061,22 @@ pub fn gen_predicate_gated_dispatch<S: AsStrSlice, S1: AsStrSlice>(
                 emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
                 return;
             }
-            w.else_begin(&"else");
+            w.else_begin("else");
             emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
             w.end();
             return;
         }
         let cond = join_gate_conds(&conds);
         if !opened {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             opened = true;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
         emit_gated_pick(w, *idx, fn_name, ctx, rule_display);
     }
-    w.else_begin(&"else");
-    w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+    w.else_begin("else");
+    w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
     emit_no_viable_return(w, ctx);
     w.end();
 }
@@ -1110,18 +1110,18 @@ pub fn alt_vals_arg(ctx: &GenContext) -> String {
 /// `return;`.
 pub fn emit_no_viable_return(w: &mut CodeWriter, ctx: &GenContext) {
     if current_rule_emits_vals(ctx) {
-        w.line(&"return vals;");
+        w.line("return vals;");
     } else {
-        w.line(&"return;");
+        w.line("return;");
     }
 }
 
 /// Emit a gated branch body: the trace pick and the tail call into the alt.
 fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, idx: i32, fn_name: S, ctx: &GenContext, rule_display: S1) {
     if ctx.is_trace() {
-        w.line(&wado`trace_pick(p, &"${rule_display.to_string()}", ${idx});`);
+        w.line(&wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
     }
-    w.line(&`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+    w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.
@@ -1129,7 +1129,7 @@ pub fn join_gate_conds(conds: &List<String>) -> String {
     let mut out = String::new();
     for let mut i = 0; i < conds.len(); i += 1 {
         if i > 0 {
-            out.push_str(&" && ");
+            out.push_str(" && ");
         }
         out.push('(');
         out.push_str(&conds[i]);
@@ -1236,7 +1236,7 @@ fn rule_captures_span(rule: &ParserRule, rules: &List<ParserRule>) -> bool {
 /// uniformly regardless of dispatch.
 pub fn emit_span_capture(w: &mut CodeWriter, rule: &ParserRule, ctx: &GenContext) {
     if ctx.emit_actions() && rule_captures_span(rule, ctx.parser_rules()) {
-        w.line(&`let ${RULE_START_TOK_LOCAL} = p.pos;`);
+        w.line(`let ${RULE_START_TOK_LOCAL} = p.pos;`);
     }
 }
 
@@ -1253,20 +1253,20 @@ fn gen_predicate_guard(w: &mut CodeWriter, src: &ActionSource, ctx: &mut GenCont
             return;
         },
     };
-    w.begin(&"if !p.speculating");
-    w.begin(&`if !(${cond})`);
-    w.line(&`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
+    w.begin("if !p.speculating");
+    w.begin(`if !(${cond})`);
+    w.line(`p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);`);
     if current_rule_emits_vals(ctx) {
-        w.line(&"return vals;");
+        w.line("return vals;");
     } else {
-        w.line(&"return;");
+        w.line("return;");
     }
     w.end();
     w.end();
 }
 
 fn emit_action_stmt<S: AsStrSlice>(w: &mut CodeWriter, code: S) {
-    w.begin(&"if !p.speculating");
+    w.begin("if !p.speculating");
     w.line(code);
     w.end();
 }

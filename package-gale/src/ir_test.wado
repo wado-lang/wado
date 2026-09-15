@@ -317,11 +317,11 @@ test "an embedded delegate names its tokens rather than spelling them" {
 
     let mut spelled = compose([host, `grammar C;\ns : ID ':' ID ;\n${tail}`]);
     alias_parser_literals(&mut spelled);
-    assert has_literal(&spelled, &"s"), "a spelled literal stays one, and mints a token nothing emits";
+    assert has_literal(&spelled, "s"), "a spelled literal stays one, and mints a token nothing emits";
 
     let mut named = compose([host, `grammar C;\ns : ID COLON ID ;\n${tail}`]);
     alias_parser_literals(&mut named);
-    assert !has_literal(&named, &"s"), "a named token is what the lexer produces";
+    assert !has_literal(&named, "s"), "a named token is what the lexer produces";
 }
 
 /// Whether the named parser rule's first alternative still holds a `Literal`.
@@ -368,9 +368,9 @@ test "compose_grammars gives each delegate's channels a slot of their own" {
         "lexer grammar T;\nchannels { C }\nT_C : 't' -> channel(C) ;",
     ]);
     assert g.channels == ["A", "B", "C"], `${g.channels:?}`;
-    assert channel_of(&g, &"M_C") == 2;
-    assert channel_of(&g, &"S_C") == 3;
-    assert channel_of(&g, &"T_C") == 4;
+    assert channel_of(&g, "M_C") == 2;
+    assert channel_of(&g, "S_C") == 3;
+    assert channel_of(&g, "T_C") == 4;
 }
 
 test "compose_grammars merges two delegates naming one channel onto one slot" {
@@ -380,8 +380,8 @@ test "compose_grammars merges two delegates naming one channel onto one slot" {
         "lexer grammar T;\nchannels { NOTE }\nT_C : 't' -> channel(NOTE) ;",
     ]);
     assert g.channels == ["NOTE"], `${g.channels:?}`;
-    assert channel_of(&g, &"S_C") == 2;
-    assert channel_of(&g, &"T_C") == 2;
+    assert channel_of(&g, "S_C") == 2;
+    assert channel_of(&g, "T_C") == 2;
 }
 
 test "Grammar construction" {

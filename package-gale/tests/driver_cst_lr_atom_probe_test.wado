@@ -18,21 +18,21 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 test "the atom's optional fires when an operator follows the atom" {
     assert_tree(
-        &"( case a when b then c end + d )",
-        &"(s ( (e (e case (e (name a)) when (e (name b)) then (e (name c)) end) + (e (name d))) ) tail)",
+        "( case a when b then c end + d )",
+        "(s ( (e (e case (e (name a)) when (e (name b)) then (e (name c)) end) + (e (name d))) ) tail)",
     );
 }
 
 test "the atom's optional fires when the caller's FOLLOW follows the atom" {
     assert_tree(
-        &"( case a when b then c end )",
-        &"(s ( (e case (e (name a)) when (e (name b)) then (e (name c)) end) ) tail)",
+        "( case a when b then c end )",
+        "(s ( (e case (e (name a)) when (e (name b)) then (e (name c)) end) ) tail)",
     );
 }
 
 test "the atom's optional yields to the mandatory when-clause" {
     assert_tree(
-        &"( case when b then c end )",
-        &"(s ( (e case when (e (name b)) then (e (name c)) end) ) tail)",
+        "( case when b then c end )",
+        "(s ( (e case when (e (name b)) then (e (name c)) end) ) tail)",
     );
 }

@@ -17,21 +17,21 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 
 test "calculator: a relational equation nests every expression layer" {
     assert_tree(
-        &"1 = 2",
-        &"(equation (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))))",
+        "1 = 2",
+        "(equation (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))))",
     );
 }
 
 test "calculator: prefix sign, `*` precedence repeat, and a constant" {
     assert_tree(
-        &"-3 + 4 * 5 = pi",
-        &"(equation (expression (multiplyingExpression (powExpression (signedAtom - (signedAtom (atom (scientific 3)))))) + (multiplyingExpression (powExpression (signedAtom (atom (scientific 4)))) * (powExpression (signedAtom (atom (scientific 5)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (constant pi)))))))",
+        "-3 + 4 * 5 = pi",
+        "(equation (expression (multiplyingExpression (powExpression (signedAtom - (signedAtom (atom (scientific 3)))))) + (multiplyingExpression (powExpression (signedAtom (atom (scientific 4)))) * (powExpression (signedAtom (atom (scientific 5)))))) (relop =) (expression (multiplyingExpression (powExpression (signedAtom (atom (constant pi)))))))",
     );
 }
 
 test "calculator: a parenthesised call with comma args" {
     assert_tree(
-        &"sin ( 1 , 2 ) > 3",
-        &"(equation (expression (multiplyingExpression (powExpression (signedAtom (func_ (funcname sin) ( (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) , (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))) )))))) (relop >) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))",
+        "sin ( 1 , 2 ) > 3",
+        "(equation (expression (multiplyingExpression (powExpression (signedAtom (func_ (funcname sin) ( (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 1)))))) , (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 2)))))) )))))) (relop >) (expression (multiplyingExpression (powExpression (signedAtom (atom (scientific 3)))))))",
     );
 }

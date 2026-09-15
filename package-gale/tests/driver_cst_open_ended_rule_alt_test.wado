@@ -20,12 +20,12 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "open-ended rule alt: the alternatives after it are still reachable" {
-    assert_tree(&"b d", &"(r b d)");
-    assert_tree(&"b e", &"(r b e)");
+    assert_tree("b d", "(r b d)");
+    assert_tree("b e", "(r b e)");
 }
 
 test "open-ended rule alt: its own first set selects it" {
-    assert_tree(&"a b c", &"(r a b c)");
+    assert_tree("a b c", "(r a b c)");
 }
 
 // Inside the merged branch the prediction tree decides which alternative the
@@ -36,12 +36,12 @@ test "open-ended rule alt: its own first set selects it" {
 // lives, and it wants its own pass rather than a widening folded in here.
 #[TODO]
 test "open-ended rule alt: the wildcard takes a token the prefix does not name" {
-    assert_tree(&"b c", &"(r b c)");
+    assert_tree("b c", "(r b c)");
 }
 
 #[TODO]
 test "open-ended rule alt: a nullable prefix yields to the wildcard" {
     // `A?` skips so `.` can take the `a` and `C` the `c`; Gale's `A?` is
     // greedy against a first set that does not know the wildcard follows it.
-    assert_tree(&"a c", &"(r a c)");
+    assert_tree("a c", "(r a c)");
 }

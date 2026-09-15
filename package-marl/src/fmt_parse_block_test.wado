@@ -9,13 +9,13 @@ fn doc_children<S: AsStrSlice>(source: S) -> List<Node> {
 }
 
 test "parse_document reads a paragraph" {
-    let children = doc_children(&"hello world");
+    let children = doc_children("hello world");
     assert children.len() == 1;
     assert children.get(0) matches { Some(Node::Paragraph(_)) };
 }
 
 test "parse_document joins consecutive lines into one paragraph" {
-    let children = doc_children(&"line one\nline two");
+    let children = doc_children("line one\nline two");
     assert children.len() == 1;
     if let Some(Node::Paragraph(p)) = children.get(0) {
         // Text, SoftBreak, Text
@@ -26,14 +26,14 @@ test "parse_document joins consecutive lines into one paragraph" {
 }
 
 test "parse_document separates paragraphs on a blank line" {
-    let children = doc_children(&"first\n\nsecond");
+    let children = doc_children("first\n\nsecond");
     assert children.len() == 2;
     assert children.get(0) matches { Some(Node::Paragraph(_)) };
     assert children.get(1) matches { Some(Node::Paragraph(_)) };
 }
 
 test "parse_document reads ATX headings by level" {
-    let children = doc_children(&"# Title\n\n## Sub");
+    let children = doc_children("# Title\n\n## Sub");
     assert children.len() == 2;
     if let Some(Node::Heading(h)) = children.get(0) {
         assert h.level == 1;
@@ -48,7 +48,7 @@ test "parse_document reads ATX headings by level" {
 }
 
 test "parse_document strips a closing ATX sequence" {
-    let children = doc_children(&"## Spaced ##");
+    let children = doc_children("## Spaced ##");
     if let Some(Node::Heading(h)) = children.get(0) {
         assert h.children.len() == 1;
         if let Some(Node::Text(s)) = h.children.get(0) {
@@ -60,13 +60,13 @@ test "parse_document strips a closing ATX sequence" {
 }
 
 test "parse_document reads a thematic break" {
-    let children = doc_children(&"first\n\n---\n\nsecond");
+    let children = doc_children("first\n\n---\n\nsecond");
     assert children.len() == 3;
     assert children.get(1) matches { Some(Node::ThematicBreak) };
 }
 
 test "parse_document reads a fenced code block with a language tag" {
-    let children = doc_children(&"```wado\nlet x = 1;\n```");
+    let children = doc_children("```wado\nlet x = 1;\n```");
     assert children.len() == 1;
     if let Some(Node::CodeBlock(cb)) = children.get(0) {
         assert cb.fenced == true;
@@ -78,7 +78,7 @@ test "parse_document reads a fenced code block with a language tag" {
 }
 
 test "parse_document reads an indented code block" {
-    let children = doc_children(&"    let x = 1;\n    let y = 2;");
+    let children = doc_children("    let x = 1;\n    let y = 2;");
     assert children.len() == 1;
     if let Some(Node::CodeBlock(cb)) = children.get(0) {
         assert cb.fenced == false;
@@ -89,7 +89,7 @@ test "parse_document reads an indented code block" {
 }
 
 test "parse_document reads a blockquote recursively" {
-    let children = doc_children(&"> a\n> b\n\nc");
+    let children = doc_children("> a\n> b\n\nc");
     assert children.len() == 2;
     if let Some(Node::BlockQuote(inner)) = children.get(0) {
         assert inner.len() == 1;
@@ -100,7 +100,7 @@ test "parse_document reads a blockquote recursively" {
 }
 
 test "parse_document reads a tight unordered list" {
-    let children = doc_children(&"- a\n- b\n- c");
+    let children = doc_children("- a\n- b\n- c");
     assert children.len() == 1;
     if let Some(Node::List(list)) = children.get(0) {
         assert list.ordered == false;
@@ -114,7 +114,7 @@ test "parse_document reads a tight unordered list" {
 }
 
 test "parse_document reads a loose list separated by blank lines" {
-    let children = doc_children(&"- a\n\n- b");
+    let children = doc_children("- a\n\n- b");
     if let Some(Node::List(list)) = children.get(0) {
         assert list.items.len() == 2;
         if let Some(second) = list.items.get(1) {
@@ -126,7 +126,7 @@ test "parse_document reads a loose list separated by blank lines" {
 }
 
 test "parse_document renumbers an ordered list from its start index" {
-    let children = doc_children(&"3. a\n4. b\n5. c");
+    let children = doc_children("3. a\n4. b\n5. c");
     if let Some(Node::List(list)) = children.get(0) {
         assert list.ordered == true;
         assert list.start == 3;
@@ -137,7 +137,7 @@ test "parse_document renumbers an ordered list from its start index" {
 }
 
 test "parse_document nests a sub-list inside a list item" {
-    let children = doc_children(&"- a\n  - nested\n- b");
+    let children = doc_children("- a\n  - nested\n- b");
     if let Some(Node::List(list)) = children.get(0) {
         assert list.items.len() == 2;
         if let Some(first) = list.items.get(0) {
@@ -151,7 +151,7 @@ test "parse_document nests a sub-list inside a list item" {
 }
 
 test "parse_document reads a task list item" {
-    let children = doc_children(&"- [ ] todo\n- [x] done");
+    let children = doc_children("- [ ] todo\n- [x] done");
     if let Some(Node::List(list)) = children.get(0) {
         if let Some(a) = list.items.get(0) {
             assert a.marker matches { Some(_) };

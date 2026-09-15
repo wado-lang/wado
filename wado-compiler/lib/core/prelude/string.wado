@@ -584,7 +584,7 @@ impl String {
 
     /// Internal: the view append, for a source that is not a whole string
     /// (stdlib use only).
-    internal fn internal_push_view(&mut self, view: StrSlice) {
+    internal fn internal_push_view(&mut self, view: &StrSlice) {
         let n = view.len();
         if n == 0 {
             return;
@@ -1673,7 +1673,8 @@ pub trait AsStrSlice {
     /// operands from the constant-folding frame, which is how a template of
     /// literals stops folding to one.
     fn internal_append_to(&self, out: &mut String) {
-        out.internal_push_view(self.as_str_slice());
+        let view = self.as_str_slice();
+        out.internal_push_view(&view);
     }
 
     fn len(&self) -> i32 {

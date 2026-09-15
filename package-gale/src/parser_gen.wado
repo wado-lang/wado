@@ -336,14 +336,14 @@ fn gen_alt_scan_if_possible<S: AsStrSlice, S1: AsStrSlice>(
     let scan_name = `${fn_name.to_string()}_scan_${alt_index}`;
 
     let mut f = FnSpec::new(&scan_name);
-    f.add_param(&"tokens", &"&Array<i32>");
-    f.add_param(&"pos", &"i32");
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&"i32");
+    f.set_return_type("i32");
     f.emit_begin(w);
-    w.line(&"let mut pos = pos;");
+    w.line("let mut pos = pos;");
 
     // alt-scan should treat the LAST element as atom-only when it is a
     // self-reference to the current rule — that is the prefix-alt case
@@ -361,7 +361,7 @@ fn gen_alt_scan_if_possible<S: AsStrSlice, S1: AsStrSlice>(
         &scan_body.gate_cond,
     );
 
-    w.line(&"return pos;");
+    w.line("return pos;");
     w.end();
     w.blank();
 }
@@ -441,20 +441,20 @@ fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     scope: &GateScope,
 ) {
     let mut f = FnSpec::new(name);
-    f.add_param(&"tokens", &"&Array<i32>");
-    f.add_param(&"pos", &"i32");
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
     let reads_follow = ctx.current_rule_reads_follow();
     if reads_follow {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&"i32");
+    f.set_return_type("i32");
     f.emit_begin(w);
     let slot = `${SCAN_GATE_HANDLE}.${scope.field}`;
-    w.line(&`let _gate_saved = ${slot};`);
-    w.line(&`${slot} = ${scope.value};`);
-    w.line(&`let _gate_end = ${inner.to_string()}(tokens, pos${follow_sep(reads_follow)});`);
-    w.line(&`${slot} = _gate_saved;`);
-    w.line(&"return _gate_end;");
+    w.line(`let _gate_saved = ${slot};`);
+    w.line(`${slot} = ${scope.value};`);
+    w.line(`let _gate_end = ${inner.to_string()}(tokens, pos${follow_sep(reads_follow)});`);
+    w.line(`${slot} = _gate_saved;`);
+    w.line("return _gate_end;");
     w.end();
     w.blank();
 }
@@ -559,12 +559,12 @@ fn gen_scan_function_named<S: AsStrSlice>(
     // Only a left-recursive rule climbs precedence, so only its `scan_X`
     // declares `min_prec`.
     let mut f = FnSpec::new(fn_name);
-    f.add_param(&"tokens", &"&Array<i32>");
-    f.add_param(&"pos", &"i32");
+    f.add_param("tokens", "&Array<i32>");
+    f.add_param("pos", "i32");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
-    f.set_return_type(&"i32");
+    f.set_return_type("i32");
     f.emit_begin(w);
 
     if rule.alternatives.len() == 1 {
@@ -590,23 +590,23 @@ fn gen_scan_function_named<S: AsStrSlice>(
         let non_nullable = !ctx.rule_is_nullable(&rule.name, &mut nullable_visiting)
             && scan_body_can_match_empty(&scan_body.elements);
         if non_nullable {
-            w.line(&"let scan_start = pos;");
+            w.line("let scan_start = pos;");
         }
-        w.line(&"let mut pos = pos;");
+        w.line("let mut pos = pos;");
         gen_scan_op_elements(
             w,
             &scan_body.elements,
             0,
             scan_body.elements.len(),
             ctx,
-            &"return -1;",
+            "return -1;",
             &scan_body.gates,
             &scan_body.gate_cond,
         );
         if non_nullable {
-            w.line(&"if pos == scan_start { return -1; }");
+            w.line("if pos == scan_start { return -1; }");
         }
-        w.line(&"return pos;");
+        w.line("return pos;");
     } else if all_alts_are_single_token(&rule.alternatives) {
         // Compact form: every alt matches exactly one fixed token, so the
         // entire scan reduces to "is the next token in this set?". A naive
@@ -626,11 +626,11 @@ fn gen_scan_function_named<S: AsStrSlice>(
                 firsts.push(t);
             }
         }
-        let check = ctx.kind_check_str(&firsts, &"tokens[pos]");
-        w.begin(&`if pos < tokens.len() && ${check}`);
-        w.line(&"return pos + 1;");
+        let check = ctx.kind_check_str(&firsts, "tokens[pos]");
+        w.begin(`if pos < tokens.len() && ${check}`);
+        w.line("return pos + 1;");
         w.end();
-        w.line(&"return -1;");
+        w.line("return -1;");
     } else {
         // `gen_scan_multi_alt` walks every alt body via the op-driven
         // `gen_scan_op_elements_in_block`. Fetch the `scan_alts` from
@@ -695,17 +695,17 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     // scan_X_atom: tries each non-LR alt (first-match, same shape as before).
     let mut fa = FnSpec::new(&atom_name);
-    fa.add_param(&"tokens", &"&Array<i32>");
-    fa.add_param(&"pos", &"i32");
+    fa.add_param("tokens", "&Array<i32>");
+    fa.add_param("pos", "i32");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut fa);
     }
-    fa.set_return_type(&"i32");
+    fa.set_return_type("i32");
     fa.emit_begin(w);
     if non_lr_alts.len() == 0 {
-        w.line(&"return -1;");
+        w.line("return -1;");
     } else if non_lr_alts.len() == 1 {
-        w.line(&"let mut pos = pos;");
+        w.line("let mut pos = pos;");
         let body = &atom_scan_alts[0];
         gen_scan_op_elements(
             w,
@@ -713,11 +713,11 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
             0,
             body.elements.len(),
             ctx,
-            &"return -1;",
+            "return -1;",
             &body.gates,
             &body.gate_cond,
         );
-        w.line(&"return pos;");
+        w.line("return pos;");
     } else {
         let plan = if let Some(p) = atom_plan {
             p;
@@ -734,8 +734,8 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
 
     // scan_X(tokens, pos, min_prec = 0): atom + precedence-aware dispatch loop.
     let mut f2 = FnSpec::new(fn_name);
-    f2.add_param(&"tokens", &"&Array<i32>");
-    f2.add_param(&"pos", &"i32");
+    f2.add_param("tokens", "&Array<i32>");
+    f2.add_param("pos", "i32");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f2);
     }
@@ -747,16 +747,16 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     if mid_operand_gated {
         add_lr_cont_param(&mut f2);
     }
-    f2.set_return_type(&"i32");
+    f2.set_return_type("i32");
     f2.emit_begin(w);
-    w.line(&`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
-    w.line(&"if pos < 0 { return -1; }");
+    w.line(`let mut pos = ${atom_name}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+    w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
     } else {
         gen_lr_suffix_dispatch(w, fn_name, rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     }
-    w.line(&"return pos;");
+    w.line("return pos;");
     w.end();
     w.blank();
 }
@@ -784,14 +784,14 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
         let suffix_fn = `${fn_name.to_string()}_lr_${lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
-        f.add_param(&"tokens", &"&Array<i32>");
-        f.add_param(&"pos", &"i32");
+        f.add_param("tokens", "&Array<i32>");
+        f.add_param("pos", "i32");
         if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&"i32");
+        f.set_return_type("i32");
         f.emit_begin(w);
-        w.line(&"let mut pos = pos;");
+        w.line("let mut pos = pos;");
 
         // Walk lr_alt.scan_suffix.elements (which runs in lockstep
         // with alt.elements[1..] and lr_alt.suffix.ops). Every
@@ -807,11 +807,11 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
             0,
             lr_alt.scan_suffix.elements.len(),
             ctx,
-            &"return -1;",
+            "return -1;",
             &lr_alt.scan_suffix.gates,
             &lr_alt.scan_suffix.gate_cond,
         );
-        w.line(&"return pos;");
+        w.line("return pos;");
         w.end();
         w.blank();
     }
@@ -829,34 +829,34 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
 ) {
     let valid = &lr_dispatch.valid_lr_alts;
     let decl = lr_atn_alt_decl(lr_dispatch);
-    w.begin(&"loop");
+    w.begin("loop");
     w.line(
-        &`${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
+        `${decl} = atn_lr_loop_decision(&ATN_SIM, &SCAN_STACK, ${decision}, tokens, pos, TK_EOF, min_prec);`,
     );
-    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, &"tokens", &"pos", /*parse_launched=*/ false, ctx);
-    w.line(&"let _lr_pos0 = pos;");
+    emit_lr_atn_group_repick(w, lr_alts, lr_dispatch, fn_name, "tokens", "pos", /*parse_launched=*/ false, ctx);
+    w.line("let _lr_pos0 = pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
         let suffix_fn = `${fn_name.to_string()}_lr_${lr_idx}`;
         if is_first {
-            w.begin(&`if _atn_alt == ${i}`);
+            w.begin(`if _atn_alt == ${i}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if _atn_alt == ${i}`);
+            w.else_begin(`else if _atn_alt == ${i}`);
         }
-        w.line(&`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
-        w.line(&"if pos < 0 { return -1; }");
+        w.line(`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line("if pos < 0 { return -1; }");
     }
     if !is_first {
-        w.else_begin(&"else");
-        w.line(&"break;");
+        w.else_begin("else");
+        w.line("break;");
         w.end();
     } else {
-        w.line(&"break;");
+        w.line("break;");
     }
-    w.begin(&"if pos == _lr_pos0");
-    w.line(&"break;");
+    w.begin("if pos == _lr_pos0");
+    w.line("break;");
     w.end();
     w.end();  // loop
 }
@@ -918,7 +918,7 @@ fn gen_scan_gate_from(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
         Parser => {
             if ctx.emit_scan_gate() {
                 for let f of ctx.scan_gate_fields() {
-                    w.line(&`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
+                    w.line(`${SCAN_GATE_HANDLE}.${*f} = ${PARSER_HANDLE}.${*f};`);
                 }
             }
         },
@@ -958,25 +958,25 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         let mut cond = String::new();
         for let mut k = 0; k < group.len(); k += 1 {
             if k > 0 {
-                cond.push_str(&" || ");
+                cond.push_str(" || ");
             }
-            cond.push_str(&`_atn_alt == ${group[k]}`);
+            cond.push_str(`_atn_alt == ${group[k]}`);
         }
-        w.begin(&`if ${cond}`);
-        w.line(&"let mut _lr_best: i32 = -1;");
-        let origin = gen_lr_candidates_begin(w, ctx, parse_launched, &`lr_pre_${group[0]}`);
+        w.begin(`if ${cond}`);
+        w.line("let mut _lr_best: i32 = -1;");
+        let origin = gen_lr_candidates_begin(w, ctx, parse_launched, `lr_pre_${group[0]}`);
         for let gi of group {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[*gi]];
-            w.line(&`let mut _lr_s_${*gi}: i32 = -1;`);
-            w.begin(&`if ${lr.own_prec} >= min_prec`);
+            w.line(`let mut _lr_s_${*gi}: i32 = -1;`);
+            w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
-            w.line(&`_lr_s_${*gi} = ${scan_fn.to_string()}_lr_${lr.alt_index}(${tokens_expr.to_string()}, ${pos_expr.to_string()}${fsep});`);
+            w.line(`_lr_s_${*gi} = ${scan_fn.to_string()}_lr_${lr.alt_index}(${tokens_expr.to_string()}, ${pos_expr.to_string()}${fsep});`);
             w.end();
         }
         gen_lr_candidates_end(w, ctx, &origin);
         // Ascending order under a strict `>` gives ANTLR4's tie-break.
         for let gi of group {
-            emit_argmax_update(w, &"_lr_best", &"_atn_alt", &`_lr_s_${*gi}`, *gi);
+            emit_argmax_update(w, "_lr_best", "_atn_alt", `_lr_s_${*gi}`, *gi);
         }
         w.end();
     }
@@ -991,8 +991,8 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
     ctx: &mut GenContext,
     mid_operand_gated: bool = false,
 ) {
-    w.begin(&"loop");
-    w.line(&"let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    w.begin("loop");
+    w.line("let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     // No-progress guard, mirroring the ATN twins
     // (`gen_lr_suffix_dispatch_atn` / `gen_lr_fn_atn`): every valid LR
     // suffix begins with a mandatory operator token, so a committed
@@ -1000,10 +1000,10 @@ fn gen_lr_suffix_dispatch<S: AsStrSlice>(
     // structural rather than relying on each suffix consuming input — a
     // suffix that yielded an empty `valid_lr_alts` member would otherwise
     // spin here.
-    w.line(&"let _lr_pos0 = pos;");
+    w.line("let _lr_pos0 = pos;");
     emit_lr_group_chain(w, &scan_lr_site(fn_name), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
-    w.begin(&"if pos == _lr_pos0");
-    w.line(&"break;");
+    w.begin("if pos == _lr_pos0");
+    w.line("break;");
     w.end();
     w.end();  // loop
 }
@@ -1024,10 +1024,10 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     // the failure as the whole scan failing. ANTLR4's LL(*) prediction
     // achieves the same result at decision time; Gale's first-token dispatch
     // makes the same decision lazily after attempting the suffix.
-    w.begin(&`if ${prec} >= min_prec`);
+    w.begin(`if ${prec} >= min_prec`);
     // A suffix scan runs the suffix's gate actions, so an abandoned climb has
     // to put the gate back with the position.
-    gen_scan_mark(w, ctx, &"lr_saved_pos");
+    gen_scan_mark(w, ctx, "lr_saved_pos");
     // The guard that selected this branch already ran the scan. Committing to
     // its end takes the gate it ended under: the chain rolled the global back to
     // the dispatch's entry before branching, and the live-call sibling below
@@ -1035,17 +1035,17 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(&`pos = ${suffix_fn.to_string()}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn.to_string()}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
     }
-    gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &"pos < 0");
+    gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     if mid_operand_gated {
         // Lockstep with the parse loop: the tournament must measure the same
         // climb the parse will take.
-        let yields = `!(lr_cont == 0 || ${follow_yields_call_of(&"tokens", &"pos", &"lr_cont")})`;
-        gen_scan_rewind_break(w, ctx, &"lr_saved_pos", &yields);
+        let yields = `!(lr_cont == 0 || ${follow_yields_call_of("tokens", "pos", "lr_cont")})`;
+        gen_scan_rewind_break(w, ctx, "lr_saved_pos", &yields);
     }
-    w.else_begin(&"else");
-    w.line(&"break;");
+    w.else_begin("else");
+    w.line("break;");
     w.end();
 }
 
@@ -1112,7 +1112,7 @@ fn emit_lr_overlap_branch(
         ScanCall => {
             gen_scan_lr_call_with_prec(
                 w,
-                &`${site.scan_fn}_lr_${lr.alt_index}`,
+                `${site.scan_fn}_lr_${lr.alt_index}`,
                 lr.own_prec,
                 ctx,
                 mid_operand_gated,
@@ -1132,9 +1132,9 @@ global NO_PREBOUND: Option<String> = null;
 /// Open the arm for one leading token, chaining onto any arm already open.
 fn begin_lr_arm<S: AsStrSlice>(w: &mut CodeWriter, site: &LrOverlapSite, tk: S, chained: bool) {
     if chained {
-        w.else_begin(&`else if ${site.kind_expr} == ${tk.to_string()}`);
+        w.else_begin(`else if ${site.kind_expr} == ${tk.to_string()}`);
     } else {
-        w.begin(&`if ${site.kind_expr} == ${tk.to_string()}`);
+        w.begin(`if ${site.kind_expr} == ${tk.to_string()}`);
     }
 }
 
@@ -1166,10 +1166,10 @@ fn emit_lr_group_chain(
         let union_first = slot_first_union(group, &suffix_first_sets);
         let cond = ctx.admits_check_str(&admits_or_everything(&union_first), &site.kind_expr);
         if is_first {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
         if group.len() == 1 {
             let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[0]]];
@@ -1190,10 +1190,10 @@ fn emit_lr_group_chain(
         }
     }
     if is_first {
-        w.line(&"break;");
+        w.line("break;");
     } else {
-        w.else_begin(&"else");
-        w.line(&"break;");
+        w.else_begin("else");
+        w.line("break;");
         w.end();
     }
 }
@@ -1289,26 +1289,26 @@ fn emit_lr_overlap(
         }
         let reads_second = plans.iter_ref().any(|p: &[i32, LrSubPlan]| p.1 matches { SecondToken(_) });
         if !site.second_init.is_empty() && reads_second {
-            w.line(&`let ${site.second_expr} = ${site.second_init};`);
+            w.line(`let ${site.second_expr} = ${site.second_init};`);
         }
         // Bind every fallback scan ahead of the chain, so the branch it guards
         // reuses the answer instead of re-running it. Each is a candidate scan
         // and starts from the dispatch's own gate, not the previous one's end.
         if plans.iter_ref().any(|p: &[i32, LrSubPlan]| p.1 matches { Prebound(_) }) {
-            let origin = gen_lr_candidates_begin(w, ctx, lr_site_is_parse(site), &dedup_name(&"lr_pre", nc));
+            let origin = gen_lr_candidates_begin(w, ctx, lr_site_is_parse(site), &dedup_name("lr_pre", nc));
             for let p of &plans {
                 if let Prebound(local) = &p.1 {
                     let alt = lr_alts[lr_dispatch.valid_lr_alts[group[p.0]]].alt_index;
                     gen_scan_gate_from(w, ctx, &origin);
                     w.line(
-                        &`let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
+                        `let ${*local} = ${site.scan_fn}_lr_${alt}(${site.scan_args}${follow_sep(
                             ctx.current_rule_reads_follow(),
                         )});`,
                     );
                     // A position the branch may commit to, so it keeps the gate
                     // it was reached under — the run rolls the global back.
                     for let line of scan_gate_snapshot(ctx, local) {
-                        w.line(&`let ${line}`);
+                        w.line(`let ${line}`);
                     }
                 }
             }
@@ -1324,7 +1324,7 @@ fn emit_lr_overlap(
                 if sub_first {
                     emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                 } else {
-                    w.else_begin(&"else");
+                    w.else_begin("else");
                     emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
                     w.end();
                 }
@@ -1332,10 +1332,10 @@ fn emit_lr_overlap(
                 let plan = &plans.iter_ref().find(|p: &[i32, LrSubPlan]| p.0 == k).unwrap().1;
                 let cond = lr_sub_plan_condition(plan);
                 if sub_first {
-                    w.begin(&`if ${cond}`);
+                    w.begin(`if ${cond}`);
                     sub_first = false;
                 } else {
-                    w.else_begin(&`else if ${cond}`);
+                    w.else_begin(`else if ${cond}`);
                 }
                 emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated, &lr_sub_plan_prebound(plan));
             }
@@ -1520,14 +1520,14 @@ fn gen_scan_alt_helpers<S: AsStrSlice>(
 ) {
     for let i of &plan.hoisted {
         let mut f = FnSpec::new(&scan_alt_helper_name(base_name, *i));
-        f.add_param(&"tokens", &"&Array<i32>");
-        f.add_param(&"pos", &"i32");
+        f.add_param("tokens", "&Array<i32>");
+        f.add_param("pos", "i32");
         if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
-        f.set_return_type(&"i32");
+        f.set_return_type("i32");
         f.emit_begin(w);
-        w.line(&"let mut pos = pos;");
+        w.line("let mut pos = pos;");
         let body = &scan_alts[*i];
         gen_scan_op_elements(
             w,
@@ -1535,11 +1535,11 @@ fn gen_scan_alt_helpers<S: AsStrSlice>(
             0,
             body.elements.len(),
             ctx,
-            &"return -1;",
+            "return -1;",
             &body.gates,
             &body.gate_cond,
         );
-        w.line(&"return pos;");
+        w.line("return pos;");
         w.end();
         w.blank();
     }
@@ -1556,20 +1556,20 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
     let groups_tokens = &plan.groups_tokens;
     let unguarded_idx = &plan.unguarded_idx;
 
-    gen_scan_mark(w, ctx, &"start");
-    w.line(&"let mut pos = pos;");
-    w.line(&"let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    gen_scan_mark(w, ctx, "start");
+    w.line("let mut pos = pos;");
+    w.line("let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
 
-    w.begin(&"scan_alts:");
+    w.begin("scan_alts:");
 
     let mut first_branch = true;
     for let mut g = 0; g < groups_alts.len(); g += 1 {
-        let cond = ctx.admits_check_str(&admits_or_everything(&groups_tokens[g]), &"alt_kind");
+        let cond = ctx.admits_check_str(&admits_or_everything(&groups_tokens[g]), "alt_kind");
         if first_branch {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             first_branch = false;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
         gen_scan_partition_body(
             w,
@@ -1589,20 +1589,20 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
         if first_branch {
             gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
         } else {
-            w.else_begin(&"else");
+            w.else_begin("else");
             gen_scan_partition_body(w, &empty_alts, unguarded_idx, scan_alts, ctx, plan, base_name, &no_guard);
             w.end();
         }
     } else if !first_branch {
-        w.else_begin(&"else");
-        w.line(&"return -1;");
+        w.else_begin("else");
+        w.line("return -1;");
         w.end();
     } else {
-        w.line(&"return -1;");
+        w.line("return -1;");
     }
 
     w.end();
-    w.line(&"return pos;");
+    w.line("return pos;");
 }
 
 /// Emit the body of a single partition branch. The partition's alts were
@@ -1638,27 +1638,27 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(&`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
+            w.line(`pos = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
                 ctx.current_rule_reads_follow(),
             )});`);
-            w.line(&"if pos >= 0 { break scan_alts; }");
-            w.line(&"return -1;");
+            w.line("if pos >= 0 { break scan_alts; }");
+            w.line("return -1;");
             return;
         }
         let body = &scan_alts[i];
         let skip = guarded && guard_implies_first_token(body, guard_tokens);
-        if gen_scan_alt_candidate(w, i, body, skip, ctx, &"break scan_alts;") {
-            w.line(&"return -1;");
+        if gen_scan_alt_candidate(w, i, body, skip, ctx, "break scan_alts;") {
+            w.line("return -1;");
         }
         return;
     }
     // Longest-match tournament (see the function doc): try each from
     // `start`, keep the greatest successful end.
-    w.line(&"let mut best: i32 = -1;");
+    w.line("let mut best: i32 = -1;");
     // The gate travels with `best` for the same reason the group's does: every
     // candidate runs, so the global holds the last one's value and not the
     // winner's.
-    gen_scan_gate_save(w, ctx, &"best", /*mutable=*/ true);
+    gen_scan_gate_save(w, ctx, "best", /*mutable=*/ true);
     let mut all_idx: List<i32> = [];
     for let i of guarded_alts {
         all_idx.push(*i);
@@ -1673,22 +1673,22 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             // The gate half of a rewind alone: a hoisted candidate takes `start`
             // as an argument rather than through `pos`, so the position is
             // already where it belongs and only the gate has to follow it.
-            gen_scan_gate_restore(w, ctx, &"start");
+            gen_scan_gate_restore(w, ctx, "start");
             w.line(
-                &`let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
+                `let try_${i}_end = ${scan_alt_helper_name(base_name, i)}(tokens, start${follow_sep(
                     ctx.current_rule_reads_follow(),
                 )});`,
             );
-            w.line(&scan_gate_best_commit(ctx, &"best", &`try_${i}_end > best`, &`try_${i}_end`));
+            w.line(&scan_gate_best_commit(ctx, "best", `try_${i}_end > best`, `try_${i}_end`));
             continue;
         }
         let body = &scan_alts[i];
         let skip = k < guarded_count && guard_implies_first_token(body, guard_tokens);
-        let commit = scan_gate_best_commit(ctx, &"best", &"pos > best", &"pos");
+        let commit = scan_gate_best_commit(ctx, "best", "pos > best", "pos");
         let _ = gen_scan_alt_candidate(w, i, body, skip, ctx, &commit);
     }
-    gen_scan_rewind_break(w, ctx, &"best", &"best >= 0", &"break scan_alts;");
-    w.line(&"return -1;");
+    gen_scan_rewind_break(w, ctx, "best", "best >= 0", "break scan_alts;");
+    w.line("return -1;");
 }
 
 /// The partition guard already tested `alt_kind` against what the alt's
@@ -1744,13 +1744,13 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
     commit_stmt: S,
 ) -> bool {
     if skip && body.elements.len() == 1 && body.gates.is_empty() && body.gate_cond.is_empty() {
-        gen_scan_rewind(w, ctx, &"start", /*skip=*/ 1);
+        gen_scan_rewind(w, ctx, "start", /*skip=*/ 1);
         w.line(commit_stmt);
         return false;
     }
     let label = `try_${i}`;
-    gen_scan_rewind(w, ctx, &"start", if skip { 1 } else { 0 });
-    w.begin(&`${label}:`);
+    gen_scan_rewind(w, ctx, "start", if skip { 1 } else { 0 });
+    w.begin(`${label}:`);
     let from = if skip { 1 } else { 0 };
     gen_scan_op_elements_in_block(
         w,
@@ -1793,14 +1793,14 @@ pub fn gen_alt_scan_op_elements<S: AsStrSlice>(
     gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
     let covers_whole_alt = end == scan_elems.len();
-    gen_scan_gate_check(w, gate_cond, &"return -1;");
+    gen_scan_gate_check(w, gate_cond, "return -1;");
     for let mut i = 0; i <= end; i += 1 {
         gen_scan_gates_before(w, gates, i, 0, end);
         if i < end {
             let se = &scan_elems[i];
             let is_last_self_ref = covers_whole_alt && i == end - 1 && is_self_ref_scan_call(se, rule_name);
             let min_prec_override = if is_last_self_ref { i32::MAX } else { 0 };
-            gen_scan_op_element(w, se, ctx, &"return -1;", min_prec_override);
+            gen_scan_op_element(w, se, ctx, "return -1;", min_prec_override);
         }
     }
 }
@@ -1831,8 +1831,8 @@ fn gen_scan_op_element<S: AsStrSlice>(
 ) {
     match se {
         Token(t) => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt.to_string()} }`);
-            w.line(&"pos += 1;");
+            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt.to_string()} }`);
+            w.line("pos += 1;");
         },
         RuleCall(rc) => {
             // Single scan callee + runtime FOLLOW arg.
@@ -1864,17 +1864,17 @@ fn gen_scan_op_element<S: AsStrSlice>(
             let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
             if push_ret >= 0 {
-                w.line(&`SCAN_STACK.push(${push_ret});`);
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
-                w.line(&"SCAN_STACK.pop();");
+                w.line(`SCAN_STACK.push(${push_ret});`);
+                w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+                w.line("SCAN_STACK.pop();");
             } else {
-                w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+                w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
             }
-            w.line(&`if pos < 0 { ${fail_stmt.to_string()} }`);
+            w.line(`if pos < 0 { ${fail_stmt.to_string()} }`);
         },
         Wildcard => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${fail_stmt.to_string()} }`);
-            w.line(&"pos += 1;");
+            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${fail_stmt.to_string()} }`);
+            w.line("pos += 1;");
         },
         Excluded(e) => {
             let mut check_parts: List<String> = [];
@@ -1884,12 +1884,12 @@ fn gen_scan_op_element<S: AsStrSlice>(
             let mut check = String::with_capacity(64);
             for let mut i = 0; i < check_parts.len(); i += 1 {
                 if i > 0 {
-                    check.push_str(&" || ");
+                    check.push_str(" || ");
                 }
                 check.push_str(&check_parts[i]);
             }
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${fail_stmt.to_string()} }`);
-            w.line(&"pos += 1;");
+            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${fail_stmt.to_string()} }`);
+            w.line("pos += 1;");
         },
         Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt),
         Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient),
@@ -1903,7 +1903,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
 fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
     match se {
         Token(t) => {
-            w.line(&`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
+            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
         },
         RuleCall(rc) => {
             let fn_name = `scan_${rc.target_snake}`;
@@ -1924,10 +1924,10 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             };
             let cont = if rc.lr_cont_mask >= 0 { `, FOLLOW_MASK_${rc.lr_cont_mask}` } else { "" };
             assert cont.is_empty() || !min_prec_arg.is_empty(), `scan call to '${rc.target_snake}' passes an LR continuation mask but the callee takes no min_prec — the mask would land in min_prec's slot`;
-            w.line(&`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
+            w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
         },
         Wildcard => {
-            w.line(&"if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
+            w.line("if pos >= tokens.len() || tokens[pos] == TK_EOF { pos = -1; } else { pos += 1; }");
         },
         Excluded(e) => {
             let mut check_parts: List<String> = [];
@@ -1937,22 +1937,22 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
             let mut check = String::with_capacity(64);
             for let mut i = 0; i < check_parts.len(); i += 1 {
                 if i > 0 {
-                    check.push_str(&" || ");
+                    check.push_str(" || ");
                 }
                 check.push_str(&check_parts[i]);
             }
-            w.line(&`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { pos = -1; } else { pos += 1; }`);
+            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { pos = -1; } else { pos += 1; }`);
         },
         Group(ge) => {
             // Group inside a repeat body — emit strict scan so a
             // 0-advance iteration cannot infinite-loop.
-            gen_scan_op_group(w, ge, ctx, &"pos = -1;", false);
+            gen_scan_op_group(w, ge, ctx, "pos = -1;", false);
         },
         Repeat(_) | OptionalLookahead(_) => {
             // Nested Repeat / OptionalLookahead within a Repeat's loop
             // body: emit through fail_stmt = "pos = -1;" so the outer
             // loop sees failure as "stop iterating".
-            gen_scan_op_element(w, se, ctx, &"pos = -1;");
+            gen_scan_op_element(w, se, ctx, "pos = -1;");
         },
     }
 }
@@ -1963,11 +1963,11 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
 /// the parse stay in lockstep. With an empty exit set, skips to EOF.
 fn gen_scan_non_greedy_skip(w: &mut CodeWriter, exit_first: &List<String>, ctx: &mut GenContext) {
     if exit_first.is_empty() {
-        w.line(&"while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }");
+        w.line("while pos < tokens.len() && tokens[pos] != TK_EOF { pos += 1; }");
         return;
     }
-    let exit_check = ctx.kind_check_str(exit_first, &"tokens[pos]");
-    w.line(&`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) { pos += 1; }`);
+    let exit_check = ctx.kind_check_str(exit_first, "tokens[pos]");
+    w.line(`while pos < tokens.len() && tokens[pos] != TK_EOF && !(${exit_check}) { pos += 1; }`);
 }
 
 /// Scan mirror of `gen_optional_probe_entry`: try the body, then the
@@ -1980,15 +1980,15 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
     ctx: &mut GenContext,
     caller_follow_gate: S,
 ) {
-    w.begin(&`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
-    gen_scan_mark(w, ctx, &"sp");
+    w.begin(`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
+    gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
-    w.begin(&"if pos < 0");
-    gen_scan_rewind(w, ctx, &"sp");
-    w.else_begin(&"else");
-    gen_scan_mark(w, ctx, &"bp");
-    w.line(&"let mut opt_ok: bool = false;");
-    w.begin(&"opt_probe:");
+    w.begin("if pos < 0");
+    gen_scan_rewind(w, ctx, "sp");
+    w.else_begin("else");
+    gen_scan_mark(w, ctx, "bp");
+    w.line("let mut opt_ok: bool = false;");
+    w.begin("opt_probe:");
     let fail = "break opt_probe;";
     for let se of &re.continuation_scan {
         gen_scan_op_element(w, se, ctx, &fail);
@@ -2000,13 +2000,13 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
     // either way: keeping the body means the gate the body left, dropping it
     // means the gate before the iteration.
     if ctx.emit_scan_gate() {
-        w.begin(&"if opt_ok");
-        gen_scan_rewind(w, ctx, &"bp");
-        w.else_begin(&"else");
-        gen_scan_rewind(w, ctx, &"sp");
+        w.begin("if opt_ok");
+        gen_scan_rewind(w, ctx, "bp");
+        w.else_begin("else");
+        gen_scan_rewind(w, ctx, "sp");
         w.end();
     } else {
-        w.line(&"pos = if opt_ok { bp } else { sp };");
+        w.line("pos = if opt_ok { bp } else { sp };");
     }
     w.end();
     w.end();
@@ -2018,10 +2018,10 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
 fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext) {
     let no_gate = String::new();
     let guard = scan_repeat_guard(&re.inner_admits, &no_gate, ctx);
-    w.begin(&"loop");
-    gen_scan_mark(w, ctx, &"ep");
-    w.line(&"let mut ng_exit: bool = false;");
-    w.begin(&"ng_exit_scan:");
+    w.begin("loop");
+    gen_scan_mark(w, ctx, "ep");
+    w.line("let mut ng_exit: bool = false;");
+    w.begin("ng_exit_scan:");
     let fail = "break ng_exit_scan;";
     for let se of &re.continuation_scan {
         gen_scan_op_element(w, se, ctx, &fail);
@@ -2029,13 +2029,13 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     let ng_exit = "ng_exit";
     emit_probe_verdict(w, &re.probe_viable, &ng_exit, ctx);
     w.end();
-    gen_scan_rewind(w, ctx, &"ep");
-    w.line(&"if ng_exit { break; }");
-    w.line(&`if !(${guard}) { break; }`);
-    gen_scan_mark(w, ctx, &"sp");
+    gen_scan_rewind(w, ctx, "ep");
+    w.line("if ng_exit { break; }");
+    w.line(`if !(${guard}) { break; }`);
+    gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
-    w.line(&"if pos == sp { break; }");
+    w.line("if pos == sp { break; }");
     w.end();
 }
 
@@ -2093,7 +2093,7 @@ fn scan_repeat_guard_excluding<S: AsStrSlice>(
 ) -> String {
     assert !admits_is_untestable(admits), "a repeat whose body matches nothing has no iteration to guard";
     let mut parts: List<String> = ["pos < tokens.len()"];
-    let admitted = admits_check_excluding(admits, excluded, &"tokens[pos]", ctx);
+    let admitted = admits_check_excluding(admits, excluded, "tokens[pos]", ctx);
     if admitted != "true" {
         parts.push(admitted);
     }
@@ -2153,7 +2153,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement,
     // Stop the scan where the caller's continuation matches, or the tournament
     // picking the calling rule's alt over-counts this Repeat. Inert when
     // `follow` is empty; mirrors the parse side.
-    let caller_follow_gate = if re.gate_caller_follow { follow_yields_call(&"tokens", &"pos") } else { "" };
+    let caller_follow_gate = if re.gate_caller_follow { follow_yields_call("tokens", "pos") } else { "" };
 
     // A body matching nothing has no iteration to scan — once here, not once
     // per arm, so an arm added later cannot miss it.
@@ -2191,7 +2191,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement,
         } else {
             [] as List<String>;
         };
-        w.begin(&`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
+        w.begin(`if ${scan_repeat_guard_excluding(&effective, &excluded, &caller_follow_gate, ctx)}`);
         gen_scan_iteration(w, re, &effective, ctx, false);
         w.end();
         return;
@@ -2211,7 +2211,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement,
         gen_scan_non_greedy_probe_loop(w, re, ctx);
         return;
     }
-    w.begin(&`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
+    w.begin(`while ${scan_repeat_guard(&loop_admits, &caller_follow_gate, ctx)}`);
     gen_scan_iteration(w, re, &loop_admits, ctx, true);
     w.end();
 }
@@ -2223,17 +2223,17 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
     // what let `A* A`'s scan eat both tokens and score -1 for input the parse
     // accepts, and the next duty added would repeat it.
     if repeat_body_implied_by_guard(&re.body, admits) && re.duties.is_empty() {
-        w.line(&"pos += 1;");
+        w.line("pos += 1;");
         return;
     }
-    gen_scan_mark(w, ctx, &"sp");
+    gen_scan_mark(w, ctx, "sp");
     gen_scan_op_element_assign(w, &re.body, ctx);
     if !looping {
         gen_scan_iteration_rewind(w, ctx, /*looping=*/ false);
         return;
     }
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
-    w.line(&"if pos == sp { break; }");
+    w.line("if pos == sp { break; }");
     gen_scan_iteration_duties(w, &re.duties, &admits_kinds(&re.inner_admits), re.kind, ctx);
 }
 
@@ -2265,30 +2265,30 @@ fn gen_scan_decline_stranded(
         return;
     }
     let gc = ctx.next_scan_group();
-    gen_kind_read(w, &`dk_${gc}`, &"tokens", &"pos");
+    gen_kind_read(w, `dk_${gc}`, "tokens", "pos");
     let can_continue = join_or(&[
-        kind_check_or_none(loop_first, &`dk_${gc}`, ctx),
-        kind_check_or_none(&duties.decline_cont_first, &`dk_${gc}`, ctx),
-        kind_check_or_none(&duties.decline_viable, &`dk_${gc}`, ctx),
+        kind_check_or_none(loop_first, `dk_${gc}`, ctx),
+        kind_check_or_none(&duties.decline_cont_first, `dk_${gc}`, ctx),
+        kind_check_or_none(&duties.decline_viable, `dk_${gc}`, ctx),
     ]);
-    w.begin(&`if !(${can_continue})`);
-    gen_scan_mark(w, ctx, &`dc_${gc}`);
-    w.line(&`let mut dc_${gc}_exit = false;`);
+    w.begin(`if !(${can_continue})`);
+    gen_scan_mark(w, ctx, `dc_${gc}`);
+    w.line(`let mut dc_${gc}_exit = false;`);
     // The probe re-walks the continuation from the iteration's start, so it
     // starts from the gate the iteration started with — not the one it ended
     // with, which is a reading the parse has not taken here.
-    gen_scan_rewind(w, ctx, &"sp");
-    w.begin(&`dcl_${gc}:`);
+    gen_scan_rewind(w, ctx, "sp");
+    w.begin(`dcl_${gc}:`);
     for let se of &duties.decline_scan {
-        gen_scan_op_element(w, se, ctx, &`break dcl_${gc};`);
+        gen_scan_op_element(w, se, ctx, `break dcl_${gc};`);
     }
-    emit_probe_verdict(w, &duties.decline_viable, &`dc_${gc}_exit`, ctx);
+    emit_probe_verdict(w, &duties.decline_viable, `dc_${gc}_exit`, ctx);
     w.end();
     // Both exits leave a walk that did not happen, so both put the gate back:
     // declining rewinds to the iteration's start, and continuing resumes at the
     // iteration's end with the gate that iteration actually produced.
-    gen_scan_rewind_break(w, ctx, &"sp", &`dc_${gc}_exit`);
-    gen_scan_rewind(w, ctx, &`dc_${gc}`);
+    gen_scan_rewind_break(w, ctx, "sp", `dc_${gc}_exit`);
+    gen_scan_rewind(w, ctx, `dc_${gc}`);
     w.end();
 }
 
@@ -2301,9 +2301,9 @@ fn gen_scan_reserve(w: &mut CodeWriter, duties: &IterationDuties, loop_first: &L
         return;
     }
     let gc = ctx.next_scan_group();
-    gen_reserve_probe(w, &duties.reserve_scan, &`rs_${gc}`, &`rs_${gc}_ok`, &`rsv_${gc}`, ctx);
-    let starved = reserve_starved_cond(w, &`rs_${gc}_ok`, &`rk_${gc}`, &"tokens", &"pos", loop_first, ctx);
-    gen_scan_rewind_break(w, ctx, &"sp", &starved);
+    gen_reserve_probe(w, &duties.reserve_scan, `rs_${gc}`, `rs_${gc}_ok`, `rsv_${gc}`, ctx);
+    let starved = reserve_starved_cond(w, `rs_${gc}_ok`, `rk_${gc}`, "tokens", "pos", loop_first, ctx);
+    gen_scan_rewind_break(w, ctx, "sp", &starved);
 }
 
 /// Op-driven scan emitter for `ScanElement::Group`: the same partition the
@@ -2323,10 +2323,10 @@ fn gen_scan_op_group<S: AsStrSlice>(w: &mut CodeWriter, ge: &ScanGroupElement, c
         if lenient {
             gen_scan_mark(w, ctx, &save_var);
         }
-        w.begin(&`${done}:`);
-        w.begin(&`${body}:`);
+        w.begin(`${done}:`);
+        w.begin(`${body}:`);
         gen_scan_op_elements_in_block(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, &body);
-        w.line(&`break ${done};`);
+        w.line(`break ${done};`);
         w.end();
         if lenient {
             gen_scan_rewind(w, ctx, &save_var);
@@ -2343,9 +2343,9 @@ fn gen_scan_op_group<S: AsStrSlice>(w: &mut CodeWriter, ge: &ScanGroupElement, c
     let branches = scan_decision_branches(ge);
     gen_scan_mark(w, ctx, &gp_var);
     if decision_reads_lookahead(&branches) {
-        gen_kind_read(w, &kind_var, &"tokens", &"pos");
+        gen_kind_read(w, &kind_var, "tokens", "pos");
     }
-    w.line(&`let mut ${best_var} = -1;`);
+    w.line(`let mut ${best_var} = -1;`);
     // The gate travels with `best`: the arms run after the winning one and each
     // starts from the entry gate, so committing to the winner's position while
     // the global holds the last arm's value hands the enclosing walk a gate from
@@ -2356,16 +2356,16 @@ fn gen_scan_op_group<S: AsStrSlice>(w: &mut CodeWriter, ge: &ScanGroupElement, c
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
             gen_scan_rewind(w, ctx, &gp_var);
-            w.begin(&`${inner}:`);
+            w.begin(`${inner}:`);
             gen_scan_op_elements_in_block(w, &ge.alts[*ai].elements, 0, ge.alts[*ai].elements.len(), ctx, &inner);
-            w.line(&scan_gate_best_commit(ctx, &best_var, &`pos > ${best_var}`, &"pos"));
+            w.line(&scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos"));
             w.end();
         }
     }
     close_decision_chain(w, &branches);
-    w.begin(&`if ${best_var} >= 0`);
+    w.begin(`if ${best_var} >= 0`);
     gen_scan_rewind(w, ctx, &best_var);
-    w.else_begin(&"else");
+    w.else_begin("else");
     if lenient {
         gen_scan_rewind(w, ctx, &gp_var);
     } else {
@@ -2385,11 +2385,11 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
     // otherwise both sides commit to the first match, so no fall-through.
     let outer = ctx.next_scan_group();
     let chain_done = `osl_${outer}_done`;
-    w.begin(&`${chain_done}:`);
+    w.begin(`${chain_done}:`);
     for let mut si = 0; si < ole.sigs.len(); si += 1 {
         let sig = &ole.sigs[si];
         assert !sig.is_empty(), `gen_scan_op_optional_lookahead: shape ${si} has an empty lookahead signature; lower drops those`;
-        w.begin(&`if ${gen_scan_lookahead_condition(ctx, sig)}`);
+        w.begin(`if ${gen_scan_lookahead_condition(ctx, sig)}`);
         // A failed shape rewinds: leaving a callee's `-1` in `pos` mis-scans
         // the elements after it and traps their `pos < tokens.len()` guard.
         let gc = ctx.next_scan_group();
@@ -2397,15 +2397,15 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         let save_var = `sol_${gc}_save`;
         let fail = `break ${body};`;
         gen_scan_mark(w, ctx, &save_var);
-        w.begin(&`${body}:`);
+        w.begin(`${body}:`);
         for let elem_se of &ole.bodies[si].elements {
             gen_scan_op_element(w, elem_se, ctx, &fail);
         }
-        w.line(&`break ${chain_done};`);
+        w.line(`break ${chain_done};`);
         w.end();
         gen_scan_rewind(w, ctx, &save_var);
         if !ole.scan_guarded {
-            w.line(&`break ${chain_done};`);
+            w.line(`break ${chain_done};`);
         }
         w.end();
     }
@@ -2448,7 +2448,7 @@ fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, gate_c
     if gate_cond.is_empty() {
         return;
     }
-    w.line(&`if !(${gate_cond.to_string()}) { ${fail_stmt.to_string()} }`);
+    w.line(`if !(${gate_cond.to_string()}) { ${fail_stmt.to_string()} }`);
 }
 
 /// Enter an inlined scan from parse context: the parser's tokens, where the
@@ -2464,8 +2464,8 @@ fn gen_scan_entry(w: &mut CodeWriter, ctx: &GenContext, from: &ScanOrigin) {
         Parser => String::from("p.pos"),
         Entry(slot) => *slot,
     };
-    w.line(&"let tokens = &p.kinds;");
-    w.line(&`let mut pos: i32 = ${at};`);
+    w.line("let tokens = &p.kinds;");
+    w.line(`let mut pos: i32 = ${at};`);
 }
 
 /// Run the gate actions due before element `at`, where the body emitted is
@@ -2484,7 +2484,7 @@ fn gen_scan_gates_before(w: &mut CodeWriter, gates: &List<ScanGate>, at: i32, st
     let hi = if at == end { i32::MAX } else { at + 1 };
     for let g of gates {
         if g.before_index >= lo && g.before_index < hi {
-            w.line(&`${SCAN_GATE_HANDLE}.${g.field} = ${g.value};`);
+            w.line(`${SCAN_GATE_HANDLE}.${g.field} = ${g.value};`);
         }
     }
 }
@@ -2626,7 +2626,7 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
 /// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
 fn rule_kind_const<S: AsStrSlice>(name: S) -> String {
     let mut out = String::with_capacity(name.len() + 3);
-    out.push_str(&"RK_");
+    out.push_str("RK_");
     for let c of name.chars() {
         out.push(c.to_ascii_uppercase());
     }
@@ -2665,7 +2665,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let returns_vals = result_type_carries_vals(result_type);
     let mut f = FnSpec::new(outer_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, "&mut Parser");
     // `follow` precedes `min_prec` so a non-precedence call site can pass
     // just `_parse_X(p, follow)` and let `min_prec` default — uniform for
     // LR and non-LR targets. Omitted entirely when the grammar has no
@@ -2694,9 +2694,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
     if returns_vals {
-        w.line(&`if p.recovering { return ${result_type.to_string()} {}; }`);
+        w.line(`if p.recovering { return ${result_type.to_string()} {}; }`);
     } else {
-        w.line(&"if p.recovering { return; }");
+        w.line("if p.recovering { return; }");
     }
     // Forward `follow`/`min_prec` so the inner body's tail-greedy gate sees
     // the caller's continuation.
@@ -2714,8 +2714,8 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // as the descent unwinds.
     let rk = rule_kind_const(rule_display);
     if trace {
-        w.line(&`trace_enter(p, &${lit});`);
-        w.line(&"p.trace_depth += 1;");
+        w.line(`trace_enter(p, &${lit});`);
+        w.line("p.trace_depth += 1;");
     }
     if needs_atn {
         emit_atn_enter(w);
@@ -2725,33 +2725,33 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // node — it would nest one extra same-rule level. Non-LR rules get the
     // single `start_node` / `finish_node` pair here.
     if !takes_min_prec {
-        w.line(&`let _start = p.peek_start();`);
-        w.line(&`p.b.start_node(${rk}, _start);`);
+        w.line(`let _start = p.peek_start();`);
+        w.line(`p.b.start_node(${rk}, _start);`);
     }
     if returns_vals {
-        w.line(&`let __vals = ${call};`);
+        w.line(`let __vals = ${call};`);
     } else {
-        w.line(&`${call};`);
+        w.line(`${call};`);
     }
     if !takes_min_prec {
-        w.line(&"p.b.finish_node(p.last_end());");
+        w.line("p.b.finish_node(p.last_end());");
     }
     if needs_atn {
-        w.line(&"p.atn_stack.pop();");
+        w.line("p.atn_stack.pop();");
     }
     if trace {
-        w.line(&"p.trace_depth -= 1;");
+        w.line("p.trace_depth -= 1;");
     }
-    w.begin(&"if p.recovering");
-    w.line(&`p.push_rule_stack(${lit});`);
+    w.begin("if p.recovering");
+    w.line(`p.push_rule_stack(${lit});`);
     if trace {
-        w.line(&`trace_fail(p, &${lit}, &p.pending_message());`);
-        w.else_begin(&"else");
-        w.line(&`trace_ok(p, &${lit});`);
+        w.line(`trace_fail(p, &${lit}, &p.pending_message());`);
+        w.else_begin("else");
+        w.line(`trace_ok(p, &${lit});`);
     }
     w.end();
     if returns_vals {
-        w.line(&"return __vals;");
+        w.line("return __vals;");
     }
     w.end();
     w.blank();
@@ -2778,7 +2778,7 @@ fn gen_parse_fn_simple_named<S: AsStrSlice>(
 
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, "&mut Parser");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
@@ -2786,7 +2786,7 @@ fn gen_parse_fn_simple_named<S: AsStrSlice>(
     f.set_return_type(&rule_result_type_for(rule, ctx));
     f.emit_begin(w);
     if rule_emits_vals(ctx, rule) {
-        w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
+        w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
     }
     emit_arg_stores(w, rule, ctx);
     emit_span_capture(w, rule, ctx);
@@ -2831,13 +2831,13 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     gen_visibility_comment(w, &rule.visibility);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, "&mut Parser");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
     f.set_return_type(&rule_result_type());
     f.emit_begin(w);
-    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
+    w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut firsts: List<String> = [];
     for let alt of &rule.alternatives {
@@ -2856,14 +2856,14 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
             let single: List<String> = [single_token_first(&rule.alternatives[i].elements[0])];
             let cond = ctx.kind_check_str(&single, &DISPATCH_KIND_LOCAL);
             if first {
-                w.begin(&`if ${cond}`);
+                w.begin(`if ${cond}`);
                 first = false;
             } else {
-                w.else_begin(&`else if ${cond}`);
+                w.else_begin(`else if ${cond}`);
             }
-            w.line(&`p.b.set_alt(${i});`);
-            w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
-            w.line(&"return;");
+            w.line(`p.b.set_alt(${i});`);
+            w.line(`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
+            w.line("return;");
         }
         w.end();
         gen_error_fallback(w, rule, &type_name, ctx);
@@ -2873,10 +2873,10 @@ fn gen_parse_fn_single_token<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRul
     }
 
     let check = ctx.kind_check_str(&firsts, &DISPATCH_KIND_LOCAL);
-    w.begin(&`if ${check}`);
+    w.begin(`if ${check}`);
     // The token is appended by `expect`; no struct to build.
-    w.line(&`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
-    w.line(&"return;");
+    w.line(`let _ = ${PARSER_HANDLE}.expect(${DISPATCH_KIND_LOCAL}, &EMPTY_SYNC);`);
+    w.line("return;");
     w.end();
     gen_error_fallback(w, rule, &type_name, ctx);
     w.end();
@@ -2972,7 +2972,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
 
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
-                    f.add_param(&PARSER_HANDLE, &"&mut Parser");
+                    f.add_param(&PARSER_HANDLE, "&mut Parser");
                     if ctx.current_rule_reads_follow() {
                         add_follow_param(&mut f);
                     }
@@ -2985,7 +2985,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                     f.set_return_type(&rule_result_type_for(rule, ctx));
                     f.emit_begin(w);
                     if rule_emits_vals(ctx, rule) {
-                        w.line(&"let mut vals = vals;");
+                        w.line("let mut vals = vals;");
                     }
                     emit_span_capture(w, rule, ctx);
                     let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3021,7 +3021,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         let atom_name = `${fn_name.to_string()}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&PARSER_HANDLE, &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, "&mut Parser");
         if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
@@ -3044,7 +3044,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if rule_emits_vals(ctx, rule) {
-            w.line(&"let mut vals = vals;");
+            w.line("let mut vals = vals;");
         }
         emit_span_capture(w, rule, ctx);
         if has_overlaps {
@@ -3093,7 +3093,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     } else {
         let mut f = FnSpec::new(fn_name);
         add_parser_super_effect(&mut f, ctx);
-        f.add_param(&PARSER_HANDLE, &"&mut Parser");
+        f.add_param(&PARSER_HANDLE, "&mut Parser");
         if ctx.current_rule_reads_follow() {
             add_follow_param(&mut f);
         }
@@ -3101,7 +3101,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
         f.set_return_type(&rule_result_type_for(rule, ctx));
         f.emit_begin(w);
         if rule_emits_vals(ctx, rule) {
-            w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
+            w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
         }
         emit_arg_stores(w, rule, ctx);
         emit_span_capture(w, rule, ctx);
@@ -3156,7 +3156,7 @@ fn gen_trace_pick(w: &mut CodeWriter, rule: &ParserRule, alt_index: i32, ctx: &G
     if !ctx.is_trace() || all_alts_are_single_token(&rule.alternatives) {
         return;
     }
-    w.line(&wado`trace_pick(p, &"${rule.name}", ${alt_index});`);
+    w.line(&wado`trace_pick(p, "${rule.name}", ${alt_index});`);
 }
 
 fn gen_alt_body<S: AsStrSlice>(
@@ -3180,7 +3180,7 @@ fn gen_alt_body<S: AsStrSlice>(
     // gated on the rule being labeled so unlabeled grammars stay
     // byte-identical.
     if rule_labeled {
-        w.line(&`p.b.set_alt(${alt_index});`);
+        w.line(`p.b.set_alt(${alt_index});`);
     }
     gen_alt_elements(w, &alt.elements, &body.ops, &alt.actions, ctx);
 
@@ -3194,9 +3194,9 @@ fn gen_alt_body<S: AsStrSlice>(
     // builder via the Parser methods, so there is no struct to assemble — the
     // rule wrapper's `finish_node` closes the node.
     if current_rule_emits_vals(ctx) {
-        w.line(&"return vals;");
+        w.line("return vals;");
     } else {
-        w.line(&"return;");
+        w.line("return;");
     }
 }
 
@@ -3216,7 +3216,7 @@ fn gen_multi_alt_body<S: AsStrSlice>(
     }
     let depth = find_needed_depth(&all_pos_sets);
 
-    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
+    w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     let mut untestable: List<bool> = [];
     let mut all_gate_conds: List<List<String>> = [];
@@ -3246,11 +3246,11 @@ fn gen_multi_alt_body<S: AsStrSlice>(
         if cond_depth > 0 {
             let cond = build_lookahead_condition(ctx, pos_sets, cond_depth);
             let gate = if gate_conds.is_empty() { String::new() } else { ` && ${join_gate_conds(&gate_conds)}` };
-            w.begin(&`if ${cond}${gate}`);
+            w.begin(`if ${cond}${gate}`);
         } else if gate_conds.is_empty() {
-            w.begin(&"scope:");
+            w.begin("scope:");
         } else {
-            w.begin(&`if ${join_gate_conds(&gate_conds)}`);
+            w.begin(`if ${join_gate_conds(&gate_conds)}`);
         }
 
         let body = rule_alt_body(lowered_rule, alt_index).unwrap();
@@ -3528,7 +3528,7 @@ fn op_is_leaf(op: &Op) -> bool {
 /// Nothing outside the iteration reads those locals — the tree builder holds
 /// the matched values — so a block is enough. Caller closes it with `w.end()`.
 fn begin_plus_first_iteration(w: &mut CodeWriter, name_counts: &mut List<[String, i32]>) {
-    w.begin(&`${dedup_name(&"_first_iter", name_counts)}:`);
+    w.begin(`${dedup_name("_first_iter", name_counts)}:`);
 }
 
 
@@ -3547,7 +3547,7 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
     if ret < 0 {
         return;
     }
-    w.line(&`p.atn_ret_pending = ${ret};`);
+    w.line(`p.atn_ret_pending = ${ret};`);
 }
 
 /// A label binding exists only for a semantic action to read.
@@ -3592,11 +3592,11 @@ fn gen_op_leaf(
     return match *op {
         Token(t) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`${leaf_binding(ctx, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &t.field)}p.expect(${t.kind}, ${sync_ref});`);
         },
         Literal(l) => {
             let sync_ref = sync_set_ref(ctx, sync);
-            w.line(&`${leaf_binding(ctx, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
+            w.line(`${leaf_binding(ctx, &l.field)}p.expect(${l.kind}, ${sync_ref});`);
         },
         RuleCall(r) => {
             // One callee per rule; the caller's continuation is
@@ -3615,14 +3615,14 @@ fn gen_op_leaf(
             let argsfx = call_arg_suffix(&r, ctx);
             let cont = if r.lr_cont_mask >= 0 { `, FOLLOW_MASK_${r.lr_cont_mask}` } else { "" };
             if let Some(min_prec) = r.min_prec_arg {
-                w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
+                w.line(`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}, ${min_prec}${cont}${argsfx});`);
             } else {
-                w.line(&`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}${argsfx});`);
+                w.line(`${leaf_binding(ctx, &r.field)}${fn_name}(p${follow_arg_str}${argsfx});`);
             }
             close_call_capture(w, &span_field);
         },
-        Wildcard(wop) => w.line(&`${leaf_binding(ctx, &wop.field)}p.any();`),
-        Excluded(eop) => w.line(&`${leaf_binding(ctx, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
+        Wildcard(wop) => w.line(`${leaf_binding(ctx, &wop.field)}p.any();`),
+        Excluded(eop) => w.line(`${leaf_binding(ctx, &eop.field)}${gen_op_excluded_call(&eop, ctx)};`),
         // Non-leaf ops (Repeat / Group / ListLabel) are routed to
         // their own dispatchers by the caller; reaching here means
         // the caller's `op_is_leaf` gate was bypassed.
@@ -3678,7 +3678,7 @@ fn gen_group_body(
     decided: Option<String> = null,
 ) {
     if let Some(kinds) = group_token_only_kinds(&g.alts) {
-        w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+        w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &kinds)});`);
         return;
     }
     if g.alts.len() == 1 {
@@ -3729,10 +3729,10 @@ fn gen_alt_dispatch(
     let branches = direct_dispatch_branches(&dd);
     assert !branches.is_empty(), "a Direct dispatch decides between alternatives, so it has branches";
     if decision_reads_lookahead(&branches) {
-        w.line(&"let _gk = p.peek_kind();");
+        w.line("let _gk = p.peek_kind();");
     }
     for let mut i = 0; i < branches.len(); i += 1 {
-        open_decision_branch(w, &branches, i, &"_gk", ctx);
+        open_decision_branch(w, &branches, i, "_gk", ctx);
         let picked = &branches[i].alts;
         if picked.len() == 1 {
             gen_ops(w, &alt_by_index(alts, picked[0]).ops, ctx, nc);
@@ -3744,8 +3744,8 @@ fn gen_alt_dispatch(
     let last = &branches[branches.len() - 1];
     assert !admits_tests_nothing(&last.test) || is_decision_fallback(last), "a Direct chain's last branch admits everything, so no `if` was emitted for the `else` to follow";
     if !is_decision_fallback(last) {
-        w.else_begin(&"else");
-        w.line(&`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
+        w.else_begin("else");
+        w.line(`let _ = p.expect_set(${sync_set_ref(ctx, &all_first)});`);
     }
     close_decision_chain(w, &branches);
 }
@@ -3778,11 +3778,11 @@ fn gen_alt_commit<S: AsStrSlice>(
     let last = order.len() - 1;
     for let mut k = 0; k < order.len(); k += 1 {
         if k == 0 {
-            w.begin(&`if ${winner.to_string()} == ${order[k]}`);
+            w.begin(`if ${winner.to_string()} == ${order[k]}`);
         } else if k == last {
-            w.else_begin(&"else");
+            w.else_begin("else");
         } else {
-            w.else_begin(&`else if ${winner.to_string()} == ${order[k]}`);
+            w.else_begin(`else if ${winner.to_string()} == ${order[k]}`);
         }
         gen_ops(w, &alt_by_index(alts, order[k]).ops, ctx, nc);
     }
@@ -3809,7 +3809,7 @@ fn gen_lr_fn<S: AsStrSlice>(
     let rk = rule_kind_const(&rule.name);
     let mut f = FnSpec::new(fn_name);
     add_parser_super_effect(&mut f, ctx);
-    f.add_param(&PARSER_HANDLE, &"&mut Parser");
+    f.add_param(&PARSER_HANDLE, "&mut Parser");
     if ctx.current_rule_reads_follow() {
         add_follow_param(&mut f);
     }
@@ -3825,9 +3825,9 @@ fn gen_lr_fn<S: AsStrSlice>(
     f.emit_begin(w);
     let emits_vals = rule_emits_vals(ctx, rule);
     let fsep = follow_sep(ctx.current_rule_reads_follow());
-    w.line(&"let _cp = p.b.checkpoint();");
-    w.line(&"let _start = p.peek_start();");
-    w.line(&`p.b.start_node(${rk}, _start);`);
+    w.line("let _cp = p.b.checkpoint();");
+    w.line("let _start = p.peek_start();");
+    w.line(`p.b.start_node(${rk}, _start);`);
     // Seed the invocation's `vals` at rule entry (rule args, then `@init`), as
     // ANTLR's `enterRecursionRule` seeds the primary context. The atom receives
     // it, so `@init`'s `$v` reaches the primary alt's action; each LR
@@ -3838,7 +3838,7 @@ fn gen_lr_fn<S: AsStrSlice>(
         let entry_needs_mut = ctx.emit_actions()
             && (rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } || rule_threads_args(rule));
         let mut_kw = if entry_needs_mut { "mut " } else { "" };
-        w.line(&`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
+        w.line(`let ${mut_kw}vals = ${vals_struct_name(rule)} {};`);
     }
     emit_span_capture(w, rule, ctx);
     if ctx.emit_actions() {
@@ -3850,11 +3850,11 @@ fn gen_lr_fn<S: AsStrSlice>(
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
     if emits_vals {
-        w.line(&`let mut _lr_acc = ${fn_name.to_string()}_atom(p${fsep}, vals, min_prec);`);
+        w.line(`let mut _lr_acc = ${fn_name.to_string()}_atom(p${fsep}, vals, min_prec);`);
     } else {
-        w.line(&`${fn_name.to_string()}_atom(p${fsep}, min_prec);`);
+        w.line(`${fn_name.to_string()}_atom(p${fsep}, min_prec);`);
     }
-    w.line(&"p.b.finish_node(p.last_end());");
+    w.line("p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
     // suffix-first tokens (a shared delimiter goes to the wrong alt), so the
     // runtime ATN simulator picks the continuation with full context, exactly
@@ -3870,9 +3870,9 @@ fn gen_lr_fn<S: AsStrSlice>(
     }
     let scan_fn = `scan_${rule.snake_name}`;
     let labeled = rule_alts_labeled(&rule.alternatives);
-    w.begin(&"loop");
-    w.line(&"if p.recovering { break; }");
-    w.line(&"let _sk = p.peek_kind();");
+    w.begin("loop");
+    w.line("if p.recovering { break; }");
+    w.line("let _sk = p.peek_kind();");
     emit_lr_group_chain(w, &parse_lr_site(&scan_fn, &rk, labeled), rule, lr_alts, lr_dispatch, ctx, mid_operand_gated);
     w.end();
     emit_lr_after_return(w, rule, emits_vals, ctx);
@@ -3890,20 +3890,20 @@ fn emit_lr_after_return(w: &mut CodeWriter, rule: &ParserRule, emits_vals: bool,
         // `@after` reads (and may write) the final value under the name `vals`.
         // The entry `vals` is still in scope (value semantics copied it into the
         // atom call), so reassign rather than redeclare.
-        w.line(&"vals = _lr_acc;");
+        w.line("vals = _lr_acc;");
         if let Some(a) = &rule.after_action {
             gen_prequel_action(w, a, &rule.name, false, ctx);
         }
-        w.line(&"return vals;");
+        w.line("return vals;");
     } else if emits_vals {
-        w.line(&"return _lr_acc;");
+        w.line("return _lr_acc;");
     } else {
         if let Some(a) = &rule.after_action {
             if ctx.emit_actions() {
                 gen_prequel_action(w, a, &rule.name, false, ctx);
             }
         }
-        w.line(&"return;");
+        w.line("return;");
     }
 }
 
@@ -3925,41 +3925,41 @@ fn gen_lr_fn_atn<S: AsStrSlice>(
     let valid = &lr_dispatch.valid_lr_alts;
     let labeled = rule_alts_labeled(&rule.alternatives);
     let mut nc: List<[String, i32]> = [];
-    w.begin(&"loop");
-    w.line(&"if p.recovering { break; }");
+    w.begin("loop");
+    w.line("if p.recovering { break; }");
     w.line(
-        &`${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
+        `${lr_atn_alt_decl(lr_dispatch)} = atn_lr_loop_decision(&ATN_SIM, &p.atn_stack, ${decision}, &p.kinds, p.pos, TK_EOF, min_prec);`,
     );
     emit_lr_atn_group_repick(
         w,
         lr_alts,
         lr_dispatch,
-        &`scan_${rule.snake_name}`,
-        &"&p.kinds",
-        &"p.pos",
+        `scan_${rule.snake_name}`,
+        "&p.kinds",
+        "p.pos",
         /*parse_launched=*/ true,
         ctx,
     );
-    w.line(&"let _lr_pos0 = p.pos;");
+    w.line("let _lr_pos0 = p.pos;");
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         if is_first {
-            w.begin(&`if _atn_alt == ${i}`);
+            w.begin(`if _atn_alt == ${i}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if _atn_alt == ${i}`);
+            w.else_begin(`else if _atn_alt == ${i}`);
         }
         emit_lr_branch_body(w, &lr_alts[valid[i]], rule, rk, labeled, ctx, &mut nc);
     }
     if !is_first {
-        w.else_begin(&"else");
-        w.line(&"break;");
+        w.else_begin("else");
+        w.line("break;");
         w.end();
     } else {
-        w.line(&"break;");
+        w.line("break;");
     }
-    w.begin(&"if p.pos == _lr_pos0");
-    w.line(&"break;");
+    w.begin("if p.pos == _lr_pos0");
+    w.line("break;");
     w.end();
     w.end();
 }
@@ -3984,7 +3984,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
     mid_operand_gated: bool = false,
     prebound: &Option<String> = &NO_PREBOUND,
 ) {
-    w.begin(&`if ${lr.own_prec} >= min_prec`);
+    w.begin(`if ${lr.own_prec} >= min_prec`);
     // The guard that selected this branch already ran the scan.
     let scan_call = if let Some(local) = prebound {
         *local;
@@ -3998,19 +3998,19 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // A caller that needs this operand to leave a delimiter behind hands
         // it down as `lr_cont`. Take the operator only while that
         // continuation is still there — climbing past it strands the caller.
-        w.line(&`let _lr_end = ${scan_call};`);
-        w.line(&"if _lr_end < 0 { break; }");
+        w.line(`let _lr_end = ${scan_call};`);
+        w.line("if _lr_end < 0 { break; }");
         w.line(
-            &`if !(lr_cont == 0 || ${follow_yields_call_of(&"&p.kinds", &"_lr_end", &"lr_cont")}) { break; }`,
+            `if !(lr_cont == 0 || ${follow_yields_call_of("&p.kinds", "_lr_end", "lr_cont")}) { break; }`,
         );
     } else {
-        w.begin(&`if ${scan_call} < 0`);
-        w.line(&"break;");
+        w.begin(`if ${scan_call} < 0`);
+        w.line("break;");
         w.end();
     }
     emit_lr_branch_body(w, lr, rule, rk, labeled, ctx, nc);
-    w.else_begin(&"else");
-    w.line(&"break;");
+    w.else_begin("else");
+    w.line("break;");
     w.end();
 }
 
@@ -4026,11 +4026,11 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
-    w.line(&`p.b.start_node_at(_cp, ${rk.to_string()}, _start);`);
+    w.line(`p.b.start_node_at(_cp, ${rk.to_string()}, _start);`);
     // Stamp this continuation's labeled-alternative index on the wrap node
     // (gated on the rule being labeled, mirroring the atom path).
     if labeled {
-        w.line(&`p.b.set_alt(${lr.alt_index});`);
+        w.line(`p.b.set_alt(${lr.alt_index});`);
     }
     // Value channel: bind the accumulated left operand under the stripped
     // leading self-ref's name (so `$l.v` reads it), and give this continuation a
@@ -4039,8 +4039,8 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     // level's value back into the accumulator.
     let emits_vals = rule_emits_vals(ctx, rule);
     if emits_vals {
-        w.line(&`let ${lr.prefix_self_ref.name} = _lr_acc;`);
-        w.line(&`let mut vals = ${vals_struct_name(rule)} {};`);
+        w.line(`let ${lr.prefix_self_ref.name} = _lr_acc;`);
+        w.line(`let mut vals = ${vals_struct_name(rule)} {};`);
     }
     // Interleave the alt's actions with the suffix ops. The LR rewrite strips
     // the leading self-ref (element 0), so an action at surface `before_index b`
@@ -4061,9 +4061,9 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         gen_op(w, &ops[i], ctx, nc);
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
-    w.line(&"p.b.finish_node(p.last_end());");
+    w.line("p.b.finish_node(p.last_end());");
     if emits_vals {
-        w.line(&"_lr_acc = vals;");
+        w.line("_lr_acc = vals;");
     }
 }
 
@@ -4091,14 +4091,14 @@ fn gen_repeat_non_greedy_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenCon
             gen_op(w, &r.body, ctx, nc);
             w.end();
             if loops {
-                w.begin(&`while !p.recovering && (${cond})`);
+                w.begin(`while !p.recovering && (${cond})`);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
         },
         Star => {
             if loops {
-                w.begin(&`while !p.recovering && (${cond})`);
+                w.begin(`while !p.recovering && (${cond})`);
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
@@ -4122,13 +4122,13 @@ fn non_greedy_probe_decides(r: &RepeatOp, ctx: &mut GenContext) -> bool {
 /// emits the body and closes the block, so both emit walkers share one
 /// decision.
 fn begin_non_greedy_probe_loop(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
-    w.begin(&"loop");
-    w.line(&"if p.recovering { break; }");
-    let verdict = dedup_name(&"ng_exit", nc);
-    w.line(&`let mut ${verdict}: bool = false;`);
-    gen_viability_probe(w, &r.continuation_scan, &verdict, &"ng_exit_scan", ctx, nc, null, &r.probe_viable);
-    w.line(&`if ${verdict} { break; }`);
-    w.line(&`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
+    w.begin("loop");
+    w.line("if p.recovering { break; }");
+    let verdict = dedup_name("ng_exit", nc);
+    w.line(`let mut ${verdict}: bool = false;`);
+    gen_viability_probe(w, &r.continuation_scan, &verdict, "ng_exit_scan", ctx, nc, null, &r.probe_viable);
+    w.line(`if ${verdict} { break; }`);
+    w.line(`if !(${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}) { break; }`);
 }
 
 /// A labelled block that scans `continuation` from the parse position and,
@@ -4146,7 +4146,7 @@ fn gen_viability_probe<S: AsStrSlice, S1: AsStrSlice>(
     probe_viable: &List<String> = &EMPTY_PROBE_VIABLE,
 ) {
     let label = dedup_name(label_base, nc);
-    w.begin(&`${label}:`);
+    w.begin(`${label}:`);
     gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let fail = `break ${label};`;
     if let Some(body) = prefix_scan {
@@ -4168,22 +4168,22 @@ global EMPTY_PROBE_VIABLE: List<String> = [];
 /// conjoining can only move a verdict from "exit" to "iterate".
 fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<String>, verdict: S, ctx: &mut GenContext) {
     let mask = if ctx.current_rule_reads_follow() {
-        `${FOLLOW_PARAM} == 0 || ${follow_yields_call(&"tokens", &"pos")}`;
+        `${FOLLOW_PARAM} == 0 || ${follow_yields_call("tokens", "pos")}`;
     } else {
         "true";
     };
     if probe_viable.is_empty() {
         if mask == "true" {
-            w.line(&`${verdict.to_string()} = true;`);
+            w.line(`${verdict.to_string()} = true;`);
         } else {
-            w.line(&`if ${mask} { ${verdict.to_string()} = true; }`);
+            w.line(`if ${mask} { ${verdict.to_string()} = true; }`);
         }
         return;
     }
-    w.line(&"let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
-    let viable = ctx.kind_check_str(probe_viable, &"probe_kind");
+    w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
+    let viable = ctx.kind_check_str(probe_viable, "probe_kind");
     let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
-    w.line(&`if ${cond} { ${verdict.to_string()} = true; }`);
+    w.line(`if ${cond} { ${verdict.to_string()} = true; }`);
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -4212,11 +4212,11 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 gen_op(w, &r.body, ctx, nc);
                 w.end();
             }
-            w.begin(&"loop");
-            w.line(&"if p.recovering { break; }");
+            w.begin("loop");
+            w.line("if p.recovering { break; }");
             if ctx.current_rule_reads_follow() && r.gate_caller_follow {
                 w.line(
-                    &`if ${follow_yields_call(&"&p.kinds", &"p.pos")} { break; }`,
+                    `if ${follow_yields_call("&p.kinds", "p.pos")} { break; }`,
                 );
             }
             // Where the body has alternatives its own decision is the guard:
@@ -4232,7 +4232,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
                 if let Some(branches) = op_group_alt_decision(g, ctx) {
                     assert r.duties.is_empty(), "gen_repeat_body: a decided group body owes iteration duties, and this entry discharges none";
                     let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
-                    w.line(&`if ${best} <= p.pos { break; }`);
+                    w.line(`if ${best} <= p.pos { break; }`);
                     gen_group_body(w, g, ctx, nc, Option::Some(winner));
                     w.end();
                     return;
@@ -4240,7 +4240,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             }
             assert !r.duties.owes_beyond_reserve(), "gen_repeat_body: a scan-guarded loop owes a duty the guard does not discharge";
             let scan_pos = gen_rep_scan_guard(w, &r.scan_body, &r.duties, &body_admits, ctx, nc);
-            w.line(&`if ${scan_pos} < 0 { break; }`);
+            w.line(`if ${scan_pos} < 0 { break; }`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
             return;
@@ -4256,7 +4256,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
     match r.kind {
         Optional => gen_op_optional(w, r, ctx, nc, follow_gate),
         Star => {
-            w.begin(&`while !p.recovering && (${cond})`);
+            w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         },
@@ -4264,7 +4264,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &
             begin_plus_first_iteration(w, nc);
             gen_op(w, &r.body, ctx, nc);
             w.end();
-            w.begin(&`while !p.recovering && (${cond})`);
+            w.begin(`while !p.recovering && (${cond})`);
             gen_op(w, &r.body, ctx, nc);
             w.end();
         },
@@ -4285,7 +4285,7 @@ fn gen_op_optional(
     follow_gate: bool,
 ) {
     if r.non_greedy && ctx.needs_atn() {
-        w.begin(&`if ${atn_optional_enter_cond(ctx, r)}`);
+        w.begin(`if ${atn_optional_enter_cond(ctx, r)}`);
         gen_op(w, &r.body, ctx, nc);
         w.end();
         return;
@@ -4300,7 +4300,7 @@ fn gen_op_optional(
                 // One answer, one set of scans: the scan deciding entry is the
                 // scan the dispatch decides on, wrapped by the yield gate.
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
-                w.begin(&`if ${best} >= 0`);
+                w.begin(`if ${best} >= 0`);
                 gen_group_body(w, g, ctx, nc, Option::Some(winner));
                 w.end();
                 return;
@@ -4308,7 +4308,7 @@ fn gen_op_optional(
         }
     }
     let entry = gate_cond_with_caller_follow(&gen_op_optional_entry_cond(w, r, ctx, nc), follow_gate);
-    w.begin(&`if ${entry}`);
+    w.begin(`if ${entry}`);
     gen_op(w, &r.body, ctx, nc);
     w.end();
 }
@@ -4323,7 +4323,7 @@ fn gen_op_optional_entry_cond(
     return match &r.strategy {
         OptionalLookahead(s) => gen_lookahead_condition(ctx, &s.sig),
         OptionalScanGuard => {
-            let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, &"opt_scan_pos", &"opt_scan", false);
+            let scan_pos = gen_scan_guard_with_prefix(w, &r.scan_body, ctx, nc, "opt_scan_pos", "opt_scan", false);
             `${scan_pos} >= 0`;
         },
         Plain => repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx),
@@ -4354,16 +4354,16 @@ fn gen_shape_entry_conditions(
         return conditions;
     }
     for let entry of &s.shapes {
-        let pos_var = dedup_name(&"shape_scan_pos", name_counts);
-        let label = dedup_name(&"shape_scan", name_counts);
-        w.line(&`let mut ${pos_var}: i32 = -1;`);
-        w.begin(&`${label}:`);
+        let pos_var = dedup_name("shape_scan_pos", name_counts);
+        let label = dedup_name("shape_scan", name_counts);
+        w.line(`let mut ${pos_var}: i32 = -1;`);
+        w.begin(`${label}:`);
         gen_scan_entry(w, ctx, &ScanOrigin::Parser);
         let fail = `break ${label};`;
         for let scan_elem of &entry.scan_body.elements {
             gen_scan_op_element(w, scan_elem, ctx, &fail);
         }
-        w.line(&`${pos_var} = pos;`);
+        w.line(`${pos_var} = pos;`);
         w.end();
         conditions.push(`${pos_var} >= 0`);
     }
@@ -4395,10 +4395,10 @@ fn gen_op_optional_shape_lookahead(
         let entry = &s.shapes[ei];
         let cond = gate_cond_with_caller_follow(&conditions[ei], follow_gate);
         if is_first {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
         for let idx of &entry.positions {
             gen_op(w, unwrap_optional_op(&body_ops[*idx]), ctx, nc);
@@ -4580,10 +4580,10 @@ fn gen_op_opt_scan_guard_for_group(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
-    let scan_pos_var = dedup_name(&"opt_scan_pos", name_counts);
-    let scan_label = dedup_name(&"opt_scan", name_counts);
-    w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
-    w.begin(&`${scan_label}:`);
+    let scan_pos_var = dedup_name("opt_scan_pos", name_counts);
+    let scan_label = dedup_name("opt_scan", name_counts);
+    w.line(`let mut ${scan_pos_var}: i32 = -1;`);
+    w.begin(`${scan_label}:`);
     gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let scan_group = &g_op.scan_group;
     if scan_group.alts.len() == 1 {
@@ -4599,9 +4599,9 @@ fn gen_op_opt_scan_guard_for_group(
             &body.gate_cond,
         );
     } else {
-        gen_scan_op_group(w, scan_group, ctx, &`break ${scan_label};`, scan_group.lenient);
+        gen_scan_op_group(w, scan_group, ctx, `break ${scan_label};`, scan_group.lenient);
     }
-    w.line(&`${scan_pos_var} = pos;`);
+    w.line(`${scan_pos_var} = pos;`);
     w.end();
     return scan_pos_var;
 }
@@ -4670,7 +4670,7 @@ fn gen_op_storable_optional(
                     name_counts,
                     rep_op.gate_caller_follow,
                 );
-                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, &`${best} >= 0`, Option::Some(winner));
+                gen_op_storable_optional_body(w, rep_op, inner_elem, ctx, `${best} >= 0`, Option::Some(winner));
             } else {
                 let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
                 gen_op_storable_optional_with_first(
@@ -4678,7 +4678,7 @@ fn gen_op_storable_optional(
                     rep_op,
                     inner_elem,
                     ctx,
-                    &gate_cond_with_caller_follow(&`${scan_pos_var} >= 0`, rep_op.gate_caller_follow),
+                    &gate_cond_with_caller_follow(`${scan_pos_var} >= 0`, rep_op.gate_caller_follow),
                 );
             }
         },
@@ -4743,7 +4743,7 @@ fn gate_cond_with_caller_follow<S: AsStrSlice>(cond: S, gate_caller_follow: bool
 /// The runtime test that the caller's continuation claims the tokens ahead,
 /// so a tail-position repeat must yield rather than take them.
 fn caller_follow_yields() -> String {
-    return follow_yields_call(&"&p.kinds", &"p.pos");
+    return follow_yields_call("&p.kinds", "p.pos");
 }
 
 /// Shared body of every storable-Optional + Group arm: emit a single
@@ -4774,7 +4774,7 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
 ) {
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
-    w.begin(&`if ${entry.to_string()}`);
+    w.begin(`if ${entry.to_string()}`);
     let mut nch: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(
         w,
@@ -4832,7 +4832,7 @@ fn gen_op_transparent_optional(
         OptionalScanGuard => {
             let scan_pos_var = gen_op_opt_scan_guard_for_group(w, g_op, ctx, name_counts);
             gen_op_transparent_optional_with_cond(w, g_op, g_elem, &rep.element, ctx, &gate_cond_with_caller_follow(
-                &`${scan_pos_var} >= 0`,
+                `${scan_pos_var} >= 0`,
                 rep_op.gate_caller_follow,
             ));
         },
@@ -4866,7 +4866,7 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
 ) {
     let body = &g_op.alts[0];
     let alt = &g_elem.alternatives[0];
-    w.begin(&`if ${optional_entry_test(cond, inner, ctx)}`);
+    w.begin(`if ${optional_entry_test(cond, inner, ctx)}`);
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
@@ -4941,7 +4941,7 @@ fn group_admits(inner: &Element, ctx: &mut GenContext) -> Option<GroupAdmits> {
     let branches = guard_branches(alts, &groups, &classes, ctx);
     let mut parts: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
-        parts.push(`(${render_branch_cond(&branches[i], &"p.peek_kind()", ctx)})`);
+        parts.push(`(${render_branch_cond(&branches[i], "p.peek_kind()", ctx)})`);
     }
     // An unconditional branch makes the disjunction `true`, absorbing the gates
     // beside it: they are rendered but answer nothing, so they stay unmarked and
@@ -5003,7 +5003,7 @@ fn open_group_entry(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, en
     gen_repeat_gate_break(w, elem, ctx, &plus_flag);
     if !plus_flag.is_empty() {
         gen_mandatory_first_report(w, elem, ctx, &plus_flag);
-        w.line(&`${plus_flag} = false;`);
+        w.line(`${plus_flag} = false;`);
     }
     return GroupEntry::Guaranteed;
 }
@@ -5016,9 +5016,9 @@ fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element
         return;
     };
     let expected_ref = sync_set_ref(ctx, &admits.expected);
-    w.begin(&`if ${plus_flag.to_string()} && !(${admits.condition})`);
-    w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
-    w.line(&"break;");
+    w.begin(`if ${plus_flag.to_string()} && !(${admits.condition})`);
+    w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
+    w.line("break;");
     w.end();
 }
 
@@ -5040,16 +5040,16 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
         return;
     };
     if plus_flag.is_empty() {
-        w.line(&`if !(${cond}) { break; }`);
+        w.line(`if !(${cond}) { break; }`);
         return;
     }
     if group_dispatch_reports(inner) {
-        w.line(&`if !${plus_flag.to_string()} && !(${cond}) { break; }`);
+        w.line(`if !${plus_flag.to_string()} && !(${cond}) { break; }`);
         return;
     }
-    w.begin(&`if !(${cond})`);
-    w.line(&`if ${plus_flag.to_string()} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
-    w.line(&"break;");
+    w.begin(`if !(${cond})`);
+    w.line(`if ${plus_flag.to_string()} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
+    w.line("break;");
     w.end();
 }
 
@@ -5083,17 +5083,17 @@ fn group_dispatch_reports(inner: &Element) -> bool {
 fn open_call_capture(w: &mut CodeWriter, op: &Op, ctx: &GenContext) -> Option<String> {
     let span_field = rule_call_span_field(op, ctx);
     if let Some(f) = &span_field {
-        w.line(&`${rule_span_lo_ref(f)} = p.pos;`);
+        w.line(`${rule_span_lo_ref(f)} = p.pos;`);
     }
     if let Some(f) = rule_call_ctx_field(op, ctx) {
-        w.line(&`${rule_node_ref(&f)} = p.b.checkpoint();`);
+        w.line(`${rule_node_ref(&f)} = p.b.checkpoint();`);
     }
     return span_field;
 }
 
 fn close_call_capture(w: &mut CodeWriter, span_field: &Option<String>) {
     if let Some(f) = span_field {
-        w.line(&`${rule_span_hi_ref(f)} = p.pos - 1;`);
+        w.line(`${rule_span_hi_ref(f)} = p.pos - 1;`);
     }
 }
 
@@ -5153,10 +5153,10 @@ fn gen_op_optional_with_shape_lookahead_storable(
         let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
 
         if is_first {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
 
         let mut nc: List<[String, i32]> = [];
@@ -5217,10 +5217,10 @@ fn gen_op_optional_with_shape_lookahead_transparent(
         let cond = `${gate_cond_with_caller_follow(&conditions[ei], gate_caller_follow)}${gate}`;
 
         if is_first {
-            w.begin(&`if ${cond}`);
+            w.begin(`if ${cond}`);
             is_first = false;
         } else {
-            w.else_begin(&`else if ${cond}`);
+            w.else_begin(`else if ${cond}`);
         }
 
         let mut nc: List<[String, i32]> = [];
@@ -5415,7 +5415,7 @@ fn gen_consume_token_group_op(
 ) {
     let _ = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`${leaf_binding(ctx, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &to.field)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
 fn collect_token_only_kinds(alts: &List<Alternative>) -> List<String> {
@@ -5505,12 +5505,12 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
     match elem {
         TokenRef(t) => {
             let field_name = dedup_name(&t.field_name, name_counts);
-            w.line(&`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
+            w.line(`${leaf_binding(ctx, &field_name)}p.expect(TK_${t.name}, &EMPTY_SYNC);`);
         },
         Literal(l) => {
             let const_name = literal_const_name(&l.text);
             let field_name = dedup_name(&literal_field_name(&l.text), name_counts);
-            w.line(&`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
+            w.line(`${leaf_binding(ctx, &field_name)}p.expect(${const_name}, &EMPTY_SYNC);`);
         },
         // Per-call-site FOLLOW args are baked on `RuleCallOp.follow_arg`
         // by lower and consumed by the op-driven walkers; this surface arm
@@ -5522,16 +5522,16 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
         RuleRef(r) => {
             let field_name = dedup_name(&r.field_name, name_counts);
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
-            w.line(&`${leaf_binding(ctx, &field_name)}_parse_${r.snake_name}(p);`);
+            w.line(`${leaf_binding(ctx, &field_name)}_parse_${r.snake_name}(p);`);
         },
         Wildcard(_) => {
-            let field_name = dedup_name(&"wildcard", name_counts);
-            w.line(&`${leaf_binding(ctx, &field_name)}p.any();`);
+            let field_name = dedup_name("wildcard", name_counts);
+            w.line(`${leaf_binding(ctx, &field_name)}p.any();`);
         },
         Not(ne) => {
             let field_name = dedup_name(&not_element_field_name(&ne.element), name_counts);
             let check = not_match_call(&ne.element, ctx);
-            w.line(&`${leaf_binding(ctx, &field_name)}${check};`);
+            w.line(`${leaf_binding(ctx, &field_name)}${check};`);
         },
         // After the Phase 2-G op-driven migration, only token-only groups
         // reach this surface walker — every other Group classification
@@ -5550,7 +5550,7 @@ fn gen_element(w: &mut CodeWriter, elem: &Element, ctx: &mut GenContext, name_co
             let predicted_inner = peek_dedup_name(&inner_info.0, name_counts);
             gen_element(w, &lab.element, ctx, name_counts);
             if !lab.list && ctx.emit_actions() {
-                w.line(&`let ${lab_name} = ${predicted_inner};`);
+                w.line(`let ${lab_name} = ${predicted_inner};`);
             }
         },
         // Every op-driven Repeat dispatch flows through
@@ -5689,7 +5689,7 @@ fn gen_op_repeat_non_greedy_storable<S: AsStrSlice>(
     }
     if !while_cond.eq_str("false") {
         let guard = if is_plus { `!p.recovering && (${while_cond.to_string()})` } else { while_cond.to_string() };
-        w.begin(&`while ${guard}`);
+        w.begin(`while ${guard}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
         w.end();
@@ -5743,7 +5743,7 @@ fn gen_op_repeat_non_greedy_transparent<S: AsStrSlice>(
         return;
     }
     if !while_cond.eq_str("false") {
-        w.begin(&`while ${while_cond.to_string()}`);
+        w.begin(`while ${while_cond.to_string()}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
         w.end();
@@ -5851,7 +5851,7 @@ fn gen_op_repeat_optional_rulecall(
         },
     };
 
-    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call(&"&p.kinds", &"p.pos") } else { "" };
+    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call("&p.kinds", "p.pos") } else { "" };
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &entry, ctx);
 }
 
@@ -5883,26 +5883,26 @@ fn probe_decides(
 /// never pays for a scan, and the caller-FOLLOW yield gate still wins —
 /// where the repair already decided to yield the probe does not rule.
 fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
-    let verdict = dedup_name(&"opt_enter", nc);
+    let verdict = dedup_name("opt_enter", nc);
     let entry_gate = if ctx.current_rule_reads_follow() && r.gate_caller_follow {
-        `!(${follow_yields_call(&"&p.kinds", &"p.pos")}) && `;
+        `!(${follow_yields_call("&p.kinds", "p.pos")}) && `;
     } else {
         "";
     };
-    w.line(&`let mut ${verdict}: bool = false;`);
-    w.begin(&`if ${entry_gate}${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
+    w.line(`let mut ${verdict}: bool = false;`);
+    w.begin(`if ${entry_gate}${repeat_guard_cond(&r.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)}`);
     gen_viability_probe(
         w,
         &r.continuation_scan,
         &verdict,
-        &"opt_enter_scan",
+        "opt_enter_scan",
         ctx,
         nc,
         Option::Some(r.scan_body),
         &r.probe_viable,
     );
     w.end();
-    w.begin(&`if ${verdict}`);
+    w.begin(`if ${verdict}`);
     let mut body_nc: List<[String, i32]> = [];
     gen_op_leaf(w, &r.body, ctx, &mut body_nc);
     w.end();
@@ -5913,7 +5913,7 @@ fn gen_optional_probe_entry(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut GenConte
 /// nothing. `gate_expr` is the caller-FOLLOW yield check (empty = none).
 fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, body: &Op, gate_expr: S, cond: S1, ctx: &mut GenContext) {
     let guard = if gate_expr.is_empty() { cond.to_string() } else { `!(${gate_expr.to_string()}) && (${cond.to_string()})` };
-    w.begin(&`if ${guard}`);
+    w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, body, ctx, &mut nc);
     w.end();
@@ -5935,7 +5935,7 @@ fn gen_op_repeat_optional_leaf(
 
     // Same K-prefix gate as the RuleCall arm — see
     // `gen_op_repeat_optional_rulecall` for the rationale.
-    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call(&"&p.kinds", &"p.pos") } else { "" };
+    let caller_follow_gate = if rep_op.gate_caller_follow { follow_yields_call("&p.kinds", "p.pos") } else { "" };
     gen_optional_present(w, &rep_op.body, &caller_follow_gate, &repeat_guard_cond(
         &rep_op.body_admits,
         &NO_EXCLUSION,
@@ -5955,7 +5955,7 @@ fn gen_op_repeat_optional_leaf(
 fn gen_caller_follow_gate(w: &mut CodeWriter, rep_op: &RepeatOp) {
     if rep_op.gate_caller_follow {
         w.line(
-            &`if ${follow_yields_call(&"&p.kinds", &"p.pos")} { break; }`,
+            `if ${follow_yields_call("&p.kinds", "p.pos")} { break; }`,
         );
     }
 }
@@ -5970,7 +5970,7 @@ fn gen_iter_caller_follow_gate<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &Repea
         gen_caller_follow_gate(w, rep_op);
         return;
     }
-    w.begin(&`if !${plus_flag.to_string()}`);
+    w.begin(`if !${plus_flag.to_string()}`);
     gen_caller_follow_gate(w, rep_op);
     w.end();
 }
@@ -5986,10 +5986,10 @@ fn follow_arg_expr(ctx: &GenContext, arg: &FollowArg) -> String {
         // The caller's continuation shifts along behind the new head, starting
         // where the head stops constraining. What that pushes past the last
         // slot begins at a depth the gate does not read.
-        Combined(id) => follow_composed(&`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), false),
+        Combined(id) => follow_composed(`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), false),
         // Same, and what the caller wants opens a fresh reading: the loop
         // iteration and it are alternatives, not a sequence.
-        AltMask(id) => follow_composed(&`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), true),
+        AltMask(id) => follow_composed(`FOLLOW_MASK_${*id}`, ctx.follow_mask_positions(*id), true),
     };
 }
 
@@ -6044,8 +6044,8 @@ fn gen_op_repeat_star_plus_non_storable_group(
 
     if let Star = rep.kind {
         if rep_op.body_scannable {
-            w.begin(&"loop");
-            w.line(&"if p.recovering { break; }");
+            w.begin("loop");
+            w.line("if p.recovering { break; }");
             let no_flag = String::new();
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
@@ -6053,7 +6053,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             w.end();
         } else {
             w.begin(
-                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+                `while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -6064,10 +6064,10 @@ fn gen_op_repeat_star_plus_non_storable_group(
     }
     if let Plus = rep.kind {
         if rep_op.body_scannable {
-            let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(&`let mut ${plus_flag} = true;`);
-            w.begin(&"loop");
-            w.line(&"if p.recovering { break; }");
+            let plus_flag = dedup_name("_plus_first", name_counts);
+            w.line(`let mut ${plus_flag} = true;`);
+            w.begin("loop");
+            w.line("if p.recovering { break; }");
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_group(w, g_op, inner, ctx, &mut nc, decided_entry(&decided, &plus_flag), decided);
@@ -6081,7 +6081,7 @@ fn gen_op_repeat_star_plus_non_storable_group(
             gen_op_group(w, g_op, inner, ctx, name_counts, GroupEntry::Required);
             w.end();
             w.begin(
-                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+                `while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
             );
             gen_caller_follow_gate(w, rep_op);
             let mut nc: List<[String, i32]> = [];
@@ -6138,37 +6138,37 @@ fn gen_rep_break_with_recovery<S: AsStrSlice>(w: &mut CodeWriter, scan_pos: S, r
             // today: recovery is only emitted for a `body_scannable`
             // `LeafRuleCall`, and a scannable RuleRef has a non-empty FIRST —
             // this guards the invariant.)
-            w.line(&`if ${scan_pos} < 0 { break; }`);
+            w.line(`if ${scan_pos} < 0 { break; }`);
             return;
         }
-        w.begin(&`if ${scan_pos} < 0`);
+        w.begin(`if ${scan_pos} < 0`);
         // Gate on the body's FIRST set, so the probe has something to report.
-        w.begin(&`if ${ctx.first_check_str(loop_first)}`);
+        w.begin(`if ${ctx.first_check_str(loop_first)}`);
         // Backtracking, and the exception the standing rule names: it decides
         // nothing, and only `pending` survives. That message is what points
         // the diagnostic at the offending token rather than the start of input
         // (`driver_cst_error_recovery_test`).
-        w.line(&"let _rec_pos = p.pos;");
-        w.line(&"let _rec_cp = p.b.checkpoint();");
-        w.line(&"let _rec_sav = p.recovering;");
-        w.line(&"let _rec_spec = p.speculating;");
-        w.line(&"p.speculating = true;");
+        w.line("let _rec_pos = p.pos;");
+        w.line("let _rec_cp = p.b.checkpoint();");
+        w.line("let _rec_sav = p.recovering;");
+        w.line("let _rec_spec = p.speculating;");
+        w.line("p.speculating = true;");
         // Stamp the call's exact ATN return state, just as a normal parse call
         // does, so a context-sensitive callee (`??` / ATN-class LR) sees the
         // right caller frame.
         if let RuleCall(r) = &rep_op.body {
             gen_atn_ret_pending(w, ctx, r.atn_call_site);
         }
-        w.line(&`${call};`);
-        w.line(&"p.speculating = _rec_spec;");
-        w.line(&"p.recovering = _rec_sav;");
-        w.line(&"p.pos = _rec_pos;");
-        w.line(&"p.b.truncate(_rec_cp);");
+        w.line(`${call};`);
+        w.line("p.speculating = _rec_spec;");
+        w.line("p.recovering = _rec_sav;");
+        w.line("p.pos = _rec_pos;");
+        w.line("p.b.truncate(_rec_cp);");
         w.end();
-        w.line(&"break;");
+        w.line("break;");
         w.end();
     } else {
-        w.line(&`if ${scan_pos} < 0 { break; }`);
+        w.line(`if ${scan_pos} < 0 { break; }`);
     }
 }
 
@@ -6198,8 +6198,8 @@ fn gen_op_repeat_star_plus_storable(
 
     if let Star = rep.kind {
         if rep_op.body_scannable {
-            w.begin(&"loop");
-            w.line(&"if p.recovering { break; }");
+            w.begin("loop");
+            w.line("if p.recovering { break; }");
             let no_flag = String::new();
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &no_flag);
             let mut nc: List<[String, i32]> = [];
@@ -6216,7 +6216,7 @@ fn gen_op_repeat_star_plus_storable(
             w.end();
         } else {
             w.begin(
-                &`while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
+                `while !p.recovering && (${repeat_guard_cond(&rep_op.body_admits, &NO_EXCLUSION, &PEEK_KIND, ctx)})`,
             );
             // Same caller-FOLLOW gate for the non-scannable while loop.
             gen_caller_follow_gate(w, rep_op);
@@ -6229,10 +6229,10 @@ fn gen_op_repeat_star_plus_storable(
 
     if let Plus = rep.kind {
         if rep_op.body_scannable {
-            let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(&`let mut ${plus_flag} = true;`);
-            w.begin(&"loop");
-            w.line(&"if p.recovering { break; }");
+            let plus_flag = dedup_name("_plus_first", name_counts);
+            w.line(`let mut ${plus_flag} = true;`);
+            w.begin("loop");
+            w.line("if p.recovering { break; }");
             let decided = gen_rep_iteration_entry(w, rep_op, inner, ctx, name_counts, &plus_flag);
             let mut nc: List<[String, i32]> = [];
             gen_op_inner_for_storable_repeat(
@@ -6247,9 +6247,9 @@ fn gen_op_repeat_star_plus_storable(
             );
             w.end();
         } else {
-            let plus_flag = dedup_name(&"_plus_first", name_counts);
-            w.line(&`let mut ${plus_flag} = true;`);
-            w.begin(&`while !p.recovering && (${plus_flag} || ${repeat_guard_cond(
+            let plus_flag = dedup_name("_plus_first", name_counts);
+            w.line(`let mut ${plus_flag} = true;`);
+            w.begin(`while !p.recovering && (${plus_flag} || ${repeat_guard_cond(
                 &rep_op.body_admits,
                 &NO_EXCLUSION,
                 &PEEK_KIND,
@@ -6296,7 +6296,7 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     }
     let guarded_only = !plus_flag.is_empty();
     if guarded_only {
-        w.begin(&`if !${plus_flag.to_string()}`);
+        w.begin(`if !${plus_flag.to_string()}`);
     }
     gen_caller_follow_gate(w, rep_op);
     let body_admits = admits_kinds(&rep_op.body_admits);
@@ -6344,19 +6344,19 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     if !duties.decline_stranded {
         return;
     }
-    let cont_kind = dedup_name(&"decline_kind", nc);
-    let dead_end = dedup_name(&"decline_dead", nc);
-    w.begin(&`if ${scan_pos.to_string()} >= 0`);
-    gen_kind_read(w, &cont_kind, &"p.kinds", scan_pos);
+    let cont_kind = dedup_name("decline_kind", nc);
+    let dead_end = dedup_name("decline_dead", nc);
+    w.begin(`if ${scan_pos.to_string()} >= 0`);
+    gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
     let can_continue = join_or(&[
         kind_check_or_none(body_admits, &cont_kind, ctx),
         kind_check_or_none(&duties.decline_cont_first, &cont_kind, ctx),
         kind_check_or_none(&duties.decline_viable, &cont_kind, ctx),
     ]);
-    w.begin(&`if !(${can_continue})`);
-    w.line(&`let mut ${dead_end}: bool = false;`);
-    gen_viability_probe(w, &duties.decline_scan, &dead_end, &"decline_scan", ctx, nc, null, &duties.decline_viable);
-    w.line(&`if ${dead_end} { break; }`);
+    w.begin(`if !(${can_continue})`);
+    w.line(`let mut ${dead_end}: bool = false;`);
+    gen_viability_probe(w, &duties.decline_scan, &dead_end, "decline_scan", ctx, nc, null, &duties.decline_viable);
+    w.line(`if ${dead_end} { break; }`);
     w.end();
     w.end();
 }
@@ -6405,7 +6405,7 @@ fn gen_iteration_duties<S: AsStrSlice>(
     // decline that fires on a `+`'s mandatory iteration emits a `+` matching
     // zero times.
     let exempt_first = if let UnlessFirst(flag) = refusable {
-        w.begin(&`if !${*flag}`);
+        w.begin(`if !${*flag}`);
         true;
     } else {
         false;
@@ -6431,13 +6431,13 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
     if duties.reserve_scan.is_empty() {
         return;
     }
-    let label = dedup_name(&"rep_reserve", nc);
-    let ok = dedup_name(&"rep_reserve_ok", nc);
+    let label = dedup_name("rep_reserve", nc);
+    let ok = dedup_name("rep_reserve_ok", nc);
     // Prediction picked nothing: `at` is no position, and the caller reports
     // that a line below.
-    w.begin(&`if ${at.to_string()} >= 0`);
-    w.line(&`let mut ${ok} = false;`);
-    w.begin(&`${label}:`);
+    w.begin(`if ${at.to_string()} >= 0`);
+    w.line(`let mut ${ok} = false;`);
+    w.begin(`${label}:`);
     // `at` is where the iteration the entry committed to ended, so the reserve
     // walks on from the gate that iteration produced — the same gate its two
     // twins run under, which is what makes the three refuse the same loops.
@@ -6448,13 +6448,13 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
     // so anyway, rather than resting on that.
     gen_scan_entry(w, ctx, &ScanOrigin::Entry(at.to_string()));
     for let se of &duties.reserve_scan {
-        gen_scan_op_element(w, se, ctx, &`break ${label};`);
+        gen_scan_op_element(w, se, ctx, `break ${label};`);
     }
-    w.line(&`${ok} = true;`);
+    w.line(`${ok} = true;`);
     w.end();
-    let kind = dedup_name(&"rep_reserve_kind", nc);
-    let starved = reserve_starved_cond(w, &ok, &kind, &"p.kinds", at, body_admits, ctx);
-    w.line(&`if ${starved} { break; }`);
+    let kind = dedup_name("rep_reserve_kind", nc);
+    let starved = reserve_starved_cond(w, &ok, &kind, "p.kinds", at, body_admits, ctx);
+    w.line(`if ${starved} { break; }`);
     w.end();
 }
 
@@ -6466,7 +6466,7 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
 /// marking and rewinding are whole operations, not a two-line idiom each site
 /// repeats and one site can write half of.
 fn gen_scan_mark<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S) {
-    w.line(&`let ${slot.to_string()} = pos;`);
+    w.line(`let ${slot.to_string()} = pos;`);
     gen_scan_gate_save(w, ctx, slot);
 }
 
@@ -6484,18 +6484,18 @@ global PLAIN_BREAK: String = "break;";
 
 /// `if <cond> { <rewind to slot>; <brk> }`. A gate-free build keeps the one
 /// line it has always emitted.
-fn gen_scan_rewind_break<S: AsStrSlice, S1: AsStrSlice>(
+fn gen_scan_rewind_break<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
     w: &mut CodeWriter,
     ctx: &GenContext,
     slot: S,
     cond: S1,
-    brk: &String = &PLAIN_BREAK,
+    brk: S2 = PLAIN_BREAK,
 ) {
     if !ctx.emit_scan_gate() {
-        w.line(&`if ${cond.to_string()} { pos = ${slot.to_string()}; ${*brk} }`);
+        w.line(`if ${cond.to_string()} { pos = ${slot.to_string()}; ${brk.to_string()} }`);
         return;
     }
-    w.begin(&`if ${cond.to_string()}`);
+    w.begin(`if ${cond.to_string()}`);
     gen_scan_rewind(w, ctx, slot);
     w.line(brk);
     w.end();
@@ -6517,7 +6517,7 @@ fn gen_scan_gate_save<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot:
         return;
     }
     let decl = if mutable { "let mut" } else { "let" };
-    w.line(&`${decl} ${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`);
+    w.line(`${decl} ${scan_gate_local(slot)} = ${SCAN_GATE_HANDLE};`);
 }
 
 /// The assignment that puts the gate now in `SCAN_GATE` into `slot`'s local.
@@ -6532,7 +6532,7 @@ fn scan_gate_snapshot<S: AsStrSlice>(ctx: &GenContext, slot: S) -> List<String> 
 /// under. The twin of `gen_scan_rewind`: a slot nothing snapshots into is a
 /// position whose gate is lost, and the next reader of it invents one.
 fn gen_scan_commit<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S, end: S1) {
-    w.line(&`${slot.to_string()} = ${end.to_string()};`);
+    w.line(`${slot.to_string()} = ${end.to_string()};`);
     for let line of scan_gate_snapshot(ctx, slot) {
         w.line(&line);
     }
@@ -6543,7 +6543,7 @@ fn gen_scan_commit<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &GenC
 fn scan_gate_best_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(ctx: &GenContext, best: S, wins: S1, end: S2) -> String {
     let mut body = `${best.to_string()} = ${end.to_string()};`;
     for let line of scan_gate_snapshot(ctx, best) {
-        body.push_str(&` ${line}`);
+        body.push_str(` ${line}`);
     }
     return `if ${wins.to_string()} { ${body} }`;
 }
@@ -6555,10 +6555,10 @@ fn gen_scan_iteration_rewind(w: &mut CodeWriter, ctx: &GenContext, looping: bool
         w.line(&if looping { "if pos < 0 { pos = sp; break; }" } else { "if pos < 0 { pos = sp; }" });
         return;
     }
-    w.begin(&"if pos < 0");
-    gen_scan_rewind(w, ctx, &"sp");
+    w.begin("if pos < 0");
+    gen_scan_rewind(w, ctx, "sp");
     if looping {
-        w.line(&"break;");
+        w.line("break;");
     }
     w.end();
 }
@@ -6567,13 +6567,13 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
     if !ctx.emit_scan_gate() {
         return;
     }
-    w.line(&`${SCAN_GATE_HANDLE} = ${scan_gate_local(slot)};`);
+    w.line(`${SCAN_GATE_HANDLE} = ${scan_gate_local(slot)};`);
 }
 
 /// The lookahead read every gate and probe opens with: the kind at `at`, EOF
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
-    w.line(&`let ${name.to_string()} = if ${at.to_string()} < ${stream.to_string()}.len() { ${stream.to_string()}[${at.to_string()}] } else { TK_EOF };`);
+    w.line(`let ${name.to_string()} = if ${at.to_string()} < ${stream.to_string()}.len() { ${stream.to_string()}[${at.to_string()}] } else { TK_EOF };`);
 }
 
 /// `kind_check_str` for a set that may be empty — an empty one admits nothing,
@@ -6593,7 +6593,7 @@ fn join_or(parts: &List<String>) -> String {
             continue;
         }
         if !out.is_empty() {
-            out.push_str(&" || ");
+            out.push_str(" || ");
         }
         out.push_str(p);
     }
@@ -6618,9 +6618,9 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // Every iteration may decline, and one that consumed nothing would come
     // round at the same position forever.
     if plus_flag.is_empty() {
-        w.line(&`if ${best} <= p.pos { break; }`);
+        w.line(`if ${best} <= p.pos { break; }`);
     } else {
-        w.line(&`if !${plus_flag.to_string()} && ${best} <= p.pos { break; }`);
+        w.line(`if !${plus_flag.to_string()} && ${best} <= p.pos { break; }`);
     }
     let refusable = if plus_flag.is_empty() { Refusable::Always } else { Refusable::UnlessFirst(plus_flag.to_string()) };
     gen_iteration_duties(
@@ -6639,12 +6639,12 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // The mandatory first iteration cannot decline: it takes what prediction
     // picked and lets the body report what it cannot match. Only where
     // prediction picked nothing is there an answer to give here.
-    w.begin(&`if ${winner} < 0`);
+    w.begin(`if ${winner} < 0`);
     let expected_ref = sync_set_ref(ctx, &decision.expected);
-    w.line(&`if ${plus_flag.to_string()} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
-    w.line(&"break;");
+    w.line(`if ${plus_flag.to_string()} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
+    w.line("break;");
     w.end();
-    w.line(&`${plus_flag.to_string()} = false;`);
+    w.line(`${plus_flag.to_string()} = false;`);
     return winner;
 }
 
@@ -6662,7 +6662,7 @@ fn decided_entry<S: AsStrSlice>(decided: &Option<String>, plus_flag: S) -> Group
 fn wildcard_non_greedy_condition(ctx: &mut GenContext, follow_first: &List<String>) -> String {
     let mut excluded: List<String> = ["TK_EOF"];
     dedup_append_arr(&mut excluded, follow_first);
-    return ctx.kind_negate_check_str(&excluded, &"p.peek_kind()");
+    return ctx.kind_negate_check_str(&excluded, "p.peek_kind()");
 }
 
 fn compute_non_greedy_condition(
@@ -6695,7 +6695,7 @@ fn compute_non_greedy_condition(
     // peek(0) is ',' either way.
     let second_continue = subtract_sets(inner_second_first, follow_second);
     let peek0_cond = ctx.first_check_str(raw_first);
-    let peek1_cond = ctx.kind_check_str(&second_continue, &"p.peek_at(1)");
+    let peek1_cond = ctx.kind_check_str(&second_continue, "p.peek_at(1)");
     return `(${peek0_cond}) && (${peek1_cond})`;
 }
 
@@ -6740,8 +6740,8 @@ fn gen_rep_scan_guard(
         scan_inner,
         ctx,
         name_counts,
-        &"rep_scan_pos",
-        &"rep_scan",
+        "rep_scan_pos",
+        "rep_scan",
         true,
         reserve,
         body_admits,
@@ -6762,12 +6762,12 @@ fn gen_reserve_probe<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut GenContext,
 ) {
     gen_scan_mark(w, ctx, slot);
-    w.line(&`let mut ${ok.to_string()} = false;`);
-    w.begin(&`${label.to_string()}:`);
+    w.line(`let mut ${ok.to_string()} = false;`);
+    w.begin(`${label.to_string()}:`);
     for let se of reserve {
-        gen_scan_op_element(w, se, ctx, &`break ${label.to_string()};`);
+        gen_scan_op_element(w, se, ctx, `break ${label.to_string()};`);
     }
-    w.line(&`${ok.to_string()} = true;`);
+    w.line(`${ok.to_string()} = true;`);
     w.end();
     gen_scan_rewind(w, ctx, slot);
 }
@@ -6810,12 +6810,12 @@ fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let ok = dedup_name(&`${body_end.to_string()}_ok`, name_counts);
-    let label = dedup_name(&`${body_end.to_string()}_scan`, name_counts);
+    let ok = dedup_name(`${body_end.to_string()}_ok`, name_counts);
+    let label = dedup_name(`${body_end.to_string()}_scan`, name_counts);
     gen_reserve_probe(w, reserve, body_end, &ok, &label, ctx);
-    let kind = dedup_name(&`${body_end.to_string()}_kind`, name_counts);
-    let starved = reserve_starved_cond(w, &ok, &kind, &"tokens", &"pos", body_admits, ctx);
-    w.line(&`if ${starved} { ${fail.to_string()} }`);
+    let kind = dedup_name(`${body_end.to_string()}_kind`, name_counts);
+    let starved = reserve_starved_cond(w, &ok, &kind, "tokens", "pos", body_admits, ctx);
+    w.line(`if ${starved} { ${fail.to_string()} }`);
 }
 
 fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
@@ -6831,23 +6831,23 @@ fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
 ) -> String {
     let scan_pos_var = dedup_name(pos_prefix, name_counts);
     let scan_label = dedup_name(label_prefix, name_counts);
-    w.line(&`let mut ${scan_pos_var}: i32 = -1;`);
-    w.begin(&`${scan_label}:`);
+    w.line(`let mut ${scan_pos_var}: i32 = -1;`);
+    w.begin(`${scan_label}:`);
     gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     let fail = `break ${scan_label};`;
     gen_scan_op_element(w, scan_inner, ctx, &fail);
     if require_advance {
-        w.line(&`if pos <= p.pos { break ${scan_label}; }`);
+        w.line(`if pos <= p.pos { break ${scan_label}; }`);
     }
     // What the alternative still owes past this loop, measured from where the
     // iteration would end. An iteration leaving the suffix unmatchable is one
     // the suffix needed for itself, so it is not an iteration. The guard
     // reports the body's end either way — the reserve only decides.
     if !reserve.is_empty() {
-        let body_end = dedup_name(&"rep_body_end", name_counts);
+        let body_end = dedup_name("rep_body_end", name_counts);
         gen_reserve_check(w, reserve, body_admits, &body_end, &fail, ctx, name_counts);
     }
-    w.line(&`${scan_pos_var} = pos;`);
+    w.line(`${scan_pos_var} = pos;`);
     w.end();
     return scan_pos_var;
 }
@@ -6918,9 +6918,9 @@ fn rule_ref_group_all_scannable(sorted_group: &List<i32>, alts: &List<Alternativ
 /// Take the longest candidate, where `best` holds a length: nothing runs a scan
 /// from it, so there is no gate to carry.
 fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, best_var: S, winner_var: S1, end_expr: S2, winner_value: i32) {
-    w.begin(&`if ${end_expr.to_string()} > ${best_var.to_string()}`);
-    w.line(&`${best_var.to_string()} = ${end_expr.to_string()};`);
-    w.line(&`${winner_var.to_string()} = ${winner_value};`);
+    w.begin(`if ${end_expr.to_string()} > ${best_var.to_string()}`);
+    w.line(`${best_var.to_string()} = ${end_expr.to_string()};`);
+    w.line(`${winner_var.to_string()} = ${winner_value};`);
     w.end();
 }
 
@@ -6936,13 +6936,13 @@ fn emit_argmax_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     from: &ScanOrigin,
     ctx: &GenContext,
 ) {
-    w.begin(&`if ${end_expr.to_string()} > ${best_var.to_string()}`);
+    w.begin(`if ${end_expr.to_string()} > ${best_var.to_string()}`);
     gen_scan_gate_from(w, ctx, from);
     for let line of scan_gate_snapshot(ctx, best_var) {
         w.line(&line);
     }
-    w.line(&`${best_var.to_string()} = ${end_expr.to_string()};`);
-    w.line(&`${winner_var.to_string()} = ${winner_value};`);
+    w.line(`${best_var.to_string()} = ${end_expr.to_string()};`);
+    w.line(`${winner_var.to_string()} = ${winner_value};`);
     w.end();
 }
 
@@ -6965,10 +6965,10 @@ fn gen_scan_winner_tournament(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) -> String {
-    let winner_var = dedup_name(&"gd_winner", name_counts);
-    let best_var = dedup_name(&"gd_best", name_counts);
-    w.line(&`let mut ${winner_var}: i32 = -1;`);
-    w.line(&`let mut ${best_var}: i32 = -1;`);
+    let winner_var = dedup_name("gd_winner", name_counts);
+    let best_var = dedup_name("gd_best", name_counts);
+    w.line(`let mut ${winner_var}: i32 = -1;`);
+    w.line(`let mut ${best_var}: i32 = -1;`);
     // The round commits the winner's gate into `best`, so the slot has to exist
     // wherever `best` is declared — both declarers, not just the one a fixture
     // happened to reach.
@@ -6989,8 +6989,8 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
     winner_var: S,
     best_var: S1,
 ) {
-    let tourney_label = dedup_name(&"gd_tourney", name_counts);
-    w.begin(&`${tourney_label}:`);
+    let tourney_label = dedup_name("gd_tourney", name_counts);
+    w.begin(`${tourney_label}:`);
     let order = sorted_group.sorted();
     for let mut oi = 0; oi < order.len(); oi += 1 {
         let ai = order[oi];
@@ -7000,8 +7000,8 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
             let epsilon = "p.pos";
             emit_argmax_commit(w, best_var, winner_var, &epsilon, ai, &ScanOrigin::Parser, ctx);
         } else {
-            let end_var = dedup_name(&"gd_end", name_counts);
-            w.line(&`let mut ${end_var}: i32 = -1;`);
+            let end_var = dedup_name("gd_end", name_counts);
+            w.line(`let mut ${end_var}: i32 = -1;`);
             gen_scan_gate_save(w, ctx, &end_var, /*mutable=*/ true);
             gen_scan_alt_end(w, sb, &end_var, ctx, name_counts);
             emit_argmax_commit(w, best_var, winner_var, &end_var, ai, &ScanOrigin::Entry(end_var), ctx);
@@ -7009,8 +7009,8 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
         // The early exit skips the alts still to come; after the last one
         // there are none.
         if oi + 1 < order.len() {
-            w.begin(&`if ${best_var.to_string()} >= p.kinds.len()`);
-            w.line(&`break ${tourney_label};`);
+            w.begin(`if ${best_var.to_string()} >= p.kinds.len()`);
+            w.line(`break ${tourney_label};`);
             w.end();
         }
     }
@@ -7148,20 +7148,20 @@ fn gen_group_decide(
     name_counts: &mut List<[String, i32]>,
     follow_gate: bool,
 ) -> [String, String] {
-    let winner_var = dedup_name(&"gd_winner", name_counts);
-    let best_var = dedup_name(&"gd_best", name_counts);
-    w.line(&`let mut ${winner_var}: i32 = -1;`);
-    w.line(&`let mut ${best_var}: i32 = -1;`);
+    let winner_var = dedup_name("gd_winner", name_counts);
+    let best_var = dedup_name("gd_best", name_counts);
+    w.line(`let mut ${winner_var}: i32 = -1;`);
+    w.line(`let mut ${best_var}: i32 = -1;`);
     // `best` is a position a scan reached, so it carries the gate it reached it
     // under: whoever runs from there — the reserve does — must not invent one.
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
     if follow_gate {
-        w.begin(&`if !(${caller_follow_yields()})`);
+        w.begin(`if !(${caller_follow_yields()})`);
     }
     // One read of the lookahead for the whole chain, where it tests it at all.
     let kind_expr = if decision_reads_lookahead(branches) {
-        let var = dedup_name(&"gd_kind", name_counts);
-        w.line(&`let ${var} = p.peek_kind();`);
+        let var = dedup_name("gd_kind", name_counts);
+        w.line(`let ${var} = p.peek_kind();`);
         var;
     } else {
         "p.peek_kind()";
@@ -7193,13 +7193,13 @@ fn gen_decision_measure<S: AsStrSlice, S1: AsStrSlice>(
     winner_var: S,
     best_var: S1,
 ) {
-    w.line(&`${winner_var.to_string()} = ${alt_index};`);
+    w.line(`${winner_var.to_string()} = ${alt_index};`);
     let sb = &scan_alts[alt_index];
     if sb.elements.is_empty() {
         // An empty alternative walks nowhere, so it ends where the parse is and
         // under the parse's own gate.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        gen_scan_commit(w, ctx, best_var, &"p.pos");
+        gen_scan_commit(w, ctx, best_var, "p.pos");
         return;
     }
     gen_scan_alt_end(w, sb, best_var, ctx, name_counts);
@@ -7214,8 +7214,8 @@ fn gen_scan_alt_end<S: AsStrSlice>(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let scan_label = dedup_name(&"gd_scan", name_counts);
-    w.begin(&`${scan_label}:`);
+    let scan_label = dedup_name("gd_scan", name_counts);
+    w.begin(`${scan_label}:`);
     gen_scan_entry(w, ctx, &ScanOrigin::Parser);
     gen_scan_op_elements_in_block(
         w,
@@ -7227,7 +7227,7 @@ fn gen_scan_alt_end<S: AsStrSlice>(
         &sb.gates,
         &sb.gate_cond,
     );
-    gen_scan_commit(w, ctx, end_var, &"pos");
+    gen_scan_commit(w, ctx, end_var, "pos");
     w.end();
 }
 
@@ -7257,14 +7257,14 @@ fn open_decision_branch<S: AsStrSlice>(
     // lowest-alternative rule — so only an untestable one must come last.
     assert !is_decision_fallback(&branches[i]) || i == branches.len() - 1, "a branch the lookahead cannot decide is the chain's last, or the ones after it are dead";
     if i > 0 && is_decision_fallback(&branches[i]) {
-        w.else_begin(&"else");
+        w.else_begin("else");
         return;
     }
     let cond = render_branch_cond(&branches[i], kind_expr, ctx);
     if i == 0 {
-        w.begin(&`if ${cond}`);
+        w.begin(`if ${cond}`);
     } else {
-        w.else_begin(&`else if ${cond}`);
+        w.else_begin(`else if ${cond}`);
     }
 }
 
@@ -7289,7 +7289,7 @@ fn gen_simplecst_rulecall_value(w: &mut CodeWriter, op: &Op, ctx: &mut GenContex
     };
     let span_field = open_call_capture(w, op, ctx);
     gen_atn_ret_pending(w, ctx, rc.atn_call_site);
-    w.line(&`${leaf_binding(ctx, &local_var)}${fn_name}(${call_args});`);
+    w.line(`${leaf_binding(ctx, &local_var)}${fn_name}(${call_args});`);
     close_call_capture(w, &span_field);
 }
 
@@ -7318,11 +7318,11 @@ fn gen_group_scan_dispatch(
         let is_last = k == last;
 
         if k == 0 && !is_last {
-            w.begin(&`if ${winner_var} == ${alt_index}`);
+            w.begin(`if ${winner_var} == ${alt_index}`);
         } else if is_last {
-            w.else_begin(&"else");
+            w.else_begin("else");
         } else {
-            w.else_begin(&`else if ${winner_var} == ${alt_index}`);
+            w.else_begin(`else if ${winner_var} == ${alt_index}`);
         }
         match kind {
             RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
@@ -7406,19 +7406,19 @@ fn gen_group_dispatch(
     // `Point { x, y }`.
     let nullable_else = if must_answer { first_nullable_alt(classes) } else { null };
     let report = must_answer && nullable_else matches { None };
-    let grp_var = dedup_name(&"grp_kind", name_counts);
-    w.line(&`let ${grp_var} = p.peek_kind();`);
+    let grp_var = dedup_name("grp_kind", name_counts);
+    w.line(`let ${grp_var} = p.peek_kind();`);
 
     for let mut g = 0; g < branches.len(); g += 1 {
         // Only a branch that has one before it can drop its condition: the
         // first is what decides whether the group is entered at all.
         let last_takes_rest = !must_answer && g > 0 && g == branches.len() - 1;
         if g == 0 {
-            w.begin(&`if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
+            w.begin(`if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         } else if last_takes_rest {
-            w.else_begin(&"else");
+            w.else_begin("else");
         } else {
-            w.else_begin(&`else if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
+            w.else_begin(`else if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         }
         gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
     }
@@ -7446,8 +7446,8 @@ fn gen_group_dispatch(
 /// The dispatch's last arm, where nothing the group admits is left to take.
 fn gen_group_no_viable(w: &mut CodeWriter, classes: &List<AltClass>, ctx: &mut GenContext) {
     let expected_ref = sync_set_ref(ctx, &classes_union(classes));
-    w.else_begin(&"else");
-    w.line(&`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
+    w.else_begin("else");
+    w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
 }
 
 /// The first alternative that matches empty — ANTLR4 prefers the earliest, and
@@ -7545,7 +7545,7 @@ fn gen_consume_token_group(
 ) {
     let var_name = dedup_name(&token_group_field_name(alts), name_counts);
     let kinds = collect_token_only_kinds(alts);
-    w.line(&`${leaf_binding(ctx, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
+    w.line(`${leaf_binding(ctx, &var_name)}p.expect_set(${sync_set_ref(ctx, &kinds)});`);
 }
 
 // Caller pre-dedups `acc_var`; its declaration is emitted here so the
@@ -7863,17 +7863,17 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &GenContext,
 ) {
     if ctx.is_trace() {
-        w.line(&wado`trace_pick(p, &"${rule_display.to_string()}", ${var.to_string()});`);
+        w.line(&wado`trace_pick(p, "${rule_display.to_string()}", ${var.to_string()});`);
     }
     // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
-        w.begin(&`if ${var.to_string()} == ${idx}`);
-        w.line(&`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+        w.begin(`if ${var.to_string()} == ${idx}`);
+        w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(&`return ${fn_name.to_string()}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
+    w.line(`return ${fn_name.to_string()}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`);
 }
 
 
@@ -7915,8 +7915,8 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     fall_through_on_no_match: bool = false,
 ) {
     let fsep = follow_sep(ctx.current_rule_reads_follow());
-    w.line(&"let _sd_tokens = &p.kinds;");
-    w.line(&"let _sd_pos = p.pos;");
+    w.line("let _sd_tokens = &p.kinds;");
+    w.line("let _sd_pos = p.pos;");
     // A gated candidate scores -1 for a reason the lookahead did not predict, so
     // a gated tournament can end with nothing viable. `emit_index_pick_dispatch`
     // runs its last alternative untested, which held only while some alternative
@@ -7936,10 +7936,10 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         match alt_initial_gate(idx, ctx) {
             Some(gate) => {
                 any_gated = true;
-                w.line(&`let _sd_p_${idx} = if ${gate} { ${scan} } else { -1 };`);
+                w.line(`let _sd_p_${idx} = if ${gate} { ${scan} } else { -1 };`);
             },
             None => {
-                w.line(&`let _sd_p_${idx} = ${scan};`);
+                w.line(`let _sd_p_${idx} = ${scan};`);
             },
         }
     }
@@ -7947,11 +7947,11 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         let rlit = wado`"${rule_display.to_string()}"`;
         for let mut i = 0; i < sorted_indices.len(); i += 1 {
             let idx = sorted_indices[i];
-            w.line(&`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
+            w.line(`trace_scan_alt(p, &${rlit}, ${idx}, _sd_p_${idx});`);
         }
     }
-    w.line(&"let mut _sd_best_i: i32 = -1;");
-    w.line(&"let mut _sd_best_p: i32 = -1;");
+    w.line("let mut _sd_best_i: i32 = -1;");
+    w.line("let mut _sd_best_p: i32 = -1;");
     // Ascending alt-index order, not the sort's, so a scan-length tie goes to
     // the first grammar alternative (ANTLR4's ambiguity resolution).
     let best_i = "_sd_best_i";
@@ -7962,9 +7962,9 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
     }
     let guard_pick = fall_through_on_no_match || any_gated;
     if guard_pick {
-        w.begin(&"if _sd_best_i >= 0");
+        w.begin("if _sd_best_i >= 0");
     }
-    emit_index_pick_dispatch(w, &"_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
+    emit_index_pick_dispatch(w, "_sd_best_i", sorted_indices, fn_name, rule_display, ctx);
     if guard_pick {
         w.end();
     }
@@ -8083,10 +8083,10 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // Consume advanced `p.pos` past `skip` shared tokens without building a
             // node; rewind so `_alt_<idx>` re-parses the alt from its start.
             if skip > 0 {
-                w.line(&`p.pos -= ${skip};`);
+                w.line(`p.pos -= ${skip};`);
             }
             w.line(
-                &`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
+                `return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
             );
         },
         Consume(c) => {
@@ -8096,7 +8096,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // ll_consume_group.g4); on a mismatch leave `p.pos`/`skip` so the Leaf
             // rewinds exactly what was advanced.
             if consume_advances_cursor(c, alts, skip) {
-                w.line(&"p.pos += 1;");
+                w.line("p.pos += 1;");
                 gen_prediction_code_inner(
                     w,
                     &c.child,
@@ -8127,17 +8127,17 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                     let dec = ctx.atn_rule_body_decision(amb_rule);
                     let disabled_arg = emit_atn_disabled_seed(w, &a.alts, alts, ctx);
                     w.line(
-                        &`let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
+                        `let _atn_alt = atn_predict_with_stack(&ATN_SIM, ${dec}, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0${disabled_arg});`,
                     );
                     // A seed can exclude every alt (`_atn_alt == -1`), which the
                     // index dispatch would otherwise route to its last alt.
                     if !disabled_arg.is_empty() {
-                        w.begin(&"if _atn_alt < 0");
-                        w.line(&`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
+                        w.begin("if _atn_alt < 0");
+                        w.line(`p.no_viable("no viable alternative", p.peek_span(), &EMPTY_SYNC);`);
                         emit_no_viable_return(w, ctx);
                         w.end();
                     }
-                    emit_index_pick_dispatch(w, &"_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
+                    emit_index_pick_dispatch(w, "_atn_alt", &sorted_indices, fn_name, rule_display, ctx);
                     return;
                 }
                 // Every alternative reaching codegen scans in full:
@@ -8171,9 +8171,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 let branch = &d.branches[i];
                 let cond = ctx.admits_check_str(&admits_or_everything(&branch.tokens), &check_var);
                 if i == 0 {
-                    w.begin(&`if ${cond}`);
+                    w.begin(`if ${cond}`);
                 } else {
-                    w.else_begin(&`else if ${cond}`);
+                    w.else_begin(`else if ${cond}`);
                 }
                 gen_prediction_code_inner(
                     w,
@@ -8195,15 +8195,15 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // lowering already chose for this overlap group.
             let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
             if !fallback.is_empty() {
-                w.else_begin(&"else");
+                w.else_begin("else");
                 // The tournament scans each alt from its first element, as
                 // `Leaf` does; the rule's error path expects the cursor back.
                 if skip > 0 {
-                    w.line(&`p.pos -= ${skip};`);
+                    w.line(`p.pos -= ${skip};`);
                 }
                 emit_scan_tournament(w, &fallback, fn_name, rule_display, ctx, /*fall_through_on_no_match=*/ true);
                 if skip > 0 {
-                    w.line(&`p.pos += ${skip};`);
+                    w.line(`p.pos += ${skip};`);
                 }
             }
             w.end();
@@ -8275,7 +8275,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
     non_lr_indices: &List<i32>,
     fn_name: S1,
 ) {
-    w.line(&`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
+    w.line(`let ${DISPATCH_KIND_LOCAL} = ${PARSER_HANDLE}.peek_kind();`);
 
     // The arms are independent `if`s that return, so an undecidable one goes
     // last or the alternatives after it are dead. The partition is over the
@@ -8306,7 +8306,7 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
             &admits_or_everything(&slot_first_union(group, first_sets)),
             &DISPATCH_KIND_LOCAL,
         );
-        w.begin(&`if ${cond}${gate}`);
+        w.begin(`if ${cond}${gate}`);
 
         if group.len() == 1 {
             let alt_index = non_lr_indices[group[0]];
@@ -8358,16 +8358,16 @@ fn gen_error_fallback<S: AsStrSlice>(w: &mut CodeWriter, rule: &ParserRule, type
     let msg = wado`"no alternative of ${rule.name} matches"`;
     // Kind ids, not names: `fail` resolves names only for the error it keeps.
     let expected_ref = sync_set_ref(ctx, &expected);
-    w.line(&`p.no_viable(`);
+    w.line(`p.no_viable(`);
     w.indent();
-    w.line(&`${msg},`);
-    w.line(&"p.peek_span(),");
-    w.line(&`${expected_ref},`);
+    w.line(`${msg},`);
+    w.line("p.peek_span(),");
+    w.line(`${expected_ref},`);
     w.dedent();
-    w.line(&");");
+    w.line(");");
     if current_rule_emits_vals(ctx) {
-        w.line(&"return vals;");
+        w.line("return vals;");
     } else {
-        w.line(&"return;");
+        w.line("return;");
     }
 }

@@ -23,7 +23,7 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "an empty name list closes on its own bar" {
-    assert_tree(&"|| b", &"(start (block | | b))");
+    assert_tree("|| b", "(start (block | | b))");
 }
 
 // Three things have to line up for the mask to reach the loop that decides
@@ -36,19 +36,19 @@ test "an empty name list closes on its own bar" {
 // two: `|a|` and `|a|b|` are the same two tokens at the loop and differ at the
 // third.
 test "one name yields the bar that closes the list" {
-    assert_tree(&"|a| b", &"(start (block | (names (name a)) | b))");
+    assert_tree("|a| b", "(start (block | (names (name a)) | b))");
 }
 
 // The rejection case: the loop yields the closing bar exactly once, not every
 // bar. A repair that reads only the first two tokens at the loop cannot tell
 // this input from the one above.
 test "the loop keeps a bar the closer cannot be" {
-    assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | c))");
+    assert_tree("|a|b| c", "(start (block | (names (name a | b)) | c))");
 }
 
 test "a comma-separated list yields the closer too" {
     assert_tree(
-        &"|a, b| c",
-        &"(start (block | (names (name a) , (name b)) | c))",
+        "|a, b| c",
+        "(start (block | (names (name a) , (name b)) | c))",
     );
 }

@@ -27,42 +27,42 @@ pub fn gen_highlight(
         ctx,
     );
     if grammar.parser_rules.len() > 0 {
-        let mut fr = FnSpec::new(&"highlight_result", Vis::Pub);
-        fr.add_generic(&"S: AsStrSlice");
-        fr.add_param(&"result", &"&ParseResult");
-        fr.add_param(&"input", &"S");
-        fr.set_return_type(&"String");
+        let mut fr = FnSpec::new("highlight_result", Vis::Pub);
+        fr.add_generic("S: AsStrSlice");
+        fr.add_param("result", "&ParseResult");
+        fr.add_param("input", "S");
+        fr.set_return_type("String");
         fr.emit_begin(w);
-        w.line(&"let mapping = highlight_mapping();");
-        w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-        w.line(&"highlight_walk(&mut visitor, &result.tokens, &result.cst);");
-        w.line(&"visitor.hl_cover_unvisited(&result.tokens);");
-        w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
+        w.line("let mapping = highlight_mapping();");
+        w.line("let mut visitor = HighlightVisitor::new(mapping);");
+        w.line("highlight_walk(&mut visitor, &result.tokens, &result.cst);");
+        w.line("visitor.hl_cover_unvisited(&result.tokens);");
+        w.line("return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
         w.blank();
 
-        let mut f = FnSpec::new(&"highlight", Vis::Pub);
-        f.add_generic(&"S: AsStrSlice");
-        f.add_param(&"input", &"S");
-        f.set_return_type(&"String");
+        let mut f = FnSpec::new("highlight", Vis::Pub);
+        f.add_generic("S: AsStrSlice");
+        f.add_param("input", "S");
+        f.set_return_type("String");
         f.emit_begin(w);
-        w.line(&"let result = parse(input);");
-        w.line(&"return highlight_result(&result, input);");
+        w.line("let result = parse(input);");
+        w.line("return highlight_result(&result, input);");
         w.end();
     } else {
         // Lexer-only grammar: no `parse` / tree, so highlight the raw stream.
-        let mut f = FnSpec::new(&"highlight", Vis::Pub);
-        f.add_generic(&"S: AsStrSlice");
-        f.add_param(&"input", &"S");
-        f.set_return_type(&"String");
+        let mut f = FnSpec::new("highlight", Vis::Pub);
+        f.add_generic("S: AsStrSlice");
+        f.add_param("input", "S");
+        f.set_return_type("String");
         f.emit_begin(w);
-        w.line(&"let mapping = highlight_mapping();");
-        w.line(&"let mut visitor = HighlightVisitor::new(mapping);");
-        w.line(&"let tokens = tokenize(input);");
-        w.begin(&"for let mut _i = 0; _i < tokens.len(); _i += 1");
-        w.line(&"visitor.hl_capture_token(&tokens, _i);");
+        w.line("let mapping = highlight_mapping();");
+        w.line("let mut visitor = HighlightVisitor::new(mapping);");
+        w.line("let tokens = tokenize(input);");
+        w.begin("for let mut _i = 0; _i < tokens.len(); _i += 1");
+        w.line("visitor.hl_capture_token(&tokens, _i);");
         w.end();
-        w.line(&"return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
+        w.line("return highlight_html(input, &visitor.captures, &visitor.capture_classes);");
         w.end();
     }
     w.blank();
@@ -155,7 +155,7 @@ fn expand_rule_capture<S: AsStrSlice>(
             }
         },
         None => ctx.warn(
-            &DiagnosticOwner::host(&"highlight"),
+            &DiagnosticOwner::host("highlight"),
             DiagnosticKind::HighlightQuery,
             `highlight query: '(${rule.name}) @${capture}' needs every alternative of '${rule.name}' to be a single token, or a delegation to a rule that is`,
         ),
@@ -286,7 +286,7 @@ fn gen_highlight_mapping(
             Some(k) => k,
             None => {
                 ctx.warn(
-                    &DiagnosticOwner::host(&"highlight"),
+                    &DiagnosticOwner::host("highlight"),
                     DiagnosticKind::HighlightQuery,
                     `highlight query: unknown token ${selector_desc(&rule.selector)}`,
                 );
@@ -300,7 +300,7 @@ fn gen_highlight_mapping(
             Some(rctx) => {
                 if parser_rule_index(parser_rules, rctx) < 0 {
                     ctx.warn(
-                        &DiagnosticOwner::host(&"highlight"),
+                        &DiagnosticOwner::host("highlight"),
                         DiagnosticKind::HighlightQuery,
                         `highlight query: unknown parser rule '${*rctx}'`,
                     );
@@ -311,12 +311,12 @@ fn gen_highlight_mapping(
         }
     }
 
-    let mut f = FnSpec::new(&"highlight_mapping", Vis::Pub);
-    f.set_return_type(&"HighlightMapping");
+    let mut f = FnSpec::new("highlight_mapping", Vis::Pub);
+    f.set_return_type("HighlightMapping");
     f.emit_begin(w);
 
     // Default capture per token kind, one row per slot in kind order.
-    w.line(&"let defaults: List<String> = [");
+    w.line("let defaults: List<String> = [");
     w.indent();
     for let mut i = 0; i < slots.len(); i += 1 {
         let capture = match default_by_kind.get(i) {
@@ -326,23 +326,23 @@ fn gen_highlight_mapping(
         w.line(&wado`"${capture}",  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
     }
     w.dedent();
-    w.line(&"];");
+    w.line("];");
 
     // Rule names indexed by rule_id (parser-rule declaration order). Must
     // match the ids the generated walker passes to hl_enter, and the ids the
     // runtime resolves override `rule_name`s against.
-    w.line(&"let rule_names: List<String> = [");
+    w.line("let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
         w.line(&wado`"${rule.name}",`);
     }
     w.dedent();
-    w.line(&"];");
+    w.line("];");
 
     if overrides.is_empty() {
-        w.line(&"let overrides: List<HighlightOverride> = [];");
+        w.line("let overrides: List<HighlightOverride> = [];");
     } else {
-        w.line(&"let overrides: List<HighlightOverride> = [");
+        w.line("let overrides: List<HighlightOverride> = [");
         w.indent();
         for let ov of &overrides {
             w.line(
@@ -350,10 +350,10 @@ fn gen_highlight_mapping(
             );
         }
         w.dedent();
-        w.line(&"];");
+        w.line("];");
     }
 
-    w.line(&"return HighlightMapping { defaults, rule_names, overrides };");
+    w.line("return HighlightMapping { defaults, rule_names, overrides };");
 
     w.end();
     w.blank();
@@ -377,19 +377,19 @@ fn gen_capture_vocabulary(
     }
     vocabulary.sort();
 
-    let mut f = FnSpec::new(&"capture_vocabulary", Vis::Pub);
-    f.set_return_type(&"List<String>");
+    let mut f = FnSpec::new("capture_vocabulary", Vis::Pub);
+    f.set_return_type("List<String>");
     f.emit_begin(w);
     if vocabulary.is_empty() {
-        w.line(&"return [];");
+        w.line("return [];");
     } else {
-        w.line(&"return [");
+        w.line("return [");
         w.indent();
         for let capture of &vocabulary {
             w.line(&wado`"${*capture}",`);
         }
         w.dedent();
-        w.line(&"];");
+        w.line("];");
     }
     w.end();
     w.blank();
@@ -402,30 +402,30 @@ fn push_unique<S: AsStrSlice>(out: &mut List<String>, value: S) {
 }
 
 fn gen_highlight_run(w: &mut CodeWriter) {
-    w.line(&"use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
-    w.line(&"use fs from \"core:fs\";");
-    w.line(&"use { Preopens } from \"wasi:filesystem\";");
+    w.line("use { args, print, eprintln, Stdout, Stderr, Environment } from \"core:cli\";");
+    w.line("use fs from \"core:fs\";");
+    w.line("use { Preopens } from \"wasi:filesystem\";");
     w.blank();
-    let mut run_fn = FnSpec::new(&"run");
+    let mut run_fn = FnSpec::new("run");
     run_fn.set_export();
-    run_fn.add_effect(&"Stdout");
-    run_fn.add_effect(&"Stderr");
-    run_fn.add_effect(&"Environment");
-    run_fn.add_effect(&"Preopens");
+    run_fn.add_effect("Stdout");
+    run_fn.add_effect("Stderr");
+    run_fn.add_effect("Environment");
+    run_fn.add_effect("Preopens");
     run_fn.emit_begin(w);
-    w.line(&"let arguments = args();");
-    w.begin(&"if arguments.len() < 1");
-    w.line(&"eprintln(\"Usage: <highlighter> <input-file>\");");
-    w.line(&"return;");
+    w.line("let arguments = args();");
+    w.begin("if arguments.len() < 1");
+    w.line("eprintln(\"Usage: <highlighter> <input-file>\");");
+    w.line("return;");
     w.end();
-    w.begin(&"let input = match fs::read_to_string(&arguments[0])");
-    w.line(&"Ok(text) => text,");
-    w.begin(&"Err(e) =>");
-    w.line(&"eprintln(`error: ${e}`);");
-    w.line(&"return;");
-    w.end_with(&",");
-    w.end_with(&";");
-    w.line(&"print(highlight(&input));");
+    w.begin("let input = match fs::read_to_string(&arguments[0])");
+    w.line("Ok(text) => text,");
+    w.begin("Err(e) =>");
+    w.line("eprintln(`error: ${e}`);");
+    w.line("return;");
+    w.end_with(",");
+    w.end_with(";");
+    w.line("print(highlight(&input));");
     w.end();
     w.blank();
 }

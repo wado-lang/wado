@@ -13,17 +13,17 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 // X Y matches both (a b) and (a). LL must pick (a b) so that `b` claims
 // the trailing `Y`.
 test "tree: X Y picks (a b)" {
-    assert_tree(&"X Y", &"(r (a X) (b Y))");
+    assert_tree("X Y", "(r (a X) (b Y))");
 }
 
 // X alone: only (a) matches; (a b) fails because b requires Y.
 test "tree: X picks (a)" {
-    assert_tree(&"X", &"(r (a X))");
+    assert_tree("X", "(r (a X))");
 }
 
 // NodeKind's generated Display/Inspect resolve the rule name from RULE_NAMES.
 test "NodeKind Display and Inspect name the rule" {
-    let r = g::parse(&"X");
+    let r = g::parse("X");
     let k = r.cst.kind(0);
     assert `${k}` == "r", `Display: ${k}`;
     assert `${k:?}` == "r(0)", `Inspect: ${k:?}`;

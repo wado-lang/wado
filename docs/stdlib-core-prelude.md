@@ -9,8 +9,8 @@ Auto-imported in every module. Disable with `#![no_prelude]`.
 
 ```wado
 let mut greeting = String::new();
-greeting.push_str(&"Hello, ");
-greeting.push_str(&"Wado!");
+greeting.push_str("Hello, ");
+greeting.push_str("Wado!");
 assert greeting == "Hello, Wado!";
 
 let primes = [2, 3, 5, 7] as List<i32>;

@@ -308,9 +308,9 @@ impl TokenStream {
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
         for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
             match self.chars[j] {
-                '\n' => out.push_str(&"\\n"),
-                '\r' => out.push_str(&"\\r"),
-                '\t' => out.push_str(&"\\t"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
                 c => out.push(c),
             }
         }
@@ -378,7 +378,7 @@ pub fn rule_path_of(stack: &List<String>) -> String {
             continue;
         }
         if written > 0 {
-            out.push_str(&" > ");
+            out.push_str(" > ");
         }
         out.push_str(name);
         written += 1;
@@ -400,9 +400,9 @@ fn join_expected(names: &List<String>) -> String {
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
+        f.write_str(`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
-            f.write_str(&`\n  in rule: ${self.rule_path()}`);
+            f.write_str(`\n  in rule: ${self.rule_path()}`);
         }
     }
 }

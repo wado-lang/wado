@@ -14,8 +14,8 @@ fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
 }
 
 test "multi-token-tail: yields the caller prefix" {
-    assert_tree(&"N X Y X Y Z", &"(r (a N X Y) (c X Y Z))");
+    assert_tree("N X Y X Y Z", "(r (a N X Y) (c X Y Z))");
 }
 test "multi-token-tail: yields on the exposing iter" {
-    assert_tree(&"N X Y X Y X Y Z", &"(r (a N X Y X Y) (c X Y Z))");
+    assert_tree("N X Y X Y X Y Z", "(r (a N X Y X Y) (c X Y Z))");
 }

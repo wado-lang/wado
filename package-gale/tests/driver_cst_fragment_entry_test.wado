@@ -27,36 +27,36 @@ fn assert_clean_identical<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1)
 }
 
 test "clean parse unchanged: bare item" {
-    assert_clean_identical(&"set a ;", &"(prog (item set a ;))");
+    assert_clean_identical("set a ;", "(prog (item set a ;))");
 }
 
 test "clean parse unchanged: main block with statements" {
-    assert_clean_identical(&"main { do x ; do y ; }", &"(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
+    assert_clean_identical("main { do x ; do y ; }", "(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
 }
 
 test "fragment recovers a statement sequence under root" {
-    let r = fe_on::parse(&"do x ; do y ;");
+    let r = fe_on::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
 }
 
 test "fragment without the option builds nothing" {
-    let r = fe_off::parse(&"do x ; do y ;");
+    let r = fe_off::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_off::to_string_tree(&r);
     assert tree == "prog", `unexpected tree: ${tree}`;
 }
 
 test "fragment with trailing junk terminates" {
-    let r = fe_on::parse(&"do x ; zzz");
+    let r = fe_on::parse("do x ; zzz");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
 }
 
 test "truncated trailing entry does not trap" {
-    let r = fe_on::parse(&"do x ; do");
+    let r = fe_on::parse("do x ; do");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
@@ -82,9 +82,9 @@ fn assert_balanced<S: AsStrSlice>(input: S) {
 }
 
 test "recovered fragments keep a balanced CST" {
-    assert_balanced(&"do x ; do");
-    assert_balanced(&"main { do x");
-    assert_balanced(&"main {");
-    assert_balanced(&"main { do x ; do y");
-    assert_balanced(&"do } zzz");
+    assert_balanced("do x ; do");
+    assert_balanced("main { do x");
+    assert_balanced("main {");
+    assert_balanced("main { do x ; do y");
+    assert_balanced("do } zzz");
 }

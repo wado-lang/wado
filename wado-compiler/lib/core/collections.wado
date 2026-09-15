@@ -722,7 +722,7 @@ impl<K: Ord + Inspect, V: Inspect> TreeMap<K, V> {
     /// indented line.
     fn inspect_alternate(&self, f: &mut Formatter) {
         if self.is_empty() {
-            f.write_str(&"{}");
+            f.write_str("{}");
             return;
         }
         f.open_brace("{");
@@ -730,7 +730,7 @@ impl<K: Ord + Inspect, V: Inspect> TreeMap<K, V> {
             if !entry.deleted {
                 f.write_newline_indent();
                 entry.key.inspect(f);
-                f.write_str(&": ");
+                f.write_str(": ");
                 entry.value.inspect(f);
                 f.write_char(',');
             }
@@ -750,11 +750,11 @@ impl<K: Ord + Inspect, V: Inspect> Inspect for TreeMap<K, V> {
         for let entry of self.entries {
             if !entry.deleted {
                 if !first {
-                    f.write_str(&", ");
+                    f.write_str(", ");
                 }
                 first = false;
                 entry.key.inspect(f);
-                f.write_str(&": ");
+                f.write_str(": ");
                 entry.value.inspect(f);
             }
         }
@@ -767,7 +767,7 @@ impl<T: Inspect + Ord> TreeSet<T> {
     /// indented line.
     fn inspect_alternate(&self, f: &mut Formatter) {
         if self.inner.is_empty() {
-            f.write_str(&"{}");
+            f.write_str("{}");
             return;
         }
         f.open_brace("{");
@@ -793,7 +793,7 @@ impl<T: Inspect + Ord> Inspect for TreeSet<T> {
         for let entry of self.inner.entries {
             if !entry.deleted {
                 if !first {
-                    f.write_str(&", ");
+                    f.write_str(", ");
                 }
                 first = false;
                 entry.key.inspect(f);

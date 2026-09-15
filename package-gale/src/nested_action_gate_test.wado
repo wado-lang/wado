@@ -25,7 +25,7 @@ test "a nested-group predicate gates its branch" {
     // The group's alternatives are a decision like a rule's, so the predicate
     // joins the branch condition instead of being dropped (or emitted as an
     // inline guard, which would fail the parse rather than select `B`).
-    let src = &"grammar T;
+    let src = "grammar T;
 options { language = Wado; }
 r : ( {false}? A | B ) ;
 A : 'a' ;
@@ -40,7 +40,7 @@ test "an empty-alt predicate gates the empty alternative" {
     // `( {p}? | A )` means "match nothing when p holds, else match A". The
     // group carries an action, so it keeps its per-alternative dispatch instead
     // of folding to an Optional that had nowhere to put the predicate.
-    let src = &"grammar T;
+    let src = "grammar T;
 options { language = Wado; }
 r : ( {false}? | A ) A ;
 A : 'a' ;
@@ -54,7 +54,7 @@ test "a `+` over a single-alternative gated group answers the predicate on its f
     // The loop gate exits later iterations, but the mandatory first one runs
     // past it. A single-alternative body has no dispatch to report from, so
     // without an answer here the predicate is dropped and `A B` matches.
-    let src = &"grammar T;
+    let src = "grammar T;
 options { language = Wado; }
 r : ( {false}? A B )+ A ;
 A : 'a' ;
@@ -76,7 +76,7 @@ test "lexer nested-group predicate is emitted, not silently dropped" {
     // vanished (`try_KW` matched any `[a-z]+`). It must reach the generated
     // lexer — its literal (`zzq`, chosen so no runtime word contains it) appears
     // only when the predicate is emitted.
-    let src = gen_source(&"lexer grammar L;
+    let src = gen_source("lexer grammar L;
 options { language = Wado; }
 KW : ([a-z]+ { $text == \"zzq\" }? | 'dog') ;
 ID : [a-z]+ ;
@@ -89,7 +89,7 @@ test "a plain action on an empty alternative does not cost it its follow set" {
     // Only a gateable alt-initial predicate makes an alternative decide by
     // something other than the lookahead, so a plain action leaves the empty
     // alternative the follow set that selects it.
-    let src = &"grammar T;
+    let src = "grammar T;
 options { language = Wado; }
 s : 'k' ( A | {x();} | B ) EOF ;
 A : 'a' ;
@@ -107,7 +107,7 @@ B : 'b' ;
 // as "no viable alternative" instead of taken. `alt_has_gate` answers "will
 // reach its arm", not "exists in the IR", so no caller has to remember this.
 test "a predicate in an unemitted host language gates nothing" {
-    let gated = &"grammar T;
+    let gated = "grammar T;
 options { language = Cpp; }
 s : 'k' ( A | {p()}? | B ) EOF ;
 A : 'a' ;
@@ -121,7 +121,7 @@ B : 'b' ;
 // The rejection case: the same shape in a language Gale does emit is selected
 // by the predicate, so the test above is not passing because nothing ever gates.
 test "the same predicate in an emitted language does gate" {
-    let gated = &"grammar T;
+    let gated = "grammar T;
 options { language = Wado; }
 s : 'k' ( A | {false}? | B ) EOF ;
 A : 'a' ;

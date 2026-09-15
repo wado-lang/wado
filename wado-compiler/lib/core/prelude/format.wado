@@ -469,8 +469,8 @@ impl Inspect for String {
                 let code = c as i32;
                 if code < 0x20 || code == 0x7f {
                     // Control char with no named escape: `\u{HEX}`, never raw.
-                    f.write_str(&"\\u{");
-                    f.write_str(&`${code:x}`);
+                    f.write_str("\\u{");
+                    f.write_str(`${code:x}`);
                     f.write_char('}');
                 } else {
                     f.write_char(c);
@@ -480,7 +480,7 @@ impl Inspect for String {
         }
         f.write_char('"');
         if truncated {
-            f.write_str(&"...");
+            f.write_str("...");
         }
     }
 }
@@ -507,7 +507,7 @@ impl Inspect for ! {
 
 impl<T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"&");
+        f.write_str("&");
         let inner: &T = *self;
         (*inner).inspect(f);
     }
@@ -515,7 +515,7 @@ impl<T: Inspect> Inspect for &T {
 
 impl<T: Inspect> Inspect for &mut T {
     pub fn inspect(&mut self, f: &mut Formatter) {
-        f.write_str(&"&mut ");
+        f.write_str("&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
     }
