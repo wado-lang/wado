@@ -234,8 +234,8 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
             }
         } else {
             // Only the first diagnostic's span reaches the header, so every
-            // later one carries its own: without it two faults reading alike
-            // render as the one message `compile_error_count` counts twice.
+            // later one carries its own: two faults reading alike would
+            // otherwise render as one message repeated.
             let all_messages: Vec<String> = errors
                 .iter()
                 .enumerate()

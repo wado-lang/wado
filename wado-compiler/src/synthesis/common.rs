@@ -527,11 +527,8 @@ pub fn make_synthetic_free_function(
     }
 }
 
-/// Build a `f.write_str("text")` statement. `Formatter::write_str` is generic
-/// over `AsStrSlice`, so the call names `String` as its type argument — one
-/// left implicit reaches WIR build uninstantiated. `formatter_name` is the
-/// resolved [`CompilerItem::Formatter`] struct name, threaded in from the
-/// caller's own snapshot rather than looked up again here.
+/// Build a `f.write_str::<String>("text")` statement. The named type argument
+/// is what instantiates the `AsStrSlice` monomorph.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,

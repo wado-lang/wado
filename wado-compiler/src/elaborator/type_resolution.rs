@@ -582,13 +582,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report an application writing more type arguments than `params`
-    /// declares, and say whether it did. A declaration with none at all is the
-    /// sharpest case: its application used to resolve to `unknown`, which
-    /// dropped the annotation and reported the consequence somewhere else.
-    ///
-    /// Only a surplus is decided here. An application short of the arity may be
-    /// filling the rest from declared defaults, which is what
-    /// [`Self::type_args_of_application`] settles.
+    /// declares, and say whether it did. One short of the arity may be filling
+    /// the rest from defaults, which [`Self::type_args_of_application`] settles.
     fn reject_surplus_type_args(
         &mut self,
         name: &str,
@@ -921,11 +916,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(def) = self.type_decl_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
+                let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 // A trait head reaches here too (`impl IndexValue<i32> for T`),
                 // and a trait's parameters live on its own declaration, so only
                 // a type declaration's list is a ceiling to exceed.
-                let declared: Option<Vec<ast::GenericParam>> = self
-                    .lookup_struct_fields_of_decl(def)
+                let declared: Option<Vec<ast::GenericParam>> = struct_info
+                    .as_ref()
                     .map(|info| info.type_params.clone())
                     .or_else(|| {
                         self.lookup_variant_case_of_decl(def)
@@ -940,7 +936,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     return TypeTable::ERROR;
                 }
-                let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()
                     .is_some_and(|info| !info.type_params.is_empty())

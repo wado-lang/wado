@@ -3345,17 +3345,13 @@ impl Monomorphizer {
             LocalMethodName::new_ref(ref_kind, Some(trait_fq.clone()), info.method_name.clone())
                 .to_mangled_name();
         // The method's own type arguments belong to the call, not to the
-        // blanket: dropping them here left a generic trait default the blanket
-        // does not override with its slots open, and it reached codegen
-        // uninstantiated. They are written in the enclosing body's type
-        // parameters, so they take the same substitution the receiver did.
+        // blanket, and are written in the enclosing body's type parameters, so
+        // they take the same substitution the receiver did.
         let method_type_args: Vec<TypeId> = method_func
             .monomorph_info
-            .as_ref()
-            .map(|m| m.method_type_args.clone())
-            .unwrap_or_default()
-            .into_iter()
-            .map(|arg| self.substitute_type(arg, substitution, type_table))
+            .iter()
+            .flat_map(|m| &m.method_type_args)
+            .map(|arg| self.substitute_type(*arg, substitution, type_table))
             .collect();
         *method_func = FunctionRef {
             module_source: ref_module.clone(),

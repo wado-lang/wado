@@ -342,7 +342,7 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
         text.push_str("?");
         params.push(h.get(&t).to_param());           // the hole's value, typed
     }
-    text.push_str(ReflectTemplate::<T>::tail());    // literal after the last hole
+    text.push_str(ReflectTemplate::<T>::tail());     // literal after the last hole
     return Query { text, params };
 }
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;

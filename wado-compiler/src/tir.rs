@@ -1107,6 +1107,11 @@ impl TypeTable {
         self.types.iter()
     }
 
+    /// Whether `id` resolves to exactly `want`, through any newtype chain.
+    pub fn is_primitive(&self, id: TypeId, want: PrimitiveType) -> bool {
+        matches!(self.get(self.representation_head(id)), ResolvedType::Primitive(p) if *p == want)
+    }
+
     /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
     /// `false`: no Wasm integer instruction takes them.
     pub fn is_integer(&self, id: TypeId) -> bool {

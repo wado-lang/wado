@@ -2018,26 +2018,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee
-    /// is not that type. `None` means it matches, or that the scrutinee's head
-    /// is not pinned down enough to judge — a literal pattern with the wrong
-    /// runtime representation otherwise reaches codegen and builds a value the
-    /// comparison cannot take (issue: invalid core Wasm, or a WIR panic).
-    ///
-    /// Only the literals with a representation of their own are decided here. An
-    /// integer literal coerces across every width and signedness, so what it
-    /// admits is the coercion's answer, not a pattern rule.
+    /// is not it. Only the literals carrying a representation of their own:
+    /// an integer literal's range is the coercion's answer, not a pattern rule.
     fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
         let expected = match lit {
             Literal::String(_) if !type_table.is_string(head) => "String",
-            Literal::Char(_) if !is_primitive(&type_table, head, PrimitiveType::Char) => "char",
-            Literal::Bool(_) if !is_primitive(&type_table, head, PrimitiveType::Bool) => "bool",
+            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
+            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
             _ => return None,
         };
-        // A head the elaborator has not settled judges nothing: an unresolved
-        // one is reported where it is unresolved, and a type parameter is
-        // decided per instantiation.
+        // An unsettled head judges nothing: an unresolved type is reported
+        // where it is unresolved, and a type parameter decided per instance.
         matches!(
             type_table.get(head),
             ResolvedType::Primitive(_)
@@ -3123,11 +3116,6 @@ fn mut_bindings_of(pattern: &Pattern) -> Pattern {
 /// or-pattern handler to align every alternative's `defining_ast_id` with
 /// the first alternative's source node, so that LSP jump-to-def from a use
 /// in the arm body lands on the first alternative's binding.
-/// Whether a type resolves to exactly this primitive.
-fn is_primitive(type_table: &TypeTable, id: TypeId, want: PrimitiveType) -> bool {
-    matches!(type_table.get(id), ResolvedType::Primitive(p) if *p == want)
-}
-
 pub(super) fn collect_ast_pattern_binding_ids(
     pattern: &Pattern,
     out: &mut hashmap::IndexMap<String, AstId>,

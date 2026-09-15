@@ -91,18 +91,6 @@ enum CandidateKind {
 }
 
 impl CandidateKind {
-    /// Whether the hoisted global gets `prefer_fixed_string_repr`: the hoist
-    /// leaves the value where the body already read it, and a lazy
-    /// `array.new_data` global costs a guard branch every time that place is
-    /// executed, so WIR raises its eager bound to
-    /// `INLINE_REF_EAGER_MAX_BYTES`. Every kind answers the same because the
-    /// shapes are the same value after inlining: a by-value argument becomes
-    /// the callee's parameter `let` in the caller. The in-place guard decisions
-    /// and the global's marking at mutation time derive from this one answer.
-    fn prefer_fixed_repr(&self) -> bool {
-        true
-    }
-
     /// The `let`s this candidate detaches into its own initializer.
     fn sibling_lets(&self) -> &[StmtId] {
         match self {
@@ -253,7 +241,6 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             kind,
             guarded,
         } = cand;
-        let prefer_fixed_repr = kind.prefer_fixed_repr();
 
         let mut func = project.functions[func_idx].borrow_mut();
         compiler_trace!(
@@ -338,7 +325,10 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             module_source,
             span: Span::new(0, 0, 1, 1),
             locals: Vec::new(),
-            prefer_fixed_string_repr: prefer_fixed_repr,
+            // The hoist leaves the value where the body already read it, so a
+            // lazy `array.new_data` global would cost a guard branch on every
+            // execution of that place.
+            prefer_fixed_string_repr: true,
             // Synthesized storage for a hoisted literal, not a user parameter.
             param_name: None,
         });
@@ -385,7 +375,7 @@ fn collect_candidates(
             };
             let guarded = std::iter::once(s)
                 .chain(kind.sibling_lets().iter().copied())
-                .any(|st| stmt_needs_lazy_guard(body, st, gate, kind.prefer_fixed_repr()));
+                .any(|st| stmt_needs_lazy_guard(body, st, gate));
             out.push(Candidate {
                 func_idx,
                 ty: *type_id,
@@ -414,7 +404,7 @@ fn collect_candidates(
                     ref_expr: id,
                     sibling_lets,
                 };
-                let guarded = needs_lazy_guard(body, inner, gate, kind.prefer_fixed_repr());
+                let guarded = needs_lazy_guard(body, inner, gate);
                 out.push(Candidate {
                     func_idx,
                     ty: inner_ty,
@@ -438,7 +428,7 @@ fn collect_candidates(
                         arg_expr: arg,
                         sibling_lets,
                     };
-                    let guarded = needs_lazy_guard(body, arg, gate, kind.prefer_fixed_repr());
+                    let guarded = needs_lazy_guard(body, arg, gate);
                     out.push(Candidate {
                         func_idx,
                         ty: body.exprs[arg].type_id,
@@ -2545,7 +2535,7 @@ fn inline_sibling_lets(
 /// a `PackedArray` outside the eager `array.new_fixed` bound; an `ArrayLiteral`
 /// past `ARRAY_NEW_FIXED_LIMIT`, which becomes a build sequence; and one
 /// `promote_constant_arrays_to_data` will rewrite to `array.new_data`.
-fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
+fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
     body.find_in_live_node_under(NodeRef::Expr(expr), |node| {
         let NodeRef::Expr(id) = node else { return None };
         match &body.exprs[id].kind {
@@ -2553,7 +2543,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>, prefer_fixed: bo
                 Some(())
             }
             ExprKind::PackedArray(bytes) => {
-                (!packed_array_is_eager(bytes.len(), gate.string_inline_max_bytes, prefer_fixed))
+                (!packed_array_is_eager(bytes.len(), gate.string_inline_max_bytes, true))
                     .then_some(())
             }
             ExprKind::ArrayLiteral { elements } => (elements.len() > ARRAY_NEW_FIXED_LIMIT
@@ -2617,13 +2607,13 @@ fn array_literal_promotes_to_data(body: &Body, elements: &[Operand], gate: &Gate
     width.is_some_and(|w| data_promotion_pays(elements.len(), w, operand_bytes))
 }
 
-fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>, prefer_fixed: bool) -> bool {
+fn stmt_needs_lazy_guard(body: &Body, stmt: StmtId, gate: &Gate<'_>) -> bool {
     let StmtKind::Let { value, .. } = &body.stmts[stmt].kind else {
         unreachable!("[NIR] const_object_globalization: guard candidates are `let` bindings");
     };
     value
         .as_expr()
-        .is_some_and(|e| needs_lazy_guard(body, e, gate, prefer_fixed))
+        .is_some_and(|e| needs_lazy_guard(body, e, gate))
 }
 
 /// Wrap a hoisted `GlobalVarSet` in `if builtin::is_uninitialized(<global>)`.

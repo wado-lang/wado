@@ -2754,12 +2754,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A user-written impl first, then the Eq / Ord auto-derive fallback.
         // Both fix their return types (`bool`, `Ordering`) whatever a user impl
         // writes, so normalize here: `find_arithmetic_trait_impl` would default
-        // `output_type` to the receiver type absent a `type Output`. The set and
-        // the types come from `TypeSystem::auto_derive_by_trait`.
+        // `output_type` to the receiver type absent a `type Output`.
         //
-        // Falling back to the unselected lookup when `rhs` selects nothing is
-        // what leaves the single `Eq<Self>` impl to type-check the operand and
-        // report the mismatch, rather than "type does not implement `Eq`".
+        // Retrying unselected is what leaves a lone `Eq<Self>` impl to
+        // type-check the operand and report a mismatch as one.
         let auto_derive = self.tysys.auto_derive_by_trait(trait_name);
         let written = rhs
             .and_then(|rhs| {

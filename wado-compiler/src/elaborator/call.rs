@@ -1241,14 +1241,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let payload = args.into_iter().next();
 
-                    // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
-                        // A concrete case's declared payload type is the one
-                        // the argument must have. Nothing checked it, so a
-                        // mismatch reached codegen and built a value the
-                        // case's storage cannot hold. A generic case's is a
-                        // type parameter `infer_variant_type_args` binds from
-                        // this very argument, so there is nothing to compare.
+                        // A generic case's payload type is a parameter
+                        // `infer_variant_type_args` binds from this very
+                        // argument, so only a concrete one has a type to check.
                         if let Some(payload) = payload {
                             self.typecheck(payload, case_data.payload, call.span);
                         }
@@ -3297,14 +3293,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(sig) = self
             .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
             .or_else(|| {
-                let owned;
-                let key = if let Some(key) = receiver_key {
-                    key
-                } else {
-                    owned = self.impl_target(struct_name);
-                    &owned
-                };
-                self.inherited_default_method_sig(key, method_name)
+                let key = receiver_key
+                    .cloned()
+                    .unwrap_or_else(|| self.impl_target(struct_name));
+                self.inherited_default_method_sig(&key, method_name)
             })
         else {
             return (vec![], vec![]);
@@ -3505,13 +3497,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The signature of a trait default body `key` inherits without overriding
-    /// it, rebased on the receiver: the trait's own slots — `Self` and its
-    /// arguments — are fixed by the receiver and the impl header, so only the
-    /// method's own remain to solve.
-    ///
-    /// Such a method belongs to no impl block's method list, so every index
-    /// keyed by the impl misses it, and a generic default then resolved with
-    /// none of its slots bound and reached WIR build uninstantiated.
+    /// it, rebased on the receiver so only the method's own slots remain to
+    /// solve. No impl block lists such a method, so every impl-keyed index
+    /// misses it.
     fn inherited_default_method_sig(
         &self,
         key: &ImplTargetKey,

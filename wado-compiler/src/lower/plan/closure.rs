@@ -23,8 +23,8 @@ use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
 /// The non-generic `Formatter` entry point a lowered body writes through.
-/// `write_str` is generic over `AsStrSlice`, and lowering runs after
-/// monomorphization, so a call minted here would never be instantiated.
+/// Lowering runs after monomorphization, so a call to generic `write_str`
+/// minted here would never be instantiated.
 const FORMATTER_WRITE_LITERAL: &str = "internal_write_literal";
 
 /// Body a per-functor format impl gets.
