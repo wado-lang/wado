@@ -5957,6 +5957,11 @@ pub struct LocalFrame {
 impl LocalFrame {
     /// Append `other`, renumbering its locals to follow this frame's.
     pub fn absorb(&mut self, other: LocalFrame, shift: impl FnOnce(u32)) {
+        let count = u32::try_from(other.locals.len()).expect("local count fits in u32");
+        assert!(
+            other.address_taken.iter().all(|&i| i < count),
+            "an address-taken index names a local of its own frame"
+        );
         let offset = u32::try_from(self.locals.len()).expect("local count fits in u32");
         if offset > 0 && !other.locals.is_empty() {
             shift(offset);
@@ -5968,6 +5973,19 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// Give the body a whole new frame. The three fields describing one are
+    /// replaced together, so a caller swapping a body cannot leave one of them
+    /// describing the body it replaced.
+    pub fn set_frame(&mut self, frame: LocalFrame) {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
+        self.local_count = u32::try_from(locals.len()).expect("local count fits in u32");
+        self.locals = locals;
+        self.address_taken_locals = address_taken;
+    }
+
     /// A parameterless function the compiler mints for itself: no declaration,
     /// no generics, no effects.
     #[must_use]

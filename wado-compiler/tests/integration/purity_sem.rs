@@ -225,10 +225,10 @@ export fn run() {
     );
 }
 
-/// A closure literal is a value. Its body's effects belong to its type and are
-/// demanded where it is called, not where it is written.
+/// A closure literal's body is read where it is written, as it is inside a
+/// function: a `fn() with Stdout` annotation grants the body nothing.
 #[test]
-fn closure_literal_in_global_initializer_is_not_reported() {
+fn effectful_closure_literal_in_global_initializer_is_reported() {
     let source = r#"
 use { println, Stdout } from "core:cli";
 
@@ -240,8 +240,27 @@ export fn run() with Stdout {
 "#;
     let found = in_global(source);
     assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == "println")),
+        "expected `println` flagged in the closure body, got {found:?}"
+    );
+}
+
+/// A closure whose body performs nothing is a value like any other.
+#[test]
+fn pure_closure_literal_in_global_initializer_is_not_reported() {
+    let source = r#"
+global DOUBLER: fn(i32) -> i32 = |n| n * 2;
+
+export fn run() {
+    assert DOUBLER(21) == 42;
+}
+"#;
+    let found = in_global(source);
+    assert!(
         found.is_empty(),
-        "making a closure performs nothing: {found:?}"
+        "a pure closure performs nothing: {found:?}"
     );
 }
 
@@ -264,6 +283,37 @@ export fn run() {
 "#;
     let found = in_global(source);
     assert!(found.is_empty(), "the default body runs: {found:?}");
+}
+
+/// An `effect E` bound through a named argument, where no closure body is
+/// written to walk into: only resolving `E` against the argument's type sees it.
+#[test]
+fn bound_effect_parameter_in_global_initializer_is_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+fn noisy(n: i32) -> i32 with Stdout {
+    println("side effect");
+    return n + 1;
+}
+
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+global A: i32 = apply(noisy, 41);
+
+export fn run() with Stdout {
+    println(`${A}`);
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == "apply")),
+        "expected `apply` flagged: `E` binds to Stdout here, got {found:?}"
+    );
 }
 
 /// An `effect E` that bound to no concrete effect demands nothing, the way

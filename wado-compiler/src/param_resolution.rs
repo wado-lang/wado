@@ -16,7 +16,7 @@ use crate::lower::wide_int_literal::create_literal;
 use crate::module_source::ModuleSource;
 use crate::name::global_init_target;
 use crate::tir::{
-    GlobalInit, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable, initializer_body,
+    GlobalInit, LocalFrame, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable, initializer_body,
 };
 use crate::token::Span;
 
@@ -188,8 +188,7 @@ pub fn resolve_params<H: CompilerHost>(
                     let mut init_fn = init_fns[&key].borrow_mut();
                     let span = literal.span;
                     init_fn.body = Some(initializer_body(literal, span));
-                    init_fn.locals.clear();
-                    init_fn.local_count = 0;
+                    init_fn.set_frame(LocalFrame::default());
                 }
             }
         } else {

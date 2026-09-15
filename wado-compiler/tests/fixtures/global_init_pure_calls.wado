@@ -1,7 +1,8 @@
 // What a global initializer may do is what performs no effect, and the purity
-// check has to agree with the effect checker on what that is: a closure is a
-// value, an effect parameter binds to nothing concrete, and an operation with a
-// default body needs no handler.
+// check has to agree with the effect checker on what that is: an effect
+// parameter that binds to nothing concrete demands nothing, an operation with a
+// default body needs no handler, and a closure literal's body is read where it
+// is written, as it is inside a function.
 
 use { println, Stdout } from "core:cli";
 
@@ -15,14 +16,11 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
     return f(x);
 }
 
-// Making a closure performs nothing; its effects belong to its type, and are
-// demanded where it is called.
-global GREETER: fn() with Stdout = || {
-    println("from a global closure");
-};
-
 // `E` binds to no concrete effect here, so the call demands none.
 global APPLIED: i32 = apply(|n| n + 1, 41);
+
+// A closure whose body performs nothing is a value like any other.
+global DOUBLER: fn(i32) -> i32 = |n| n * 2;
 
 // No handler is installed, so the default body runs.
 global LEVEL: i32 = Log::level();
@@ -30,11 +28,11 @@ global LEVEL: i32 = Log::level();
 export fn run() with Stdout {
     assert APPLIED == 42;
     assert LEVEL == 3;
-    GREETER();
+    assert DOUBLER(21) == 42;
     println(`${APPLIED} ${LEVEL}`);
 }
 
 __DATA__
 {
-    "stdout": "from a global closure\n42 3\n"
+    "stdout": "42 3\n"
 }

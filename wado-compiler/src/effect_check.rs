@@ -1090,6 +1090,85 @@ impl EffectIndex<'_> {
     }
 }
 
+/// Resolve `EffectRef::Param` effects to concrete effects by matching the
+/// callee's function-typed parameters against the actual argument types.
+/// `is_method` drops the leading `self` parameter so params line up with
+/// `args`.
+///
+/// Both walks resolve before they read a callee's effects, so an `effect E`
+/// bound to a concrete effect at the call site is seen by each of them.
+fn resolve_effect_params(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    callee_effects: &[EffectRef],
+    param_types: &[TypeId],
+    is_method: bool,
+    args: &[Expr],
+) -> Vec<EffectRef> {
+    let param_names: IndexSet<String> = callee_effects
+        .iter()
+        .filter_map(|e| match e {
+            EffectRef::Param { name } => Some(name.clone()),
+            EffectRef::Concrete { .. } => None,
+        })
+        .collect();
+    if param_names.is_empty() {
+        return callee_effects.to_vec();
+    }
+    let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
+        .iter()
+        .map(|n| (n.clone(), IndexSet::default()))
+        .collect();
+    let type_table = &sem.types;
+    let skip = usize::from(is_method && !param_types.is_empty());
+    for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
+        let ResolvedType::Function {
+            effects: formal, ..
+        } = type_table.get(*param_type)
+        else {
+            continue;
+        };
+        if !formal
+            .iter()
+            .any(|e| e.is_param() && param_names.contains(e.name()))
+        {
+            continue;
+        }
+        let Some(arg_type) = sem.expression_type(arg.id()) else {
+            continue;
+        };
+        let ResolvedType::Function {
+            effects: actual, ..
+        } = type_table.get(arg_type)
+        else {
+            continue;
+        };
+        for formal_effect in formal {
+            if let EffectRef::Param { name } = formal_effect
+                && let Some(set) = concrete.get_mut(name)
+            {
+                for a in actual {
+                    set.insert(a.clone());
+                }
+            }
+        }
+    }
+    let mut resolved = Vec::new();
+    for effect in callee_effects {
+        match effect {
+            EffectRef::Param { name } => {
+                if let Some(set) = concrete.get(name) {
+                    for c in expand_through_closure(set, index.closure) {
+                        resolved.push(c);
+                    }
+                }
+            }
+            EffectRef::Concrete { .. } => resolved.push(effect.clone()),
+        }
+    }
+    resolved
+}
+
 impl SemEffectWalker<'_> {
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         self.index.method_effects(func_ref)
@@ -1128,81 +1207,6 @@ impl SemEffectWalker<'_> {
             &self.module_source,
             binding,
         )
-    }
-
-    /// Resolve `EffectRef::Param` effects to concrete effects by matching the
-    /// callee's function-typed parameters against the actual argument types.
-    /// `is_method` drops the leading `self` parameter so params line up with
-    /// `args`.
-    fn resolve_effect_params(
-        &self,
-        callee_effects: &[EffectRef],
-        param_types: &[TypeId],
-        is_method: bool,
-        args: &[Expr],
-    ) -> Vec<EffectRef> {
-        let param_names: IndexSet<String> = callee_effects
-            .iter()
-            .filter_map(|e| match e {
-                EffectRef::Param { name } => Some(name.clone()),
-                EffectRef::Concrete { .. } => None,
-            })
-            .collect();
-        if param_names.is_empty() {
-            return callee_effects.to_vec();
-        }
-        let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
-            .iter()
-            .map(|n| (n.clone(), IndexSet::default()))
-            .collect();
-        let type_table = &self.sem.types;
-        let skip = usize::from(is_method && !param_types.is_empty());
-        for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
-            let ResolvedType::Function {
-                effects: formal, ..
-            } = type_table.get(*param_type)
-            else {
-                continue;
-            };
-            if !formal
-                .iter()
-                .any(|e| e.is_param() && param_names.contains(e.name()))
-            {
-                continue;
-            }
-            let Some(arg_type) = self.sem.expression_type(arg.id()) else {
-                continue;
-            };
-            let ResolvedType::Function {
-                effects: actual, ..
-            } = type_table.get(arg_type)
-            else {
-                continue;
-            };
-            for formal_effect in formal {
-                if let EffectRef::Param { name } = formal_effect
-                    && let Some(set) = concrete.get_mut(name)
-                {
-                    for a in actual {
-                        set.insert(a.clone());
-                    }
-                }
-            }
-        }
-        let mut resolved = Vec::new();
-        for effect in callee_effects {
-            match effect {
-                EffectRef::Param { name } => {
-                    if let Some(set) = concrete.get(name) {
-                        for c in expand_through_closure(set, self.index.closure) {
-                            resolved.push(c);
-                        }
-                    }
-                }
-                EffectRef::Concrete { .. } => resolved.push(effect.clone()),
-            }
-        }
-        resolved
     }
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
@@ -1300,8 +1304,14 @@ impl AstVisitor for SemEffectWalker<'_> {
                     let mut effects = self.method_effects(&func_ref);
                     effects.extend(self.effect_op_requirement(&func_ref, None));
                     let params = self.method_param_types(&func_ref);
-                    let resolved =
-                        self.resolve_effect_params(&effects, &params, true, &method_call.args);
+                    let resolved = resolve_effect_params(
+                        self.sem,
+                        self.index,
+                        &effects,
+                        &params,
+                        true,
+                        &method_call.args,
+                    );
                     self.report_missing(&resolved, &method_call.method, method_call.span);
                 }
             }
@@ -1319,8 +1329,14 @@ impl AstVisitor for SemEffectWalker<'_> {
                     // See the `Call` arm: a trait-turbofish qualified call
                     // carries its receiver in the argument list.
                     let is_method = func_ref.method_info.is_some() && !self_in_args;
-                    let resolved =
-                        self.resolve_effect_params(&effects, &params, is_method, &static_call.args);
+                    let resolved = resolve_effect_params(
+                        self.sem,
+                        self.index,
+                        &effects,
+                        &params,
+                        is_method,
+                        &static_call.args,
+                    );
                     self.report_missing(&resolved, &static_call.method, static_call.span);
                 }
             }
@@ -1380,7 +1396,8 @@ impl SemEffectWalker<'_> {
         };
         if let Some((def, effects, name)) = free {
             let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
-            let resolved = self.resolve_effect_params(&effects, &params, false, args);
+            let resolved =
+                resolve_effect_params(self.sem, self.index, &effects, &params, false, args);
             self.report_missing(&resolved, &name, span);
             return true;
         }
@@ -1402,7 +1419,8 @@ impl SemEffectWalker<'_> {
             // argument, so the args already align with the callee's full
             // parameter list — no self skip.
             let is_method = func_ref.method_info.is_some() && !self_in_args;
-            let resolved = self.resolve_effect_params(&effects, &params, is_method, args);
+            let resolved =
+                resolve_effect_params(self.sem, self.index, &effects, &params, is_method, args);
             self.report_missing(&resolved, callee_name(callee), span);
         }
         true
@@ -2694,7 +2712,26 @@ impl PurityWalker<'_> {
         });
     }
 
-    fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
+    /// The static dispatches recorded at a call, with whether each spells its
+    /// receiver as the first argument.
+    fn dispatches_at(&self, id: AstId) -> Vec<(FunctionRef, bool)> {
+        self.annotations
+            .into_iter()
+            .flat_map(|ann| ann.static_dispatches(id))
+            .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+            .collect()
+    }
+
+    fn flag_if_effectful(
+        &mut self,
+        effects: &[EffectRef],
+        params: &[TypeId],
+        is_method: bool,
+        args: &[Expr],
+        callee: &str,
+        span: Span,
+    ) {
+        let effects = resolve_effect_params(self.sem, self.index, effects, params, is_method, args);
         let unanswered = effects.iter().any(|effect| {
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             // A `Param` left after resolution bound to no concrete effect, as
@@ -2734,7 +2771,11 @@ impl PurityWalker<'_> {
             {
                 self.flag(Impurity::Dispatch(op.to_string()), span);
             }
-            Some(Operation::Requires(effects)) => self.flag_if_effectful(&effects, op, span),
+            // An operation declares no effect parameters, so there is nothing
+            // for the arguments to resolve.
+            Some(Operation::Requires(effects)) => {
+                self.flag_if_effectful(&effects, &[], false, &[], op, span);
+            }
             Some(Operation::Handled(_)) | None => {}
         }
     }
@@ -2743,9 +2784,6 @@ impl PurityWalker<'_> {
 impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            // A closure literal is a value: making one performs nothing, and
-            // its body's effects belong to its type, checked where it is called.
-            Expr::Closure(_) => return,
             Expr::Call(call) => {
                 if let Some(interface) = interface_segment(&call.callee)
                     && let Expr::Ident(ident) = &call.callee
@@ -2754,25 +2792,31 @@ impl AstVisitor for PurityWalker<'_> {
                     self.flag_if_operation(interface.id, &op.name, call.span);
                 }
                 let free = if let Expr::Ident(ident) = &call.callee {
-                    self.sem
-                        .referenced_symbol(ident.id)
-                        .and_then(|def| self.index.fn_effects.get(&def))
-                        .map(|effects| (effects.clone(), ident.name.clone()))
+                    self.sem.referenced_symbol(ident.id).and_then(|def| {
+                        self.index
+                            .fn_effects
+                            .get(&def)
+                            .map(|effects| (def, effects.clone(), ident.name.clone()))
+                    })
                 } else {
                     None
                 };
-                if let Some((effects, name)) = free {
-                    self.flag_if_effectful(&effects, &name, call.span);
+                if let Some((def, effects, name)) = free {
+                    let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
+                    self.flag_if_effectful(&effects, &params, false, &call.args, &name, call.span);
                 } else {
-                    let func_refs: Vec<FunctionRef> = self
-                        .annotations
-                        .into_iter()
-                        .flat_map(|ann| ann.static_dispatches(call.id))
-                        .map(|dispatch| dispatch.function_ref.clone())
-                        .collect();
-                    for func_ref in func_refs {
+                    for (func_ref, self_in_args) in self.dispatches_at(call.id) {
                         let effects = self.index.method_effects(&func_ref);
-                        self.flag_if_effectful(&effects, callee_name(&call.callee), call.span);
+                        let params = self.index.method_param_types(&func_ref);
+                        let is_method = func_ref.method_info.is_some() && !self_in_args;
+                        self.flag_if_effectful(
+                            &effects,
+                            &params,
+                            is_method,
+                            &call.args,
+                            callee_name(&call.callee),
+                            call.span,
+                        );
                     }
                 }
             }
@@ -2780,22 +2824,33 @@ impl AstVisitor for PurityWalker<'_> {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let effects = self.index.method_effects(&dispatch.function_ref);
-                    self.flag_if_effectful(&effects, &method_call.method, method_call.span);
+                    let params = self.index.method_param_types(&dispatch.function_ref);
+                    self.flag_if_effectful(
+                        &effects,
+                        &params,
+                        true,
+                        &method_call.args,
+                        &method_call.method,
+                        method_call.span,
+                    );
                 }
             }
             Expr::StaticMethodCall(static_call) => {
                 if let ast::Type::Named(named) = &static_call.target_type {
                     self.flag_if_operation(named.id, &static_call.method, static_call.span);
                 }
-                let func_refs: Vec<FunctionRef> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.static_dispatches(static_call.id))
-                    .map(|dispatch| dispatch.function_ref.clone())
-                    .collect();
-                for func_ref in func_refs {
+                for (func_ref, self_in_args) in self.dispatches_at(static_call.id) {
                     let effects = self.index.method_effects(&func_ref);
-                    self.flag_if_effectful(&effects, &static_call.method, static_call.span);
+                    let params = self.index.method_param_types(&func_ref);
+                    let is_method = func_ref.method_info.is_some() && !self_in_args;
+                    self.flag_if_effectful(
+                        &effects,
+                        &params,
+                        is_method,
+                        &static_call.args,
+                        &static_call.method,
+                        static_call.span,
+                    );
                 }
             }
             Expr::WithHandler(with_handler) => {
