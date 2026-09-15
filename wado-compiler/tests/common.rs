@@ -261,6 +261,11 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
     }
 }
 
+/// Run `future` to completion on a pooled [`runtime`].
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    runtime().block_on(future)
+}
+
 /// Runtimes returned by [`runtime`], waiting to be handed out again.
 static RUNTIME_POOL: OnceLock<Mutex<Vec<tokio::runtime::Runtime>>> = OnceLock::new();
 

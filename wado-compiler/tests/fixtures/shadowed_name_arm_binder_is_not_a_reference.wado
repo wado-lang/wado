@@ -1,0 +1,43 @@
+// The derivation that sanctions a same-scope `let` is a reference to the
+// binding being replaced, so a nested binder taking the same name is not one.
+// Reading the arm body's `x` as a reference to the outer `x` let a `let` that
+// derives from nothing through, and waived the lint on it as well.
+
+use { println, Stdout } from "core:cli";
+
+fn derived(opt: &Option<i32>) -> i32 {
+    let x = 1;
+    // The arm binds `v`, so the body's `x` is the outer one: a derivation.
+    let x = match *opt {
+        Some(v) => x + v,
+        None => 0,
+    };
+    return x;
+}
+
+fn scoped(opt: &Option<i32>) -> i32 {
+    let total = 0;
+    // The arm binds `total`, so the body reads that binder, not the outer one.
+    let sum = match *opt {
+        Some(total) => total,
+        None => total,
+    };
+    return sum;
+}
+
+export fn run() with Stdout {
+    assert derived(&Option::<i32>::Some(5)) == 6;
+    assert scoped(&Option::<i32>::Some(3)) == 3;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_not_contains": [
+        "`x` shadows"
+    ],
+    "warnings_contains": [
+        "`total` shadows"
+    ]
+}

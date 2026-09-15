@@ -1,0 +1,47 @@
+// `#[allow(shadowed_name)]` waives the lint at the binder it sits on, and only
+// there: a type parameter, a function parameter, a closure parameter, a local
+// item, and a `let`. A same-scope `let` that derives from the binding it
+// replaces is the form the language sanctions, so it is never reported and
+// needs no attribute.
+
+use { println, Stdout } from "core:cli";
+
+fn identity<#[allow(shadowed_name)] List>(v: List) -> List {
+    return v;
+}
+
+fn twice(#[allow(shadowed_name)] String: i32) -> i32 {
+    return String * 2;
+}
+
+struct Size {
+    w: i32,
+}
+
+export fn run() with Stdout {
+    #[allow(shadowed_name)]
+    struct Size { w: i32, h: i32 }
+
+    #[allow(shadowed_name)]
+    let println = 3;
+    assert Size { w: 1, h: 1 }.h == 1;
+    let n = identity(1);
+    let n = n + 1;
+    let add = |#[allow(shadowed_name)] Stdout: i32| Stdout + n;
+    assert n == 2;
+    assert add(1) == 3;
+    assert twice(println) == 6;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "warnings_not_contains": [
+        "`List` shadows",
+        "`String` shadows",
+        "`println` shadows",
+        "`Stdout` shadows",
+        "`Size` shadows",
+        "`n` shadows"
+    ]
+}

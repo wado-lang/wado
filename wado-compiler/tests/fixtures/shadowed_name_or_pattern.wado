@@ -1,0 +1,34 @@
+// The alternatives of an or-pattern bind one set of names, and the language
+// requires every alternative to bind the same ones. Reading them as successive
+// binders made the second alternative shadow the first, with no way to waive
+// it: a match arm takes no attribute, and renaming is not allowed.
+
+use { println, Stdout } from "core:cli";
+
+variant E {
+    Num(i32),
+    Neg(i32),
+    Zero,
+}
+
+fn magnitude(e: &E) -> i32 {
+    return match *e {
+        Num(n) | Neg(n) => n,
+        Zero => 0,
+    };
+}
+
+export fn run() with Stdout {
+    assert magnitude(&E::Num(1)) == 1;
+    assert magnitude(&E::Neg(2)) == 2;
+    assert magnitude(&E::Zero) == 0;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_not_contains": [
+        "`n` shadows"
+    ]
+}

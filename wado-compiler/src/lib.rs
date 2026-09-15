@@ -106,8 +106,9 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-    DefaultPurityError, EffectError, SemanticDiagnostics, StoresError,
-    check_default_purity_semantic, check_effects_semantic, check_semantics, check_stores_semantic,
+    EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
+    StoresError, check_effects_semantic, check_purity_semantic, check_semantics,
+    check_stores_semantic,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -333,6 +334,9 @@ pub struct CompilerOptions {
     /// instead of conforming to a fixed WASI world. Sets `target_world` to this
     /// FQ and bypasses the static world-registry lookup.
     pub lib_world: Option<String>,
+    /// The caller discards the component it asks for (`wado check`), so a rule
+    /// that only protects an emitted artifact does not apply.
+    pub analysis_only: bool,
     /// Force the library's exports into the default interface (the A-grouping)
     /// even when no signature references a named type. Set when the library
     /// implements a foreign interface (a provider component), whose consumers
@@ -366,6 +370,7 @@ impl Default for CompilerOptions {
             codegen_flags: Vec::new(),
             unused_diagnostics: true,
             lib_world: None,
+            analysis_only: false,
             lib_interface_export: false,
             providers: Vec::new(),
             params: param_resolution::ParamInputs::default(),
@@ -460,6 +465,44 @@ pub fn unused_diagnostics(sem: &semantics::Semantics, is_test_world: bool) -> Ve
     }
 
     out
+}
+
+/// Source-level `ShadowedName` warnings: every binder the resolution pass found
+/// taking a name that already reached a declaration or an enclosing binder.
+/// Stdlib modules are left alone, as the unused lints leave them.
+pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+    use crate::compiler_host::{Code, DiagnosticSpan};
+    use crate::elaborator::liveness::is_user_authored;
+    use crate::resolve::Shadowed;
+
+    let Some(resolutions) = sem.resolutions() else {
+        return Vec::new();
+    };
+    let defs = resolutions.defs();
+    resolutions
+        .shadowings()
+        .iter()
+        .filter(|s| is_user_authored(&s.module))
+        .map(|shadowing| {
+            let what = match shadowing.shadowed {
+                Shadowed::Decl(def) => format!("the {} of the same name", defs.kind(def).label()),
+                Shadowed::Binder => "a binding of the same name".to_string(),
+            };
+            Diagnostic {
+                severity: Severity::Warning,
+                code: Code::ShadowedName,
+                message: format!(
+                    "`{}` shadows {what}; rename it, or mark the binder \
+                     `#[allow(shadowed_name)]` if that is deliberate",
+                    shadowing.name
+                ),
+                span: Some(DiagnosticSpan::from_span(
+                    &shadowing.span,
+                    Some(shadowing.module.source_path().as_str()),
+                )),
+            }
+        })
+        .collect()
 }
 
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
@@ -730,6 +773,61 @@ fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
         Type::Tuple(elems) => elems.iter().any(lib_sig_uses_named_type),
         Type::Reference(inner) | Type::MutReference(inner) => lib_sig_uses_named_type(inner),
         _ => false,
+    }
+}
+
+/// The types a library declaration carries: a struct's fields, a variant's
+/// payloads, a newtype's base. What [`resource_in_lib_sig`] follows a name into.
+fn declared_member_types(item: &ast::Item) -> Vec<&ast::Type> {
+    use crate::ast::Item;
+    match item {
+        Item::Struct(s) => s.fields.iter().map(|f| &f.ty).collect(),
+        Item::Variant(v) => v.cases.iter().filter_map(|c| c.payload.as_ref()).collect(),
+        Item::Newtype(n) => vec![&n.ty],
+        _ => Vec::new(),
+    }
+}
+
+/// The first resource an exported library signature reaches, through the
+/// declarations it names as well as the types it spells. Every Wado `resource`
+/// binds one another interface owns, so the library's own instance type has no
+/// export for the handle to point at.
+fn resource_in_lib_sig<'a>(
+    registry: &'a component_model::CmInterfaceRegistry,
+    resolutions: &resolve::Resolutions,
+    declared: &hashmap::IndexMap<ast::AstId, &ast::Item>,
+    ty: &ast::Type,
+    entered: &mut hashmap::IndexSet<ast::AstId>,
+) -> Option<&'a str> {
+    use crate::ast::Type;
+    let mut follow =
+        |t: &ast::Type| resource_in_lib_sig(registry, resolutions, declared, t, entered);
+    match ty {
+        Type::Generic(g) => g.args.iter().find_map(&mut follow),
+        Type::Tuple(elems) => elems.iter().find_map(&mut follow),
+        Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
+        Type::Named(named) => {
+            if let Some(source) = registry.resolve_cm_source_for(named, None)
+                && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
+            {
+                return Some(cm);
+            }
+            // Which declaration the name means, since two modules may each
+            // write one and only the reference site says which is meant.
+            let resolve::Resolution::Def(def) = resolutions.get(named.id) else {
+                return None;
+            };
+            let item_id = resolutions.defs().ast_id(def);
+            // A recursive declaration (`struct Node { next: Option<Node> }`)
+            // reaches itself, and a second visit answers what the first did.
+            if !entered.insert(item_id) {
+                return None;
+            }
+            declared_member_types(declared.get(&item_id)?)
+                .into_iter()
+                .find_map(|t| resource_in_lib_sig(registry, resolutions, declared, t, entered))
+        }
+        _ => None,
     }
 }
 
@@ -1044,19 +1142,22 @@ fn compile_after_load<H: CompilerHost>(
         )
     });
 
-    // Source-level unused diagnostics. Reads the liveness computed during
-    // `semantics_with_logger`; gated on the option (CLI `--no-unused`).
+    // Source-level lint warnings. `--no-unused` names the unused lints alone,
+    // so `shadowed_name` is emitted either way; it is waived per binder and per
+    // module by `allow` instead.
+    let mut lints = shadowing_diagnostics(&sem);
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
-        for diag in unused_diagnostics(&sem, is_test_world) {
-            match diag.span {
-                Some(span) => logger.warn_at(diag.code, diag.message, span),
-                None => logger.warn(diag.code, diag.message),
-            }
+        lints.extend(unused_diagnostics(&sem, is_test_world));
+    }
+    for diag in lints {
+        match diag.span {
+            Some(span) => logger.warn_at(diag.code, diag.message, span),
+            None => logger.warn(diag.code, diag.message),
         }
     }
 
-    // === Phase 6b: Effect, Stores, and Default-Purity Checks (Design B) ===
+    // === Phase 6b: Effect, Stores, and Purity Checks (Design B) ===
     // All three are produced from `Semantics` (AST + recorded facts), not the
     // emitted TIR, so they see every source function regardless of what reify
     // emits and share their logic with the LSP.
@@ -1274,7 +1375,8 @@ fn compile_after_load<H: CompilerHost>(
     // A `--lib` with neither an `export fn` nor a public type exports nothing —
     // almost always a facade that forgot `export`. Reject it rather than emit an
     // empty library. A data-model library (only public types) is valid and kept.
-    if options.lib_world.is_some()
+    if !options.analysis_only
+        && options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
         && world.exports.is_empty()
         && !lib_has_public_type
@@ -1288,6 +1390,53 @@ fn compile_after_load<H: CompilerHost>(
             span: None,
         });
         return Err(Bail);
+    }
+
+    // A library's exported signature cannot carry a resource handle: every Wado
+    // `resource` binds one another interface owns, so the library's own
+    // instance type has no export for it to point at. The emitter reaches that
+    // missing entry and panics, so the refusal has to land here.
+    if options.lib_world.is_some()
+        && let Some(world) = lib_world_info.as_ref()
+        && let Some(registry) = sem.cm_interface_registry()
+        && let Some(resolutions) = sem.resolutions()
+    {
+        let declared: hashmap::IndexMap<ast::AstId, &ast::Item> = sem
+            .modules
+            .iter()
+            .flat_map(|(_, module)| &module.items)
+            .filter(|item| lib_type_decl_name(item).is_some())
+            .map(|item| (item.id(), item))
+            .collect();
+        let mut refused = false;
+        for export in &world.exports {
+            let types = export
+                .params
+                .iter()
+                .map(|(_, ty)| ty)
+                .chain(export.return_type.as_ref());
+            for ty in types {
+                let mut entered = hashmap::IndexSet::default();
+                if let Some(name) =
+                    resource_in_lib_sig(registry, resolutions, &declared, ty, &mut entered)
+                {
+                    refused = true;
+                    let _ = logger.error(compiler_host::Diagnostic {
+                        severity: compiler_host::Severity::Error,
+                        code: compiler_host::Code::CodegenError,
+                        message: format!(
+                            "`export fn {}` reaches the resource `{name}`, which another \
+                             interface owns; a library's public API cannot carry a resource handle",
+                            export.name
+                        ),
+                        span: None,
+                    });
+                }
+            }
+        }
+        if refused {
+            return Err(Bail);
+        }
     }
 
     // Capture the entry module so its own named types can be registered into

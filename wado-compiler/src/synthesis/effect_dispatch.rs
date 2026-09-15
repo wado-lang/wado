@@ -445,7 +445,6 @@ fn synthesize_dispatch_global(
         visibility: Visibility::Private,
         module_source: entry_source.clone(),
         span,
-        locals: Vec::new(),
     };
     let entry_module = project
         .tir_modules

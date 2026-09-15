@@ -653,7 +653,9 @@ impl Translator<'_> {
             visibility: global.visibility,
             module_source: global.module_source.clone(),
             span: global.span,
-            locals: global.locals.iter().map(convert_local).collect(),
+            // A TIR global holds no body, so its NIR slot starts with no locals;
+            // `const_object_globalization` allocates them if it hoists one here.
+            locals: Vec::new(),
             prefer_fixed_string_repr: false,
             param_name: global.param.as_ref().map(|p| p.name.clone()),
         }

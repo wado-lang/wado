@@ -113,6 +113,31 @@ impl DefKind {
         }
     }
 
+    /// What to call a declaration of this kind in a diagnostic.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Effect => "effect",
+            Self::Struct => "struct",
+            Self::Enum => "enum",
+            Self::Flags => "flags",
+            Self::Variant => "variant",
+            Self::Trait => "trait",
+            Self::Newtype => "type",
+            Self::BuiltinType => "builtin type",
+            Self::Resource => "resource",
+            Self::World => "world",
+            Self::Global => "global",
+            Self::Variable => "binding",
+            Self::Method => "method",
+            Self::Field => "field",
+            Self::EnumCase | Self::VariantCase => "case",
+            Self::FlagsMember => "flags member",
+            Self::Impl => "impl",
+        }
+    }
+
     /// Whether a declaration of this kind names a type.
     #[must_use]
     pub fn is_type(self) -> bool {

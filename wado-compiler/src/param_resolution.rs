@@ -13,7 +13,11 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
 use crate::lower::wide_int_literal::create_literal;
-use crate::tir::{GlobalInit, TirExpr, TirExprKind, TypeId, TypeTable};
+use crate::module_source::ModuleSource;
+use crate::name::global_init_target;
+use crate::tir::{
+    GlobalInit, LocalFrame, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable, initializer_body,
+};
 use crate::token::Span;
 
 /// Severity for one class of param-resolution diagnostic, set per `wado`
@@ -156,6 +160,22 @@ pub fn resolve_params<H: CompilerHost>(
         }
     };
 
+    // A resolved parameter replaces the declared fallback wherever reify put
+    // it: in the slot when the fallback is a Wasm constant, in the global's
+    // initializer function otherwise.
+    let init_fns: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>> = flat
+        .functions
+        .iter()
+        .filter_map(|f| {
+            let func = f.borrow();
+            let global = global_init_target(&func.name)?;
+            Some((
+                (func.module_source.clone(), global.to_string()),
+                Rc::clone(f),
+            ))
+        })
+        .collect();
+
     for global in &mut flat.globals {
         let Some(spec) = global.param.clone() else {
             continue;
@@ -203,8 +223,18 @@ pub fn resolve_params<H: CompilerHost>(
         if let Some(literal) =
             convert_builtin(trimmed, global.ty, &builtins, &type_table, global.span)
         {
-            // A resolved parameter is a literal, so the storage can hold it.
-            global.init = GlobalInit::Direct(literal);
+            match &mut global.init {
+                GlobalInit::Direct(slot) => *slot = literal,
+                // A deferred global has an initializer function, and the
+                // resolved literal replaces what it returns.
+                GlobalInit::Deferred(_) => {
+                    let key = (global.module_source.clone(), global.name.clone());
+                    let mut init_fn = init_fns[&key].borrow_mut();
+                    let span = literal.span;
+                    init_fn.body = Some(initializer_body(literal, span));
+                    init_fn.set_frame(LocalFrame::default());
+                }
+            }
         } else if let Some(origin) = source.blamed_origin(&spec.name) {
             let type_name = type_table.borrow().type_name(global.ty);
             emit(

@@ -1,0 +1,30 @@
+// A container offering only `IndexValue` hands out a copy. A write through the
+// element lands on that copy and is discarded, since no `index_assign` puts it
+// back. It was accepted, and appeared to work only where value-copy elision
+// happened to return the stored object.
+
+struct Cell {
+    n: i32,
+}
+
+struct Holder {
+    cell: Cell,
+}
+
+impl IndexValue<i32> for Holder {
+    type Output = Cell;
+
+    fn index_value(&self, _idx: i32) -> Self::Output {
+        return self.cell;
+    }
+}
+
+export fn run() {
+    let mut h = Holder { cell: Cell { n: 1 } };
+    h[0].n = 7;
+}
+
+__DATA__
+{
+    "compile_error": "cannot assign through a by-value index"
+}

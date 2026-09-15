@@ -1,0 +1,24 @@
+// A C-style `for` binds its initializer's name for the condition, the update
+// and the body, so none of those is a reference to the binding outside the
+// loop. Reading them as one let a same-scope `let` that derives from nothing
+// through.
+
+use { println, Stdout } from "core:cli";
+
+fn shadowed() -> i32 {
+    let n = 1;
+    let n = tally: {
+        for let mut n = 0; n < 3; n += 1 { }
+        7
+    };
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${shadowed()}`);
+}
+
+__DATA__
+{
+    "compile_error": "cannot redeclare 'n' in the same scope"
+}

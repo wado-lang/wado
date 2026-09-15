@@ -21,8 +21,9 @@ use pubgrub::{
     resolve as pubgrub_solve,
 };
 
+use crate::dependency::registry_lock_id;
 use crate::lockfile::LockedPackage;
-use crate::manifest::{Dependency, DependencySource, GitPin, Manifest};
+use crate::manifest::{Dependency, DependencySource, GitPin, Manifest, registry_url};
 use crate::provider::{DependencyProvider, ProviderError};
 use crate::version::{Version, VersionSpecifier};
 
@@ -202,9 +203,10 @@ impl<'p, P: DependencyProvider> Crawl<'p, P> {
                         version,
                     } => {
                         let url = registry_url(&registries, registry.as_deref())
+                            .cloned()
                             .ok_or_else(|| ResolveError::NoRegistry { dep: key.clone() })?;
                         let spec = parse_req(key, version)?;
-                        let id = format!("registry+{url}/{package}");
+                        let id = registry_lock_id(&url, package);
                         self.sources.entry(id.clone()).or_insert(Fetch::Registry {
                             url,
                             package: package.clone(),
@@ -522,10 +524,6 @@ fn join_base(base: &str, path: &str) -> String {
     } else {
         format!("{}/{path}", base.trim_end_matches('/'))
     }
-}
-
-fn registry_url(registries: &IndexMap<String, String>, alias: Option<&str>) -> Option<String> {
-    registries.get(alias.unwrap_or("default")).cloned()
 }
 
 #[cfg(test)]

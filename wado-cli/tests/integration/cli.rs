@@ -472,14 +472,124 @@ fn test_check_world_test_accepts_test_only_module() {
 }
 
 #[test]
-fn test_check_world_default_requires_run() {
-    // Without `--world test`, `wado check` targets `wasi:cli/command` and the
-    // missing `run` entry point makes the check fail.
+fn test_check_world_default_checks_a_non_entry_module_as_a_library() {
+    // A module no `[world]` entry names is a library, so `check` requires no
+    // world entry point of it (issue #2059).
     wado()
         .args(["check", "wado-compiler/tests/fixtures/test_decl.wado"])
         .assert()
+        .success();
+}
+
+#[test]
+fn test_check_named_world_requires_its_entry_point() {
+    // Naming the world opts into its entry-point contract, which this fixture
+    // does not satisfy.
+    wado()
+        .args([
+            "check",
+            "--world",
+            "wasi:cli/command",
+            "wado-compiler/tests/fixtures/test_decl.wado",
+        ])
+        .assert()
         .failure()
         .stderr(predicate::str::contains("run"));
+}
+
+#[test]
+fn test_check_with_no_file_checks_every_declared_world() {
+    // `check` takes `build`'s targets: the library world and each `[world]`
+    // entry, each against its own contract. The CLI world's entry is missing
+    // its `run`, which is what the check has to catch.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\n\
+         name = \"checkall\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n\n\
+         [world.\"wasi:cli/command\"]\n\
+         entry = \"main.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "export fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("main.wado"), "fn helper() -> i32 { return 1; }\n").unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("run"));
+
+    // The library world alone is satisfied, so selecting it passes.
+    std::fs::write(dir.join("main.wado"), "export fn run() { let _ = 1; }\n").unwrap();
+    wado().current_dir(dir).arg("check").assert().success();
+}
+
+#[test]
+fn test_library_export_reaching_a_resource_is_refused() {
+    // A handle from another interface has no export index in the library's own
+    // instance type, and the CM emitter used to panic on the missing entry. A
+    // declaration the signature names carries one just as the signature does,
+    // so the guard follows fields, payloads and a newtype base.
+    let dir = tempfile::tempdir().unwrap();
+    let cases = [
+        "export fn take(d: Descriptor) -> i32 { return 1; }",
+        "pub struct Holder { d: Descriptor }\n\
+         export fn take(h: Holder) -> i32 { return 1; }",
+        "pub variant Payload { Open(Descriptor), Closed }\n\
+         export fn take(p: Payload) -> i32 { return 1; }",
+        "pub type Handle = Descriptor;\n\
+         export fn take(h: Handle) -> i32 { return 1; }",
+    ];
+    for (i, case) in cases.iter().enumerate() {
+        let src = dir.path().join(format!("lib{i}.wado"));
+        std::fs::write(
+            &src,
+            format!("use {{ Descriptor }} from \"wasi:filesystem\";\n{case}\n"),
+        )
+        .unwrap();
+        wado()
+            .args(["check", src.to_str().unwrap()])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("cannot carry a resource handle"));
+    }
+}
+
+#[test]
+fn test_library_export_reaching_a_resource_through_an_alias_is_refused() {
+    // The signature spells the alias, and only the reference site says which
+    // declaration that is. Matching the spelling against declared names finds
+    // nothing, and the emitter reaches the missing entry and panics.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("other.wado"),
+        "use { Descriptor } from \"wasi:filesystem\";\n\
+         pub struct Holder { d: Descriptor }\n",
+    )
+    .unwrap();
+    let src = dir.path().join("lib.wado");
+    std::fs::write(
+        &src,
+        "use { Holder as Held } from \"./other.wado\";\n\
+         export fn take(h: Held) -> i32 { let _ = h; return 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["check", src.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot carry a resource handle"));
 }
 
 #[test]

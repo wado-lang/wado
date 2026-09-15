@@ -11,7 +11,7 @@
 //!   lock-pinned via [`wado_lsp::host::discovery::registry_component_needs`],
 //!   keyed by the manifest specifier.
 //! - A single-file inline `use … from "ns:pkg@ver" with { registry }` clause
-//!   ([`fetch_inline_component_dependencies`]) — no lock, an exact pin, keyed by
+//!   ([`resolve_inline_component_dependencies`]) — no lock, an exact pin, keyed by
 //!   the verbatim specifier.
 //!
 //! Components land in the shared `~/wado/` cache (see [`crate::cache`]); a
@@ -26,27 +26,62 @@ use crate::git::{fetch_manifest, materialize_entry, resolve_ref};
 use crate::oci;
 use crate::registry::FilesystemProvider;
 
+/// How far a subcommand may go to acquire a dependency that the cache does not
+/// already hold.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Acquisition {
+    /// `compile` / `run` / `test` / `check` / `dump` / `wit`: fetch whatever is
+    /// missing, resolving versions live where nothing pins them.
+    Build,
+    /// `query`: pull what a pin already names (bounded, one-time, deterministic)
+    /// but never resolve a version live, and degrade a failure to an
+    /// `unresolved` diagnostic instead of failing the command. An editor request
+    /// must not block on a version listing it would repeat on every keystroke.
+    Analysis,
+}
+
+/// What one group of dependencies resolved to and what it did not, each entry
+/// keyed by the import name: a path, or a reason phrased for the `use` site.
+#[derive(Debug, Default)]
+pub struct Resolution {
+    pub resolved: Vec<(String, String)>,
+    pub unresolved: Vec<(String, String)>,
+}
+
 /// Resolve and fetch every registry `[dependencies]` entry into the component
 /// cache, returning `(specifier, absolute local .wasm path)` pairs keyed by the
 /// manifest key the loader looks up (`ns:pkg` or a `lib:nick` alias).
 ///
-/// Lock-first: when every registry dep is pinned in `wado.lock`, the version and
-/// cache path come from the lock and only a cold-cache entry is pulled — a warm,
-/// locked project fetches nothing over the network and matches the version the
-/// language server resolves. A lockless (or partially locked) project falls back
-/// to a full registry resolution, which cannot be offline or reproducible anyway.
+/// Pin-first: when every registry dep is pinned — by `wado.lock`, or by what the
+/// cache already holds — the version and cache path come from the pin and only a
+/// cold entry is pulled. Only [`Acquisition::Build`] falls back to a live
+/// registry resolution for a dep nothing pins.
 pub async fn fetch_component_dependencies(
     manifest: &Manifest,
     manifest_dir: &std::path::Path,
-) -> Result<Vec<(String, String)>, String> {
+    tier: Acquisition,
+) -> Result<Resolution, String> {
     let needs = wado_lsp::host::discovery::registry_component_needs(manifest, manifest_dir);
-    if !needs.iter().all(Result::is_ok) {
-        return fetch_via_resolve(manifest, manifest_dir).await;
+    if !needs.iter().all(Result::is_ok) && tier == Acquisition::Build {
+        return Ok(Resolution {
+            resolved: fetch_via_resolve(manifest, manifest_dir).await?,
+            unresolved: Vec::new(),
+        });
     }
-    let mut out = Vec::new();
-    for need in needs.into_iter().flatten() {
-        let abs = pull_component(&need.registry_url, &need.coordinate, &need.version).await?;
-        out.push((need.name, abs));
+    let mut out = Resolution::default();
+    for need in needs {
+        let need = match need {
+            Ok(need) => need,
+            Err((name, reason)) => {
+                out.unresolved.push((name, reason));
+                continue;
+            }
+        };
+        match pull_component(&need.registry_url, &need.coordinate, &need.version).await {
+            Ok(abs) => out.resolved.push((need.name, abs)),
+            Err(e) if tier == Acquisition::Analysis => out.unresolved.push((need.name, e)),
+            Err(e) => return Err(e),
+        }
     }
     Ok(out)
 }
@@ -89,72 +124,57 @@ fn manifest_key_for_coordinate<'a>(manifest: &'a Manifest, coordinate: &str) -> 
         })
 }
 
-/// A single-file inline component resolution, split into the imports resolved to
-/// a cache path and those that could not be (keyed by the verbatim specifier the
-/// loader looks up, so a `@ver` pin round-trips).
-pub struct InlineResolution {
-    pub resolved: Vec<(String, String)>,
-    pub unresolved: Vec<(String, String)>,
-}
-
 /// Resolve every inline `use … from "ns:pkg@ver" with { registry }` clause in
 /// `source` (single-file mode; the manifest, when present, supplies a default
-/// registry and enforces the inline-vs-`[dependencies]` exclusivity). Each
-/// clause carries an exact pin, so a present cache file resolves offline; a cold
-/// cache is pulled when `fetch_missing`, otherwise reported `unresolved` with a
-/// `wado fetch` hint (matching the manifest registry path).
+/// registry and enforces the inline-vs-`[dependencies]` exclusivity), keyed by
+/// the verbatim specifier the loader looks up, so a `@ver` pin round-trips.
+///
+/// Each clause carries an exact pin, so a present cache file resolves offline
+/// and a cold one is pulled on either tier; on [`Acquisition::Analysis`] a failed
+/// pull is reported `unresolved` with a `wado fetch` hint rather than failing.
 pub async fn resolve_inline_component_dependencies(
     source: &str,
     manifest: Option<&Manifest>,
-    fetch_missing: bool,
-) -> Result<InlineResolution, String> {
+    tier: Acquisition,
+) -> Result<Resolution, String> {
     let deps = collect_inline_deps(source, manifest)?;
-    let mut resolved = Vec::new();
-    let mut unresolved = Vec::new();
+    let mut out = Resolution::default();
     for dep in deps {
         let path = component_path(&dep.registry_url, &dep.coordinate, &dep.version)?;
         if path.is_file() {
-            resolved.push((dep.specifier, path.display().to_string()));
-        } else if fetch_missing {
-            let abs = pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await?;
-            resolved.push((dep.specifier, abs));
-        } else {
-            unresolved.push((
+            out.resolved
+                .push((dep.specifier, path.display().to_string()));
+            continue;
+        }
+        match pull_component(&dep.registry_url, &dep.coordinate, &dep.version).await {
+            Ok(abs) => out.resolved.push((dep.specifier, abs)),
+            Err(_) if tier == Acquisition::Analysis => out.unresolved.push((
                 dep.specifier,
                 format!("{:?} is not cached; run `wado fetch`", dep.coordinate),
-            ));
+            )),
+            Err(e) => return Err(e),
         }
     }
-    Ok(InlineResolution {
-        resolved,
-        unresolved,
-    })
-}
-
-/// Resolution of single-file inline git dependencies
-/// (`use { … } from "<name>" with { git: "<url>", ref: "<ref>" }`). Unlike an
-/// inline registry component, a git dependency is *source*: its materialized
-/// worktree entry lands in the compiler's `resolved` map and compiles into the
-/// consumer, keyed by the import name.
-#[derive(Debug, Default)]
-pub struct InlineGitResolution {
-    pub resolved: Vec<(String, String)>,
-    pub unresolved: Vec<(String, String)>,
+    Ok(out)
 }
 
 /// Resolve every inline `use … from "<name>" with { git }` clause in `source`.
+/// Unlike an inline registry component, a git dependency is *source*: its
+/// materialized worktree entry compiles into the consumer.
+///
 /// Each is pinned by an exact `ref` (single-file mode has no lock, so a
-/// `version` range is rejected). On the build tier (`fetch_missing`) the ref is
-/// resolved to a commit and the worktree materialized under the Wado root;
-/// otherwise the clause is reported `unresolved` with a build hint.
+/// `version` range is rejected). On [`Acquisition::Build`] the ref is resolved to
+/// a commit and the worktree materialized under the Wado root; a `ref` may name a
+/// moving branch, so that resolution is live and the analysis tier reports the
+/// clause `unresolved` with a build hint instead.
 pub async fn resolve_inline_git_dependencies(
     source: &str,
-    fetch_missing: bool,
-) -> Result<InlineGitResolution, String> {
+    tier: Acquisition,
+) -> Result<Resolution, String> {
     let Ok(parsed) = wado_compiler::parse(source).into_fail_fast() else {
-        return Ok(InlineGitResolution::default());
+        return Ok(Resolution::default());
     };
-    let mut out = InlineGitResolution::default();
+    let mut out = Resolution::default();
     for item in &parsed.ast.items {
         let wado_compiler::ast::Item::Use(use_decl) = item else {
             continue;
@@ -176,7 +196,7 @@ pub async fn resolve_inline_git_dependencies(
             ));
         }
         let directory = attrs.directory();
-        if !fetch_missing {
+        if tier == Acquisition::Analysis {
             out.unresolved.push((
                 name,
                 "inline git dependency is materialized by `wado build`/`run`".to_string(),
@@ -360,7 +380,7 @@ fn classify_specifier(spec: &str) -> Option<(&str, &str, Option<&str>)> {
 /// Pull `coordinate` @ `version` from `registry_url` into the shared `~/wado/`
 /// cache, returning the absolute path. A present cache file (immutable published
 /// version) is reused without a re-pull.
-async fn pull_component(
+pub async fn pull_component(
     registry_url: &str,
     coordinate: &str,
     version: &str,

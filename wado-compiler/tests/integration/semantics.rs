@@ -1,6 +1,6 @@
 //! Tests for the LSP-friendly `semantics` entry point.
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, block_on};
 use std::assert_matches;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::semantics::{Semantics, semantics};
@@ -32,10 +32,6 @@ type Maybe = Option<i32>;
     expect_aliased("Meters", "f64");
     expect_aliased("Pair", "[i32, i32]");
     expect_aliased("Maybe", "Option<i32>");
-}
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
 }
 
 #[test]

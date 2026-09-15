@@ -1,0 +1,47 @@
+// A binder comes into scope after the expression it binds from, and reaches
+// only where that construct carries it. Walking a `let`'s pattern before its
+// value, or framing an `if let` over the `else` it never reaches, made a name
+// shadow itself.
+
+use { println, Stdout } from "core:cli";
+
+fn pick(member: &Option<i32>) -> i32 {
+    let m = match *member {
+        Some(m) => m,
+        None => 0,
+    };
+    return m;
+}
+
+fn found(rs: &List<i32>, k: i32) -> i32 {
+    if let Some(r) = rs.into_iter().find(|r| *r == k) {
+        return *r;
+    }
+    return -1;
+}
+
+fn branch(a: &Option<i32>) -> i32 {
+    if let Some(v) = *a {
+        return v;
+    } else {
+        let v = 9;
+        return v;
+    }
+}
+
+export fn run() with Stdout {
+    assert pick(&Option::<i32>::Some(3)) == 3;
+    assert found(&([1, 2, 3] as List<i32>), 2) == 2;
+    assert branch(&Option::<i32>::None) == 9;
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_not_contains": [
+        "`m` shadows",
+        "`r` shadows",
+        "`v` shadows"
+    ]
+}

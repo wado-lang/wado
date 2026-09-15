@@ -3,7 +3,7 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
-use wado_lsp::host::discovery::governing_workspace;
+use wado_lsp::host::discovery::{absolutize, governing_workspace};
 use wado_manifest::{Manifest, ManifestError};
 
 use crate::args::CliExit;
@@ -309,6 +309,22 @@ pub fn resolve_lib_input(
 pub fn resolve_entry_point(project: &ProjectManifest, kind: EntryPointKind) -> Option<PathBuf> {
     let relative = project.manifest.world_entry(kind.world_fq()?)?;
     Some(project.root.join(relative))
+}
+
+/// The inverse of [`resolve_entry_point`]: the `[world]` key whose entry is
+/// `path`, or `None` when the file is no world's entry.
+///
+/// Paths are absolutized, so a manifest-relative entry and a cwd-relative
+/// argument meet in one frame.
+#[must_use]
+pub fn world_declaring(project: &ProjectManifest, path: &Path) -> Option<String> {
+    let target = absolutize(path);
+    project
+        .manifest
+        .world
+        .iter()
+        .find(|(_, entry)| absolutize(&project.root.join(&entry.entry)) == target)
+        .map(|(world, _)| world.clone())
 }
 
 /// Load a `wado.toml` directly from `dir` (does not walk parents).

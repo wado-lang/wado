@@ -4,12 +4,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::common::InMemoryHost;
+use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};
-
-fn block_on<F: std::future::Future>(future: F) -> F::Output {
-    tokio::runtime::Runtime::new().unwrap().block_on(future)
-}
 
 /// `map` takes `f: fn(Self::Item) -> U`, so elaborating this call instantiates
 /// both slots and interns the `fn` type the collector used to accept.
