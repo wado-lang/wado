@@ -586,6 +586,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ///
     /// A written argument resolves at the use site and a default under the
     /// declaration, which is the whole point of filling them apart.
+    /// Report an application writing more type arguments than `params`
+    /// declares, and say whether it did. A declaration with none at all is the
+    /// sharpest case: its application used to resolve to `unknown`, which
+    /// dropped the annotation and reported the consequence somewhere else.
+    ///
+    /// Only a surplus is decided here. An application short of the arity may be
+    /// filling the rest from declared defaults, which is what
+    /// [`Self::type_args_of_application`] settles.
+    fn reject_surplus_type_args(
+        &mut self,
+        name: &str,
+        params: &[ast::GenericParam],
+        args: &[Type],
+        span: Span,
+    ) -> bool {
+        // A pack swallows every argument past the scalars ahead of it, so an
+        // arity is only a ceiling when the declaration has none.
+        if params.iter().any(|p| p.is_pack) {
+            return false;
+        }
+        let expected = params.iter().filter(|p| !p.is_effect).count();
+        if args.len() <= expected {
+            return false;
+        }
+        let _ = self.emit(TypeError::SurplusTypeArguments {
+            name: name.to_string(),
+            expected,
+            found: args.len(),
+            span,
+        });
+        true
+    }
+
     pub(super) fn type_args_of_application(&mut self, def: DefId, args: &[Type]) -> Vec<TypeId> {
         let mut resolved: Vec<TypeId> = args.iter().map(|t| self.resolve_type(t)).collect();
         let arity = self
@@ -888,6 +921,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let Some(def) = self.type_decl_at(site, name) else {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
+                // A trait head reaches here too (`impl IndexValue<i32> for T`),
+                // and a trait's parameters live on its own declaration, so only
+                // a type declaration's list is a ceiling to exceed.
+                let declared: Option<Vec<ast::GenericParam>> = self
+                    .lookup_struct_fields_of_decl(def)
+                    .map(|info| info.type_params.clone())
+                    .or_else(|| {
+                        self.lookup_variant_case_of_decl(def)
+                            .map(|info| info.type_params.clone())
+                    })
+                    .or_else(|| {
+                        self.lookup_generic_newtype_of_decl(def)
+                            .map(|info| info.type_params.clone())
+                    });
+                if let Some(params) = declared
+                    && self.reject_surplus_type_args(name, &params, args, span)
+                {
+                    return TypeTable::ERROR;
+                }
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
                 if struct_info
                     .as_ref()

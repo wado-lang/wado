@@ -1,0 +1,15 @@
+// The struct parallel to `error_type_args_on_non_generic_variant`: a head that
+// declares no type parameters is reported where it is written, not where the
+// binding is later read.
+
+struct Point {
+    x: i32,
+}
+
+test "a struct that declares no type parameters takes no type arguments" {
+    let p: Point<i32> = Point { x: 1 };
+    assert p.x == 1;
+}
+
+__DATA__
+{"compile_error": "`Point` takes no type arguments"}
