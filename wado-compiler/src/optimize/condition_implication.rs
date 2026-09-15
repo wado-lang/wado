@@ -1618,47 +1618,54 @@ fn sole_unconditional_write(
     stop: Option<StmtId>,
 ) -> Option<Operand> {
     let mut written = None;
-    let mut writes = 0;
     for &s in &engine.body.blocks[block].stmts {
         if Some(s) == stop {
             break;
         }
-        engine.body.for_each_node_under(NodeRef::Stmt(s), |n| {
-            if local_written_value(engine, n, var).is_some() {
-                writes += 1;
-            }
-        });
-        if let Some(value) = stmt_written_value(engine, s, var) {
-            written = Some(value);
+        match write_count(engine, s, var) {
+            // `node_modifies` recognises a channel `write_count` has no node
+            // for — an auto-`&mut` receiver — and a change it cannot place is
+            // still a change.
+            0 if node_modifies(engine, NodeRef::Stmt(s), var, BoundKey::Const(0)) => return None,
+            0 => {}
+            1 if written.is_none() => written = Some(stmt_written_value(engine, s, var)?),
+            _ => return None,
         }
     }
-    (writes == 1).then_some(written?)
+    written
+}
+
+/// How many times `s` writes `var`, counting a `let`, an assignment, a `&mut`
+/// escape, and a destructuring bind alike. `arena_query::local_written_by` is
+/// what the module means by a write; a binding statement is the form it has no
+/// expression node for.
+fn write_count(engine: &Engine, s: StmtId, var: u32) -> usize {
+    let mut writes = 0;
+    engine.body.for_each_live_node_under(NodeRef::Stmt(s), |n| {
+        let binds_var = match n {
+            NodeRef::Stmt(i) => match &engine.body.stmts[i].kind {
+                StmtKind::Let { local_index, .. } => *local_index == var,
+                // The pattern could name `var`; reading it is `subtree_redefines`'
+                // job, and counting it as a write is the same refusal.
+                StmtKind::LetDestructure { .. } => true,
+                _ => false,
+            },
+            _ => local_written_by(engine.body, n) == Some(var),
+        };
+        writes += usize::from(binds_var);
+    });
+    writes
 }
 
 /// The operand a statement writes to `var` at its own level: a `let`, or a
-/// statement that is nothing but the assignment.
+/// statement that is nothing but the assignment. Anything deeper belongs to
+/// something nested, which is never unconditional.
 fn stmt_written_value(engine: &Engine, s: StmtId, var: u32) -> Option<Operand> {
     match &engine.body.stmts[s].kind {
         StmtKind::Let {
             local_index, value, ..
         } if *local_index == var => Some(*value),
-        StmtKind::Expr(op) => local_written_value(engine, NodeRef::Expr(op.as_expr()?), var),
-        _ => None,
-    }
-}
-
-/// The operand written to local `var` by `node` alone — a `let` statement or an
-/// assignment expression. One write is one such node, which is what lets
-/// [`sole_unconditional_write`] count them.
-fn local_written_value(engine: &Engine, node: NodeRef, var: u32) -> Option<Operand> {
-    match node {
-        NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-            StmtKind::Let {
-                local_index, value, ..
-            } if *local_index == var => Some(*value),
-            _ => None,
-        },
-        NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
+        StmtKind::Expr(op) => match &engine.body.exprs[op.as_expr()?].kind {
             ExprKind::Assign { target, value } => matches!(
                 &engine.body.exprs[*target].kind,
                 ExprKind::Local { index, .. } if *index == var
