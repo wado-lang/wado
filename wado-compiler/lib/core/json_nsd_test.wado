@@ -392,3 +392,10 @@ test "nesting within max_depth still parses" {
     let r: Result<Tree, DeserializeError> = from_string(nested_tree(3));
     assert r matches { Ok(_) };
 }
+
+test "a StrSlice parses without copying out" {
+    let owner = `  [0,7]  `;
+    let view = owner.as_str_slice().trim_ascii();
+    let r: Result<Tree, DeserializeError> = from_string(view);
+    assert r matches { Ok(Tree::Leaf(7)) };
+}

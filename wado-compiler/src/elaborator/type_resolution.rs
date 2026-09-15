@@ -581,11 +581,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_named_type_at(None, name, span, false)
     }
 
-    /// The type arguments an application of `def` supplies, each slot the site
-    /// left out taken from the declaration's default.
-    ///
-    /// A written argument resolves at the use site and a default under the
-    /// declaration, which is the whole point of filling them apart.
     /// Report an application writing more type arguments than `params`
     /// declares, and say whether it did. A declaration with none at all is the
     /// sharpest case: its application used to resolve to `unknown`, which
@@ -619,6 +614,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
+    /// The type arguments an application of `def` supplies, each slot the site
+    /// left out taken from the declaration's default.
+    ///
+    /// A written argument resolves at the use site and a default under the
+    /// declaration, which is the whole point of filling them apart.
     pub(super) fn type_args_of_application(&mut self, def: DefId, args: &[Type]) -> Vec<TypeId> {
         let mut resolved: Vec<TypeId> = args.iter().map(|t| self.resolve_type(t)).collect();
         let arity = self

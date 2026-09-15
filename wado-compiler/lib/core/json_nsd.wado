@@ -596,7 +596,7 @@ pub fn from_string<T: Deserialize, S: AsStrSlice>(
     input: S,
     max_depth: i32 = DEFAULT_MAX_DEPTH,
 ) -> Result<T, DeserializeError> {
-    return from_bytes::<T, S>(input, max_depth);
+    return from_bytes::<T, ByteSlice>(input.as_bytes(), max_depth);
 }
 
 /// Deserializes a value from UTF-8 JSON NSD bytes — the primary entry point.

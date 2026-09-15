@@ -907,3 +907,10 @@ test "a repeated key in a nested map is rejected" {
     let r: Result<TreeMap<String, Value>, DeserializeError> = from_string(`{"a":{"b":1,"b":2}}`);
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
 }
+
+test "a StrSlice parses without copying out" {
+    let owner = `  {"a":1,"b":2}  `;
+    let view = owner.as_str_slice().trim_ascii();
+    let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(view);
+    assert r matches { Ok(m) && m.len() == 2 };
+}

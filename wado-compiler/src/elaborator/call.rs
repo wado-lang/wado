@@ -3289,12 +3289,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
             .or_else(|| {
                 let owned;
-                let key = match receiver_key {
-                    Some(key) => key,
-                    None => {
-                        owned = self.impl_target(struct_name);
-                        &owned
-                    }
+                let key = if let Some(key) = receiver_key {
+                    key
+                } else {
+                    owned = self.impl_target(struct_name);
+                    &owned
                 };
                 self.inherited_default_method_sig(key, method_name)
             })

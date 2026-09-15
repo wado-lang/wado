@@ -102,9 +102,6 @@ impl Ctx {
                 write_str_at: write_str_id?,
             })
         })();
-        if push_str_ids.is_empty() {
-            return None;
-        }
         Some(Self {
             push_str_ids,
             push_char_id: push_char_id?,

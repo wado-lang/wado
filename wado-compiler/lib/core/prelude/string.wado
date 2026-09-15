@@ -1288,7 +1288,6 @@ impl StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
-    /// The view's UTF-8 bytes.
     /// The backing array and this view's offset into it (stdlib use only):
     /// what a byte-at-a-time reader needs to index without a bounds check.
     internal fn internal_raw_bytes(&self) -> &Array<u8> with stores[self] {
@@ -1299,6 +1298,7 @@ impl StrSlice {
         return self.start;
     }
 
+    /// The view's UTF-8 bytes.
     pub fn as_bytes(&self) -> ByteSlice with stores[self] {
         return Slice::internal_new(self.repr, self.start, self.end) as ByteSlice;
     }
