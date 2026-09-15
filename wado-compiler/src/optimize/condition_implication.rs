@@ -12,9 +12,11 @@ use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
 use crate::nir_engine::Engine;
 use crate::nir_package::NirPackage;
-use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind};
+use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
-use crate::optimize::arena_query::{is_pure_nontrapping_expr_typed, is_pure_operand, storage_root};
+use crate::optimize::arena_query::{
+    binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local, storage_root,
+};
 use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
 
@@ -234,13 +236,7 @@ fn resolve_through_opaque(engine: &Engine, binds: &Binds, op: Operand) -> Operan
 /// The `Local idx` an `Opaque` value sources from, if any (pool read — not
 /// `value_of`).
 pub(super) fn opaque_local(engine: &Engine, v: ValueId) -> Option<u32> {
-    if let ValueKind::Opaque(o) = engine.body.values.kind(v)
-        && let Some(OpaqueSource::Local(i)) = engine.body.values.opaque_source(*o)
-    {
-        Some(i)
-    } else {
-        None
-    }
+    operand_local(engine.body, Operand::Value(v))
 }
 
 /// The root a [`BoundKey::Field`] keys on. Path-sensitive on purpose: since the
@@ -464,36 +460,16 @@ pub(super) fn parse_cmp(
     binds: &Binds,
     cond: Operand,
 ) -> Option<(u32, i64, BoundKey, NirBinaryOp)> {
-    let is_cmp = |op: NirBinaryOp| {
-        matches!(
-            op,
-            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
-        )
-    };
-    match resolve(engine, binds, cond) {
-        Operand::Expr(ce) => {
-            if let ExprKind::Binary { left, op, right } = &engine.body.exprs[ce].kind
-                && is_cmp(*op)
-            {
-                let op = *op;
-                let (var, off) = parse_var_offset(engine, binds, *left)?;
-                let bound = parse_bound(engine, binds, *right)?;
-                return Some((var, off, bound, op));
-            }
-            None
-        }
-        Operand::Value(v) => {
-            if let ValueKind::Binary { op, lhs, rhs, .. } = engine.body.values.kind(v)
-                && is_cmp(*op)
-            {
-                let (op, lhs, rhs) = (*op, *lhs, *rhs);
-                let (var, off) = parse_var_offset(engine, binds, Operand::Value(lhs))?;
-                let bound = parse_bound(engine, binds, Operand::Value(rhs))?;
-                return Some((var, off, bound, op));
-            }
-            None
-        }
+    let (left, op, right) = binary_parts(engine.body, resolve(engine, binds, cond))?;
+    if !matches!(
+        op,
+        NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+    ) {
+        return None;
     }
+    let (var, off) = parse_var_offset(engine, binds, left)?;
+    let bound = parse_bound(engine, binds, right)?;
+    Some((var, off, bound, op))
 }
 
 /// The loop-guard head both structural BCE and loop versioning recognise:
@@ -564,26 +540,12 @@ pub(super) fn ge_check_operands(
     binds: &Binds,
     cond: Operand,
 ) -> Option<(Operand, Operand)> {
-    let direct = match resolve(engine, binds, cond) {
-        Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
-            ExprKind::Binary {
-                left,
-                op: NirBinaryOp::GtEq,
-                right,
-            } => Some((*left, *right)),
-            _ => None,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Binary {
-                op: NirBinaryOp::GtEq,
-                lhs,
-                rhs,
-                ..
-            } => Some((Operand::Value(*lhs), Operand::Value(*rhs))),
-            _ => None,
-        },
-    };
-    direct.or_else(|| lt_operands(engine, binds, negated_operand(engine, binds, cond)?))
+    if let Some((left, NirBinaryOp::GtEq, right)) =
+        binary_parts(engine.body, resolve(engine, binds, cond))
+    {
+        return Some((left, right));
+    }
+    lt_operands(engine, binds, negated_operand(engine, binds, cond)?)
 }
 
 /// The operand a condition negates: `!x`, or the `x == 0` a lowered `&&` leaves
@@ -591,17 +553,16 @@ pub(super) fn ge_check_operands(
 /// parses here, and dead-ends in the caller that tries to read `i` as a
 /// comparison — the recursion, not a type, is what rejects it.
 pub(super) fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> Option<Operand> {
-    match resolve(engine, binds, cond) {
+    let cond = resolve(engine, binds, cond);
+    if let Some((left, NirBinaryOp::Eq, right)) = binary_parts(engine.body, cond) {
+        return eq_false_operand(engine, binds, left, right);
+    }
+    match cond {
         Operand::Expr(ce) => match &engine.body.exprs[ce].kind {
             ExprKind::Unary {
                 op: NirUnaryOp::Not,
                 expr: inner,
             } => Some(*inner),
-            ExprKind::Binary {
-                left,
-                op: NirBinaryOp::Eq,
-                right,
-            } => eq_false_operand(engine, binds, *left, *right),
             _ => None,
         },
         Operand::Value(v) => match engine.body.values.kind(v) {
@@ -610,12 +571,6 @@ pub(super) fn negated_operand(engine: &Engine, binds: &Binds, cond: Operand) -> 
                 operand,
                 ..
             } => Some(Operand::Value(*operand)),
-            ValueKind::Binary {
-                op: NirBinaryOp::Eq,
-                lhs,
-                rhs,
-                ..
-            } => eq_false_operand(engine, binds, Operand::Value(*lhs), Operand::Value(*rhs)),
             _ => None,
         },
     }
@@ -629,17 +584,11 @@ fn eq_false_operand(engine: &Engine, binds: &Binds, a: Operand, b: Operand) -> O
     is_const_false(engine, binds, a).then_some(b)
 }
 
-/// Is this operand a constant `false`? A bool literal pools as
-/// `ValueKind::Bool`, which no integer parse reads, so both spellings of the
-/// zero a lowered bool can wear are asked for here and nowhere else.
+/// Is this operand a constant `false`? A source `false` pools as a bool and the
+/// zero a lowering synthesises as an int, so both spellings are asked for.
 fn is_const_false(engine: &Engine, binds: &Binds, op: Operand) -> bool {
-    if parse_const_i64(engine, binds, op) == Some(0) {
-        return true;
-    }
-    let Operand::Value(v) = resolve(engine, binds, op) else {
-        return false;
-    };
-    engine.body.values.kind(v).as_bool() == Some(false)
+    parse_const_i64(engine, binds, op) == Some(0)
+        || engine.body.operand_const_bool(resolve(engine, binds, op)) == Some(false)
 }
 
 /// One conjunct of the predicate a panic guard must be shown to hold.
@@ -688,53 +637,54 @@ fn collect_and_operands(engine: &Engine, binds: &Binds, op: Operand, out: &mut V
 /// bool `&`, the `if a { b } else { false }` a captured operand turns `&&`
 /// into, and the pooled `Select(a, b, false)` of the promoted form.
 fn and_operands(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, Operand)> {
-    match resolve_through_opaque(engine, binds, op) {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Binary {
-                left,
-                op: NirBinaryOp::And,
-                right,
-            } => Some((*left, *right)),
-            // `&` on two bools is `&&` without the short-circuit, so it splits
-            // the same way. On integers it is not a conjunction at all.
-            ExprKind::Binary {
-                left,
-                op: NirBinaryOp::BitAnd,
-                right,
-            } if engine.body.exprs[e].type_id == TypeTable::BOOL => Some((*left, *right)),
-            ExprKind::If {
+    let op = resolve_through_opaque(engine, binds, op);
+    if let Some((left, kind, right)) = binary_parts(engine.body, op) {
+        // `&` on two bools is `&&` without the short-circuit, so it splits the
+        // same way. On integers it is not a conjunction at all.
+        let conjunction = kind == NirBinaryOp::And
+            || (kind == NirBinaryOp::BitAnd && operand_is_bool(engine, op));
+        return conjunction.then_some((left, right));
+    }
+    let (cond, then, else_) = choice_arms(engine, op)?;
+    is_const_false(engine, binds, else_).then_some((cond, then))
+}
+
+/// The `(condition, then, else)` of a two-armed choice, skeleton or promoted: an
+/// `if` whose branches each yield one operand, or the `Select` it promotes to.
+fn choice_arms(engine: &Engine, op: Operand) -> Option<(Operand, Operand, Operand)> {
+    match op {
+        Operand::Expr(e) => {
+            let ExprKind::If {
                 condition,
                 then_branch,
                 else_branch: Some(else_branch),
-            } => {
-                let else_tail = block_id_tail(engine.body, *else_branch)?;
-                let then_tail = block_id_tail(engine.body, *then_branch)?;
-                is_const_false(engine, binds, else_tail).then_some((*condition, then_tail))
-            }
-            _ => None,
-        },
+            } = &engine.body.exprs[e].kind
+            else {
+                return None;
+            };
+            Some((
+                *condition,
+                block_id_tail(engine.body, *then_branch)?,
+                block_id_tail(engine.body, *else_branch)?,
+            ))
+        }
         Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Select { cond, then, else_ } => {
-                let (cond, then, else_) = (*cond, *then, *else_);
-                is_const_false(engine, binds, Operand::Value(else_))
-                    .then_some((Operand::Value(cond), Operand::Value(then)))
-            }
-            ValueKind::Binary {
-                op: NirBinaryOp::And,
-                lhs,
-                rhs,
-                ..
-            } => Some((Operand::Value(*lhs), Operand::Value(*rhs))),
-            ValueKind::Binary {
-                op: NirBinaryOp::BitAnd,
-                lhs,
-                rhs,
-                ..
-            } if engine.body.values.type_of(v) == Some(TypeTable::BOOL) => {
-                Some((Operand::Value(*lhs), Operand::Value(*rhs)))
-            }
+            ValueKind::Select { cond, then, else_ } => Some((
+                Operand::Value(*cond),
+                Operand::Value(*then),
+                Operand::Value(*else_),
+            )),
             _ => None,
         },
+    }
+}
+
+/// Is this operand's type `bool`? A promoted value records its source type, and
+/// one that recorded none answers no rather than panicking a read-only pass.
+fn operand_is_bool(engine: &Engine, op: Operand) -> bool {
+    match op {
+        Operand::Expr(e) => engine.body.exprs[e].type_id == TypeTable::BOOL,
+        Operand::Value(v) => engine.body.values.type_of(v) == Some(TypeTable::BOOL),
     }
 }
 
@@ -761,20 +711,8 @@ fn cmp_parts(
     binds: &Binds,
     op: Operand,
 ) -> Option<(Operand, NirBinaryOp, Operand)> {
-    let relational =
-        |op: NirBinaryOp| matches!(op, NirBinaryOp::Lt | NirBinaryOp::LtEq).then_some(op);
-    match resolve_through_opaque(engine, binds, op) {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Binary { left, op, right } => Some((*left, relational(*op)?, *right)),
-            _ => None,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Binary { op, lhs, rhs, .. } => {
-                Some((Operand::Value(*lhs), relational(*op)?, Operand::Value(*rhs)))
-            }
-            _ => None,
-        },
-    }
+    let (left, kind, right) = binary_parts(engine.body, resolve_through_opaque(engine, binds, op))?;
+    matches!(kind, NirBinaryOp::Lt | NirBinaryOp::LtEq).then_some((left, kind, right))
 }
 
 /// The `(left, right)` of a strict `left < right`, skeleton or promoted.
@@ -806,33 +744,11 @@ fn is_bitmask_bounded_structural(engine: &Engine, binds: &Binds, cond: Operand) 
 /// The constant `MASK` of a `value & MASK` (through copy temps / value pool), if
 /// either operand is a constant.
 fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
-    match resolve(engine, binds, op) {
-        Operand::Expr(e) => {
-            let ExprKind::Binary {
-                left,
-                op: NirBinaryOp::BitAnd,
-                right,
-            } = &engine.body.exprs[e].kind
-            else {
-                return None;
-            };
-            let (l, r) = (*left, *right);
-            parse_const_i64(engine, binds, r).or_else(|| parse_const_i64(engine, binds, l))
-        }
-        Operand::Value(v) => {
-            let ValueKind::Binary {
-                op: NirBinaryOp::BitAnd,
-                lhs,
-                rhs,
-                ..
-            } = engine.body.values.kind(v)
-            else {
-                return None;
-            };
-            let (l, r) = (*lhs, *rhs);
-            pool_int_const(engine, r).or_else(|| pool_int_const(engine, l))
-        }
-    }
+    let (left, NirBinaryOp::BitAnd, right) = binary_parts(engine.body, resolve(engine, binds, op))?
+    else {
+        return None;
+    };
+    parse_const_i64(engine, binds, right).or_else(|| parse_const_i64(engine, binds, left))
 }
 
 /// A pooled value's constant `i64`, if it is an `Int` (pool read, not
@@ -1570,26 +1486,12 @@ fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<ProvenLt>) {
 
 /// The `(minuend, k)` of a `<expr> - k` (skeleton or promoted), if any.
 fn sub_const(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Operand, i64)> {
-    let (a, b) = match resolve(engine, binds, op) {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Binary {
-                left,
-                op: NirBinaryOp::Sub,
-                right,
-            } => (*left, *right),
-            _ => return None,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Binary {
-                op: NirBinaryOp::Sub,
-                lhs,
-                rhs,
-                ..
-            } => (Operand::Value(*lhs), Operand::Value(*rhs)),
-            _ => return None,
-        },
+    let (minuend, NirBinaryOp::Sub, subtrahend) =
+        binary_parts(engine.body, resolve(engine, binds, op))?
+    else {
+        return None;
     };
-    parse_const_i64(engine, binds, b).map(|k| (a, k))
+    parse_const_i64(engine, binds, subtrahend).map(|k| (minuend, k))
 }
 
 /// The fact a `let idx = <length field> - k` (k >= 1) proves: `idx + (k-1) <

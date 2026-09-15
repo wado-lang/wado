@@ -309,6 +309,35 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
+/// The local an operand reads: a bare skeleton `Local`, or the promoted value
+/// that extracts back to one.
+pub(super) fn operand_local(body: &Body, op: Operand) -> Option<u32> {
+    match op {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        },
+        Operand::Value(_) => bare_promoted_local(body, op),
+    }
+}
+
+/// The `(left, op, right)` of a binary node, skeleton or promoted. The two
+/// worlds spell the node differently and every reader of one wants both.
+pub(super) fn binary_parts(body: &Body, op: Operand) -> Option<(Operand, NirBinaryOp, Operand)> {
+    match op {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Binary { left, op, right } => Some((*left, *op, *right)),
+            _ => None,
+        },
+        Operand::Value(v) => match body.values.kind(v) {
+            ValueKind::Binary { lhs, op, rhs, .. } => {
+                Some((Operand::Value(*lhs), *op, Operand::Value(*rhs)))
+            }
+            _ => None,
+        },
+    }
+}
+
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
 /// the coverage of the tree `expr_mentions_local` (every nested statement,
 /// block, and `ConstantValue` pattern expression is walked).

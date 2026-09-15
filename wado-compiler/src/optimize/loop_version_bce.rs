@@ -17,9 +17,9 @@ use crate::token::Span;
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
-    eliminate_condition, induction_entry, negated_operand, node_modifies, opaque_local,
-    panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block,
-    resolve_panic_ids, stmt_modifies,
+    eliminate_condition, induction_entry, negated_operand, node_modifies, panic_guard_check,
+    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
+    stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -28,7 +28,8 @@ use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
 use crate::optimize::arena_query::{
-    expr_node_may_trap_typed, is_pure_operand, local_written_by, mentions_local_except,
+    binary_parts, expr_node_may_trap_typed, is_pure_operand, local_written_by,
+    mentions_local_except, operand_local,
 };
 use crate::optimize::mod_ref::compute_fn_effects;
 
@@ -297,18 +298,7 @@ fn parse_versionable_check(
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
 fn parse_raw_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
-    read_local(engine, peel_capture_block(engine, binds, op))
-}
-
-/// The local a direct read names, in either operand form.
-fn read_local(engine: &Engine, op: Operand) -> Option<u32> {
-    match op {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
-        },
-        Operand::Value(v) => opaque_local(engine, v),
-    }
+    operand_local(engine.body, peel_capture_block(engine, binds, op))
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -487,7 +477,7 @@ fn constify_check_temp(
     fast_body: BlockId,
 ) {
     let negated = negated_operand(engine, binds, cond);
-    let Some(temp) = read_local(engine, negated.unwrap_or(cond)) else {
+    let Some(temp) = operand_local(engine.body, negated.unwrap_or(cond)) else {
         return;
     };
     let konst = negated.is_some();
@@ -523,28 +513,14 @@ fn constify_check_temp(
 /// confirms the `let` being constified is that comparison and not an unrelated
 /// binding reusing the temp's local slot.
 fn is_check_comparison(engine: &Engine, value: Operand, var: u32) -> bool {
-    let is_relational = |op: NirBinaryOp| {
-        matches!(
-            op,
-            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
-        )
+    let Some((left, op, right)) = binary_parts(engine.body, value) else {
+        return false;
     };
-    let reads_var = |op| read_local(engine, op) == Some(var);
-    match value {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Binary { left, op, right } => {
-                is_relational(*op) && (reads_var(*left) || reads_var(*right))
-            }
-            _ => false,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Binary { op, lhs, rhs, .. } => {
-                is_relational(*op)
-                    && (reads_var(Operand::Value(*lhs)) || reads_var(Operand::Value(*rhs)))
-            }
-            _ => false,
-        },
-    }
+    let reads_var = |op| operand_local(engine.body, op) == Some(var);
+    matches!(
+        op,
+        NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+    ) && (reads_var(left) || reads_var(right))
 }
 
 /// Whether the subtree under `block` re-binds any of `locals` via `let`, or
