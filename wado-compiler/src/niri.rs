@@ -321,35 +321,52 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.return_type != TypeTable::UNIT && func.stores.is_empty() && is_ctfe_runnable(func)
 }
 
-/// Derive the [`MaterializingGlobals`] set: pair a global on every block that
-/// materializes it, and drop it again on any mention outside one. One derivation
-/// for the fold and the remark alike, which must agree on what a store means.
+/// Derive the [`MaterializingGlobals`] set: claim a global on the block that
+/// stores into it, and drop it again on any mention the block does not enclose.
+/// What is left is stored in one place and read only under it, so a frame
+/// running that block binds the value and the global leaves with the block. One
+/// derivation for the fold and the remark alike, which must agree on what a
+/// store means.
 #[must_use]
 pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
-    let mut paired = MaterializingGlobals::default();
+    enum Step {
+        Enter(NodeRef),
+        /// Leave the blocks claimed since the enclosing set was this deep.
+        Leave(usize),
+    }
+
+    let mut claimed = MaterializingGlobals::default();
     let mut loose: IndexSet<GlobalKey> = IndexSet::default();
     let mut visit = |body: &Body| {
-        let mut stack = vec![(NodeRef::Block(body.root), None::<GlobalKey>)];
-        while let Some((node, enclosing)) = stack.pop() {
-            let enclosing = match node {
-                NodeRef::Block(b) => match region::materialization_pair(body, b) {
-                    Some(key) => {
-                        paired.insert(key.clone());
-                        Some(key)
-                    }
-                    None => enclosing,
-                },
-                _ => enclosing,
+        let mut enclosing: Vec<GlobalKey> = Vec::new();
+        let mut stack = vec![Step::Enter(NodeRef::Block(body.root))];
+        while let Some(step) = stack.pop() {
+            let node = match step {
+                Step::Leave(depth) => {
+                    enclosing.truncate(depth);
+                    continue;
+                }
+                Step::Enter(node) => node,
             };
-            // A mention of some *other* global inside a pair block is a plain
-            // read, so the pair says nothing about it.
+            if let NodeRef::Block(b) = node {
+                let stored = region::materialized_globals(body, b);
+                if !stored.is_empty() {
+                    stack.push(Step::Leave(enclosing.len()));
+                    for key in stored {
+                        claimed.insert(key.clone());
+                        enclosing.push(key);
+                    }
+                }
+            }
+            // A mention of some *other* global inside a claiming block is a
+            // plain read, so the claim says nothing about it.
             if let NodeRef::Expr(e) = node
                 && let Some(key) = region::global_mention(body, e)
-                && enclosing.as_ref() != Some(&key)
+                && !enclosing.contains(&key)
             {
                 loose.insert(key);
             }
-            body.for_each_child(node, |c| stack.push((c, enclosing.clone())));
+            body.for_each_child(node, |c| stack.push(Step::Enter(c)));
         }
     };
     for func_rc in &project.functions {
@@ -362,8 +379,8 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
             visit(declared.body());
         }
     }
-    paired.retain(|key| !loose.contains(key));
-    paired
+    claimed.retain(|key| !loose.contains(key));
+    claimed
 }
 
 /// A region-shaped block and what a frame would need to run it. Reaching no
