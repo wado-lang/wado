@@ -256,7 +256,6 @@ impl Resolutions {
                 shadowings: &mut shadowings,
                 pending_binder: None,
                 irrefutable_pattern: false,
-                body_frame_open: false,
                 lint_shadowing: !module.has_generated()
                     && !ast::inner_attrs_allow(module.inner_attributes(), ast::lint::SHADOWED_NAME),
             };
@@ -436,11 +435,6 @@ struct Resolver<'a> {
     /// The pattern being walked sits where a refutable one cannot: a `let`, a
     /// `for let … of`, a tuple comprehension. Every bare identifier in it binds.
     irrefutable_pattern: bool,
-    /// A frame is already open for the statements the next block holds — the
-    /// function body, whose parameters share it. `bind.rs` opens one scope for
-    /// both, and a second one here would put the body's top level out of reach
-    /// of the derived-`let` exemption.
-    body_frame_open: bool,
 }
 
 impl Resolver<'_> {
@@ -603,6 +597,14 @@ impl Resolver<'_> {
         self.bindings.pop();
     }
 
+    /// Walk a binder's pattern with what the binder lends to the sites inside
+    /// it: its attribute, and the names it derives from themselves.
+    fn in_binder(&mut self, pending: PendingBinder, walk: impl FnOnce(&mut Self)) {
+        self.pending_binder = Some(pending);
+        walk(self);
+        self.pending_binder = None;
+    }
+
     /// Walk a pattern that cannot fail to match, where every bare identifier
     /// binds rather than naming a case or a `global`.
     fn in_irrefutable_pattern(&mut self, walk: impl FnOnce(&mut Self)) {
@@ -610,20 +612,11 @@ impl Resolver<'_> {
         walk(self);
         self.irrefutable_pattern = saved;
     }
-
-    /// The names this `let` rebuilds from themselves (`let x = x + 1`), at any
-    /// scope: it is the derivation that exempts them, not where the binding it
-    /// replaces sits.
-    fn derived_names(&self, stmt: &ast::LetStmt) -> Vec<String> {
-        stmt.value
-            .as_ref()
-            .map(|value| derived_from(&stmt.pattern, value))
-            .unwrap_or_default()
-    }
 }
 
-/// The names `pattern` binds that `source` already mentions — the derivation
-/// `let x = x + 1` names, read off any binder and the expression it binds from.
+/// The names `pattern` binds that `source` already mentions. Such a binder
+/// rebuilds the binding it takes the name from rather than hiding it, at
+/// whatever scope that binding sits, so the lint passes over it.
 fn derived_from(pattern: &ast::Pattern, source: &ast::Expr) -> Vec<String> {
     let mut out = Vec::new();
     ast::for_each_pattern_name(pattern, &mut |name, _| {
@@ -642,12 +635,8 @@ struct PendingBinder {
     derived: Vec<String>,
 }
 
-/// Whether this statement scopes the names it binds to itself.
-///
-/// Together with [`expr_scopes_bindings`] this mirrors every `enter_scope` in
-/// `bind.rs`. A construct that binds there and frames nowhere here leaks its
-/// names into the enclosing block, where the lint then reports every later
-/// binder of the same name.
+/// Whether this statement scopes the names it binds to itself. With
+/// [`expr_scopes_bindings`] it mirrors every `enter_scope` in `bind.rs`.
 fn stmt_scopes_bindings(stmt: &ast::Stmt) -> bool {
     matches!(
         stmt,
@@ -704,9 +693,6 @@ impl AstVisitor for Resolver<'_> {
         self.in_scope(params, self_binder, |s| ast::walk_item(s, item));
     }
 
-    /// Parameters and the body's top level share one frame, as they share one
-    /// scope in `bind.rs` — which is what makes `fn f(x: i32) { let x = x + 1; }`
-    /// the sanctioned same-scope derivation rather than an inner shadow.
     fn visit_function(&mut self, func: &ast::Function) {
         self.in_scope(&func.type_params, None, |s| {
             s.in_frame(|s| {
@@ -716,9 +702,7 @@ impl AstVisitor for Resolver<'_> {
                         s.bind_name(&param.name, param.name_span, allowed);
                     }
                 }
-                s.body_frame_open = true;
                 ast::walk_function(s, func);
-                s.body_frame_open = false;
             });
         });
     }
@@ -740,12 +724,7 @@ impl AstVisitor for Resolver<'_> {
             }
         }
         self.locals.push(scope);
-        if std::mem::take(&mut self.body_frame_open) {
-            ast::walk_block(self, block);
-            self.body_frame_open = true;
-        } else {
-            self.in_frame(|s| ast::walk_block(s, block));
-        }
+        self.in_frame(|s| ast::walk_block(s, block));
         self.locals.pop();
     }
 
@@ -753,14 +732,17 @@ impl AstVisitor for Resolver<'_> {
     /// `if let`'s pattern, a `while let`'s — scopes those bindings to itself.
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         match stmt {
-            // Only the `let`'s own pattern is irrefutable. Its value is an
-            // ordinary expression, and a `match` inside it binds refutably.
-            // The pattern comes last because the name it binds reaches nothing
-            // written before it, the `else` block included.
+            // Only the `let`'s own pattern is irrefutable: a `match` inside its
+            // value binds refutably. The pattern is walked last because the
+            // name it binds reaches nothing written before it, `else` included.
             ast::Stmt::Let(l) => {
                 let pending = PendingBinder {
                     allowed: ast::attrs_allow(&l.attrs, ast::lint::SHADOWED_NAME),
-                    derived: self.derived_names(l),
+                    derived: l
+                        .value
+                        .as_ref()
+                        .map(|value| derived_from(&l.pattern, value))
+                        .unwrap_or_default(),
                 };
                 self.visit_id(l.id, l.span);
                 if let Some(ty) = &l.ty {
@@ -772,9 +754,9 @@ impl AstVisitor for Resolver<'_> {
                 if let Some(block) = &l.else_block {
                     self.visit_block(block);
                 }
-                self.pending_binder = Some(pending);
-                self.in_irrefutable_pattern(|s| s.visit_pattern(&l.pattern));
-                self.pending_binder = None;
+                self.in_binder(pending, |s| {
+                    s.in_irrefutable_pattern(|s| s.visit_pattern(&l.pattern));
+                });
             }
             // The element binding is irrefutable, and the frame is the loop's.
             ast::Stmt::ForOf(f) => self.in_frame(|s| {
@@ -801,12 +783,11 @@ impl AstVisitor for Resolver<'_> {
             match element {
                 ast::ConditionElement::Let { pattern, expr, .. } => {
                     self.visit_expr(expr);
-                    self.pending_binder = Some(PendingBinder {
+                    let pending = PendingBinder {
                         allowed: false,
                         derived: derived_from(pattern, expr),
-                    });
-                    self.visit_pattern(pattern);
-                    self.pending_binder = None;
+                    };
+                    self.in_binder(pending, |s| s.visit_pattern(pattern));
                 }
                 ast::ConditionElement::Expr(e) => self.visit_expr(e),
             }

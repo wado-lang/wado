@@ -183,6 +183,29 @@ pub fn declared_worlds(project: &manifest::ProjectManifest) -> Result<Vec<BuildT
     Ok(targets)
 }
 
+/// The project enclosing the current directory, its manifest warnings emitted.
+/// `missing` words the error for a directory under no manifest.
+pub fn project_here(missing: &'static str) -> Result<manifest::ProjectManifest, CliExit> {
+    let cwd = std::env::current_dir()
+        .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
+    let project = manifest::discover(&cwd)
+        .map_err(CliExit::error)?
+        .ok_or_else(|| CliExit::error(missing))?;
+    manifest::emit_manifest_warnings(&project);
+    Ok(project)
+}
+
+/// Keep only the world `--world <fq>` names.
+pub fn retain_world(targets: &mut Vec<BuildTarget>, world_fq: &str) -> Result<(), CliExit> {
+    targets.retain(|t| t.target_world.as_deref() == Some(world_fq));
+    if targets.is_empty() {
+        return Err(CliExit::error(format!(
+            "wado.toml declares no [world].\"{world_fq}\""
+        )));
+    }
+    Ok(())
+}
+
 /// Keep only the world selected by `--lib` / `--world`, or all worlds when
 /// neither is given.
 fn select_targets(
@@ -197,29 +220,16 @@ fn select_targets(
             ));
         }
     } else if let Some(world_fq) = &opts.world {
-        targets.retain(|t| t.target_world.as_deref() == Some(world_fq.as_str()));
-        if targets.is_empty() {
-            return Err(CliExit::error(format!(
-                "wado.toml declares no [world].\"{world_fq}\" to build"
-            )));
-        }
+        retain_world(&mut targets, world_fq)?;
     }
     Ok(targets)
 }
 
 pub async fn run(opts: BuildOptions) -> Result<(), CliExit> {
-    let cwd = std::env::current_dir()
-        .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = manifest::discover(&cwd)
-        .map_err(CliExit::error)?
-        .ok_or_else(|| {
-            CliExit::error(
-                "no wado.toml found; run from a project directory \
-                 (use `wado compile <file>` to compile a single file)",
-            )
-        })?;
-    manifest::emit_manifest_warnings(&project);
-
+    let project = project_here(
+        "no wado.toml found; run from a project directory \
+         (use `wado compile <file>` to compile a single file)",
+    )?;
     let targets = select_targets(declared_worlds(&project)?, &opts)?;
     if targets.is_empty() {
         return Err(CliExit::error(

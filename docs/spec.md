@@ -289,13 +289,13 @@ scrutinee's type decides which it does.
 The derivation is read off the binder's own source, not off the `let` keyword,
 and holds at any scope. `let x = x + 1` under an `if`, `if let Some(x) = x` and
 `while let Some(x) = x` are all exempt; `if let Some(x) = y` warns. A match arm
-is not exempt — its scrutinee stays in scope across every arm, so
+is not exempt. Its scrutinee stays in scope across every arm, so
 `match x { Some(x) => … }` gives one name two meanings side by side.
 
 A binder shadows only what is in scope where it is written. A name binds after
-the expression it binds from, and reaches only what the construct carries it
-to — so an `if let` binding is not in scope in the `else`, and the alternatives
-of an or-pattern bind one set of names rather than shadowing each other.
+the expression it binds from, and reaches only what the construct carries it to.
+So an `if let` binding is not in scope in the `else`, and the alternatives of an
+or-pattern bind one set of names rather than shadowing each other.
 
 ### Local Item Definitions
 

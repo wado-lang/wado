@@ -151,26 +151,13 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
 /// Check every world `wado.toml` declares, selected the way `wado build`
 /// selects its targets. Same analysis as a single file, once per entry.
 async fn check_declared_worlds(opts: &CheckOptions) -> Result<(), CliExit> {
-    let cwd = std::env::current_dir()
-        .map_err(|e| CliExit::error(format!("cannot get current directory: {e}")))?;
-    let project = manifest::discover(&cwd)
-        .map_err(CliExit::error)?
-        .ok_or_else(|| {
-            CliExit::error(
-                "no wado.toml found; name a file to check \
-                 (`wado check <file.wado>`) or run from a project directory",
-            )
-        })?;
-    manifest::emit_manifest_warnings(&project);
-
+    let project = build::project_here(
+        "no wado.toml found; name a file to check \
+         (`wado check <file.wado>`) or run from a project directory",
+    )?;
     let mut targets = build::declared_worlds(&project)?;
     if let Some(world_fq) = &opts.target_world {
-        targets.retain(|t| t.target_world.as_deref() == Some(world_fq.as_str()));
-        if targets.is_empty() {
-            return Err(CliExit::error(format!(
-                "wado.toml declares no [world].\"{world_fq}\" to check"
-            )));
-        }
+        build::retain_world(&mut targets, world_fq)?;
     }
     if targets.is_empty() {
         return Err(CliExit::error(

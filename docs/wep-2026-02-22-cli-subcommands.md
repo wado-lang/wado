@@ -146,10 +146,9 @@ Rules that keep this consistent:
 every world `wado.toml` declares — `[package].lib` and each `[world]` entry —
 so what it gates is what `build` would produce.
 
-It runs every phase a build does, including codegen, so no diagnostic is lost;
-it just discards the component, which is what lets it drop the optimization
-level. The optimization loop reports nothing and on a large program is most of
-the run, which is what makes the lighter command worth having.
+It runs every phase a build does, codegen included, so no diagnostic is lost. It
+can drop to `O0` because it throws the component away. The optimization loop
+reports nothing, and on a large program it is most of the run.
 
 Naming a file checks that file alone. Its world is the one whose `[world]` entry
 names it, and otherwise the library world, which requires no entry point: a

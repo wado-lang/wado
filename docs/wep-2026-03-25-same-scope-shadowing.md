@@ -134,9 +134,9 @@ has to work out which one it means, and that is the same work whichever
 namespace answers.
 
 The exemption is the derivation this WEP sanctions, read off the binder's own
-source rather than off the `let` keyword. A `let`, an `if let` and a `while let`
-whose source already mentions the name it binds rebuilds that binding instead of
-hiding it, at any scope:
+source rather than off the `let` keyword. A binder whose source already mentions
+the name it binds rebuilds that binding instead of hiding it. This holds for
+`let`, `if let` and `while let`, at any scope:
 
 ```wado
 let x = x + 1;                    // exempt, at the same scope or an inner one
@@ -145,9 +145,9 @@ while let Some(x) = x { ... }     // exempt
 if let Some(x) = y { ... }        // warns: `x` comes from something else
 ```
 
-A match arm is not exempt. `match x { Some(x) => … }` warns: the scrutinee stays
-in scope across every arm, so the name means one thing in one arm and another
-next to it, which is the confusion the lint is for.
+A match arm is not exempt. Its scrutinee stays in scope across every arm, so
+`match x { Some(x) => … }` gives the name one meaning in one arm and another
+next to it. That is the confusion the lint names.
 
 `#[allow(shadowed_name)]` on the binder waives it, and
 `#![allow(shadowed_name)]` waives it for a module. A condition and a match arm
