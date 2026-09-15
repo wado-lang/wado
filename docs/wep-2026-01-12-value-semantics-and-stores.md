@@ -176,7 +176,7 @@ declaration from user code entirely, rather than making it optional.
 An attribute rather than a `with` row, because retention is not part of the
 function's type. Two declarations that differ only in what they retain are one
 type, and a call resolves against the declaration it names, never against a row
-carried by the type. That is what lets §3 drop the row from function types.
+carried by the type.
 
 The row on a function type is a separate question from the clause on a function,
 and it is the one an indirect call reads. An empty row means "retains nothing"
@@ -186,11 +186,18 @@ rejected where a non-retaining functor type is expected. Remove the obligation
 without replacing the row's source and the empty row becomes a lie, so an
 indirect call must instead assume every reference position escapes.
 
-What the row needs is a source, not a new analysis: the same facts §3 reads from
-a body, known early enough to be part of the type. Both consumers — the subset
-check at coercion, and the row in the mangled type name — stay exactly as they
-are. Whether the fixpoint can run before the type name is minted is the open
-question, and it is in the gaps below.
+What the row needs is a source, not a new analysis, and the fixpoint of §3 is
+it. A function value of a given functor type is minted in exactly two places — a
+reference to a named function, and a closure literal — so joining the facts of
+every such expression of one type bounds every call through a value of that
+type. That join belongs beside the per-function facts, in the same pass, since
+both node kinds are already on its walk.
+
+Sourcing the row this way settles what the row is: a derived fact about a type,
+not part of its identity. Two function types differing only in retention are one
+type, nothing is checked at coercion, and retention leaves the mangled type
+name. The precision it recovers is per type rather than per call site, which is
+a gap below.
 
 A closure declares neither effects nor stores. The parser still reads a `with`
 row where one would go, and reports that the compiler does not carry it yet.
@@ -431,10 +438,11 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
    API learns it from the body or not at all.
    - Mitigation: none in the language. `wado doc` could render the inferred
      fact, which is a gap below.
-3. An indirect call reads the worst case unless the function type's row gets a
-   new source (§4).
-   - Mitigation: seventeen signatures in the corpus are exposed, so the cost is
-     measurable first. Recovering it is a gap below.
+3. An indirect call is answered per functor type, not per call site (§4), so one
+   retaining function value coarsens every call through the same type.
+   - Mitigation: seventeen signatures in the corpus take a functor with a
+     reference parameter at all, four of them comparators in the prelude.
+     Sharpening it to the call site is a gap below.
 4. Different from Rust: no lifetimes, different model.
    - Mitigation: the simpler model is easier to learn.
 
@@ -501,45 +509,58 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        `core:builtin`'s. Done when `record_builtin_declaration` keys on the
        absence of a body, so a CM import or a `.wasm` / `.wat` asset import can
        carry §4's attributes.
-3. [ ] Measure what the conservative reading of an indirect call costs, at the
-       seventeen exposed signatures §4 names. Done when the number is known,
-       since it decides how much the gap below is worth.
-4. [ ] Delete `check_stores_semantic` and what only it reaches — the oracle, the
+3. [ ] Measure what a conservative reading of an indirect call would cost, at the
+       seventeen exposed signatures §4 names. Done when the number is known: it
+       says how much item 4 is worth, and how much the gap below it leaves.
+4. [ ] Give the functor type's row an inferred source, so an indirect call keeps
+       today's precision once item 5 stops the frontend keeping it (§4). The
+       fixpoint gains a second map, from functor `TypeId` to facts, joined from
+       every expression that mints a function value of that type — a `FuncRef`
+       takes the named function's facts, a `Closure` its body's. A function value
+       of type `T` is minted nowhere else, so the join bounds whatever reaches an
+       `IndirectCall`, with no points-to analysis and no phase to move:
+       `stores.rs` already walks both node kinds. Done when `indirect` reads the
+       join instead of a declared row, and a `sort_by` comparator that retains
+       neither argument stops pinning them. Before item 5, not after: it is what
+       makes an empty row true once a closure may retain.
+5. [ ] Delete `check_stores_semantic` and what only it reaches — the oracle, the
        return-provenance fixpoint, the escape walk, the type-reachability memo.
        Done when `effect_check.rs` reports effects and default purity only, and
        the fixtures asserting a stores diagnostic are gone with it. This closes
        issues #2049 and #2050.
-5. [ ] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
+6. [ ] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
        3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
        stops emitting them first — and 2 under `package-marl`. Done when no
        function declaration in the corpus carries a `stores` clause and
        `mise run test-wado` passes.
-6. [ ] Remove the `stores` clause from a function declaration in the grammar,
-       after nothing writes one. Done when the parser rejects it. The row in
-       function type position stays until the gap below settles where its facts
-       come from.
-7. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
+7. [ ] Remove the `stores` clause from the grammar, in both declaration and
+       function type position, after nothing writes one. Done when the parser
+       rejects both.
+8. [ ] Take retention out of the type, which §4 says it is no part of: delete
+       `mangle_stores_member` from the function type name, the subset check in
+       `typecheck::check_at`, and `ResolvedType::Function::stores`, which item 4
+       replaces. Done when two function types differing only in retention are one
+       type, and golden type names carry no stores member.
+9. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
        `declared_positions` reads `BuiltinDeclaration` and the `hands_out_result`
        heuristic is gone, closing the "declared `stores` the walk does not
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
-8. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
-       §5. Done when compile-time evaluation is decided by the body alone.
-9. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
-       READMEs carry the new numbers.
+10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
+        §5. Done when compile-time evaluation is decided by the body alone.
+11. [ ] Show the inferred facts, which no signature states any more. Done when
+        `wado query hover` and `wado doc` say what a function retains and hands
+        out — which needs the facts in the language service, where only the
+        frontend runs today.
+12. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
+        READMEs carry the new numbers.
 
 ## Known gaps
 
-- [ ] Give the function type's `stores` row a source that is not a declaration
-      (§4). Seventeen signatures in the corpus take a functor with a reference
-      parameter — four in the prelude, all comparators, and thirteen written by
-      hand — so what the conservative reading costs is measurable before anything
-      is built.
-      Closing it means running the retention fixpoint before the type name is
-      minted, which today it cannot: it runs at `lower::plan`, and the row is
-      mangled during reification. Then the coercion check and the mangling read
-      an inferred row instead of a written one, unchanged otherwise.
-      Failing that, the row leaves the type and an indirect call needs to know
-      which functions reach it — a points-to analysis, which nothing here is;
+- [ ] Read an indirect call per call site rather than per functor type. Roadmap
+      item 4 joins every function value of one type into one answer, so a
+      comparator that retains an argument coarsens every other call through the
+      same type. Closing it takes knowing which function values reach which call
+      — a points-to analysis, which nothing here is;
       `lower::plan::value_copy::funcset` is a borrow-keyed container, not that.
 
 - [ ] Say which place a retained parameter lands in. Retention records that `p`
@@ -553,11 +574,6 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
       it would cost the hottest paths in the stdlib for a leak none of them has.
       §4's attribute has room for the destination — `#[stores(src, into = dst)]`
       — and nothing reads one.
-
-- [ ] Show the inferred facts. A reader of a `pub` signature can no longer see
-      what it retains, and neither `wado doc` nor `wado query hover` says.
-      Closing it means running the fixpoint early enough for the language
-      service, which today it is not: it runs at `lower::plan`.
 
 - [ ] Populate `NirFunction::stores_aliased_locals` from a retaining call, or say
       it is not that. Its doc reads "when inlining a function that stores `x`
