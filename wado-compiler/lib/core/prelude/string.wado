@@ -1100,13 +1100,13 @@ impl String {
 
     /// Splits at the first `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]> {
+    pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
         return self.as_str_slice().split_once(sep);
     }
 
     /// Splits at the last `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]> {
+    pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
         return self.as_str_slice().rsplit_once(sep);
     }
 
@@ -1489,8 +1489,8 @@ impl StrSlice {
     }
 
     /// The parts either side of the first `sep`, or None when it does not
-    /// occur. Both parts are copied out, as `String::split_once` does.
-    pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]> {
+    /// occur. Both parts view this one; `to_string` copies whichever is kept.
+    pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
         let sep_len = sep.as_str_slice().len();
         let Some(at) = self.find(sep) else {
             return null;
@@ -1498,7 +1498,7 @@ impl StrSlice {
         return Option::Some(self.cut_at(at, sep_len));
     }
 
-    pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]> {
+    pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
         let sep_len = sep.as_str_slice().len();
         let Some(at) = self.rfind(sep) else {
             return null;
@@ -1506,10 +1506,10 @@ impl StrSlice {
         return Option::Some(self.cut_at(at, sep_len));
     }
 
-    fn cut_at(&self, at: i32, sep_len: i32) -> [String, String] {
+    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] with stores[self] {
         return [
-            self.sub_unchecked(0, at).to_string(),
-            self.sub_unchecked(at + sep_len, self.len()).to_string(),
+            self.sub_unchecked(0, at),
+            self.sub_unchecked(at + sep_len, self.len()),
         ];
     }
 
@@ -1753,11 +1753,11 @@ pub trait AsStrSlice {
         return self.as_str_slice().lines();
     }
 
-    fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]> {
+    fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
         return self.as_str_slice().split_once(sep);
     }
 
-    fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]> {
+    fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
         return self.as_str_slice().rsplit_once(sep);
     }
 

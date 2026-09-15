@@ -85,21 +85,21 @@ fn default_port_for_scheme<S: AsStrSlice>(scheme: S) -> u16 {
 /// Peels `#fragment` then `?query` off `input`, as `[rest, query, fragment]`.
 /// The fragment goes first, so a `?` inside it stays part of the fragment.
 fn split_off_query_and_fragment<S: AsStrSlice>(input: S) -> [String, Option<String>, Option<String>] {
-    let mut rest = input.to_string();
+    let mut rest = input.as_str_slice();
 
     let mut fragment: Option<String> = null;
     if let Some([before, after]) = rest.split_once("#") {
-        fragment = Option::Some(after);
+        fragment = Option::Some(after.to_string());
         rest = before;
     }
 
     let mut query: Option<String> = null;
     if let Some([before, after]) = rest.split_once("?") {
-        query = Option::Some(after);
+        query = Option::Some(after.to_string());
         rest = before;
     }
 
-    return [rest, query, fragment];
+    return [rest.to_string(), query, fragment];
 }
 
 fn is_special_scheme<S: AsStrSlice>(s: S) -> bool {
@@ -245,11 +245,14 @@ fn percent_decode_query_component<S: AsStrSlice>(input: S) -> String {
 
 /// The still-encoded key and value of one `key=value` query part. A part
 /// carrying no `=` is all key, with an empty value.
-fn split_query_part<S: AsStrSlice>(part: S) -> [String, String] {
+fn split_query_part<S: AsStrSlice>(part: S) -> [StrSlice, StrSlice] {
     if let Some([key, val]) = part.split_once("=") {
         return [key, val];
     }
-    return [part.to_string(), ""];
+    return [
+        part.as_str_slice(),
+        "".as_str_slice(),
+    ];
 }
 
 /// Parses a query string into key-value pairs (insertion-order preserved).
@@ -343,7 +346,7 @@ fn apply_port(url: &mut Url, port_val: u16) {
 }
 
 fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), ParseError> {
-    let input = authority.to_string();
+    let input = authority.as_str_slice();
     let mut rest = input;
 
     // User info runs to the last `@` and its password starts at the first `:`,
@@ -499,10 +502,10 @@ impl Url {
         } else {
             "/";
         };
-        let mut path_part = pwq;
+        let mut path_part = pwq.as_str_slice();
         if let Some([before, after]) = pwq.split_once("?") {
             path_part = before;
-            url.query = Option::Some(after);
+            url.query = Option::Some(after.to_string());
         }
         if path_part.is_empty() {
             url.path = "/";
@@ -512,7 +515,7 @@ impl Url {
             p.push_str(&path_part);
             url.path = p;
         } else {
-            url.path = path_part;
+            url.path = path_part.to_string();
         }
         return url;
     }

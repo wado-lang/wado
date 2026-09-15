@@ -812,9 +812,9 @@ literals stops folding to one.
 
 #### `fn lines(&self) -> StrLinesIter with stores[self]`
 
-#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
-#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
 #### `fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
 
@@ -3815,12 +3815,12 @@ Returns an iterator over substrings split by the given separator.
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]>`
+#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
 Splits at the first `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[String, String]>`
+#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
 Splits at the last `sep` into the parts before and after it, or None
 when `sep` does not occur.
@@ -4031,12 +4031,12 @@ The view with leading and trailing Unicode whitespace removed.
 
 #### `pub fn lines(&self) -> StrLinesIter with stores[self]`
 
-#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
 The parts either side of the first `sep`, or None when it does not
-occur. Both parts are copied out, as `String::split_once` does.
+occur. Both parts view this one; `to_string` copies whichever is kept.
 
-#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[String, String]>`
+#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
 
 #### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
 
