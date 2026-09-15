@@ -173,7 +173,7 @@ let result = pow(x, 2);   // ✅ Correct
 
 ### 6. Comparison Operator Chaining: Mathematical Chaining
 
-Wado supports **mathematical comparison chaining** similar to Python, but with stricter rules.
+Wado supports **mathematical comparison chaining**: Python's syntax, with stricter rules and no short-circuit.
 
 **Valid chains** (same direction):
 
@@ -206,7 +206,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 **Rationale**:
 
 1. **Mathematical intuition**: Range checks like `0 <= x <= 100` are natural and common
-2. **Same as Python**: Developers familiar with Python will find this familiar
+2. **Familiar syntax**: `a < b < c` reads as it does in Python, though Wado evaluates every operand where Python short-circuits
 3. **Clearer intent**: `a < b < c` is more readable than `a < b && b < c`
 4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
@@ -224,7 +224,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 2. **Avoids undefined behavior**: No `++`/`--` operators
 3. **Clear and explicit**: `pow(x, y)` instead of ambiguous `**`
 4. **Familiar to C/Java/Python developers**: `~` for bitwise NOT
-5. **Mathematical comparison chaining**: `0 <= x <= 100` works naturally like Python
+5. **Mathematical comparison chaining**: `0 <= x <= 100` reads as one range test, and is evaluated as one
 6. **Rejects ambiguous chains**: `a < b > c` and `a != b != c` are errors
 7. **Consistent with Rust precedence**: Minimal learning curve (except `~` and chaining)
 8. **Battle-tested**: Rust's precedence has been proven in production
