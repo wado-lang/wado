@@ -979,7 +979,7 @@ fn callee_name(callee: &Expr) -> &str {
 }
 
 /// What a diagnostic calls a callee no name reaches.
-const INDIRECT_CALLEE: &str = "(indirect call)";
+pub const INDIRECT_CALLEE: &str = "(indirect call)";
 
 /// Type of an indirect call's callee, preferring the enclosing function's
 /// parameter types: a function-typed parameter callee leaves no `references`

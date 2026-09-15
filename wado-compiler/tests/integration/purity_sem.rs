@@ -4,7 +4,7 @@
 
 use crate::common::{InMemoryHost, block_on};
 use wado_compiler::semantics::semantics;
-use wado_compiler::{Impurity, PureContext, check_purity_semantic};
+use wado_compiler::{INDIRECT_CALLEE, Impurity, PureContext, check_purity_semantic};
 
 /// Purity callees reported for `source`, whatever the position.
 fn violations(source: &str) -> Vec<String> {
@@ -388,7 +388,9 @@ export fn run() with Stdout {
 "#;
     let found = in_global(source);
     assert!(
-        !found.is_empty(),
+        found
+            .iter()
+            .any(|i| matches!(i, Impurity::Call(callee) if callee == INDIRECT_CALLEE)),
         "a call through a function-typed value performs what its type declares: {found:?}"
     );
 }

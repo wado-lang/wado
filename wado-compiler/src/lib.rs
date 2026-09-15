@@ -106,8 +106,9 @@ pub use semantics::{
 #[cfg(test)]
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
-    EffectError, Impurity, PureContext, PurityError, SemanticDiagnostics, StoresError,
-    check_effects_semantic, check_purity_semantic, check_semantics, check_stores_semantic,
+    EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
+    StoresError, check_effects_semantic, check_purity_semantic, check_semantics,
+    check_stores_semantic,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
