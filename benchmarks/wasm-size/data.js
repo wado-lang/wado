@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789456805882,
+  "lastUpdate": 1789461374797,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56113,6 +56113,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5aa6d2b4e13df6e0f473abda11ea477b76d61c44"
         },
         "date": 1789456805326,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18901,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285344,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5708464fb8e067daaebfd467ee862259b0bdeda1",
+          "message": "Merge pull request #2063 from wado-lang/claude/friendly-goldberg-fmo6d5\n\nfix(compiler): a global initializer is a function body, and every pass walks it",
+          "timestamp": "2026-09-15T17:19:20+09:00",
+          "tree_id": "cf22a84b0fd1eed4bfc160b538b94bc7abfbe01e",
+          "url": "https://github.com/wado-lang/wado/commit/5708464fb8e067daaebfd467ee862259b0bdeda1"
+        },
+        "date": 1789461373871,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
