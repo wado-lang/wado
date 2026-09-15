@@ -201,6 +201,12 @@ pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) ->
 /// exactly once. Anything weaker leaves which write reaches the tail to control
 /// flow, and then the block does not stand for that operand at all.
 fn capture_block_value(engine: &Engine, op: Operand) -> Option<Operand> {
+    Some(capture_block_binding(engine, op)?.1)
+}
+
+/// [`capture_block_value`] with the local the block binds, for a caller that has
+/// to account for that local's own writes.
+pub(super) fn capture_block_binding(engine: &Engine, op: Operand) -> Option<(u32, Operand)> {
     let Operand::Expr(e) = op else { return None };
     let ExprKind::LabeledBlock { block, .. } = &engine.body.exprs[e].kind else {
         return None;
@@ -210,7 +216,10 @@ fn capture_block_value(engine: &Engine, op: Operand) -> Option<Operand> {
     let ExprKind::Local { index, .. } = &engine.body.exprs[tail].kind else {
         return None;
     };
-    sole_unconditional_write(engine, block, *index, None)
+    Some((
+        *index,
+        sole_unconditional_write(engine, block, *index, None)?,
+    ))
 }
 
 /// [`resolve`], continued through a promoted `Opaque(Local)` back to the `let`

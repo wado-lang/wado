@@ -7,7 +7,7 @@
 use std::ops::ControlFlow;
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
@@ -16,10 +16,10 @@ use crate::token::Span;
 
 use super::arena_query::block_contains_loop;
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, build_copy_bindings, check_conjuncts, eliminate_condition,
-    induction_entry, negated_operand, node_modifies, opaque_local, panic_guard_check,
-    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
-    stmt_modifies,
+    Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
+    eliminate_condition, induction_entry, negated_operand, node_modifies, opaque_local,
+    panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block,
+    resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -569,11 +569,11 @@ fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
         .is_some()
 }
 
-/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [pure lets];
-/// array_set(A, i, CONST); i += 1 }` — into one `array_fill` plus the lets and
-/// `i` re-materialized at their final values. The count is `H + 1 - i` for `<=`
-/// (the residual proving no overflow) and `H - i` for `<`; the wrapping `if`
-/// preserves the zero-iteration case exactly.
+/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [local writes];
+/// array_set(A, i, CONST); i += 1 }` — into one `array_fill` followed by those
+/// writes replayed once at the last iterated `i`. The count is `H + 1 - i` for
+/// `<=` (the residual proving no overflow) and `H - i` for `<`; the wrapping
+/// `if` preserves the zero-iteration case exactly.
 fn try_fill_idiom(
     engine: &mut Engine,
     binds: &Binds,
@@ -671,40 +671,24 @@ fn try_fill_idiom(
         },
         Operand::Value(_) => return false,
     };
-    // Middle statements: pure `let`s whose finals we can re-materialize —
-    // `let t = i` (final: last iterated `i`) or `let t = <const value>`.
-    enum TempFinal {
-        LastVar(u32),
-        Const(u32, Operand),
-    }
-    let mut temps: Vec<TempFinal> = Vec::new();
-    for &s in &stmts[1..n - 2] {
-        let StmtKind::Let {
-            local_index, value, ..
-        } = &engine.body.stmts[s].kind
-        else {
+    // Middle statements survive verbatim, re-run once with `i` at its last
+    // iterated value — which is the final iteration, so their finals come out
+    // right without anyone classifying what they compute. Each must write only
+    // locals, and must not read one the sequence writes at or after it: that
+    // would be state carried between iterations, which one re-run cannot
+    // rebuild.
+    let middle: Vec<StmtId> = stmts[1..n - 2].to_vec();
+    let reserved = [var, arr_local, h];
+    let mut effects: Vec<Effects> = Vec::new();
+    for &s in &middle {
+        let Some(e) = replayable_effects(engine, s, &reserved) else {
             return false;
         };
-        if *local_index == arr_local {
-            // The array local must predate the loop for the once-evaluation
-            // to be exact.
-            return false;
-        }
-        if !is_pure_operand(engine.body, *value) {
-            return false;
-        }
-        if parse_var_offset(engine, binds, *value) == Some((*local_index, 0)) {
-            // Self-referential resolution artifact; treat as opaque.
-            return false;
-        }
-        if parse_var_offset(engine, binds, *value) == Some((var, 0)) {
-            temps.push(TempFinal::LastVar(*local_index));
-        } else if matches!(value, Operand::Value(v) if matches!(
-            engine.body.values.kind(*v),
-            ValueKind::Int(..) | ValueKind::Float(..) | ValueKind::Bool(_) | ValueKind::Char(_)
-        )) {
-            temps.push(TempFinal::Const(*local_index, *value));
-        } else {
+        effects.push(e);
+    }
+    for (i, e) in effects.iter().enumerate() {
+        let carried = |r: &u32| effects[i..].iter().any(|w| w.writes.contains(r));
+        if e.reads.iter().any(carried) {
             return false;
         }
     }
@@ -773,32 +757,27 @@ fn try_fill_idiom(
     let fill_stmt = engine.alloc_stmt(StmtKind::Expr(Operand::Expr(fill_call)), span);
 
     let mut body_stmts = vec![fill_stmt];
-    // Re-materialize temp finals: `t = i` observed `i`'s last iterated value
-    // (`H` for `<=`, `H - 1` for `<`); consts keep their value.
-    for t in &temps {
-        match t {
-            TempFinal::LastVar(l) => {
-                let final_val = if guard_le {
-                    local_read(engine, h, span)
-                } else {
-                    let h_read = local_read(engine, h, span);
-                    let e = engine.alloc_expr(
-                        ExprKind::Binary {
-                            left: h_read,
-                            op: NirBinaryOp::Sub,
-                            right: Operand::Value(one),
-                        },
-                        ty,
-                        span,
-                    );
-                    Operand::Expr(e)
-                };
-                body_stmts.push(alloc_local_set(engine, *l, final_val, span));
-            }
-            TempFinal::Const(l, v) => {
-                body_stmts.push(alloc_local_set(engine, *l, *v, span));
-            }
-        }
+    // The fill consumed every iteration's store; what the middle statements
+    // leave behind is the last iteration's, so set `i` to the value that
+    // iteration saw (`H` for `<=`, `H - 1` for `<`) and run them once.
+    if !middle.is_empty() {
+        let last_iterated = if guard_le {
+            local_read(engine, h, span)
+        } else {
+            let h_read = local_read(engine, h, span);
+            let e = engine.alloc_expr(
+                ExprKind::Binary {
+                    left: h_read,
+                    op: NirBinaryOp::Sub,
+                    right: Operand::Value(one),
+                },
+                ty,
+                span,
+            );
+            Operand::Expr(e)
+        };
+        body_stmts.push(alloc_local_set(engine, var, last_iterated, span));
+        body_stmts.extend(middle);
     }
     // `i`'s final value: `H + 1` for `<=`, `H` for `<`.
     let i_final = upper(engine);
@@ -831,6 +810,129 @@ fn try_fill_idiom(
     );
     engine.set_block_stmts(arm.then_block, vec![fill_if]);
     true
+}
+
+/// The locals one middle statement reads and writes.
+struct Effects {
+    reads: Vec<u32>,
+    writes: Vec<u32>,
+}
+
+/// What `stmt` reads and writes, or `None` when running it once cannot stand
+/// for the loop's last iteration: it must write nothing but locals, leave
+/// `reserved` alone, and neither call nor jump.
+fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option<Effects> {
+    let body = &engine.body;
+    let mut eff = Effects {
+        reads: Vec::new(),
+        writes: Vec::new(),
+    };
+    // A block that binds a local and yields it reads that local only to yield
+    // it, so the read is its own write and not a value carried from before.
+    let mut captured: Vec<u32> = Vec::new();
+    let mut roots = vec![NodeRef::Stmt(stmt)];
+    while let Some(root) = roots.pop() {
+        let rejected = body.walk_nodes_under::<()>(root, |n| {
+            let mut constant_operands = true;
+            body.for_each_operand(n, |op| {
+                if let Operand::Value(v) = op
+                    && !matches!(
+                        body.values.kind(v),
+                        ValueKind::Int(..)
+                            | ValueKind::Float(..)
+                            | ValueKind::Bool(_)
+                            | ValueKind::Char(_)
+                    )
+                {
+                    constant_operands = false;
+                }
+            });
+            if !constant_operands {
+                return ControlFlow::Break(());
+            }
+            match n {
+                NodeRef::Block(_) => {}
+                // A pattern binds locals of its own, which no walk over
+                // expressions accounts for.
+                NodeRef::Pat(_) => return ControlFlow::Break(()),
+                NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                    StmtKind::Let { local_index, .. } => eff.writes.push(*local_index),
+                    StmtKind::Expr(_) | StmtKind::If { .. } | StmtKind::LabeledBlock { .. } => {}
+                    _ => return ControlFlow::Break(()),
+                },
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
+                    ExprKind::Local { index, .. } => eff.reads.push(*index),
+                    ExprKind::Unary {
+                        op: NirUnaryOp::MutRef,
+                        expr,
+                    } => {
+                        let Some(ExprKind::Local { index, .. }) =
+                            expr.as_expr().map(|ie| &body.exprs[ie].kind)
+                        else {
+                            return ControlFlow::Break(());
+                        };
+                        eff.writes.push(*index);
+                        return ControlFlow::Continue(false);
+                    }
+                    ExprKind::Assign { target, value } => {
+                        let ExprKind::Local { index, .. } = &body.exprs[*target].kind else {
+                            return ControlFlow::Break(());
+                        };
+                        eff.writes.push(*index);
+                        if let Some(ve) = value.as_expr() {
+                            roots.push(NodeRef::Expr(ve));
+                        }
+                        return ControlFlow::Continue(false);
+                    }
+                    ExprKind::LabeledBlock { .. } => {
+                        if let Some((l, _)) = capture_block_binding(engine, Operand::Expr(e))
+                            && local_read_count(body, NodeRef::Stmt(stmt), l) == 1
+                        {
+                            captured.push(l);
+                        }
+                    }
+                    ExprKind::Dead
+                    | ExprKind::GlobalVarSet { .. }
+                    | ExprKind::Call { .. }
+                    | ExprKind::CmRawCall { .. }
+                    | ExprKind::IndirectCall { .. }
+                    | ExprKind::ClosureToCanonical { .. } => return ControlFlow::Break(()),
+                    _ => {}
+                },
+            }
+            ControlFlow::Continue(true)
+        });
+        if rejected.is_some() {
+            return None;
+        }
+    }
+    if eff.writes.iter().any(|w| reserved.contains(w)) {
+        return None;
+    }
+    eff.reads.retain(|r| !captured.contains(r));
+    Some(eff)
+}
+
+/// How many times `root` reads local `l`. An assignment's target names a place
+/// rather than reading one, so it does not count.
+fn local_read_count(body: &Body, root: NodeRef, l: u32) -> usize {
+    let mut count = 0;
+    body.walk_nodes_under::<()>(root, |n| {
+        if let NodeRef::Expr(e) = n {
+            match &body.exprs[e].kind {
+                ExprKind::Local { index, .. } if *index == l => count += 1,
+                ExprKind::Assign { value, .. } => {
+                    if let Some(ve) = value.as_expr() {
+                        count += local_read_count(body, NodeRef::Expr(ve), l);
+                    }
+                    return ControlFlow::Continue(false);
+                }
+                _ => {}
+            }
+        }
+        ControlFlow::Continue(true)
+    });
+    count
 }
 
 /// A `Let` statement re-binding local `l` to `value` (locals are
