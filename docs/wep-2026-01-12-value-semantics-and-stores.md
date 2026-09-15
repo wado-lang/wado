@@ -153,20 +153,43 @@ pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-`#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out;
-`#[stores(p, ...)]` states retain, and `into = dst` on it names the parameter
-the retained one lands in rather than leaving the destination unknown. All name
-parameters rather than positions, and all report an argument that names none.
+`#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out.
+`#[stores(...)]` states retain, and names one retained thing per attribute,
+repeated where there is more than one — so each carries its own destination
+without the attribute grammar growing a way to group them:
+
+```wado
+#[stores(value, into = arr)]               // `value` itself, landing in `arr`
+#[stores(elements_of = src, into = dst)]   // `src`'s elements, landing in `dst`
+#[stores(data)]                            // `data` itself, destination unknown
+```
+
+A bare name is the parameter as a whole and `elements_of = p` is that
+parameter's elements, which is the difference `array_copy` needs: what reaches
+`dst` is what `src` holds, not `src`. `into = q` names where it lands; without
+it the destination is unknown, which is the conservative reading. Every form
+names a parameter rather than a position, reusing the `key = parameter` shape
+`part_of` already has, and reports an argument that names none.
+
 Silence is the conservative reading of whichever consumer asks — for
 `#[returns]` that is "allocates", which elides copies.
 
 Where each is accepted:
 
-| Declaration                                        | `#[stores]` / `#[returns]` |
-| -------------------------------------------------- | -------------------------- |
-| `core:builtin`, body-less                          | Yes                        |
-| CM component import, WASI, `.wasm` / `.wat` import | Yes                        |
-| Anything with a body                               | Error — the body states it |
+| Declaration                                        | `#[stores]` / `#[returns]`   |
+| -------------------------------------------------- | ---------------------------- |
+| `core:builtin`, body-less                          | Yes                          |
+| CM component import, WASI, `.wasm` / `.wat` import | Yes                          |
+| `trait` / `interface` method requirement           | Error — the impl's body does |
+| Anything with a body                               | Error — the body states it   |
+
+A trait method requirement has no body of its own, but every call to it is
+statically dispatched to an impl that has one, and monomorphization resolves
+that before the fixpoint runs — so an attribute there would never be read, and
+one contradicting the impl would never be caught. The seven requirements
+carrying a `stores` clause today (`AsStrSlice`, `AsSlice`, `AsByteSlice`, and
+four in `core:serde`) all state borrow-out their impls already state, so they
+lose it rather than convert it.
 
 A program has no body-less function of its own to put these on — the one it can
 write is a [declared absence](./wep-2026-09-13-declared-absence.md), which
@@ -533,7 +556,8 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
        stops emitting them first — and 2 under `package-marl`. Done when no
        function declaration in the corpus carries a `stores` clause and
-       `mise run test-wado` passes.
+       `mise run test-wado` passes. The seven trait requirements §4 names lose
+       theirs here rather than converting it.
 7. [ ] Remove the `stores` clause from the grammar, in both declaration and
        function type position, after nothing writes one. Done when the parser
        rejects both.
@@ -548,17 +572,17 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
 10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
         §5. Done when compile-time evaluation is decided by the body alone.
-11. [ ] Say which place a retained parameter lands in, with `into = dst`.
-        Retention alone records that `p` outlives the call, not where it goes,
-        and `array_copy(dst, _, src, _, _)` is the case that needs the
-        difference: `src`'s elements reach `dst` afterwards, so plain retention
-        marks the whole reference borrow-escaped at all twenty call sites.
-        Fifteen are `Array<u8>`, where a scalar element escapes nothing; the
-        other five are the backing-array swap in `List::grow` and its
-        neighbours, which hand elements out of an array they then discard. Done
-        when `array_copy` carries the destination, the fifteen scalar sites stop
-        paying for it, and a caller reasons about `dst`'s extent instead of
-        assuming the worst.
+11. [ ] Say which place a retained parameter lands in, and whether what lands is
+        the parameter or its elements (§4). Retention alone records that `p`
+        outlives the call, not where it goes, and `array_copy(dst, _, src, _, _)`
+        is the case that needs both: `src`'s elements reach `dst` afterwards, so
+        plain retention marks the whole reference borrow-escaped at all twenty
+        call sites. Fifteen are `Array<u8>`, where a scalar element escapes
+        nothing; the other five are the backing-array swap in `List::grow` and
+        its neighbours, which hand elements out of an array they then discard.
+        Done when `array_copy` carries `elements_of` and `into`, the fifteen
+        scalar sites stop paying for it, and a caller reasons about `dst`'s
+        extent instead of assuming the worst.
 12. [ ] Show the inferred facts, which no signature states any more. Done when
         `wado query hover` and `wado doc` say what a function retains and hands
         out — which needs the facts in the language service, where only the
