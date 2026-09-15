@@ -133,7 +133,6 @@ impl Snapshot {
             .effects
             .into_iter()
             .map(Into::into)
-            .chain(checked.stores.into_iter().map(Into::into))
             .chain(checked.purity.into_iter().map(Into::into))
             .collect();
         out.extend(

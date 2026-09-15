@@ -413,7 +413,7 @@ A place names the frame's own storage and must not outlive it, so the aggregate
 exit refuses to write any value carrying one — a leaf gate beside the one that
 refuses a reference-shaped leaf.
 
-Upstream: the `stores`-gated temp and write-back carve-outs and divergences D1–D6
+Upstream: the retention-gated temp and write-back carve-outs and divergences D1–D6
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
 engine's notion of a place must be the one that WEP settles, not a second one.
 

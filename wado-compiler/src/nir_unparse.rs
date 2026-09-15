@@ -303,7 +303,7 @@ impl<'a> NirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
-        self.unparse_nir_with_clause(&f.effects, &f.stores);
+        self.unparse_nir_with_clause(&f.effects, &f.retains);
 
         if let Some(body) = &f.body {
             let root = body.root;

@@ -215,7 +215,7 @@ pub(super) fn make_binding_function(
         return_type,
         task_return_type: None,
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span: synth_span(),
         local_count,

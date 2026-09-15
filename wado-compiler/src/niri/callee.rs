@@ -46,7 +46,7 @@ impl Callee {
                 borrowed
                     .params
                     .iter()
-                    .map(|p| borrowed.stores.contains(&p.name))
+                    .map(|p| borrowed.retains.contains(&p.name))
                     .collect(),
             )
         };

@@ -11,6 +11,7 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
+use super::ownership::BuiltinDeclarations;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
@@ -58,31 +59,35 @@ fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
 /// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
     computed: &'a FuncKeyMap<StoresFacts>,
-    type_table: &'a TypeTable,
+    builtins: &'a BuiltinDeclarations,
 }
 
 impl StoresOracle<'_> {
-    /// Facts for a directly-called function. Unknown callee (not in the map — a
-    /// bodyless / not-yet-computed function) → its declared positions are
-    /// already folded into `computed` at seeding, so absence means "stores
-    /// nothing known".
+    /// Facts for a directly-called function. A builtin is not in `computed` —
+    /// monomorphization drops the generic declaration the seeding walk would
+    /// read — so its `#[retain(...)]` is answered from the snapshot link took.
     fn direct(&self, func: &FunctionRef) -> StoresFacts {
-        self.computed
-            .get(&func.module_source, &func.name)
-            .cloned()
-            .unwrap_or_default()
+        if let Some(facts) = self.computed.get(&func.module_source, &func.name) {
+            return facts.clone();
+        }
+        let retained: IndexSet<u32> = self
+            .builtins
+            .stored_params(func)
+            .into_iter()
+            .map(|p| u32::try_from(p).unwrap())
+            .collect();
+        StoresFacts {
+            escapes: retained,
+            into_result: IndexSet::default(),
+        }
     }
 
-    /// Facts for an indirect (functor) callee, from its functor type's declared
-    /// `stores`. A non-`Function` callee type is conservative: every position
-    /// may escape.
-    fn indirect(&self, callee: &TirExpr, arity: usize) -> StoresFacts {
-        let positions: IndexSet<u32> =
-            if let ResolvedType::Function { stores, .. } = self.type_table.get(callee.type_id) {
-                stores.iter().copied().collect()
-            } else {
-                (0..u32::try_from(arity).unwrap()).collect()
-            };
+    /// Facts for an indirect (functor) callee. Retention is no part of a
+    /// function's type, so nothing at the call names the body that will run:
+    /// every position may escape. WEP 2026-01-12 roadmap item 4 gives the row
+    /// an inferred source and takes the precision back.
+    fn indirect(&self, arity: usize) -> StoresFacts {
+        let positions: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
         StoresFacts {
             escapes: positions.clone(),
             into_result: positions,
@@ -90,7 +95,11 @@ impl StoresOracle<'_> {
     }
 }
 
-pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> StoredParams {
+pub fn compute_stored_params(
+    project: &FlatPackage,
+    call_graph: &CallGraph,
+    builtins: &BuiltinDeclarations,
+) -> StoredParams {
     let type_table = project.type_table.borrow();
     let mut computed: FuncKeyMap<StoresFacts> = FuncKeyMap::default();
 
@@ -115,6 +124,11 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
         computed.insert(func.module_source.clone(), func.name.clone(), facts);
     }
 
+    let mut carrying = RefCarrying {
+        project,
+        type_table: &type_table,
+        memo: IndexMap::default(),
+    };
     call_graph.solve(project, |id| {
         let func = project.functions[id as usize].borrow();
         let Some(body) = &func.body else {
@@ -123,9 +137,9 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
         let found = {
             let oracle = StoresOracle {
                 computed: &computed,
-                type_table: &type_table,
+                builtins,
             };
-            function_stores_facts(body, &func.params, &oracle, &type_table)
+            function_stores_facts(body, &func.params, &oracle, &type_table, &mut carrying)
         };
         let mut merged = computed
             .get(&func.module_source, &func.name)
@@ -150,14 +164,115 @@ pub fn compute_stored_params(project: &FlatPackage, call_graph: &CallGraph) -> S
     out
 }
 
-/// The reference-parameter positions named in a function's `stores[...]` clause.
+/// The reference-parameter positions named in a function's `#[retain(...)]`.
 fn declared_positions(func: &TirFunction) -> IndexSet<u32> {
     func.params
         .iter()
         .enumerate()
-        .filter(|(_, p)| func.stores.contains(&p.name))
+        .filter(|(_, p)| func.retains_param(&p.name))
         .map(|(i, _)| u32::try_from(i).unwrap())
         .collect()
+}
+
+/// Whether a value of a type can hold a reference. A parameter that is not
+/// itself a reference still carries one when its type holds one — `List::push`
+/// takes `Sink { r: &Item }` by value — and a carrier seeded only from a
+/// reference parameter loses the retention there. Memoized per `TypeId`.
+struct RefCarrying<'a> {
+    project: &'a FlatPackage,
+    type_table: &'a TypeTable,
+    memo: IndexMap<TypeId, bool>,
+}
+
+impl RefCarrying<'_> {
+    fn holds(&mut self, type_id: TypeId) -> bool {
+        self.walk(type_id, &mut Vec::new()).0
+    }
+
+    /// The answer, and whether it was reached through a type still being
+    /// walked. An answer that leans on an open cycle is not memoized: the
+    /// enclosing walk may still find the reference the cycle could not.
+    fn walk(&mut self, type_id: TypeId, open: &mut Vec<TypeId>) -> (bool, bool) {
+        if let Some(&answer) = self.memo.get(&type_id) {
+            return (answer, false);
+        }
+        if open.contains(&type_id) {
+            return (false, true);
+        }
+        open.push(type_id);
+        let (answer, cyclic) = self.members(type_id, open);
+        open.pop();
+        if !cyclic {
+            self.memo.insert(type_id, answer);
+        }
+        (answer, cyclic)
+    }
+
+    fn any(&mut self, types: Vec<TypeId>, open: &mut Vec<TypeId>) -> (bool, bool) {
+        let mut cyclic = false;
+        for t in types {
+            let (answer, saw_cycle) = self.walk(t, open);
+            cyclic |= saw_cycle;
+            if answer {
+                return (true, cyclic);
+            }
+        }
+        (false, cyclic)
+    }
+
+    fn members(&mut self, type_id: TypeId, open: &mut Vec<TypeId>) -> (bool, bool) {
+        match self.type_table.get(type_id) {
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => (true, false),
+            // What a type parameter stands for is not known here.
+            ResolvedType::TypeParam { .. } | ResolvedType::AssocTypeProjection { .. } => {
+                (true, false)
+            }
+            ResolvedType::Reactive(inner) | ResolvedType::BuiltinArray(inner) => {
+                let inner = *inner;
+                self.walk(inner, open)
+            }
+            ResolvedType::Newtype { base_type, .. } => {
+                let base = *base_type;
+                self.walk(base, open)
+            }
+            ResolvedType::Struct { def, type_args } => {
+                let (def, type_args) = (*def, type_args.clone());
+                let fields = self
+                    .project
+                    .structs
+                    .iter()
+                    .find(|s| s.def == def && s.type_args == type_args)
+                    .map(|s| s.fields.iter().map(|f| f.type_id).collect::<Vec<_>>());
+                match fields {
+                    Some(fields) => self.any(fields, open),
+                    // A declaration the plan phase cannot see is read as
+                    // holding one, which only widens the carrier set.
+                    None => (true, false),
+                }
+            }
+            ResolvedType::GenericInstance { def, type_args } => {
+                let (def, type_args) = (*def, type_args.clone());
+                let payloads = self
+                    .type_table
+                    .variant_template_cases(def)
+                    .map(|cases| cases.iter().map(|(_, _, payload)| *payload).collect());
+                match payloads {
+                    Some(payloads) => {
+                        let (from_cases, cyclic) = self.any(payloads, open);
+                        if from_cases {
+                            return (true, cyclic);
+                        }
+                        let (from_args, more) = self.any(type_args, open);
+                        (from_args, cyclic | more)
+                    }
+                    None => self.any(type_args, open),
+                }
+            }
+            // A functor is a value; the environment it closed over is not
+            // reachable from a caller's parameter through its type.
+            _ => (false, false),
+        }
+    }
 }
 
 fn function_stores_facts(
@@ -165,10 +280,11 @@ fn function_stores_facts(
     params: &[TirParam],
     oracle: &StoresOracle,
     type_table: &TypeTable,
+    carrying: &mut RefCarrying,
 ) -> StoresFacts {
     let mut carries: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     for (i, p) in params.iter().enumerate() {
-        if is_reference_type(p.type_id, type_table) {
+        if carrying.holds(p.type_id) {
             carries
                 .entry(p.local_index)
                 .or_default()
@@ -259,8 +375,8 @@ impl StoresWalker<'_> {
                 let facts = self.oracle.direct(func);
                 self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result)
             }
-            TirExprKind::IndirectCall { callee, args } => {
-                let facts = self.oracle.indirect(callee, args.len());
+            TirExprKind::IndirectCall { args, .. } => {
+                let facts = self.oracle.indirect(args.len());
                 self.carried_args(args.iter(), &facts.into_result)
             }
             // A control form's value is the tail of whichever arm runs, plus
@@ -454,8 +570,8 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let facts = self.oracle.direct(func);
                 self.escape_args(args.iter().map(|a| &a.expr), &facts.escapes);
             }
-            TirExprKind::IndirectCall { callee, args } => {
-                let facts = self.oracle.indirect(callee, args.len());
+            TirExprKind::IndirectCall { args, .. } => {
+                let facts = self.oracle.indirect(args.len());
                 self.escape_args(args.iter(), &facts.escapes);
             }
             _ => {}

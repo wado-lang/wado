@@ -38,7 +38,7 @@ the tree-sitter capture vocabulary, so any tree-sitter theme applies:
 | `property`         | `.field`, literal and pattern field names    |
 | `function`         | a template tag, `` sql`…` ``                 |
 | `function method`  | `.method()`                                  |
-| `variable`         | `stores[p]`, a contextual keyword as a name  |
+| `variable`         | a contextual keyword used as a name          |
 | `constant builtin` | `true` / `false` / `null` / `self`           |
 
 A plain identifier stays uncoloured: telling a function from a variable takes

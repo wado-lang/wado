@@ -49,12 +49,12 @@ Returns the number of key-value pairs in the map.
 
 Returns true if the map contains no elements.
 
-#### `pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value]`
+#### `pub fn try_insert(&mut self, key: K, value: V) -> bool`
 
 Inserts only if `key` is absent, and reports whether it was inserted.
 The losing insert keeps the existing value, unlike `map[key] = value`.
 
-#### `pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value]`
+#### `pub fn get_or_insert(&mut self, key: K, value: V) -> V`
 
 The value already stored under `key`, or `value` inserted and returned.
 The shape of TC39's `Map.prototype.getOrInsert`; for whether it
@@ -73,17 +73,17 @@ Returns the value corresponding to the key, or null if not found.
 Removes a key from the map and returns true if the key was present.
 Preserves insertion order of remaining elements.
 
-#### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self]`
+#### `pub fn keys(&self) -> TreeMapKeysRefIter<K, V>`
 
 The keys, in insertion order. A map traversal yields references and
 carries no axis suffix: `keys` already says what it yields, and a
 caller wanting owned keys takes `iter_value()` off the result.
 
-#### `pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self]`
+#### `pub fn values(&self) -> TreeMapValuesRefIter<K, V>`
 
 The values, in insertion order.
 
-#### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self]`
+#### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V>`
 
 The key-value pairs, in insertion order.
 
@@ -157,7 +157,7 @@ Returns the number of elements in the set.
 
 Returns true if the set contains no elements.
 
-#### `pub fn insert(&mut self, value: T) -> bool with stores[value]`
+#### `pub fn insert(&mut self, value: T) -> bool`
 
 Inserts a value into the set.
 
@@ -177,17 +177,17 @@ Returns true if the value was present, false otherwise.
 
 Removes all elements from the set.
 
-#### `pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self]`
+#### `pub fn iter_ref(&self) -> TreeSetRefIter<T>`
 
 The elements, in insertion order.
 
-#### `pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self]`
+#### `pub fn iter_value(&self) -> TreeSetValueIter<T>`
 
 The elements, in insertion order.
 
 #### `impl IntoIterator for TreeSet<T>`
 
-##### `fn into_iter(&self) -> TreeSetValueIter<T> with stores[self]`
+##### `fn into_iter(&self) -> TreeSetValueIter<T>`
 
 #### `impl From<Array<T>> for TreeSet<T>`
 

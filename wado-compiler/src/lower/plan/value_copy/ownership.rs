@@ -81,9 +81,11 @@ impl BuiltinDeclarations {
         }
     }
 
-    /// The parameters a builtin keeps beyond the call, from `with stores[p]`.
-    pub fn stored_params(&self, func: &FunctionRef) -> &[usize] {
-        self.get(func).map_or(&[], |d| &d.stores)
+    /// The parameters a builtin keeps beyond the call, from `#[retain(p)]`.
+    pub fn stored_params(&self, func: &FunctionRef) -> Vec<usize> {
+        self.get(func)
+            .map(|d| d.retains.iter().map(|r| r.source).collect())
+            .unwrap_or_default()
     }
 }
 

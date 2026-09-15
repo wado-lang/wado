@@ -192,15 +192,15 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
-#### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self]`
+#### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 
-#### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self]`
+#### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
+#### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
 
 #### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
 
-#### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
+#### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
 
 ### `pub trait Serialize`
 
@@ -355,13 +355,13 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 What this format does when the wire repeats a field or key.
 
-#### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self]`
+#### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError>`
 
-#### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self]`
+#### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
+#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
-#### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
+#### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

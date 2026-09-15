@@ -3,6 +3,7 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
+use super::value_copy::stores::StoredParams;
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -20,9 +21,9 @@ use crate::token::Span;
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
+    escaping: &StoredParams,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
-    let escaping = escaping_params(flat);
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
     let replaced = whole_value_writes::compute(flat, call_graph, &type_table);
@@ -43,7 +44,7 @@ pub fn insert_write_backs(
             .unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
-            escaping: &escaping,
+            escaping,
             replaced: &replaced,
             replaced_locals,
             local_count,
@@ -79,27 +80,6 @@ pub fn insert_write_backs(
         }
     }
     Ok(())
-}
-
-/// Parameter positions each function declares in `stores[...]`: a borrow handed
-/// to one outlives the call, so the call is no place to write it back.
-fn escaping_params(flat: &FlatPackage) -> FuncKeyMap<IndexSet<u32>> {
-    let mut out = FuncKeyMap::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        if func.stores.is_empty() {
-            continue;
-        }
-        let positions = func
-            .params
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| func.stores.contains(&p.name))
-            .map(|(i, _)| u32::try_from(i).unwrap())
-            .collect();
-        out.insert(func.module_source.clone(), func.name.clone(), positions);
-    }
-    out
 }
 
 struct WriteBack<'a> {
@@ -446,16 +426,17 @@ impl WriteBack<'_> {
                     *has_receiver,
                     args.iter_mut().map(|a| &mut a.expr).collect(),
                 ),
-                TirExprKind::IndirectCall { callee, args } => {
+                TirExprKind::IndirectCall { args, .. } => {
                     let every =
                         || -> IndexSet<u32> { (0..u32::try_from(args.len()).unwrap()).collect() };
-                    let stores = match self.type_table.get(callee.type_id) {
-                        ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
-                        // A callee whose type says nothing has declared nothing
-                        // it keeps, which is not the same as keeping nothing.
-                        _ => every(),
-                    };
-                    // A functor says nothing about what it replaces either.
+                    // Retention is no part of a function's type, so nothing
+                    // here names the body that will run. Reading that as "keeps
+                    // everything" refuses a write-back no program can now
+                    // permit, so this stays at "keeps nothing" until the
+                    // functor type's row has an inferred source — WEP
+                    // 2026-01-12 roadmap item 4. A functor says nothing about
+                    // what it replaces either.
+                    let stores = IndexSet::default();
                     let replaced = every();
                     (
                         "a function value".to_string(),

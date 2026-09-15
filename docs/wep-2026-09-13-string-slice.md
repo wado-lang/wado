@@ -42,11 +42,10 @@ costs something at `-O2`, the optimizer is fixed rather than worked around.
 What follows:
 
 - `AsStrSlice` is an ordinary trait whose method returns a view of the
-  receiver, so it declares `stores[self]`, the same shape `AsByteSlice` has.
-  Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: &S)` carries no
-  dispatch at `-O2`.
-- Every `StrSlice` method that returns another view declares `stores[self]` too.
-  A view holds its bytes in a reference field, and the spec's reference-storage
+  receiver, the same shape `AsByteSlice` has. Static dispatch monomorphizes it,
+  so a `fn f<S: AsStrSlice>(s: &S)` carries no dispatch at `-O2`.
+- Every `StrSlice` method that returns another view hands out the receiver's
+  storage too. A view holds its bytes in a reference field, and the spec's reference-storage
   rule counts reading one out of the receiver as the receiver escaping.
 - The view must scalarize: a three-field struct built and read in one function
   leaves no `struct.new` behind. That is a property of the optimizer, so it is

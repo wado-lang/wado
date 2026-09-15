@@ -893,12 +893,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// Invalid stores declaration
-    InvalidStores {
-        message: String,
-        span: Span,
-    },
-
     PrivateFieldAccess {
         struct_name: String,
         field_name: String,
@@ -1897,9 +1891,6 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::InvalidStores { message, span } => {
-                (Code::InvalidSyntax, message.clone(), *span)
-            }
             TypeError::PrivateFieldAccess {
                 struct_name,
                 field_name,

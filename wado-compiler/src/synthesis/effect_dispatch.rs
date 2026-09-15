@@ -947,7 +947,7 @@ fn build_dispatch_wrapper_function(
         // dispatches into the installed handler, its `else` branch emits the
         // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span,
         local_count: next_local,

@@ -42,14 +42,14 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if func.stores.is_empty() {
+        if func.retains.is_empty() {
             continue;
         }
         let stored_indices: IndexSet<usize> = func
             .params
             .iter()
             .enumerate()
-            .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
+            .filter(|(_, param)| func.retains.iter().any(|s| s == &param.name))
             .map(|(i, _)| i)
             .collect();
         if !stored_indices.is_empty()

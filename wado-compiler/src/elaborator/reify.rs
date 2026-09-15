@@ -1435,6 +1435,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
         let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1457,7 +1458,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .get(&func.id)
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
-            stores: func.stores.clone(),
+            retains,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1850,6 +1851,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             "resolve_method records the method type params for every impl method reify emits",
         );
         let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1872,7 +1874,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .get(&func.id)
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
-            stores: func.stores.clone(),
+            retains,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1941,7 +1943,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return_type,
             task_return_type: None,
             effects: vec![],
-            stores: vec![],
+            retains: vec![],
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2121,6 +2123,89 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 arg.name()
             )),
         }
+    }
+
+    /// The `#[retain(...)]` clauses, one per attribute. A function with a body
+    /// states what it retains in that body, so an attribute there is reported
+    /// and dropped rather than read.
+    fn reify_retain_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Vec<tir::RetainSpec<String>> {
+        attrs
+            .iter()
+            .filter(|a| a.name == "retain")
+            .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
+            .collect()
+    }
+
+    fn reify_retain_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Option<tir::RetainSpec<String>> {
+        let emit = |message: String| {
+            self.attr_error(Code::RetainAttr, attr, message);
+            None
+        };
+        if has_body {
+            return emit(
+                "#[retain] belongs to a declaration with no body; a body states what it retains"
+                    .to_string(),
+            );
+        }
+        let named = |name: &str| params.iter().any(|p| p.name == name);
+
+        let (source, elements) = match attr.args.first() {
+            Some(ast::AttrArg::Ident(name)) => (name.clone(), false),
+            Some(ast::AttrArg::KeyIdent(key, name)) if key == "elements_of" => (name.clone(), true),
+            Some(arg) if arg.name() == "elements_of" => {
+                return emit(
+                    "#[retain(elements_of = ...)] takes a parameter name, unquoted".to_string(),
+                );
+            }
+            _ => {
+                return emit(
+                    "#[retain] names one parameter: `p`, or `elements_of = p`".to_string(),
+                );
+            }
+        };
+        if !named(&source) {
+            return emit(format!("#[retain] names no parameter: {source}"));
+        }
+
+        let into = match attr.args.get(1) {
+            None => None,
+            Some(ast::AttrArg::KeyIdent(key, dest)) if key == "into" => {
+                if !named(dest) {
+                    return emit(format!("#[retain(into = {dest})] names no parameter"));
+                }
+                Some(dest.clone())
+            }
+            Some(arg) if arg.name() == "into" => {
+                return emit("#[retain(into = ...)] takes a parameter name, unquoted".to_string());
+            }
+            Some(arg) => {
+                return emit(format!(
+                    "unknown #[retain] argument: {} (expected `into = param`)",
+                    arg.name()
+                ));
+            }
+        };
+        if attr.args.len() > 2 {
+            return emit(
+                "#[retain] names one retained thing; repeat the attribute for another".to_string(),
+            );
+        }
+
+        Some(tir::RetainSpec {
+            source,
+            elements,
+            into,
+        })
     }
 
     // ─────────────────────────────────────────────────────────────────

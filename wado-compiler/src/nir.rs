@@ -352,8 +352,8 @@ pub struct NirFunction {
     /// to infer signature resources.
     pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
-    /// Parameter names declared in `stores[...]` — the function may store these references.
-    pub stores: Vec<String>,
+    /// Parameter names a `#[retain(...)]` declaration names as retained.
+    pub retains: Vec<String>,
     pub body: Option<Body>,
     pub span: Span,
     /// Per-local metadata — `name`, `type_id`, `is_mut` — indexed by Wasm
@@ -511,7 +511,7 @@ impl NirFunction {
             return_type: TypeTable::UNIT,
             task_return_type: None,
             effects: Vec::new(),
-            stores: Vec::new(),
+            retains: Vec::new(),
             body: None,
             span: Span::default(),
             locals: Vec::new(),

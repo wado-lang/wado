@@ -1295,14 +1295,13 @@ mod tests {
     }
 
     /// `self` is `KeywordCategory::Constant`, so no occurrence may colour as
-    /// the parameter it resolves to — the receiver, the uses, and the ones in
-    /// positions no AST node carries a span for, like a `stores[self]` clause.
+    /// the parameter it resolves to — the receiver and every use.
     #[test]
     fn every_self_is_a_constant() {
         let src = concat!(
             "struct S { n: i32 }\n",
             "impl S {\n",
-            "    fn get(&self) -> i32 with stores[self] { return self.n; }\n",
+            "    fn get(&self) -> i32 { return self.n + self.n; }\n",
             "}\n",
             "fn run() {}\n",
         );
@@ -1313,7 +1312,7 @@ mod tests {
             .match_indices("self")
             .map(|(at, _)| at as u32)
             .collect();
-        assert_eq!(columns.len(), 3, "receiver, stores clause, and use site");
+        assert_eq!(columns.len(), 3, "receiver and two use sites");
         for col in columns {
             let token = tokens
                 .iter()

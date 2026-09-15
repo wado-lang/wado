@@ -207,7 +207,7 @@ impl Signatures {
                 func.params
                     .iter()
                     .map(|p| {
-                        if func.stores.contains(&p.name) {
+                        if func.retains.contains(&p.name) {
                             None
                         } else {
                             reference_struct(p.type_id, types)

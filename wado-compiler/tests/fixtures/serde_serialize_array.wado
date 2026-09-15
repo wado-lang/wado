@@ -20,7 +20,7 @@ trait Serializer {
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
-    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self];
+    fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>;
 }
 
 // Sub-serializer holds `&mut JsonSerializer` so writes flow back to the
@@ -47,7 +47,7 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
         self.buf.push_str(&"[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
             ser: self,

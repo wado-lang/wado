@@ -66,12 +66,15 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     let pre_boxing_calls = value_copy::callgraph::CallGraph::build(flat);
     // Before boxing, while `&mut T` still names its referent: a detached `&mut`
     // argument becomes a borrow of a temp that is stored back after the call.
-    mut_ref_writeback::insert_write_backs(flat, &pre_boxing_calls, errors)?;
+    // The borrow a callee keeps is read from its body, so the fixpoint runs
+    // here as well as after closure lifting: a write-back needs the answer
+    // before boxing, while `&mut T` still names its referent.
+    let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
+    let retained = value_copy::stores::compute_stored_params(flat, &pre_boxing_calls, &builtins);
+    mut_ref_writeback::insert_write_backs(flat, &pre_boxing_calls, &retained, errors)?;
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`
     // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
     // boxing.
-    // Snapshotted once: boxing rewrites types, never what a builtin declared.
-    let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
     let confined_params =
         value_copy::confine::compute_confined_params(flat, &pre_boxing_calls, &builtins);
     let ref_receiver_methods = ref_receiver_methods(flat);

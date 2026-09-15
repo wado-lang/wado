@@ -184,7 +184,7 @@ pub fn plan(
     );
     let conventions =
         ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtins);
-    let stored_params = stores::compute_stored_params(flat, &call_graph);
+    let stored_params = stores::compute_stored_params(flat, &call_graph, &builtins);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {

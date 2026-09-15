@@ -236,7 +236,7 @@ fn collect_aliased_in_instr(
             for (i, arg) in args.iter().enumerate() {
                 let stores_param = match callee {
                     Some(f) => match f.param_names.get(i) {
-                        Some(param) => f.stores.iter().any(|s| s == param),
+                        Some(param) => f.retains.iter().any(|s| s == param),
                         None => true,
                     },
                     None => true,

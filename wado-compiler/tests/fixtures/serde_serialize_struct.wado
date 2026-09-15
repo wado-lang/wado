@@ -21,7 +21,7 @@ trait Serializer {
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
 }
 
 // Mock JSON-like serializer. Sub-serializers hold `&mut JsonSerializer`
@@ -61,7 +61,7 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
         self.buf.push_str(&"{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             ser: self,

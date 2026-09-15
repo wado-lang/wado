@@ -58,12 +58,12 @@ impl<T> Array<T> {
 
     /// Sets the element at `index` to `value` (`array.set`).
     /// Traps if `index` is out of bounds.
-    pub fn set(&mut self, index: i32, value: T) with stores[value] {
+    pub fn set(&mut self, index: i32, value: T) {
         builtin::array_set(self, index, value);
     }
 
     /// Sets every element to `value` (`array.fill`).
-    pub fn fill(&mut self, value: T) with stores[value] {
+    pub fn fill(&mut self, value: T) {
         builtin::array_fill(self, 0, value, builtin::array_len(self));
     }
 
@@ -75,7 +75,7 @@ impl<T> Array<T> {
 
     /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
     /// addressable cell, so a write through the reference would be lost.
-    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> {
         return SliceRefMutIter::internal_new(self, 0, builtin::array_len(self));
     }
 }
@@ -102,7 +102,7 @@ impl<T> Sequence for Array<T> {
 }
 
 impl<T> AsSlice for Array<T> {
-    fn as_slice(&self) -> Slice<T> with stores[self] {
+    fn as_slice(&self) -> Slice<T> {
         return Slice::internal_new(self, 0, builtin::array_len(self));
     }
 }
@@ -117,7 +117,7 @@ impl<T> IntoIterator for Array<T> {
     type Item = T;
     type Iter = SliceValueIter<T>;
 
-    fn into_iter(&self) -> Self::Iter with stores[self] {
+    fn into_iter(&self) -> Self::Iter {
         return SliceValueIter::internal_new(self, 0, builtin::array_len(self));
     }
 }
@@ -143,7 +143,7 @@ impl<T> IndexValue<i32> for Array<T> {
 impl<T> IndexAssign<i32> for Array<T> {
     type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) {
         builtin::array_set(self, index, value);
     }
 }
@@ -167,7 +167,7 @@ impl<T: RefMut> IndexRefMut<i32> for Array<T> {
 impl<T> IndexValue<RangeExclusive<i32>> for Array<T> {
     type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
 }
@@ -175,7 +175,7 @@ impl<T> IndexValue<RangeExclusive<i32>> for Array<T> {
 impl<T> IndexValue<RangeInclusive<i32>> for Array<T> {
     type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }

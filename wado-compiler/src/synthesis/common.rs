@@ -504,7 +504,7 @@ pub fn make_synthetic_free_function(
         return_type,
         task_return_type: None,
         effects: Vec::new(),
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span: synth_span(),
         local_count,

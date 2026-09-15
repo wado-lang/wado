@@ -196,7 +196,7 @@ fn generate_copy_function(
         return_type: type_id,
         task_return_type: None,
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span,
         local_count,

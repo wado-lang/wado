@@ -606,7 +606,7 @@ impl Translator<'_> {
             return_type: func.return_type,
             task_return_type: func.task_return_type,
             effects: func.effects.clone(),
-            stores: func.stores.clone(),
+            retains: func.retained_param_names().map(str::to_string).collect(),
             body,
             span: func.span,
             locals,

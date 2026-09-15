@@ -555,12 +555,12 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
 
 ## Roadmap
 
-1. [ ] Add `#[retain(...)]`, accepted on a body-less declaration and reported on
+1. [x] Add `#[retain(...)]`, accepted on a body-less declaration and reported on
        one with a body or on a trait requirement (§4). Its `into` and
        `elements_of` parse and reach `BuiltinDeclaration` here but have no reader
        until items 11 and 12, so `array_set` and `array_fill` keep exactly the
-       fact their `with stores[value]` carries today. Done when the clause on
-       those two is gone and nothing downstream has changed.
+       fact the clause they carried stated. Done when that clause is gone from
+       both and nothing downstream has changed.
 2. [ ] Snapshot the declarations of every body-less function at link, not only
        the ones `ms.is_core_builtin()` admits, so a CM import or a `.wasm` /
        `.wat` asset import can carry §4's attributes. The gate is that check,
@@ -574,39 +574,48 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
 3. [ ] Measure what a conservative reading of an indirect call would cost, at the
        seventeen exposed signatures §4 names. Done when the number is known: it
        says how much item 4 is worth, and how much the gap below it leaves.
-4. [ ] Give the functor type's row an inferred source, so an indirect call keeps
-       today's precision once item 5 stops the frontend keeping it (§4). The
-       fixpoint gains a second map, from functor `TypeId` to facts, joined from
-       every expression that mints a function value of that type — a `FuncRef`
-       takes the named function's facts, a `Closure` its body's. A function value
-       of type `T` is minted nowhere else, so the join bounds whatever reaches an
-       `IndirectCall`, with no points-to analysis and no phase to move:
-       `stores.rs` already walks both node kinds. Done when `indirect` reads the
-       join instead of a declared row, and a `sort_by` comparator that retains
-       neither argument stops pinning them. Before item 5, not after: it is what
-       makes an empty row true once a closure may retain.
-5. [ ] Delete `check_stores_semantic` and what only it reaches — the oracle, the
+4. [ ] Give the functor type's row an inferred source, so an indirect call has
+       one again (§4). The fixpoint gains a second map, from functor `TypeId` to
+       facts, joined from every expression that mints a function value of that
+       type — a `FuncRef` takes the named function's facts, a `Closure` its
+       body's. A function value of type `T` is minted nowhere else, so the join
+       bounds whatever reaches an `IndirectCall`, with no points-to analysis and
+       no phase to move: `stores.rs` already walks both node kinds. Items 5 to 7
+       landed first, so the row is empty and the two readers of an indirect call
+       had to split: `stores.rs` reads it as retaining every argument, which
+       costs a copy, and `mut_ref_writeback` as retaining none, because the
+       conservative reading there is a hard error on a program no keyword can
+       now make acceptable. Done when both read the join, a `sort_by` comparator
+       that retains neither argument stops pinning them, and the write-back
+       asymmetry in the gaps below is closed with them.
+5. [x] Delete `check_stores_semantic` and what only it reaches — the oracle, the
        return-provenance fixpoint, the escape walk, the type-reachability memo.
        Done when `effect_check.rs` reports effects and default purity only, and
        the fixtures asserting a stores diagnostic are gone with it. This closes
        issues #2049 and #2050.
-6. [ ] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
+6. [x] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
        3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
        stops emitting them first — and 2 under `package-marl`. Done when no
        function declaration in the corpus carries a `stores` clause and
        `mise run test-wado` passes. The seven trait requirements §4 names lose
        theirs here rather than converting it.
-7. [ ] Remove the `stores` clause from the grammar, in both declaration and
+7. [x] Remove the `stores` clause from the grammar, in both declaration and
        function type position, after nothing writes one. Done when the parser
        rejects both.
 8. [ ] Take retention out of the type, which §4 says it is no part of: delete
        `mangle_stores_member` from the function type name, the subset check in
        `typecheck::check_at`, and `ResolvedType::Function::stores`, which item 4
-       replaces. Done when two function types differing only in retention are one
-       type, and golden type names carry no stores member.
-9. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
-       `declared_positions` reads `BuiltinDeclaration` and the `hands_out_result`
-       heuristic is gone, closing the "declared `stores` the walk does not
+       replaces. Nothing writes the row since item 7, so the member is already
+       absent from every mangled name and the subset check already vacuous; what
+       is left is the field and the three readers that still ask it. Done when
+       two function types differing only in retention are one type, and golden
+       type names carry no stores member.
+9. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Its two
+       halves parted with item 5: `declared_positions` reads `func.retains` and
+       `direct` falls back to the linked `BuiltinDeclaration`, because
+       monomorphization drops a generic body-less declaration before the
+       fixpoint sees it — but the `hands_out_result` heuristic is still there.
+       Done when it is gone, closing the "declared `stores` the walk does not
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
 10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
         §5. Done when compile-time evaluation is decided by the body alone.
@@ -641,6 +650,14 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
       same type. Closing it takes knowing which function values reach which call
       — a points-to analysis, which nothing here is;
       `lower::plan::value_copy::funcset` is a borrow-keyed container, not that.
+
+- [ ] Read an indirect call the same way in both places. `stores.rs` assumes it
+      retains every argument and `mut_ref_writeback` that it retains none, so a
+      write-back through a functor is emitted on a body that may keep the
+      reference. The frontend used to refuse that program, and the refusal went
+      with item 5; the reading that would replace it rejects programs no keyword
+      can now make acceptable, which is worse. Roadmap item 4 closes it by
+      giving both the same join.
 
 - [ ] Populate `NirFunction::stores_aliased_locals` from a retaining call, or say
       it is not that. Its doc reads "when inlining a function that stores `x`

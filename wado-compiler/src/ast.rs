@@ -2056,8 +2056,6 @@ pub struct Function {
     /// it appeared in the `with` clause. Used by the elaborator to record
     /// use->def references for LSP jump-to-def.
     pub effect_ids: Vec<(AstId, Span)>,
-    /// Parameters declared in `stores[param1, param2]` — the function may store these references.
-    pub stores: Vec<String>,
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
     pub body: Option<Block>,
     pub span: Span,
@@ -3469,25 +3467,6 @@ pub struct FunctionType {
     /// references for LSP jump-to-def. Empty when constructed by the compiler
     /// (synthesized function types from monomorphization, etc.).
     pub effect_ids: Vec<(AstId, Span)>,
-    /// Positional indices of parameters the function may store (e.g., `stores[0]`).
-    pub stores: Vec<StoresEntry>,
-}
-
-/// A stores entry: either a parameter name (in function declarations) or a
-/// positional index (in function type expressions).
-#[derive(Debug, Clone)]
-pub enum StoresEntry {
-    Name(String),
-    Index(u32),
-}
-
-impl std::fmt::Display for StoresEntry {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            StoresEntry::Name(name) => write!(f, "{name}"),
-            StoresEntry::Index(idx) => write!(f, "{idx}"),
-        }
-    }
 }
 
 /// An effect declaration: an interface whose operations handlers implement.

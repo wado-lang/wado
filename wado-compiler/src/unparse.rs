@@ -11,11 +11,11 @@ use crate::ast::{
     ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
-    TraitBound, TraitDecl, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
+    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
+    StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
+    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
+    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
+    WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -876,7 +876,7 @@ impl<'a> Unparser<'a> {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
             }
-            s.unparse_with_clause(&f.effects, &f.stores);
+            s.unparse_with_clause(&f.effects);
         });
 
         if let Some(body) = &f.body {
@@ -891,8 +891,8 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_with_clause(&mut self, effects: &[String], stores: &[String]) {
-        unparse_with_clause_into(effects, stores, &mut self.output);
+    fn unparse_with_clause(&mut self, effects: &[String]) {
+        unparse_with_row_into(effects, &mut self.output);
     }
 
     fn unparse_param(&mut self, param: &Param) {
@@ -4031,7 +4031,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             output.push_str(if f.is_mut { "fn mut" } else { "fn" });
             delimited_into("(", ")", &f.params, output, unparse_type_into);
             unparse_fn_return_into(&f.return_type, output);
-            unparse_fn_type_with_clause_into(&f.effects, &f.stores, output);
+            unparse_with_row_into(&f.effects, output);
         }
         Type::Tuple(types) => {
             delimited_into("[", "]", types, output, unparse_type_into);
@@ -4129,7 +4129,7 @@ pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
         output.push_str(" -> ");
         unparse_type_into(ret, output);
     }
-    unparse_with_clause_into(&f.effects, &f.stores, output);
+    unparse_with_row_into(&f.effects, output);
 }
 
 /// Emit `[pub ]<keyword> <name>[<generics>]` into `out`.
@@ -4359,16 +4359,7 @@ fn self_param_shorthand(param: &Param) -> Option<&'static str> {
 }
 
 /// Emit a `with` row: one item goes bare, more than one is parenthesized.
-pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {
-    let mut items: Vec<String> = effects.to_vec();
-    if !stores.is_empty() {
-        items.push(format!("stores[{}]", stores.join(", ")));
-    }
-    unparse_with_row_into(&items, output);
-}
-
-/// The shared row shape. `items` are the already-rendered effect names and
-/// `stores[...]` group; an empty row emits nothing.
+/// An empty row emits nothing.
 pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
     match items {
         [] => {}
@@ -4394,28 +4385,12 @@ fn unparse_fn_return_into(return_type: &Type, output: &mut String) {
     }
 }
 
-/// Bound-context variant of `fn(...)` printing. `stores[...]` never appears in
-/// bound position, so the row is effects only.
+/// Bound-context variant of `fn(...)` printing.
 fn unparse_fn_signature_in_bound_into(sig: &FunctionType, output: &mut String) {
     output.push_str(if sig.is_mut { "fn mut" } else { "fn" });
     delimited_into("(", ")", &sig.params, output, unparse_type_into);
     unparse_fn_return_into(&sig.return_type, output);
     unparse_with_row_into(&sig.effects, output);
-}
-
-/// `with` row for function-type position, where `stores` takes positional
-/// indices.
-fn unparse_fn_type_with_clause_into(
-    effects: &[String],
-    stores: &[StoresEntry],
-    output: &mut String,
-) {
-    let mut items: Vec<String> = effects.to_vec();
-    if !stores.is_empty() {
-        let entries: Vec<String> = stores.iter().map(ToString::to_string).collect();
-        items.push(format!("stores[{}]", entries.join(", ")));
-    }
-    unparse_with_row_into(&items, output);
 }
 
 pub fn unparse_enum_case(enum_name: &str, case: &EnumCase) -> String {
@@ -4691,6 +4666,11 @@ impl<'a> TirUnparser<'a> {
             self.output.push_str(attr);
             self.output.push('\n');
         }
+        for retain in &f.retains {
+            self.write_indent();
+            self.output.push_str(&unparse_retain_attr(retain));
+            self.output.push('\n');
+        }
         self.write_indent();
         if f.is_export {
             self.output.push_str("export ");
@@ -4724,7 +4704,7 @@ impl<'a> TirUnparser<'a> {
                 .push_str(&self.type_table.type_name(f.return_type));
         }
 
-        self.unparse_tir_with_clause(&f.effects, &f.stores);
+        self.unparse_tir_with_clause(&f.effects);
 
         if let Some(body) = &f.body {
             self.emit_indented_block(|this| this.unparse_block(body));
@@ -4734,11 +4714,8 @@ impl<'a> TirUnparser<'a> {
         }
     }
 
-    fn unparse_tir_with_clause(&mut self, effects: &[EffectRef], stores: &[String]) {
-        let mut items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
-        if !stores.is_empty() {
-            items.push(format!("stores[{}]", stores.join(", ")));
-        }
+    fn unparse_tir_with_clause(&mut self, effects: &[EffectRef]) {
+        let items: Vec<String> = effects.iter().map(|e| e.name().to_string()).collect();
         unparse_with_row_into(&items, &mut self.output);
     }
 
@@ -5392,6 +5369,19 @@ fn inline_hint_attr(hint: tir::InlineHint) -> Option<&'static str> {
         tir::InlineHint::Hint => Some("#[inline]"),
         tir::InlineHint::Always => Some("#[inline(always)]"),
         tir::InlineHint::Never => Some("#[inline(never)]"),
+    }
+}
+
+/// Render a `#[retain(...)]` clause back as it is written.
+pub fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
+    let source = if retain.elements {
+        format!("elements_of = {}", retain.source)
+    } else {
+        retain.source.clone()
+    };
+    match &retain.into {
+        Some(dest) => format!("#[retain({source}, into = {dest})]"),
+        None => format!("#[retain({source})]"),
     }
 }
 

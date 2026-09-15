@@ -1,6 +1,6 @@
 // The write-back rests on the borrow not outliving the call. A parameter the
-// callee declares `stores[...]` keeps it, so no point in the caller is late
-// enough to store the temp back and the call is refused instead.
+// callee retains outlives it, so no point in the caller is late enough to
+// store the temp back and the call is refused instead.
 
 variant Payload {
     Text(String),
@@ -16,11 +16,11 @@ struct Keep {
 }
 
 #[inline("never")]
-fn keep(p: &mut Payload) -> Keep with stores[p] {
+fn keep(p: &mut Payload) -> Keep {
     return Keep { held: p };
 }
 
-fn hand_over_a_field(b: &mut Bag) -> Keep with stores[b] {
+fn hand_over_a_field(b: &mut Bag) -> Keep {
     return keep(&mut b.item);
 }
 

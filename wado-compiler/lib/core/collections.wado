@@ -195,7 +195,7 @@ impl<K: Ord, V> TreeMap<K, V> {
 
     /// Appends `key` as a new entry; the caller has established it is absent.
     /// A previously removed key re-enters at the end.
-    fn append_entry(&mut self, key: K, value: V) with stores[key, value] {
+    fn append_entry(&mut self, key: K, value: V) {
         let new_index = self.entries.len();
         self.entries.push(TreeMapEntry {
             key,
@@ -209,7 +209,7 @@ impl<K: Ord, V> TreeMap<K, V> {
     /// The implementation behind `map[key] = value`; the public API is index
     /// assignment, `try_insert`, and `get_or_insert`. Updates in place when the
     /// key exists (keeping its order), else appends.
-    fn insert(&mut self, key: K, value: V) with stores[key, value] {
+    fn insert(&mut self, key: K, value: V) {
         let existing_index = self.find_index(key);
         if existing_index >= 0 {
             self.entries[existing_index].value = value;
@@ -220,7 +220,7 @@ impl<K: Ord, V> TreeMap<K, V> {
 
     /// Inserts only if `key` is absent, and reports whether it was inserted.
     /// The losing insert keeps the existing value, unlike `map[key] = value`.
-    pub fn try_insert(&mut self, key: K, value: V) -> bool with stores[key, value] {
+    pub fn try_insert(&mut self, key: K, value: V) -> bool {
         if self.find_index(key) >= 0 {
             return false;
         }
@@ -231,7 +231,7 @@ impl<K: Ord, V> TreeMap<K, V> {
     /// The value already stored under `key`, or `value` inserted and returned.
     /// The shape of TC39's `Map.prototype.getOrInsert`; for whether it
     /// inserted, use `try_insert`.
-    pub fn get_or_insert(&mut self, key: K, value: V) -> V with stores[key, value] {
+    pub fn get_or_insert(&mut self, key: K, value: V) -> V {
         let existing_index = self.find_index(key);
         if existing_index >= 0 {
             return self.entries[existing_index].value;
@@ -310,17 +310,17 @@ impl<K: Ord, V> TreeMap<K, V> {
     /// The keys, in insertion order. A map traversal yields references and
     /// carries no axis suffix: `keys` already says what it yields, and a
     /// caller wanting owned keys takes `iter_value()` off the result.
-    pub fn keys(&self) -> TreeMapKeysRefIter<K, V> with stores[self] {
+    pub fn keys(&self) -> TreeMapKeysRefIter<K, V> {
         return TreeMapKeysRefIter { entries: &self.entries, index: 0 };
     }
 
     /// The values, in insertion order.
-    pub fn values(&self) -> TreeMapValuesRefIter<K, V> with stores[self] {
+    pub fn values(&self) -> TreeMapValuesRefIter<K, V> {
         return TreeMapValuesRefIter { entries: &self.entries, index: 0 };
     }
 
     /// The key-value pairs, in insertion order.
-    pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> with stores[self] {
+    pub fn entries(&self) -> TreeMapEntriesRefIter<K, V> {
         return TreeMapEntriesRefIter { entries: &self.entries, index: 0 };
     }
 
@@ -418,7 +418,7 @@ struct TreeSetRefIter<T> {
 impl<T> Iterator for TreeSetRefIter<T> {
     type Item = &T;
 
-    fn next(&mut self) -> Option<&T> with stores[self] {
+    fn next(&mut self) -> Option<&T> {
         while self.index < self.entries.len() {
             let i = self.index;
             self.index += 1;
@@ -431,7 +431,7 @@ impl<T> Iterator for TreeSetRefIter<T> {
 }
 
 impl<T> TreeSetRefIter<T> {
-    pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self] {
+    pub fn iter_value(&self) -> TreeSetValueIter<T> {
         return TreeSetValueIter { entries: self.entries, index: self.index };
     }
 }
@@ -464,7 +464,7 @@ struct TreeMapKeysRefIter<K, V> {
 impl<K, V> Iterator for TreeMapKeysRefIter<K, V> {
     type Item = &K;
 
-    fn next(&mut self) -> Option<&K> with stores[self] {
+    fn next(&mut self) -> Option<&K> {
         while self.index < self.entries.len() {
             let i = self.index;
             self.index += 1;
@@ -477,7 +477,7 @@ impl<K, V> Iterator for TreeMapKeysRefIter<K, V> {
 }
 
 impl<K, V> TreeMapKeysRefIter<K, V> {
-    pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V> with stores[self] {
+    pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V> {
         return TreeMapKeysValueIter { entries: self.entries, index: self.index };
     }
 }
@@ -510,7 +510,7 @@ struct TreeMapValuesRefIter<K, V> {
 impl<K, V> Iterator for TreeMapValuesRefIter<K, V> {
     type Item = &V;
 
-    fn next(&mut self) -> Option<&V> with stores[self] {
+    fn next(&mut self) -> Option<&V> {
         while self.index < self.entries.len() {
             let i = self.index;
             self.index += 1;
@@ -523,7 +523,7 @@ impl<K, V> Iterator for TreeMapValuesRefIter<K, V> {
 }
 
 impl<K, V> TreeMapValuesRefIter<K, V> {
-    pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V> with stores[self] {
+    pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V> {
         return TreeMapValuesValueIter { entries: self.entries, index: self.index };
     }
 }
@@ -558,7 +558,7 @@ struct TreeMapEntriesRefIter<K, V> {
 impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
     type Item = [&K, &V];
 
-    fn next(&mut self) -> Option<[&K, &V]> with stores[self] {
+    fn next(&mut self) -> Option<[&K, &V]> {
         while self.index < self.entries.len() {
             let i = self.index;
             self.index += 1;
@@ -571,7 +571,7 @@ impl<K, V> Iterator for TreeMapEntriesRefIter<K, V> {
 }
 
 impl<K, V> TreeMapEntriesRefIter<K, V> {
-    pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V> with stores[self] {
+    pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V> {
         return TreeMapEntriesValueIter { entries: self.entries, index: self.index };
     }
 }
@@ -628,7 +628,7 @@ impl<T: Ord> TreeSet<T> {
     /// Inserts a value into the set.
     ///
     /// Returns true if the value was newly inserted, false if it was already present.
-    pub fn insert(&mut self, value: T) -> bool with stores[value] {
+    pub fn insert(&mut self, value: T) -> bool {
         return self.inner.try_insert(value, ());
     }
 
@@ -650,12 +650,12 @@ impl<T: Ord> TreeSet<T> {
     }
 
     /// The elements, in insertion order.
-    pub fn iter_ref(&self) -> TreeSetRefIter<T> with stores[self] {
+    pub fn iter_ref(&self) -> TreeSetRefIter<T> {
         return TreeSetRefIter { entries: &self.inner.entries, index: 0 };
     }
 
     /// The elements, in insertion order.
-    pub fn iter_value(&self) -> TreeSetValueIter<T> with stores[self] {
+    pub fn iter_value(&self) -> TreeSetValueIter<T> {
         return TreeSetValueIter { entries: &self.inner.entries, index: 0 };
     }
 }
@@ -664,7 +664,7 @@ impl<T: Ord> IntoIterator for TreeSet<T> {
     type Item = T;
     type Iter = TreeSetValueIter<T>;
 
-    fn into_iter(&self) -> TreeSetValueIter<T> with stores[self] {
+    fn into_iter(&self) -> TreeSetValueIter<T> {
         return TreeSetValueIter { entries: &self.inner.entries, index: 0 };
     }
 }

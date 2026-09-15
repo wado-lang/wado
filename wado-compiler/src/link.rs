@@ -11,7 +11,7 @@ use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{BuiltinDeclaration, TirFunction, TypeTable};
+use crate::tir::{BuiltinDeclaration, RetainSpec, TirFunction, TypeTable};
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
@@ -35,22 +35,27 @@ fn record_builtin_declaration(
          declare #[returns(part_of = p)] or #[returns(owned)]",
         func.name,
     );
-    let stores: Vec<usize> = func
-        .stores
+    let position = |name: &str| {
+        func.params
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| panic!("builtin `{}` retains unknown `{name}`", func.name))
+    };
+    let retains: Vec<RetainSpec<usize>> = func
+        .retains
         .iter()
-        .map(|name| {
-            func.params
-                .iter()
-                .position(|p| &p.name == name)
-                .unwrap_or_else(|| panic!("builtin `{}` stores unknown `{name}`", func.name))
+        .map(|r| RetainSpec {
+            source: position(&r.source),
+            elements: r.elements,
+            into: r.into.as_deref().map(position),
         })
         .collect();
-    if func.declared_return_convention.is_some() || !stores.is_empty() {
+    if func.declared_return_convention.is_some() || !retains.is_empty() {
         out.insert(
             func.name.clone(),
             BuiltinDeclaration {
                 returns: func.declared_return_convention,
-                stores,
+                retains,
             },
         );
     }

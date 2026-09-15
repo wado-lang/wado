@@ -718,22 +718,22 @@ Reference view over a contiguous sequence. Implemented by `Array<T>`,
 `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 carries the real bodies.
 
-#### `fn as_slice(&self) -> Slice<Self::Elem> with stores[self]`
+#### `fn as_slice(&self) -> Slice<Self::Elem>`
 
-#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self]`
+#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>`
 
 Sub-view over `[start, end)`, clamped to this sequence.
 
-#### `fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self]`
+#### `fn iter_value(&self) -> SliceValueIter<Self::Elem>`
 
-#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self]`
+#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem>`
 
-#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem> with stores[self]`
+#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
 
 Overlapping windows of `size` consecutive elements. Panics if `size` is
 not positive.
 
-#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> with stores[self]`
+#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
 
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
@@ -743,7 +743,7 @@ shorter. Panics if `size` is not positive.
 Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
 
-#### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+#### `fn as_str_slice(&self) -> StrSlice`
 
 ### `pub trait AsByteSlice`
 
@@ -753,7 +753,7 @@ Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 `core:json` `from_bytes`) accept any of them.
 
-#### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
+#### `fn as_byte_slice(&self) -> ByteSlice`
 
 ### `pub trait Step`
 
@@ -2643,7 +2643,7 @@ The element/char cap a sequence Inspect should apply: the explicit
 precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
 (`PRECISION_INFINITE`) means uncapped.
 
-#### `pub fn new(buf: &mut String) -> Formatter with stores[buf]`
+#### `pub fn new(buf: &mut String) -> Formatter`
 
 Create a Formatter with the default spec, writing into the given buffer.
 
@@ -3269,16 +3269,16 @@ anchor for `FieldSchema::lookup`, as `len` is for byte length.
 Sub-slice over `[start, end)` relative to this one, clamped to its
 bounds.
 
-#### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
 
-#### `pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self]`
+#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
 
-#### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
 
 Overlapping windows of `size` consecutive elements. Panics if `size` is
 not positive.
 
-#### `pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self]`
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
 
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
@@ -3297,7 +3297,7 @@ shorter. Panics if `size` is not positive.
 
 #### `impl AsSlice for Slice<T>`
 
-##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+##### `fn as_slice(&self) -> Slice<T>`
 
 #### `impl IndexValue<i32> for Slice<T>`
 
@@ -3309,11 +3309,11 @@ shorter. Panics if `size` is not positive.
 
 #### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self]`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self]`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
 #### `impl Eq for Slice<T>`
 
@@ -3443,7 +3443,7 @@ Write the byte at `index` without bounds or UTF-8 checks.
 - `0 <= index < self.len()`.
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `pub fn as_bytes(&self) -> ByteSlice`
 
 Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
 
@@ -3478,15 +3478,15 @@ Append the byte range `[start, end)` of `s` to this string.
 - `start` and `end` must lie on UTF-8 character boundaries of `s`.
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
 Returns an iterator over the UTF-8 bytes of the string.
 
-#### `pub fn chars(&self) -> StrCharIter with stores[self]`
+#### `pub fn chars(&self) -> StrCharIter`
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter`
 
 Returns an iterator over characters with their byte indices.
 
@@ -3746,11 +3746,11 @@ Build a `String` from an iterable of bytes without UTF-8 validation.
 
 The caller must ensure the bytes form valid UTF-8.
 
-#### `pub fn split(&self, sep: String) -> StrSplitIter with stores[self]`
+#### `pub fn split(&self, sep: String) -> StrSplitIter`
 
 Returns an iterator over substrings split by the given separator.
 
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
+#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
@@ -3764,11 +3764,11 @@ when `sep` does not occur.
 Splits at the last `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
 Returns an iterator over whitespace-separated substrings.
 
-#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
+#### `pub fn lines(&self) -> StrLinesIter`
 
 Returns an iterator over the lines of this string.
 
@@ -3800,7 +3800,7 @@ Identity: any string parses to itself. Never fails.
 
 #### `impl AsStrSlice for String`
 
-##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+##### `fn as_str_slice(&self) -> StrSlice`
 
 ### `pub struct StrUtf8ByteIter`
 
@@ -3849,13 +3849,13 @@ checks.
 Returns true if `index`, counted from the view's start, is 0, `len()`,
 or the start of a character.
 
-#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
 
 A sub-view over `[start, end)`, counted from this view's start.
 Panics if the range is out of bounds or either end is off a character
 boundary.
 
-#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
 A sub-view without bounds or UTF-8 boundary checks.
 
@@ -3864,15 +3864,15 @@ A sub-view without bounds or UTF-8 boundary checks.
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
 
-#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `pub fn as_bytes(&self) -> ByteSlice`
 
 The view's UTF-8 bytes.
 
-#### `pub fn chars(&self) -> StrCharIter with stores[self]`
+#### `pub fn chars(&self) -> StrCharIter`
 
 Returns an iterator over the Unicode scalar values (chars) of the view.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
 Returns an iterator over the UTF-8 bytes of the view.
 
@@ -3882,7 +3882,7 @@ Copy the view into an owned `String`.
 
 #### `impl AsStrSlice for StrSlice`
 
-##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+##### `fn as_str_slice(&self) -> StrSlice`
 
 #### `impl Eq for StrSlice`
 
@@ -3912,11 +3912,11 @@ Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 Returns the total number of elements the list can hold without reallocating.
 
-#### `pub fn push(&mut self, value: T) with stores[value]`
+#### `pub fn push(&mut self, value: T)`
 
 Appends a single element to the end.
 
-#### `pub fn push_within_capacity(&mut self, value: T) with stores[value]`
+#### `pub fn push_within_capacity(&mut self, value: T)`
 
 Appends a single element assuming the capacity was already reserved
 (see `reserve`). Skips the grow check `push` performs on every call, so
@@ -3935,7 +3935,7 @@ without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
 generated parser over a fixed token stream) avoid that per-access cost.
 Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
 
-#### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
+#### `pub fn insert(&mut self, index: i32, value: T)`
 
 Inserts an element at the given index, shifting all elements after it to the right.
 Panics if `index > len()`.
@@ -3992,7 +3992,7 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
-#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self]`
+#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T>`
 
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
@@ -4017,7 +4017,7 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value]`
+##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
 #### `impl IndexRef<i32> for List<T>`
 
@@ -4035,7 +4035,7 @@ Joins elements into a string with the given separator.
 
 #### `impl AsSlice for List<T>`
 
-##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+##### `fn as_slice(&self) -> Slice<T>`
 
 #### `impl Eq for List<T>`
 

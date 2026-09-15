@@ -839,7 +839,7 @@ pub(super) fn compute_fn_effects(
         }
         // A declared effect or a `stores` clause is a caller-visible promise in
         // its own right; treat either as opaque rather than re-deriving it.
-        if !f.effects.is_empty() || !f.stores.is_empty() || f.is_async {
+        if !f.effects.is_empty() || !f.retains.is_empty() || f.is_async {
             own.opaque = true;
         }
         effects[i] = own;

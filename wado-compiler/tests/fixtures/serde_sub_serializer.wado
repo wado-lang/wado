@@ -65,7 +65,7 @@ impl Serializer for TextSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<TextSeqSerializer, SerializeError> {
         self.buf.push_str(&"[");
         return Result::<TextSeqSerializer, SerializeError>::Ok(TextSeqSerializer {
             parent: self,
@@ -73,7 +73,7 @@ impl Serializer for TextSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<TextStructSerializer, SerializeError> {
         self.buf.push_str(&"{");
         return Result::<TextStructSerializer, SerializeError>::Ok(TextStructSerializer {
             parent: self,

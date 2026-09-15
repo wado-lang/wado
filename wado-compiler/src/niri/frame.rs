@@ -780,7 +780,7 @@ impl Interpreter<'_> {
         // would stand as a snapshot the next write to that storage leaves
         // stale. A scalar embeds nothing.
         let stores_a_reference = callee.params.iter().any(|p| {
-            callee.stores.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
+            callee.retains.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
         });
         let may_embed_caller_storage = !targets.is_empty() || stores_a_reference;
 

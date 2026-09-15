@@ -202,24 +202,24 @@ impl<H> Router<H> {
     /// the previous handler. Panics on a malformed pattern (empty,
     /// missing leading `/`, trailing-wildcard not last, empty param/wildcard
     /// name).
-    pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler]
+    pub fn route(&mut self, method: Method, pattern: String, handler: H)
 
     /// Method-specific shorthands. Each delegates to `route(Method::X, ...)`.
     /// Provided for `Get`, `Post`, `Put`, `Patch`, `Delete`, `Options`.
     /// `Head`, `Connect`, `Trace`, and custom `Other(_)` methods go through
     /// `route()`.
-    pub fn get(&mut self, pattern: String, handler: H)     with stores[handler]
-    pub fn post(&mut self, pattern: String, handler: H)    with stores[handler]
-    pub fn put(&mut self, pattern: String, handler: H)     with stores[handler]
-    pub fn patch(&mut self, pattern: String, handler: H)   with stores[handler]
-    pub fn delete(&mut self, pattern: String, handler: H)  with stores[handler]
-    pub fn options(&mut self, pattern: String, handler: H) with stores[handler]
+    pub fn get(&mut self, pattern: String, handler: H)
+    pub fn post(&mut self, pattern: String, handler: H)
+    pub fn put(&mut self, pattern: String, handler: H)
+    pub fn patch(&mut self, pattern: String, handler: H)
+    pub fn delete(&mut self, pattern: String, handler: H)
+    pub fn options(&mut self, pattern: String, handler: H)
 
     /// Registers a handler that matches any method (including `Method::Other(_)`)
     /// at `pattern`. Specific-method handlers at the same pattern take
     /// precedence; `any` is the fallback when no specific entry matched.
     /// Same panic rules as `route()`.
-    pub fn any(&mut self, pattern: String, handler: H) with stores[handler]
+    pub fn any(&mut self, pattern: String, handler: H)
 
     /// Matches a method/path pair. Returns `Some(&RouteMatch)` on a hit and
     /// `None` on a miss. The path argument must be the URL path only (no
@@ -228,7 +228,6 @@ impl<H> Router<H> {
     /// heap-promoted local `RouteMatch`. Assumes `Option<&T>` niche
     /// optimization at codegen, so the `Option` itself is not boxed.
     pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>
-        with stores[self, path]
 
     /// If `path` matches a registered route under any specific method, returns
     /// the list of those methods. `any` handlers do not contribute (they are
@@ -240,7 +239,6 @@ impl<H> Router<H> {
     /// Matches against a `wasi:http` `Request`, splitting the path from the
     /// query string internally. Recommended entry point for HTTP services.
     pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>
-        with stores[self]
 }
 ```
 

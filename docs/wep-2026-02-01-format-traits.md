@@ -40,7 +40,7 @@ The fields are public and read directly; there are no accessors.
 
 ```wado
 impl Formatter {
-    fn new(buf: &mut String) -> Formatter with stores[buf];
+    fn new(buf: &mut String) -> Formatter;
 
     // Writing
     fn write_str(&mut self, s: &String);

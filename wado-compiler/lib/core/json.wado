@@ -2279,7 +2279,7 @@ impl Deserializer for JsonDeserializer {
         return Result::Ok(false);
     }
 
-    fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> with stores[self] {
+    fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> {
         self.expect_char(b'[')?;
         let depth = self.inner_depth()?;
         return Result::Ok(JsonSeqAccess {
@@ -2289,7 +2289,7 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> with stores[self] {
+    fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> {
         self.expect_char(b'{')?;
         let depth = self.inner_depth()?;
         return Result::Ok(JsonMapAccess {
@@ -2299,11 +2299,7 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_struct(
-        &mut self,
-        name: &String,
-        num_fields: i32,
-    ) -> Result<JsonStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> {
         self.expect_char(b'{')?;
         let depth = self.inner_depth()?;
         return Result::Ok(JsonStructAccess {
@@ -2313,11 +2309,7 @@ impl Deserializer for JsonDeserializer {
         });
     }
 
-    fn begin_variant(
-        &mut self,
-        type_name: &String,
-        num_cases: i32,
-    ) -> Result<JsonVariantAccess, DeserializeError> with stores[self] {
+    fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> {
         let lead = self.peek_after_whitespace();
         if lead < 0 {
             builtin::cold_path();

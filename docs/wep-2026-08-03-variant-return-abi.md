@@ -557,7 +557,7 @@ the pattern names belongs to another binding, and boxing against it emits a ref
 where an `i32` is read. A binding the test does not recognise is refused, and
 validation consults the same predicate so the two decline together.
 
-A local a `stores` parameter aliases is refused outright either way: that alias
+A local in `stores_aliased_locals` is refused outright either way: that alias
 is established outside the body, and a `let` does not re-establish it.
 
 ### A rebox is a signal, not a cost to absorb

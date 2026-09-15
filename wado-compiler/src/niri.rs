@@ -318,7 +318,7 @@ pub fn is_ctfe_runnable(func: &NirFunction) -> bool {
 /// when it wants to hold the result.
 #[must_use]
 pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
-    func.return_type != TypeTable::UNIT && func.stores.is_empty() && is_ctfe_runnable(func)
+    func.return_type != TypeTable::UNIT && func.retains.is_empty() && is_ctfe_runnable(func)
 }
 
 /// Derive the [`MaterializingGlobals`] set: pair a global on every block that

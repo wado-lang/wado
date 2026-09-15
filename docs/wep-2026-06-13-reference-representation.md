@@ -116,8 +116,8 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   point exists.
 - `&` (immutable, read-only) to such a place is permitted: it reads a snapshot
   copy, and there is no write to lose.
-- Carve-out: when the `&mut <place>` is a call argument to a parameter that does
-  not escape (no `stores[param]`, enforced by `check_stores_semantic`), the
+- Carve-out: when the `&mut <place>` is a call argument to a parameter the
+  callee does not retain, the
   reference provably cannot outlive the call, so it is desugared to a temp +
   write-back:
 
@@ -131,8 +131,8 @@ already drifted out of sync (see [D2](#known-implementation-divergences)–
   ```
 
   The temp is a real local, so the address-taken boxing promotes it exactly as for
-  `&mut <local>`. The forbid stays permanently for the escaping case (param in
-  `stores`, or a `&mut` bound to a variable / returned), which has no sound
+  `&mut <local>`. The forbid stays permanently for the escaping case (a retained
+  param, or a `&mut` bound to a variable / returned), which has no sound
   write-back point.
 
 In-place places — `&mut <local>` of any type, and `&mut` of a struct / `List` /
@@ -168,7 +168,7 @@ What the two rules above rest on:
 - [ ] Ship the remaining `compile_error` fixtures: `primitive` / `enum` /
       `flags` list element. Covered today: `fn` list element, `primitive` /
       `enum` struct field, and the `variant` storing positions.
-- [ ] Carve out the `stores`-gated temp + write-back, one call path at a time:
+- [ ] Carve out the retention-gated temp + write-back, one call path at a time:
   - [ ] `List` index element (`&mut xs[i]`) — reuses the existing
         `index_assign` dispatch.
   - [x] struct field (`&mut s.f`) — write-back is a plain field assign.
@@ -193,7 +193,7 @@ fix to conform; none should be preserved.
   | `variant`, into a variable / aggregate / payload / `return`       | refused               |
   | `variant`, reaching one of those through a variable               | refused               |
   | `variant` field / `&mut *p`, call argument                        | written back          |
-  | `variant`, call argument at a `stores` position                   | refused               |
+  | `variant`, call argument at a retained position                   | refused               |
   | `variant` element / whole capture / branch, at a written position | refused               |
   | `variant` element as a `&mut self` receiver (`xs[i].m()`)         | refused               |
 
@@ -259,8 +259,8 @@ fix to conform; none should be preserved.
     code is not reported. It cannot execute, so nothing miscompiles.
   - The refusals reach `wado check`, which lowers, but not
     `wado query diagnostics`, which does not; and only the first per function is
-    reported. Raising them where the LSP sees them takes the callee's declared
-    `stores` at the call site, which `effect_check.rs` already computes.
+    reported. Raising them where the LSP sees them takes what the callee
+    retains at the call site, which only `lower::plan` computes.
 
 - [ ] D2 — the boxed set is `TypeTable::is_boxed_reference_target`, which boxing
       and the implicit `&mut self` receiver borrow both read. The forbid rule
@@ -316,13 +316,13 @@ fix to conform; none should be preserved.
 - The silent miscompile becomes a compile error, then progressively a working
   write-back for the sound cases — across _all_ replace types, including `fn`,
   because forbid/carve-out derive from the shared predicate.
-- The carve-out reuses the existing `stores` analysis and local-boxing machinery;
+- The carve-out reuses the existing retention analysis and local-boxing machinery;
   no new runtime representation, allocation, or indirection.
 - A single classification predicate removes the fn / flags drift class of bug.
 
 ### Negative
 
-- A value-type `&mut` whose param escapes (`stores`), or one bound / returned
+- A value-type `&mut` whose param is retained, or one bound / returned
   outside a call, stays forbidden. Workaround: assign the whole element / field,
   or restructure functionally. This is the genuinely-unsound case under the
   current representation.

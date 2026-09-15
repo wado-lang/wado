@@ -1,4 +1,4 @@
-// Stores combined with effects: `with (Stdout, stores[data])`
+// Stores combined with effects: ` with Stdout`
 
 use { println, Stdout } from "core:cli";
 
@@ -10,7 +10,7 @@ struct Container {
     data: &Data,
 }
 
-fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
+fn store_and_log(data: &Data) -> Container with Stdout {
     println(`Storing data with value: ${data.value}`);
     return Container { data };
 }

@@ -30,23 +30,23 @@ pub type ByteSlice = Slice<u8>;
 /// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 /// `core:json` `from_bytes`) accept any of them.
 pub trait AsByteSlice {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self];
+    fn as_byte_slice(&self) -> ByteSlice;
 }
 
 impl AsByteSlice for ByteSlice {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+    fn as_byte_slice(&self) -> ByteSlice {
         return *self;
     }
 }
 
 impl AsByteSlice for ByteList {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+    fn as_byte_slice(&self) -> ByteSlice {
         return self.as_slice() as ByteSlice;
     }
 }
 
 impl AsByteSlice for ByteArray {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+    fn as_byte_slice(&self) -> ByteSlice {
         return self.as_slice() as ByteSlice;
     }
 }
@@ -106,7 +106,7 @@ pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool {
 // This lets `from_bytes("...")` accept a string literal with no copy, even
 // though `String` still serializes as text (`serialize_string`), not bytes.
 impl AsByteSlice for String {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self] {
+    fn as_byte_slice(&self) -> ByteSlice {
         return self.as_bytes();
     }
 }

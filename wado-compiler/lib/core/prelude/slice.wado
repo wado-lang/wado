@@ -80,7 +80,7 @@ pub struct Slice<T> {
 }
 
 impl<T> Slice<T> {
-    internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, start: i32, end: i32) -> Slice<T> {
         return Slice { repr, start, end };
     }
 
@@ -113,23 +113,23 @@ impl<T> Slice<T> {
         };
     }
 
-    pub fn iter_value(&self) -> SliceValueIter<T> with stores[self] {
+    pub fn iter_value(&self) -> SliceValueIter<T> {
         return SliceValueIter::internal_new(self.repr, self.start, self.end);
     }
 
-    pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self] {
+    pub fn iter_ref(&self) -> SliceRefIter<T> {
         return SliceRefIter::internal_new(self.repr, self.start, self.end);
     }
 
     /// Overlapping windows of `size` consecutive elements. Panics if `size` is
     /// not positive.
-    pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self] {
+    pub fn windows(&self, size: i32) -> SliceWindows<T> {
         return SliceWindows::internal_new(self.repr, self.start, self.end, size);
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
     /// shorter. Panics if `size` is not positive.
-    pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self] {
+    pub fn chunks(&self, size: i32) -> SliceChunks<T> {
         return SliceChunks::internal_new(self.repr, self.start, self.end, size);
     }
 
@@ -149,7 +149,7 @@ impl<T> Slice<T> {
 
     /// With `internal_start`, lets bulk-copy paths (`List::extend_from_slice`)
     /// `array_copy` straight from the view without a temporary.
-    internal fn internal_repr(&self) -> &Array<T> with stores[self] {
+    internal fn internal_repr(&self) -> &Array<T> {
         return self.repr;
     }
 
@@ -171,7 +171,7 @@ impl<T> Sequence for Slice<T> {
 }
 
 impl<T> AsSlice for Slice<T> {
-    fn as_slice(&self) -> Slice<T> with stores[self] {
+    fn as_slice(&self) -> Slice<T> {
         return *self;
     }
 }
@@ -213,7 +213,7 @@ impl<T: Ref> IndexRef<i32> for Slice<T> {
 impl<T> IndexValue<RangeExclusive<i32>> for Slice<T> {
     type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self] {
+    fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end);
     }
 }
@@ -221,7 +221,7 @@ impl<T> IndexValue<RangeExclusive<i32>> for Slice<T> {
 impl<T> IndexValue<RangeInclusive<i32>> for Slice<T> {
     type Output = Slice<T>;
 
-    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self] {
+    fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> {
         return self.slice(range.start, range.end + 1);
     }
 }
@@ -270,7 +270,7 @@ pub struct SliceValueIter<T> {
 }
 
 impl<T> SliceValueIter<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceValueIter<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceValueIter<T> {
         return SliceValueIter { repr, index, end };
     }
 }
@@ -320,7 +320,7 @@ pub struct SliceRefIter<T> {
 }
 
 impl<T> SliceRefIter<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceRefIter<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32) -> SliceRefIter<T> {
         return SliceRefIter { repr, index, end };
     }
 
@@ -351,7 +351,7 @@ internal struct SliceRefMutIter<T> {
 }
 
 impl<T> SliceRefMutIter<T> {
-    internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> SliceRefMutIter<T> with stores[repr] {
+    internal fn internal_new(repr: &mut Array<T>, index: i32, end: i32) -> SliceRefMutIter<T> {
         return SliceRefMutIter { repr, index, end };
     }
 }
@@ -378,7 +378,7 @@ pub struct SliceWindows<T> {
 }
 
 impl<T> SliceWindows<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceWindows<T> {
         assert size > 0, "window size must be positive";
         return SliceWindows { repr, index, end, size };
     }
@@ -419,7 +419,7 @@ pub struct SliceChunks<T> {
 }
 
 impl<T> SliceChunks<T> {
-    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> with stores[repr] {
+    internal fn internal_new(repr: &Array<T>, index: i32, end: i32, size: i32) -> SliceChunks<T> {
         assert size > 0, "chunk size must be positive";
         return SliceChunks { repr, index, end, size };
     }
@@ -456,30 +456,30 @@ impl<T> IntoIterator for SliceChunks<T> {
 /// `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 /// carries the real bodies.
 pub trait AsSlice: Sequence {
-    fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
+    fn as_slice(&self) -> Slice<Self::Elem>;
 
     /// Sub-view over `[start, end)`, clamped to this sequence.
-    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self] {
+    fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> {
         return self.as_slice().slice(start, end);
     }
 
-    fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self] {
+    fn iter_value(&self) -> SliceValueIter<Self::Elem> {
         return self.as_slice().iter_value();
     }
 
-    fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self] {
+    fn iter_ref(&self) -> SliceRefIter<Self::Elem> {
         return self.as_slice().iter_ref();
     }
 
     /// Overlapping windows of `size` consecutive elements. Panics if `size` is
     /// not positive.
-    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> with stores[self] {
+    fn windows(&self, size: i32) -> SliceWindows<Self::Elem> {
         return self.as_slice().windows(size);
     }
 
     /// Non-overlapping chunks of up to `size` elements; the last may be
     /// shorter. Panics if `size` is not positive.
-    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> with stores[self] {
+    fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> {
         return self.as_slice().chunks(size);
     }
 }

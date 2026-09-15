@@ -538,7 +538,7 @@ receiver. Their ownership model is specified in
 
 ### Interaction with existing features
 
-Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`/RAII, variants holding resources, `fn` types, effects, `stores[...]`, pattern matching) follows from the subtyping and method-resolution rules already established and needs no separate treatment.
+Four interactions need explicit rules. Everything else (`Default`, `Ord`, `Drop`/RAII, variants holding resources, `fn` types, effects, pattern matching) follows from the subtyping and method-resolution rules already established and needs no separate treatment.
 
 #### `Eq` is auto-derived as reference equality
 

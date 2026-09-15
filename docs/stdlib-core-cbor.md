@@ -196,12 +196,12 @@ Open a container of the expected major type, unwrapping any
 self-described prefix. `remaining` is `-1` when indefinite; `expected`
 is the type-mismatch diagnostic, by reference so success allocates none.
 
-##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self]`
+##### `fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError>`
 
-##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self]`
+##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
+##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
+##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`

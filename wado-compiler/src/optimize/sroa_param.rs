@@ -195,7 +195,7 @@ fn collect_and_validate(
             if func.stores_aliased_locals.contains(&param.local_index) {
                 continue;
             }
-            if func.stores.iter().any(|s| s == &param.name) {
+            if func.retains.iter().any(|s| s == &param.name) {
                 continue;
             }
             let Some(mut info) = candidate_info_for(param.type_id, &type_table, &field_table)
