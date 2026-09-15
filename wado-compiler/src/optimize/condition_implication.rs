@@ -197,28 +197,20 @@ pub(super) fn peel_capture_block(engine: &Engine, binds: &Binds, op: Operand) ->
     cur
 }
 
-/// The operand a block yields when it yields a local it assigns exactly once.
-/// The single assignment is what makes the value unambiguous: a second one
-/// would leave which write reaches the tail to control flow.
+/// The operand a block yields when it yields a local its own statements write
+/// exactly once. Anything weaker leaves which write reaches the tail to control
+/// flow, and then the block does not stand for that operand at all.
 fn capture_block_value(engine: &Engine, op: Operand) -> Option<Operand> {
     let Operand::Expr(e) = op else { return None };
+    let ExprKind::LabeledBlock { block, .. } = &engine.body.exprs[e].kind else {
+        return None;
+    };
+    let block = *block;
     let tail = engine.body.block_yield(e)?.as_expr()?;
     let ExprKind::Local { index, .. } = &engine.body.exprs[tail].kind else {
         return None;
     };
-    let target = *index;
-    let mut written = None;
-    let mut writes = 0;
-    engine.body.for_each_live_node_under(NodeRef::Expr(e), |n| {
-        if let NodeRef::Expr(ae) = n
-            && let ExprKind::Assign { target: t, value } = &engine.body.exprs[ae].kind
-            && matches!(&engine.body.exprs[*t].kind, ExprKind::Local { index, .. } if *index == target)
-        {
-            written = Some(*value);
-            writes += 1;
-        }
-    });
-    (writes == 1).then_some(written?)
+    sole_unconditional_write(engine, block, *index, None)
 }
 
 /// [`resolve`], continued through a promoted `Opaque(Local)` back to the `let`
@@ -297,16 +289,12 @@ pub(super) fn parse_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option
 }
 
 /// Parse an operand (through copy temps) as a constant `i64`. Constants live in
-/// the value **pool** as `Operand::Value(Int)` — that is `body.values` (the IR's
-/// value pool), **not** the `value_of` side-table, so reading it stays
-/// `value_of`-free.
+/// the value **pool** as `Operand::Value(Int)`, never the `value_of` side-table.
 fn parse_const_i64(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
-    if let Operand::Value(v) = resolve(engine, binds, op)
-        && let Some((val, _)) = engine.body.values.kind(v).as_int()
-    {
-        return Some(val as i64);
+    match resolve(engine, binds, op) {
+        Operand::Value(v) => pool_int_const(engine, v),
+        Operand::Expr(_) => None,
     }
-    None
 }
 
 /// Parse an operand (through copy temps) as `var_local + const_offset`. A bare
@@ -387,14 +375,14 @@ fn parse_value_offset(engine: &Engine, v: ValueId) -> Option<(u32, i64)> {
         } => {
             let (lhs, rhs) = (*lhs, *rhs);
             if let Some((var, o)) = parse_value_offset(engine, lhs)
-                && let Some((c, _)) = engine.body.values.kind(rhs).as_int()
+                && let Some(c) = pool_int_const(engine, rhs)
             {
-                return Some((var, o + c as i64));
+                return Some((var, o + c));
             }
             if let Some((var, o)) = parse_value_offset(engine, rhs)
-                && let Some((c, _)) = engine.body.values.kind(lhs).as_int()
+                && let Some(c) = pool_int_const(engine, lhs)
             {
-                return Some((var, o + c as i64));
+                return Some((var, o + c));
             }
             None
         }
@@ -812,13 +800,16 @@ fn bitand_mask(engine: &Engine, binds: &Binds, op: Operand) -> Option<i64> {
     }
 }
 
-/// A pooled value's constant `i64`, if it is an `Int` (pool read, not `value_of`).
+/// A pooled value's constant `i64`, if it is an `Int` (pool read, not
+/// `value_of`). The pool holds the `u64` bit pattern, and every caller here
+/// compares signed, so an unsigned constant past `i64::MAX` is refused rather
+/// than read as the negative it would order as.
 fn pool_int_const(engine: &Engine, v: ValueId) -> Option<i64> {
-    if let Some((val, _)) = engine.body.values.kind(v).as_int() {
-        Some(val as i64)
-    } else {
-        None
-    }
+    let (val, ty) = engine.body.values.kind(v).as_int()?;
+    let signed = engine
+        .value_graph_type_table()
+        .is_some_and(|types| !types.is_unsigned_int(ty));
+    (signed || i64::try_from(val).is_ok()).then_some(val as i64)
 }
 
 /// The local that `BoundKey` reads through, if any (for write-tracking).
@@ -1607,32 +1598,58 @@ pub(super) fn induction_entry(
     loop_body: BlockId,
     var: u32,
 ) -> Option<i64> {
-    let mut entry = None;
-    for &s in &engine.body.blocks[parent].stmts {
-        if s == loop_stmt {
+    let entry = sole_unconditional_write(engine, parent, var, Some(loop_stmt))?;
+    let step = sole_unconditional_write(engine, loop_body, var, None)?;
+    (parse_var_offset(engine, binds, step) == Some((var, 1)))
+        .then(|| parse_const_i64(engine, binds, entry))
+        .flatten()
+}
+
+/// The operand `block` writes to `var` when exactly one of its own statements
+/// is that write. `stop` ends the scan at a statement, for a caller that means
+/// "before this one".
+///
+/// A write nested inside an `if` runs on some paths, and a second write runs
+/// again; either way the operand is not what `var` holds, so both refuse.
+fn sole_unconditional_write(
+    engine: &Engine,
+    block: BlockId,
+    var: u32,
+    stop: Option<StmtId>,
+) -> Option<Operand> {
+    let mut written = None;
+    let mut writes = 0;
+    for &s in &engine.body.blocks[block].stmts {
+        if Some(s) == stop {
             break;
         }
         engine.body.for_each_node_under(NodeRef::Stmt(s), |n| {
-            if let Some(value) = local_written_value(engine, n, var) {
-                entry = parse_const_i64(engine, binds, value);
+            if local_written_value(engine, n, var).is_some() {
+                writes += 1;
             }
         });
+        if let Some(value) = stmt_written_value(engine, s, var) {
+            written = Some(value);
+        }
     }
-    let mut stepped = false;
-    let mut steps_by_one = true;
-    engine
-        .body
-        .for_each_node_under(NodeRef::Block(loop_body), |n| {
-            if let Some(value) = local_written_value(engine, n, var) {
-                stepped = true;
-                steps_by_one &= parse_var_offset(engine, binds, value) == Some((var, 1));
-            }
-        });
-    (stepped && steps_by_one).then_some(entry?)
+    (writes == 1).then_some(written?)
 }
 
-/// The operand written to local `var` by `node`, when `node` is a `let` or an
-/// assignment naming it directly.
+/// The operand a statement writes to `var` at its own level: a `let`, or a
+/// statement that is nothing but the assignment.
+fn stmt_written_value(engine: &Engine, s: StmtId, var: u32) -> Option<Operand> {
+    match &engine.body.stmts[s].kind {
+        StmtKind::Let {
+            local_index, value, ..
+        } if *local_index == var => Some(*value),
+        StmtKind::Expr(op) => local_written_value(engine, NodeRef::Expr(op.as_expr()?), var),
+        _ => None,
+    }
+}
+
+/// The operand written to local `var` by `node` alone — a `let` statement or an
+/// assignment expression. One write is one such node, which is what lets
+/// [`sole_unconditional_write`] count them.
 fn local_written_value(engine: &Engine, node: NodeRef, var: u32) -> Option<Operand> {
     match node {
         NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
