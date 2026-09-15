@@ -524,17 +524,12 @@ untouched even with the cloned array provably unread.
 
 ### Known gap: a declared retention the walk does not confirm
 
-`stores.rs` reads a `#[retain(p)]` with no `into` on a value-returning body as
-naming the result, which is what `iter()` and `as_slice()` do and what keeps a
-`collect()` that drops the iterator from pinning the list it walked. The reading
-is not derived: a body that instead puts the reference somewhere the walk cannot
-follow — a raw builtin, a `CmRawCall` — and returns a value is read as routing it
-to the result. Only a body-less declaration carries one now
+Only a body-less declaration carries retention now
 ([Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)),
-and a body-less declaration has no body for the reading to contradict, so what
-is left is the seeding of an attribute the compiler owns. What covers the rest
-is the published answer being the union of both channels, so every direct caller
-stays conservative.
+and it has no body for the walk to confirm it against. A `#[retain(p)]` is taken
+at its word on both channels, so a caller stays conservative whether or not the
+declaration was right; what nothing can catch is a declaration that understates
+what the callee keeps.
 
 `carries` drops at a projection whose type only _holds_ a reference — `w.h`
 where `Held { r: &Rep }` — since the arm keys on the projection being a
@@ -542,16 +537,8 @@ reference itself. A parameter that only holds one is seeded, through
 `RefCarrying`: the memoized "can a value of this type hold a reference"
 predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
 that no frontend obligation makes the caller declare it. The projection arm is
-still the narrower reading, and closing it is what would let the walk confirm
-what a declaration asserts.
-
-Deriving the strong reading means promoting a declaration the walk did not
-confirm, and that is only sound-and-precise once the walk confirms the routings
-that are real: measured, it promotes `List::as_slice` and every `AsSlice`
-iterator built on it, which restores the deep copy of each `Op` in
-`lower_alt_body` and costs gale-gen ~2%. So the order is fixed — make `carries`
-follow a reference through the adapter chain first, then let an unconfirmed
-declaration mean "anywhere".
+still the narrower reading, and closing it is what would let the walk follow a
+reference through an adapter chain rather than lose it at the first projection.
 
 ### Known gap: a generic resource a user module declares
 

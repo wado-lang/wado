@@ -286,45 +286,30 @@ written. Wasm GC uses the same word for the same thing.
    neither argument stops pinning them, and the disagreement in the gaps below
    is closed with it.
 
-4. Take retention out of the function type, which §4 says it is no part of. The
-   type still carries a vestigial row that nothing writes, so it is absent from
-   every mangled name and the check against it is already vacuous; what remains
-   is the field and its last two readers. Done when two function types differing
-   only in retention are indistinguishable, including in mangled names.
-
-5. Seed the fixpoint from the attributes alone. A declaration that returns a
-   value is still assumed to hand its retained reference out with the result,
-   which is a heuristic standing in for what the attribute should say. Done when
-   it is gone, closing the corresponding gap in
-   [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
-
-6. Stop refusing every retaining call at compile-time evaluation. The reason §5
-   gives reaches only calls whose result could embed the retained reference, and
-   that narrow test already runs; the blanket refusal is an older, coarser copy
-   of it. Done when the narrow test is the only place retention decides a fold,
-   and a retaining call returning a scalar folds.
-
-7. Add `into_param` as the third channel (§3), fed both by `into = q` on a
+4. Add `into_param` as the third channel (§3), fed both by `into = q` on a
    declaration and by a body that puts a reference into one of its own
-   parameters. Done when the facts carry retained parameter to destination
-   parameter, the fixpoint propagates it, and `List::push` reaches it from its
-   body with no attribute.
+   parameters. Recording it is the smaller half: what a caller does with a
+   bounded retention is a reading the published facts have no shape for today,
+   since they name retained positions and not where each landed. Done when the
+   facts carry retained parameter to destination parameter, the fixpoint
+   propagates it, `List::push` reaches it from its body with no attribute, and a
+   caller reasons about the destination's extent instead of assuming the worst.
 
-8. Read `elements_of` and `into`, so a declaration can say which place a
+5. Read `elements_of` and `into`, so a declaration can say which place a
    retained parameter lands in and whether what lands is the parameter or its
    elements. A copy between arrays is the case that needs both: without them the
    whole source reference is marked escaped at every call site, including the
-   many whose elements are scalars that escape nothing. Done when a caller
-   reasons about the destination's extent instead of assuming the worst.
+   many whose elements are scalars that escape nothing. Done when those sites
+   stop paying for it.
 
-9. Surface every attribute a declaration carries in `wado query hover` and
+6. Surface every attribute a declaration carries in `wado query hover` and
    `wado doc`, with no per-attribute allowlist — `#[retain]` and `#[returns]`
    should reach a reader because attributes do. Done when a body-less
    declaration's attributes appear in both, and adding an attribute needs no
    change to either.
 
-10. Record the effect on `benchmark/` and `wasm-size/`. Done when both READMEs
-    carry the new numbers.
+7. Record the effect on `benchmark/` and `wasm-size/`. Done when both READMEs
+   carry the new numbers.
 
 ## Known gaps
 
