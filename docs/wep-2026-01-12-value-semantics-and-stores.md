@@ -178,11 +178,19 @@ function's type. Two declarations that differ only in what they retain are one
 type, and a call resolves against the declaration it names, never against a row
 carried by the type. That is what lets §3 drop the row from function types.
 
-It follows that an indirect call through a functor type carries no retention
-fact of its own. A `fn(&Data)` parameter says nothing about what the function
-behind it keeps, so a call through one must assume every reference position
-escapes. Recovering the precision takes knowing which functions reach the call;
-that is a gap below, not something the row bought back.
+The row on a function type is a separate question from the clause on a function,
+and it is the one an indirect call reads. An empty row means "retains nothing"
+today, and that reading is true only because the frontend keeps it true: a
+closure may not retain a reference parameter, and a named function that does is
+rejected where a non-retaining functor type is expected. Remove the obligation
+without replacing the row's source and the empty row becomes a lie, so an
+indirect call must instead assume every reference position escapes.
+
+What the row needs is a source, not a new analysis: the same facts §3 reads from
+a body, known early enough to be part of the type. Both consumers — the subset
+check at coercion, and the row in the mangled type name — stay exactly as they
+are. Whether the fixpoint can run before the type name is minted is the open
+question, and it is in the gaps below.
 
 A closure declares neither effects nor stores. The parser still reads a `with`
 row where one would go, and reports that the compiler does not carry it yet.
@@ -423,8 +431,10 @@ The external component receives a **copy**, not a GC reference. Even if it "stor
    API learns it from the body or not at all.
    - Mitigation: none in the language. `wado doc` could render the inferred
      fact, which is a gap below.
-3. An indirect call has no retention fact, so it assumes the worst (§4).
-   - Mitigation: none today; recovering it is a gap below.
+3. An indirect call reads the worst case unless the function type's row gets a
+   new source (§4).
+   - Mitigation: seventeen signatures in the corpus are exposed, so the cost is
+     measurable first. Recovering it is a gap below.
 4. Different from Rust: no lifetimes, different model.
    - Mitigation: the simpler model is easier to learn.
 
@@ -491,9 +501,9 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        `core:builtin`'s. Done when `record_builtin_declaration` keys on the
        absence of a body, so a CM import or a `.wasm` / `.wat` asset import can
        carry §4's attributes.
-3. [ ] Remove the `stores` row from the grammar, from function types, and from
-       the mangled function type name. Done when no `.wado` in the corpus parses
-       one and `fn_type_name_info` writes no stores member.
+3. [ ] Measure what the conservative reading of an indirect call costs, at the
+       seventeen exposed signatures §4 names. Done when the number is known,
+       since it decides how much the gap below is worth.
 4. [ ] Delete `check_stores_semantic` and what only it reaches — the oracle, the
        return-provenance fixpoint, the escape walk, the type-reachability memo.
        Done when `effect_check.rs` reports effects and default purity only, and
@@ -502,22 +512,35 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
 5. [ ] Strip the declarations from the corpus: 137 under `wado-compiler/lib`,
        3023 under `package-gale` — 2957 of them Kiln output, so Gale's generator
        stops emitting them first — and 2 under `package-marl`. Done when no
-       `with` row in the corpus names `stores` and `mise run test-wado` passes.
-6. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
+       function declaration in the corpus carries a `stores` clause and
+       `mise run test-wado` passes.
+6. [ ] Remove the `stores` clause from a function declaration in the grammar,
+       after nothing writes one. Done when the parser rejects it. The row in
+       function type position stays until the gap below settles where its facts
+       come from.
+7. [ ] Seed `lower::plan::value_copy::stores` from the attribute alone. Done when
        `declared_positions` reads `BuiltinDeclaration` and the `hands_out_result`
        heuristic is gone, closing the "declared `stores` the walk does not
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
-7. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
+8. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
        §5. Done when compile-time evaluation is decided by the body alone.
-8. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
+9. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
        READMEs carry the new numbers.
 
 ## Known gaps
 
-- [ ] An indirect call assumes every reference position escapes (§4). Closing it
-      takes knowing which functions can reach the call site;
-      `lower::plan::value_copy::funcset` is a borrow-keyed container today, not
-      that analysis.
+- [ ] Give the function type's `stores` row a source that is not a declaration
+      (§4). Seventeen signatures in the corpus take a functor with a reference
+      parameter — four in the prelude, all comparators, and thirteen written by
+      hand — so what the conservative reading costs is measurable before anything
+      is built.
+      Closing it means running the retention fixpoint before the type name is
+      minted, which today it cannot: it runs at `lower::plan`, and the row is
+      mangled during reification. Then the coercion check and the mangling read
+      an inferred row instead of a written one, unchanged otherwise.
+      Failing that, the row leaves the type and an indirect call needs to know
+      which functions reach it — a points-to analysis, which nothing here is;
+      `lower::plan::value_copy::funcset` is a borrow-keyed container, not that.
 
 - [ ] Say which place a retained parameter lands in. Retention records that `p`
       outlives the call, not where it goes, and `array_copy(dst, _, src, _, _)`
