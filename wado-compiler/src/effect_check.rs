@@ -997,20 +997,14 @@ fn indirect_callee_type(
     expr_type_of(callee, sem)
 }
 
-/// The operation requirement a direct call carries, where its callee is a free
-/// function in this program rather than a method or a host binding.
-fn operation_requirement(
-    sem: &Semantics,
-    index: &EffectIndex<'_>,
-    func_ref: &FunctionRef,
-    receiver_site: Option<AstId>,
-) -> Vec<EffectRef> {
-    if func_ref.method_info.is_some()
-        || !matches!(func_ref.module_source, ModuleSource::Local { .. })
-    {
-        return Vec::new();
-    }
-    operation_requirements(sem, index, receiver_site)
+/// The static dispatches recorded at a call, with whether each spells its
+/// receiver as the first argument.
+fn dispatches_at(annotations: Option<&TypeAnnotations>, id: AstId) -> Vec<(FunctionRef, bool)> {
+    annotations
+        .into_iter()
+        .flat_map(|ann| ann.static_dispatches(id))
+        .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+        .collect()
 }
 
 /// What invoking one callee at a call site performs.
@@ -1053,11 +1047,7 @@ fn call_site_effects(
         let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
         return vec![bare(ident.name.clone(), resolved)];
     }
-    let dispatches: Vec<(FunctionRef, bool)> = annotations
-        .into_iter()
-        .flat_map(|ann| ann.static_dispatches(id))
-        .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-        .collect();
+    let dispatches = dispatches_at(annotations, id);
     if dispatches.is_empty() {
         // The callee is a function-typed value (a closure or `fn(...)`
         // parameter). Its type carries the effects it performs when invoked.
@@ -1069,7 +1059,9 @@ fn call_site_effects(
         };
         return vec![bare(INDIRECT_CALLEE.to_string(), effects.clone())];
     }
-    let receiver_site = interface_segment(callee).map(|seg| seg.id);
+    // Only a free function in this program dispatches through the path: a
+    // method names its receiver, and a host binding is already the import.
+    let path_site = interface_segment(callee).map(|seg| seg.id);
     dispatches
         .into_iter()
         .map(|(func_ref, self_in_args)| {
@@ -1079,10 +1071,16 @@ fn call_site_effects(
             // argument, so the args already align with the callee's full
             // parameter list — no self skip.
             let is_method = func_ref.method_info.is_some() && !self_in_args;
+            let dispatches_through_path = func_ref.method_info.is_none()
+                && matches!(func_ref.module_source, ModuleSource::Local { .. });
             CalleeEffects {
                 name: callee_name(callee).to_string(),
                 declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
-                dispatched: operation_requirement(sem, index, &func_ref, receiver_site),
+                dispatched: if dispatches_through_path {
+                    operation_requirements(sem, index, path_site)
+                } else {
+                    Vec::new()
+                },
             }
         })
         .collect()
@@ -1328,8 +1326,7 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
-                    let mut effects = self.method_effects(&func_ref);
-                    effects.extend(operation_requirement(self.sem, self.index, &func_ref, None));
+                    let effects = self.method_effects(&func_ref);
                     let params = self.method_param_types(&func_ref);
                     let resolved = resolve_effect_params(
                         self.sem,
@@ -1343,15 +1340,8 @@ impl AstVisitor for SemEffectWalker<'_> {
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let dispatches: Vec<(FunctionRef, bool)> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.static_dispatches(static_call.id))
-                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                    .collect();
-                for (func_ref, self_in_args) in dispatches {
-                    let mut effects = self.method_effects(&func_ref);
-                    effects.extend(operation_requirement(self.sem, self.index, &func_ref, None));
+                for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
+                    let effects = self.method_effects(&func_ref);
                     let params = self.method_param_types(&func_ref);
                     // See the `Call` arm: a trait-turbofish qualified call
                     // carries its receiver in the argument list.
@@ -2747,16 +2737,6 @@ impl PurityWalker<'_> {
         });
     }
 
-    /// The static dispatches recorded at a call, with whether each spells its
-    /// receiver as the first argument.
-    fn dispatches_at(&self, id: AstId) -> Vec<(FunctionRef, bool)> {
-        self.annotations
-            .into_iter()
-            .flat_map(|ann| ann.static_dispatches(id))
-            .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-            .collect()
-    }
-
     /// Whether any of `effects` is one no enclosing `with … do` installs.
     fn unanswered(&self, effects: &[EffectRef]) -> bool {
         effects.iter().any(|effect| {
@@ -2850,7 +2830,7 @@ impl AstVisitor for PurityWalker<'_> {
                 if let ast::Type::Named(named) = &static_call.target_type {
                     self.flag_if_operation(named.id, &static_call.method, static_call.span);
                 }
-                for (func_ref, self_in_args) in self.dispatches_at(static_call.id) {
+                for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);
                     let params = self.index.method_param_types(&func_ref);
                     let is_method = func_ref.method_info.is_some() && !self_in_args;

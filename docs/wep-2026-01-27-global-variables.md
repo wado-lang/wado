@@ -138,9 +138,10 @@ cannot evaluate, a value read out of mutable state, or a payload too large to
 inline as `array.new_fixed` — a long string literal lives in the data section
 and is materialized at run time, so no constant expression can denote it.
 
-Two steps put a value in the slot, and both finish before the module is emitted.
-The syntactic classifier below runs at every optimization level. The promotion on
-the lowered Wasm value then takes back what the optimizer folded.
+Two steps put a value in the slot, and both finish before the module is emitted:
+reify classifies the initializer's syntax, at every optimization level, and a
+later classifier reads the lowered Wasm value and promotes back what the
+optimizer folded to a constant.
 
 ### An initializer is a body, and a body is a function
 
@@ -156,10 +157,9 @@ global's slot holds the placeholder. A global carries no locals of its own, so
 it cannot hold a body at all. Lowering splices those functions into the module's
 initialization function in dependency order and drops them.
 
-Reify decides one direction for good: what it calls `Direct` the Wasm slot can
-hold at every phase after it, because nothing on the way turns a literal into
-code. Lowering asserts that rather than trusting it. What reify defers is
-provisional, and the section below says who settles it.
+What reify calls `Direct` stays direct. The Wasm slot can hold it at every phase
+after, because nothing on the way turns a literal into code, and lowering asserts
+that rather than trusting it. What reify defers is provisional.
 
 ### The decision is made on the value, not on the syntax
 

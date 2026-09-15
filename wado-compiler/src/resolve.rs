@@ -571,8 +571,7 @@ impl AstVisitor for Resolver<'_> {
         {
             let answer = self.resolve_name(&head.name);
             self.record(head.id, answer);
-            let owner = ident.segments.len() - 2;
-            if owner > 0 {
+            if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
                 let qualified = format!(
                     "{}${}",
                     ident.segments[owner - 1].name,
