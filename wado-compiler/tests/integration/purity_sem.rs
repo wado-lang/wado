@@ -112,13 +112,13 @@ export fn run() with Stdout {
     );
 }
 
+/// An operation with no default body has nothing to run unhandled, so the
+/// dispatch needs a handler the initializer does not have.
 #[test]
 fn interface_operation_in_global_initializer_is_reported() {
     let source = r#"
 interface Counter {
-    fn next() -> i32 {
-        return 41;
-    }
+    fn next() -> i32;
 }
 
 global A: i32 = Counter::next();
@@ -142,9 +142,7 @@ export fn run() {
 fn handler_install_in_global_initializer_is_not_reported() {
     let source = r#"
 interface Counter {
-    fn next() -> i32 {
-        return 41;
-    }
+    fn next() -> i32;
 }
 
 struct Tally {
@@ -182,11 +180,11 @@ export fn run() {
 fn unhandled_operation_under_a_handler_is_still_reported() {
     let source = r#"
 interface Counter {
-    fn next() -> i32 { return 41; }
+    fn next() -> i32;
 }
 
 interface Clock {
-    fn now() -> i32 { return 7; }
+    fn now() -> i32;
 }
 
 struct Tally {
@@ -224,6 +222,69 @@ export fn run() {
             .iter()
             .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
         "`next` is answered by the installed handler: {found:?}"
+    );
+}
+
+/// A closure literal is a value. Its body's effects belong to its type and are
+/// demanded where it is called, not where it is written.
+#[test]
+fn closure_literal_in_global_initializer_is_not_reported() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+
+global CB: fn() with Stdout = || { println("hi"); };
+
+export fn run() with Stdout {
+    CB();
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found.is_empty(),
+        "making a closure performs nothing: {found:?}"
+    );
+}
+
+/// An operation declaring a default body needs no handler — the default is what
+/// a dispatch with none installed runs.
+#[test]
+fn defaulted_operation_in_global_initializer_is_not_reported() {
+    let source = r#"
+interface Log {
+    fn level() -> i32 {
+        return 3;
+    }
+}
+
+global A: i32 = Log::level();
+
+export fn run() {
+    assert A == 3;
+}
+"#;
+    let found = in_global(source);
+    assert!(found.is_empty(), "the default body runs: {found:?}");
+}
+
+/// An `effect E` that bound to no concrete effect demands nothing, the way
+/// `SemEffectWalker::report_missing` reads it.
+#[test]
+fn unbound_effect_parameter_in_global_initializer_is_not_reported() {
+    let source = r#"
+fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
+    return f(x);
+}
+
+global A: i32 = apply(|n| n + 1, 41);
+
+export fn run() {
+    assert A == 42;
+}
+"#;
+    let found = in_global(source);
+    assert!(
+        found.is_empty(),
+        "an unbound effect parameter is not an effect: {found:?}"
     );
 }
 

@@ -5944,6 +5944,29 @@ pub struct BuiltinDeclaration {
     pub stores: Vec<usize>,
 }
 
+/// A body's local frame. Taken and given whole, so a caller moving a body
+/// between functions cannot carry the locals and leave what describes them.
+#[derive(Debug, Clone, Default)]
+pub struct LocalFrame {
+    pub locals: Vec<TirLocal>,
+    /// Indices of the locals something takes the address of (`&x` / `&mut x`),
+    /// which codegen boxes so a write through the reference is seen.
+    pub address_taken: IndexSet<u32>,
+}
+
+impl LocalFrame {
+    /// Append `other`, renumbering its locals to follow this frame's.
+    pub fn absorb(&mut self, other: LocalFrame, shift: impl FnOnce(u32)) {
+        let offset = u32::try_from(self.locals.len()).expect("local count fits in u32");
+        if offset > 0 && !other.locals.is_empty() {
+            shift(offset);
+        }
+        self.locals.extend(other.locals);
+        self.address_taken
+            .extend(other.address_taken.into_iter().map(|i| i + offset));
+    }
+}
+
 impl TirFunction {
     /// A parameterless function the compiler mints for itself: no declaration,
     /// no generics, no effects.
@@ -5953,9 +5976,13 @@ impl TirFunction {
         name: String,
         return_type: TypeId,
         body: TirBlock,
-        locals: Vec<TirLocal>,
+        frame: LocalFrame,
         span: Span,
     ) -> Self {
+        let LocalFrame {
+            locals,
+            address_taken,
+        } = frame;
         Self {
             module_source,
             def_id: None,
@@ -5976,7 +6003,7 @@ impl TirFunction {
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
             locals,
-            address_taken_locals: IndexSet::default(),
+            address_taken_locals: address_taken,
             stores_aliased_locals: IndexSet::default(),
             is_cm_binding: false,
             is_dispatch_wrapper: false,

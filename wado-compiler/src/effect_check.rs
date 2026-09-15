@@ -354,6 +354,9 @@ struct OwnedEffectData {
     effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
     interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
+    /// `(module, interface, operation)` for every operation declaring a default
+    /// body, which runs when no handler is installed.
+    defaulted_operations: IndexSet<(ModuleSource, String, String)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -451,6 +454,8 @@ impl OwnedEffectData {
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
+        let mut defaulted_operations: IndexSet<(ModuleSource, String, String)> =
+            IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Interface(decl) = item else {
@@ -462,6 +467,15 @@ impl OwnedEffectData {
                     .find_map(|a| a.as_cm_import())
                     .map(CmImport::interface_path);
                 interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
+                for method in &decl.methods {
+                    if method.body.is_some() {
+                        defaulted_operations.insert((
+                            src.clone(),
+                            decl.name.clone(),
+                            method.name.clone(),
+                        ));
+                    }
+                }
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
                     module_source: src.clone(),
@@ -485,6 +499,7 @@ impl OwnedEffectData {
             closure,
             effect_by_name,
             interface_cm_fq,
+            defaulted_operations,
             effect_by_cm_fq,
             provided_import_fqs,
         }
@@ -502,6 +517,7 @@ impl OwnedEffectData {
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
             interface_cm_fq: &self.interface_cm_fq,
+            defaulted_operations: &self.defaulted_operations,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
         }
@@ -528,6 +544,9 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// Declared effect / resource name → resolved `EffectRef` (`#[benign]`).
     effect_by_name: &'a IndexMap<String, EffectRef>,
+    /// `(module, interface, operation)` for every operation declaring a default
+    /// body, which runs when no handler is installed.
+    defaulted_operations: &'a IndexSet<(ModuleSource, String, String)>,
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
     interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
@@ -536,6 +555,17 @@ struct EffectIndex<'a> {
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
+}
+
+/// The segment naming the interface in a dispatch path `[ns::]*E::op`: the one
+/// before the operation, so a namespace qualifier ahead of `E` does not stand in
+/// for it.
+fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
+    let Expr::Ident(ident) = callee else {
+        return None;
+    };
+    let last = ident.segments.len().checked_sub(2)?;
+    ident.segments.get(last)
 }
 
 /// The `interface` the name at `site` declares, as its declaring module, its
@@ -1363,10 +1393,7 @@ impl SemEffectWalker<'_> {
         if dispatches.is_empty() {
             return false;
         }
-        let receiver_site = match callee {
-            Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
-            _ => None,
-        };
+        let receiver_site = interface_segment(callee).map(|seg| seg.id);
         for (func_ref, self_in_args) in dispatches {
             let mut effects = self.method_effects(&func_ref);
             effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
@@ -2668,9 +2695,30 @@ impl PurityWalker<'_> {
     }
 
     fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
-        if effects.iter().any(|e| !self.granted.contains(e)) {
+        let unanswered = effects.iter().any(|effect| {
+            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
+            // A `Param` left after resolution bound to no concrete effect, as
+            // `SemEffectWalker::report_missing` reads it.
+            !effect.is_param() && !self.granted.contains(&effect)
+        });
+        if unanswered {
             self.flag(Impurity::Call(callee.to_string()), span);
         }
+    }
+
+    /// Whether the operation declares a default body, which is what a dispatch
+    /// with no handler installed runs.
+    fn is_defaulted(&self, effect: &EffectRef, op: &str) -> bool {
+        let EffectRef::Concrete {
+            name,
+            module_source,
+        } = effect
+        else {
+            return false;
+        };
+        self.index
+            .defaulted_operations
+            .contains(&(module_source.clone(), name.clone(), op.to_string()))
     }
 
     /// Flags `Site::op(…)` when the dispatch needs something the position does
@@ -2679,7 +2727,9 @@ impl PurityWalker<'_> {
     /// neither a handler nor an effect, and stays.
     fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
         match operation_at(self.sem, self.index, Some(site)) {
-            Some(Operation::Handled(effect)) if !self.granted.contains(&effect) => {
+            Some(Operation::Handled(effect))
+                if !self.granted.contains(&effect) && !self.is_defaulted(&effect, op) =>
+            {
                 self.flag(Impurity::Dispatch(op.to_string()), span);
             }
             Some(Operation::Requires(effects)) => self.flag_if_effectful(&effects, op, span),
@@ -2691,12 +2741,13 @@ impl PurityWalker<'_> {
 impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
+            // A closure literal is a value: making one performs nothing, and
+            // its body's effects belong to its type, checked where it is called.
+            Expr::Closure(_) => return,
             Expr::Call(call) => {
-                // `E::op()` parses as a path callee: the interface is the first
-                // segment, the operation the last.
-                if let Expr::Ident(ident) = &call.callee
-                    && let (Some(interface), Some(op)) =
-                        (ident.segments.first(), ident.segments.last())
+                if let Some(interface) = interface_segment(&call.callee)
+                    && let Expr::Ident(ident) = &call.callee
+                    && let Some(op) = ident.segments.last()
                 {
                     self.flag_if_operation(interface.id, &op.name, call.span);
                 }

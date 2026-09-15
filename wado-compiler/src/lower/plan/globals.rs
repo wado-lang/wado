@@ -14,7 +14,7 @@ use crate::name::{
 };
 use crate::synthesis::common::builtin_call;
 use crate::tir::{
-    FunctionRef, GlobalInit, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal, TirLocal,
+    FunctionRef, GlobalInit, LocalFrame, TirBlock, TirExpr, TirExprKind, TirFunction, TirGlobal,
     TirStmt, TirStmtKind, TypeTable, is_constant_initializer,
 };
 use crate::tir_visitor::{TirRefVisitor, shift_locals};
@@ -26,9 +26,9 @@ use crate::token::Span;
 struct LazyInit {
     global: String,
     module_source: ModuleSource,
-    /// What the global is assigned, in the frame `locals` describes.
+    /// What the global is assigned, in the frame `frame` describes.
     value: TirExpr,
-    locals: Vec<TirLocal>,
+    frame: LocalFrame,
 }
 
 /// The value a `$init$` function returns. Reify writes the one return, and
@@ -79,7 +79,10 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
             global,
             module_source: func.module_source.clone(),
             value: returned_value(func.body.take().expect("$init$ carries a body")),
-            locals: std::mem::take(&mut func.locals),
+            frame: LocalFrame {
+                locals: std::mem::take(&mut func.locals),
+                address_taken: std::mem::take(&mut func.address_taken_locals),
+            },
         };
         by_module
             .entry(init.module_source.clone())
@@ -118,20 +121,16 @@ fn build_module_init_function(
     span: Span,
 ) -> TirFunction {
     let mut init_stmts: Vec<TirStmt> = Vec::new();
-    let mut merged_locals: Vec<TirLocal> = Vec::new();
+    let mut merged = LocalFrame::default();
 
     for init in sorted_inits {
         let LazyInit {
             global,
             module_source,
             mut value,
-            locals,
+            frame,
         } = init;
-        let offset = u32::try_from(merged_locals.len()).expect("local count fits in u32");
-        if offset > 0 && !locals.is_empty() {
-            shift_locals(&mut value, offset);
-        }
-        merged_locals.extend(locals);
+        merged.absorb(frame, |offset| shift_locals(&mut value, offset));
         let global_set = TirExpr::new(
             TirExprKind::GlobalVarSet {
                 module_source,
@@ -152,7 +151,7 @@ fn build_module_init_function(
             stmts: init_stmts,
             span,
         },
-        merged_locals,
+        merged,
         span,
     )
 }
@@ -587,7 +586,7 @@ pub fn build_initialize_modules(flat: &mut FlatPackage) {
         MODULES_INIT_FUNCTION.to_string(),
         TypeTable::UNIT,
         init_body,
-        Vec::new(),
+        LocalFrame::default(),
         span,
     );
     flat.functions

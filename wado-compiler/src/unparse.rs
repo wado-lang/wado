@@ -4611,7 +4611,14 @@ impl<'a> TirUnparser<'a> {
         self.output.push_str(&g.name);
         self.output.push_str(": ");
         self.output.push_str(&self.type_table.type_name(g.ty));
-        self.output.push_str(" = ");
+        // A deferred global's slot holds a placeholder, and the declared value
+        // is the `$init$` function below. Saying so keeps the placeholder from
+        // reading as the value.
+        self.output.push_str(if g.init.is_deferred() {
+            " = deferred "
+        } else {
+            " = "
+        });
         self.unparse_expr(g.init.slot_expr());
         self.output.push_str(";\n");
     }

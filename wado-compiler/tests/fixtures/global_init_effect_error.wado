@@ -4,10 +4,9 @@
 
 use { println, Stdout } from "core:cli";
 
+// No default body, so an unhandled dispatch has nothing to run.
 interface Counter {
-    fn next() -> i32 {
-        return 41;
-    }
+    fn next() -> i32;
 }
 
 fn noisy() -> i32 with Stdout {
@@ -18,8 +17,7 @@ fn noisy() -> i32 with Stdout {
 // Calls a function that declares an effect.
 global FROM_EFFECTFUL_FN: i32 = noisy();
 
-// Dispatches a user-defined effect's operation, which a handler answers. Its
-// default body does not make the dispatch pure.
+// Dispatches a user-defined effect's operation, which only a handler answers.
 global FROM_OPERATION: i32 = Counter::next();
 
 export fn run() with Stdout {

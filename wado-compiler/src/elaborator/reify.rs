@@ -16,10 +16,10 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
-    self as tir, CallArg, GlobalInit, ResolvedType, TirBinaryOp, TirBlock, TirEnum, TirEnumCase,
-    TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirLocal, TirModule,
-    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable,
+    self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
+    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
+    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
+    TirVariantDecl, TypeId, TypeTable,
 };
 
 use super::coercion::{
@@ -2008,13 +2008,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let param = self.reify_param_attr(global_decl);
         let span = global_decl.span;
 
-        let (init, init_fn) = self.split_global_initializer(
-            &global_decl.name,
-            ty,
-            initializer,
-            std::mem::take(&mut ctx.locals),
-            span,
-        );
+        let frame = LocalFrame {
+            locals: std::mem::take(&mut ctx.locals),
+            address_taken: std::mem::take(&mut ctx.address_taken_locals),
+        };
+        let (init, init_fn) =
+            self.split_global_initializer(&global_decl.name, ty, initializer, frame, span);
         Some((
             TirGlobal {
                 name: global_decl.name.clone(),
@@ -2038,13 +2037,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         name: &str,
         ty: TypeId,
         initializer: TirExpr,
-        locals: Vec<TirLocal>,
+        frame: LocalFrame,
         span: Span,
     ) -> (GlobalInit<TirExpr>, Option<TirFunction>) {
         let type_table = self.tysys.type_table.borrow();
         if tir::is_constant_initializer(&initializer, &type_table) {
             assert!(
-                locals.is_empty(),
+                frame.locals.is_empty(),
                 "a constant initializer allocates no local"
             );
             return (GlobalInit::Direct(initializer), None);
@@ -2055,7 +2054,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             global_init_function(name),
             ty,
             tir::initializer_body(initializer, span),
-            locals,
+            frame,
             span,
         );
         (GlobalInit::Deferred(placeholder), Some(init_fn))
