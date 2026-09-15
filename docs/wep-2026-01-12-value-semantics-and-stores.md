@@ -21,7 +21,7 @@ never the programmer.
 
 ## Decision
 
-### 1. Structs Have Value Semantics
+### Structs Have Value Semantics
 
 A struct is copied on assignment, on parameter passing, and on return.
 
@@ -35,7 +35,7 @@ let c = move a;  // ownership transferred, `a` invalidated
 Value semantics are the model with no aliasing surprises to reason about, and
 `move` is the escape hatch where a copy is too expensive to take.
 
-### 2. There Is No Stack, So Nothing Is Promoted
+### There Is No Stack, So Nothing Is Promoted
 
 A programmer never chooses between stack and heap, and never annotates a value
 so that it may outlive a scope. Neither the choice nor the annotation exists.
@@ -55,7 +55,7 @@ This is what makes retention safe to be imprecise about. An escape analysis that
 decides where a value lives must be right or the program is wrong; one that
 decides only what the optimizer may skip costs a copy when it is wrong.
 
-### 3. Retention Is Inferred, Never Declared
+### Retention Is Inferred, Never Declared
 
 A reference parameter leaves a call in two ways, and they are different claims:
 
@@ -64,8 +64,10 @@ A reference parameter leaves a call in two ways, and they are different claims:
 - Retain — the reference reaches a global, or is written through a `&mut` the
   caller still holds, as `array_set` does.
 
-Neither is a safety condition, for §2's reason: there is nothing for a
-declaration to prevent. Both are optimizer inputs, and §5 says what they buy.
+Neither is a safety condition, for the reason
+[There Is No Stack, So Nothing Is Promoted](#there-is-no-stack-so-nothing-is-promoted)
+gives: there is nothing for a declaration to prevent. Both are optimizer inputs,
+and [What Retention Buys](#what-retention-buys) says what they buy.
 
 A body states both, so the compiler reads them from it rather than from a
 declaration: an interprocedural least fixpoint over the call graph, publishing
@@ -99,7 +101,7 @@ A function with a body therefore declares nothing. There is no retention row on
 a function declaration, in a function type, or on a closure, and no obligation
 for a programmer to discharge.
 
-### 4. A Declaration Only Where There Is No Body
+### A Declaration Only Where There Is No Body
 
 A body-less declaration is the exception: there is nothing to read, so it states
 its facts itself, as attributes.
@@ -155,17 +157,18 @@ contradicting the impl would never be caught.
 A program has no body-less function of its own to put these on — the one it can
 write is a [declared absence](./wep-2026-09-13-declared-absence.md), which
 reserves a name and is never called — so in practice the attributes belong to
-the compiler's own declarations and to imports. That is the sense in which §3
-removes retention from user code entirely rather than making it optional.
+the compiler's own declarations and to imports. That is the sense in which
+inference removes retention from user code entirely rather than making it
+optional.
 
 They are attributes rather than a `with` row because retention is not part of a
 function's type. Two declarations differing only in what they retain are one
 type, and a call resolves against the declaration it names.
 
-### 5. What Retention Buys
+### What Retention Buys
 
-Nothing is promoted to reach a retained reference (§2), so what the facts buy is
-what the compiler may stop doing to the argument:
+Nothing is promoted to reach a retained reference, so what the facts buy is what
+the compiler may stop doing to the argument:
 
 - A local passed where the callee retains it or hands it out cannot be moved out
   of, so it is copied; one passed where the callee keeps nothing can be moved.
@@ -176,7 +179,7 @@ what the compiler may stop doing to the argument:
   time, since compile-time evaluation has no reference values to embed and the
   result would be a snapshot the next write leaves stale.
 
-### 6. Closures Capture by Reference
+### Closures Capture by Reference
 
 A closure auto-captures each free variable by reference, and the reference kind
 is inferred from body usage: `&T` where the body only reads, `&mut T` where it
@@ -195,13 +198,13 @@ assert get() == 2;             // both closures see the same location
 
 Two closures naming the same outer binding share its location, because
 references alias and nothing here makes a second copy. The closure value itself
-follows §1 and is copied when assigned or passed; since its environment holds
-references, every copy observes the same bindings.
+has value semantics like any other and is copied when assigned or passed; since
+its environment holds references, every copy observes the same bindings.
 
 A closure that escapes its declaring scope needs no lifetime rule of its own.
-Its captured referents are GC allocations the environment holds references to
-(§2), so the collector keeps them; the escape changes only what the optimizer
-may do to the bindings.
+Its captured referents are GC allocations the environment holds references to,
+so the collector keeps them; the escape changes only what the optimizer may do
+to the bindings.
 
 A closure declares no more about what it retains than a named function does, and
 no effects either — those are inferred from the body. A `with` row written where
@@ -211,7 +214,7 @@ The term for what a closure does to an outer binding is capture, and retention
 is about the reference parameters a call is handed. They are separate
 mechanisms.
 
-### 7. The Functor Type Carries No Retention
+### The Functor Type Carries No Retention
 
 Retention is a fact about a function, not about its type, so a function type
 says nothing about it and an indirect call has nothing to read. The copy
@@ -234,7 +237,7 @@ points-to analysis. Sourcing it that way keeps retention a derived fact about a
 type rather than part of its identity: two function types differing only in
 retention stay one type, and nothing is checked when one coerces to the other.
 
-### 8. Component Model Boundaries
+### Component Model Boundaries
 
 Retention is a within-component concern. A call crossing a Component Model
 boundary copies — `struct` to `record`, `List<T>` to `list<T>`, `String` to
@@ -242,11 +245,11 @@ boundary copies — `struct` to `record`, `List<T>` to `list<T>`, `String` to
 carries none of the caller's storage across. Whatever the other component keeps,
 it keeps its own copy.
 
-A CM import is still a body-less declaration, so §4's attributes belong on one;
-nothing needs them today, because the copy already answers. They are there for
-an import whose lowering does not copy.
+A CM import is still a body-less declaration, so the attributes above belong on
+one; nothing needs them today, because the copy already answers. They are there
+for an import whose lowering does not copy.
 
-### 9. Retention Is Not an Effect
+### Retention Is Not an Effect
 
 An effect is what a function does, retention is what it keeps, and a
 capability-based reading makes the two look close: a retained reference can be
@@ -259,7 +262,7 @@ it may stop doing to an argument. So an effect is declared in the `with` row and
 is part of the function's type, while retention is read from the body — or,
 where there is none, stated as an attribute the type does not carry.
 
-### 10. Reference, Not Pointer
+### Reference, Not Pointer
 
 `&T` is a reference and Wado does not call it a pointer: it is GC-managed and
 non-null, with no arithmetic on it, and `Option<&T>` is how a nullable one is
@@ -267,57 +270,74 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Roadmap
 
-1. Read the attributes of every body-less declaration, not only the compiler's
-   own, so that a CM import or a `.wasm` / `.wat` asset import can carry them.
-   The obstacle is §4's asymmetry: a missing `#[returns]` is asserted rather
-   than diagnosed, which is right while only compiler-owned code reaches it and
-   wrong for a user-supplied declaration. Done when that assert is a diagnostic
-   against the declaration everywhere outside the compiler's own library, and a
-   panic nowhere.
+In order. Each is named rather than numbered, so a reference to one from the
+code survives the list changing around it.
 
-2. Measure what the conservative reading of an indirect call costs, across the
-   signatures in the corpus that take a functor with a reference parameter.
-   Done when the number is known, since it says how much item 3 is worth and how
-   much the gap below it would leave.
+### Attributes on declarations the compiler does not own
 
-3. Give the functor type's row the inferred source §7 describes, joining the
-   facts of every function reference and closure literal of one type. Done when
-   every reader of an indirect call reads that join, a comparator that retains
-   neither argument stops pinning them, and the disagreement in the gaps below
-   is closed with it.
+Read the attributes of every body-less declaration, not only the compiler's own,
+so that a CM import or a `.wasm` / `.wat` asset import can carry them, and
+surface every attribute a declaration carries in `wado query hover` and `wado
+doc` with no per-attribute allowlist — `#[retain]` and `#[returns]` should reach
+a reader because attributes do.
 
-4. Add `into_param` as the third channel (§3), fed both by `into = q` on a
-   declaration and by a body that puts a reference into one of its own
-   parameters. Recording it is the smaller half: what a caller does with a
-   bounded retention is a reading the published facts have no shape for today,
-   since they name retained positions and not where each landed. Done when the
-   facts carry retained parameter to destination parameter, the fixpoint
-   propagates it, `List::push` reaches it from its body with no attribute, and a
-   caller reasons about the destination's extent instead of assuming the worst.
+The obstacle on the reading side is the asymmetry in
+[A Declaration Only Where There Is No Body](#a-declaration-only-where-there-is-no-body):
+a missing `#[returns]` is asserted rather than diagnosed, which is right while
+only compiler-owned code reaches it and wrong for a user-supplied declaration.
 
-5. Read `elements_of` and `into`, so a declaration can say which place a
-   retained parameter lands in and whether what lands is the parameter or its
-   elements. A copy between arrays is the case that needs both: without them the
-   whole source reference is marked escaped at every call site, including the
-   many whose elements are scalars that escape nothing. Done when those sites
-   stop paying for it.
+Done when that assert is a diagnostic against the declaration everywhere outside
+the compiler's own library with a panic nowhere, a body-less declaration's
+attributes appear in both hover and `wado doc`, and adding an attribute needs no
+change to either.
 
-6. Surface every attribute a declaration carries in `wado query hover` and
-   `wado doc`, with no per-attribute allowlist — `#[retain]` and `#[returns]`
-   should reach a reader because attributes do. Done when a body-less
-   declaration's attributes appear in both, and adding an attribute needs no
-   change to either.
+### The numbers
 
-7. Record the effect on `benchmark/` and `wasm-size/`. Done when both READMEs
-   carry the new numbers.
+Measure what the conservative reading of an indirect call costs, across the
+signatures in the corpus that take a functor with a reference parameter, since
+that number says how much the inferred row below is worth and how much the gap
+under it would leave. Record the effect of the retention redesign on
+`benchmark/` and `wasm-size/`.
+
+Done when that cost is known and both READMEs carry the new numbers.
+
+### An inferred row for the functor type
+
+Give the functor type's row the inferred source
+[The Functor Type Carries No Retention](#the-functor-type-carries-no-retention)
+describes, joining the facts of every function reference and closure literal of
+one type.
+
+Done when every reader of an indirect call reads that join, a comparator that
+retains neither argument stops pinning them, and the disagreement in the gaps
+below is closed with it.
+
+### A bounded destination
+
+Add `into_param` as the third channel, fed both by `into = q` on a declaration
+and by a body that puts a reference into one of its own parameters, and read
+`elements_of` alongside it so a declaration can also say whether what lands is
+the parameter or its elements.
+
+Recording is the smaller half: what a caller does with a bounded retention is a
+reading the published facts have no shape for today, since they name retained
+positions and not where each landed. A copy between arrays is the case that
+needs both halves — without them the whole source reference is marked escaped at
+every call site, including the many whose elements are scalars that escape
+nothing.
+
+Done when the facts carry retained parameter to destination parameter, the
+fixpoint propagates it, `List::push` reaches it from its body with no attribute,
+a caller reasons about the destination's extent instead of assuming the worst,
+and those array-copy sites stop paying for a retention they do not perform.
 
 ## Known gaps
 
-An indirect call is read per functor type rather than per call site. Roadmap
-item 3 joins every function value of one type into a single answer, so one
-comparator that retains an argument coarsens every other call through the same
-type. Closing it takes knowing which function values reach which call, which is
-a points-to analysis and nothing here is one.
+An indirect call is read per functor type rather than per call site. The
+inferred row above joins every function value of one type into a single answer,
+so one comparator that retains an argument coarsens every other call through the
+same type. Closing it takes knowing which function values reach which call,
+which is a points-to analysis and nothing here is one.
 
 An indirect call is not read the same way everywhere. The copy analysis assumes
 it retains every argument; the write-back assumes it retains none, so a
@@ -325,8 +345,8 @@ write-back through a functor is emitted on a body that may keep the reference.
 The frontend used to refuse such a program, and that refusal is gone; the
 conservative reading that would replace it rejects programs nothing in the
 language can now make acceptable, which is worse, and unlike the other readers
-it costs a refusal rather than a copy. Roadmap item 3 closes it by giving every
-reader the same join.
+it costs a refusal rather than a copy. The inferred row closes it by giving
+every reader the same join.
 
 ## References
 

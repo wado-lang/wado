@@ -912,7 +912,7 @@ impl Analyzer<'_> {
 
     /// An indirect-call argument. Its referent always escapes: retention is no
     /// part of a function's type, so nothing here names the body that will run.
-    // WEP 2026-01-12 roadmap item 3 gives the functor type's row an inferred
+    // WEP 2026-01-12, "An inferred row for the functor type", gives that row a
     // source, and a transient borrow through one becomes provable again.
     fn walk_indirect_arg(&mut self, arg: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
         if let TirExprKind::Unary {

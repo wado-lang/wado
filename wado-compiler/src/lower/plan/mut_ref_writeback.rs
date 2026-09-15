@@ -429,8 +429,9 @@ impl WriteBack<'_> {
                 TirExprKind::IndirectCall { args, .. } => {
                     // Nothing here names the body that will run, and reading
                     // that as "keeps everything" refuses a write-back no
-                    // program can make acceptable — WEP 2026-01-12 roadmap
-                    // item 3. What it replaces is unknown the other way.
+                    // program can make acceptable — WEP 2026-01-12, "An
+                    // inferred row for the functor type". What it replaces is
+                    // unknown the other way.
                     let stores = IndexSet::default();
                     let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
                     (

@@ -82,8 +82,8 @@ impl StoresOracle<'_> {
 
     /// Facts for an indirect (functor) callee: every position, since retention
     /// is no part of a type and nothing here names the body that will run.
-    // WEP 2026-01-12 roadmap item 3 gives the row an inferred source and takes
-    // the precision back.
+    // WEP 2026-01-12, "An inferred row for the functor type", gives the row a
+    // source and takes the precision back.
     fn indirect(&self, arity: usize) -> StoresFacts {
         let positions: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
         StoresFacts {
@@ -105,7 +105,7 @@ pub fn compute_stored_params(
         let func = func.borrow();
         // A `#[retain(p)]` with no `into` says the reference persists, not
         // where, so both channels take it: only the strong reading is sound
-        // until `into` has a reader (WEP 2026-01-12 roadmap item 5).
+        // until `into` has a reader (WEP 2026-01-12, "A bounded destination").
         let declared = declared_positions(&func);
         debug_assert!(
             declared.is_empty() || func.body.is_none(),
