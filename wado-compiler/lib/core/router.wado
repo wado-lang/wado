@@ -395,6 +395,7 @@ impl<H> Router<H> {
     /// makes returning a ref derived from `&self` and `path` legal here.
     fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
         let plen = path.len();
+        let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         let mut ranges: List<i32> = [];
@@ -406,7 +407,8 @@ impl<H> Router<H> {
             if end == pos {
                 return null;
             }
-            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            let segment = view.sub_unchecked(pos, end);
+            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
@@ -511,6 +513,7 @@ impl<H> Router<H> {
 
     fn allowed_methods_dynamic(&self, path: &String) -> List<Method> {
         let plen = path.len();
+        let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
         let mut state: i32 = 0;
         while pos < plen {
@@ -521,7 +524,8 @@ impl<H> Router<H> {
             if end == pos {
                 return [];
             }
-            let target = bsearch_target_by_bytes(&self.states[state].literals, path, pos, end);
+            let segment = view.sub_unchecked(pos, end);
+            let target = bsearch_target_by_bytes(&self.states[state].literals, &segment);
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {
@@ -770,12 +774,12 @@ fn bsearch_label(edges: &List<LiteralEdge>, key: &String) -> [i32, bool] {
     return [lo, false];
 }
 
-fn bsearch_target_by_bytes(edges: &List<LiteralEdge>, path: &String, start: i32, end: i32) -> i32 {
+fn bsearch_target_by_bytes(edges: &List<LiteralEdge>, segment: &StrSlice) -> i32 {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        match cmp_string_to_byte_range(&edges[mid].label, path, start, end) {
+        match edges[mid].label.as_str_slice().cmp(segment) {
             Less => {
                 lo = mid + 1;
             },
@@ -788,29 +792,6 @@ fn bsearch_target_by_bytes(edges: &List<LiteralEdge>, path: &String, start: i32,
         }
     }
     return -1;
-}
-
-fn cmp_string_to_byte_range(label: &String, path: &String, start: i32, end: i32) -> Ordering {
-    let llen = label.len();
-    let blen = end - start;
-    let cmp_len = if llen < blen { llen } else { blen };
-    for let mut i = 0; i < cmp_len; i += 1 {
-        let a = label.get_byte_unchecked(i);
-        let b = path.get_byte_unchecked(start + i);
-        if a < b {
-            return Ordering::Less;
-        }
-        if a > b {
-            return Ordering::Greater;
-        }
-    }
-    if llen < blen {
-        return Ordering::Less;
-    }
-    if llen > blen {
-        return Ordering::Greater;
-    }
-    return Ordering::Equal;
 }
 
 /// `Deserializer` for `PathParams`. Iterates captured params in the order
@@ -1015,7 +996,7 @@ impl PathParamsDeserializer {
     fn parse_scalar<T: FromStr>(&self, type_name: String) -> Result<T, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
-        return match T::from_str_range(self.src.path, s, e) {
+        return match T::from_str_slice(&self.src.path.as_str_slice().sub(s, e)) {
             Ok(v) => Result::Ok(v),
             Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
         };

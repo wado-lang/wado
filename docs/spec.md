@@ -2589,6 +2589,12 @@ let raw: f64 = m as f64;      // explicit cast required
 - Zero runtime cost (same Wasm representation)
 - Literal coercion to `T` when type context expects `T`
 
+A newtype does not carry an invariant of its own. `as` converts in both
+directions at no cost, so `T` admits exactly what `U` admits. An invariant the
+base type does not enforce, such as UTF-8 in a byte view, belongs in a `struct`
+with a private field and a checked constructor, where the check is the only way
+in.
+
 #### Method Signature Substitution
 
 When calling inherited methods on a newtype, parameters and return types are substituted:
@@ -3639,7 +3645,7 @@ f64::from_str_lenient(&"inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(&" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_range(s, start, end)` (parse a byte range with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 
@@ -5219,13 +5225,22 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
 Every reference parameter follows this rule, `self` included. A method that
 returns or stores `self` declares `with stores[self]`.
 
-A reference reached _through_ a parameter is a different reference. Copying it
-out is not that parameter escaping, and the code that put it there already
-declared it, so it needs no declaration here:
+A reference member read out of a parameter still names what that parameter
+names, so returning it lets the caller's storage escape. Declare it:
 
 ```wado
-fn rebase(c: &Cursor, at: i32) -> Cursor {   // no stores[c]
+struct Cursor { chars: &Array<char>, pos: i32 }
+
+fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
     return Cursor { chars: c.chars, pos: at };
+}
+```
+
+A value member is copied, so nothing of the parameter escapes with it:
+
+```wado
+fn name_of(p: &Person) -> String {   // `name` is a `String`
+    return p.name;
 }
 ```
 

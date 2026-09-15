@@ -638,7 +638,7 @@ fn "http_fields.wado/$cm_export__handle"(request) {
 fn "http_fields.wado/$cm_task_entry__handle"(request) {
     let fields: i32;
     let has_before: bool;
-    let value: ref "core:prelude//List<u8>";
+    let bytes: ref "core:prelude//List<u8>";
     let append_result: ref null "wasi:http/types.wado//HeaderError";
     let has_after: bool;
     let cloned: i32;
@@ -681,8 +681,8 @@ fn "http_fields.wado/$cm_task_entry__handle"(request) {
         "core:rt/panic"($local_24 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(126); $fuse_at_205 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_24, 47); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_205, global:http_fields.wado::$const_obj_8, 20); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_205 + 20, global:http_fields.wado::$const_obj_7, 6); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_205 + 26, global:http_fields.wado::$const_obj_6, 4); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_205 + 30, global:http_fields.wado::$const_obj_5, 16); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_205 + 46, global:http_fields.wado::$const_obj_4, 1); $local_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_24); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 19 }, $local_25); $fuse_at_206 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_24, 36); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_206, global:http_fields.wado::$const_obj_43, 24); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_24.repr, $fuse_at_206 + 24, global:http_fields.wado::$const_obj_42, 12); $local_25 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_24); "core:prelude/primitive.wado/bool^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<bool>" { value: has_before }, $local_25); "core:prelude/string.wado/core:prelude/string.wado/String::push_str"($local_24, global:http_fields.wado::$const_obj_1); $local_24);
         unreachable;
     }
-    value = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("hello"), used: 5 };
-    append_result = "http_fields.wado/$cm_binding__Fields_append"(fields, global:http_fields.wado::$const_obj_9, value);
+    bytes = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("hello"), used: 5 };
+    append_result = "http_fields.wado/$cm_binding__Fields_append"(fields, global:http_fields.wado::$const_obj_9, bytes);
     if @unlikely(ref.is_null(append_result) == 0) {
         drop(ref.as_non_null(append_result));
         cold_path;
@@ -2157,11 +2157,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_50, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;

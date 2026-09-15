@@ -62,40 +62,39 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:newtype_string_coercion.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 65, 108, 105, 99, 101, 33), used: 13 };
+global global:newtype_string_coercion.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111, 32, 119, 111, 114, 108, 100), used: 11 };
+global global:newtype_string_coercion.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 101, 108, 108, 111, 44, 32, 65, 108, 105, 99, 101, 33), used: 13 };
 
 fn "newtype_string_coercion.wado/run"() with Stdout {
-    let label2: ref "core:prelude/string.wado//String";
-    let message_26: ref "core:prelude/string.wado//String";
-    let handle_29: i32;
-    let packed_31: i64;
-    let rx_32: i32;
-    let tx_33: i32;
-    let handle_41: i32;
-    let packed_43: i64;
-    let rx_44: i32;
-    let tx_45: i32;
-    let handle_53: i32;
-    let packed_55: i64;
-    let rx_56: i32;
-    let tx_57: i32;
-    label2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello world"), used: 11 };
-    message_26 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
-    rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
-    tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
-    handle_29 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
-    "core:rt/write_string_to_stream"(tx_33, message_26);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
-    rx_44 = builtin::i32_wrap_i64(local.tee packed_43("wasi/stream-new"()));
-    tx_45 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
-    handle_41 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
-    "core:rt/write_string_to_stream"(tx_45, global:newtype_string_coercion.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_41);
-    rx_56 = builtin::i32_wrap_i64(local.tee packed_55("wasi/stream-new"()));
-    tx_57 = builtin::i32_wrap_i64(packed_55 >> 32_i64);
-    handle_53 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_56);
-    "core:rt/write_string_to_stream"(tx_57, label2);
-    "wasi/future-drop-readable:transmission-cli"(handle_53);
+    let label: ref "core:prelude/string.wado//String";
+    let handle_54: i32;
+    let packed_56: i64;
+    let rx_57: i32;
+    let tx_58: i32;
+    let handle_66: i32;
+    let packed_68: i64;
+    let rx_69: i32;
+    let tx_70: i32;
+    let handle_78: i32;
+    let packed_80: i64;
+    let rx_81: i32;
+    let tx_82: i32;
+    label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
+    rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
+    tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
+    handle_54 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_57);
+    "core:rt/write_string_to_stream"(tx_58, label);
+    "wasi/future-drop-readable:transmission-cli"(handle_54);
+    rx_69 = builtin::i32_wrap_i64(local.tee packed_68("wasi/stream-new"()));
+    tx_70 = builtin::i32_wrap_i64(packed_68 >> 32_i64);
+    handle_66 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_69);
+    "core:rt/write_string_to_stream"(tx_70, global:newtype_string_coercion.wado::$const_obj_3);
+    "wasi/future-drop-readable:transmission-cli"(handle_66);
+    rx_81 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
+    tx_82 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
+    handle_78 = "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(rx_81);
+    "core:rt/write_string_to_stream"(tx_82, global:newtype_string_coercion.wado::$const_obj_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_78);
 }
 
 fn "newtype_string_coercion.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -18,6 +18,7 @@ use super::drop_value::DropValueRule;
 use super::elide_box_local::build_elide_box_local;
 use super::elide_local::ElideRule;
 use super::gate::{FunctionGate, GatedPass};
+use super::identity_cast::IdentityCastRule;
 use super::if_chain_to_match::IfChainToMatchRule;
 use super::known_case::KnownCaseRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
@@ -165,6 +166,9 @@ pub(super) fn run_peephole(
             // Ahead of the folding rules: the arms it drops are what leaves a
             // constant condition and a dead branch for them to reclaim.
             &known_case_rule as &dyn Rule,
+            // Ahead of every rule matching on the shape of a value: a cast that
+            // changes no representation is what hides that shape.
+            &IdentityCastRule,
             &aggregate_forward_rule,
             &elide_rule,
             &const_fold_rule,

@@ -10,17 +10,17 @@ struct View {
 }
 
 impl View {
-    fn inner(&self) -> &mut List<i32> {
+    fn inner(&self) -> &mut List<i32> with stores[self] {
         return self.repr;
     }
 
     /// Accessor over accessor: the path is `self.repr` one call further out.
-    fn inner_via_call(&self) -> &mut List<i32> {
+    fn inner_via_call(&self) -> &mut List<i32> with stores[self] {
         return self.inner();
     }
 
     /// The same place, reached through a local.
-    fn inner_via_local(&self) -> &mut List<i32> {
+    fn inner_via_local(&self) -> &mut List<i32> with stores[self] {
         let r = self.repr;
         return r;
     }

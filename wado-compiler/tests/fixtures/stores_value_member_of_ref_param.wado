@@ -1,0 +1,25 @@
+// The other side of the rule: a value member is copied out, and the copy names
+// nothing the caller still reaches, so handing it back needs no `stores`.
+
+use { println, Stdout } from "core:cli";
+
+struct Person {
+    name: String,
+    tags: List<String>,
+}
+
+fn name_of(p: &Person) -> String {
+    return p.name;
+}
+
+fn tags_of(p: &Person) -> List<String> {
+    return p.tags;
+}
+
+export fn run() with Stdout {
+    let p = Person { name: "ada", tags: ["x"] };
+    println(`${name_of(&p)} ${tags_of(&p).len()}`);
+}
+
+__DATA__
+{ "stdout": "ada 1\n" }

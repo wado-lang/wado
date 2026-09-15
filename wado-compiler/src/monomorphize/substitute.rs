@@ -5,7 +5,6 @@
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::mangle_generic_name;
 use crate::tir::{
     ResolvedType, TirExpr, TirExprKind, TirModule, TirPattern, TirStmt, TirStmtKind, TypeId,
     TypeTable,
@@ -109,7 +108,6 @@ impl Monomorphizer {
             // with different TypeIds for the type arguments
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = type_table.def_name(def).to_string();
-                let module_source = type_table.def_module(def).clone();
                 // Skip List and Tuple - they have special codegen handling and should remain
                 // as GenericInstance, not be rewritten to Struct
                 if name == "List" || TypeTable::is_tuple_type(&name) {
@@ -126,21 +124,9 @@ impl Monomorphizer {
                     };
                 }
 
-                // Build the mangled name using type names (not TypeIds).
-                // Use `mangle_type_arg_for_generic` so the lookup key matches
-                // what `instantiation_name` registered the struct under.
-                let type_names: Vec<String> = type_args
-                    .iter()
-                    .map(|&arg| type_table.mangle_type_arg_for_generic(arg))
-                    .collect();
-                let mangled_name = mangle_generic_name(&name, &type_names);
-
-                // Look for existing Struct with this mangled name via O(1) index
-                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
-                    return tid;
-                }
-                // If not found, return original type_id
-                type_id
+                type_table
+                    .monomorphized_struct_of(def, &type_args)
+                    .unwrap_or(type_id)
             }
             _ => type_id,
         }
@@ -275,14 +261,9 @@ impl Monomorphizer {
                         let mut indexed_args: Vec<(u32, TypeId)> =
                             substitution.iter().map(|(&idx, &tid)| (idx, tid)).collect();
                         indexed_args.sort_by_key(|(idx, _)| *idx);
-                        let type_names: Vec<String> = indexed_args
-                            .iter()
-                            .map(|(_, arg_id)| type_table.mangle_type_arg_for_generic(*arg_id))
-                            .collect();
-                        let mangled_name = mangle_generic_name(&name, &type_names);
-                        if let Some(tid) =
-                            type_table.find_struct_by_name(&mangled_name, &module_source)
-                        {
+                        let args: Vec<TypeId> =
+                            indexed_args.into_iter().map(|(_, tid)| tid).collect();
+                        if let Some(tid) = type_table.monomorphized_struct_of(def, &args) {
                             return tid;
                         }
                     }
@@ -371,12 +352,7 @@ impl Monomorphizer {
                     .map(|&arg| self.substitute_type(arg, substitution, type_table))
                     .collect();
 
-                let type_names: Vec<String> = new_args
-                    .iter()
-                    .map(|&arg| type_table.mangle_type_arg_for_generic(arg))
-                    .collect();
-                let mangled_name = mangle_generic_name(&name, &type_names);
-                if let Some(tid) = type_table.find_struct_by_name(&mangled_name, &module_source) {
+                if let Some(tid) = type_table.monomorphized_struct_of(def, &new_args) {
                     return tid;
                 }
 
@@ -516,12 +492,7 @@ impl TirMutVisitor for TypeRewriter<'_> {
                         *struct_name = self.type_table.struct_rendered_name(*def, type_args);
                     }
                     ResolvedType::GenericInstance { def, type_args } => {
-                        let type_names: Vec<String> = type_args
-                            .iter()
-                            .map(|&arg| self.type_table.mangle_type_arg_for_generic(arg))
-                            .collect();
-                        *struct_name =
-                            mangle_generic_name(self.type_table.def_name(*def), &type_names);
+                        *struct_name = self.type_table.generic_rendered_name(*def, type_args);
                     }
                     _ => {}
                 }

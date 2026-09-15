@@ -143,9 +143,9 @@ global global:core:prelude/list.wado::$const_obj_43: ref null Array<u8> = array.
 global global:core:prelude/list.wado::$const_obj_44: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 97, 115, 115, 105, 103, 110);
 global global:core:prelude/list.wado::$const_obj_45: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 global global:core:prelude/primitive.wado::$const_obj_46: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:serde::$const_obj_49: ref null Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_50: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
-global global:core:serde::$const_obj_51: ref null Array<u8> = array.new_fixed<u8>(123);
+global global:core:serde::$const_obj_52: ref null Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_53: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
+global global:core:serde::$const_obj_54: ref null Array<u8> = array.new_fixed<u8>(123);
 global global:core:json::$const_obj_55: ref null Array<u8> = array.new_fixed<u8>(34, 58);
 global global:core:json::$const_obj_57: ref null Array<u8> = array.new_fixed<u8>(44, 34);
 
@@ -1067,11 +1067,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let pos: i32;
     let t: u64;
     let i: i32;
+    let self_14: ref "core:prelude/string.wado//String";
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_46, digit_count_4);
-    arr = f.buf.repr;
+    self_14 = f.buf;
+    arr = self_14.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
@@ -1102,9 +1104,9 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     }
     start_27 = s.used;
     s.used = new_used_26;
-    builtin::array_copy<u8>(s.repr, start_27, global:core:serde::$const_obj_51, 0, 1);
+    builtin::array_copy<u8>(s.repr, start_27, global:core:serde::$const_obj_54, 0, 1);
     v_37 = self.ok;
-    "core:json/write_plain_key$spec0"(s, global:core:serde::$const_obj_50, 0);
+    "core:json/write_plain_key$spec0"(s, global:core:serde::$const_obj_53, 0);
     r = "core:json/write_json_bool"(s, v_37);
     if @likely(ref.is_null(r)) {
     } else {
@@ -1115,7 +1117,7 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     return new_used_46 = s.used + 1, if @unlikely(new_used_46 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_46);
-    }, start_47 = s.used, s.used = new_used_46, builtin::array_copy<u8>(s.repr, start_47, global:core:serde::$const_obj_49, 0, 1), ref.null none;
+    }, start_47 = s.used, s.used = new_used_46, builtin::array_copy<u8>(s.repr, start_47, global:core:serde::$const_obj_52, 0, 1), ref.null none;
 }
 
 export fn "serde_ndjson_wrapper.wado/$cm_export__run" as "run"

@@ -10,7 +10,7 @@ use { ReflectTemplate } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { Slice } from "core:prelude/slice.wado";
-use { Array } from "core:prelude/array.wado";
+use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
 
@@ -78,18 +78,32 @@ fn encode_char(repr: &mut Array<u8>, pos: i32, code: u32) -> i32 {
     return 4;
 }
 
+/// True when `b` opens a UTF-8 sequence rather than continuing one. A
+/// continuation byte has the form 10xxxxxx (0x80..=0xBF).
+#[inline]
+internal fn is_char_start(b: u8) -> bool {
+    return b & 0xC0 != 0x80;
+}
+
 /// Return the start offset of the UTF-8 sequence containing byte `pos`.
 fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     let mut p = pos;
-    while p > 0 {
-        let b = repr[p];
-        if b >= 0x80 && b < 0xC0 {
-            p -= 1;
-        } else {
-            break;
-        }
+    while p > 0 && !is_char_start(repr[p]) {
+        p -= 1;
     }
     return p;
+}
+
+/// True when `index`, counted from `start`, is 0, `len`, or the start of a
+/// UTF-8 character.
+fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
+    if index == 0 || index == len {
+        return true;
+    }
+    if index < 0 || index > len {
+        return false;
+    }
+    return is_char_start(repr[start + index]);
 }
 
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
@@ -473,13 +487,13 @@ impl String {
 
     /// Internal: shared reference to the string's bytes (stdlib use only).
     /// Caller must respect the `len()` boundary.
-    internal fn internal_raw_bytes(&self) -> &Array<u8> {
+    internal fn internal_raw_bytes(&self) -> &Array<u8> with stores[self] {
         return &self.repr as &Array<u8>;
     }
 
     /// Internal: mutable reference to the string's bytes (stdlib use only).
     /// Caller must respect the `len()` boundary.
-    internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> {
+    internal fn internal_raw_bytes_mut(&mut self) -> &mut Array<u8> with stores[self] {
         return &mut self.repr as &mut Array<u8>;
     }
 
@@ -714,15 +728,7 @@ impl String {
     /// Returns true if `byte_index` is 0, `self.len()`, or the start of a
     /// UTF-8 character in this string.
     pub fn is_char_boundary(&self, byte_index: i32) -> bool {
-        if byte_index == 0 || byte_index == self.used {
-            return true;
-        }
-        if byte_index < 0 || byte_index > self.used {
-            return false;
-        }
-        // A continuation byte has the form 10xxxxxx (0x80..=0xBF).
-        let b = self.repr[byte_index];
-        return b < 0x80 || b >= 0xC0;
+        return boundary_at(&self.repr as &Array<u8>, 0, self.used, byte_index);
     }
 
     /// Removes and returns the last character, or None if empty.
@@ -1346,11 +1352,14 @@ impl Add for String {
 
 impl Eq for String {
     pub fn eq(&self, other: &Self) -> bool {
-        let len = self.len();
-        if len != other.len() {
-            return false;
-        }
-        return bytes_match_at(&self.repr as &Array<u8>, 0, &other.repr as &Array<u8>, len);
+        return seq_eq(
+            &self.repr as &Array<u8>,
+            0,
+            self.used,
+            &other.repr as &Array<u8>,
+            0,
+            other.used,
+        );
     }
 }
 
@@ -1365,30 +1374,14 @@ impl LenientFromStr for String {
 
 impl Ord for String {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        let len_a = self.len();
-        let len_b = other.len();
-        let min_len = i32::min(len_a, len_b);
-
-        let a_repr = &self.repr as &Array<u8>;
-        let b_repr = &other.repr as &Array<u8>;
-        for let mut i = 0; i < min_len; i += 1 {
-            let a_byte = a_repr[i];
-            let b_byte = b_repr[i];
-            if a_byte < b_byte {
-                return Ordering::Less;
-            }
-            if a_byte > b_byte {
-                return Ordering::Greater;
-            }
-        }
-
-        if len_a < len_b {
-            return Ordering::Less;
-        }
-        if len_a > len_b {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return seq_cmp(
+            &self.repr as &Array<u8>,
+            0,
+            self.used,
+            &other.repr as &Array<u8>,
+            0,
+            other.used,
+        );
     }
 }
 
@@ -1403,5 +1396,115 @@ impl From<char> for String {
         let mut s = String::with_capacity(4);
         s.push(value);
         return s;
+    }
+}
+
+/// A view of part of a string, its ends on UTF-8 character boundaries.
+/// Creating one copies nothing.
+pub struct StrSlice {
+    repr: &Array<u8>,
+    start: i32,
+    end: i32,
+}
+
+impl StrSlice {
+    /// Wrap a byte range already known to be on character boundaries
+    /// (stdlib use only).
+    internal fn internal_new(repr: &Array<u8>, start: i32, end: i32) -> StrSlice with stores[repr] {
+        return StrSlice { repr, start, end };
+    }
+
+    /// Length in bytes.
+    pub fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        return self.end == self.start;
+    }
+
+    /// Read the byte at `index`, counted from the view's start, without bounds
+    /// checks.
+    ///
+    /// # Safety (caller-side preconditions)
+    /// - `0 <= index < self.len()`.
+    #[inline]
+    pub fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.repr[self.start + index];
+    }
+
+    /// Returns true if `index`, counted from the view's start, is 0, `len()`,
+    /// or the start of a character.
+    pub fn is_char_boundary(&self, index: i32) -> bool {
+        return boundary_at(self.repr, self.start, self.len(), index);
+    }
+
+    /// A sub-view over `[start, end)`, counted from this view's start.
+    /// Panics if the range is out of bounds or either end is off a character
+    /// boundary.
+    pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+        assert 0 <= start && start <= end && end <= self.len(), "byte range out of bounds";
+        assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
+        return self.sub_unchecked(start, end);
+    }
+
+    /// A sub-view without bounds or UTF-8 boundary checks.
+    ///
+    /// # Safety (caller-side preconditions)
+    /// - `0 <= start <= end <= self.len()`.
+    /// - `start` and `end` lie on UTF-8 character boundaries.
+    #[inline]
+    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+        return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
+    }
+
+    /// The view's UTF-8 bytes.
+    pub fn as_bytes(&self) -> ByteSlice with stores[self] {
+        return Slice::internal_new(self.repr, self.start, self.end) as ByteSlice;
+    }
+
+    /// Returns an iterator over the Unicode scalar values (chars) of the view.
+    pub fn chars(&self) -> StrCharIter with stores[self] {
+        return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
+    }
+
+    /// Returns an iterator over the UTF-8 bytes of the view.
+    pub fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
+        return StrUtf8ByteIter { repr: self.repr, used: self.end, index: self.start };
+    }
+
+    /// Copy the view into an owned `String`.
+    pub fn to_string(&self) -> String {
+        return substring(self.repr, self.start, self.len());
+    }
+}
+
+/// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
+/// owned string, a reference to one, or a view of part of one.
+pub trait AsStrSlice {
+    fn as_str_slice(&self) -> StrSlice with stores[self];
+}
+
+impl AsStrSlice for String {
+    fn as_str_slice(&self) -> StrSlice with stores[self] {
+        return StrSlice::internal_new(&self.repr as &Array<u8>, 0, self.used);
+    }
+}
+
+impl AsStrSlice for StrSlice {
+    fn as_str_slice(&self) -> StrSlice with stores[self] {
+        return *self;
+    }
+}
+
+impl Eq for StrSlice {
+    pub fn eq(&self, other: &Self) -> bool {
+        return seq_eq(self.repr, self.start, self.end, other.repr, other.start, other.end);
+    }
+}
+
+impl Ord for StrSlice {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
     }
 }

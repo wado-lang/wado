@@ -187,3 +187,4 @@ omission goes in Decision.
 - [Whole-File I/O (`core:fs`)](./wep-2026-09-12-core-fs.md)
 - [Declared Absence](./wep-2026-09-13-declared-absence.md)
 - [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
+- [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)

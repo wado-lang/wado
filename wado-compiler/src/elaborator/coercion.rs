@@ -784,8 +784,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 several => Some(Err(several.len())),
             }
         };
-        // A newtype over a literal-constructible type is built through the base
-        // and cast back.
+        // A newtype over a literal-constructible type is built through its
+        // representation and cast back.
         let (found, output_type, needs_newtype_cast) =
             if let Some(found) = resolve(self, target_type) {
                 (found, target_type, false)
@@ -794,7 +794,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .get_newtype_base(target_type)?;
+                    .newtype_representation(target_type)?;
                 (resolve(self, base_type)?, base_type, true)
             };
         match found {

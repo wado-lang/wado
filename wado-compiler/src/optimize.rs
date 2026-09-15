@@ -25,6 +25,7 @@ mod elide_local;
 mod extract;
 mod field_scalarize;
 mod gate;
+mod identity_cast;
 mod if_chain_to_match;
 mod inline;
 mod known_case;

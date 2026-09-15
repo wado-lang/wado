@@ -128,6 +128,11 @@ fn process(data: &Data) -> Result {
 }
 ```
 
+Handing the reference back to the caller counts as storing it: the caller holds
+what the parameter names once the call returns. That covers a reference read out
+of the parameter, since it still names the parameter's storage. A value member is
+copied, so it carries nothing out. See [the spec](./spec.md#reference-storage).
+
 **Syntax**: `with stores[param1, param2, ...]`
 
 - Uses `[...]` (not `{...}`) to avoid ambiguity with function body
@@ -479,6 +484,15 @@ fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
       in `List::grow` and its neighbours, which hand elements from an array they
       then discard, so the declaration would cost the hottest paths in the
       stdlib for a leak none of them has.
+
+- [ ] Check the obligation in the standard library, which `is_user_authored`
+      exempts. 49 declarations are missing one today (issue #2049). Closing it
+      means annotating each and deleting the exemption.
+
+- [ ] Split the two relations the keyword names, or decide they are one (issue
+      #2050). "The caller holds it after the call" and "the callee keeps it past
+      the call" are different claims, and §5's three consumers each read the
+      declaration with only the second in mind.
 
 - [ ] Populate `NirFunction::stores_aliased_locals` from a `stores` call, or say
       it is not that. Its doc reads "when inlining `fn f(x: &T) with stores[x]`
