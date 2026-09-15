@@ -223,7 +223,6 @@ pub fn resolve_params<H: CompilerHost>(
         if let Some(literal) =
             convert_builtin(trimmed, global.ty, &builtins, &type_table, global.span)
         {
-<<<<<<< HEAD
             match &mut global.init {
                 GlobalInit::Direct(slot) => *slot = literal,
                 // A deferred global has an initializer function, and the
@@ -236,16 +235,7 @@ pub fn resolve_params<H: CompilerHost>(
                     init_fn.set_frame(LocalFrame::default());
                 }
             }
-        } else {
-||||||| 1d1e169aa
-            // A resolved parameter is a literal, so the storage can hold it.
-            global.init = GlobalInit::Direct(literal);
-        } else {
-=======
-            // A resolved parameter is a literal, so the storage can hold it.
-            global.init = GlobalInit::Direct(literal);
         } else if let Some(origin) = source.blamed_origin(&spec.name) {
->>>>>>> origin/main
             let type_name = type_table.borrow().type_name(global.ty);
             emit(
                 policy.invalid,
