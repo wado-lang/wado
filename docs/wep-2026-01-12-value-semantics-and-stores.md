@@ -154,10 +154,11 @@ pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
 `#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out;
-`#[stores(p, ...)]` states retain. Both name parameters rather than positions,
-and both report an argument that names none. Silence is the conservative
-reading of whichever consumer asks — for `#[returns]` that is "allocates",
-which elides copies.
+`#[stores(p, ...)]` states retain, and `into = dst` on it names the parameter
+the retained one lands in rather than leaving the destination unknown. All name
+parameters rather than positions, and all report an argument that names none.
+Silence is the conservative reading of whichever consumer asks — for
+`#[returns]` that is "allocates", which elides copies.
 
 Where each is accepted:
 
@@ -547,11 +548,22 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
        confirm" gap in [Ownership Analysis](./wep-2026-05-21-resource-ownership.md).
 10. [ ] Delete the `func.stores.is_empty()` gate in `niri::is_ctfe_eligible`, per
         §5. Done when compile-time evaluation is decided by the body alone.
-11. [ ] Show the inferred facts, which no signature states any more. Done when
+11. [ ] Say which place a retained parameter lands in, with `into = dst`.
+        Retention alone records that `p` outlives the call, not where it goes,
+        and `array_copy(dst, _, src, _, _)` is the case that needs the
+        difference: `src`'s elements reach `dst` afterwards, so plain retention
+        marks the whole reference borrow-escaped at all twenty call sites.
+        Fifteen are `Array<u8>`, where a scalar element escapes nothing; the
+        other five are the backing-array swap in `List::grow` and its
+        neighbours, which hand elements out of an array they then discard. Done
+        when `array_copy` carries the destination, the fifteen scalar sites stop
+        paying for it, and a caller reasons about `dst`'s extent instead of
+        assuming the worst.
+12. [ ] Show the inferred facts, which no signature states any more. Done when
         `wado query hover` and `wado doc` say what a function retains and hands
         out — which needs the facts in the language service, where only the
         frontend runs today.
-12. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
+13. [ ] Record the effect on `benchmark/` and `wasm-size/`. Done when both
         READMEs carry the new numbers.
 
 ## Known gaps
@@ -562,18 +574,6 @@ fn store_and_log(data: &Data) -> Handle with Stdout {
       same type. Closing it takes knowing which function values reach which call
       — a points-to analysis, which nothing here is;
       `lower::plan::value_copy::funcset` is a borrow-keyed container, not that.
-
-- [ ] Say which place a retained parameter lands in. Retention records that `p`
-      outlives the call, not where it goes, and `array_copy(dst, _, src, _, _)`
-      is the case that needs the difference: for a reference `T` its elements
-      reach `dst` afterwards, so `src` escapes into a place the caller may still
-      hold. Read as plain retention it marks the whole reference borrow-escaped
-      at all twenty call sites. Fifteen are `Array<u8>`, where a scalar element
-      escapes nothing; the other five are the backing-array swap in `List::grow`
-      and its neighbours, which hand elements from an array they then discard, so
-      it would cost the hottest paths in the stdlib for a leak none of them has.
-      §4's attribute has room for the destination — `#[stores(src, into = dst)]`
-      — and nothing reads one.
 
 - [ ] Populate `NirFunction::stores_aliased_locals` from a retaining call, or say
       it is not that. Its doc reads "when inlining a function that stores `x`
