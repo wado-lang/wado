@@ -1,0 +1,39 @@
+// An operation's parameter default is read off the declaration the path's
+// owner segment names, so a namespace qualifier ahead of the interface does not
+// hide it. Matching the path as two segments exactly left the defaults empty
+// while the signature still reported the declared parameter count, and the call
+// was rejected for an argument it never had to write.
+
+use { println, Stdout } from "core:cli";
+use s from "./sub/ns_stepper.wado";
+
+struct Acc {
+    value: i32,
+}
+
+impl s::Stepper for Acc {
+    fn step(&mut self, by: i32) -> i32 {
+        self.value += by;
+        resume self.value
+    }
+}
+
+global STEPPED: i32 = hold: {
+    let mut acc = Acc { value: 0 };
+    with s::Stepper => &mut acc do {
+        break hold: s::Stepper::step() + s::Stepper::step(10)
+    }
+    break hold: 0
+};
+
+export fn run() with Stdout {
+    let mut acc = Acc { value: 100 };
+    with s::Stepper => &mut acc do {
+        println(`${STEPPED} ${s::Stepper::step()}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "12 101\n"
+}

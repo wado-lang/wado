@@ -1,0 +1,39 @@
+// A dispatch path names its interface in the segment before the operation, so a
+// namespace qualifier ahead of it must not stand in for the interface. Reading
+// the first segment instead made `c::Counter::next()` a static method on the
+// interface, which reached WIR as an unresolved call and panicked.
+
+use { println, Stdout } from "core:cli";
+use c from "./sub/ns_counter.wado";
+
+struct Tally {
+    value: i32,
+}
+
+impl c::Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+// The initializer installs its own handler, so it discharges what it dispatches.
+global COUNTED: i32 = hold: {
+    let mut tally = Tally { value: 40 };
+    with c::Counter => &mut tally do {
+        break hold: c::Counter::next()
+    }
+    break hold: 0
+};
+
+export fn run() with Stdout {
+    let mut tally = Tally { value: 10 };
+    with c::Counter => &mut tally do {
+        println(`${COUNTED} ${c::Counter::next()}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "41 11\n"
+}

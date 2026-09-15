@@ -167,12 +167,6 @@ pub fn expand_templates(
             func.locals.extend(expander.alloc.new_locals);
         }
     }
-    for global in &mut module.globals {
-        let next_index = u32::try_from(global.locals.len()).unwrap();
-        let mut expander = TemplateExpander::over(next_index, &ctx);
-        expander.visit_expr(global.init.slot_expr_mut());
-        global.locals.extend(expander.alloc.new_locals);
-    }
 }
 
 /// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every

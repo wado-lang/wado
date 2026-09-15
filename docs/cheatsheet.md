@@ -171,12 +171,18 @@ global PI: f64 = 3.14159;           // immutable
 global mut counter: i32 = 0;        // mutable
 pub global VERSION: i32 = 1;        // accessible from other modules
 global DOUBLED: i32 = 21 * 2;       // expressions allowed
+global GREETING: String = `v${VERSION}`;  // template strings too
 
 fn example() {
     println(`${PI}`);                // read global
     counter = counter + 1;          // write mutable global
 }
 ```
+
+An initializer must be pure: calling a function that declares an effect is a
+compile error. A user-defined effect's operation is another matter — it may be
+dispatched, and traps at module init where no `with … do` installs a handler,
+just as it would in a function body. An initializer may install its own.
 
 ## Types
 

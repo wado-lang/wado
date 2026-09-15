@@ -2998,6 +2998,22 @@ pub struct IdentExpr {
     pub type_args_on_prefix: bool,
 }
 
+impl IdentExpr {
+    /// The segment naming the path's *owner*: `Color` in `Color::Red` and in
+    /// `ns::Color::Red` — the one before the member, so a namespace qualifier
+    /// ahead of the owner does not stand in for it. `None` for a bare name,
+    /// which qualifies nothing.
+    pub fn owner_segment(&self) -> Option<&PathSegment> {
+        self.segments.get(self.owner_index()?)
+    }
+
+    /// Where [`Self::owner_segment`] sits, for a caller that also needs what
+    /// qualifies it — the `ns` of `ns::Color::Red`.
+    pub fn owner_index(&self) -> Option<usize> {
+        self.segments.len().checked_sub(2)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PathSegment {
     pub id: AstId,

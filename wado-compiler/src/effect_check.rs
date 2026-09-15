@@ -1,8 +1,8 @@
-//! Effect, stores, and default-purity checking for Wado (Design B): that every
-//! call holds the effects its callee requires, that an escaping reference
-//! parameter declares `stores[param]`, and that defaults are pure. All three
-//! read [`Semantics`] rather than the emitted TIR, so they see every source
-//! function and run on the LSP path. Violations are returned, not emitted.
+//! Effect, stores, and purity checking for Wado (Design B): that every call
+//! holds the effects its callee requires, that an escaping reference parameter
+//! declares `stores[param]`, and that defaults and global initializers are
+//! pure. All three read [`Semantics`] rather than the emitted TIR, so they see
+//! every source function and run on the LSP path. Violations are returned.
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -12,8 +12,8 @@ use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTabl
 use crate::token::Span;
 
 use crate::ast::{
-    self, AstId, AstVisitor, AttrArg, Attribute, CallExpr, CmImport, EffectHandlerBinding, Expr,
-    Function, ImplBlock, Item, Stmt,
+    self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
+    ImplBlock, Item, Stmt,
 };
 use crate::compiler_host::Diagnostic;
 use crate::elaborator::liveness::is_user_authored;
@@ -93,24 +93,59 @@ impl From<StoresError> for Diagnostic {
     }
 }
 
-/// Error from default-value purity checking
+/// A position whose expression must be pure. The diagnostic names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PureContext {
+    DefaultValue,
+    GlobalInitializer,
+}
+
+impl PureContext {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::DefaultValue => "default value expression",
+            Self::GlobalInitializer => "global initializer",
+        }
+    }
+}
+
+/// Why an expression that must be pure is rejected, as the diagnostic words it.
 #[derive(Debug, Clone)]
-pub struct DefaultPurityError {
-    pub callee: String,
+pub enum Impurity {
+    /// The named callee declares an effect.
+    Call(String),
+    /// The named operation is backed by the host, so dispatching it demands a
+    /// capability. A user-defined effect's operation demands none: it traps
+    /// where no handler answers, which is a runtime outcome, not an impurity.
+    Dispatch(String),
+}
+
+/// One impurity, at the position that must not hold it.
+#[derive(Debug, Clone)]
+pub struct PurityError {
+    pub context: PureContext,
+    pub impurity: Impurity,
     pub span: Span,
     pub module: String,
 }
 
-impl From<DefaultPurityError> for Diagnostic {
-    fn from(e: DefaultPurityError) -> Self {
+impl From<PurityError> for Diagnostic {
+    fn from(e: PurityError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+        let noun = e.context.noun();
+        let message = match &e.impurity {
+            Impurity::Call(callee) => {
+                format!("{noun} must be pure (no effects), but calls effectful function '{callee}'")
+            }
+            Impurity::Dispatch(op) => format!(
+                "{noun} must be pure (no effects), but dispatches '{op}', which needs a \
+                 capability the position does not hold"
+            ),
+        };
         Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
-            message: format!(
-                "default value expression must be pure (no effects), but calls effectful function '{}'",
-                e.callee
-            ),
+            message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
@@ -293,7 +328,7 @@ pub fn check_semantics(
 pub struct SemanticDiagnostics {
     pub effects: Vec<EffectError>,
     pub stores: Vec<StoresError>,
-    pub purity: Vec<DefaultPurityError>,
+    pub purity: Vec<PurityError>,
 }
 
 impl SemanticDiagnostics {
@@ -506,6 +541,119 @@ struct EffectIndex<'a> {
     effect_by_cm_fq: &'a IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer provides (discharged in reconstruction).
     provided_import_fqs: &'a IndexSet<String>,
+}
+
+/// The segment naming the interface in a dispatch path `[ns::]*E::op`: the one
+/// before the operation, so a namespace qualifier ahead of `E` does not stand in
+/// for it.
+fn interface_segment(callee: &Expr) -> Option<&ast::PathSegment> {
+    let Expr::Ident(ident) = callee else {
+        return None;
+    };
+    ident.owner_segment()
+}
+
+/// The `interface` the name at `site` declares, as its declaring module, its
+/// name, and its `#[cm]` FQ. `None` when the name declares anything else.
+fn interface_at<'a>(
+    sem: &Semantics,
+    index: &EffectIndex<'a>,
+    site: Option<AstId>,
+) -> Option<(ModuleSource, String, &'a Option<String>)> {
+    let resolutions = sem.resolutions()?;
+    let def = resolutions.declared(site?)?;
+    let defs = resolutions.defs();
+    let key = (defs.module(def).clone(), defs.name(def).to_string());
+    let cm_fq = index.interface_cm_fq.get(&key)?;
+    Some((key.0, key.1, cm_fq))
+}
+
+/// The effects `with E => h do` grants to its body.
+fn binding_granted_effects(
+    sem: &Semantics,
+    annotations: Option<&TypeAnnotations>,
+    index: &EffectIndex,
+    module_source: &ModuleSource,
+    binding: &EffectHandlerBinding,
+) -> Vec<EffectRef> {
+    // One fact per walk that reached the binding. A handler installed in a
+    // tuple `for-of` body is bound once per element, and an effect only some
+    // elements grant does not cover the body — so the grant is what every walk
+    // agrees on.
+    let mut granted: Option<Vec<EffectRef>> = None;
+    for facts in annotations
+        .into_iter()
+        .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
+    {
+        let walk: Vec<EffectRef> = facts
+            .effects
+            .iter()
+            .map(|entry| EffectRef::Concrete {
+                name: entry.name.clone(),
+                module_source: entry.module_source.clone(),
+            })
+            .filter(|effect| index.closure.contains_key(effect))
+            .collect();
+        granted = Some(match granted {
+            None => walk,
+            Some(prev) => prev.into_iter().filter(|e| walk.contains(e)).collect(),
+        });
+    }
+    if let Some(granted) = granted {
+        return granted;
+    }
+    binding
+        .effect
+        .as_ref()
+        .and_then(|ty| match ty {
+            ast::Type::Named(named) => effect_named_in(
+                &named.name,
+                module_source,
+                sem,
+                index.closure,
+                index.effect_by_name,
+            ),
+            _ => None,
+        })
+        .into_iter()
+        .collect()
+}
+
+/// What a direct `E::op()` call at `site` demands of its caller.
+///
+/// Empty where it demands nothing: the site names no interface, or `E` is a
+/// user-defined effect, whose operation an installed handler answers and whose
+/// dispatch with none traps — a runtime outcome, not a demand on the position.
+/// A purely computational component's operation demands nothing either.
+fn operation_requirements(
+    sem: &Semantics,
+    index: &EffectIndex,
+    site: Option<AstId>,
+) -> Vec<EffectRef> {
+    // The callee names its interface's declaration; the site says which one
+    // that is, so a same-named local `interface` cannot stand in for it.
+    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, site) else {
+        return Vec::new();
+    };
+    let Some(fq) = cm_fq else {
+        return Vec::new();
+    };
+    if let Some(registry) = sem.cm_interface_registry()
+        && registry.is_component_interface(fq)
+    {
+        // Composition-relative: the imported interface is composed away, so its
+        // operations demand the dependency's own host-leaf capabilities.
+        return registry
+            .host_leaf_imports_for(fq)
+            .iter()
+            .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
+            .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
+            .collect();
+    }
+    vec![EffectRef::Concrete {
+        name,
+        module_source: decl_module,
+    }]
 }
 
 /// The effect an `impl E for T` block handles, when `E` is one. Read off the
@@ -830,6 +978,114 @@ fn callee_name(callee: &Expr) -> &str {
     }
 }
 
+/// What a diagnostic calls a callee no name reaches.
+pub const INDIRECT_CALLEE: &str = "(indirect call)";
+
+/// Type of an indirect call's callee, preferring the enclosing function's
+/// parameter types: a function-typed parameter callee leaves no `references`
+/// edge or recorded expression type at the call, so nothing else names it.
+fn indirect_callee_type(
+    sem: &Semantics,
+    param_types: &IndexMap<String, TypeId>,
+    callee: &Expr,
+) -> Option<TypeId> {
+    if let Expr::Ident(ident) = callee
+        && let Some(type_id) = param_types.get(&ident.name)
+    {
+        return Some(*type_id);
+    }
+    expr_type_of(callee, sem)
+}
+
+/// The static dispatches recorded at a call, with whether each spells its
+/// receiver as the first argument.
+fn dispatches_at(annotations: Option<&TypeAnnotations>, id: AstId) -> Vec<(FunctionRef, bool)> {
+    annotations
+        .into_iter()
+        .flat_map(|ann| ann.static_dispatches(id))
+        .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
+        .collect()
+}
+
+/// What invoking one callee at a call site performs.
+struct CalleeEffects {
+    /// The name a diagnostic gives the callee.
+    name: String,
+    /// Effects the callee's signature declares.
+    declared: Vec<EffectRef>,
+    /// The capability dispatching a host-backed operation demands. It belongs
+    /// to the path that names the interface, not to the callee's signature, so a
+    /// walk may word the two apart.
+    dispatched: Vec<EffectRef>,
+}
+
+/// Every callee a call at `id` resolves to: a free function, each static
+/// dispatch, or the function type of a callee no name reaches.
+///
+/// Both walks read a call through this, so a spelling either one answers for is
+/// a spelling both answer for. A tag call is a call: annotate records its callee
+/// under the template's own id, so the same lookup answers for it.
+fn call_site_effects(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    annotations: Option<&TypeAnnotations>,
+    param_types: &IndexMap<String, TypeId>,
+    callee: &Expr,
+    id: AstId,
+    args: &[Expr],
+) -> Vec<CalleeEffects> {
+    let bare = |name: String, declared: Vec<EffectRef>| CalleeEffects {
+        name,
+        declared,
+        dispatched: Vec::new(),
+    };
+    if let Expr::Ident(ident) = callee
+        && let Some(def) = sem.referenced_symbol(ident.id)
+        && let Some(effects) = index.fn_effects.get(&def)
+    {
+        let params = index.fn_params.get(&def).cloned().unwrap_or_default();
+        let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
+        return vec![bare(ident.name.clone(), resolved)];
+    }
+    let dispatches = dispatches_at(annotations, id);
+    if dispatches.is_empty() {
+        // The callee is a function-typed value (a closure or `fn(...)`
+        // parameter). Its type carries the effects it performs when invoked.
+        let Some(callee_type) = indirect_callee_type(sem, param_types, callee) else {
+            return Vec::new();
+        };
+        let ResolvedType::Function { effects, .. } = sem.types.get(callee_type) else {
+            return Vec::new();
+        };
+        return vec![bare(INDIRECT_CALLEE.to_string(), effects.clone())];
+    }
+    // Only a free function in this program dispatches through the path: a
+    // method names its receiver, and a host binding is already the import.
+    let path_site = interface_segment(callee).map(|seg| seg.id);
+    dispatches
+        .into_iter()
+        .map(|(func_ref, self_in_args)| {
+            let effects = index.method_effects(&func_ref);
+            let params = index.method_param_types(&func_ref);
+            // A qualified (UFCS) call spells the receiver as its first
+            // argument, so the args already align with the callee's full
+            // parameter list — no self skip.
+            let is_method = func_ref.method_info.is_some() && !self_in_args;
+            let dispatches_through_path = func_ref.method_info.is_none()
+                && matches!(func_ref.module_source, ModuleSource::Local { .. });
+            CalleeEffects {
+                name: callee_name(callee).to_string(),
+                declared: resolve_effect_params(sem, index, &effects, &params, is_method, args),
+                dispatched: if dispatches_through_path {
+                    operation_requirements(sem, index, path_site)
+                } else {
+                    Vec::new()
+                },
+            }
+        })
+        .collect()
+}
+
 /// Walks a function body, checking that each call's required effects are held.
 struct SemEffectWalker<'a> {
     sem: &'a Semantics,
@@ -890,6 +1146,85 @@ impl EffectIndex<'_> {
     }
 }
 
+/// Resolve `EffectRef::Param` effects to concrete effects by matching the
+/// callee's function-typed parameters against the actual argument types.
+/// `is_method` drops the leading `self` parameter so params line up with
+/// `args`.
+///
+/// Both walks resolve before they read a callee's effects, so an `effect E`
+/// bound to a concrete effect at the call site is seen by each of them.
+fn resolve_effect_params(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    callee_effects: &[EffectRef],
+    param_types: &[TypeId],
+    is_method: bool,
+    args: &[Expr],
+) -> Vec<EffectRef> {
+    let param_names: IndexSet<String> = callee_effects
+        .iter()
+        .filter_map(|e| match e {
+            EffectRef::Param { name } => Some(name.clone()),
+            EffectRef::Concrete { .. } => None,
+        })
+        .collect();
+    if param_names.is_empty() {
+        return callee_effects.to_vec();
+    }
+    let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
+        .iter()
+        .map(|n| (n.clone(), IndexSet::default()))
+        .collect();
+    let type_table = &sem.types;
+    let skip = usize::from(is_method && !param_types.is_empty());
+    for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
+        let ResolvedType::Function {
+            effects: formal, ..
+        } = type_table.get(*param_type)
+        else {
+            continue;
+        };
+        if !formal
+            .iter()
+            .any(|e| e.is_param() && param_names.contains(e.name()))
+        {
+            continue;
+        }
+        let Some(arg_type) = sem.expression_type(arg.id()) else {
+            continue;
+        };
+        let ResolvedType::Function {
+            effects: actual, ..
+        } = type_table.get(arg_type)
+        else {
+            continue;
+        };
+        for formal_effect in formal {
+            if let EffectRef::Param { name } = formal_effect
+                && let Some(set) = concrete.get_mut(name)
+            {
+                for a in actual {
+                    set.insert(a.clone());
+                }
+            }
+        }
+    }
+    let mut resolved = Vec::new();
+    for effect in callee_effects {
+        match effect {
+            EffectRef::Param { name } => {
+                if let Some(set) = concrete.get(name) {
+                    for c in expand_through_closure(set, index.closure) {
+                        resolved.push(c);
+                    }
+                }
+            }
+            EffectRef::Concrete { .. } => resolved.push(effect.clone()),
+        }
+    }
+    resolved
+}
+
 impl SemEffectWalker<'_> {
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
         self.index.method_effects(func_ref)
@@ -902,174 +1237,14 @@ impl SemEffectWalker<'_> {
     /// itself; for a CM-component-imported interface it is the reconstructed
     /// host-leaf effect set — empty for a purely-computational component, so its
     /// operations need no `with`. Returns empty for a non-effect-op callee.
-    fn effect_op_requirement(
-        &self,
-        func_ref: &FunctionRef,
-        receiver_site: Option<AstId>,
-    ) -> Vec<EffectRef> {
-        if func_ref.method_info.is_some() {
-            return Vec::new();
-        }
-        if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
-            return Vec::new();
-        }
-        // The callee names its interface's declaration; the site says which one
-        // that is, so a same-named local `interface` cannot stand in for it.
-        let Some((decl_module, name, cm_fq)) = receiver_site
-            .and_then(|site| self.sem.resolutions()?.declared(site))
-            .and_then(|def| {
-                let defs = self.sem.resolutions().expect("resolutions").defs();
-                let key = (defs.module(def).clone(), defs.name(def).to_string());
-                let cm_fq = self.index.interface_cm_fq.get(&key)?;
-                Some((key.0, key.1, cm_fq))
-            })
-        else {
-            return Vec::new();
-        };
-        // Only a host-backed effect (`#[cm]`) is a capability the caller must
-        // hold. A user-defined effect is resolved by the handler machinery, so
-        // its operations — including a handler's self-delegation — are not a
-        // direct-op requirement.
-        let Some(fq) = cm_fq else {
-            return Vec::new();
-        };
-        if let Some(registry) = self.sem.cm_interface_registry()
-            && registry.is_component_interface(fq)
-        {
-            // Composition-relative: the imported interface is composed away, so
-            // its operations demand the dependency's own host-leaf capabilities
-            // (empty for a purely-computational component).
-            return registry
-                .host_leaf_imports_for(fq)
-                .iter()
-                .filter(|leaf| !self.index.provided_import_fqs.contains(leaf.as_str()))
-                .filter_map(|leaf| self.index.effect_by_cm_fq.get(leaf).cloned())
-                .collect();
-        }
-        vec![EffectRef::Concrete {
-            name,
-            module_source: decl_module,
-        }]
-    }
-
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
-        // One fact per walk that reached the binding. A handler installed in a
-        // tuple `for-of` body is bound once per element, and an effect only
-        // some elements grant does not cover the body — so the grant is what
-        // every walk agrees on.
-        let mut granted: Option<Vec<EffectRef>> = None;
-        for facts in self
-            .annotations
-            .into_iter()
-            .flat_map(|a| a.all(|f| &f.handler_bindings, binding.id))
-        {
-            let walk: Vec<EffectRef> = facts
-                .effects
-                .iter()
-                .map(|entry| EffectRef::Concrete {
-                    name: entry.name.clone(),
-                    module_source: entry.module_source.clone(),
-                })
-                .filter(|effect| self.index.closure.contains_key(effect))
-                .collect();
-            granted = Some(match granted {
-                None => walk,
-                Some(prev) => prev.into_iter().filter(|e| walk.contains(e)).collect(),
-            });
-        }
-        if let Some(granted) = granted {
-            return granted;
-        }
-        binding
-            .effect
-            .as_ref()
-            .and_then(|ty| match ty {
-                ast::Type::Named(named) => effect_named_in(
-                    &named.name,
-                    &self.module_source,
-                    self.sem,
-                    self.index.closure,
-                    self.index.effect_by_name,
-                ),
-                _ => None,
-            })
-            .into_iter()
-            .collect()
-    }
-
-    /// Resolve `EffectRef::Param` effects to concrete effects by matching the
-    /// callee's function-typed parameters against the actual argument types.
-    /// `is_method` drops the leading `self` parameter so params line up with
-    /// `args`.
-    fn resolve_effect_params(
-        &self,
-        callee_effects: &[EffectRef],
-        param_types: &[TypeId],
-        is_method: bool,
-        args: &[Expr],
-    ) -> Vec<EffectRef> {
-        let param_names: IndexSet<String> = callee_effects
-            .iter()
-            .filter_map(|e| match e {
-                EffectRef::Param { name } => Some(name.clone()),
-                EffectRef::Concrete { .. } => None,
-            })
-            .collect();
-        if param_names.is_empty() {
-            return callee_effects.to_vec();
-        }
-        let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
-            .iter()
-            .map(|n| (n.clone(), IndexSet::default()))
-            .collect();
-        let type_table = &self.sem.types;
-        let skip = usize::from(is_method && !param_types.is_empty());
-        for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
-            let ResolvedType::Function {
-                effects: formal, ..
-            } = type_table.get(*param_type)
-            else {
-                continue;
-            };
-            if !formal
-                .iter()
-                .any(|e| e.is_param() && param_names.contains(e.name()))
-            {
-                continue;
-            }
-            let Some(arg_type) = self.sem.expression_type(arg.id()) else {
-                continue;
-            };
-            let ResolvedType::Function {
-                effects: actual, ..
-            } = type_table.get(arg_type)
-            else {
-                continue;
-            };
-            for formal_effect in formal {
-                if let EffectRef::Param { name } = formal_effect
-                    && let Some(set) = concrete.get_mut(name)
-                {
-                    for a in actual {
-                        set.insert(a.clone());
-                    }
-                }
-            }
-        }
-        let mut resolved = Vec::new();
-        for effect in callee_effects {
-            match effect {
-                EffectRef::Param { name } => {
-                    if let Some(set) = concrete.get(name) {
-                        for c in expand_through_closure(set, self.index.closure) {
-                            resolved.push(c);
-                        }
-                    }
-                }
-                EffectRef::Concrete { .. } => resolved.push(effect.clone()),
-            }
-        }
-        resolved
+        binding_granted_effects(
+            self.sem,
+            self.annotations,
+            self.index,
+            &self.module_source,
+            binding,
+        )
     }
 
     fn report_missing(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
@@ -1142,21 +1317,8 @@ impl AstVisitor for SemEffectWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                if !self.check_call_effects(&call.callee, call.id, &call.args, call.span)
-                    && let Some(callee_type) = self.indirect_callee_type(call)
-                {
-                    // Indirect call: the callee is a function-typed value (a
-                    // closure or `fn(...)` parameter). Its type carries the
-                    // effects it performs when invoked.
-                    if let ResolvedType::Function { effects, .. } = self.sem.types.get(callee_type)
-                    {
-                        let effects = effects.clone();
-                        self.report_missing(&effects, "(indirect call)", call.span);
-                    }
-                }
+                self.check_call_effects(&call.callee, call.id, &call.args, call.span);
             }
-            // A tag call is a call: annotate records its callee under the
-            // template's own id, so the same lookup answers for it.
             Expr::TaggedTemplate(tagged) => {
                 self.check_call_effects(&tagged.tag, tagged.id, &[], tagged.span);
             }
@@ -1164,30 +1326,34 @@ impl AstVisitor for SemEffectWalker<'_> {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let func_ref = dispatch.function_ref.clone();
-                    let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref, None));
+                    let effects = self.method_effects(&func_ref);
                     let params = self.method_param_types(&func_ref);
-                    let resolved =
-                        self.resolve_effect_params(&effects, &params, true, &method_call.args);
+                    let resolved = resolve_effect_params(
+                        self.sem,
+                        self.index,
+                        &effects,
+                        &params,
+                        true,
+                        &method_call.args,
+                    );
                     self.report_missing(&resolved, &method_call.method, method_call.span);
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let dispatches: Vec<(FunctionRef, bool)> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.static_dispatches(static_call.id))
-                    .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-                    .collect();
-                for (func_ref, self_in_args) in dispatches {
-                    let mut effects = self.method_effects(&func_ref);
-                    effects.extend(self.effect_op_requirement(&func_ref, None));
+                for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
+                    let effects = self.method_effects(&func_ref);
                     let params = self.method_param_types(&func_ref);
                     // See the `Call` arm: a trait-turbofish qualified call
                     // carries its receiver in the argument list.
                     let is_method = func_ref.method_info.is_some() && !self_in_args;
-                    let resolved =
-                        self.resolve_effect_params(&effects, &params, is_method, &static_call.args);
+                    let resolved = resolve_effect_params(
+                        self.sem,
+                        self.index,
+                        &effects,
+                        &params,
+                        is_method,
+                        &static_call.args,
+                    );
                     self.report_missing(&resolved, &static_call.method, static_call.span);
                 }
             }
@@ -1225,69 +1391,22 @@ impl SemEffectWalker<'_> {
         self.index.method_param_types(func_ref)
     }
 
-    /// Report the effects the callee named at `id` performs. `false` when
-    /// nothing names it, which for a spelled call means an indirect one.
-    ///
-    /// A free call resolves through `references` on the callee identifier.
-    /// `Type::method(...)` / `Self::method(...)` parse as a `Call` with a path
-    /// callee whose identifier has no free-function reference; they resolve
-    /// through `static_method_dispatch` keyed by the call id. (Free functions
-    /// also appear there, so `references` is tried first — it is the
-    /// authoritative free-call edge.)
-    fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) -> bool {
-        let free = if let Expr::Ident(ident) = callee {
-            self.sem.referenced_symbol(ident.id).and_then(|def| {
-                self.index
-                    .fn_effects
-                    .get(&def)
-                    .map(|effects| (def, effects.clone(), ident.name.clone()))
-            })
-        } else {
-            None
-        };
-        if let Some((def, effects, name)) = free {
-            let params = self.index.fn_params.get(&def).cloned().unwrap_or_default();
-            let resolved = self.resolve_effect_params(&effects, &params, false, args);
-            self.report_missing(&resolved, &name, span);
-            return true;
+    /// Report the effects every callee the call at `id` resolves to performs,
+    /// and the capability its path demands where it dispatches an operation.
+    fn check_call_effects(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
+        let sites = call_site_effects(
+            self.sem,
+            self.index,
+            self.annotations,
+            &self.param_types,
+            callee,
+            id,
+            args,
+        );
+        for site in sites {
+            self.report_missing(&site.declared, &site.name, span);
+            self.report_missing(&site.dispatched, &site.name, span);
         }
-        let dispatches: Vec<(FunctionRef, bool)> = self
-            .annotations
-            .into_iter()
-            .flat_map(|ann| ann.static_dispatches(id))
-            .map(|dispatch| (dispatch.function_ref.clone(), dispatch.self_in_args))
-            .collect();
-        if dispatches.is_empty() {
-            return false;
-        }
-        let receiver_site = match callee {
-            Expr::Ident(ident) => ident.segments.first().map(|seg| seg.id),
-            _ => None,
-        };
-        for (func_ref, self_in_args) in dispatches {
-            let mut effects = self.method_effects(&func_ref);
-            effects.extend(self.effect_op_requirement(&func_ref, receiver_site));
-            let params = self.method_param_types(&func_ref);
-            // A qualified (UFCS) call spells the receiver as its first
-            // argument, so the args already align with the callee's full
-            // parameter list — no self skip.
-            let is_method = func_ref.method_info.is_some() && !self_in_args;
-            let resolved = self.resolve_effect_params(&effects, &params, is_method, args);
-            self.report_missing(&resolved, callee_name(callee), span);
-        }
-        true
-    }
-
-    /// Type of an indirect call's callee, preferring the enclosing function's
-    /// parameter types: a function-typed parameter callee leaves no `references`
-    /// edge or recorded expression type at the call, so nothing else names it.
-    fn indirect_callee_type(&self, call: &CallExpr) -> Option<TypeId> {
-        if let Expr::Ident(ident) = &call.callee
-            && let Some(type_id) = self.param_types.get(&ident.name)
-        {
-            return Some(*type_id);
-        }
-        expr_type_of(&call.callee, self.sem)
     }
 }
 
@@ -2488,16 +2607,13 @@ fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
 }
 
 // ---------------------------------------------------------------------------
-// Semantics-based default-value purity checking (Design B)
+// Semantics-based purity checking
 // ---------------------------------------------------------------------------
 
-/// Default-value purity over [`Semantics`] — the Design B default-value purity
-/// checker. Every `param: T = expr` and
-/// `field: T = expr` default must be pure: it may not call any function that
-/// declares effects, nor install an effect handler. Walks the source default
-/// expressions directly. Violations are returned for the caller to route.
+/// Purity over [`Semantics`]: no default expression or global initializer
+/// performs an effect its own handlers do not answer.
 #[must_use]
-pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError> {
+pub fn check_purity_semantic(sem: &Semantics) -> Vec<PurityError> {
     let mut out = Vec::new();
     let Some(state) = sem.state.as_ref() else {
         return out;
@@ -2507,102 +2623,175 @@ pub fn check_default_purity_semantic(sem: &Semantics) -> Vec<DefaultPurityError>
     out
 }
 
-/// Walk every user-authored parameter / field default, appending impurity
-/// violations. Shared by [`check_default_purity_semantic`] and
-/// [`check_semantics`].
-fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<DefaultPurityError>) {
+/// Walk every user-authored expression that must be pure, appending violations.
+/// Shared by [`check_purity_semantic`] and [`check_semantics`].
+fn run_purity_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<PurityError>) {
     let Some(state) = sem.state.as_ref() else {
         return;
     };
-    let walk = |annotations: Option<&TypeAnnotations>,
-                module: &ModuleSource,
-                params: &[ast::Param],
-                out: &mut Vec<DefaultPurityError>| {
-        for param in params {
-            if let Some(default) = &param.default {
-                purity_walk_default(sem, annotations, index, module, default, out);
-            }
-        }
-    };
-
     for (src, module) in &sem.modules {
         if !is_user_authored(src) {
             continue;
         }
-        let annotations = state.module_semantics.get(src).map(|m| &m.types);
+        let mut walker = PurityWalker {
+            sem,
+            annotations: state.module_semantics.get(src).map(|m| &m.types),
+            index,
+            module_source: src,
+            context: PureContext::DefaultValue,
+            granted: IndexSet::default(),
+            param_types: IndexMap::default(),
+            out: &mut *out,
+        };
         for item in &module.items {
             match item {
-                Item::Function(func) => walk(annotations, src, &func.params, out),
+                Item::Function(func) => walker.check_defaults(&func.params),
                 Item::Impl(impl_block) => {
                     for method in &impl_block.methods {
-                        walk(annotations, src, &method.params, out);
+                        walker.check_defaults(&method.params);
                     }
                 }
                 Item::Trait(trait_decl) => {
-                    // Parity with the effect checker's trait coverage. Note the
-                    // trait/effect method signature path does not yet resolve
-                    // param defaults (item.rs builds them with `default_expr:
-                    // None` and no expression context), so a trait-method
-                    // default's calls leave no `references` edge for the walker
-                    // to flag until that annotation lands.
+                    // The trait method signature path does not yet resolve param
+                    // defaults, so their calls leave no `references` edge to flag
+                    // until that annotation lands.
                     for method in &trait_decl.methods {
-                        walk(annotations, src, &method.params, out);
+                        walker.check_defaults(&method.params);
                     }
                 }
                 Item::Interface(interface_decl) => {
                     for method in &interface_decl.methods {
-                        walk(annotations, src, &method.params, out);
+                        walker.check_defaults(&method.params);
+                    }
+                }
+                Item::Resource(resource_decl) => {
+                    for method in &resource_decl.methods {
+                        walker.check_defaults(&method.params);
                     }
                 }
                 Item::Struct(struct_decl) => {
                     for field in &struct_decl.fields {
                         if let Some(default) = &field.default {
-                            purity_walk_default(sem, annotations, index, src, default, out);
+                            walker.check(PureContext::DefaultValue, default);
                         }
                     }
                 }
-                _ => {}
+                Item::Global(global) => {
+                    walker.check(PureContext::GlobalInitializer, &global.initializer);
+                }
+                // No expression a position requires to be pure.
+                Item::Use(_)
+                | Item::Enum(_)
+                | Item::Variant(_)
+                | Item::Flags(_)
+                | Item::Newtype(_)
+                | Item::TupleTypeDecl(_)
+                | Item::BuiltinTypeDecl(_)
+                | Item::World(_)
+                | Item::Test(_)
+                | Item::Error(_) => {}
             }
         }
     }
 }
 
-fn purity_walk_default(
-    sem: &Semantics,
-    annotations: Option<&TypeAnnotations>,
-    index: &EffectIndex,
-    module: &ModuleSource,
-    default: &Expr,
-    out: &mut Vec<DefaultPurityError>,
-) {
-    let mut walker = PurityWalker {
-        sem,
-        annotations,
-        index,
-        module: module.source_path(),
-        out,
-    };
-    walker.visit_expr(default);
-}
-
-/// Walks a default expression flagging any call to an effectful function (or an
-/// effect-handler install), which would make the default impure.
+/// Walks an expression that must be pure, flagging every effect it performs
+/// that no enclosing `with … do` answers.
 struct PurityWalker<'a> {
     sem: &'a Semantics,
     annotations: Option<&'a TypeAnnotations>,
     index: &'a EffectIndex<'a>,
-    module: String,
-    out: &'a mut Vec<DefaultPurityError>,
+    module_source: &'a ModuleSource,
+    context: PureContext,
+    /// Effects the enclosing `with … do` installs, which a callee declaring
+    /// one may demand of the position.
+    granted: IndexSet<EffectRef>,
+    /// Names the callee of an indirect call through a function-typed parameter.
+    /// Always empty: a global initializer has no enclosing function, and a
+    /// default expression cannot name a parameter — the call site evaluates it
+    /// before any is bound.
+    param_types: IndexMap<String, TypeId>,
+    out: &'a mut Vec<PurityError>,
 }
 
 impl PurityWalker<'_> {
-    fn flag_if_effectful(&mut self, effects: &[EffectRef], callee: &str, span: Span) {
-        if !effects.is_empty() {
-            self.out.push(DefaultPurityError {
-                callee: callee.to_string(),
-                span,
-                module: self.module.clone(),
-            });
+    fn check(&mut self, context: PureContext, expr: &Expr) {
+        self.context = context;
+        self.visit_expr(expr);
+    }
+
+    fn check_defaults(&mut self, params: &[ast::Param]) {
+        for param in params {
+            if let Some(default) = &param.default {
+                self.check(PureContext::DefaultValue, default);
+            }
+        }
+    }
+
+    fn flag(&mut self, impurity: Impurity, span: Span) {
+        self.out.push(PurityError {
+            context: self.context,
+            impurity,
+            span,
+            module: self.module_source.source_path(),
+        });
+    }
+
+    /// Whether any of `effects` is one no enclosing `with … do` installs.
+    fn unanswered(&self, effects: &[EffectRef]) -> bool {
+        effects.iter().any(|effect| {
+            let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
+            // A `Param` left after resolution bound to no concrete effect, as
+            // `SemEffectWalker::report_missing` reads it.
+            !effect.is_param() && !self.granted.contains(&effect)
+        })
+    }
+
+    fn flag_if_effectful(
+        &mut self,
+        effects: &[EffectRef],
+        params: &[TypeId],
+        is_method: bool,
+        args: &[Expr],
+        callee: &str,
+        span: Span,
+    ) {
+        let effects = resolve_effect_params(self.sem, self.index, effects, params, is_method, args);
+        if self.unanswered(&effects) {
+            self.flag(Impurity::Call(callee.to_string()), span);
+        }
+    }
+
+    /// Flags `Site::op(…)` when the dispatch demands a capability the position
+    /// does not hold. An operation declares no `with` clause of its own, so
+    /// nothing but the site says so.
+    fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
+        // An operation declares no effect parameters, so there is nothing for
+        // the arguments to resolve.
+        let required = operation_requirements(self.sem, self.index, Some(site));
+        if self.unanswered(&required) {
+            self.flag(Impurity::Dispatch(op.to_string()), span);
+        }
+    }
+
+    /// Flags every callee the call at `id` resolves to whose effects the
+    /// position does not hold.
+    fn flag_call(&mut self, callee: &Expr, id: AstId, args: &[Expr], span: Span) {
+        let sites = call_site_effects(
+            self.sem,
+            self.index,
+            self.annotations,
+            &self.param_types,
+            callee,
+            id,
+            args,
+        );
+        // `dispatched` is left to `flag_if_operation`, which asks the path
+        // rather than each dispatch and so answers once per site.
+        for site in sites {
+            if self.unanswered(&site.declared) {
+                self.flag(Impurity::Call(site.name), span);
+            }
         }
     }
 }
@@ -2611,55 +2800,75 @@ impl AstVisitor for PurityWalker<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Call(call) => {
-                let free = if let Expr::Ident(ident) = &call.callee {
-                    self.sem
-                        .referenced_symbol(ident.id)
-                        .and_then(|def| self.index.fn_effects.get(&def))
-                        .map(|effects| (effects.clone(), ident.name.clone()))
-                } else {
-                    None
-                };
-                if let Some((effects, name)) = free {
-                    self.flag_if_effectful(&effects, &name, call.span);
-                } else {
-                    let func_refs: Vec<FunctionRef> = self
-                        .annotations
-                        .into_iter()
-                        .flat_map(|ann| ann.static_dispatches(call.id))
-                        .map(|dispatch| dispatch.function_ref.clone())
-                        .collect();
-                    for func_ref in func_refs {
-                        let effects = self.index.method_effects(&func_ref);
-                        self.flag_if_effectful(&effects, callee_name(&call.callee), call.span);
-                    }
+                if let Some(interface) = interface_segment(&call.callee)
+                    && let Expr::Ident(ident) = &call.callee
+                    && let Some(op) = ident.segments.last()
+                {
+                    self.flag_if_operation(interface.id, &op.name, call.span);
                 }
+                self.flag_call(&call.callee, call.id, &call.args, call.span);
+            }
+            Expr::TaggedTemplate(tagged) => {
+                self.flag_call(&tagged.tag, tagged.id, &[], tagged.span);
             }
             Expr::MethodCall(method_call) => {
                 let sem = self.sem;
                 for dispatch in sem.method_dispatches_at(method_call.id) {
                     let effects = self.index.method_effects(&dispatch.function_ref);
-                    self.flag_if_effectful(&effects, &method_call.method, method_call.span);
+                    let params = self.index.method_param_types(&dispatch.function_ref);
+                    self.flag_if_effectful(
+                        &effects,
+                        &params,
+                        true,
+                        &method_call.args,
+                        &method_call.method,
+                        method_call.span,
+                    );
                 }
             }
             Expr::StaticMethodCall(static_call) => {
-                let func_refs: Vec<FunctionRef> = self
-                    .annotations
-                    .into_iter()
-                    .flat_map(|ann| ann.static_dispatches(static_call.id))
-                    .map(|dispatch| dispatch.function_ref.clone())
-                    .collect();
-                for func_ref in func_refs {
+                if let ast::Type::Named(named) = &static_call.target_type {
+                    self.flag_if_operation(named.id, &static_call.method, static_call.span);
+                }
+                for (func_ref, self_in_args) in dispatches_at(self.annotations, static_call.id) {
                     let effects = self.index.method_effects(&func_ref);
-                    self.flag_if_effectful(&effects, &static_call.method, static_call.span);
+                    let params = self.index.method_param_types(&func_ref);
+                    let is_method = func_ref.method_info.is_some() && !self_in_args;
+                    self.flag_if_effectful(
+                        &effects,
+                        &params,
+                        is_method,
+                        &static_call.args,
+                        &static_call.method,
+                        static_call.span,
+                    );
                 }
             }
             Expr::WithHandler(with_handler) => {
-                // Installing a handler touches the dispatch global — impure.
-                self.out.push(DefaultPurityError {
-                    callee: "<with-handler>".to_string(),
-                    span: with_handler.span,
-                    module: self.module.clone(),
-                });
+                // The install discharges what its body dispatches, so the body
+                // walks under the grant. The handler expressions run outside it.
+                for binding in &with_handler.handlers {
+                    ast::walk_expr(self, &binding.handler);
+                }
+                let added: Vec<EffectRef> = with_handler
+                    .handlers
+                    .iter()
+                    .flat_map(|binding| {
+                        binding_granted_effects(
+                            self.sem,
+                            self.annotations,
+                            self.index,
+                            self.module_source,
+                            binding,
+                        )
+                    })
+                    .filter(|effect| self.granted.insert(effect.clone()))
+                    .collect();
+                ast::walk_block(self, &with_handler.body);
+                for effect in added {
+                    self.granted.shift_remove(&effect);
+                }
+                return;
             }
             _ => {}
         }

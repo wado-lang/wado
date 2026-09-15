@@ -1,0 +1,32 @@
+// A `-D` override replaces a deferred initializer's body, so the locals that
+// body needed go with it. Leaving `address_taken_locals` behind pointed boxing
+// at a local the new body does not have.
+
+use { println, Stdout } from "core:cli";
+
+fn bump(x: &mut i32) {
+    *x += 5;
+}
+
+#[param]
+global TAG: i32 = hold: {
+    let mut x = 1;
+    bump(&mut x);
+    break hold: x
+};
+
+global PLAIN: i32 = hold: {
+    let mut y = 100;
+    bump(&mut y);
+    break hold: y
+};
+
+export fn run() with Stdout {
+    println(`${TAG} ${PLAIN}`);
+}
+
+__DATA__
+{
+    "params": { "TAG": "7" },
+    "stdout": "7 105\n"
+}

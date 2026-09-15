@@ -166,27 +166,6 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         func.locals = locals;
         func.body = Some(body);
     }
-
-    for global in &mut module.globals {
-        let mut locals = std::mem::take(&mut global.locals);
-        // A global carries no count beside its locals, so the vec is the count.
-        let mut local_count = locals.len() as u32;
-        let init = global.init.slot_expr_mut();
-        SettledPackExpander {
-            mono,
-            type_table: &type_table_rc,
-            local_count: &mut local_count,
-            locals: &mut locals,
-        }
-        .visit_expr(init);
-        PackExpansionLocalSplitter {
-            local_count: &mut local_count,
-            locals: &mut locals,
-        }
-        .visit_expr(init);
-        assert_eq!(locals.len() as u32, local_count);
-        global.locals = locals;
-    }
 }
 
 /// The receivers a trait-method lookup may try, in order: the method info's

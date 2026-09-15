@@ -3803,7 +3803,7 @@ fn generate_struct_eq_ord_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'
 /// all declare a default, returning `S { f0: e0, … }`. Skips a struct with any
 /// undefaulted field, one already carrying a user `impl Default`, and generic
 /// structs, whose field defaults may depend on bounds. Every `default_expr`
-/// reaching here is pure, `check_default_purity_semantic` having run.
+/// reaching here is pure, `check_purity_semantic` having run.
 fn generate_struct_default_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>) {
     if module.structs.is_empty() {
         return;

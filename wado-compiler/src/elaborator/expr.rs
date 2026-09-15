@@ -771,11 +771,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // TIR under `with_const_module_perspective(const_module)` and does
         // not read these consumer-side entries.
         if let Some(assoc) = self.associated_constant_of_path(ident) {
+            let (Some(owner), Some(member)) = (ident.owner_segment(), ident.segments.last()) else {
+                unreachable!("an associated constant path names an owner and a member")
+            };
             self.check_inherent_member_visibility(
                 assoc.inherent_visibility,
                 Some(&assoc.module),
-                MemberOwner::Named(assoc_const_owner_segment(ident)),
-                ident.segments.last().map_or(&ident.name, |s| &s.name),
+                MemberOwner::Named(&owner.name),
+                &member.name,
                 ImplMemberKind::AssociatedConstant,
                 Some(ident.id),
                 ident.span,
@@ -963,11 +966,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // inside a foreign default resolves in the declaring module. A bare
         // case (`None`, `Leaf`) has no such segment: the expected type
         // supplies it, or nothing does.
-        let (owner, spelled) = if let Some(i) = ident.segments.len().checked_sub(2) {
-            (
-                self.tysys.resolutions.declared(ident.segments[i].id),
-                ident.name.clone(),
-            )
+        let (owner, spelled) = if let Some(seg) = ident.owner_segment() {
+            (self.tysys.resolutions.declared(seg.id), ident.name.clone())
         } else {
             match self.bare_case(ident, expected_type) {
                 BareCase::Of { owner, spelled } => (Some(owner), spelled),
@@ -5509,14 +5509,4 @@ pub(super) enum MemberOwner<'a> {
     Type(TypeId),
     Named(&'a str),
     Written(Option<&'a ast::Type>),
-}
-
-/// The segment naming an associated constant's owner — `K` in `K::SECRET` and
-/// in `ns::K::SECRET`.
-fn assoc_const_owner_segment(ident: &ast::IdentExpr) -> &str {
-    ident
-        .segments
-        .len()
-        .checked_sub(2)
-        .map_or(ident.name.as_str(), |i| ident.segments[i].name.as_str())
 }
