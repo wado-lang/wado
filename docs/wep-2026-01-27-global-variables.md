@@ -59,18 +59,18 @@ fn example() {
 ### An initializer performs no effect
 
 An initializer runs at module instantiation. Nothing is installed for it then,
-and it runs in dependency order rather than one the program wrote. Nothing can
-answer an effect that reaches out of it, so two things are compile errors:
+and it runs in dependency order rather than one the program wrote. It declares
+no `with` clause, and has nowhere to declare one, so it behaves as a function
+body that declares no effect: calling a function that declares one is a compile
+error. A default-value expression carries the same rule, and one checker answers
+for both positions, naming the position in its diagnostic.
 
-- calling a function that declares an effect,
-- dispatching an operation no enclosing `with … do` installs a handler for.
-
-A default-value expression already carries this rule. One checker now answers
-for both positions and names the position in the diagnostic.
+A closure literal's body is read where it is written, as it is inside a
+function: the `fn() with E` a global's annotation gives it grants its body
+nothing.
 
 An initializer may install its own handler. `with E => h do` answers the
-operations its body dispatches, so the expression as a whole performs no
-effect:
+operations its body dispatches:
 
 ```wado
 global COUNTED: i32 = hold: {
@@ -82,11 +82,29 @@ global COUNTED: i32 = hold: {
 };
 ```
 
-The purity walk tracks the same grants the effect checker does. An operation the
-installed handler does not cover is still an error.
+### A dispatch is not an effect the position holds
 
-A purely-computational component's operation needs neither a handler nor a host
-capability, so an initializer may call one.
+A user-defined effect's operation is answered by an installed handler, and traps
+where none is (see [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md)).
+That is a runtime outcome rather than a demand on the position, and it is the
+same outcome in an initializer as in a function body, which is why an
+initializer may write the dispatch:
+
+```wado
+global COUNTED: i32 = Counter::next();   // compiles; traps at module init
+```
+
+The purity check would otherwise have to hold only for a dispatch written
+directly in the initializer: a signature carries no record that a function
+dispatches an operation, so the same dispatch one call away is invisible to it.
+A rule that holds for `Counter::next()` and not for `indirect()` is worse than
+no rule, and the runtime answer already covers both.
+
+An operation backed by the host, or by a component that reaches the host, is a
+different matter: it demands a capability the position must already hold, and an
+initializer holds none, so dispatching one is a compile error. A purely
+computational component's operation demands nothing, so an initializer may call
+it.
 
 ### What a constant expression can hold
 

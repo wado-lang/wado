@@ -354,9 +354,6 @@ struct OwnedEffectData {
     effect_by_name: IndexMap<String, EffectRef>,
     /// `#[cm]` FQ per interface declaration.
     interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>>,
-    /// `(module, interface, operation)` for every operation declaring a default
-    /// body, which runs when no handler is installed.
-    defaulted_operations: IndexSet<(ModuleSource, String, String)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component; a
     /// reconstructed host-leaf import in this set is discharged (composition-
@@ -454,8 +451,6 @@ impl OwnedEffectData {
         // effect while a type-only interface (`wasi:cli/types`) resolves to
         // nothing.
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
-        let mut defaulted_operations: IndexSet<(ModuleSource, String, String)> =
-            IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Interface(decl) = item else {
@@ -467,15 +462,6 @@ impl OwnedEffectData {
                     .find_map(|a| a.as_cm_import())
                     .map(CmImport::interface_path);
                 interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
-                for method in &decl.methods {
-                    if method.body.is_some() {
-                        defaulted_operations.insert((
-                            src.clone(),
-                            decl.name.clone(),
-                            method.name.clone(),
-                        ));
-                    }
-                }
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),
                     module_source: src.clone(),
@@ -499,7 +485,6 @@ impl OwnedEffectData {
             closure,
             effect_by_name,
             interface_cm_fq,
-            defaulted_operations,
             effect_by_cm_fq,
             provided_import_fqs,
         }
@@ -517,7 +502,6 @@ impl OwnedEffectData {
             closure: &self.closure,
             effect_by_name: &self.effect_by_name,
             interface_cm_fq: &self.interface_cm_fq,
-            defaulted_operations: &self.defaulted_operations,
             effect_by_cm_fq: &self.effect_by_cm_fq,
             provided_import_fqs: &self.provided_import_fqs,
         }
@@ -546,7 +530,6 @@ struct EffectIndex<'a> {
     effect_by_name: &'a IndexMap<String, EffectRef>,
     /// `(module, interface, operation)` for every operation declaring a default
     /// body, which runs when no handler is installed.
-    defaulted_operations: &'a IndexSet<(ModuleSource, String, String)>,
     /// Interface declaration → its `#[cm]` FQ, for resolving a direct `E::op()`
     /// callee to its effect and FQ.
     interface_cm_fq: &'a IndexMap<(ModuleSource, String), Option<String>>,
@@ -634,44 +617,41 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct `E::op()` call demands of its caller.
-enum Operation {
-    /// A user-defined effect: an installed handler answers the dispatch.
-    Handled(EffectRef),
-    /// A host-backed or component effect, with the effects it requires of the
-    /// caller — empty for a purely-computational component.
-    Requires(Vec<EffectRef>),
-}
-
-/// How an operation of the `interface` at `site` is resolved. `None` when the
-/// site names no interface.
-fn operation_at(sem: &Semantics, index: &EffectIndex, site: Option<AstId>) -> Option<Operation> {
+/// What a direct `E::op()` call at `site` demands of its caller.
+///
+/// Empty where it demands nothing: the site names no interface, or `E` is a
+/// user-defined effect, whose operation an installed handler answers and whose
+/// dispatch with none traps — a runtime outcome, not a demand on the position.
+/// A purely computational component's operation demands nothing either.
+fn operation_requirements(
+    sem: &Semantics,
+    index: &EffectIndex,
+    site: Option<AstId>,
+) -> Vec<EffectRef> {
     // The callee names its interface's declaration; the site says which one
     // that is, so a same-named local `interface` cannot stand in for it.
-    let (decl_module, name, cm_fq) = interface_at(sem, index, site)?;
+    let Some((decl_module, name, cm_fq)) = interface_at(sem, index, site) else {
+        return Vec::new();
+    };
     let Some(fq) = cm_fq else {
-        return Some(Operation::Handled(EffectRef::Concrete {
-            name,
-            module_source: decl_module,
-        }));
+        return Vec::new();
     };
     if let Some(registry) = sem.cm_interface_registry()
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
         // operations demand the dependency's own host-leaf capabilities.
-        let leaves = registry
+        return registry
             .host_leaf_imports_for(fq)
             .iter()
             .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
             .collect();
-        return Some(Operation::Requires(leaves));
     }
-    Some(Operation::Requires(vec![EffectRef::Concrete {
+    vec![EffectRef::Concrete {
         name,
         module_source: decl_module,
-    }]))
+    }]
 }
 
 /// The effect an `impl E for T` block handles, when `E` is one. Read off the
@@ -1192,11 +1172,7 @@ impl SemEffectWalker<'_> {
         if !matches!(func_ref.module_source, ModuleSource::Local { .. }) {
             return Vec::new();
         }
-        match operation_at(self.sem, self.index, receiver_site) {
-            // A handler resolves it, so it is not a direct-op requirement.
-            Some(Operation::Handled(_)) | None => Vec::new(),
-            Some(Operation::Requires(effects)) => effects,
-        }
+        operation_requirements(self.sem, self.index, receiver_site)
     }
 
     fn binding_granted_effects(&self, binding: &EffectHandlerBinding) -> Vec<EffectRef> {
@@ -2743,41 +2719,14 @@ impl PurityWalker<'_> {
         }
     }
 
-    /// Whether the operation declares a default body, which is what a dispatch
-    /// with no handler installed runs.
-    fn is_defaulted(&self, effect: &EffectRef, op: &str) -> bool {
-        let EffectRef::Concrete {
-            name,
-            module_source,
-        } = effect
-        else {
-            return false;
-        };
-        self.index.defaulted_operations.contains(&(
-            module_source.clone(),
-            name.clone(),
-            op.to_string(),
-        ))
-    }
-
-    /// Flags `Site::op(…)` when the dispatch needs something the position does
-    /// not hold. An operation declares no `with` clause of its own, so nothing
-    /// but the site says so. A purely-computational component's operation needs
-    /// neither a handler nor an effect, and stays.
+    /// Flags `Site::op(…)` when the dispatch demands a capability the position
+    /// does not hold. An operation declares no `with` clause of its own, so
+    /// nothing but the site says so.
     fn flag_if_operation(&mut self, site: AstId, op: &str, span: Span) {
-        match operation_at(self.sem, self.index, Some(site)) {
-            Some(Operation::Handled(effect))
-                if !self.granted.contains(&effect) && !self.is_defaulted(&effect, op) =>
-            {
-                self.flag(Impurity::Dispatch(op.to_string()), span);
-            }
-            // An operation declares no effect parameters, so there is nothing
-            // for the arguments to resolve.
-            Some(Operation::Requires(effects)) => {
-                self.flag_if_effectful(&effects, &[], false, &[], op, span);
-            }
-            Some(Operation::Handled(_)) | None => {}
-        }
+        // An operation declares no effect parameters, so there is nothing for
+        // the arguments to resolve.
+        let required = operation_requirements(self.sem, self.index, Some(site));
+        self.flag_if_effectful(&required, &[], false, &[], op, span);
     }
 }
 

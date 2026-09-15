@@ -112,10 +112,11 @@ export fn run() with Stdout {
     );
 }
 
-/// An operation with no default body has nothing to run unhandled, so the
-/// dispatch needs a handler the initializer does not have.
+/// A user-defined effect's operation demands nothing of the position: an
+/// installed handler answers it, and a dispatch with none traps, in an
+/// initializer as in a function body.
 #[test]
-fn interface_operation_in_global_initializer_is_reported() {
+fn interface_operation_in_global_initializer_is_not_reported() {
     let source = r#"
 interface Counter {
     fn next() -> i32;
@@ -129,62 +130,19 @@ export fn run() {
 "#;
     let found = in_global(source);
     assert!(
-        found
-            .iter()
-            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
-        "expected the operation `next` flagged in a global initializer, got {found:?}"
-    );
-}
-
-/// The install discharges what its body dispatches, so the initializer as a
-/// whole performs no effect.
-#[test]
-fn handler_install_in_global_initializer_is_not_reported() {
-    let source = r#"
-interface Counter {
-    fn next() -> i32;
-}
-
-struct Tally {
-    value: i32,
-}
-
-impl Counter for Tally {
-    fn next(&mut self) -> i32 {
-        self.value += 1;
-        resume self.value
-    }
-}
-
-global A: i32 = hold: {
-    let mut tally = Tally { value: 10 };
-    with Counter => &mut tally do {
-        break hold: Counter::next()
-    }
-    break hold: 0
-};
-
-export fn run() {
-    assert A == 11;
-}
-"#;
-    let found = in_global(source);
-    assert!(
         found.is_empty(),
-        "a handler install discharges its own dispatches: {found:?}"
+        "an unhandled dispatch traps rather than failing to compile: {found:?}"
     );
 }
 
-/// The grant covers the effect the `with` installs, and nothing else.
+/// A `with … do` grants the effect it installs to its body, and nothing beyond
+/// it: `tick` declares `with Counter`, so the same call is answered inside the
+/// install and unanswered outside it.
 #[test]
-fn unhandled_operation_under_a_handler_is_still_reported() {
+fn handler_install_grants_only_its_own_body() {
     let source = r#"
 interface Counter {
     fn next() -> i32;
-}
-
-interface Clock {
-    fn now() -> i32;
 }
 
 struct Tally {
@@ -198,30 +156,33 @@ impl Counter for Tally {
     }
 }
 
-global A: i32 = hold: {
+fn tick() -> i32 with Counter {
+    return Counter::next();
+}
+
+global INSIDE: i32 = hold: {
     let mut tally = Tally { value: 10 };
     with Counter => &mut tally do {
-        break hold: Counter::next() + Clock::now()
+        break hold: tick()
     }
     break hold: 0
 };
 
+global OUTSIDE: i32 = tick();
+
 export fn run() {
-    assert A == 18;
+    assert INSIDE + OUTSIDE > 0;
 }
 "#;
     let found = in_global(source);
-    assert!(
-        found
-            .iter()
-            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "now")),
-        "expected `now` flagged: only `Counter` is installed, got {found:?}"
+    assert_eq!(
+        found.len(),
+        1,
+        "only the call outside the install is unanswered: {found:?}"
     );
     assert!(
-        !found
-            .iter()
-            .any(|i| matches!(i, Impurity::Dispatch(op) if op == "next")),
-        "`next` is answered by the installed handler: {found:?}"
+        matches!(&found[0], Impurity::Call(callee) if callee == "tick"),
+        "expected `tick` flagged outside the install, got {found:?}"
     );
 }
 
