@@ -2296,12 +2296,11 @@ impl Parser {
             return self.parse_item().map(|item| Stmt::Item(Box::new(item)));
         }
 
-        if at > 0 && matches!(self.peek_nth(at).kind, TokenKind::Let | TokenKind::Reactive) {
+        if matches!(self.peek_nth(at).kind, TokenKind::Let | TokenKind::Reactive) {
             return self.parse_let_stmt();
         }
 
         match self.peek_kind() {
-            TokenKind::Let | TokenKind::Reactive => self.parse_let_stmt(),
             TokenKind::Return => self.parse_return_stmt(),
             TokenKind::If => self.parse_if_stmt(),
             TokenKind::While => self.parse_while_stmt(),

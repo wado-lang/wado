@@ -793,12 +793,14 @@ fn declared_member_types(item: &ast::Item) -> Vec<&ast::Type> {
 /// export for the handle to point at.
 fn resource_in_lib_sig<'a>(
     registry: &'a component_model::CmInterfaceRegistry,
-    declared: &hashmap::IndexMap<String, &ast::Item>,
+    resolutions: &resolve::Resolutions,
+    declared: &hashmap::IndexMap<ast::AstId, &ast::Item>,
     ty: &ast::Type,
-    entered: &mut hashmap::IndexSet<String>,
+    entered: &mut hashmap::IndexSet<ast::AstId>,
 ) -> Option<&'a str> {
     use crate::ast::Type;
-    let mut follow = |t: &ast::Type| resource_in_lib_sig(registry, declared, t, entered);
+    let mut follow =
+        |t: &ast::Type| resource_in_lib_sig(registry, resolutions, declared, t, entered);
     match ty {
         Type::Generic(g) => g.args.iter().find_map(&mut follow),
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
@@ -809,14 +811,20 @@ fn resource_in_lib_sig<'a>(
             {
                 return Some(cm);
             }
+            // Which declaration the name means, since two modules may each
+            // write one and only the reference site says which is meant.
+            let resolve::Resolution::Def(def) = resolutions.get(named.id) else {
+                return None;
+            };
+            let item_id = resolutions.defs().ast_id(def);
             // A recursive declaration (`struct Node { next: Option<Node> }`)
-            // reaches itself, and every name answers the same way twice.
-            if !entered.insert(named.name.clone()) {
+            // reaches itself, and a second visit answers what the first did.
+            if !entered.insert(item_id) {
                 return None;
             }
-            declared_member_types(declared.get(named.name.as_str())?)
+            declared_member_types(declared.get(&item_id)?)
                 .into_iter()
-                .find_map(|t| resource_in_lib_sig(registry, declared, t, entered))
+                .find_map(|t| resource_in_lib_sig(registry, resolutions, declared, t, entered))
         }
         _ => None,
     }
@@ -1385,18 +1393,18 @@ fn compile_after_load<H: CompilerHost>(
 
     // A library's exported signature cannot carry a resource handle: every Wado
     // `resource` binds one another interface owns, so the library's own
-    // instance type has no export for it to point at. The emitter used to reach
-    // that missing entry and panic, so a declaration the signature names is
-    // followed into its own members.
+    // instance type has no export for it to point at. The emitter reaches that
+    // missing entry and panics, so the refusal has to land here.
     if options.lib_world.is_some()
         && let Some(world) = lib_world_info.as_ref()
         && let Some(registry) = sem.cm_interface_registry()
+        && let Some(resolutions) = sem.resolutions()
     {
-        let declared: hashmap::IndexMap<String, &ast::Item> = sem
+        let declared: hashmap::IndexMap<ast::AstId, &ast::Item> = sem
             .modules
             .iter()
             .flat_map(|(_, module)| &module.items)
-            .filter_map(|item| Some((lib_type_decl_name(item)?, item)))
+            .filter_map(|item| lib_type_decl_name(item).map(|_| (item.id(), item)))
             .collect();
         let mut refused = false;
         for export in &world.exports {
@@ -1407,7 +1415,9 @@ fn compile_after_load<H: CompilerHost>(
                 .chain(export.return_type.as_ref());
             for ty in types {
                 let mut entered = hashmap::IndexSet::default();
-                if let Some(name) = resource_in_lib_sig(registry, &declared, ty, &mut entered) {
+                if let Some(name) =
+                    resource_in_lib_sig(registry, resolutions, &declared, ty, &mut entered)
+                {
                     refused = true;
                     let _ = logger.error(compiler_host::Diagnostic {
                         severity: compiler_host::Severity::Error,

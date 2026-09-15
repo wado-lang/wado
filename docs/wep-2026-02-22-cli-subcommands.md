@@ -158,8 +158,8 @@ world's contract in either mode.
 
 #### Acquisition tiers — how far a command goes for a cold cache
 
-Consuming the graph still leaves open how a dependency the cache lacks is
-acquired. Two tiers answer it, and every consuming command picks one:
+Consuming the graph does not say how a dependency the cache lacks is fetched.
+Two tiers answer that, and every consuming command picks one:
 
 | Tier       | Commands                                            | Cold cache                                       | Unpinned version        |
 | ---------- | --------------------------------------------------- | ------------------------------------------------ | ----------------------- |

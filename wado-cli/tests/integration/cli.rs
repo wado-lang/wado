@@ -566,6 +566,33 @@ fn test_library_export_reaching_a_resource_is_refused() {
 }
 
 #[test]
+fn test_library_export_reaching_a_resource_through_an_alias_is_refused() {
+    // The signature spells the alias, and only the reference site says which
+    // declaration that is. Matching the spelling against declared names finds
+    // nothing, and the emitter reaches the missing entry and panics.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("other.wado"),
+        "use { Descriptor } from \"wasi:filesystem\";\n\
+         pub struct Holder { d: Descriptor }\n",
+    )
+    .unwrap();
+    let src = dir.path().join("lib.wado");
+    std::fs::write(
+        &src,
+        "use { Holder as Held } from \"./other.wado\";\n\
+         export fn take(h: Held) -> i32 { let _ = h; return 1; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .args(["check", src.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot carry a resource handle"));
+}
+
+#[test]
 fn test_run_hello() {
     wado()
         .args(["run", "example/hello.wado"])

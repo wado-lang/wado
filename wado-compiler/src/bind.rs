@@ -9,8 +9,8 @@ use crate::hashmap::IndexMap;
 
 use crate::ast::{
     AssertStmt, Block, ClosureExpr, Condition, ConditionElement, Expr, ExprStmt, ForOfStmt,
-    ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchExpr, Module, Pattern,
-    ReturnStmt, Stmt, WhileStmt, for_each_pattern_name,
+    ForStmt, Function, IfExpr, IfStmt, Item, LetStmt, LoopStmt, MatchArm, MatchExpr, Module,
+    Pattern, ReturnStmt, Stmt, WhileStmt, for_each_pattern_name,
 };
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::logger::{Bail, Logger};
@@ -155,30 +155,14 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
             expr_references_var(&range.start, name) || expr_references_var(&range.end, name)
         }
 
-        // The condition's bindings reach the `then` block and stop there.
-        Expr::If(if_expr) => {
-            condition_references_var(&if_expr.condition, name)
-                || (!condition_binds_name(&if_expr.condition, name)
-                    && if_expr
-                        .then_block
-                        .stmts
-                        .iter()
-                        .any(|s| stmt_references_var(s, name)))
-                || if_expr
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| b.stmts.iter().any(|s| stmt_references_var(s, name)))
-        }
+        Expr::If(if_expr) => if_references_var(
+            &if_expr.condition,
+            &if_expr.then_block,
+            if_expr.else_block.as_ref(),
+            name,
+        ),
         Expr::Match(m) => {
-            expr_references_var(&m.expr, name)
-                || m.arms.iter().any(|arm| {
-                    !pattern_binds_name(&arm.pattern, name)
-                        && (arm
-                            .guard
-                            .as_ref()
-                            .is_some_and(|g| expr_references_var(g, name))
-                            || expr_references_var(&arm.body, name))
-                })
+            expr_references_var(&m.expr, name) || match_arms_reference_var(&m.arms, name)
         }
         Expr::Matches(m) => {
             expr_references_var(&m.expr, name)
@@ -188,8 +172,8 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
                         .is_some_and(|g| expr_references_var(g, name)))
         }
 
-        Expr::Block(block) => block.stmts.iter().any(|s| stmt_references_var(s, name)),
-        Expr::LabeledBlock(lb) => lb.block.stmts.iter().any(|s| stmt_references_var(s, name)),
+        Expr::Block(block) => block_references_var(block, name),
+        Expr::LabeledBlock(lb) => block_references_var(&lb.block, name),
 
         Expr::TemplateString(ts) => ts
             .interpolations()
@@ -254,59 +238,82 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
                     .as_ref()
                     .is_some_and(|m| expr_references_var(m, name))
         }
-        Stmt::If(if_stmt) => {
-            condition_references_var(&if_stmt.condition, name)
-                || (!condition_binds_name(&if_stmt.condition, name)
-                    && if_stmt
-                        .then_block
-                        .stmts
-                        .iter()
-                        .any(|s| stmt_references_var(s, name)))
-                || if_stmt
-                    .else_block
-                    .as_ref()
-                    .is_some_and(|b| b.stmts.iter().any(|s| stmt_references_var(s, name)))
-        }
+        Stmt::If(if_stmt) => if_references_var(
+            &if_stmt.condition,
+            &if_stmt.then_block,
+            if_stmt.else_block.as_ref(),
+            name,
+        ),
         Stmt::While(w) => {
             condition_references_var(&w.condition, name)
                 || (!condition_binds_name(&w.condition, name)
-                    && w.body.stmts.iter().any(|s| stmt_references_var(s, name)))
+                    && block_references_var(&w.body, name))
         }
+        // The initializer binds for the condition, the update and the body, so
+        // an initializer taking the name leaves none of the three a reference.
         Stmt::For(f) => {
-            f.init
-                .as_ref()
-                .is_some_and(|i| stmt_references_var(i, name))
-                || f.condition
-                    .as_ref()
-                    .is_some_and(|c| condition_references_var(c, name))
-                || f.update
-                    .as_ref()
-                    .is_some_and(|u| expr_references_var(u, name))
-                || f.body.stmts.iter().any(|s| stmt_references_var(s, name))
+            let init = f.init.as_deref();
+            init.is_some_and(|i| stmt_references_var(i, name))
+                || (!init.is_some_and(|i| stmt_binds_name(i, name))
+                    && (f
+                        .condition
+                        .as_ref()
+                        .is_some_and(|c| condition_references_var(c, name))
+                        || f.update
+                            .as_ref()
+                            .is_some_and(|u| expr_references_var(u, name))
+                        || block_references_var(&f.body, name)))
         }
         Stmt::ForOf(fo) => {
             expr_references_var(&fo.iterable, name)
-                || (!pattern_binds_name(&fo.binding, name)
-                    && fo.body.stmts.iter().any(|s| stmt_references_var(s, name)))
+                || (!pattern_binds_name(&fo.binding, name) && block_references_var(&fo.body, name))
         }
-        Stmt::Loop(l) => l.body.stmts.iter().any(|s| stmt_references_var(s, name)),
+        Stmt::Loop(l) => block_references_var(&l.body, name),
         Stmt::Match(m) => {
-            expr_references_var(&m.expr, name)
-                || m.arms.iter().any(|arm| {
-                    !pattern_binds_name(&arm.pattern, name)
-                        && (arm
-                            .guard
-                            .as_ref()
-                            .is_some_and(|g| expr_references_var(g, name))
-                            || expr_references_var(&arm.body, name))
-                })
+            expr_references_var(&m.expr, name) || match_arms_reference_var(&m.arms, name)
         }
-        Stmt::LabeledBlock(lb) => lb.block.stmts.iter().any(|s| stmt_references_var(s, name)),
+        Stmt::LabeledBlock(lb) => block_references_var(&lb.block, name),
         // A local type/impl declaration's methods aren't closures — they
         // can't capture `name` from the enclosing function — so it never
         // references an outer variable.
         Stmt::Item(_) | Stmt::Break(_) | Stmt::Continue(_) | Stmt::Error(_) => false,
     }
+}
+
+fn block_references_var(block: &Block, name: &str) -> bool {
+    block.stmts.iter().any(|s| stmt_references_var(s, name))
+}
+
+/// A condition's bindings reach the `then` block and stop there, so the `else`
+/// is read outside them.
+fn if_references_var(
+    condition: &Condition,
+    then_block: &Block,
+    else_block: Option<&Block>,
+    name: &str,
+) -> bool {
+    condition_references_var(condition, name)
+        || (!condition_binds_name(condition, name) && block_references_var(then_block, name))
+        || else_block.is_some_and(|b| block_references_var(b, name))
+}
+
+/// An arm's pattern scopes its guard and body, so an arm taking the name reads
+/// its own binding rather than the one outside.
+fn match_arms_reference_var(arms: &[MatchArm], name: &str) -> bool {
+    arms.iter().any(|arm| {
+        !pattern_binds_name(&arm.pattern, name)
+            && (arm
+                .guard
+                .as_ref()
+                .is_some_and(|g| expr_references_var(g, name))
+                || expr_references_var(&arm.body, name))
+    })
+}
+
+/// Whether a statement binds the name for what follows it, as a C-style `for`'s
+/// initializer does for the rest of the loop.
+fn stmt_binds_name(stmt: &Stmt, name: &str) -> bool {
+    matches!(stmt, Stmt::Let(l) if pattern_binds_name(&l.pattern, name))
 }
 
 /// Whether a name a construct binds is the one being looked for, so the body it
