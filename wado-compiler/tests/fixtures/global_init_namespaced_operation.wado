@@ -1,22 +1,39 @@
 // A dispatch path names its interface in the segment before the operation, so a
 // namespace qualifier ahead of it must not stand in for the interface. Reading
-// the first segment instead let `c::Counter::next()` past the purity check,
-// which then reached WIR as an unresolved call and panicked.
-//
-// Namespace-qualified dispatch does not elaborate yet (it fails the same way in
-// a plain function body), so what this pins is the diagnostic: the check sees
-// the operation and words it, rather than waving the call through.
+// the first segment instead made `c::Counter::next()` a static method on the
+// interface, which reached WIR as an unresolved call and panicked.
 
 use { println, Stdout } from "core:cli";
 use c from "./sub/ns_counter.wado";
 
-global COUNTED: i32 = c::Counter::next();
+struct Tally {
+    value: i32,
+}
+
+impl c::Counter for Tally {
+    fn next(&mut self) -> i32 {
+        self.value += 1;
+        resume self.value
+    }
+}
+
+// The initializer installs its own handler, so it discharges what it dispatches.
+global COUNTED: i32 = hold: {
+    let mut tally = Tally { value: 40 };
+    with c::Counter => &mut tally do {
+        break hold: c::Counter::next()
+    }
+    break hold: 0
+};
 
 export fn run() with Stdout {
-    println(`${COUNTED}`);
+    let mut tally = Tally { value: 10 };
+    with c::Counter => &mut tally do {
+        println(`${COUNTED} ${c::Counter::next()}`);
+    }
 }
 
 __DATA__
 {
-    "compile_error": "global initializer must be pure (no effects), but dispatches effect operation 'next', which needs an installed handler"
+    "stdout": "41 11\n"
 }

@@ -2716,9 +2716,11 @@ impl PurityWalker<'_> {
         else {
             return false;
         };
-        self.index
-            .defaulted_operations
-            .contains(&(module_source.clone(), name.clone(), op.to_string()))
+        self.index.defaulted_operations.contains(&(
+            module_source.clone(),
+            name.clone(),
+            op.to_string(),
+        ))
     }
 
     /// Flags `Site::op(…)` when the dispatch needs something the position does

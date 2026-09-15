@@ -17,9 +17,9 @@ use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
 use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
-    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal,
-    TirModule, TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp,
-    TirVariantDecl, TypeId, TypeTable,
+    TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
+    TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
+    TypeId, TypeTable,
 };
 
 use super::coercion::{
