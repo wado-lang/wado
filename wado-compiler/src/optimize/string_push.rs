@@ -61,7 +61,7 @@ impl Ctx {
             let [_receiver, text] = f.params.as_slice() else {
                 return false;
             };
-            type_table.is_string(type_table.peel_refs(text.type_id))
+            type_table.is_string(text.type_id)
         };
         for func_rc in &project.functions {
             let f = func_rc.borrow();
