@@ -1404,7 +1404,8 @@ fn compile_after_load<H: CompilerHost>(
             .modules
             .iter()
             .flat_map(|(_, module)| &module.items)
-            .filter_map(|item| lib_type_decl_name(item).map(|_| (item.id(), item)))
+            .filter(|item| lib_type_decl_name(item).is_some())
+            .map(|item| (item.id(), item))
             .collect();
         let mut refused = false;
         for export in &world.exports {

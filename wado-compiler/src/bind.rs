@@ -212,7 +212,7 @@ pub(crate) fn expr_references_var(expr: &Expr, name: &str) -> bool {
             w.handlers
                 .iter()
                 .any(|b| expr_references_var(&b.handler, name))
-                || w.body.stmts.iter().any(|s| stmt_references_var(s, name))
+                || block_references_var(&w.body, name)
         }
         Expr::Resume(r) => expr_references_var(&r.value, name),
 
@@ -249,21 +249,7 @@ fn stmt_references_var(stmt: &Stmt, name: &str) -> bool {
                 || (!condition_binds_name(&w.condition, name)
                     && block_references_var(&w.body, name))
         }
-        // The initializer binds for the condition, the update and the body, so
-        // an initializer taking the name leaves none of the three a reference.
-        Stmt::For(f) => {
-            let init = f.init.as_deref();
-            init.is_some_and(|i| stmt_references_var(i, name))
-                || (!init.is_some_and(|i| stmt_binds_name(i, name))
-                    && (f
-                        .condition
-                        .as_ref()
-                        .is_some_and(|c| condition_references_var(c, name))
-                        || f.update
-                            .as_ref()
-                            .is_some_and(|u| expr_references_var(u, name))
-                        || block_references_var(&f.body, name)))
-        }
+        Stmt::For(f) => for_references_var(f, name),
         Stmt::ForOf(fo) => {
             expr_references_var(&fo.iterable, name)
                 || (!pattern_binds_name(&fo.binding, name) && block_references_var(&fo.body, name))
@@ -308,6 +294,25 @@ fn match_arms_reference_var(arms: &[MatchArm], name: &str) -> bool {
                 .is_some_and(|g| expr_references_var(g, name))
                 || expr_references_var(&arm.body, name))
     })
+}
+
+/// The initializer binds for the condition, the update and the body, so the
+/// walk stops there when it takes the name.
+fn for_references_var(f: &ForStmt, name: &str) -> bool {
+    let init = f.init.as_deref();
+    if init.is_some_and(|i| stmt_references_var(i, name)) {
+        return true;
+    }
+    if init.is_some_and(|i| stmt_binds_name(i, name)) {
+        return false;
+    }
+    f.condition
+        .as_ref()
+        .is_some_and(|c| condition_references_var(c, name))
+        || f.update
+            .as_ref()
+            .is_some_and(|u| expr_references_var(u, name))
+        || block_references_var(&f.body, name)
 }
 
 /// Whether a statement binds the name for what follows it, as a C-style `for`'s
