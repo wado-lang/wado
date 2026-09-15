@@ -1091,6 +1091,16 @@ test "char_indices multibyte" {
     assert indices[1].0 == 3;
 }
 
+test "char_indices counts from the view's start" {
+    let s: String = "abcdef";
+    let indices: List<[i32, char]> = s.as_str_slice().sub(2, 5).char_indices().collect();
+    assert indices.len() == 3;
+    assert indices[0].0 == 0;
+    assert indices[0].1 == 'c';
+    assert indices[2].0 == 2;
+    assert indices[2].1 == 'e';
+}
+
 test "eq_ignore_ascii_case same case" {
     assert "hello".eq_ignore_ascii_case("hello");
     assert "HELLO".eq_ignore_ascii_case("HELLO");

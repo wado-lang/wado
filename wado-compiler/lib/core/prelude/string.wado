@@ -271,6 +271,9 @@ internal struct StrCharIndicesIter {
     repr: &Array<u8>,
     used: i32,
     byte_index: i32,
+    /// Where the viewed text starts in `repr`. Yielded indices count from it,
+    /// as every other `StrSlice` index does.
+    base: i32,
 }
 
 impl Iterator for StrCharIndicesIter {
@@ -280,7 +283,7 @@ impl Iterator for StrCharIndicesIter {
         if self.byte_index >= self.used {
             return null;
         }
-        let idx = self.byte_index;
+        let idx = self.byte_index - self.base;
         let [code, len] = decode_char_at(self.repr, self.byte_index);
         self.byte_index += len;
         return Option::Some([idx, char::from_u32_unchecked(code)]);
@@ -1514,7 +1517,7 @@ impl StrSlice {
     }
 
     pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
-        return StrCharIndicesIter { repr: self.repr, used: self.end, byte_index: self.start };
+        return StrCharIndicesIter { repr: self.repr, used: self.end, byte_index: self.start, base: self.start };
     }
 
     pub fn to_chars(&self) -> List<char> {

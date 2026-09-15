@@ -367,10 +367,10 @@ impl LenientFromStr for bool {
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bool, LenientParseError> {
         let text = s.as_str_slice();
-        if text.eq_ignore_ascii_case("true") || text.eq_ignore_ascii_case("1") {
+        if text.eq_ignore_ascii_case("true") || text.eq_str("1") {
             return Result::Ok(true);
         }
-        if text.eq_ignore_ascii_case("false") || text.eq_ignore_ascii_case("0") {
+        if text.eq_ignore_ascii_case("false") || text.eq_str("0") {
             return Result::Ok(false);
         }
         return Result::Err(LenientParseError::new("invalid boolean string"));

@@ -538,7 +538,7 @@ impl GenContext {
 
     pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
         for let n of &self.lr_rule_snakes {
-            if *n == snake.to_string() {
+            if *n == snake.as_str_slice() {
                 return true;
             }
         }
@@ -592,7 +592,7 @@ impl GenContext {
             return false;
         }
         for let n of &self.follow_rule_snakes {
-            if *n == snake.to_string() {
+            if *n == snake.as_str_slice() {
                 return true;
             }
         }
@@ -872,7 +872,7 @@ impl GenContext {
     /// `DiagnosticKind`.
     pub fn warn<S: AsStrSlice>(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: S) {
         for let d of &self.diagnostics {
-            if d.owner == *owner && d.message == message.to_string() {
+            if d.owner == *owner && d.message == message.as_str_slice() {
                 return;
             }
         }
@@ -2497,7 +2497,7 @@ fn none_list_cache(n: i32) -> List<Option<List<String>>> {
 /// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
 fn visiting_index<S: AsStrSlice>(visiting: &List<String>, name: S) -> i32 {
     for let mut i = 0; i < visiting.len(); i += 1 {
-        if visiting[i] == name.to_string() {
+        if visiting[i] == name.as_str_slice() {
             return i;
         }
     }
@@ -2536,9 +2536,9 @@ fn remove_from_visiting<S: AsStrSlice>(visiting: &mut List<String>, name: S) {
     // dominated allocation and GC. Fall back to a scan if the invariant is ever
     // violated.
     let n = visiting.len();
-    if n > 0 && visiting[n - 1] == name.to_string() {
+    if n > 0 && visiting[n - 1] == name.as_str_slice() {
         visiting.pop();
         return;
     }
-    *visiting = visiting.iter_value().filter(|v: String| v != name.to_string()).collect();
+    *visiting = visiting.iter_value().filter(|v: String| v != name.as_str_slice()).collect();
 }

@@ -162,7 +162,7 @@ fn label_named<S: AsStrSlice>(env: &AttrEnv, name: S, bindings: &List<AltBinding
     let key = escape_ident(&to_snake_case(name));
     let mut first: Option<LabelInfo> = null;
     for let lab of &env.labels {
-        if lab.name != name.to_string() {
+        if lab.name != name.as_str_slice() {
             continue;
         }
         if first matches { None } {
@@ -222,7 +222,7 @@ fn ok_attr_named<S: AsStrSlice, S1: AsStrSlice>(
 /// when it is not an alias.
 fn alias_target<S: AsStrSlice>(env: &AttrEnv, name: S) -> String {
     for let a of &env.label_aliases {
-        if a.0 == name.to_string() {
+        if a.0 == name.as_str_slice() {
             return a.1;
         }
     }
@@ -274,9 +274,9 @@ fn is_rule_member<S: AsStrSlice, S1: AsStrSlice>(m: S, rule_name: S1, rules: &Li
         return true;
     }
     for let rule of rules {
-        if rule.name == rule_name.to_string() {
+        if rule.name == rule_name.as_str_slice() {
             for let d of &rule.returns_decls {
-                if d.name == m.to_string() {
+                if d.name == m.as_str_slice() {
                     return true;
                 }
             }
@@ -296,7 +296,7 @@ fn is_parser_special<S: AsStrSlice>(name: S) -> bool {
 }
 
 fn contains<S: AsStrSlice>(names: &List<String>, name: S) -> bool {
-    return names.iter_ref().any(|n| *n == name.to_string());
+    return names.iter_ref().any(|n| *n == name.as_str_slice());
 }
 
 /// Build a rule's attribute environment by collecting its declared
@@ -353,7 +353,7 @@ fn build_label_aliases(
 fn count_labeled_ref<S: AsStrSlice>(labels: &List<LabelInfo>, ref_name: S, is_token: bool) -> i32 {
     let mut n = 0;
     for let lab of labels {
-        if !lab.list && lab.is_token == is_token && lab.ref_name == ref_name.to_string() {
+        if !lab.list && lab.is_token == is_token && lab.ref_name == ref_name.as_str_slice() {
             n += 1;
         }
     }

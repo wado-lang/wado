@@ -314,7 +314,7 @@ impl TriageMap {
 
     pub fn lookup<S: AsStrSlice>(&self, key: S) -> Triage {
         for let e of &self.entries {
-            if e.key == key.to_string() {
+            if e.key == key.as_str_slice() {
                 return e.triage;
             }
         }
@@ -2478,7 +2478,7 @@ fn assert_triage_skip<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     expected_reason: S2,
 ) {
     if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string(
+        assert *reason == expected_reason.as_str_slice(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string(
         )}'), got Skip('${*reason}')`;
     } else {
         panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Skip, got other`);
@@ -2492,7 +2492,7 @@ fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     expected_reason: S2,
 ) {
     if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.to_string(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string(
+        assert *reason == expected_reason.as_str_slice(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string(
         )}'), got Todo('${*reason}')`;
     } else {
         panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Todo, got other`);

@@ -306,7 +306,7 @@ fn elem_refs_rule<S: AsStrSlice>(
 ) -> bool {
     match *elem {
         RuleRef(rn) => {
-            if rn == target.to_string() {
+            if rn == target.as_str_slice() {
                 return true;
             }
             for let v of visited {
@@ -436,7 +436,7 @@ fn collect_reachable<S: AsStrSlice>(
     seen: &mut List<String>,
 ) {
     for let s of seen {
-        if *s == name.to_string() {
+        if *s == name.as_str_slice() {
             return;
         }
     }

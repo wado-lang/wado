@@ -50,7 +50,7 @@ fn is_prefix_alt<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
 /// are still recognised.
 pub fn is_self_ref_element<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     if let RuleRef(r) = unwrap_label(elem) {
-        return r.name == rule_name.to_string();
+        return r.name == rule_name.as_str_slice();
     }
     return false;
 }

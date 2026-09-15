@@ -128,7 +128,7 @@ fn is_members<S: AsStrSlice>(act: &NamedAction, scope: S, bare_is_mine: bool) ->
         return false;
     }
     return match &act.scope {
-        Some(s) => *s == scope.to_string(),
+        Some(s) => *s == scope.as_str_slice(),
         None => bare_is_mine,
     };
 }
@@ -682,7 +682,7 @@ fn alt_leads_with_self_ref<S: AsStrSlice>(elements: &List<Element>, name: S) -> 
 
 fn element_leads_self_ref<S: AsStrSlice>(elem: &Element, name: S) -> bool {
     return match elem {
-        RuleRef(r) => r.name == name.to_string(),
+        RuleRef(r) => r.name == name.as_str_slice(),
         Label(l) => element_leads_self_ref(&l.element, name),
         _ => false,
     };
@@ -1511,12 +1511,12 @@ fn drop_empty_modes(g: &mut Grammar) {
 }
 
 fn find_parser_rule<S: AsStrSlice>(all_rules: &List<ParserRule>, name: S) -> Option<&ParserRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &ParserRule| r.name == name.to_string());
+    return all_rules.iter_ref().find(|r: &ParserRule| r.name == name.as_str_slice());
 }
 
 fn find_lexer_rule_index<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> i32 {
     for let mut i = 0; i < all_rules.len(); i += 1 {
-        if all_rules[i].name == name.to_string() {
+        if all_rules[i].name == name.as_str_slice() {
             return i;
         }
     }
@@ -1524,7 +1524,7 @@ fn find_lexer_rule_index<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) ->
 }
 
 pub fn find_lexer_rule<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.to_string());
+    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.as_str_slice());
 }
 
 /// `g`'s lexer rules with their mode indices and channel ids rebased onto the
@@ -1564,7 +1564,7 @@ fn rebase_lexer_rules(g: &Grammar, modes: &mut List<String>, channels: &mut List
 
 fn find_or_add_mode<S: AsStrSlice>(modes: &mut List<String>, name: S) -> i32 {
     for let mut i = 0; i < modes.len(); i += 1 {
-        if modes[i] == name.to_string() {
+        if modes[i] == name.as_str_slice() {
             return i;
         }
     }
@@ -1576,7 +1576,7 @@ fn find_or_add_mode<S: AsStrSlice>(modes: &mut List<String>, name: S) -> i32 {
 /// (0=DEFAULT, 1=HIDDEN are predefined by ANTLR4).
 fn find_or_add_channel<S: AsStrSlice>(channels: &mut List<String>, name: S) -> i32 {
     for let mut i = 0; i < channels.len(); i += 1 {
-        if channels[i] == name.to_string() {
+        if channels[i] == name.as_str_slice() {
             return i + 2;
         }
     }
@@ -1680,7 +1680,7 @@ pub fn alias_parser_literals(grammar: &mut Grammar) {
 
 fn index_of_text<S: AsStrSlice>(texts: &List<String>, text: S) -> i32 {
     for let mut i = 0; i < texts.len(); i += 1 {
-        if texts[i] == text.to_string() {
+        if texts[i] == text.as_str_slice() {
             return i;
         }
     }

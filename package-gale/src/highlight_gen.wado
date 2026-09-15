@@ -129,7 +129,7 @@ fn selector_desc(sel: &TokenSelector) -> String {
 /// the caller reads the rule out of the list it already holds.
 fn parser_rule_index<S: AsStrSlice>(parser_rules: &List<ParserRule>, name: S) -> i32 {
     for let mut i = 0; i < parser_rules.len(); i += 1 {
-        if parser_rules[i].name == name.to_string() {
+        if parser_rules[i].name == name.as_str_slice() {
             return i;
         }
     }
@@ -227,7 +227,7 @@ fn push_override<S: AsStrSlice, S1: AsStrSlice>(
     capture: S1,
 ) {
     for let mut i = 0; i < overrides.len(); i += 1 {
-        if overrides[i].rule_name == rule_name.to_string() && overrides[i].token_kind == token_kind {
+        if overrides[i].rule_name == rule_name.as_str_slice() && overrides[i].token_kind == token_kind {
             overrides[i] = ResolvedOverride {
                 rule_name: rule_name.to_string(),
                 token_kind,

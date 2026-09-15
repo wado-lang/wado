@@ -805,7 +805,7 @@ fn call_names<S: AsStrSlice>(e: &JExpr, name: S) -> bool {
 
 fn name_is<S: AsStrSlice>(e: &JExpr, s: S) -> bool {
     return match e {
-        Name(n) => *n == s.to_string(),
+        Name(n) => *n == s.as_str_slice(),
         _ => false,
     };
 }

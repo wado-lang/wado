@@ -542,7 +542,7 @@ fn follow_rule_snakes(grammar: &Grammar, ctx: &GenContext) -> List<String> {
 /// self-ref (Wado value semantics make the rebuild a deep clone).
 fn scan_element_contains_self_ref<S: AsStrSlice>(se: &ScanElement, rule_snake: S) -> bool {
     return match se {
-        RuleCall(rc) => rc.target_snake == rule_snake.to_string(),
+        RuleCall(rc) => rc.target_snake == rule_snake.as_str_slice(),
         Repeat(r) => scan_element_contains_self_ref(&r.body, rule_snake),
         Group(g) => {
             let mut found = false;
@@ -1183,7 +1183,7 @@ fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, l
         return se;
     }
     if let RuleCall(rc) = se {
-        if rc.target_snake == rule_snake.to_string() {
+        if rc.target_snake == rule_snake.as_str_slice() {
             return ScanElement::RuleCall(ScanRuleCallElement { ..rc, lr_cont_mask });
         }
     }
@@ -1198,7 +1198,7 @@ fn rebind_scan_self_ref_lr_cont<S: AsStrSlice>(se: ScanElement, rule_snake: S, l
 /// precedence argument.
 fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, prec: i32) -> ScanElement {
     if let RuleCall(mut rc) = se {
-        if rc.target_snake == rule_snake.to_string() {
+        if rc.target_snake == rule_snake.as_str_slice() {
             rc.min_prec_arg = Option::Some(prec);
             return ScanElement::RuleCall(rc);
         }
@@ -1208,7 +1208,7 @@ fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, 
 
 fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> with stores[op] {
     return match op {
-        RuleCall(rc) => if rc.target_name == rule_name.to_string() { Option::Some(rc) } else { null },
+        RuleCall(rc) => if rc.target_name == rule_name.as_str_slice() { Option::Some(rc) } else { null },
         ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
         Token(_) | Literal(_) | Wildcard(_) | Excluded(_) | Repeat(_) | Group(_) => null,
     };
@@ -1222,7 +1222,7 @@ fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&Rule
 /// turn the rebuild into a deep copy.
 fn op_subtree_contains_self_ref<S: AsStrSlice>(op: &Op, rule_name: S) -> bool {
     return match *op {
-        RuleCall(rc) => rc.target_name == rule_name.to_string(),
+        RuleCall(rc) => rc.target_name == rule_name.as_str_slice(),
         ListLabel(ll) => op_subtree_contains_self_ref(&ll.inner, rule_name),
         Repeat(r) => op_subtree_contains_self_ref(&r.body, rule_name),
         Group(g) => {
@@ -1346,7 +1346,7 @@ fn stamp_op_follow<S: AsStrSlice, S1: AsStrSlice>(
 ) -> Op {
     return match op {
         RuleCall(mut rc) => {
-            if rc.target_name == rule_name.to_string() {
+            if rc.target_name == rule_name.as_str_slice() {
                 rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             Op::RuleCall(rc);
@@ -1484,7 +1484,7 @@ fn stamp_scan_follow<S: AsStrSlice>(
 ) -> ScanElement {
     return match se {
         RuleCall(mut rc) => {
-            if rc.target_snake == rule_snake.to_string() {
+            if rc.target_snake == rule_snake.as_str_slice() {
                 rc.min_prec_arg = Option::Some(if follow_has { conflict_min } else { 0 });
             }
             ScanElement::RuleCall(rc);
@@ -2092,7 +2092,7 @@ fn alt_is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool
 
 pub fn element_is_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     return match *elem {
-        RuleRef(r) => r.name == rule_name.to_string(),
+        RuleRef(r) => r.name == rule_name.as_str_slice(),
         Label(lab) => element_is_self_ref(&lab.element, rule_name),
         TokenRef(_) | Literal(_) | Group(_) | Repeat(_) | Wildcard(_) | Not(_) => false,
     };

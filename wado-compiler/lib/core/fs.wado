@@ -239,7 +239,7 @@ fn ensure_dir<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), FsError> {
 }
 
 fn open_dir<S: AsStrSlice>(path: S) -> Result<Descriptor, FsError> with Preopens {
-    if path.is_empty() || path.to_string() == "." {
+    if path.is_empty() || path.eq_str(".") {
         return root();
     }
     return open(path, OpenFlags::Directory, DescriptorFlags::Read);

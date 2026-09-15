@@ -615,7 +615,7 @@ fn gen_scan_gate_global(w: &mut CodeWriter, fields: &List<String>, members: &Mem
 /// the members block declares, so the miss below cannot be reached from here.
 fn member_field<S: AsStrSlice>(members: &MemberDecls, name: S) -> [String, String] {
     for let mf of &members.fields {
-        if mf.name == name.to_string() {
+        if mf.name == name.as_str_slice() {
             return [mf.ty, mf.init];
         }
     }

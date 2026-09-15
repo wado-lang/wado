@@ -111,7 +111,7 @@ pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
 }
 
 fn seen_contains<S: AsStrSlice>(seen: &List<String>, text: S) -> bool {
-    return seen.iter_ref().any(|item| *item == text.to_string());
+    return seen.iter_ref().any(|item| *item == text.as_str_slice());
 }
 
 pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken> {
@@ -141,7 +141,7 @@ fn disambiguate_const_name<S: AsStrSlice>(base: S, result: &List<LitToken>) -> S
 }
 
 fn const_name_taken<S: AsStrSlice>(result: &List<LitToken>, name: S) -> bool {
-    return result.iter_ref().any(|lit| lit.const_name == name.to_string());
+    return result.iter_ref().any(|lit| lit.const_name == name.as_str_slice());
 }
 
 fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>, result: &mut List<LitToken>) {
@@ -304,7 +304,7 @@ fn parse_token_type_numeric<S: AsStrSlice>(s: S) -> Option<i32> {
 }
 
 fn rule_name_exists<S: AsStrSlice>(lexer_rules: &List<LexerRule>, name: S) -> bool {
-    return lexer_rules.iter_ref().any(|rule| !rule.is_fragment && rule.name == name.to_string());
+    return lexer_rules.iter_ref().any(|rule| !rule.is_fragment && rule.name == name.as_str_slice());
 }
 
 pub fn gen_lexer<S: AsStrSlice>(
@@ -883,7 +883,7 @@ fn fragment_elem_refs_self<S: AsStrSlice>(
 ) -> bool {
     match *elem {
         RuleRef(name) => {
-            if name == target.to_string() {
+            if name == target.as_str_slice() {
                 return true;
             }
             if visited.iter_ref().any(|v: &String| *v == name) {
@@ -946,7 +946,7 @@ fn lexer_alt_refs_rule<S: AsStrSlice>(alt: &LexerAlternative, name: S) -> bool {
 
 fn lexer_elem_refs_rule<S: AsStrSlice>(elem: &LexerElement, name: S) -> bool {
     return match *elem {
-        RuleRef(n) => n == name.to_string(),
+        RuleRef(n) => n == name.as_str_slice(),
         Group(alts) => {
             for let a of &alts {
                 if lexer_alt_refs_rule(a, name) {
@@ -3372,7 +3372,7 @@ fn gen_lexer_not<S: AsStrSlice>(
 }
 
 pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.to_string() && r.is_fragment);
+    return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.as_str_slice() && r.is_fragment);
 }
 
 /// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).
@@ -3711,7 +3711,7 @@ fn keyword_carrier_admits(
 }
 
 fn is_keyword_rule_name<S: AsStrSlice>(name: S, keywords: &List<KeywordInfo>) -> bool {
-    return keywords.iter_ref().any(|kw| kw.rule_name == name.to_string());
+    return keywords.iter_ref().any(|kw| kw.rule_name == name.as_str_slice());
 }
 
 /// Extracts the fixed literal text from a lexer rule, if it's a pure literal sequence.
@@ -4697,7 +4697,7 @@ fn gen_group_calls(
 /// rule list is short.
 fn index_of_name<S: AsStrSlice>(names: &List<String>, name: S) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == name.to_string() {
+        if names[i] == name.as_str_slice() {
             return i;
         }
     }
@@ -5050,7 +5050,7 @@ fn vocab_display_name<S: AsStrSlice>(kind_name: S, lexer_rules: &List<LexerRule>
     // it, and the two are one vocabulary — a `'` or a newline in the text has to
     // come back escaped the same way in both.
     for let lit of lit_tokens {
-        if lit.const_name == kind_name.to_string() {
+        if lit.const_name == kind_name.as_str_slice() {
             return `${lit_name(lit.text)}`;
         }
     }

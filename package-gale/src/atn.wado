@@ -645,7 +645,7 @@ fn elements_seq_first_has_lr(elements: &List<Element>, idx: i32, lr_first: &List
 /// `element_is_self_ref`).
 fn element_contains_self_ref<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     return match *elem {
-        RuleRef(rr) => rr.name == rule_name.to_string(),
+        RuleRef(rr) => rr.name == rule_name.as_str_slice(),
         Label(lab) => element_contains_self_ref(&lab.element, rule_name),
         Repeat(rep) => element_contains_self_ref(&rep.element, rule_name),
         Not(n) => element_contains_self_ref(&n.element, rule_name),

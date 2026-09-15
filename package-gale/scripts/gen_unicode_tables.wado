@@ -444,7 +444,7 @@ fn canonical_value<S: AsStrSlice>(aliases: &List<NamedRanges>, value: S) -> Stri
 /// 1-based so 0 stays free as "no value yet".
 fn intern<S: AsStrSlice>(names: &mut List<String>, value: S) -> i32 {
     for let mut i = 0; i < names.len(); i += 1 {
-        if names[i] == value.to_string() {
+        if names[i] == value.as_str_slice() {
             return i + 1;
         }
     }
@@ -493,7 +493,7 @@ fn parse_alias_lines<S: AsStrSlice, S1: AsStrSlice>(content: S, prefix: S1) -> L
             fields.push(f.trim().to_string());
         }
         let first = if prefix.is_empty() { 0 } else { 1 };
-        if fields.len() < first + 2 || !prefix.is_empty() && fields[0] != prefix.to_string() {
+        if fields.len() < first + 2 || !prefix.is_empty() && fields[0] != prefix.as_str_slice() {
             continue;
         }
         let mut names: List<String> = [fields[first + 1]];
@@ -618,7 +618,7 @@ fn parse_runs<S: AsStrSlice>(content: S) -> List<CategoryRun> {
 fn ranges_of<S: AsStrSlice>(runs: &List<CategoryRun>, category: S) -> List<[i32, i32]> {
     let mut out: List<[i32, i32]> = [];
     for let run of runs {
-        if run.category != category.to_string() {
+        if run.category != category.as_str_slice() {
             continue;
         }
         if !out.is_empty() && out[out.len() - 1].1 + 1 >= run.start {

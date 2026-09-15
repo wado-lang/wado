@@ -129,7 +129,7 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
 fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> String {
-    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == base.to_string()) {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == base.as_str_slice()) {
         Some(b) => b.field,
         None => base.to_string(),
     };
@@ -176,7 +176,7 @@ fn vals_field_ref<S: AsStrSlice>(field: S) -> String {
 /// the one reference that needs the call's token range captured.
 pub fn action_reads_rule_span<S: AsStrSlice, S1: AsStrSlice>(body: S, dedup_base: S1) -> bool {
     for let r of &find_attr_refs(body) {
-        if r.member matches { Some("text") } && binding_name(&r.name) == dedup_base.to_string() {
+        if r.member matches { Some("text") } && binding_name(&r.name) == dedup_base.as_str_slice() {
             return true;
         }
     }
@@ -187,7 +187,7 @@ pub fn action_reads_rule_span<S: AsStrSlice, S1: AsStrSlice>(body: S, dedup_base
 /// the one reference that needs the call's builder row captured.
 pub fn action_reads_rule_ctx<S: AsStrSlice, S1: AsStrSlice>(body: S, dedup_base: S1) -> bool {
     for let r of &find_attr_refs(body) {
-        if r.member matches { Some("ctx") } && binding_name(&r.name) == dedup_base.to_string() {
+        if r.member matches { Some("ctx") } && binding_name(&r.name) == dedup_base.as_str_slice() {
             return true;
         }
     }
@@ -641,14 +641,14 @@ fn field_type<S: AsStrSlice>(rule: &ParserRule, name: S) -> String {
 }
 
 fn find_field<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<&AttrDecl> with stores[rule] {
-    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == name.to_string()) {
+    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == name.as_str_slice()) {
         return Option::Some(d);
     }
-    return rule.locals_decls.iter_ref().find(|d| d.name == name.to_string());
+    return rule.locals_decls.iter_ref().find(|d| d.name == name.as_str_slice());
 }
 
 fn is_arg<S: AsStrSlice>(rule: &ParserRule, name: S) -> bool {
-    return rule.args.iter_ref().any(|d| d.name == name.to_string());
+    return rule.args.iter_ref().any(|d| d.name == name.as_str_slice());
 }
 
 /// Whether a rule exposes a value channel to callers (a defaultable

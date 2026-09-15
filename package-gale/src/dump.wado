@@ -452,7 +452,7 @@ fn repeat_strategy_label(strategy: &RepeatStrategy) -> String {
 /// summary only.
 fn render_rule_diagnostics<S: AsStrSlice>(out: &mut String, rule_name: S, lowered: &LoweredGrammar) {
     for let d of &lowered.diagnostics {
-        if d.owner.rule != rule_name.to_string() {
+        if d.owner.rule != rule_name.as_str_slice() {
             continue;
         }
         out.push_str("  ! warning: ");

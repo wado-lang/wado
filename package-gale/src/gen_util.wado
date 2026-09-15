@@ -536,7 +536,7 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
 
 /// Return `true` when `first` contains `token` (linear scan).
 pub fn first_contains<S: AsStrSlice>(first: &List<String>, token: S) -> bool {
-    return first.iter_ref().any(|item| *item == token.to_string());
+    return first.iter_ref().any(|item| *item == token.as_str_slice());
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
@@ -559,7 +559,7 @@ pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
 // the running counter: `[base, count_emitted_so_far]`.
 fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
     for let entry of counts {
-        if entry.0 == name.to_string() {
+        if entry.0 == name.as_str_slice() {
             return entry.1;
         }
     }
@@ -568,7 +568,7 @@ fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
 
 fn increment_count<S: AsStrSlice>(counts: &mut List<[String, i32]>, name: S) {
     for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == name.to_string() {
+        if counts[i].0 == name.as_str_slice() {
             let prev = counts[i].1;
             counts[i] = [name.to_string(), prev + 1];
             return;

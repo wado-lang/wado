@@ -353,6 +353,13 @@ pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
                 if !stored.is_empty() {
                     stack.push(Step::Leave(enclosing.len()));
                     for key in stored {
+                        // A second store under a block that already claims the
+                        // key stores it twice over: the inner one could leave
+                        // with its own block while the outer block's readers
+                        // stay, and read the first store's value.
+                        if enclosing.contains(&key) {
+                            loose.insert(key.clone());
+                        }
                         claimed.insert(key.clone());
                         enclosing.push(key);
                     }
