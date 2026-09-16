@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789461374797,
+  "lastUpdate": 1789518697053,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56177,6 +56177,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 285344,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8568c5038a7bf79e97373dffa1a12a4071eacff7",
+          "message": "Merge pull request #2065 from wado-lang/claude/bce-const-bounds-and-conjunction\n\nfeat(lang): branchless comparison chains, and the bounds checks they unblock",
+          "timestamp": "2026-09-16T09:13:56+09:00",
+          "tree_id": "cee25f81fbf024ecc4b13ec8073f23d3e12f7579",
+          "url": "https://github.com/wado-lang/wado/commit/8568c5038a7bf79e97373dffa1a12a4071eacff7"
+        },
+        "date": 1789518696109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18944,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285548,
             "unit": "bytes"
           }
         ]
