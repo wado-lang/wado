@@ -166,6 +166,54 @@ fn is_function_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     matches!(type_table.get(type_id), ResolvedType::Function { .. })
 }
 
+/// Which of a body's parameter positions take a function value, and the
+/// function type each is read at.
+type FunctorParams = IndexMap<u32, TypeId>;
+
+/// The function type each of `func`'s parameters holds a value of.
+///
+/// A specialization declares such a parameter at the one closure's own type
+/// while its body still reads it at the function type, so what the body reads
+/// answers where the signature cannot.
+fn functor_params_of(func: &TirFunction, type_table: &TypeTable) -> FunctorParams {
+    let mut reads = FunctorLocalReads {
+        type_table,
+        at: IndexMap::default(),
+    };
+    if let Some(body) = &func.body {
+        reads.visit_block(body);
+    }
+    func.params
+        .iter()
+        .enumerate()
+        .filter_map(|(position, param)| {
+            let position = u32::try_from(position).unwrap();
+            if is_function_type(param.type_id, type_table) {
+                return Some((position, param.type_id));
+            }
+            reads.at.get(&param.local_index).map(|&at| (position, at))
+        })
+        .collect()
+}
+
+/// The function type each local is read at, for a parameter whose declared type
+/// no longer says. A local read at two such types answers with the first.
+struct FunctorLocalReads<'a> {
+    type_table: &'a TypeTable,
+    at: IndexMap<u32, TypeId>,
+}
+
+impl TirRefVisitor for FunctorLocalReads<'_> {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Local { index, .. } = &expr.kind
+            && is_function_type(expr.type_id, self.type_table)
+        {
+            self.at.entry(*index).or_insert(expr.type_id);
+        }
+        self.walk_expr(expr);
+    }
+}
+
 /// Insert every element of `src` into `dst`, reporting whether `dst` grew.
 fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
     let mut grew = false;
@@ -465,10 +513,8 @@ fn unfollowed_functor_params(project: &FlatPackage, type_table: &TypeTable) -> I
         if !func.is_export {
             continue;
         }
-        for param in &func.params {
-            if is_function_type(param.type_id, type_table) {
-                found.insert(param.type_id);
-            }
+        for at in functor_params_of(&func, type_table).values() {
+            found.insert(*at);
         }
     }
     found
@@ -545,7 +591,7 @@ struct StoresOracle<'a> {
     call_graph: &'a CallGraph,
     /// Which of each function's parameters take a function value, by the dense
     /// id the call graph uses.
-    functor_params: &'a [IndexSet<u32>],
+    functor_params: &'a [FunctorParams],
 }
 
 impl StoresOracle<'_> {
@@ -583,7 +629,7 @@ impl StoresOracle<'_> {
         self.rows.row_of(callees, callee.type_id, arity)
     }
 
-    fn functor_params(&self, function: u32) -> &IndexSet<u32> {
+    fn functor_params(&self, function: u32) -> &FunctorParams {
         &self.functor_params[function as usize]
     }
 }
@@ -649,18 +695,10 @@ pub fn compute_stored_params(
     }
 
     let carrying = RefCarrying::new(&project.structs, &type_table);
-    let functor_params: Vec<IndexSet<u32>> = project
+    let functor_params: Vec<FunctorParams> = project
         .functions
         .iter()
-        .map(|func| {
-            func.borrow()
-                .params
-                .iter()
-                .enumerate()
-                .filter(|(_, param)| is_function_type(param.type_id, &type_table))
-                .map(|(position, _)| u32::try_from(position).unwrap())
-                .collect()
-        })
+        .map(|func| functor_params_of(&func.borrow(), &type_table))
         .collect();
     let mut rows = FunctorRows {
         minted: minted_functor_types(project, &type_table),
@@ -693,6 +731,7 @@ pub fn compute_stored_params(
                 };
                 facts_of_body(
                     &positions,
+                    &functor_params[id as usize],
                     None,
                     &oracle,
                     &type_table,
@@ -1104,6 +1143,7 @@ fn anchors_of_body(param_of_local: &IndexMap<u32, u32>, body: BodyRef) -> Anchor
 /// and what it contributes to the whole-program tables.
 fn facts_of_body(
     params: &[(u32, TypeId)],
+    functor_params: &FunctorParams,
     tail: Option<&TirExpr>,
     oracle: &StoresOracle,
     type_table: &TypeTable,
@@ -1123,8 +1163,10 @@ fn facts_of_body(
         } else if carrying.holds(*type_id) {
             entry.holds.insert(position);
         }
-        if is_function_type(*type_id, type_table) {
-            let callees = oracle.rows.at_site(owner.site(position), *type_id);
+    }
+    for (&position, &at) in functor_params {
+        if let Some((local_index, _)) = params.get(position as usize) {
+            let callees = oracle.rows.at_site(owner.site(position), at);
             reaching.insert(*local_index, callees);
         }
     }
@@ -1440,8 +1482,14 @@ impl StoresWalker<'_> {
             .enumerate()
             .map(|(i, (_, type_id))| (u32::try_from(i).unwrap(), *type_id))
             .collect();
+        let functor_params: FunctorParams = positions
+            .iter()
+            .filter(|(_, type_id)| is_function_type(*type_id, self.type_table))
+            .map(|(position, type_id)| (*position, *type_id))
+            .collect();
         let (facts, nested) = facts_of_body(
             &positions,
+            &functor_params,
             Some(body),
             self.oracle,
             self.type_table,
@@ -1450,17 +1498,12 @@ impl StoresWalker<'_> {
             BodyRef::Expr(body),
         );
         self.contributions.extend(nested);
-        let functor_params = positions
-            .iter()
-            .filter(|(_, type_id)| is_function_type(*type_id, self.type_table))
-            .map(|(position, _)| *position)
-            .collect();
         self.mint(
             span,
             callee_type,
             MintRow {
                 target: MintTarget::Closure,
-                functor_params,
+                functor_params: functor_params.keys().copied().collect(),
                 facts,
             },
         );
@@ -1487,7 +1530,7 @@ impl StoresWalker<'_> {
             let sites: Vec<Site> = match landing {
                 Landing::Named(function) => oracle
                     .functor_params(*function)
-                    .iter()
+                    .keys()
                     .map(|&position| Site::Named(*function, position))
                     .collect(),
                 Landing::Closure(id) => oracle
@@ -1813,7 +1856,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 let (target, functor_params) = match self.oracle.call_graph.id_of(&referenced) {
                     Some(id) => (
                         MintTarget::Named(id),
-                        self.oracle.functor_params(id).clone(),
+                        self.oracle.functor_params(id).keys().copied().collect(),
                     ),
                     None => (MintTarget::Opaque, IndexSet::default()),
                 };

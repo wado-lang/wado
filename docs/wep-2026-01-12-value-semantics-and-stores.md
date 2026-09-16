@@ -235,7 +235,10 @@ no move and no scalarization follows. The bounded destination has little to work
 with for a plainer reason: 19 functions across the Gale corpus publish one at
 all, and every one is a container insert — `List::push`'s `value` into `self`,
 `array_copy`'s `src` into `dst`, `index_assign`'s `value` into `self` — where
-the destination is read after the argument would be moved anyway.
+the destination is read after the argument would be moved anyway. Following a
+specialization's parameter by the type its body reads it at is the same story
+larger: it takes the Gale corpus from 343 resolved call sites of 1356 to 715,
+and changes no byte of output.
 
 What the facts do buy is correctness, and that is not free. Declaring what
 `array_copy` and `array_clone` hand on through their elements costs 478 bytes,
@@ -335,6 +338,13 @@ a later phase minting one cannot widen an answer an earlier reader already gave.
 Closure lifting does mint — a `with … do` body inside a closure becomes a
 handler thunk — and those are types no earlier call site could have named.
 
+Lifting also specializes: a function taking a function value gets a copy per
+closure reaching it, and the copy declares that parameter at the one closure's
+own type while its body still calls it at the function type. A parameter is
+therefore followed by the type its body reads it at, not by the type its
+signature gives — otherwise the copy, which has exactly one value reaching its
+parameter, would be the one place the answer went back to the type.
+
 ### Component Model Boundaries
 
 Retention is a within-component concern. A call crossing a Component Model
@@ -383,12 +393,15 @@ reach a value of that type is then read off the type. Closing that would take
 following function values through the heap, which is a shape-level points-to
 answer and nothing here is one.
 
-The two readings of a call differ once closures are lifted. Before lifting a
-closure literal is one, and the call that names it reads that value alone; after
-it, the value is an object the walk does not recognise as a mint, so the same
-call reads its type. The write-back gets the sharper answer and the last-use
-walk the coarser one. Closing it takes reading a lifted closure as the value it
-came from.
+A lifted closure is not read as the value it came from. Lifting rewrites the
+closure literal at a call site into an object holding the lifted function, while
+the call receiving it still reads its parameter at the function type — so the
+argument arrives spelled at a type nothing mints, and the parameter falls back
+to any value of its own type. Where one function type has several closures, that
+takes each specialization back to their join, which is the coarsest reading of
+the one place exactly one value arrives. Closing it takes reading such an object
+as the closure it was, which the object does not say: what it holds is the
+lifted body, whose parameters are the closure's shifted by its environment.
 
 An element claim reads what a value holds, which a body fills but a signature
 never states. A parameter arrives holding whatever the caller put there, and
