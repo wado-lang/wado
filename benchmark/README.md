@@ -16,15 +16,33 @@ compression, parsing, and application server.
 
 ## Pure Computation
 
-### Prime Counting
+### microgpt
 
-Count primes up to 1M (integer arithmetic, trial division).
+32 training steps of a character-level GPT over a scalar autograd graph: 1
+layer, 16 embedding dimensions, 4 heads, 4,096 parameters. A port of
+[Andrej Karpathy's microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
+`example/microgpt.wado` is the full version, which also samples from the model.
 
-| Implementation |     Throughput |   ms/iter | vs best |
-| -------------- | -------------: | --------: | ------- |
-| C              | 12.36 M nums/s | 80.930 ms | 1.00x   |
-| JavaScript     | 11.81 M nums/s | 84.703 ms | 1.05x   |
-| **Wado**       | 11.66 M nums/s | 85.794 ms | 1.06x   |
+| Implementation |      Throughput |    ms/iter | vs best |
+| -------------- | --------------: | ---------: | ------- |
+| Rust           | 1.66 k tokens/s | 136.537 ms | 1.00x   |
+| JavaScript     | 583.79 tokens/s | 388.836 ms | 2.85x   |
+| **Wado**       | 526.38 tokens/s | 431.244 ms | 3.16x   |
+
+The rows above measure loops over flat arrays. This one measures a graph of
+small heap objects: a step builds 31k to 89k nodes, walks them depth-first, and
+accumulates gradients back through them. All three arms report the same final
+loss, so they are the same computation.
+
+Rust makes a node a `usize` index into a `Vec<Value>`, because a `&mut` into a
+growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
+that `&mut Value` and a node holds those handles as its children, which is the
+shape the Python original has. This row prices the difference.
+
+These three figures come from a 4-core Xeon @ 2.80GHz, one run each, not from
+the dedicated machine and the best of three the rest of this file uses. Read the
+`vs best` column; the absolute throughput is not comparable to the other tables.
+Re-measure the row on the benchmark machine when one is next taken.
 
 ### Mandelbrot
 
@@ -329,7 +347,7 @@ HTTP routing needs `oha` and Bun, and is measured separately
 mise run benchmark-all              # run all
 
 # pure computation
-mise run benchmark-count-prime      # integer arithmetic
+mise run benchmark-microgpt         # autograd object graph
 mise run benchmark-mandelbrot       # float arithmetic
 mise run benchmark-sieve            # array operations
 mise run benchmark-fts              # float-to-string

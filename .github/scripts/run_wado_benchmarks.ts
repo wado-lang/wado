@@ -64,7 +64,7 @@ function push(name: string, output: string, label?: string): void {
 for (const opt of OPT_LEVELS) {
   const label = opt;
 
-  push(`count_prime (${label})`, runBench('count_prime/count_prime.wado', opt));
+  push(`microgpt (${label})`, runBench('microgpt/microgpt.wado', opt));
   push(`mandelbrot (${label})`, runBench('mandelbrot/mandelbrot.wado', opt));
   push(`sieve (${label})`, runBench('sieve/sieve.wado', opt));
   push(`fts (${label})`, runBench('fts/fts.wado', opt));

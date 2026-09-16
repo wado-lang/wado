@@ -27,27 +27,24 @@ node = "latest"
 bun = "latest"
 "github:WebAssembly/wasi-sdk" = "latest" # clang + wasm-ld + wasi-sysroot for C zlib Wasm
 
-[tasks.count-prime]
-description = "Run count_prime benchmark (integer arithmetic)"
+[tasks.microgpt]
+description = "Run microgpt benchmark (autograd object graph)"
 run = """
 #!/usr/bin/env bash
 set -e
 source ./wado.sh
 
-echo "=== Compiling Wado benchmark ==="
-wado compile -O2 $WADO_BENCH_FLAGS -o count_prime/count_prime.wasm count_prime/count_prime.wado
+echo "=== Compiling Rust benchmark ==="
+rustc -O --edition 2024 -o microgpt/microgpt_rs microgpt/microgpt.rs
 
-echo "=== Compiling C benchmark ==="
-cc -O3 -o count_prime/count_prime_c count_prime/count_prime.c
-
-echo "=== C ==="
-./count_prime/count_prime_c
+echo "=== Rust ==="
+./microgpt/microgpt_rs
 
 echo "=== JavaScript ==="
-node count_prime/count_prime.js
+node microgpt/microgpt.js
 
 echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS count_prime/count_prime.wado
+wado run -O2 $WADO_BENCH_FLAGS microgpt/microgpt.wado
 """
 
 [tasks.mandelbrot]
@@ -328,7 +325,7 @@ run = """
 set -e
 source ./wado.sh
 # pure computation
-MISE_JOBS=1 mise run count-prime
+MISE_JOBS=1 mise run microgpt
 MISE_JOBS=1 mise run mandelbrot
 MISE_JOBS=1 mise run sieve
 MISE_JOBS=1 mise run fts
@@ -354,7 +351,7 @@ run = """
 #!/usr/bin/env bash
 set -e
 source ./wado.sh
-FILES="count_prime/count_prime.wado mandelbrot/mandelbrot.wado sieve/sieve.wado
+FILES="microgpt/microgpt.wado mandelbrot/mandelbrot.wado sieve/sieve.wado
 fts/fts.wado json_twitter/json_twitter.wado cbor/cbor_twitter.wado
 cbor/cbor_canada.wado cbor/cbor_catalog.wado json_canada/json_canada.wado
 json_catalog/json_catalog.wado json_catalog/json_catalog_v2.wado
@@ -380,9 +377,9 @@ done
 [tasks.clean]
 description = "Clean benchmark artifacts"
 run = """
-rm -f count_prime/*.wasm mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
-rm -f count_prime/count_prime_c mandelbrot/mandelbrot_c sieve/sieve_c
-rm -f fts/fts_c fts/fts_rs
+rm -f mandelbrot/*.wasm sieve/*.wasm zlib/zlib_c.wasm
+rm -f mandelbrot/mandelbrot_c sieve/sieve_c
+rm -f fts/fts_c fts/fts_rs microgpt/microgpt_rs
 rm -rf zlib/target json_twitter/target json_canada/target json_catalog/target cbor/target syntax_highlight/target
 rm -rf cbor/node_modules cbor/package-lock.json
 rm -rf syntax_highlight/node_modules syntax_highlight/package-lock.json
