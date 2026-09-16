@@ -46,19 +46,17 @@ pub(crate) enum Keep {
 
 pub(crate) fn live(asset: &Asset<'_>, opts: &Embed<'_>) -> Result<Live, Error> {
     let keep_export = opts.keep_export;
+    let (data_refs, pointers) = match &asset.data_refs {
+        Some(refs) => resolve_map(asset, refs)?,
+        None => (BTreeMap::new(), Vec::new()),
+    };
     let mut walk = Walk {
         asset,
         live: Live::default(),
         queue: Vec::new(),
         ref_funcs: BTreeSet::new(),
-        data_refs: match &asset.data_refs {
-            Some(refs) => func_ranges(asset, refs)?,
-            None => BTreeMap::new(),
-        },
-        pointers: match &asset.data_refs {
-            Some(refs) => pointer_edges(asset, refs)?,
-            None => Vec::new(),
-        },
+        data_refs,
+        pointers,
         // Only an active segment at a constant base can have its pieces name
         // their own addresses. A passive one is reached through the
         // `memory.init` that copies it, which the walk already follows.
@@ -526,53 +524,53 @@ impl Reencode for Recorder<'_> {
     }
 }
 
-/// Resolve each pointer edge against the asset's segments and `name` section.
+/// Resolve the asset's map against its `name` section, which both halves of the
+/// map are keyed by, so it is walked once.
 ///
-/// A site or a target outside its segment, or a name landing on no function,
-/// means the map has drifted from the module — and an edge not followed is a
-/// pointer left dangling, so it is an error rather than an edge to skip.
-fn pointer_edges(asset: &Asset<'_>, refs: &DataRefs) -> Result<Vec<Edge>, Error> {
-    if refs.pointers().is_empty() {
-        return Ok(Vec::new());
+/// Anything the module cannot answer for — a name landing on no function, a
+/// range outside its segment — means the map has drifted from it. Honouring a
+/// drifted map prunes data something still reads, so it is an error.
+fn resolve_map<'a>(
+    asset: &'a Asset<'_>,
+    refs: &'a DataRefs,
+) -> Result<(BTreeMap<u32, &'a [DataRange]>, Vec<Edge>), Error> {
+    let names = asset.names.clone().ok_or_else(|| {
+        Error::DataRef("the asset has no `name` section to resolve the map against".into())
+    })?;
+    let mut funcs: BTreeMap<&str, u32> = BTreeMap::new();
+    for subsection in names {
+        if let wasmparser::Name::Function(map) = subsection? {
+            for naming in map {
+                let naming = naming?;
+                funcs.insert(naming.name, naming.index);
+            }
+        }
     }
-    let funcs = function_indices(asset)?;
-    let segment_len = |index: u32| {
-        asset
-            .datas
-            .get(index as usize)
-            .map(|data| data.data.len() as u32)
-    };
+
+    let mut reads = BTreeMap::new();
+    for (name, index) in &funcs {
+        if let Some(ranges) = refs.get(name) {
+            for range in ranges {
+                check_range(asset, range, &format!("function `{name}`"))?;
+            }
+            reads.insert(*index, ranges);
+        }
+    }
+    if reads.len() != refs.len() {
+        return Err(Error::DataRef(format!(
+            "names {} functions, of which the asset's `name` section resolves {}",
+            refs.len(),
+            reads.len()
+        )));
+    }
 
     let mut edges = Vec::new();
     for pointer in refs.pointers() {
-        let len = segment_len(pointer.segment).ok_or_else(|| {
-            Error::DataRef(format!(
-                "a pointer sits in segment {}, which the asset does not have",
-                pointer.segment
-            ))
-        })?;
-        if pointer.offset >= len {
-            return Err(Error::DataRef(format!(
-                "a pointer sits at {} of segment {}, which is {len} bytes",
-                pointer.offset, pointer.segment
-            )));
-        }
+        let site = DataRange::at(pointer.segment, pointer.offset);
+        check_range(asset, &site, "a pointer")?;
         let target = match &pointer.target {
             Target::Data(range) => {
-                let len = segment_len(range.segment).ok_or_else(|| {
-                    Error::DataRef(format!(
-                        "a pointer reaches segment {}, which the asset does not have",
-                        range.segment
-                    ))
-                })?;
-                if range.end() > len {
-                    return Err(Error::DataRef(format!(
-                        "a pointer reaches {}..{} of segment {}, which is {len} bytes",
-                        range.offset,
-                        range.end(),
-                        range.segment
-                    )));
-                }
+                check_range(asset, range, "a pointer")?;
                 Reached::Data(*range)
             }
             Target::Func(name) => Reached::Func(*funcs.get(name.as_str()).ok_or_else(|| {
@@ -588,79 +586,24 @@ fn pointer_edges(asset: &Asset<'_>, refs: &DataRefs) -> Result<Vec<Edge>, Error>
             fired: false,
         });
     }
-    Ok(edges)
+    Ok((reads, edges))
 }
 
-fn function_indices<'a>(asset: &Asset<'a>) -> Result<BTreeMap<&'a str, u32>, Error> {
-    let names = asset.names.clone().ok_or_else(|| {
-        Error::DataRef("the asset has no `name` section to resolve the map against".into())
+fn check_range(asset: &Asset<'_>, range: &DataRange, reader: &str) -> Result<(), Error> {
+    let segment = asset.datas.get(range.segment as usize).ok_or_else(|| {
+        Error::DataRef(format!(
+            "{reader} reads segment {}, which the asset does not have",
+            range.segment
+        ))
     })?;
-    let mut funcs = BTreeMap::new();
-    for subsection in names {
-        if let wasmparser::Name::Function(map) = subsection? {
-            for naming in map {
-                let naming = naming?;
-                funcs.insert(naming.name, naming.index);
-            }
-        }
-    }
-    Ok(funcs)
-}
-
-/// Resolve the asset's map against its `name` section.
-///
-/// Every name in the map has to land on a function, and every range inside its
-/// segment: a map that has drifted from the module would otherwise prune data
-/// that is still read, and silently produce a module that computes the wrong
-/// answer.
-fn func_ranges<'a>(
-    asset: &'a Asset<'_>,
-    refs: &'a DataRefs,
-) -> Result<BTreeMap<u32, &'a [DataRange]>, Error> {
-    let names = asset.names.clone().ok_or_else(|| {
-        Error::DataRef("the asset has no `name` section to resolve the map against".into())
-    })?;
-
-    let mut resolved = BTreeMap::new();
-    let mut matched: BTreeSet<&str> = BTreeSet::new();
-    for subsection in names {
-        let wasmparser::Name::Function(map) = subsection? else {
-            continue;
-        };
-        for naming in map {
-            let naming = naming?;
-            if let Some(ranges) = refs.get(naming.name) {
-                resolved.insert(naming.index, ranges);
-                matched.insert(naming.name);
-            }
-        }
-    }
-
-    if matched.len() != refs.len() {
+    if range.end() as usize > segment.data.len() {
         return Err(Error::DataRef(format!(
-            "names {} functions, of which the asset's `name` section resolves {}",
-            refs.len(),
-            matched.len()
+            "{reader} reads {}..{} of segment {}, which is {} bytes",
+            range.offset,
+            range.end(),
+            range.segment,
+            segment.data.len()
         )));
     }
-    for (func, ranges) in &resolved {
-        for range in *ranges {
-            let segment = asset.datas.get(range.segment as usize).ok_or_else(|| {
-                Error::DataRef(format!(
-                    "function {func} reads segment {}, which the asset does not have",
-                    range.segment
-                ))
-            })?;
-            if range.end() as usize > segment.data.len() {
-                return Err(Error::DataRef(format!(
-                    "function {func} reads {}..{} of segment {}, which is {} bytes",
-                    range.offset,
-                    range.end(),
-                    range.segment,
-                    segment.data.len()
-                )));
-            }
-        }
-    }
-    Ok(resolved)
+    Ok(())
 }

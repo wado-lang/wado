@@ -33,6 +33,16 @@ impl DataRange {
         })
     }
 
+    /// The single byte at `offset`, which is what a pointer site occupies for
+    /// the purpose of asking whether the asset holds it.
+    pub(crate) fn at(segment: u32, offset: u32) -> Self {
+        DataRange {
+            segment,
+            offset,
+            size: 1,
+        }
+    }
+
     pub(crate) fn end(&self) -> u32 {
         self.offset
             .checked_add(self.size)
@@ -155,9 +165,10 @@ impl DataRefs {
             .map(|p| format!("@{}:{}", p.segment, p.offset))
             .collect();
         // Aligning to the longest name pads every line to it, and a mangled
-        // Rust symbol runs past a hundred characters. Past the cap a name gets
-        // one space, which costs the reader less than the padding does.
-        const ALIGN_CAP: usize = 40;
+        // Rust symbol can run past a hundred characters. Past a line's worth a
+        // name gets one space: the padding costs the reader more than the
+        // columns buy.
+        const ALIGN_CAP: usize = 72;
         let width = rows
             .iter()
             .map(|(name, _)| name.len())

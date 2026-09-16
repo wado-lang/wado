@@ -4022,51 +4022,34 @@ fn import_resource_using_interfaces(
 }
 
 /// Collect a component asset down to the lifted functions the program imports.
-///
-/// The component's own items are left alone, so a lift the program does not
-/// import still names a core export. The export therefore stays as a stub: what
-/// only its body reached is what the collection takes away.
-/// An asset the pass cannot read is composed whole rather than failing — it is
-/// a size question, and the program is correct either way.
+/// An asset the pass cannot read is composed whole: the program is correct
+/// either way, and only its size is at stake.
 fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
-    let lifted: IndexSet<String> = project
+    // The component's own items are left alone, so a lift the program does not
+    // import still names a core export. That export stays as a stub, and what
+    // only its body reached is what the collection takes away.
+    let unused: IndexSet<String> = project
         .cm_interface_registry
         .interfaces()
         .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
         .flat_map(|interface| {
             let path = interface.path.clone();
-            interface
-                .functions
-                .into_iter()
-                .map(move |func| format!("{path}#{}", func.wasi_func_name))
-        })
-        .collect();
-    let used: IndexSet<String> = project
-        .cm_interface_registry
-        .interfaces()
-        .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
-        .flat_map(|interface| {
-            let path = interface.path.clone();
-            interface
-                .functions
-                .into_iter()
-                .filter(|func| project.used_wasi_functions.contains(&func.used_key()))
-                .map(move |func| format!("{path}#{}", func.wasi_func_name))
+            interface.functions.into_iter().filter_map(move |func| {
+                let used = project.used_wasi_functions.contains(&func.used_key());
+                (!used).then(|| format!("{path}#{}", func.wasi_func_name))
+            })
         })
         .collect();
 
     // A `cabi_post_` export belongs to the lift it is named after, so it lives
     // and dies with it rather than being asked about separately.
-    let fate = |name: &str| {
-        let lift = name.strip_prefix("cabi_post_").unwrap_or(name);
-        lifted.contains(lift) && !used.contains(lift)
-    };
+    let stub = |name: &str| unused.contains(name.strip_prefix("cabi_post_").unwrap_or(name));
     wado_wasm_embed::embed_component(
         &asset.bytes,
         &wado_wasm_embed::Embed {
             memory_import: None,
             keep_export: &|_| true,
-            stub_export: &fate,
+            stub_export: &stub,
             strip_custom_sections: true,
         },
     )

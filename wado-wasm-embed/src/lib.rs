@@ -133,13 +133,12 @@ pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
 
 /// Collect over a component: each core module it holds is embedded, and every
 /// other section is copied byte for byte.
-///
-/// The component's own items are untouched, so nothing is renumbered and every
-/// `alias core export` still resolves. What that costs is the reason
-/// [`Embed::stub_export`] exists: a lift the program does not import names a
-/// core export that has to stay, and stubbing it is how its body goes anyway.
 pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     use wasmparser::Payload;
+
+    // Copying the rest leaves the component's own items untouched, so nothing
+    // is renumbered and every `alias core export` still resolves. That is what
+    // [`Embed::stub_export`] is for: an export a lift still names cannot go.
 
     let mut out = Vec::new();
     let mut nesting = 0usize;
@@ -174,11 +173,8 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
     Ok(out)
 }
 
-/// Take the module length off the tail of `out`.
-///
-/// A module section is `0x01` then the payload's length as a LEB128, and the
-/// range `wasmparser` hands over starts after both. Read backwards the length
-/// is its one byte without a continuation bit, then however many with one.
+/// Take the module length off the tail of `out`. Read backwards, a LEB128 is
+/// its one byte without a continuation bit, then however many with one.
 fn drop_module_length(out: &mut Vec<u8>) {
     out.pop();
     while out.last().is_some_and(|byte| byte & 0x80 != 0) {

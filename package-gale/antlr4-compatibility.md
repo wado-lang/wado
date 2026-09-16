@@ -67,9 +67,9 @@ ships a property table frozen when the jar was built (4.13.2 is Unicode
 against the jar at all: a property's members are ICU's answer, not something
 Gale keeps and could get wrong.
 
-What remains Gale's, and so remains a bug when it disagrees, is the layer above
-the data: the bare-name resolution order, the two `General_Category` aliases
-behind `cntrl` and `digit`, `EmojiPresentation=`, and the complement. Those are
+The layer above the data is still Gale's, so a disagreement there is still a
+bug: the bare-name resolution order, the two `General_Category` aliases behind
+`cntrl` and `digit`, `EmojiPresentation=`, and the complement. Those are
 pinned
 character-by-character in `src/g4/parser_test.wado`.
 

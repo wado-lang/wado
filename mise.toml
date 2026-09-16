@@ -568,13 +568,7 @@ cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_
 WAT_FILE="wado-compiler/lib/core/libm.wat"
 WAT_TMP="${WAT_FILE}.tmp"
 cargo run --bin wado-dev-tools -- bundled-asset target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
-if cmp -s "$WAT_TMP" "$WAT_FILE"; then
-  rm "$WAT_TMP"
-  echo "  bundled libm WAT unchanged, skipping update"
-else
-  mv "$WAT_TMP" "$WAT_FILE"
-  echo "  bundled libm WAT updated"
-fi
+scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled libm WAT"
 """
 
 [tasks.update-bundled-icu]
@@ -598,13 +592,7 @@ wasm-tools validate "$COMPONENT"
 WAT_FILE="wado-compiler/lib/core/icu.wat"
 WAT_TMP="${WAT_FILE}.tmp"
 wasm-tools print -f "$COMPONENT" -o "$WAT_TMP"
-if cmp -s "$WAT_TMP" "$WAT_FILE"; then
-  rm "$WAT_TMP"
-  echo "  bundled ICU WAT unchanged, skipping update"
-else
-  mv "$WAT_TMP" "$WAT_FILE"
-  echo "  bundled ICU WAT updated"
-fi
+scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled ICU WAT"
 """
 
 [tasks.list-todo]

@@ -201,17 +201,17 @@ package resolution.
 They are resource-free, need no locale, and their data does not vary by one, so
 they need neither the handle kinds above nor the data image below.
 
-The surface names a property two ways, because programs name one two ways. A
-name written into the source is a WIT enum case: it resolves at the call site,
-carries no string, and cannot fail, which is what a per-character predicate like
-`is_upper` needs. A name a program reads at run time — the `\p{...}` in a
-grammar — stays a string, matched loosely per UAX #44 and answered with `none`
-where it does not resolve. Both reach the same baked data, so neither is an
-approximation of the other.
+The surface names a property two ways. A name written into the source is a WIT
+enum case: it resolves at the call site, carries no string, and cannot fail,
+which is what a per-character predicate like `is_upper` needs. A name a program
+reads at run time stays a string, matched loosely per UAX #44 and answered with
+`none` where it does not resolve. That is the `\p{...}` in a grammar. Both reach
+the same baked data, so neither approximates the other.
 
 The enum is not a size knob. ICU4X bakes every property as a static and the
-dispatch reaches every case, so what a program's share of the asset costs is
-settled by the collection in Known gaps, not by how the call names the property.
+dispatch reaches every case, so naming a property as an enum case does not
+narrow what the call roots. What a program carries is decided by the collection
+instead.
 
 Three UCD properties are deliberately not answered:
 
@@ -361,10 +361,10 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   for all of them.
 
   Splitting that needs a root finer than an export, which neither the
-  collection nor a re-link can express today. What a coarser split already buys
-  is the gap between the two paths: the string-named `ranges` and `contains`
-  pull the enumerated properties, `General_Category` and the name tables, which
-  the enum-named `has` and `set` do not.
+  collection nor a re-link can express today. The export-level split already
+  separates the two paths: the string-named `ranges` and `contains` pull the
+  enumerated properties, `General_Category` and the name tables, which the
+  enum-named `has` and `set` do not.
 
 - **A dropped lift leaves a stub, not a hole.** A lift the program does not
   import keeps its name and signature in the core module, because the
