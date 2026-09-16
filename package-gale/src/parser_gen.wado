@@ -5711,7 +5711,7 @@ fn gen_op_repeat_non_greedy_storable<S: AsStrSlice>(
         w.end();
         return;
     }
-    if !while_cond.eq_str("false") {
+    if while_cond != "false" {
         let guard = if is_plus { `!p.recovering && (${while_cond})` } else { while_cond.to_string() };
         w.begin(`while ${guard}`);
         let mut nc: List<[String, i32]> = [];
@@ -5766,7 +5766,7 @@ fn gen_op_repeat_non_greedy_transparent<S: AsStrSlice>(
         w.end();
         return;
     }
-    if !while_cond.eq_str("false") {
+    if while_cond != "false" {
         w.begin(`while ${while_cond}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc, looped());

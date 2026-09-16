@@ -1360,8 +1360,8 @@ impl StrSlice {
         return seq_cmp(self.repr, self.start, self.end, o.repr, o.start, o.end);
     }
 
-    /// Byte equality against any text. `==` reaches only another `StrSlice`,
-    /// so a body generic over `AsStrSlice` has no operator to compare with.
+    /// Byte equality against any text. `==` reaches a `String` and another
+    /// `StrSlice`; this reaches whatever a type parameter turns out to be.
     pub fn eq_str<S: AsStrSlice>(&self, other: S) -> bool {
         let len = self.len();
         let b = other.as_str_slice();

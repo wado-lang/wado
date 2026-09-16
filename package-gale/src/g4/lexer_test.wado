@@ -12,7 +12,7 @@ fn tokenize<S: AsStrSlice>(input: S) -> List<Token> {
 
 fn assert_token<S: AsStrSlice>(tok: &Token, expected_kind: G4Token, expected_text: S) {
     assert tok.kind == expected_kind as i32, `expected kind ${expected_kind.name()}, got ${tok.kind}`;
-    assert LexerSlice::eq_str(&expected_text, &tok.text), `expected text "${expected_text}", got "${tok.text}"`;
+    assert tok.text == expected_text.to_string(), `expected text "${expected_text}", got "${tok.text}"`;
 }
 
 test "empty input produces EOF" {

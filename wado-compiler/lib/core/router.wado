@@ -78,7 +78,7 @@ impl PathParams {
     pub fn get<S: AsStrSlice>(&self, name: S) -> Option<String> {
         let n = self.names.len();
         for let mut i = 0; i < n; i += 1 {
-            if name.eq_str(&self.names[i]) {
+            if name == self.names[i] {
                 let s = self.ranges[i * 2];
                 let e = self.ranges[i * 2 + 1];
                 return Option::Some(self.path.substr_bytes(s, e));
