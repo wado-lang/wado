@@ -92,13 +92,7 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     globals::build_initialize_modules(flat);
     flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
-    let value_copy = value_copy::plan(
-        flat,
-        builtins,
-        confined_params,
-        ref_receiver_methods,
-        retained.rows.mint_sites(),
-    );
+    let value_copy = value_copy::plan(flat, builtins, confined_params, ref_receiver_methods);
     Ok(LowerPlan {
         box_plan,
         closure,

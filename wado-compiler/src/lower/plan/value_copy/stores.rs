@@ -133,12 +133,6 @@ pub struct FunctorRows {
     /// the bottom a least fixpoint starts from.
     minted: IndexSet<TypeId>,
     facts: IndexMap<TypeId, StoresFacts>,
-    /// How many expressions mint a function value. The row is computed once
-    /// before boxing and again after closure lifting, and each reader sees only
-    /// the tree of its own phase, so a pass that minted a value between them
-    /// would leave the earlier reader's answer too narrow. Boxing rewrites the
-    /// types, which is why this counts sites rather than comparing type sets.
-    mint_sites: usize,
 }
 
 impl FunctorRows {
@@ -165,24 +159,18 @@ impl FunctorRows {
     pub fn retained(&self, callee_type: TypeId, arity: usize) -> IndexSet<u32> {
         self.row(callee_type, arity).union()
     }
-
-    /// How many expressions mint a function value. See [`Self::mint_sites`].
-    #[must_use]
-    pub fn mint_sites(&self) -> usize {
-        self.mint_sites
-    }
 }
 
-/// Every functor type a `Closure` or `FuncRef` expression mints a value at, and
-/// how many such expressions there are.
-fn minted_functor_types(
-    project: &FlatPackage,
-    type_table: &TypeTable,
-) -> (IndexSet<TypeId>, usize) {
+/// Every functor type a `Closure` or `FuncRef` expression mints a value at.
+///
+/// Read over the same tree the row's reader walks, which is what makes a
+/// missing type mean "nothing mints this": a value has to be minted in a tree
+/// to reach a call site in it, so a later phase minting one — a handler thunk
+/// at closure lifting — cannot widen what an earlier reader already answered.
+fn minted_functor_types(project: &FlatPackage, type_table: &TypeTable) -> IndexSet<TypeId> {
     let mut collector = MintedTypes {
         type_table,
         found: IndexSet::default(),
-        sites: 0,
     };
     for func in &project.functions {
         let func = func.borrow();
@@ -190,13 +178,12 @@ fn minted_functor_types(
             collector.visit_block(body);
         }
     }
-    (collector.found, collector.sites)
+    collector.found
 }
 
 struct MintedTypes<'a> {
     type_table: &'a TypeTable,
     found: IndexSet<TypeId>,
-    sites: usize,
 }
 
 impl TirRefVisitor for MintedTypes<'_> {
@@ -209,7 +196,6 @@ impl TirRefVisitor for MintedTypes<'_> {
             ResolvedType::Function { .. }
         ) {
             self.found.insert(expr.type_id);
-            self.sites += 1;
         }
         self.walk_expr(expr);
     }
@@ -292,11 +278,9 @@ pub fn compute_stored_params(
         type_table: &type_table,
         memo: RefCell::new(IndexMap::default()),
     };
-    let (minted, mint_sites) = minted_functor_types(project, &type_table);
     let mut rows = FunctorRows {
-        minted,
+        minted: minted_functor_types(project, &type_table),
         facts: IndexMap::default(),
-        mint_sites,
     };
     // A row is a whole-program join, so a function's facts depend on a minting
     // site the call graph gives no edge to. The worklist settles each round

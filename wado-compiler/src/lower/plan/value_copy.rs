@@ -162,7 +162,6 @@ pub fn plan(
     builtins: ownership::BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
-    mint_sites_before_lifting: usize,
 ) -> ValueCopyPlan {
     register_variant_cases(flat);
     let seed = analyze::collect_seed_types(flat);
@@ -190,12 +189,6 @@ pub fn plan(
     let conventions =
         ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtins);
     let stores = stores::compute_stored_params(flat, &call_graph, &builtins);
-    debug_assert!(
-        stores.rows.mint_sites() <= mint_sites_before_lifting,
-        "closure lifting minted {} function value(s): the write-back already read \
-         a row that did not have them",
-        stores.rows.mint_sites() - mint_sites_before_lifting,
-    );
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {

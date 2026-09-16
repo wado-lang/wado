@@ -273,13 +273,12 @@ every reader of an indirect call read the same answer — the copy analysis, the
 last-use walk and the write-back — rather than each taking a reading of its own.
 
 The row is computed twice, since those readers sit on either side of boxing, and
-each sees only the tree of its own phase. A pass minting a function value
-between the two would leave the earlier reader's answer too narrow, so the count
-of minting expressions is carried forward and asserted not to grow. Closure
-lifting is the one pass there, and it mints nothing: it rewrites a reference to
-a named function into a zero-capture closure forwarding to that same function.
-The count is what the assertion compares, because boxing rewrites the types the
-row is keyed on.
+each is read over the same tree its reader walks. That is what makes a type no
+expression mints mean "nothing mints this" rather than "not minted yet": a
+function value has to be minted in a tree to reach a call site in that tree, so
+a later phase minting one cannot widen an answer an earlier reader already gave.
+Closure lifting does mint — a `with … do` body inside a closure becomes a
+handler thunk — and those are types no earlier call site could have named.
 
 ### Component Model Boundaries
 
