@@ -37,8 +37,7 @@ impl Random for CountingRandom {
         }
         let mut out: List<u8> = [];
         for let mut i = 0; i < n; i += 1 {
-            out.push(self.next);
-            self.next = (self.next as i32 + 1 & 0xFF) as u8;
+            out.push(self.take_byte());
         }
         resume out;
     }
@@ -47,11 +46,26 @@ impl Random for CountingRandom {
         self.calls += 1;
         let mut value: u64 = 0;
         for let mut i = 0; i < 8; i += 1 {
-            value = value | self.next as u64 << (i * 8) as u64;
-            self.next = (self.next as i32 + 1 & 0xFF) as u8;
+            value = value | self.take_byte() as u64 << (i * 8) as u64;
         }
         resume value;
     }
+}
+
+impl CountingRandom {
+    fn take_byte(&mut self) -> u8 {
+        let byte = self.next;
+        self.next = (byte as i32 + 1 & 0xFF) as u8;
+        return byte;
+    }
+}
+
+fn seq(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut i = 0; i < n; i += 1 {
+        out.push(i);
+    }
+    return out;
 }
 
 test "one host call serves many reads" {
@@ -178,7 +192,7 @@ test "bytes collects exactly what was asked for" {
     assert host.calls == 3;
 }
 
-test "bytes of zero length asks the host nothing useful" {
+test "bytes of zero length is empty" {
     let mut host = CountingRandom {};
     with Random => &mut host do {
         assert random::bytes(0).len() == 0;
@@ -280,31 +294,20 @@ test "boolean follows the low bit" {
 
 test "shuffle keeps every element" {
     let mut host = CountingRandom {};
-    let mut items: List<i32> = [];
-    for let mut i = 0; i < 32; i += 1 {
-        items.push(i);
-    }
+    let mut items = seq(32);
     with Random => &mut host do {
         random::shuffle(&mut items);
     };
-    assert items.len() == 32;
-    let seen = items.sorted();
-    for let mut i = 0; i < 32; i += 1 {
-        assert seen[i] == i;
-    }
+    assert items.sorted() == seq(32);
 }
 
 test "shuffle reorders" {
     let mut host = CountingRandom {};
-    let mut items: List<i32> = [];
-    for let mut i = 0; i < 32; i += 1 {
-        items.push(i);
-    }
-    let before = items;
+    let mut items = seq(32);
     with Random => &mut host do {
         random::shuffle(&mut items);
     };
-    assert items != before;
+    assert items != seq(32);
 }
 
 test "shuffle of a short list draws nothing" {
@@ -381,12 +384,9 @@ test "the real host drives the utilities" {
         assert random::token(16).len() == 22;
         assert random::alphanumeric(24).chars().count() == 24;
 
-        let mut deck: List<i32> = [];
-        for let mut i = 0; i < 16; i += 1 {
-            deck.push(i);
-        }
+        let mut deck = seq(16);
         random::shuffle(&mut deck);
-        assert deck.sorted()[15] == 15;
+        assert deck.sorted() == seq(16);
         assert random::choose(&deck) matches { Some(_) };
     };
 }

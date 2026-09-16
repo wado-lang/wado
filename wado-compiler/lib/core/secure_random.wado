@@ -108,8 +108,7 @@ pub fn hex(n: i32) -> String with Random {
 /// `n` random bytes as unpadded URL-safe Base64 — a secret that survives a URL,
 /// a cookie or a header. 16 bytes (128 bits) is a sound default.
 pub fn token(n: i32) -> String with Random {
-    let raw = bytes(n);
-    return base64::encode_url(&raw);
+    return base64::encode_url(&bytes(n));
 }
 
 /// A `len`-character string of `[A-Za-z0-9]`, uniform over the 62 characters.
@@ -141,20 +140,21 @@ pub trait SampleRange {
 
 impl SampleRange for RangeExclusive<i32> {
     fn sample_span(&self) -> [i32, i32] {
-        let count = self.end as i64 - self.start as i64;
-        assert count > 0, "range must not be empty";
-        assert count <= i32::MAX as i64, "range holds more values than an i32 can count";
-        return [self.start, count as i32];
+        return span(self.start, self.end as i64);
     }
 }
 
 impl SampleRange for RangeInclusive<i32> {
     fn sample_span(&self) -> [i32, i32] {
-        let count = self.end as i64 - self.start as i64 + 1;
-        assert count > 0, "range must not be empty";
-        assert count <= i32::MAX as i64, "range holds more values than an i32 can count";
-        return [self.start, count as i32];
+        return span(self.start, self.end as i64 + 1);
     }
+}
+
+fn span(low: i32, end: i64) -> [i32, i32] {
+    let count = end - low as i64;
+    assert count > 0, "range must not be empty";
+    assert count <= i32::MAX as i64, "range holds more values than an i32 can count";
+    return [low, count as i32];
 }
 
 /// A `Random` handler that draws entropy in blocks. Install it around the work
