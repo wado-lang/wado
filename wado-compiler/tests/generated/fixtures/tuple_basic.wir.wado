@@ -6,14 +6,20 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
+struct core:prelude/string.wado//StrSlice {  // TypeId(2)
+    mut repr: ref Array<u8>,
+    mut start: i32,
+    mut end: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(3)
+array Array<u8> (mut u8);  // TypeId(3)
+
+struct core:prelude/string.wado//String {  // TypeId(4)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(4)
+struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -25,107 +31,109 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(5)
+struct core:prelude/slice.wado//Slice<u8> {  // TypeId(6)
     mut repr: ref Array<u8>,
     mut start: i32,
     mut end: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(6)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(7)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(8)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(9)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(9)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(10)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(10)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(11)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(11)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(12)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(12)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(13)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin" = fn();  // TypeId(13)
+type "functype//tuple_basic.wado/$test_5_tuples_as_parameters_and_return_values" = fn();  // TypeId(14)
 
-type "functype//tuple_basic.wado/$cm_export__$test_0_field_access_by_index" = fn();  // TypeId(14)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin" = fn();  // TypeId(15)
 
-type "functype//tuple_basic.wado/$cm_export__$test_1_arities_and_element_kinds" = fn();  // TypeId(15)
+type "functype//tuple_basic.wado/$cm_export__$test_0_field_access_by_index" = fn();  // TypeId(16)
 
-type "functype//tuple_basic.wado/$cm_export__$test_2_tuples_nest" = fn();  // TypeId(16)
+type "functype//tuple_basic.wado/$cm_export__$test_1_arities_and_element_kinds" = fn();  // TypeId(17)
 
-type "functype//tuple_basic.wado/$cm_export__$test_3_a_type_annotation_supplies_the_element_types" = fn();  // TypeId(17)
+type "functype//tuple_basic.wado/$cm_export__$test_2_tuples_nest" = fn();  // TypeId(18)
 
-type "functype//tuple_basic.wado/$cm_export__$test_4_len_is_the_arity" = fn();  // TypeId(18)
+type "functype//tuple_basic.wado/$cm_export__$test_3_a_type_annotation_supplies_the_element_types" = fn();  // TypeId(19)
 
-type "functype//tuple_basic.wado/$cm_export__$test_5_tuples_as_parameters_and_return_values" = fn();  // TypeId(19)
+type "functype//tuple_basic.wado/$cm_export__$test_4_len_is_the_arity" = fn();  // TypeId(20)
 
-type "functype//tuple_basic.wado/$cm_export__$test_6_destructuring_a_multi_value_builtin" = fn();  // TypeId(20)
+type "functype//tuple_basic.wado/$cm_export__$test_5_tuples_as_parameters_and_return_values" = fn();  // TypeId(21)
 
-type "functype//tuple_basic.wado/$cm_export__$test_7_a_rest_pattern_ignores_the_trailing_elements" = fn();  // TypeId(21)
+type "functype//tuple_basic.wado/$cm_export__$test_6_destructuring_a_multi_value_builtin" = fn();  // TypeId(22)
 
-type "functype//tuple_basic.wado/$cm_export__$test_8_a_cast_takes_the_element_types_from_the_target" = fn();  // TypeId(22)
+type "functype//tuple_basic.wado/$cm_export__$test_7_a_rest_pattern_ignores_the_trailing_elements" = fn();  // TypeId(23)
 
-type "functype//tuple_basic.wado/$cm_export__$test_9_a_tuple_literal_in_an_if_branch_takes_the_narrow_element_type" = fn();  // TypeId(23)
+type "functype//tuple_basic.wado/$cm_export__$test_8_a_cast_takes_the_element_types_from_the_target" = fn();  // TypeId(24)
 
-type "functype//tuple_basic.wado/$cm_export__$test_10_destructuring_a_tuple_literal_from_an_if_branch" = fn();  // TypeId(24)
+type "functype//tuple_basic.wado/$cm_export__$test_9_a_tuple_literal_in_an_if_branch_takes_the_narrow_element_type" = fn();  // TypeId(25)
 
-type "functype//tuple_basic.wado/$cm_export__$test_11_a_tuple_literal_in_a_match_arm_takes_the_narrow_element_type" = fn();  // TypeId(25)
+type "functype//tuple_basic.wado/$cm_export__$test_10_destructuring_a_tuple_literal_from_an_if_branch" = fn();  // TypeId(26)
 
-type "functype//tuple_basic.wado/$cm_export__$test_12_a_user_struct_named_tuple_coexists_with_the_built_in" = fn();  // TypeId(26)
+type "functype//tuple_basic.wado/$cm_export__$test_11_a_tuple_literal_in_a_match_arm_takes_the_narrow_element_type" = fn();  // TypeId(27)
 
-type "functype//tuple_basic.wado/$cm_export__$test_13_a_user_generic_tuple_t__coexists_with_the_built_in" = fn();  // TypeId(27)
+type "functype//tuple_basic.wado/$cm_export__$test_12_a_user_struct_named_tuple_coexists_with_the_built_in" = fn();  // TypeId(28)
 
-type "functype//tuple_basic.wado/$cm_export__$test_14_return_inside_a_tuple_for_of_leaves_the_function" = fn();  // TypeId(28)
+type "functype//tuple_basic.wado/$cm_export__$test_13_a_user_generic_tuple_t__coexists_with_the_built_in" = fn();  // TypeId(29)
 
-type "functype//tuple_basic.wado/$cm_export__$test_15_zip_over_tuples" = fn();  // TypeId(29)
+type "functype//tuple_basic.wado/$cm_export__$test_14_return_inside_a_tuple_for_of_leaves_the_function" = fn();  // TypeId(30)
 
-type "functype//tuple_basic.wado/$cm_export__$test_16_zip_over_heterogeneous_tuples" = fn();  // TypeId(30)
+type "functype//tuple_basic.wado/$cm_export__$test_15_zip_over_tuples" = fn();  // TypeId(31)
 
-type "functype//tuple_basic.wado/$cm_export__$test_17_zip_over_three_tuples__and_over_single_element_ones" = fn();  // TypeId(31)
+type "functype//tuple_basic.wado/$cm_export__$test_16_zip_over_heterogeneous_tuples" = fn();  // TypeId(32)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold0" = fn(i64);  // TypeId(32)
+type "functype//tuple_basic.wado/$cm_export__$test_17_zip_over_three_tuples__and_over_single_element_ones" = fn();  // TypeId(33)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold1" = fn(i64);  // TypeId(33)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold0" = fn(i64);  // TypeId(34)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold2" = fn(i64, i64);  // TypeId(34)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold1" = fn(i64);  // TypeId(35)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold3" = fn(i64, i64);  // TypeId(35)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold2" = fn(i64, i64);  // TypeId(36)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold4" = fn(i64);  // TypeId(36)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold3" = fn(i64, i64);  // TypeId(37)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold5" = fn(i64);  // TypeId(37)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold4" = fn(i64);  // TypeId(38)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold6" = fn(i64);  // TypeId(38)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold5" = fn(i64);  // TypeId(39)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold7" = fn(i64);  // TypeId(39)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold6" = fn(i64);  // TypeId(40)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold8" = fn(i64);  // TypeId(40)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold7" = fn(i64);  // TypeId(41)
 
-type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold9" = fn(i64);  // TypeId(41)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold8" = fn(i64);  // TypeId(42)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(42)
+type "functype//tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin$cold9" = fn(i64);  // TypeId(43)
 
-type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(43)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(44)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(44)
+type "functype//core:rt/panic" = fn(ref "core:prelude/string.wado//String");  // TypeId(45)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(45)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(46)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(46)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" = fn(ref "core:prelude/string.wado//String", char);  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(47)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(49)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(50)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(51)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(53)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(53)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(55)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -169,6 +177,9 @@ global global:tuple_basic.wado::$const_obj_273: ref null Array<u8> = array.new_f
 global global:tuple_basic.wado::$const_obj_280: ref null Array<u8> = array.new_fixed<u8>(108, 111, 49, 58, 32);
 global global:tuple_basic.wado::$const_obj_281: ref null Array<u8> = array.new_fixed<u8>(10, 99, 111, 110, 100, 105, 116, 105, 111, 110, 58, 32, 108, 111, 49, 32, 61, 61, 32, 49, 53, 48, 32, 97, 115, 32, 105, 54, 52, 10);
 global global:core:prelude/primitive.wado::$const_obj_475: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+
+fn "tuple_basic.wado/$test_5_tuples_as_parameters_and_return_values"() {
+}
 
 fn "tuple_basic.wado/$test_6_destructuring_a_multi_value_builtin"() {
     let lo1: i64;
@@ -260,6 +271,7 @@ fn "tuple_basic.wado/$cm_export__$test_4_len_is_the_arity"() {
 }
 
 fn "tuple_basic.wado/$cm_export__$test_5_tuples_as_parameters_and_return_values"() {
+    "tuple_basic.wado/$test_5_tuples_as_parameters_and_return_values"();
     "wasi/task-return"(0);
 }
 
@@ -862,6 +874,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
+    let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
     let content_len: i32;
@@ -870,7 +883,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let left_pad: i32;
     let right_pad: i32;
     let repr: ref Array<u8>;
-    let end: i32;
     let self_21: ref "core:prelude/string.wado//String";
     let new_used_26: i32;
     let start_27: i32;
@@ -952,16 +964,18 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let start_292: i32;
     let new_used_299: i32;
     let start_300: i32;
-    let $av_311: bool;
-    let $av_312: i32;
+    let $av_308: bool;
+    let $av_309: i32;
+    let $av_310: i32;
     repr = alt_prefix.repr;
-    end = alt_prefix.used;
-    $av_311 = self.sign_plus;
-    sign_len = select i32(select i32(is_negative, 1, $av_311), 1, 0);
-    prefix_len = select i32(self.alternate, end - 0, 0);
+    $av_310 = alt_prefix.used;
+    prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
+    $av_308 = self.sign_plus;
+    sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
+    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
     content_len = (sign_len + prefix_len) + digit_count;
-    $av_312 = self.width;
-    if select i32($av_312 <= 0, 1, content_len >= $av_312) {
+    $av_309 = self.width;
+    if select i32($av_309 <= 0, 1, content_len >= $av_309) {
         if is_negative {
             self_21 = self.buf;
             new_used_26 = self_21.used + 1;
@@ -972,7 +986,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_27 = self_21.used;
             self_21.used = new_used_26;
             builtin::array_set_u8(self_21.repr, start_27, 45);
-        } else if $av_311 {
+        } else if $av_308 {
             self_35 = self.buf;
             new_used_40 = self_35.used + 1;
             if @unlikely(new_used_40 > builtin::array_len(self_35.repr)) {
@@ -986,7 +1000,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_49 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_17: block {
-                n_57 = end - 0;
+                n_57 = $av_310 - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_17 n_57 == 0;
                 new_used_62 = self_49.used + n_57;
                 if @unlikely(new_used_62 > builtin::array_len(self_49.repr)) {
@@ -995,7 +1009,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_63 = self_49.used;
                 self_49.used = new_used_62;
-                builtin::array_copy<u8>(self_49.repr, start_63, repr, 0, n_57);
+                builtin::array_copy<u8>(self_49.repr, start_63, prefix.repr, 0, n_57);
             };
         }
         return self_65 = self.buf, new_used_67 = self_65.used + digit_count, if @unlikely(new_used_67 > builtin::array_len(self_65.repr)) {
@@ -1029,7 +1043,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_100 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_37: block {
-                n_108 = end - 0;
+                n_108 = $av_310 - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_37 n_108 == 0;
                 new_used_113 = self_100.used + n_108;
                 if @unlikely(new_used_113 > builtin::array_len(self_100.repr)) {
@@ -1038,7 +1052,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_114 = self_100.used;
                 self_100.used = new_used_113;
-                builtin::array_copy<u8>(self_100.repr, start_114, repr, 0, n_108);
+                builtin::array_copy<u8>(self_100.repr, start_114, prefix.repr, 0, n_108);
             };
         }
         self_116 = self.buf;
@@ -1089,7 +1103,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_155 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_58: block {
-                n_163 = end - 0;
+                n_163 = $av_310 - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_58 n_163 == 0;
                 new_used_168 = self_155.used + n_163;
                 if @unlikely(new_used_168 > builtin::array_len(self_155.repr)) {
@@ -1098,7 +1112,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_169 = self_155.used;
                 self_155.used = new_used_168;
-                builtin::array_copy<u8>(self_155.repr, start_169, repr, 0, n_163);
+                builtin::array_copy<u8>(self_155.repr, start_169, prefix.repr, 0, n_163);
             };
         }
         self_171 = self.buf;
@@ -1159,7 +1173,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_214 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_80: block {
-                n_222 = end - 0;
+                n_222 = $av_310 - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_80 n_222 == 0;
                 new_used_227 = self_214.used + n_222;
                 if @unlikely(new_used_227 > builtin::array_len(self_214.repr)) {
@@ -1168,7 +1182,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_228 = self_214.used;
                 self_214.used = new_used_227;
-                builtin::array_copy<u8>(self_214.repr, start_228, repr, 0, n_222);
+                builtin::array_copy<u8>(self_214.repr, start_228, prefix.repr, 0, n_222);
             };
         }
         self_230 = self.buf;
@@ -1227,7 +1241,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             self_273 = self.buf;
             $inline_core_prelude_string_wado_String__internal_push_view_102: block {
-                n_281 = end - 0;
+                n_281 = $av_310 - 0;
                 break_if $inline_core_prelude_string_wado_String__internal_push_view_102 n_281 == 0;
                 new_used_286 = self_273.used + n_281;
                 if @unlikely(new_used_286 > builtin::array_len(self_273.repr)) {
@@ -1236,7 +1250,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 }
                 start_287 = self_273.used;
                 self_273.used = new_used_286;
-                builtin::array_copy<u8>(self_273.repr, start_287, repr, 0, n_281);
+                builtin::array_copy<u8>(self_273.repr, start_287, prefix.repr, 0, n_281);
             };
         }
         return self_289 = self.buf, new_used_291 = self_289.used + digit_count, if @unlikely(new_used_291 > builtin::array_len(self_289.repr)) {
