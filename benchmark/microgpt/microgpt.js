@@ -1,13 +1,13 @@
-// microgpt training benchmark for JavaScript.
+// microgpt training and inference benchmark for JavaScript.
 //
-// A port of Andrej Karpathy's dependency-free Python microgpt, trimmed to the
-// training loop. Copyright (c) Andrej Karpathy, MIT License.
+// A port of Andrej Karpathy's dependency-free Python microgpt.
+// Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
 // The same program as microgpt.wado: a scalar autograd graph where a node holds
 // its children directly, so both arms measure a GC'd language walking an object
-// graph. `train` reseeds and rebuilds the model, so the two report the same
-// final loss and can be checked against each other.
+// graph. Both phases reseed, so the two print the same loss and the same sample
+// and can be checked against each other.
 //
 // How to run:
 //   node benchmark/microgpt/microgpt.js
@@ -15,7 +15,7 @@
 const ITERATIONS = 3;
 const WARMUP = 1;
 
-function printThroughput(workPerIter, n, elapsedNs, unit) {
+function printThroughput(label, workPerIter, n, elapsedNs, unit) {
   const secs = elapsedNs / 1e9;
   const rate = secs > 0 ? (workPerIter * n) / secs : 0;
   const perMs = elapsedNs / n / 1e6;
@@ -24,11 +24,15 @@ function printThroughput(workPerIter, n, elapsedNs, unit) {
   else if (rate >= 1e6) rbuf = `${(rate / 1e6).toFixed(2)} M ${unit}/s`;
   else if (rate >= 1e3) rbuf = `${(rate / 1e3).toFixed(2)} k ${unit}/s`;
   else rbuf = `${rate.toFixed(2)} ${unit}/s`;
-  console.log(`Throughput: ${rbuf}   (${perMs.toFixed(3)} ms/iter, ${n} iter)`);
+  console.log(`${label}: ${rbuf}   (${perMs.toFixed(3)} ms/iter, ${n} iter)`);
 }
 
 // One step per document, so a measured iteration is one pass over the corpus.
 const STEPS = 32;
+// Each sample runs the full attention window, deeper than any training step
+// reaches on this corpus.
+const SAMPLES = 24;
+const TEMPERATURE = 0.5;
 const SEED = 42n;
 
 // Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
@@ -58,6 +62,18 @@ class Rng {
     while (u <= 0) u = this.random();
     const v = this.random();
     return std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+  choice(weights) {
+    let total = 0;
+    for (const w of weights) total += w;
+    let r = this.random() * total;
+    for (let i = 0; i < weights.length; i++) {
+      r -= weights[i];
+      if (r < 0) return i;
+    }
+    return weights.length - 1;
   }
 }
 
@@ -406,19 +422,6 @@ const DOCS = [
   "emmanuelle", "renae", "eveline", "yazmine", "corinna", "makyla", "marilynn", "malea",
 ];
 
-// Next-token predictions per iteration, which is what the throughput counts.
-// A step count would move with the corpus's document lengths.
-function tokensPerIteration(tok, steps) {
-  let total = 0;
-  for (let step = 0; step < steps; step++) {
-    total += Math.min(
-      BLOCK_SIZE,
-      tok.encode(DOCS[step % DOCS.length]).length - 1,
-    );
-  }
-  return total;
-}
-
 // One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
 function train(steps) {
   const rng = new Rng(SEED);
@@ -441,21 +444,73 @@ function train(steps) {
   return lossValue;
 }
 
+// Unlike the example's `generate`, this never stops early on a BOS draw: the
+// position count has to be fixed for the throughput figure to mean anything.
+function generate(g, state, tok, rng) {
+  const nParams = g.len();
+  const keys = emptyCache();
+  const values = emptyCache();
+
+  let tokenId = tok.bos;
+  let sample = "";
+  for (let posId = 0; posId < BLOCK_SIZE; posId++) {
+    const logits = gpt(g, state, tokenId, posId, keys, values);
+    const scaled = logits.map((l) => g.divNum(l, TEMPERATURE));
+    const probs = softmax(g, scaled);
+    tokenId = rng.choice(probs.map((p) => p.data));
+    if (tokenId !== tok.bos) sample += tok.uchars[tokenId];
+  }
+  g.rewind(nParams);
+  return sample;
+}
+
+// The forward path alone. Weights only steer which token is drawn, never how
+// much work a position costs, so an untrained model times the same as a trained
+// one and keeps the phase self-contained.
+function infer(samples) {
+  const rng = new Rng(SEED);
+  const tok = new Tokenizer(DOCS);
+  const g = new Graph();
+  const state = stateDict(g, rng, tok.vocabSize);
+
+  let last = "";
+  for (let i = 0; i < samples; i++) last = generate(g, state, tok, rng);
+  return last;
+}
+
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
+function trainTokens(tok, steps) {
+  let total = 0;
+  for (let step = 0; step < steps; step++) {
+    total += Math.min(BLOCK_SIZE, tok.encode(DOCS[step % DOCS.length]).length - 1);
+  }
+  return total;
+}
+
+function measure(label, workPerIter, f) {
+  for (let w = 0; w < WARMUP; w++) f();
+  let result;
+  const start = process.hrtime.bigint();
+  for (let i = 0; i < ITERATIONS; i++) result = f();
+  printThroughput(
+    label,
+    workPerIter,
+    ITERATIONS,
+    Number(process.hrtime.bigint() - start),
+    "tokens",
+  );
+  return result;
+}
+
 console.log(
-  `microgpt ${STEPS} training steps: ${ITERATIONS} iter (warmup ${WARMUP})`,
+  `microgpt ${STEPS} training steps, ${SAMPLES} samples: ${ITERATIONS} iter (warmup ${WARMUP})`,
 );
 
-for (let w = 0; w < WARMUP; w++) train(STEPS);
-
-let loss = 0;
-const start = process.hrtime.bigint();
-for (let i = 0; i < ITERATIONS; i++) loss = train(STEPS);
-const elapsed = Number(process.hrtime.bigint() - start);
-
-printThroughput(
-  tokensPerIteration(new Tokenizer(DOCS), STEPS),
-  ITERATIONS,
-  elapsed,
-  "tokens",
+const loss = measure("train", trainTokens(new Tokenizer(DOCS), STEPS), () =>
+  train(STEPS),
 );
 console.log(`final loss = ${loss.toFixed(6)}`);
+
+const sample = measure("infer", SAMPLES * BLOCK_SIZE, () => infer(SAMPLES));
+console.log(`last sample = ${sample}`);

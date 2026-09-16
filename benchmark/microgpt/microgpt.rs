@@ -1,7 +1,7 @@
-// microgpt training benchmark for Rust.
+// microgpt training and inference benchmark for Rust.
 //
-// A port of Andrej Karpathy's dependency-free Python microgpt, trimmed to the
-// training loop. Copyright (c) Andrej Karpathy, MIT License.
+// A port of Andrej Karpathy's dependency-free Python microgpt.
+// Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
 // The same program as microgpt.wado, with one forced difference. Wado's
@@ -12,8 +12,8 @@
 // is also the identity the `visited` set needs, which is why this file has no
 // `id` field and microgpt.wado does.
 //
-// `train` reseeds and rebuilds the model, so every arm reports the same final
-// loss and they can be checked against each other.
+// Both phases reseed, so every arm prints the same loss and the same sample and
+// they can be checked against each other.
 //
 // How to run:
 //   rustc -O --edition 2024 -o microgpt_rs microgpt.rs && ./microgpt_rs
@@ -24,7 +24,7 @@ use std::time::Instant;
 const ITERATIONS: u64 = 3;
 const WARMUP: u64 = 1;
 
-fn print_throughput(work_per_iter: f64, n: u64, elapsed_ns: u128, unit: &str) {
+fn print_throughput(label: &str, work_per_iter: f64, n: u64, elapsed_ns: u128, unit: &str) {
     let secs = elapsed_ns as f64 / 1e9;
     let rate = if secs > 0.0 {
         work_per_iter * n as f64 / secs
@@ -41,11 +41,15 @@ fn print_throughput(work_per_iter: f64, n: u64, elapsed_ns: u128, unit: &str) {
     } else {
         format!("{rate:.2} {unit}/s")
     };
-    println!("Throughput: {rbuf}   ({per_ms:.3} ms/iter, {n} iter)");
+    println!("{label}: {rbuf}   ({per_ms:.3} ms/iter, {n} iter)");
 }
 
 // One step per document, so a measured iteration is one pass over the corpus.
 const STEPS: usize = 32;
+// Each sample runs the full attention window, deeper than any training step
+// reaches on this corpus.
+const SAMPLES: usize = 24;
+const TEMPERATURE: f64 = 0.5;
 const SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
@@ -79,6 +83,22 @@ impl Rng {
         }
         let v = self.random();
         std * (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos()
+    }
+
+    // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+    fn choice(&mut self, weights: &[f64]) -> usize {
+        let mut total = 0.0;
+        for &w in weights {
+            total += w;
+        }
+        let mut r = self.random() * total;
+        for (i, &w) in weights.iter().enumerate() {
+            r -= w;
+            if r < 0.0 {
+                return i;
+            }
+        }
+        weights.len() - 1
     }
 }
 
@@ -523,16 +543,6 @@ const DOCS: [&str; 32] = [
     "emmanuelle", "renae", "eveline", "yazmine", "corinna", "makyla", "marilynn", "malea",
 ];
 
-// Next-token predictions per iteration, which is what the throughput counts.
-// A step count would move with the corpus's document lengths.
-fn tokens_per_iteration(tok: &Tokenizer, steps: usize) -> f64 {
-    let mut total = 0;
-    for step in 0..steps {
-        total += BLOCK_SIZE.min(tok.encode(DOCS[step % DOCS.len()]).len() - 1);
-    }
-    total as f64
-}
-
 // One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
 fn train(steps: usize) -> f64 {
     let mut rng = Rng::new(SEED);
@@ -560,21 +570,75 @@ fn train(steps: usize) -> f64 {
     loss_value
 }
 
-fn main() {
-    println!("microgpt {STEPS} training steps: {ITERATIONS} iter (warmup {WARMUP})");
+// Unlike the example's `generate`, this never stops early on a BOS draw: the
+// position count has to be fixed for the throughput figure to mean anything.
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String {
+    let n_params = g.len();
+    let mut keys = empty_cache();
+    let mut values = empty_cache();
 
+    let mut token_id = tok.bos;
+    let mut sample = String::new();
+    for pos_id in 0..BLOCK_SIZE {
+        let logits = gpt(g, state, token_id, pos_id, &mut keys, &mut values);
+        let scaled: Vec<usize> = logits.iter().map(|&l| g.div_num(l, TEMPERATURE)).collect();
+        let probs = softmax(g, &scaled);
+        let weights: Vec<f64> = probs.iter().map(|&p| g.nodes[p].data).collect();
+        token_id = rng.choice(&weights);
+        if token_id != tok.bos {
+            sample.push(tok.uchars[token_id]);
+        }
+    }
+    g.rewind(n_params);
+    sample
+}
+
+// The forward path alone. Weights only steer which token is drawn, never how
+// much work a position costs, so an untrained model times the same as a trained
+// one and keeps the phase self-contained.
+fn infer(samples: usize) -> String {
+    let mut rng = Rng::new(SEED);
+    let tok = Tokenizer::new(&DOCS);
+    let mut g = Graph::new();
+    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+
+    let mut last = String::new();
+    for _ in 0..samples {
+        last = generate(&mut g, &state, &tok, &mut rng);
+    }
+    last
+}
+
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
+fn train_tokens(tok: &Tokenizer, steps: usize) -> f64 {
+    let mut total = 0;
+    for step in 0..steps {
+        total += BLOCK_SIZE.min(tok.encode(DOCS[step % DOCS.len()]).len() - 1);
+    }
+    total as f64
+}
+
+fn measure<T>(label: &str, work_per_iter: f64, mut f: impl FnMut() -> T) -> T {
     for _ in 0..WARMUP {
-        train(STEPS);
+        f();
     }
-
-    let mut loss = 0.0;
     let start = Instant::now();
-    for _ in 0..ITERATIONS {
-        loss = train(STEPS);
+    let mut result = f();
+    for _ in 1..ITERATIONS {
+        result = f();
     }
-    let elapsed = start.elapsed().as_nanos();
+    print_throughput(label, work_per_iter, ITERATIONS, start.elapsed().as_nanos(), "tokens");
+    result
+}
 
-    let tokens = tokens_per_iteration(&Tokenizer::new(&DOCS), STEPS);
-    print_throughput(tokens, ITERATIONS, elapsed, "tokens");
+fn main() {
+    println!("microgpt {STEPS} training steps, {SAMPLES} samples: {ITERATIONS} iter (warmup {WARMUP})");
+
+    let tok = Tokenizer::new(&DOCS);
+    let loss = measure("train", train_tokens(&tok, STEPS), || train(STEPS));
     println!("final loss = {loss:.6}");
+
+    let sample = measure("infer", (SAMPLES * BLOCK_SIZE) as f64, || infer(SAMPLES));
+    println!("last sample = {sample}");
 }

@@ -1,11 +1,12 @@
-//! microgpt — GPT training steps over a scalar autograd object graph.
+//! microgpt — training and inference over a scalar autograd object graph.
 //!
-//! A port of Andrej Karpathy's dependency-free Python microgpt, trimmed to the
-//! training loop. Copyright (c) Andrej Karpathy, MIT License.
+//! A port of Andrej Karpathy's dependency-free Python microgpt. Copyright (c)
+//! Andrej Karpathy, MIT License.
 //! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
 //!
-//! The JS and Rust arms in this directory are the same program. `train` reseeds
-//! and rebuilds the model, so all three report the same final loss.
+//! Two phases: `train` is forward, backward and Adam; `infer` is the forward
+//! path alone, over the full attention window. The JS and Rust arms are the
+//! same program, and both phases reseed, so all three print the same numbers.
 //!
 //!     mise run microgpt
 
@@ -16,6 +17,10 @@ use { Benchmark } from "core:benchmark";
 
 // One step per document, so a measured iteration is one pass over the corpus.
 global STEPS: i32 = 32;
+// Each sample runs the full attention window, deeper than any training step
+// reaches on this corpus.
+global SAMPLES: i32 = 24;
+global TEMPERATURE: f64 = 0.5;
 global SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
@@ -49,6 +54,22 @@ impl Rng {
         }
         let v = self.random();
         return std * f64::sqrt(-2.0 * f64::ln(u)) * f64::cos(2.0 * f64::PI * v);
+    }
+
+    // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+    fn choice(&mut self, weights: &List<f64>) -> i32 {
+        let mut total = 0.0;
+        for let w of weights {
+            total += *w;
+        }
+        let mut r = self.random() * total;
+        for let [i, w] of weights.into_iter().enumerate() {
+            r -= *w;
+            if r < 0.0 {
+                return i;
+            }
+        }
+        return weights.len() - 1;
     }
 }
 
@@ -493,9 +514,48 @@ fn train(steps: i32) -> f64 {
     return loss_value;
 }
 
+// Unlike the example's `generate`, this never stops early on a BOS draw: the
+// position count has to be fixed for the throughput figure to mean anything.
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String with stores[g, state] {
+    let n_params = g.len();
+    let mut keys = empty_cache();
+    let mut values = empty_cache();
+
+    let mut token_id = tok.bos;
+    let mut sample = String::with_capacity(BLOCK_SIZE);
+    for let pos_id of 0..<BLOCK_SIZE {
+        let logits = gpt(g, state, token_id, pos_id, &mut keys, &mut values);
+        let scaled: List<&mut Value> = logits.into_iter().map(|l| g.div_num(l, TEMPERATURE)).collect();
+        let probs = softmax(g, &scaled);
+        let weights: List<f64> = probs.into_iter().map(|p| p.data).collect();
+        token_id = rng.choice(&weights);
+        if token_id != tok.bos {
+            sample.push(tok.uchars[token_id]);
+        }
+    }
+    g.rewind(n_params);
+    return sample;
+}
+
+// The forward path alone. Weights only steer which token is drawn, never how
+// much work a position costs, so an untrained model times the same as a trained
+// one and keeps the phase self-contained.
+fn infer(samples: i32) -> String {
+    let mut rng = Rng::new(SEED);
+    let tok = Tokenizer::new(&DOCS);
+    let mut g = Graph::new();
+    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+
+    let mut last = "";
+    for let _ of 0..<samples {
+        last = generate(&mut g, &state, &tok, &mut rng);
+    }
+    return last;
+}
+
 // Next-token predictions per iteration, which is what the throughput counts.
 // A step count would move with the corpus's document lengths.
-fn tokens_per_iteration(tok: &Tokenizer, steps: i32) -> f64 {
+fn train_tokens(tok: &Tokenizer, steps: i32) -> f64 {
     let mut total = 0;
     for let step of 0..<steps {
         total += i32::min(BLOCK_SIZE, tok.encode(&DOCS[step % DOCS.len()]).len() - 1);
@@ -505,16 +565,22 @@ fn tokens_per_iteration(tok: &Tokenizer, steps: i32) -> f64 {
 
 test "smoke" {
     assert train(2) > 0.0;
+    assert infer(1).len() > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock) {
     let mut b = Benchmark {
-        name: `microgpt ${STEPS} training steps`,
+        name: `microgpt ${STEPS} training steps, ${SAMPLES} samples`,
         // Fixed rather than calibrated, so the three arms time equal work.
         iterations: 3,
-        work_per_iter: Option::Some(tokens_per_iteration(&Tokenizer::new(&DOCS), STEPS)),
         unit: "tokens",
     };
-    let loss = b.run("", || train(STEPS));
+
+    b.work_per_iter = Option::Some(train_tokens(&Tokenizer::new(&DOCS), STEPS));
+    let loss = b.run("train", || train(STEPS));
     b.println(`final loss = ${loss:.6f}`);
+
+    b.work_per_iter = Option::Some((SAMPLES * BLOCK_SIZE) as f64);
+    let sample = b.run("infer", || infer(SAMPLES));
+    b.println(`last sample = ${sample}`);
 }
