@@ -569,6 +569,27 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
 }
 
 impl Translator<'_> {
+    /// The parameters `func` keeps past its return, as the NIR passes ask it.
+    ///
+    /// The fixpoint's answer, not the declaration's: a function with a body
+    /// declares no `#[retain(...)]`, so reading the declaration here would tell
+    /// every NIR pass that every bodied function keeps nothing.
+    fn retained_param_names(&self, func: &TirFunction) -> Vec<String> {
+        let Some(positions) = self
+            .value_copy
+            .retained_params
+            .get(&func.module_source, &func.name)
+        else {
+            return Vec::new();
+        };
+        func.params
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| positions.contains(&u32::try_from(*i).unwrap()))
+            .map(|(_, p)| p.name.clone())
+            .collect()
+    }
+
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func);
         // Walk the body first so any locals allocated by per-arm
@@ -606,7 +627,7 @@ impl Translator<'_> {
             return_type: func.return_type,
             task_return_type: func.task_return_type,
             effects: func.effects.clone(),
-            retains: func.retained_param_names().map(str::to_string).collect(),
+            retains: self.retained_param_names(func),
             body,
             span: func.span,
             locals,

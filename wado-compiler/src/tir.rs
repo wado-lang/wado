@@ -6033,17 +6033,6 @@ impl LocalFrame {
 }
 
 impl TirFunction {
-    /// Whether a `#[retain(...)]` names this parameter as the retained one.
-    #[must_use]
-    pub fn retains_param(&self, name: &str) -> bool {
-        self.retains.iter().any(|r| r.source == name)
-    }
-
-    /// The parameters `#[retain(...)]` names, in declaration order.
-    pub fn retained_param_names(&self) -> impl Iterator<Item = &str> {
-        self.retains.iter().map(|r| r.source.as_str())
-    }
-
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.

@@ -1,0 +1,34 @@
+// A body states what it retains, so only the fixpoint knows it — a bodied
+// function carries no `#[retain(...)]` to read. NIR's passes ask the function
+// what it keeps, and SROA decomposes a local whose `&` reaches a call that
+// keeps nothing. Published from the declaration instead of from the fixpoint,
+// `hold` reads as keeping nothing, `origin` is decomposed and handed on as a
+// reconstructed snapshot, and the write below never reaches `held`.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Held {
+    p: &Point,
+}
+
+#[inline("never")]
+fn hold(p: &Point) -> Held {
+    return Held { p };
+}
+
+test "a retained reference outlives its referent's decomposition" {
+    let mut origin = Point { x: 1, y: 2 };
+    let held = hold(&origin);
+    assert origin.x == 1;
+    assert origin.y == 2;
+    origin.x = 100;
+    assert held.p.x == 100;
+}
+
+__DATA__
+{
+    "test": {}
+}
