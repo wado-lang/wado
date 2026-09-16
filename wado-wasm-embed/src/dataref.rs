@@ -208,8 +208,7 @@ fn parse_range(field: &str) -> Option<DataRange> {
 }
 
 /// `@<segment>:<offset>+<size>` is a range, and anything else names a function.
-/// The `@` is what tells them apart: a WIT-derived symbol carries `:`, so the
-/// shape of the field cannot.
+/// The `@` tells them apart, since a WIT-derived symbol carries `:` itself.
 fn parse_target(field: &str) -> Option<Target> {
     match field.strip_prefix('@') {
         Some(range) => parse_range(range).map(Target::Data),

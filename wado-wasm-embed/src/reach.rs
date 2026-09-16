@@ -342,8 +342,7 @@ impl Walk<'_, '_> {
 
     fn mark_func(&mut self, index: u32) {
         // A stub already sits in `live.funcs`, so that set alone cannot say
-        // whether the body has been walked. Something else reached it after
-        // all, and the body the stub would have taken away is kept.
+        // whether the body has been walked.
         let was_stub = self.live.stub.remove(&index);
         if !self.live.funcs.insert(index) && !was_stub {
             return;
