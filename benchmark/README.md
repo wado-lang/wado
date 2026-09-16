@@ -16,7 +16,7 @@ compression, parsing, and application server.
 
 ## Pure Computation
 
-### microgpt
+### MicroGPT
 
 32 training steps of a character-level GPT over a scalar autograd graph: 1
 layer, 16 embedding dimensions, 4 heads, 4,096 parameters. A port of
@@ -25,9 +25,9 @@ layer, 16 embedding dimensions, 4 heads, 4,096 parameters. A port of
 
 | Implementation |      Throughput |    ms/iter | vs best |
 | -------------- | --------------: | ---------: | ------- |
-| Rust           | 1.66 k tokens/s | 136.537 ms | 1.00x   |
-| JavaScript     | 583.79 tokens/s | 388.836 ms | 2.85x   |
-| **Wado**       | 526.38 tokens/s | 431.244 ms | 3.16x   |
+| Rust           | 1.65 k tokens/s | 137.838 ms | 1.00x   |
+| JavaScript     | 567.30 tokens/s | 400.139 ms | 2.90x   |
+| **Wado**       | 450.55 tokens/s | 503.829 ms | 3.66x   |
 
 The rows above measure loops over flat arrays. This one measures a graph of
 small heap objects: a step builds 31k to 89k nodes, walks them depth-first, and
@@ -39,10 +39,10 @@ growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
 that `&mut Value` and a node holds those handles as its children, which is the
 shape the Python original has. This row prices the difference.
 
-These three figures come from a 4-core Xeon @ 2.80GHz, one run each, not from
-the dedicated machine and the best of three the rest of this file uses. Read the
-`vs best` column; the absolute throughput is not comparable to the other tables.
-Re-measure the row on the benchmark machine when one is next taken.
+These three figures come from a 4-core Xeon @ 2.80GHz, not from the dedicated
+machine the rest of this file uses, so read the `vs best` column rather than the
+absolute throughput. Best of three, as everywhere else. Re-measure the row on
+the benchmark machine when one is next taken.
 
 ### Mandelbrot
 
