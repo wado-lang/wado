@@ -1,0 +1,80 @@
+// A `&mut` parameter reaches a write target through whatever holds it, not only
+// through the `&mut` bindings that name it directly. Held in a local aggregate
+// it neither escapes the callee nor forms an alias chain, so both the retention
+// walk and the direct-alias reading answer "nothing" and the caller of a
+// detached borrow neither refuses the call nor stores the temp back — the write
+// is lost. What a local may hand a reference to is the reading that covers it.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Holder {
+    p: &mut Payload,
+}
+
+struct Pair {
+    first: &mut Payload,
+    second: &mut Payload,
+}
+
+#[inline("never")]
+fn replace_through_a_field(p: &mut Payload) {
+    let h = Holder { p };
+    *h.p = Payload::Text(`xyz`);
+}
+
+#[inline("never")]
+fn replace_through_a_rebound_field(p: &mut Payload) {
+    let mut h = Holder { p: p };
+    h.p = p;
+    *h.p = Payload::Text(`rebound`);
+}
+
+#[inline("never")]
+fn replace_through_the_second_of_a_pair(a: &mut Payload, b: &mut Payload) {
+    let pair = Pair { first: a, second: b };
+    *pair.second = Payload::Text(`second`);
+}
+
+#[inline("never")]
+fn replace_through_a_list(p: &mut Payload) {
+    let held: List<&mut Payload> = [p];
+    *held[0] = Payload::Text(`listed`);
+}
+
+test "a whole-value write through a held reference writes back" {
+    let mut b = Bag { item: Payload::Empty };
+    replace_through_a_field(&mut b.item);
+    assert b.item matches { Text(t) && t == `xyz` };
+}
+
+test "a reference rebound into the aggregate writes back too" {
+    let mut b = Bag { item: Payload::Empty };
+    replace_through_a_rebound_field(&mut b.item);
+    assert b.item matches { Text(t) && t == `rebound` };
+}
+
+test "only the position actually written is replaced" {
+    let mut left = Bag { item: Payload::Empty };
+    let mut right = Bag { item: Payload::Empty };
+    replace_through_the_second_of_a_pair(&mut left.item, &mut right.item);
+    assert left.item matches { Empty };
+    assert right.item matches { Text(t) && t == `second` };
+}
+
+test "a write through a held reference in a list writes back" {
+    let mut b = Bag { item: Payload::Empty };
+    replace_through_a_list(&mut b.item);
+    assert b.item matches { Text(t) && t == `listed` };
+}
+
+__DATA__
+{
+    "test": {}
+}

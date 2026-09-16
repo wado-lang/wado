@@ -95,6 +95,13 @@ its own reference parameters it is `into_param` again, one level up. So a
 retention that ends in a local stops there instead of propagating out of every
 frame it passes through.
 
+A write need not name a parameter to land in one. A reference-typed local whose
+every assignment roots at one of this body's own parameters points nowhere else,
+so a write through it lands inside those parameters and is `into_param` at them
+rather than an escape. The reading is a must-alias one: a single assignment from
+anywhere the walk cannot name makes every write through that local an escape
+again, and a local derived from such a one is no better off.
+
 What a caller cannot resolve, it must assume: the published facts name retained
 positions and not where each landed, so a reader outside the fixpoint — the
 last-use walk, the write-back — takes the union of all three channels.
@@ -350,11 +357,12 @@ too. Only a parameter root is told apart, that being the one case where the two
 readings provably differ. Closing it takes separating a reference from what it
 points at in the carrier model.
 
-A retention into a reference-typed local reads as an escape. The bounded channel
-resolves a destination rooted at one of this body's own parameters; a local
-holding a reference derived from a parameter is not one, and the walk cannot say
-it holds only that, since a carrier set records what a local may hold and not
-what it must. Closing it takes a must-alias reading of such a local.
+A retention into a reference-typed local is bounded only where every assignment
+to that local roots at one of this body's own parameters. That is a must-alias
+reading, so one assignment from anywhere else — a call result, a global, another
+local with such an assignment — makes every write through the local an escape,
+however narrow the other assignments are. Closing it takes a per-program-point
+reading rather than one answer per local.
 
 ## References
 

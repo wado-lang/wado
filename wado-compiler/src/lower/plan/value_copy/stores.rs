@@ -273,11 +273,7 @@ pub fn compute_stored_params(
         );
     }
 
-    let carrying = RefCarrying {
-        structs: &project.structs,
-        type_table: &type_table,
-        memo: RefCell::new(IndexMap::default()),
-    };
+    let carrying = RefCarrying::new(&project.structs, &type_table);
     let mut rows = FunctorRows {
         minted: minted_functor_types(project, &type_table),
         facts: IndexMap::default(),
@@ -304,9 +300,14 @@ pub fn compute_stored_params(
                     builtins,
                     rows: &rows,
                 };
-                facts_of_body(&positions, None, &oracle, &type_table, &carrying, |w| {
-                    w.visit_block(body);
-                })
+                facts_of_body(
+                    &positions,
+                    None,
+                    &oracle,
+                    &type_table,
+                    &carrying,
+                    BodyRef::Block(body),
+                )
             };
             minted.extend(from_body);
             let mut merged = computed
@@ -389,14 +390,31 @@ fn declared_facts(func: &TirFunction) -> StoresFacts {
 /// Whether a value of a type can hold a reference, memoized per `TypeId`.
 /// `List::push` takes `Sink { r: &Item }` by value: a parameter carries a
 /// reference when its type holds one, not only when it is one.
-struct RefCarrying<'a> {
+pub struct RefCarrying<'a> {
     structs: &'a [TirStruct],
     type_table: &'a TypeTable,
     memo: RefCell<IndexMap<TypeId, bool>>,
 }
 
+impl<'a> RefCarrying<'a> {
+    #[must_use]
+    pub fn new(structs: &'a [TirStruct], type_table: &'a TypeTable) -> Self {
+        Self {
+            structs,
+            type_table,
+            memo: RefCell::new(IndexMap::default()),
+        }
+    }
+
+    #[must_use]
+    pub fn type_table(&self) -> &'a TypeTable {
+        self.type_table
+    }
+}
+
 impl RefCarrying<'_> {
-    fn holds(&self, type_id: TypeId) -> bool {
+    #[must_use]
+    pub fn holds(&self, type_id: TypeId) -> bool {
         self.walk(type_id, &mut Vec::new()).0
     }
 
@@ -485,6 +503,185 @@ impl RefCarrying<'_> {
     }
 }
 
+/// The tree a body walk starts from: a function's block, or the expression a
+/// closure's body is. Naming it lets one body be walked by two visitors.
+#[derive(Clone, Copy)]
+enum BodyRef<'a> {
+    Block(&'a TirBlock),
+    Expr(&'a TirExpr),
+}
+
+impl BodyRef<'_> {
+    fn walk(self, visitor: &mut impl TirRefVisitor) {
+        match self {
+            BodyRef::Block(block) => visitor.visit_block(block),
+            BodyRef::Expr(expr) => visitor.visit_expr(expr),
+        }
+    }
+}
+
+/// Where a reference-typed local must point.
+///
+/// The carrier map is a may-set: a local carries a position when some
+/// assignment derived from it. This is the must-set — a local is anchored only
+/// where every assignment to it roots at one of this body's parameters — so a
+/// write through an anchored local lands inside those parameters and nowhere
+/// else, which is what lets the bounded channel take it instead of an escape.
+#[derive(Default)]
+struct Anchors {
+    at: IndexMap<u32, IndexSet<u32>>,
+}
+
+impl Anchors {
+    /// The positions a write through `local` must land in, or `None` where
+    /// some assignment to it goes somewhere this walk cannot name.
+    fn of(&self, local: u32) -> Option<&IndexSet<u32>> {
+        self.at
+            .get(&local)
+            .filter(|positions| !positions.is_empty())
+    }
+}
+
+/// Where one assignment's value came from, reduced to what anchoring needs.
+#[derive(Clone, Copy)]
+enum Source {
+    Param(u32),
+    Local(u32),
+    /// A call result, an rvalue, a global — a root this walk cannot name.
+    Unknown,
+}
+
+/// Every assignment to a local in one body, as `(local, source)`.
+struct AnchorScan<'a> {
+    param_of_local: &'a IndexMap<u32, u32>,
+    writes: Vec<(u32, Source)>,
+}
+
+impl AnchorScan<'_> {
+    fn source_of(&self, value: &TirExpr) -> Source {
+        match StoresWalker::place_root(unwrap_borrow(value)) {
+            Some((root, _)) => match self.param_of_local.get(&root) {
+                Some(&position) => Source::Param(position),
+                None => Source::Local(root),
+            },
+            None => Source::Unknown,
+        }
+    }
+
+    fn bind(&mut self, local: u32, value: &TirExpr) {
+        if self.param_of_local.contains_key(&local) {
+            return;
+        }
+        let source = self.source_of(value);
+        self.writes.push((local, source));
+    }
+
+    fn bind_pattern(&mut self, pattern: &TirPattern, value: &TirExpr) {
+        let mut binds: IndexSet<u32> = IndexSet::default();
+        analyze::collect_pattern_bindings(pattern, &mut binds);
+        for b in binds {
+            self.bind(b, value);
+        }
+    }
+}
+
+impl TirRefVisitor for AnchorScan<'_> {
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        match &stmt.kind {
+            TirStmtKind::Let {
+                local_index, value, ..
+            } => self.bind(*local_index, value),
+            TirStmtKind::LetDestructure { pattern, value, .. } => {
+                self.bind_pattern(pattern, value);
+            }
+            _ => {}
+        }
+        self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        match &expr.kind {
+            TirExprKind::Assign { target, value } => {
+                if let TirExprKind::Local { index, .. } = &target.kind {
+                    self.bind(*index, value);
+                }
+            }
+            TirExprKind::Match {
+                expr: scrutinee,
+                arms,
+            } => {
+                for arm in arms {
+                    self.bind_pattern(&arm.pattern, scrutinee);
+                }
+            }
+            // A closure body binds in its own namespace, and is anchored there.
+            TirExprKind::Closure { .. } => return,
+            _ => {}
+        }
+        self.walk_expr(expr);
+    }
+}
+
+/// Settle [`Anchors`] over one body's assignments. A local whose every
+/// assignment resolves to a parameter is anchored at those positions; one with
+/// an unnameable source, or one derived from a local that has one, is not.
+fn anchors_of_body(param_of_local: &IndexMap<u32, u32>, body: BodyRef) -> Anchors {
+    let mut scan = AnchorScan {
+        param_of_local,
+        writes: Vec::new(),
+    };
+    body.walk(&mut scan);
+
+    let mut loose: IndexSet<u32> = IndexSet::default();
+    for &(local, source) in &scan.writes {
+        if matches!(source, Source::Unknown) {
+            loose.insert(local);
+        }
+    }
+    // A local derived from an unanchored one is unanchored too, and a local
+    // nothing here assigns is a write this walk did not model. Both only
+    // spread, so the loop settles.
+    loop {
+        let mut grew = false;
+        for &(local, source) in &scan.writes {
+            let Source::Local(root) = source else {
+                continue;
+            };
+            let unmodelled = !scan.writes.iter().any(|(bound, _)| *bound == root);
+            if (loose.contains(&root) || unmodelled) && loose.insert(local) {
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+
+    let mut anchors = Anchors::default();
+    loop {
+        let mut grew = false;
+        for &(local, source) in &scan.writes {
+            if loose.contains(&local) {
+                continue;
+            }
+            let positions = match source {
+                Source::Param(position) => {
+                    let mut one = IndexSet::default();
+                    one.insert(position);
+                    one
+                }
+                Source::Local(root) => anchors.at.get(&root).cloned().unwrap_or_default(),
+                Source::Unknown => continue,
+            };
+            grew |= extend(anchors.at.entry(local).or_default(), &positions);
+        }
+        if !grew {
+            break;
+        }
+    }
+    anchors
+}
+
 /// Walk one body over `params`, given as `(local index, type)` so a closure's
 /// own parameters are read the same way a function's are. `tail` is the
 /// expression a body without a `return` yields, which a closure has and a
@@ -496,7 +693,7 @@ fn facts_of_body(
     oracle: &StoresOracle,
     type_table: &TypeTable,
     carrying: &RefCarrying,
-    walk: impl Fn(&mut StoresWalker),
+    body: BodyRef,
 ) -> (StoresFacts, Vec<(TypeId, StoresFacts)>) {
     let mut carries: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     let mut param_of_local: IndexMap<u32, u32> = IndexMap::default();
@@ -507,9 +704,11 @@ fn facts_of_body(
             carries.entry(*local_index).or_default().insert(position);
         }
     }
+    let anchors = anchors_of_body(&param_of_local, body);
     let mut walker = StoresWalker {
         carries,
         param_of_local,
+        anchors,
         oracle,
         type_table,
         carrying,
@@ -521,7 +720,7 @@ fn facts_of_body(
     // carrying a reference backwards needs another. Repeat until nothing grows.
     loop {
         walker.grew = false;
-        walk(&mut walker);
+        body.walk(&mut walker);
         if let Some(tail) = tail {
             let carried = walker.carries(tail);
             walker.reaches_result(&carried);
@@ -538,6 +737,10 @@ struct StoresWalker<'a> {
     /// Which parameter position each parameter's local holds, so a write
     /// through one is recorded as landing there rather than out of sight.
     param_of_local: IndexMap<u32, u32>,
+    /// Where a write through a reference-typed local must land, for the locals
+    /// that hold a reference to one of this body's own parameters and nothing
+    /// else. See [`Anchors`].
+    anchors: Anchors,
     oracle: &'a StoresOracle<'a>,
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
@@ -744,7 +947,7 @@ impl StoresWalker<'_> {
             self.oracle,
             self.type_table,
             self.carrying,
-            |walker| walker.visit_expr(body),
+            BodyRef::Expr(body),
         );
         self.minted.extend(nested);
         self.mint(callee_type, facts);
@@ -780,17 +983,25 @@ impl StoresWalker<'_> {
 
     /// Where a reference written into `place` ends up. Into a local's own
     /// aggregate it makes that local a carrier; through one of this body's own
-    /// reference parameters it is a bounded retention the caller resolves;
-    /// anywhere else the caller cannot see it.
+    /// reference parameters, or a local anchored at some of them, it is a
+    /// bounded retention the caller resolves; anywhere else the caller cannot
+    /// see it.
     fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>) {
         match Self::place_root(place) {
             Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
                 self.carry_into(root, carried);
             }
-            Some((root, _)) => match self.param_of_local.get(&root) {
-                Some(&destination) => self.retained_into(destination, carried),
-                None => self.escape(carried),
-            },
+            Some((root, _)) => {
+                if let Some(&destination) = self.param_of_local.get(&root) {
+                    self.retained_into(destination, carried);
+                } else if let Some(destinations) = self.anchors.of(root).cloned() {
+                    for destination in destinations {
+                        self.retained_into(destination, carried);
+                    }
+                } else {
+                    self.escape(carried);
+                }
+            }
             None => self.escape(carried),
         }
     }

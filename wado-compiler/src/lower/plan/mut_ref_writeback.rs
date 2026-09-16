@@ -3,7 +3,7 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::stores::{FunctorRows, StoredParams};
+use super::value_copy::stores::{FunctorRows, RefCarrying, StoredParams};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -27,7 +27,8 @@ pub fn insert_write_backs(
 ) -> Result<(), Bail> {
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let replaced = whole_value_writes::compute(flat, call_graph, &type_table);
+    let carrying = RefCarrying::new(&flat.structs, &type_table);
+    let replaced = whole_value_writes::compute(flat, call_graph, &carrying);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
@@ -39,12 +40,13 @@ pub fn insert_write_backs(
                 whole_value_writes::replaced_locals(
                     whole_value_writes::Body::Block(body),
                     &replaced,
-                    &type_table,
+                    &carrying,
                 )
             })
             .unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
+            carrying: &carrying,
             escaping,
             functor_rows,
             replaced: &replaced,
@@ -86,6 +88,7 @@ pub fn insert_write_backs(
 
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
+    carrying: &'a RefCarrying<'a>,
     escaping: &'a FuncKeyMap<IndexSet<u32>>,
     /// What a call through a function value of each functor type keeps. Read
     /// where no callee name is available, so an indirect call is refused on the
@@ -226,6 +229,7 @@ impl WriteBack<'_> {
         let local_base = u32::try_from(param_count).unwrap();
         let mut inner = WriteBack {
             type_table: self.type_table,
+            carrying: self.carrying,
             escaping: self.escaping,
             functor_rows: self.functor_rows,
             replaced: self.replaced,
@@ -234,7 +238,7 @@ impl WriteBack<'_> {
             replaced_locals: whole_value_writes::replaced_locals(
                 whole_value_writes::Body::Expr(body),
                 self.replaced,
-                self.type_table,
+                self.carrying,
             ),
             local_count: local_base + u32::try_from(body_locals.len()).unwrap(),
             local_base,

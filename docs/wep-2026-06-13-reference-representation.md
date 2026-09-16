@@ -206,10 +206,17 @@ fix to conform; none should be preserved.
 
   Both halves follow the borrow, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
-  storage through a `&mut *r` reborrow, through a capture, and through the
-  `&mut` bindings that carry a parameter on (`let q = p; *q = v`). A closure
-  numbers its locals in its own namespace, so what it replaces there says
-  nothing about the enclosing slot of the same index.
+  storage through a `&mut *r` reborrow, through a capture, through the `&mut`
+  bindings that carry a parameter on (`let q = p; *q = v`), and through
+  whatever holds the reference in between. A reference put into a value comes
+  back out of any reference to that value, so a struct field, a list element
+  and a call result are all routes to the storage it names, and a write through
+  one replaces there. Which storage a call hands back is read off a body this
+  reading does not have, so a result whose type can hold a reference is read as
+  handing on every argument; naming a place the callee does not replace costs a
+  redundant store, never a lost write. A closure numbers its locals in its own
+  namespace, so what it replaces there says nothing about the enclosing slot of
+  the same index.
 
   What still drops, and what closing it takes:
 
