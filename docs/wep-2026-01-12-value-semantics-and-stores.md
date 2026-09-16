@@ -383,12 +383,14 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Known gaps
 
-The write-back orders a read against a call by where the two sit in the source,
-which is the execution order only for straight-line code. A read inside a loop
-runs again after a call in that loop, and one inside a closure runs wherever the
-closure is called, so a local either of them reads counts as read after every
-call in the body. Closing it takes a control-flow reading, which this pass has
-none of: it rewrites a tree on the way down and never builds a graph to ask.
+The write-back pins a local any loop or closure in the body reads, rather than
+only one that can reach a read after the call. A loop is the body's only
+backward edge — a labelled break leaves forwards, and nothing else jumps — so
+source order answers every other shape exactly, including two arms of the same
+branch. Inside a loop it answers nothing, and a closure body carries no order
+against a call at all, so both are taken whole. Closing that takes a
+control-flow reading, which this pass never builds: it rewrites a tree on the
+way down.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
