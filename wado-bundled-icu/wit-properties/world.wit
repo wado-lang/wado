@@ -1,0 +1,27 @@
+// The shippable `core:icu` stage-1 surface: Unicode character properties as
+// code point ranges, with no `resource` anywhere, so a Wado program can import
+// the component today. `wit/world.wit` keeps the full spike surface.
+package wado:icu@0.1.0;
+
+interface properties {
+  /// Inclusive code point ranges of a property value, lowest first.
+  ///
+  /// `value` absent names a binary property (`Alphabetic`, `Hex_Digit`, …).
+  /// `value` present names an enumerated one, `property` being `gc` (whose
+  /// value may be a group such as `L`), `sc`, `bc`, `lb`, `wb`, `sb`, `gcb`,
+  /// `incb`, `ea`, `hst`, `nt`, `insc`, `jt`, `jg`, `vo` or `ccc`.
+  ///
+  /// Names match as UAX #44 matches them, loosely. `none` when the property or
+  /// the value is not one this build answers — never an approximation, since a
+  /// caller complementing the result would admit real members rather than miss
+  /// some.
+  ranges: func(property: string, value: option<string>) -> option<list<tuple<u32, u32>>>;
+
+  /// Whether `ch` has the property value `ranges` describes, without building
+  /// the ranges. `none` on the same unknown names.
+  contains: func(property: string, value: option<string>, ch: char) -> option<bool>;
+}
+
+world icu-properties {
+  export properties;
+}

@@ -1,14 +1,46 @@
-# wado-bundled-icu (technical-validation spike)
+# wado-bundled-icu
 
-A proof-of-concept that bundles [ICU4X](https://github.com/unicode-org/icu4x)
-into a self-contained **Wasm Component Model** component, the way
-`wado-bundled-libm` bundles libm. This crate is **not** wired into the compiler
-yet; it exists to validate feasibility, the toolchain, and artifact size.
+Bundles [ICU4X](https://github.com/unicode-org/icu4x) into a self-contained
+**Wasm Component Model** component, the way `wado-bundled-libm` bundles libm.
+See [WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md).
 
 It is its own Cargo workspace root so its heavy dependency tree (icu +
 wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
 
-## What it exposes
+The crate builds one of two worlds:
+
+| build                       | world            | WIT               | what it is                                   |
+| --------------------------- | ---------------- | ----------------- | -------------------------------------------- |
+| `cargo build --release`     | `icu-properties` | `wit-properties/` | the shippable `core:icu` stage-1 surface     |
+| `--release --features spike` | `icu`            | `wit/`            | the wider technical-validation surface below |
+
+## The shippable surface: character properties
+
+Resource-free, so the Wado import path consumes it today. Two operations —
+`ranges` for a property's inclusive code point ranges, `contains` for one
+character — each taking a property name and, for an enumerated property, a
+value. Names match as UAX #44 matches them, loosely.
+
+**287 KB** import-free component, covering 63 binary properties, 15 enumerated
+ones, and General_Category groups (`L` as well as `Lu`).
+
+Three things it deliberately does not answer, so a caller rejects rather than
+approximates — `\P{...}` complements what comes back, so a close-enough answer
+admits real members rather than missing some:
+
+- **`Block`** — ICU4X ships no Block data.
+- **The UCD's contributory `Other_*` properties** — UAX #44 defines them as
+  inputs to derived properties, not as properties to query, and ICU4X follows
+  that.
+- **`Decomposition_Type`** — ICU4X ships no data for it.
+
+None of the three occurs in a live rule anywhere in
+[antlr/grammars-v4](https://github.com/antlr/grammars-v4) (1,150 grammars):
+`Block` and `Decomposition_Type` never appear at all, and every `Other_*`
+occurrence sits in a comment — Python's and Rust's lexers spell the code points
+out by hand instead.
+
+## What the spike surface exposes
 
 See [`wit/world.wit`](wit/world.wit). The current surface is the
 **string-oriented** slice of ICU4X plus character properties:
@@ -99,7 +131,8 @@ maps `panic` straight to a Wasm trap (Wado has no exceptions). It builds for
 `wasm32-unknown-unknown` (no WASI, no std) so the module imports nothing.
 
 ```sh
-# 1. Compile the no_std core module (target set in .cargo/config.toml)
+# 1. Compile the no_std core module (target set in .cargo/config.toml).
+#    Add `--features spike` for the wider surface the sections above measure.
 cargo build --release
 
 # 2. Wrap it into a component using the component-type section wit-bindgen
