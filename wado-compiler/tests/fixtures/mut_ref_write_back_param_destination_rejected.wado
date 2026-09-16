@@ -1,0 +1,42 @@
+// The callee parks the borrow in another of its own arguments, and that
+// argument is a parameter of this frame — so the caller still holds it after
+// the call returns. There is no point here late enough to store the temp back,
+// and a write-back emitted anyway would leave `h.p` naming the temp.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Holder {
+    p: &mut Payload,
+}
+
+#[inline("never")]
+fn stash(slot: &mut Holder, p: &mut Payload) {
+    slot.p = p;
+}
+
+struct Bag {
+    item: Payload,
+}
+
+#[inline("never")]
+fn outer(h: &mut Holder, b: &mut Bag) {
+    stash(h, &mut b.item);
+}
+
+test "unreachable" {
+    let mut bag = Bag { item: Payload::Empty };
+    let mut spare = Payload::Empty;
+    let mut h = Holder { p: &mut spare };
+    outer(&mut h, &mut bag);
+    *h.p = Payload::Text("filled");
+    assert bag.item matches { Text(_) };
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "stores it, so it outlives the call"
+}

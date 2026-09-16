@@ -4286,10 +4286,14 @@ pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String 
     }
     unparse_type_into(&b.ty, &mut out);
     out.push_str(" {\n");
-    for line in lines {
-        out.push_str("    ");
-        out.push_str(&line);
-        out.push('\n');
+    // A member's signature is several lines once it carries an attribute, and
+    // every one of them sits inside the block.
+    for member in lines {
+        for line in member.lines() {
+            out.push_str("    ");
+            out.push_str(line);
+            out.push('\n');
+        }
     }
     out.push('}');
     out

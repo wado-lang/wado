@@ -1,0 +1,42 @@
+// The same, with the destination reaching the parameter through a local of
+// this body. Asking only whether the destination is spelled as a parameter
+// would let this one through.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Holder {
+    p: &mut Payload,
+}
+
+#[inline("never")]
+fn stash(slot: &mut Holder, p: &mut Payload) {
+    slot.p = p;
+}
+
+struct Bag {
+    item: Payload,
+}
+
+#[inline("never")]
+fn outer(h: &mut Holder, b: &mut Bag) {
+    let d = h;
+    stash(d, &mut b.item);
+}
+
+test "unreachable" {
+    let mut bag = Bag { item: Payload::Empty };
+    let mut spare = Payload::Empty;
+    let mut h = Holder { p: &mut spare };
+    outer(&mut h, &mut bag);
+    *h.p = Payload::Text("filled");
+    assert bag.item matches { Text(_) };
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "stores it, so it outlives the call"
+}

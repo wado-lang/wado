@@ -75,7 +75,6 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
         flat,
         &pre_boxing_calls,
         &retained.stored_params,
-        &retained.bounded,
         &retained.rows,
         errors,
     )?;

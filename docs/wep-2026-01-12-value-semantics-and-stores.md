@@ -219,13 +219,9 @@ the compiler may stop doing to the argument:
   outlives the call, so the call is no place to write it. Where no place in the
   body can be written back to, the call is refused — which is why an indirect
   call must read the same answer as a direct one, or the same program is
-  accepted through a function value and refused by name. Where the retention
-  names a destination the caller owns, the refusal reads it as a move does: the
-  borrow outlives that destination and no longer, so a call whose destinations
-  are all past their last read is written back after all. A read inside a loop
-  is a read after every call that loop encloses, and a borrow of a destination
-  taken outside the call is a second name for it that says nothing about where
-  the read through it happens, so both count as a read after.
+  accepted through a function value and refused by name. This reads the union
+  and not the destination, unlike the move above: a refusal is a correctness
+  rule, and the reading that would sharpen it is a gap below.
 - A constant is not forwarded into a retained parameter.
 - A call whose result could embed a retained reference is not folded at compile
   time, since compile-time evaluation has no reference values to embed and the
@@ -386,9 +382,9 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Known gaps
 
-Two readings the compiler does not have account for four of these: a
-shape-level points-to answer, and a per-program-point one. The fifth is a
-change to the lattice the rest are read over.
+Each says which reading the compiler does not have. The first two want the same
+shape-level points-to answer, the next two a reading of this body finer than one
+answer per local, and the last a change to the lattice the rest are read over.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
@@ -406,15 +402,16 @@ claim useful — it stops at the frame that filled the container — and also wh
 bounds it. Closing that would take a summary of what a parameter holds on entry,
 which is the same points-to answer.
 
-The write-back pins a local any closure in the body reads, rather than one whose
-closure can still be called after the call. A loop is the body's only backward
-edge — a labelled break leaves forwards, and nothing else jumps — so a read
-inside a loop is a read after exactly the calls that loop encloses, and source
-order answers every other shape, two arms of the same branch included. A closure
-has no such bound: where its body sits says nothing about where it runs, so
-every local it reads is pinned for the whole body. Closing that takes knowing
-where a closure value can still be called from, which is the same points-to
-answer as above.
+The write-back reads the union where the move reads the destination. Refusing a
+write-back is a correctness rule rather than a precision one — a `&mut` to a
+detached place cannot be stored back where anything can still read the borrow —
+and the destination would sharpen it as it sharpens a move. What it would take
+is the reading the move has and this pass does not: whether the destination
+leaves the frame. A parameter does, a local assigned from one does, and a local
+this body built does not until something carries it out — which is a per-local
+escape answer over this body, published where the pass can read it. Sharpening
+it on the last read alone is unsound, and was: a destination that is a parameter
+is read by the caller after every point in this frame.
 
 A retention into a reference-typed local is bounded only where every assignment
 to that local roots at one of this body's own parameters. That is a must-alias

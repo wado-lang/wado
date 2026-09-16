@@ -481,8 +481,15 @@ impl FunctorRows {
             functor_params: row.functor_params.clone(),
             facts: StoresFacts::default(),
         });
-        let mut grew = entry.target != row.target;
-        entry.target = row.target;
+        // Two mints can share a key — a synthesised expression carries no
+        // distinct range — and the fixpoint only terminates while every step
+        // climbs. Disagreeing targets therefore join to the one that names no
+        // body, rather than the later one replacing the earlier for ever.
+        let mut grew = false;
+        if entry.target != row.target && !matches!(entry.target, MintTarget::Opaque) {
+            entry.target = MintTarget::Opaque;
+            grew = true;
+        }
         grew |= extend(&mut entry.functor_params, &row.functor_params);
         grew |= entry.facts.absorb(&row.facts);
         grew
