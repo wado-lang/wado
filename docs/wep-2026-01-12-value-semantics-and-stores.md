@@ -202,6 +202,15 @@ the compiler may stop doing to the argument:
   time, since compile-time evaluation has no reference values to embed and the
   result would be a snapshot the next write leaves stale.
 
+What it buys on today's corpus is nothing. Taking the row, the bounded
+destination, the element gate and a Component Model import's owned result all
+together leaves every benchmark and every size program byte-identical. The
+conservatism they remove is real — 785 generated `_parse_*` functions keep
+nothing, so `fn(&mut Parser)` reads empty where it used to read as keeping
+everything — but the locals it stops pinning have later uses anyway, so no move
+and no scalarization follows. Retention is carried for correctness, and a
+precision claim about it is worth only what a measurement says it is.
+
 ### Closures Capture by Reference
 
 A closure auto-captures each free variable by reference, and the reference kind
@@ -263,6 +272,15 @@ type, and nothing is checked when one coerces to the other. It is also what lets
 every reader of an indirect call read the same answer — the copy analysis, the
 last-use walk and the write-back — rather than each taking a reading of its own.
 
+The row is computed twice, since those readers sit on either side of boxing, and
+each sees only the tree of its own phase. A pass minting a function value
+between the two would leave the earlier reader's answer too narrow, so the count
+of minting expressions is carried forward and asserted not to grow. Closure
+lifting is the one pass there, and it mints nothing: it rewrites a reference to
+a named function into a zero-capture closure forwarding to that same function.
+The count is what the assertion compares, because boxing rewrites the types the
+row is keyed on.
+
 ### Component Model Boundaries
 
 Retention is a within-component concern. A call crossing a Component Model
@@ -296,8 +314,8 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Roadmap
 
-In order. Each is named rather than numbered, so a reference to one from the
-code survives the list changing around it.
+Named rather than numbered, so a reference to one from the code survives the
+list changing around it.
 
 ### A bounded destination the caller can read
 
@@ -311,16 +329,11 @@ Done when a reader outside the fixpoint can ask where a position landed, an
 argument retained into a local the caller owns is pinned only for that local's
 extent rather than for the frame, and a fixture shows the difference.
 
-### The numbers
-
-Record the effect of the retention redesign on `benchmark/` and `wasm-size/`.
-The corpus cost of the old conservative reading is known: 666 functor-typed
-parameters carry a reference, and 661 of them are one shape — the
-`entry: fn(&mut Parser)` that every Gale-generated parser's `_run_parse_entry`
-takes — so the reading was paid on the hot path of every generated parser and
-almost nowhere else.
-
-Done when both READMEs carry the new numbers.
+What it has to work with is small: 19 functions across the Gale corpus publish a
+bounded retention at all, and every one is a container insert — `List::push`'s
+`value` into `self`, `array_copy`'s `src` into `dst`, `index_assign`'s `value`
+into `self` — where the destination outlives the argument anyway. Pinning to the
+destination's extent and pinning to the frame are the same answer there.
 
 ## Known gaps
 
@@ -329,16 +342,6 @@ joins every function value of one type into a single answer, so one comparator
 that retains an argument coarsens every other call through the same type.
 Closing it takes knowing which function values reach which call, which is a
 points-to analysis and nothing here is one.
-
-A pass between the two rows could widen one behind the other's back. The row is
-computed twice — once before boxing, for the write-back, and once after closure
-lifting, for the last-use walk — and each reader sees only the tree of its own
-phase. Lifting mints nothing new: it rewrites a reference to a named function
-into a zero-capture closure forwarding to that same function, so the retention
-is the one the reference already carried. A later synthesis pass that minted a
-function value of an existing functor type with wider retention would leave the
-earlier reader's answer too narrow. Closing it takes a check that the minted set
-does not grow between the two, rather than the reading of the one pass there is.
 
 An element claim on a local hands on everything that local carries. There is one
 carrier set per value, so "what was written into this array" and "what a
