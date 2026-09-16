@@ -70,11 +70,11 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // here as well as after closure lifting: a write-back needs the answer
     // before boxing, while `&mut T` still names its referent.
     let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
-    let retained = value_copy::stores::compute_stored_params(flat, &pre_boxing_calls, &builtins);
+    let retained = value_copy::retention::compute_retention(flat, &pre_boxing_calls, &builtins);
     mut_ref_writeback::insert_write_backs(
         flat,
         &pre_boxing_calls,
-        &retained.stored_params,
+        &retained.retained_params,
         &retained.rows,
         errors,
     )?;

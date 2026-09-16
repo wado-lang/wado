@@ -70,7 +70,7 @@ Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-ma
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 

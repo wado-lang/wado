@@ -56,7 +56,7 @@ omission goes in Decision.
 - [Data Section (`__DATA__`)](./wep-2026-01-12-data-section.md)
 - [Literal Type Conversion Rules](./wep-2026-01-12-literal-type-conversion.md)
 - [Resource Lifecycle Management (RAII)](./wep-2026-01-12-resource-lifecycle.md)
-- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
 - [Struct and Trait System](./wep-2026-01-13-struct-and-trait.md)
 - [Compiler Pipeline Refactoring](./wep-2026-01-14-compiler-pipeline-refactoring.md)
 - [String Type Design](./wep-2026-01-15-string-type-design.md)

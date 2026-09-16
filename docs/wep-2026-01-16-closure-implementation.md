@@ -256,7 +256,7 @@ Each closure literal generates an anonymous functor struct paired with a functio
 - Specialised path: when the closure type is known concretely at the use site (parameter position, return position with unifiable branches, generic-bound parameter), the function is monomorphized for the specific functor. Calls are direct and inlinable.
 - Canonical path: when the closure must be type-erased (struct field, mixed-branch return, container element, etc.), the value is wrapped in a canonical signature-keyed struct `(env, funcref)`. Calls dispatch indirectly through a funcref.
 
-Escape analysis drives the choice. From the user's perspective both paths satisfy the same `fn(T) -> U` type. Captures resolve to references stored in the functor's environment, and a closure that escapes its declaring scope needs nothing arranged for them: each referent is a GC allocation already (see [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md) §2).
+Escape analysis drives the choice. From the user's perspective both paths satisfy the same `fn(T) -> U` type. Captures resolve to references stored in the functor's environment, and a closure that escapes its declaring scope needs nothing arranged for them: each referent is a GC allocation already (see [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md) §2).
 
 `fn` vs `fn mut` lives entirely in the type system; both compile to identical Wasm calling conventions. The full Wasm GC layout, the internal trait machinery, and the migration plan from the current implementation are documented in [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md).
 
@@ -319,7 +319,7 @@ Future: resource adapter — wrap closures as CM resources with a `call` method 
 ## References
 
 - [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md) — Wasm GC layout, internal trait machinery, migration plan.
-- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
 - [Effect System Design](./wep-2026-01-27-effect-system-design.md)
 - [Iterator Traits Design](./wep-2026-01-24-iterator-traits.md)
 - [Rust Closure Implementation](https://doc.rust-lang.org/book/ch13-01-closures.html)

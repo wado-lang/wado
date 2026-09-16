@@ -3,7 +3,7 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::stores::{FunctorRows, RefCarrying, StoredParams};
+use super::value_copy::retention::{FunctorRows, RefCarrying, RetainedParams};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -21,7 +21,7 @@ use crate::token::Span;
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
-    escaping: &StoredParams,
+    escaping: &RetainedParams,
     functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {

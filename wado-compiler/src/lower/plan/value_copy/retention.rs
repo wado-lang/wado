@@ -1,13 +1,13 @@
-//! Interprocedural reference-storage analysis: which reference-parameter
+//! Interprocedural reference-retention analysis: which reference-parameter
 //! *positions* a function may persist beyond its call. A least fixpoint over
 //! the call graph, sound as long as `carries` over-approximates.
 //!
 //! Three channels, apart by where the reference lands:
-//! [`StoresFacts::escapes`] reaches somewhere the caller cannot see,
-//! [`StoresFacts::into_result`] reaches the return value, and
-//! [`StoresFacts::into_param`] reaches a parameter the caller named, which the
+//! [`RetentionFacts::escapes`] reaches somewhere the caller cannot see,
+//! [`RetentionFacts::into_result`] reaches the return value, and
+//! [`RetentionFacts::into_param`] reaches a parameter the caller named, which the
 //! caller resolves against its own argument there. Why the first two cannot be
-//! one set is in WEP 2026-05-21; [`compute_stored_params`] publishes the union,
+//! one set is in WEP 2026-05-21; [`compute_retention`] publishes the union,
 //! which is what a reader with no argument list must assume.
 //!
 //! An indirect call reads [`FunctorRows`], which answers per call site where it
@@ -31,11 +31,11 @@ use crate::token::Span;
 use std::cell::RefCell;
 
 /// Per-function set of reference-parameter positions the function may store.
-pub type StoredParams = FuncKeyMap<IndexSet<u32>>;
+pub type RetainedParams = FuncKeyMap<IndexSet<u32>>;
 
 /// The three ways a reference parameter outlives its call. See the module doc.
 #[derive(Clone, Default)]
-struct StoresFacts {
+struct RetentionFacts {
     escapes: IndexSet<u32>,
     into_result: IndexSet<u32>,
     /// Retained parameter to the parameters it lands in. A destination the
@@ -49,7 +49,7 @@ struct StoresFacts {
     elements: IndexSet<u32>,
 }
 
-impl StoresFacts {
+impl RetentionFacts {
     /// Whether any channel claims `source`.
     fn claims(&self, source: u32) -> bool {
         self.escapes.contains(&source)
@@ -58,7 +58,7 @@ impl StoresFacts {
     }
 
     /// Absorb `other`, reporting whether anything grew.
-    fn absorb(&mut self, other: &StoresFacts) -> bool {
+    fn absorb(&mut self, other: &RetentionFacts) -> bool {
         let claimed_before: Vec<u32> = self
             .escapes
             .iter()
@@ -283,7 +283,7 @@ enum MintTarget {
 struct MintRow {
     target: MintTarget,
     functor_params: IndexSet<u32>,
-    facts: StoresFacts,
+    facts: RetentionFacts,
 }
 
 /// One parameter namespace a call's arguments land in. `Unfollowed` is a body
@@ -348,7 +348,7 @@ pub struct FunctorRows {
     /// reached yet" stay apart: the first is read conservatively, the second is
     /// the bottom a least fixpoint starts from.
     minted: IndexSet<TypeId>,
-    facts: IndexMap<TypeId, StoresFacts>,
+    facts: IndexMap<TypeId, RetentionFacts>,
     /// Each mint's own facts, whose parameters a call resolving to it feeds,
     /// and which of those parameters take a function value.
     per_mint: IndexMap<MintId, MintRow>,
@@ -376,7 +376,7 @@ pub struct Retained {
 }
 
 impl Retained {
-    fn of(facts: &StoresFacts) -> Self {
+    fn of(facts: &RetentionFacts) -> Self {
         Retained {
             kept: facts.union(),
             bounded: facts.bounded(),
@@ -422,10 +422,10 @@ impl Retained {
 }
 
 impl FunctorRows {
-    fn row(&self, callee_type: TypeId, arity: usize) -> StoresFacts {
+    fn row(&self, callee_type: TypeId, arity: usize) -> RetentionFacts {
         if !self.minted.contains(&callee_type) {
             let every: IndexSet<u32> = (0..u32::try_from(arity).unwrap()).collect();
-            return StoresFacts {
+            return RetentionFacts {
                 escapes: every.clone(),
                 into_result: every,
                 into_param: IndexMap::default(),
@@ -437,14 +437,14 @@ impl FunctorRows {
 
     /// The facts of a call the walk resolved to `callees`. A resolved set joins
     /// exactly those mints; an unresolved one falls back to the type's row.
-    fn row_of(&self, callees: &Callees, callee_type: TypeId, arity: usize) -> StoresFacts {
+    fn row_of(&self, callees: &Callees, callee_type: TypeId, arity: usize) -> RetentionFacts {
         let Callees::Mints(ids) = callees else {
             return self.row(callee_type, arity);
         };
         if !self.minted.contains(&callee_type) {
             return self.row(callee_type, arity);
         }
-        let mut out = StoresFacts::default();
+        let mut out = RetentionFacts::default();
         for id in ids {
             if let Some(row) = self.per_mint.get(id) {
                 out.absorb(&row.facts);
@@ -471,7 +471,7 @@ impl FunctorRows {
         self.per_mint.get(&id).map(|row| &row.functor_params)
     }
 
-    fn merge(&mut self, callee_type: TypeId, facts: &StoresFacts) -> bool {
+    fn merge(&mut self, callee_type: TypeId, facts: &RetentionFacts) -> bool {
         self.facts.entry(callee_type).or_default().absorb(facts)
     }
 
@@ -479,7 +479,7 @@ impl FunctorRows {
         let entry = self.per_mint.entry(id).or_insert_with(|| MintRow {
             target: row.target,
             functor_params: row.functor_params.clone(),
-            facts: StoresFacts::default(),
+            facts: RetentionFacts::default(),
         });
         // Two mints can share a key — a synthesised expression carries no
         // distinct range — and the fixpoint only terminates while every step
@@ -592,7 +592,7 @@ impl Contributions {
 
 /// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
-    computed: &'a FuncKeyMap<StoresFacts>,
+    computed: &'a FuncKeyMap<RetentionFacts>,
     builtins: &'a BuiltinDeclarations,
     rows: &'a FunctorRows,
     call_graph: &'a CallGraph,
@@ -604,11 +604,11 @@ struct StoresOracle<'a> {
 impl StoresOracle<'_> {
     /// Facts for a directly-called function, falling back to link's snapshot:
     /// monomorphization drops the generic declaration a builtin's is read from.
-    fn direct(&self, func: &FunctionRef) -> StoresFacts {
+    fn direct(&self, func: &FunctionRef) -> RetentionFacts {
         if let Some(facts) = self.computed.get(&func.module_source, &func.name) {
             return facts.clone();
         }
-        let mut facts = StoresFacts::default();
+        let mut facts = RetentionFacts::default();
         for retain in self.builtins.retain_specs(func) {
             let source = u32::try_from(retain.source).unwrap();
             if retain.elements {
@@ -632,7 +632,7 @@ impl StoresOracle<'_> {
 
     /// Facts for an indirect (functor) callee: the join over the values the
     /// walk resolved it to, or the callee type's row where it resolved none.
-    fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> StoresFacts {
+    fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> RetentionFacts {
         self.rows.row_of(callees, callee.type_id, arity)
     }
 
@@ -673,19 +673,19 @@ impl BoundedRetention {
 
 /// What the fixpoint publishes: the positions each function may keep, where the
 /// bounded ones land, and the row each functor type carries.
-pub struct StoresSummary {
-    pub stored_params: StoredParams,
+pub struct RetentionSummary {
+    pub retained_params: RetainedParams,
     pub bounded: BoundedRetention,
     pub rows: FunctorRows,
 }
 
-pub fn compute_stored_params(
+pub fn compute_retention(
     project: &FlatPackage,
     call_graph: &CallGraph,
     builtins: &BuiltinDeclarations,
-) -> StoresSummary {
+) -> RetentionSummary {
     let type_table = project.type_table.borrow();
-    let mut computed: FuncKeyMap<StoresFacts> = FuncKeyMap::default();
+    let mut computed: FuncKeyMap<RetentionFacts> = FuncKeyMap::default();
 
     for func in &project.functions {
         let func = func.borrow();
@@ -782,7 +782,7 @@ pub fn compute_stored_params(
         }
     }
 
-    let mut stored_params = StoredParams::default();
+    let mut retained_params = RetainedParams::default();
     let mut bounded = BoundedRetention::default();
     for func in &project.functions {
         let func = func.borrow();
@@ -795,7 +795,7 @@ pub fn compute_stored_params(
                 facts.into_result,
                 facts.into_param
             );
-            stored_params.insert(func.module_source.clone(), func.name.clone(), facts.union());
+            retained_params.insert(func.module_source.clone(), func.name.clone(), facts.union());
             bounded.at.insert(
                 func.module_source.clone(),
                 func.name.clone(),
@@ -804,8 +804,8 @@ pub fn compute_stored_params(
         }
     }
 
-    StoresSummary {
-        stored_params,
+    RetentionSummary {
+        retained_params,
         bounded,
         rows,
     }
@@ -818,14 +818,14 @@ pub fn compute_stored_params(
 /// where, so both unbounded channels take it: the result is one of the places
 /// it could be. `elements_of = p` claims what the referent holds rather than
 /// the reference, which each call gates on the argument's own type.
-fn declared_facts(func: &TirFunction) -> StoresFacts {
+fn declared_facts(func: &TirFunction) -> RetentionFacts {
     let position = |name: &str| {
         func.params
             .iter()
             .position(|p| p.name == name)
             .map(|i| u32::try_from(i).unwrap())
     };
-    let mut facts = StoresFacts::default();
+    let mut facts = RetentionFacts::default();
     for retain in &func.retains {
         let Some(source) = position(&retain.source) else {
             continue;
@@ -1157,7 +1157,7 @@ fn facts_of_body(
     carrying: &RefCarrying,
     owner: Owner,
     body: BodyRef,
-) -> (StoresFacts, Contributions) {
+) -> (RetentionFacts, Contributions) {
     let mut carries: IndexMap<u32, Carried> = IndexMap::default();
     let mut param_of_local: IndexMap<u32, u32> = IndexMap::default();
     let mut reaching: IndexMap<u32, Callees> = IndexMap::default();
@@ -1187,7 +1187,7 @@ fn facts_of_body(
         carrying,
         owner,
         reaching,
-        facts: StoresFacts::default(),
+        facts: RetentionFacts::default(),
         contributions: Contributions::default(),
         grew: false,
     };
@@ -1227,7 +1227,7 @@ struct StoresWalker<'a> {
     owner: Owner,
     /// Which function values each function-typed local may hold.
     reaching: IndexMap<u32, Callees>,
-    facts: StoresFacts,
+    facts: RetentionFacts,
     contributions: Contributions,
     grew: bool,
 }
@@ -1374,7 +1374,7 @@ impl StoresWalker<'_> {
         &self,
         args: impl Iterator<Item = &'e TirExpr>,
         positions: &IndexSet<u32>,
-        facts: &StoresFacts,
+        facts: &RetentionFacts,
     ) -> IndexSet<u32> {
         args.enumerate()
             .filter(|(i, _)| positions.contains(&u32::try_from(*i).unwrap()))
@@ -1386,7 +1386,7 @@ impl StoresWalker<'_> {
     /// `elements_of` asks after the referent's elements, so it reads what the
     /// argument holds and never what it is: a reference to a container is a
     /// carrier by pointing at the container, not by anything the container keeps.
-    fn claimed(&self, position: u32, arg: &TirExpr, facts: &StoresFacts) -> IndexSet<u32> {
+    fn claimed(&self, position: u32, arg: &TirExpr, facts: &RetentionFacts) -> IndexSet<u32> {
         let carried = self.carried(arg);
         if facts.elements.contains(&position) {
             return carried.holds;
@@ -1683,7 +1683,7 @@ impl StoresWalker<'_> {
     /// whatever this body passed there, so it is resolved against that argument
     /// rather than assumed unseen. A result-bound one reaches the caller
     /// through the call's value instead (see [`StoresWalker::carries`]).
-    fn call_hands_on(&mut self, args: &[&TirExpr], facts: &StoresFacts) {
+    fn call_hands_on(&mut self, args: &[&TirExpr], facts: &RetentionFacts) {
         let carried = self.carried_args(args.iter().copied(), &facts.escapes, facts);
         self.escape(&carried);
         for (&source, destinations) in &facts.into_param {

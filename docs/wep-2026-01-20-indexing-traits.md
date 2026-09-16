@@ -153,6 +153,6 @@ reference from the language's reference model.
 
 - [Reference Representation and Mutation Write-Back](./wep-2026-06-13-reference-representation.md)
 - [Iterator Reference Model](./wep-2026-07-05-iterator-reference-model.md)
-- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
 - [Associated Types](./wep-2026-01-20-associated-types.md)
 - [Operator Overloading](./wep-2026-01-18-operator-overloading.md)

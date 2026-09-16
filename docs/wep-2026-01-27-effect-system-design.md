@@ -355,7 +355,7 @@ Every `with` row member is an effect. What a function does with its reference
 parameters is not one and is never written in the row: an effect is authority a
 caller grants and a handler can intercept, while retaining a reference grants
 nothing and only tells the compiler what it may stop doing to an argument. See
-[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ## Consequences
 

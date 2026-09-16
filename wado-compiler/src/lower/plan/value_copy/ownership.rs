@@ -100,7 +100,7 @@ impl BuiltinDeclarations {
     }
 
     /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
-    pub fn stored_params(&self, func: &FunctionRef) -> impl Iterator<Item = usize> + '_ {
+    pub fn retained_params(&self, func: &FunctionRef) -> impl Iterator<Item = usize> + '_ {
         self.retain_specs(func).map(|r| r.source)
     }
 

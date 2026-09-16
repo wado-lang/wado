@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
-use super::stores::{BoundedRetention, FunctorRows, Retained, StoredParams};
+use super::retention::{BoundedRetention, FunctorRows, Retained, RetainedParams};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -150,7 +150,7 @@ pub fn analyze_ownership(
     if has_unsupported_form(body) {
         return Ownership::default();
     }
-    let stored_params = &plan.stored_params;
+    let retained_params = &plan.retained_params;
     let mut_receiver_methods = &plan.mut_receiver_methods;
 
     let mut all_locals: IndexSet<u32> = (0..func.local_count).collect();
@@ -162,7 +162,7 @@ pub fn analyze_ownership(
     }
 
     let mut a = Analyzer {
-        stored_params,
+        retained_params,
         bounded: &plan.bounded_retention,
         params: func.params.iter().map(|p| p.local_index).collect(),
         pending_bounded: Vec::new(),
@@ -765,7 +765,7 @@ struct Exit {
 struct Analyzer<'a> {
     /// Which parameter positions each callee may persist a reference to
     /// (position 0 is the receiver). Elsewhere a `&`/`&mut` is transient.
-    stored_params: &'a StoredParams,
+    retained_params: &'a RetainedParams,
     /// Where a callee puts the positions it keeps nowhere else, so an argument
     /// list on hand resolves the retention to locals this body owns.
     bounded: &'a BoundedRetention,
@@ -938,9 +938,9 @@ impl Analyzer<'_> {
     }
 
     /// Whether the callee may persist a reference passed at position `pos`. One
-    /// this walk has no entry for stores nothing.
-    fn callee_stores(&self, callee: &FunctionRef, pos: usize) -> bool {
-        self.stored_params
+    /// this walk has no entry for keeps nothing.
+    fn callee_retains(&self, callee: &FunctionRef, pos: usize) -> bool {
+        self.retained_params
             .get(&callee.module_source, &callee.name)
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
     }
@@ -950,7 +950,7 @@ impl Analyzer<'_> {
     fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr]) -> Vec<Kept> {
         (0..args.len())
             .map(|pos| {
-                if !self.callee_stores(callee, pos) {
+                if !self.callee_retains(callee, pos) {
                     return Kept::Transient;
                 }
                 self.landing(args, self.bounded.destinations(callee, pos))
@@ -1276,7 +1276,7 @@ impl Analyzer<'_> {
                             && !self
                                 .mut_receiver_methods
                                 .contains(&func.module_source, &func.name)
-                            && !self.callee_stores(func, 0);
+                            && !self.callee_retains(func, 0);
                         if !read_only {
                             conflict.insert(base);
                         }
@@ -1345,7 +1345,7 @@ impl Analyzer<'_> {
                 expr: place,
             } => match clean_root(place) {
                 Some(base) => {
-                    if callee.is_some_and(|c| self.callee_stores(c, pos)) {
+                    if callee.is_some_and(|c| self.callee_retains(c, pos)) {
                         conflict.insert(base);
                     }
                 }

@@ -1163,7 +1163,7 @@ so the Wasm engine downstream is free to fold the constant.
 
 ### Value Semantics
 
-See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
 
@@ -2380,7 +2380,7 @@ See [`docs/wep-2026-01-16-closure-implementation.md`](./wep-2026-01-16-closure-i
 
 A closure capturing an outer binding is a separate concept from what a function
 does with its reference _parameters_, which nothing in the language states — see
-[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ### Function References
 
@@ -5793,7 +5793,7 @@ condition — every referent is GC-managed, so neither can dangle — and the
 compiler reads both from a function's body. These attributes are for a
 declaration that has none: a `core:builtin` primitive, a Component Model import,
 a `.wasm` / `.wat` asset import. See
-[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-stores.md).
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ```wado
 #[returns(part_of = arr)]

@@ -5,7 +5,7 @@
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
 use super::value_copy::is_reference_type;
-use super::value_copy::stores::RefCarrying;
+use super::value_copy::retention::RefCarrying;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
