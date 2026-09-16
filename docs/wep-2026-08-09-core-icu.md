@@ -354,32 +354,24 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Known gaps
 
-- **Nothing collects a component asset.** `wado-wasm-embed` collects over a
-  core-module asset, which is where the mechanism is proven: on
-  `wado-bundled-libm` a program calling `sin` keeps 344 of the asset's 5,448
-  rodata bytes, and all 54 of its exports answer bit-identically to the unpruned
-  module. A component takes the `wasm-compose` path instead and is composed
-  whole, so neither the code nor the data of ICU's asset is reached today.
+- **The collection stops at the export.** A program reaching one property
+  carries the code and data of every property that export's dispatch can reach.
+  `has` matches over all 63 binary properties, so naming one case does not
+  narrow what the function roots, and a program wanting `Uppercase` alone pays
+  for all of them.
 
-  What that costs is measured: a program calling one character property carries
-  the whole 295 KB asset, where the property it asked for is a few KB of it.
-  A program reaching none of `core:icu` pays nothing, since composition runs
-  over the import plan and an unreached component is never composed.
+  Splitting that needs a root finer than an export, which neither the
+  collection nor a re-link can express today. What a coarser split already buys
+  is the gap between the two paths: the string-named `ranges` and `contains`
+  pull the enumerated properties, `General_Category` and the name tables, which
+  the enum-named `has` and `set` do not.
 
-  Closing it is three Implementation items: run the collection inside a
-  component, resolve the map from the sections a relocatable asset keeps rather
-  than only at asset-build time, and carry the `reloc.DATA` edges libm has none
-  of.
-
-- **The text form and the relocatable form pull against each other.** The asset
-  ships as `.wat` so a reader can inspect it, and the collection wants the
-  `linking` and `reloc.*` sections a relocatable build keeps. A reloc entry is
-  an offset into the encoded code section, which a print-and-reparse does not
-  preserve, so the two cannot both hold as stated. Either the map is resolved
-  at asset-build time and baked, the way `wado-bundled-libm` bakes
-  `wado.dataref`, or the asset ships in binary and gives up being readable.
-  Which of those is the human's call, and nothing forces it until the
-  collection runs over a component at all.
+- **The trapped export is a body, not a hole.** A lift the program does not
+  import keeps its name and signature in the core module, with a trapping body,
+  because the component's `canon lift` still aliases it. Dropping it outright
+  would mean renumbering the component's own index spaces. What remains is one
+  short function per unused lift — the data and code it reached are already
+  gone, so the cost is bytes rather than kilobytes.
 
 ## Open questions
 
@@ -427,18 +419,21 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - [ ] Ship the asset relocatable, and move the locale-bearing capabilities onto
       a buffer provider with the rest left baked. The asset is first-party and
       bundled already; what it is not yet is either of those.
-- [ ] Collect over a component asset, rooted where the core-module path already
-      roots: the asset's exports that surviving Wado code calls.
-- [ ] Resolve the data-reference map at compile time. `dataref::resolve` runs
-      today only from `mise run update-bundled`, because libm ships as `.wat`
-      and the round trip invalidates the offsets a relocation holds. A
-      relocatable asset keeps those sections, so `embed` can read them itself
-      and needs no baked `wado.dataref`.
-- [ ] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
-      data range or a function. The map's shape and the walk both have to grow:
-      a live data range can root a function, so the data and code edges close
-      over one worklist rather than the code seeding the data once. The resolver
-      rejects one today rather than resolving halfway.
+- [x] Collect over a component asset. Each core module it holds is embedded and
+      every other section copied byte for byte, so nothing is renumbered and
+      each `alias core export` still resolves. The root set is the lifted
+      functions the program imports; the rest keep their name and signature with
+      a trapping body. A program reaching one property carries 104 KB where it
+      carried 303 KB.
+- [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
+      data range or a function. A live data range can root a function, so the
+      data and code edges close over one worklist rather than the code seeding
+      the data once. libm has none; ICU has 146.
+- [x] Bake ICU's data-reference map at asset-build time, as libm's is. That is
+      what keeps the `.wat`: the map's offsets are segment-relative, so a
+      print/reparse preserves them where a `reloc` entry's offset into the
+      encoded code section would not. Resolving the map at compile time instead
+      would need the asset to ship relocatable, and ship in binary with it.
 - [ ] Grow the facade past character properties: re-exports, the Wado-native
       shapes (`Ord`, iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(capability, locale) zlib entries plus index,

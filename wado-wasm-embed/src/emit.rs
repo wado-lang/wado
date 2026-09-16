@@ -58,24 +58,26 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
         module.section(&types);
     }
 
-    // Imports are kept whole; the memory the asset defined becomes one of them,
-    // so it shares the component's memory. Index spaces are per-kind, so adding
-    // it disturbs nothing else.
+    // Imports are kept whole; where the caller asks, the memory the asset
+    // defined becomes one of them, so it shares the component's memory. Index
+    // spaces are per-kind, so adding it disturbs nothing else.
     let mut imports = wasm_encoder::ImportSection::new();
     for import in &asset.imports {
-        if let wasmparser::TypeRef::Memory(memory) = import.ty {
+        if let (wasmparser::TypeRef::Memory(memory), Some(_)) = (import.ty, opts.memory_import) {
             let memory = shared_memory(remap.memory_type(memory)?);
             imports.import(import.module, import.name, memory);
         } else {
             remap.parse_import(&mut imports, *import)?;
         }
     }
-    if asset.imported.memories == 0 {
+    if let Some(shared) = opts.memory_import
+        && asset.imported.memories == 0
+    {
         let memory = match asset.memory {
             Some(memory) => shared_memory(remap.memory_type(memory)?),
             None => DEFAULT_MEMORY,
         };
-        imports.import(opts.memory_import.0, opts.memory_import.1, memory);
+        imports.import(shared.0, shared.1, memory);
     }
     module.section(&imports);
 
@@ -97,6 +99,14 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
     }
     if !tables.is_empty() {
         module.section(&tables);
+    }
+
+    // Kept only where the caller left the memory alone; otherwise the import
+    // above has taken its place. The section follows tables, as the spec orders.
+    if let (None, Some(memory)) = (opts.memory_import, asset.memory) {
+        let mut memories = wasm_encoder::MemorySection::new();
+        memories.memory(remap.memory_type(memory)?);
+        module.section(&memories);
     }
 
     let mut tags = wasm_encoder::TagSection::new();
@@ -121,6 +131,11 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
 
     let mut exports = wasm_encoder::ExportSection::new();
     for export in &asset.exports {
+        // The component supplies the memory where the caller asked for the
+        // import, so an export of one the asset no longer has is dropped.
+        if matches!(export.kind, wasmparser::ExternalKind::Memory) && opts.memory_import.is_some() {
+            continue;
+        }
         if (opts.keep_export)(export.name) {
             remap.parse_export(&mut exports, *export)?;
         }
@@ -167,9 +182,18 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
 
     let mut code = wasm_encoder::CodeSection::new();
     for (i, body) in asset.bodies.iter().enumerate() {
-        if live.funcs.contains(&(asset.imported.funcs + i as u32)) {
-            remap.parse_function_body(&mut code, body.clone())?;
+        let index = asset.imported.funcs + i as u32;
+        if !live.funcs.contains(&index) {
+            continue;
         }
+        if live.trap.contains(&index) {
+            let mut trap = wasm_encoder::Function::new([]);
+            trap.instruction(&wasm_encoder::Instruction::Unreachable);
+            trap.instruction(&wasm_encoder::Instruction::End);
+            code.function(&trap);
+            continue;
+        }
+        remap.parse_function_body(&mut code, body.clone())?;
     }
     if !code.is_empty() {
         module.section(&code);

@@ -24,8 +24,10 @@ total. `contains` and `ranges` take the name as a string instead, for a name a
 program reads at run time rather than writes. Both take a value as well, for an
 enumerated property, and match names as UAX #44 matches them, loosely.
 
-**295 KB** import-free component, covering 63 binary properties, 15 enumerated
-ones, and General_Category groups (`L` as well as `Lu`).
+**326 KB** import-free component, covering 63 binary properties, 15 enumerated
+ones, and General_Category groups (`L` as well as `Lu`). 35 KB of that is the
+`wado.dataref` map and the `name` section it is keyed by, which is what lets a
+program carry a slice of the rest rather than all of it.
 
 Three things it deliberately does not answer:
 
@@ -81,10 +83,12 @@ So segmenter+collator are ~93% of the bytes. Dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
 
 The 44 KB row answers seven properties by name in the WIT. The shippable
-surface answers every one, which roots all of their data at once and is what
-puts it at 295 KB. Naming a property as an enum case does not narrow that:
-the dispatch still reaches every case, so what bounds a program's share is the
-collection in the Known gaps, not the shape of the call.
+surface answers every one, which roots all of their data at once.
+
+What a program carries is narrower than what the asset holds: the toolchain
+collects the asset down to the lifted functions the program imports, so one
+reaching a single property carries 104 KB rather than 303 KB. Naming a property
+as an enum case does not narrow it further — the dispatch reaches every case.
 
 ## Post-hoc slicing: one asset, sliced per program
 

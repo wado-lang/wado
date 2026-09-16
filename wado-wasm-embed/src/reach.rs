@@ -12,7 +12,7 @@ use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
 use crate::dataref::{DataRange, DataRefs, Target, merge_with_gap};
-use crate::{Asset, Error, segment_base};
+use crate::{Asset, Embed, Error, segment_base};
 
 /// A gap this small is cheaper to keep than to split around: a second segment
 /// costs a header, an offset expression and a length.
@@ -32,6 +32,8 @@ pub(crate) struct Live {
     /// Functions a surviving `ref.func` names that nothing left in the module
     /// declares. They need a declarative segment of their own.
     pub declare: Vec<u32>,
+    /// Functions kept for their name and signature alone, emitted as a trap.
+    pub trap: BTreeSet<u32>,
 }
 
 /// How much of a surviving data segment survives.
@@ -42,7 +44,8 @@ pub(crate) enum Keep {
     Ranges(Vec<DataRange>),
 }
 
-pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Result<Live, Error> {
+pub(crate) fn live(asset: &Asset<'_>, opts: &Embed<'_>) -> Result<Live, Error> {
+    let keep_export = opts.keep_export;
     let mut walk = Walk {
         asset,
         live: Live::default(),
@@ -83,6 +86,14 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
 
     for export in &asset.exports {
         if !keep_export(export.name) {
+            continue;
+        }
+        // A trapped export keeps its index and its type but roots nothing, so
+        // its body is never walked and whatever only it reached is collected.
+        if (opts.trap_export)(export.name)
+            && matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
+        {
+            walk.mark_trap(export.index);
             continue;
         }
         match export.kind {
@@ -335,10 +346,26 @@ impl Walk<'_, '_> {
         if !self.live.funcs.insert(index) {
             return;
         }
+        // Something else reached it after all, so the body it would have traded
+        // for a trap is walked and kept.
+        self.live.trap.remove(&index);
         self.queue.push(Item::Func(index));
         for range in self.data_refs.get(&index).copied().unwrap_or_default() {
             self.mark_data_range(*range);
         }
+    }
+
+    /// Keep a function's slot and signature without walking its body. Its type
+    /// stays live: the export and the trapping body both still name it.
+    fn mark_trap(&mut self, index: u32) {
+        if self.live.funcs.contains(&index) {
+            return;
+        }
+        if let Some(defined) = self.defined(index, self.asset.imported.funcs) {
+            self.mark_type(self.asset.funcs[defined]);
+        }
+        self.live.funcs.insert(index);
+        self.live.trap.insert(index);
     }
 
     fn mark_table(&mut self, index: u32) {

@@ -28,10 +28,16 @@ use std::fmt;
 
 /// How to embed an asset.
 pub struct Embed<'a> {
-    /// `(module, name)` the memory is imported under.
-    pub memory_import: (&'a str, &'a str),
+    /// `(module, name)` the memory is imported under. `None` leaves the asset's
+    /// own memory alone, which is what a component's inner module needs.
+    pub memory_import: Option<(&'a str, &'a str)>,
     /// The exports to keep. Everything unreachable from them is dropped.
     pub keep_export: &'a dyn Fn(&str) -> bool,
+    /// Exports to keep as a name and a signature, with a trapping body. For an
+    /// export something still names — a component's `canon lift` — but nothing
+    /// can call: the name survives, and everything only its body reached does
+    /// not. A dropped export is not asked.
+    pub trap_export: &'a dyn Fn(&str) -> bool,
     /// Drop every custom section, the `name` section included (`-Os`).
     pub strip_custom_sections: bool,
 }
@@ -119,8 +125,81 @@ pub(crate) fn segment_base(data: &wasmparser::Data<'_>) -> Option<SegmentBase> {
 /// right. Validate before calling.
 pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     let asset = Asset::collect(wasm)?;
-    let live = reach::live(&asset, opts.keep_export)?;
+    let live = reach::live(&asset, opts)?;
     emit::encode(&asset, &live, opts)
+}
+
+/// Collect over a component: each core module it holds is embedded, and every
+/// other section is copied byte for byte.
+///
+/// The component's own items are untouched, so nothing is renumbered and every
+/// `alias core export` still resolves. What that costs is the reason
+/// [`Embed::trap_export`] exists: a lift the program does not import names a
+/// core export that has to stay, and trapping it is how its body goes anyway.
+pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
+    use wasmparser::Payload;
+
+    let mut out = Vec::new();
+    let mut nesting = 0usize;
+    let mut copied = 0usize;
+    for payload in wasmparser::Parser::new(0).parse_all(component) {
+        match payload? {
+            Payload::ModuleSection {
+                unchecked_range, ..
+            } => {
+                // A module nested inside another module or component is that
+                // one's business; only the top level's are the asset's.
+                if nesting == 0 {
+                    out.extend_from_slice(&component[copied..unchecked_range.start]);
+                    let embedded = embed(&component[unchecked_range.clone()], opts)?;
+                    // The length already written ahead of the range describes
+                    // the module that was there, so it is rewritten with it.
+                    rewrite_module_length(&mut out, embedded.len());
+                    out.extend_from_slice(&embedded);
+                    copied = unchecked_range.end;
+                }
+                nesting += 1;
+            }
+            Payload::ComponentSection { .. } => nesting += 1,
+            Payload::End(_) if nesting > 0 => nesting -= 1,
+            _ => {}
+        }
+    }
+    if copied == 0 {
+        return Err(Error::Unsupported("a component with no core module"));
+    }
+    out.extend_from_slice(&component[copied..]);
+    Ok(out)
+}
+
+/// Replace the length already written at the tail of `out` with `len`.
+///
+/// A module section is `0x01` then the payload's length as a LEB128, and the
+/// range `wasmparser` hands over starts after both. Read backwards the length
+/// is its one byte without a continuation bit, then however many with one.
+fn rewrite_module_length(out: &mut Vec<u8>, len: usize) {
+    out.pop();
+    while out.last().is_some_and(|byte| byte & 0x80 != 0) {
+        out.pop();
+    }
+    assert_eq!(
+        out.last(),
+        Some(&0x01),
+        "a module section is the byte 0x01 and a length"
+    );
+    leb128_write(out, len as u64);
+}
+
+fn leb128_write(out: &mut Vec<u8>, mut value: u64) {
+    loop {
+        let byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value == 0 {
+            out.push(byte);
+            return;
+        }
+        out.push(byte | 0x80);
+    }
 }
 
 /// Everything the pass needs from the asset, in its original index space.
