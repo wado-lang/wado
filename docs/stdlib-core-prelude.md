@@ -3865,6 +3865,20 @@ Identity: any text parses to the string it spells. Never fails.
 
 ##### `fn internal_append_to(&self, out: &mut String)`
 
+##### `fn len(&self) -> i32`
+
+The byte accessors read the backing array directly. The default builds a
+view per call, which a scan over a generic body's text pays per byte.
+
+##### `fn is_empty(&self) -> bool`
+
+##### `fn get_byte_unchecked(&self, index: i32) -> u8`
+
+##### `fn to_string(&self) -> String`
+
+Already a `String`: the default would rebuild one byte by byte, which a
+per-field wire name pays on every serialization.
+
 #### `impl Eq<StrSlice> for String`
 
 ##### `pub fn eq(&self, other: &StrSlice) -> bool`
