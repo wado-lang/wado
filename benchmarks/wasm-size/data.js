@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789550274763,
+  "lastUpdate": 1789564616527,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56348,6 +56348,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19116,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0896d43255bc8b5412e597df977c9bdb093f9786",
+          "message": "Merge pull request #2070 from wado-lang/claude/core-secure-random\n\nfeat(core:secure_random): name randomness by its invariant, and select a rotate in the optimizer",
+          "timestamp": "2026-09-16T21:58:22+09:00",
+          "tree_id": "92c86a1d427fb4e228f6ca3658f83d3f9a0b15aa",
+          "url": "https://github.com/wado-lang/wado/commit/0896d43255bc8b5412e597df977c9bdb093f9786"
+        },
+        "date": 1789564615738,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
             "unit": "bytes"
           },
           {
