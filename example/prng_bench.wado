@@ -5,11 +5,13 @@
 // - xoshiro256++ again, eight lanes at once over `core:simd`.
 // - SHISHUA — https://github.com/espadrine/shishua, over `core:simd`.
 //
-// All four are seeded with SplitMix64, so the comparison is of the generator
-// and not of its initialization. SHISHUA's own seeding runs thirteen rounds
-// over a table of digits of phi; leaving it out changes the stream but not one
-// instruction of the round being timed. Nothing here is a reference
-// implementation — `core:prng` is where a checked one would go.
+// Every state starts from SplitMix64, so the comparison is of the generator and
+// not of its initialization. The SIMD xoshiro then jumps each lane on from
+// there, which is the reference's own way of separating parallel streams.
+// SHISHUA's thirteen-round seeding over a table of digits of phi is left out:
+// it changes the stream and not one instruction of the round being timed.
+// Nothing here is a reference implementation — `core:prng` is where a checked
+// one would go.
 
 use { Stdout } from "core:cli";
 use { Benchmark } from "core:benchmark";
@@ -77,7 +79,14 @@ impl RomuTrio {
 }
 
 // xoshiro256++: four words, shifts and xors, with one rotate in the output
-// function and one in the state update.
+// function and one in the state update. Period 2^256 - 1, and every 4-tuple of
+// consecutive outputs appears exactly once over it.
+//
+// The jump polynomials are the reference's, from prng.di.unimi.it.
+global JUMP: List<u64> = [0x180EC6D33CFD0ABA, 0xD5A61266F0C9392C, 0xA9582618E03FC9AA, 0x39ABDC4529B1661C];
+
+global LONG_JUMP: List<u64> = [0x76E15D3EFEFDCBBF, 0xC5004E441C522FB3, 0x77710069854EE241, 0x39109BB02ACBE635];
+
 struct Xoshiro256pp {
     s0: u64,
     s1: u64,
@@ -107,6 +116,42 @@ impl Xoshiro256pp {
         self.s3 = rotl(self.s3, 45);
         return result;
     }
+
+    // Advance 2^128 steps, in the time 256 steps take. The state transition is
+    // linear over F2, so the jump is a polynomial there: each set bit of
+    // `polynomial` names a term, and the terms accumulate by xor.
+    fn jump(&mut self) {
+        self.jump_by(&JUMP);
+    }
+
+    // The same, 2^192 steps on. Streams this far apart stay disjoint for
+    // longer than any run will draw.
+    fn long_jump(&mut self) {
+        self.jump_by(&LONG_JUMP);
+    }
+
+    fn jump_by(&mut self, polynomial: &List<u64>) {
+        let mut j0: u64 = 0;
+        let mut j1: u64 = 0;
+        let mut j2: u64 = 0;
+        let mut j3: u64 = 0;
+        for let mut w = 0; w < polynomial.len(); w += 1 {
+            let word = polynomial[w];
+            for let mut b: u64 = 0; b < 64; b += 1 {
+                if word >> b & 1 == 1 {
+                    j0 = j0 ^ self.s0;
+                    j1 = j1 ^ self.s1;
+                    j2 = j2 ^ self.s2;
+                    j3 = j3 ^ self.s3;
+                }
+                self.next();
+            }
+        }
+        self.s0 = j0;
+        self.s1 = j1;
+        self.s2 = j2;
+        self.s3 = j3;
+    }
 }
 
 // The same generator, run eight times over at once: one independent stream per
@@ -114,8 +159,9 @@ impl Xoshiro256pp {
 // is no permute and nothing to split — the whole cost of SIMD here is that Wasm
 // has no vector rotate, which makes each `rotl` three instructions.
 //
-// Lanes seeded from one SplitMix64 run are independent enough to time. Streams
-// a caller may rely on being disjoint want `jump()` per lane instead.
+// Each lane starts 2^128 steps past the one before it, so the eight streams
+// are disjoint for 2^128 draws apiece — proven, not hoped for. This is what a
+// lane-parallel generator needs and what Romu and SHISHUA cannot offer.
 global XOSHIRO_LANES: i32 = 8;
 
 struct XoshiroSimd {
@@ -147,24 +193,42 @@ fn vrotl(v: u64x2, n: u32) -> u64x2 {
 
 impl XoshiroSimd {
     fn new(seed: u64) -> XoshiroSimd {
-        let mut seeder = SplitMix64::new(seed);
+        // A copy is a copy, so reading the cursor into a lane and jumping it on
+        // leaves the lane where it was.
+        let mut cursor = Xoshiro256pp::new(seed);
+        let l0 = cursor;
+        cursor.jump();
+        let l1 = cursor;
+        cursor.jump();
+        let l2 = cursor;
+        cursor.jump();
+        let l3 = cursor;
+        cursor.jump();
+        let l4 = cursor;
+        cursor.jump();
+        let l5 = cursor;
+        cursor.jump();
+        let l6 = cursor;
+        cursor.jump();
+        let l7 = cursor;
+
         return XoshiroSimd {
-            s0a: seeder.pair(),
-            s0b: seeder.pair(),
-            s0c: seeder.pair(),
-            s0d: seeder.pair(),
-            s1a: seeder.pair(),
-            s1b: seeder.pair(),
-            s1c: seeder.pair(),
-            s1d: seeder.pair(),
-            s2a: seeder.pair(),
-            s2b: seeder.pair(),
-            s2c: seeder.pair(),
-            s2d: seeder.pair(),
-            s3a: seeder.pair(),
-            s3b: seeder.pair(),
-            s3c: seeder.pair(),
-            s3d: seeder.pair(),
+            s0a: [l0.s0 as i64, l1.s0 as i64],
+            s0b: [l2.s0 as i64, l3.s0 as i64],
+            s0c: [l4.s0 as i64, l5.s0 as i64],
+            s0d: [l6.s0 as i64, l7.s0 as i64],
+            s1a: [l0.s1 as i64, l1.s1 as i64],
+            s1b: [l2.s1 as i64, l3.s1 as i64],
+            s1c: [l4.s1 as i64, l5.s1 as i64],
+            s1d: [l6.s1 as i64, l7.s1 as i64],
+            s2a: [l0.s2 as i64, l1.s2 as i64],
+            s2b: [l2.s2 as i64, l3.s2 as i64],
+            s2c: [l4.s2 as i64, l5.s2 as i64],
+            s2d: [l6.s2 as i64, l7.s2 as i64],
+            s3a: [l0.s3 as i64, l1.s3 as i64],
+            s3b: [l2.s3 as i64, l3.s3 as i64],
+            s3c: [l4.s3 as i64, l5.s3 as i64],
+            s3d: [l6.s3 as i64, l7.s3 as i64],
             o0: [0, 0],
             o1: [0, 0],
             o2: [0, 0],
@@ -510,6 +574,56 @@ test "each generator moves, and no two agree" {
         assert drawn[i] != 0;
         for let mut j = i + 1; j < drawn.len(); j += 1 {
             assert drawn[i] != drawn[j];
+        }
+    }
+}
+
+// A jump advances 2^128 steps and a step advances one, over the same linear
+// state transition, so the two commute. An implementation that got the
+// polynomial, the bit order, or the accumulation wrong would not.
+test "jumping and stepping commute" {
+    let start = Xoshiro256pp::new(99);
+
+    let mut jumped = start;
+    jumped.jump();
+    assert jumped != start;
+
+    let mut long_jumped = start;
+    long_jumped.long_jump();
+    assert long_jumped != start;
+    assert long_jumped != jumped;
+
+    let mut jump_first = Xoshiro256pp::new(99);
+    jump_first.jump();
+    jump_first.next();
+
+    let mut step_first = Xoshiro256pp::new(99);
+    step_first.next();
+    step_first.jump();
+
+    assert jump_first == step_first;
+
+    let mut long_first = Xoshiro256pp::new(99);
+    long_first.long_jump();
+    long_first.next();
+
+    let mut long_second = Xoshiro256pp::new(99);
+    long_second.next();
+    long_second.long_jump();
+
+    assert long_first == long_second;
+}
+
+test "every SIMD lane holds a different stream" {
+    let mut cursor = Xoshiro256pp::new(4);
+    let mut seen: List<u64> = [];
+    for let mut i = 0; i < XOSHIRO_LANES; i += 1 {
+        seen.push(cursor.next());
+        cursor.jump();
+    }
+    for let mut i = 0; i < seen.len(); i += 1 {
+        for let mut j = i + 1; j < seen.len(); j += 1 {
+            assert seen[i] != seen[j];
         }
     }
 }
