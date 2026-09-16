@@ -1620,7 +1620,7 @@ impl StrSlice {
 
 /// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 /// owned string, a reference to one, or a view of part of one.
-pub trait AsStrSlice {
+pub trait AsStrSlice: Eq<String> {
     fn as_str_slice(&self) -> StrSlice with stores[self];
 
     /// Append this text to `out`. `String` overrides it to copy straight out of
@@ -1876,6 +1876,14 @@ impl<T: AsStrSlice> AsStrSlice for &T {
 
     fn to_string(&self) -> String {
         return (*self).to_string();
+    }
+}
+
+/// What `AsStrSlice` requires of a reference to one. The blanket `Eq for &T`
+/// beside it compares two references, which is a different question.
+impl<T: AsStrSlice> Eq<String> for &T {
+    pub fn eq(&self, other: &String) -> bool {
+        return (*self).eq_str(other);
     }
 }
 
