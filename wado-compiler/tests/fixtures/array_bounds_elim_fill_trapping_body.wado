@@ -1,0 +1,28 @@
+// A trap belongs to the iteration that raises it, and the fill idiom replays
+// only the last one. `100 / (i - 3)` divides by zero at `i == 3`, so the loop
+// must trap there however the store collapses.
+
+use { println, Stdout } from "core:cli";
+
+fn fill_and_sum(xs: &mut List<i32>, limit: i32) -> i32 {
+    let mut seen = 0;
+    for let mut i = 0; i <= limit; i += 1 {
+        seen = 100 / (i - 3);
+        xs[i] = 7;
+    }
+    let mut sum = 0;
+    for let mut n = 0; n <= limit; n += 1 {
+        sum += xs[n];
+    }
+    return sum + seen;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${fill_and_sum(&mut xs, builtin::black_box(10))}`);
+}
+
+__DATA__
+{
+    "trapped": true
+}

@@ -564,7 +564,7 @@ See [WEP: Operator Precedence and Associativity](./wep-2026-01-11-operator-prece
 // Arithmetic
 + - * / %
 
-// Comparison (can be chained: a < b < c → a < b && b < c)
+// Comparison (can be chained: a < b < c → (a < b) & (b < c); no short-circuit)
 == != < <= > >=
 
 // Logical

@@ -1,0 +1,37 @@
+// Loop-versioned BCE through a negated conjunction. The check is written with
+// a short-circuiting `!(0 <= i && i < used)`, and the guard bound (`limit`) is
+// unrelated to the check bound (`used`), so the loop is versioned on the
+// residual `limit < used`. In the fast arm the residual refutes the upper
+// conjunct and the counting loop's entry `i = 0` floors the lower one, so the
+// whole check goes and the constant-fill loop collapses to one `array.fill`.
+
+use { println, Stdout } from "core:cli";
+
+fn fill_and_sum(xs: &mut Array<i32>, used: i32, limit: i32) -> i32 {
+    for let mut i = 0; i <= limit; i += 1 {
+        if !(0 <= i && i < used) {
+            panic("index out of range");
+        }
+        xs[i] = 7;
+    }
+    let mut sum = 0;
+    for let mut n = 0; n <= limit; n += 1 {
+        sum += xs[n];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs: Array<i32> = builtin::array_new(11);
+    println(`${fill_and_sum(&mut xs, builtin::black_box(11), builtin::black_box(10))}`);
+}
+
+__DATA__
+{
+    "stdout": "77\n",
+    "wir_scope": ".wado/fill_and_sum",
+    "wir_expect:O2": [
+        "builtin::array_fill<i32>(",
+        "7, (limit + 1) - i)"
+    ]
+}

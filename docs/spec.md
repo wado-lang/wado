@@ -496,17 +496,22 @@ let d = (3 | 4) & 6;    // 6 (| first due to parentheses)
 
 #### Comparison Chaining
 
-Wado supports mathematical comparison chaining similar to Python, allowing natural range expressions:
+Wado supports mathematical comparison chaining, allowing natural range expressions. It borrows Python's syntax, but not Python's evaluation:
 
 ```wado
 // Valid chains (same direction)
-a < b < c       // Equivalent to: a < b && b < c
-a > b > c       // Equivalent to: a > b && b > c
-a <= b <= c     // Equivalent to: a <= b && b <= c
-a >= b >= c     // Equivalent to: a >= b && b >= c
-a == b == c     // Equivalent to: a == b && b == c
+a < b < c       // Equivalent to: (a < b) & (b < c)
+a > b > c       // Equivalent to: (a > b) & (b > c)
+a <= b <= c     // Equivalent to: (a <= b) & (b <= c)
+a >= b >= c     // Equivalent to: (a >= b) & (b >= c)
+a == b == c     // Equivalent to: (a == b) & (b == c)
 0 <= x <= 100   // Natural range check
 ```
+
+A chain evaluates every operand exactly once, left to right, and then tests
+them. It does not short-circuit, so a later operand runs even where an earlier
+comparison already decided the answer. Write `&&` where an operand must not run
+on that path.
 
 ```wado
 // Invalid chains (semantic error)

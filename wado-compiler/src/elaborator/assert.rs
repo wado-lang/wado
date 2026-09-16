@@ -486,12 +486,11 @@ impl CaptureScanner {
             }
             Expr::ComparisonChain(chain) => {
                 self.scan(&chain.first);
-                for (idx, cmp) in chain.comparisons.iter().enumerate() {
-                    // `a < b < c` runs as `(a < b) && (b < c)`.
-                    self.conditional = conditional || idx >= 1;
+                // A chain evaluates every term, so none of them is conditional
+                // and `self.conditional` stands as the enclosing scan left it.
+                for cmp in &chain.comparisons {
                     self.scan(&cmp.right);
                 }
-                self.conditional = conditional;
                 if !is_root {
                     self.add(unparse_expr_source(expr), ast_id, is_place_expr(expr), pos);
                 }

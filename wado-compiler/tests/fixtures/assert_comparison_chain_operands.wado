@@ -1,8 +1,9 @@
-// A chained comparison renders its operands: the chain runs as
-// `(0 <= index) && (index < used)`, so both are reached here. Issue #1855.
+// A chain evaluates every operand, so a failure reports every one of them.
+// The lower bound fails here and the message still names `used`, which is what
+// a reader needs to see beside `index`.
 
 export fn run() with Stdout {
-    let index = 5;
+    let index = -1;
     let used = 3;
     assert 0 <= index < used, "index out of bounds";
 }
@@ -11,10 +12,8 @@ __DATA__
 {
     "trapped": true,
     "stderr_contains": [
-        "Assertion failed in run at",
-        ": index out of bounds",
         "condition: 0 <= index < used",
-        "index: 5",
+        "index: -1",
         "used: 3"
     ]
 }

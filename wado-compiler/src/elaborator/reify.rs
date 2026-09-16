@@ -6563,7 +6563,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             acc_tir = TirExpr::new(
                 TirExprKind::Binary {
                     left: Box::new(acc_tir),
-                    op: TirBinaryOp::And,
+                    op: TirBinaryOp::BitAnd,
                     right: Box::new(cmp_tir),
                 },
                 TypeTable::BOOL,

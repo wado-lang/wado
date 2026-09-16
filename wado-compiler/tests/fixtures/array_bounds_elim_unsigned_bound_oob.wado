@@ -1,0 +1,38 @@
+// The value pool keeps an integer as its `u64` bit pattern, and the check
+// eliminators compare signed. `2^63` as a `u64` guard bound reads back as
+// `i64::MIN`, which orders below every other bound rather than above it, so a
+// guard `x <= 2^63` would appear to refute the check `x >= 1`. It refutes
+// nothing: `x` is 5 here and the panic must fire.
+//
+// The `n > 3` exit keeps the loop finite, so losing the panic shows up as the
+// wrong answer rather than as a run that never ends.
+
+use { println, Stdout } from "core:cli";
+
+fn probe(start: u64) -> i32 {
+    let mut x = start;
+    let mut n = 0;
+    while x <= 9223372036854775808 {
+        if x >= 1 {
+            panic("reached");
+        }
+        n += 1;
+        if n > 3 {
+            return n;
+        }
+        x = x + 1;
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    println(`${probe(builtin::black_box(5 as u64))}`);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "reached"
+    ],
+    "trapped": true
+}

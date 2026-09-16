@@ -73,7 +73,7 @@ Syntactic transformations that do not require type information. Operates on a si
 Responsibilities:
 
 - Compound assignment expansion (`x += 1` → `x = x + 1`)
-- Comparison chain expansion (`a < b < c` → `a < b && b < c`)
+- Comparison chain expansion (`a < b < c` tests `(a < b) & (b < c)`, each operand evaluated once)
 - JSX syntax transformation (structure only, types resolved later)
 - Reactive signal syntax transformation (markers only, graph built later)
 - Template string expansion

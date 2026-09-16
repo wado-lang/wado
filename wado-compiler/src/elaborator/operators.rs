@@ -1755,7 +1755,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `a OP1 b OP2 c [OP3 d …]` as the equivalent
-    /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`, which reify emits.
+    /// `(a OP1 b) & (b OP2 c) [& (c OP3 d) …]`, which reify emits. The join is
+    /// `&`, not `&&`: a chain evaluates every operand.
     ///
     /// Middle terms appear in two comparisons each, so each is bound to a
     /// `$mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
@@ -1798,7 +1799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
-        // future `reify` pass can replay the same `(a < b) && (b < c)`
+        // future `reify` pass can replay the same `(a < b) & (b < c)`
         // shape with the same `$mK` middle bindings.
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
@@ -1842,10 +1843,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let cmp_type =
                 self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
-            // The `&&` joining two comparisons is synthesised, so its right
+            // The `&` joining two comparisons is synthesised, so its right
             // operand is the comparison the chain just built, not written text.
-            acc =
-                self.resolve_binary_op(acc, BinaryOp::And, cmp_type, cmp.op_span, chain.span, None);
+            acc = self.resolve_binary_op(
+                acc,
+                BinaryOp::BitAnd,
+                cmp_type,
+                cmp.op_span,
+                chain.span,
+                None,
+            );
             prev = right;
         }
 
