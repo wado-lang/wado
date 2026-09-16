@@ -1721,13 +1721,10 @@ impl Analyzer<'_> {
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
-                if record {
-                    let exprs: Vec<&TirExpr> = args.iter().collect();
-                    self.mark_sibling_mut_aliases(&exprs, None);
-                }
-                let retained = self.functor_rows.retained(callee, args.len());
                 let kept = if record {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
+                    self.mark_sibling_mut_aliases(&exprs, None);
+                    let retained = self.functor_rows.retained(callee, args.len());
                     self.kept_through(&retained, &exprs)
                 } else {
                     Vec::new()

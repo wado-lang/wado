@@ -2043,12 +2043,12 @@ impl Parser {
         Some(false)
     }
 
-    /// Parse a declaration's `with (Effect1, Effect2)` clause. Every row
-    /// member is an effect. Nothing follows the row but the body or `;`, so a
-    /// comma after a bare effect is a missing paren.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
+    /// Parse a `with (Effect1, Effect2)` row. Every member is an effect. The
+    /// third result says the row was written bare, with no parentheses closing
+    /// it.
+    fn parse_effect_row(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, bool)> {
         let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new()));
+            return Ok((Vec::new(), Vec::new(), false));
         };
 
         let mut effects = Vec::new();
@@ -2071,7 +2071,16 @@ impl Parser {
 
         if parenthesized {
             self.expect(&TokenKind::RParen)?;
-        } else if self.check(&TokenKind::Comma) {
+        }
+        Ok((effects, effect_ids, !parenthesized))
+    }
+
+    /// Parse a declaration's `with` clause. Nothing follows the row but the
+    /// body or `;`, so a comma after a bare effect is a missing paren; in type
+    /// position that comma belongs to the enclosing list.
+    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
+        let (effects, effect_ids, bare) = self.parse_effect_row()?;
+        if bare && self.check(&TokenKind::Comma) {
             return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
         }
         Ok((effects, effect_ids))
@@ -2091,37 +2100,6 @@ impl Parser {
             return Ok(());
         }
         Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS))
-    }
-
-    /// Parse a function type's `with (Effect1, Effect2)` clause. Same row
-    /// shape as a declaration's.
-    fn parse_with_clause_for_fn_type(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
-        let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new()));
-        };
-
-        let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
-        if parenthesized && self.check(&TokenKind::RParen) {
-            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
-        }
-        loop {
-            if parenthesized && self.check(&TokenKind::RParen) {
-                break;
-            }
-            let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
-            if !parenthesized || !self.check(&TokenKind::Comma) {
-                break;
-            }
-            self.advance();
-        }
-
-        if parenthesized {
-            self.expect(&TokenKind::RParen)?;
-        }
-        Ok((effects, effect_ids))
     }
 
     /// Consume the `;` separating this statement from the next and return the
@@ -4193,8 +4171,8 @@ impl Parser {
         Err(self.error_at_span(
             span,
             "a closure cannot declare `with` yet: its effects are inferred from \
-             the body. To make a handler the \
-             body, wrap it: `|| (with H => h do { ... })`",
+             the body. To make a handler the body, wrap it: \
+             `|| (with H => h do { ... })`",
         ))
     }
 
@@ -4854,7 +4832,7 @@ impl Parser {
                 })
             };
 
-            let (effects, effect_ids) = self.parse_with_clause_for_fn_type()?;
+            let (effects, effect_ids, _) = self.parse_effect_row()?;
 
             return Ok(Type::Function(Box::new(FunctionType {
                 is_mut,
@@ -5213,7 +5191,7 @@ impl Parser {
             })
         };
 
-        let (effects, effect_ids) = self.parse_bound_with_clause()?;
+        let (effects, effect_ids, _) = self.parse_effect_row()?;
 
         Ok(Box::new(FunctionType {
             is_mut,
@@ -5222,37 +5200,6 @@ impl Parser {
             effects,
             effect_ids,
         }))
-    }
-
-    /// Parse a closure-type bound's `with (E1, E2)` clause. Same row shape as
-    /// a declaration's.
-    fn parse_bound_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>)> {
-        let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new()));
-        };
-
-        let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
-        if parenthesized && self.check(&TokenKind::RParen) {
-            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
-        }
-        loop {
-            if parenthesized && self.check(&TokenKind::RParen) {
-                break;
-            }
-            let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
-            if !parenthesized || !self.check(&TokenKind::Comma) {
-                break;
-            }
-            self.advance();
-        }
-
-        if parenthesized {
-            self.expect(&TokenKind::RParen)?;
-        }
-        Ok((effects, effect_ids))
     }
 
     /// Parse type arguments for turbofish syntax: `<T1, T2, ...>`

@@ -4104,14 +4104,7 @@ fn unparse_attr_body_into(name: &str, args: &[AttrArg], output: &mut String) {
     if args.is_empty() {
         return;
     }
-    output.push('(');
-    for (i, arg) in args.iter().enumerate() {
-        if i > 0 {
-            output.push_str(", ");
-        }
-        unparse_attr_arg_into(arg, output);
-    }
-    output.push(')');
+    delimited_into("(", ")", args, output, unparse_attr_arg_into);
 }
 
 fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
@@ -4125,14 +4118,10 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
         }
         AttrArg::KeyArray(k, vs) => {
             output.push_str(k);
-            output.push_str(" = [");
-            for (i, v) in vs.iter().enumerate() {
-                if i > 0 {
-                    output.push_str(", ");
-                }
-                output.push_str(&quoted(v));
-            }
-            output.push(']');
+            output.push_str(" = ");
+            delimited_into("[", "]", vs, output, |v: &String, out: &mut String| {
+                out.push_str(&quoted(v));
+            });
         }
         AttrArg::KeyIdent(k, v) => {
             output.push_str(k);

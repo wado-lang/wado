@@ -58,7 +58,7 @@ fn record_declaration(
 /// The name a call resolves a declaration by: the generic one where the call is
 /// a monomorphized instance, which is what link snapshots before
 /// monomorphization drops the declaration it came from.
-pub fn declaration_key(func: &TirFunction) -> String {
+fn declaration_key(func: &TirFunction) -> String {
     func.monomorph_info
         .as_ref()
         .map_or_else(|| func.name.clone(), |m| m.generic_name.clone())

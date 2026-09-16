@@ -136,12 +136,6 @@ fn target_local(target: &TirExpr) -> Option<u32> {
     }
 }
 
-fn once(root: Root) -> IndexSet<Root> {
-    let mut set = IndexSet::default();
-    set.insert(root);
-    set
-}
-
 struct WriteWalker<'a> {
     computed: &'a WholeValueWrites,
     carrying: &'a RefCarrying<'a>,
@@ -218,7 +212,7 @@ impl<'a> WriteWalker<'a> {
                 }
                 out
             }
-            TirExprKind::Capture { index, .. } => once(Root::Capture(*index)),
+            TirExprKind::Capture { index, .. } => IndexSet::from_iter([Root::Capture(*index)]),
             TirExprKind::Unary {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
