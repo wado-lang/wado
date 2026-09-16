@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
-use super::stores::{BoundedRetention, FunctorRows, StoredParams};
+use super::stores::{BoundedRetention, FunctorRows, Retained, StoredParams};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -945,7 +945,7 @@ impl Analyzer<'_> {
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
     }
 
-    /// What this call keeps at each argument position, resolved against the
+    /// What a named call keeps at each argument position, resolved against the
     /// arguments it is given.
     fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr]) -> Vec<Kept> {
         (0..args.len())
@@ -953,14 +953,34 @@ impl Analyzer<'_> {
                 if !self.callee_stores(callee, pos) {
                     return Kept::Transient;
                 }
-                match self.bounded.destinations(callee, pos) {
-                    Some(destinations) if !destinations.is_empty() => self
-                        .landing_locals(args, destinations)
-                        .map_or(Kept::Frame, Kept::Into),
-                    _ => Kept::Frame,
-                }
+                self.landing(args, self.bounded.destinations(callee, pos))
             })
             .collect()
+    }
+
+    /// The same for a call through a function value, off the row the site
+    /// resolved rather than a name.
+    fn kept_through(&self, retained: &Retained, args: &[&TirExpr]) -> Vec<Kept> {
+        (0..args.len())
+            .map(|pos| {
+                let position = u32::try_from(pos).unwrap();
+                if !retained.keeps(position) {
+                    return Kept::Transient;
+                }
+                self.landing(args, retained.destinations(position))
+            })
+            .collect()
+    }
+
+    /// A kept position read as a pin: where the destinations are all locals of
+    /// this body it lasts only as long as they do, and otherwise the frame.
+    fn landing(&self, args: &[&TirExpr], destinations: Option<&IndexSet<u32>>) -> Kept {
+        match destinations {
+            Some(destinations) if !destinations.is_empty() => self
+                .landing_locals(args, destinations)
+                .map_or(Kept::Frame, Kept::Into),
+            _ => Kept::Frame,
+        }
     }
 
     /// The locals the callee's destination positions name, or `None` where one
@@ -1025,13 +1045,13 @@ impl Analyzer<'_> {
     }
 
     /// An indirect-call argument. Nothing here names the body that will run, so
-    /// the row the callee's type carries says whether this position escapes:
+    /// the row the call site resolved says what this position leaves behind:
     /// through a functor nothing mints a retaining value for, a borrow is as
     /// transient as it is through a named callee that keeps nothing.
     fn walk_indirect_arg(
         &mut self,
         arg: &TirExpr,
-        retained: bool,
+        kept: &Kept,
         live: &mut IndexSet<u32>,
         record: bool,
     ) {
@@ -1044,11 +1064,8 @@ impl Analyzer<'_> {
                 self.record_mutation(place, live);
             }
             let referent = self.borrow_read(place, live, record);
-            if record
-                && retained
-                && let Some(r) = referent
-            {
-                self.mark_escaped(r, top_field_of(place));
+            if record && let Some(r) = referent {
+                self.pin(r, top_field_of(place), kept);
             }
         } else {
             self.walk_expr(arg, live, record);
@@ -1709,9 +1726,19 @@ impl Analyzer<'_> {
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
                 let retained = self.functor_rows.retained(callee, args.len());
+                let kept = if record {
+                    let exprs: Vec<&TirExpr> = args.iter().collect();
+                    self.kept_through(&retained, &exprs)
+                } else {
+                    Vec::new()
+                };
                 for (pos, arg) in args.iter().enumerate().rev() {
-                    let keeps = retained.contains(&u32::try_from(pos).unwrap());
-                    self.walk_indirect_arg(arg, keeps, live, record);
+                    self.walk_indirect_arg(
+                        arg,
+                        kept.get(pos).unwrap_or(&Kept::Transient),
+                        live,
+                        record,
+                    );
                 }
                 self.walk_expr(callee, live, record);
             }

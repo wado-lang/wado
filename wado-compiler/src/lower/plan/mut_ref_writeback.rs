@@ -443,7 +443,7 @@ impl WriteBack<'_> {
                     // callee's type — the same reading the copy analysis takes,
                     // so the two no longer disagree. What it replaces is still
                     // unknown, and over-approximating that only costs a store.
-                    let stores = self.functor_rows.retained(callee, args.len());
+                    let stores = self.functor_rows.retained(callee, args.len()).positions();
                     let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
                     (
                         "a function value".to_string(),

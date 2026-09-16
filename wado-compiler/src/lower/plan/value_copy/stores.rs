@@ -312,8 +312,65 @@ pub struct FunctorRows {
     /// What each indirect call site keeps, by its callee expression. A reader
     /// outside the fixpoint has the expression and not the resolution, so this
     /// is where the per-site answer is published; two callee expressions sharing
-    /// a key answer their union.
-    at_call: IndexMap<(TypeId, Span), IndexSet<u32>>,
+    /// a key answer their join.
+    at_call: IndexMap<(TypeId, Span), Retained>,
+}
+
+/// What a call keeps, and where the positions the caller can resolve land.
+///
+/// Every reading of a call gives one: the union with no destinations is the
+/// answer a reader that cannot resolve a landing takes, and it is what a
+/// position any contributing body keeps out of sight reads as.
+#[derive(Default, Clone)]
+pub struct Retained {
+    kept: IndexSet<u32>,
+    bounded: IndexMap<u32, IndexSet<u32>>,
+}
+
+impl Retained {
+    fn of(facts: &StoresFacts) -> Self {
+        Retained {
+            kept: facts.union(),
+            bounded: facts.bounded(),
+        }
+    }
+
+    /// Join with another reading of the same call: it keeps what either keeps,
+    /// and a position stays bounded only where every reading that keeps it says
+    /// where it landed. A reading that does not keep a position says nothing
+    /// about it, which is what lets the fixpoint start from keeping nothing.
+    fn join(&mut self, other: &Retained) {
+        for (source, destinations) in &other.bounded {
+            if self.kept.contains(source) {
+                if let Some(mine) = self.bounded.get_mut(source) {
+                    extend(mine, destinations);
+                }
+            } else {
+                self.bounded.insert(*source, destinations.clone());
+            }
+        }
+        self.bounded
+            .retain(|source, _| !other.kept.contains(source) || other.bounded.contains_key(source));
+        extend(&mut self.kept, &other.kept);
+    }
+
+    /// Every position the call keeps, for a reader with no landing to resolve.
+    #[must_use]
+    pub fn positions(&self) -> IndexSet<u32> {
+        self.kept.clone()
+    }
+
+    #[must_use]
+    pub fn keeps(&self, position: u32) -> bool {
+        self.kept.contains(&position)
+    }
+
+    /// The parameter positions the call puts `position` in, or `None` where it
+    /// also keeps it somewhere the caller cannot name.
+    #[must_use]
+    pub fn destinations(&self, position: u32) -> Option<&IndexSet<u32>> {
+        self.bounded.get(&position)
+    }
 }
 
 impl FunctorRows {
@@ -387,13 +444,13 @@ impl FunctorRows {
         self.flow.entry(site).or_default().absorb(callees)
     }
 
-    /// The positions a call through `callee` may keep, for a reader outside the
-    /// fixpoint. A site the walk did not publish falls back to the type's row.
+    /// What a call through `callee` may keep, for a reader outside the fixpoint.
+    /// A site the walk did not publish falls back to the type's row.
     #[must_use]
-    pub fn retained(&self, callee: &TirExpr, arity: usize) -> IndexSet<u32> {
+    pub fn retained(&self, callee: &TirExpr, arity: usize) -> Retained {
         match self.at_call.get(&(callee.type_id, callee.span)) {
-            Some(positions) => positions.clone(),
-            None => self.row(callee.type_id, arity).union(),
+            Some(retained) => retained.clone(),
+            None => Retained::of(&self.row(callee.type_id, arity)),
         }
     }
 }
@@ -466,7 +523,7 @@ struct Contributions {
     mints: Vec<(MintId, TypeId, MintRow)>,
     flowed: Vec<(Site, Callees)>,
     escaping: IndexSet<TypeId>,
-    at_call: Vec<((TypeId, Span), IndexSet<u32>)>,
+    at_call: Vec<((TypeId, Span), Retained)>,
 }
 
 impl Contributions {
@@ -666,8 +723,13 @@ pub fn compute_stored_params(
         for type_id in round.escaping {
             grew |= rows.escaped.insert(type_id);
         }
-        for (key, positions) in round.at_call {
-            extend(rows.at_call.entry(key).or_default(), &positions);
+        for (key, retained) in round.at_call {
+            match rows.at_call.get_mut(&key) {
+                Some(entry) => entry.join(&retained),
+                None => {
+                    rows.at_call.insert(key, retained);
+                }
+            }
         }
         if !grew {
             break;
@@ -1700,7 +1762,7 @@ impl TirRefVisitor for StoresWalker<'_> {
                 self.functor_args_reach(landings.as_deref(), &exprs);
                 self.contributions
                     .at_call
-                    .push(((callee.type_id, callee.span), facts.union()));
+                    .push(((callee.type_id, callee.span), Retained::of(&facts)));
             }
             // A reference to a function-typed local is a way to replace what it
             // holds that this walk does not read, so the local may hold any

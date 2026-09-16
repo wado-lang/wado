@@ -1,0 +1,41 @@
+// A call through a function value bounds its retention the same way a named
+// one does. `hold` is the only value reaching `f`, and it puts its second
+// argument in its first, which here is a slot of this body that nothing reads
+// again — so the bag is moved into `kept` rather than copied. Read as "position
+// 1 is kept, never mind where", the bag would be pinned to the end of the body.
+
+struct Bag {
+    tags: List<String>,
+}
+
+struct Slot {
+    b: &Bag,
+}
+
+fn hold(slot: &mut Slot, b: &Bag) {
+    slot.b = b;
+}
+
+#[inline("never")]
+fn count_through(f: fn(&mut Slot, &Bag), filler: &Bag) -> i32 {
+    let mut slot = Slot { b: filler };
+    let origin = Bag {
+        tags: [`a${builtin::black_box(1)}`, "b"],
+    };
+    f(&mut slot, &origin);
+
+    let mut kept: List<Bag> = [];
+    kept.push(origin);
+    return kept[0].tags.len();
+}
+
+export fn run() {
+    let filler = Bag { tags: [] };
+    assert count_through(hold, &filler) == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$retain_indirect_bounded_destination.wado/Bag"]
+}

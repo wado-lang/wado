@@ -103,9 +103,10 @@ anywhere the walk cannot name makes every write through that local an escape
 again, and a local derived from such a one is no better off.
 
 The fixpoint publishes where a bounded position landed and not just that it was
-kept, so a reader outside it — the last-use walk — resolves the destination
-against its own argument list the way the fixpoint does. A position any channel
-keeps out of sight carries no destination and is read as the union of all three.
+kept, so a reader outside it resolves the destination against its own argument
+list the way the fixpoint does, by name or through a function value alike. A
+position any channel keeps out of sight carries no destination and is read as
+the union of all three.
 One whose every channel names a parameter is read as the locals the call's
 arguments name there, and pins its referent only where one of them is still
 readable at a point the referent would be moved out of. A destination that is
@@ -311,6 +312,13 @@ argument no longer coarsens every other call through its type. A functor type
 nothing mints a value at is read conservatively, which keeps "nothing mints
 this" apart from "the fixpoint has not reached it yet".
 
+What a site reads is a reading like any other, destinations included: a position
+stays bounded there only where every value reaching it says where it landed, and
+the caller resolves that against its own arguments as it would for a name. One
+value that keeps the position out of sight makes it unbounded for the site, and
+a reading that does not keep the position says nothing about it — which is what
+lets a fixpoint that starts from keeping nothing arrive at a bound.
+
 Sourcing it that way keeps retention a derived fact about a type rather than
 part of its identity: two function types differing only in retention stay one
 type, and nothing is checked when one coerces to the other. It is also what lets
@@ -367,13 +375,6 @@ the destination would sharpen it the same way, but the two walks run on rows
 built from different trees, one before boxing and one after lifting, so the
 bounded map the later one reads is not the one the earlier would need. Closing
 it takes publishing the destination from both passes.
-
-An indirect call reads the union. The row a call site resolves says which
-positions the values reaching it keep, not where each landed, so a function
-value is never a bounded retention however narrow the bodies behind it are.
-Closing it takes carrying a destination through the points-to answer, where a
-position means one thing per mint and the caller's argument list is the same one
-either way.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
