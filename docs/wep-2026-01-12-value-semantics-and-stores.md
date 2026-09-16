@@ -276,11 +276,25 @@ fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
 ```
 
 `apply` keeps nothing of its own, and what `f` does with `x` is not in `f`'s
-type. The answer comes from a source rather than a new analysis: a function
-value of a given type is minted in exactly two places — a reference to a named
-function, and a closure literal — and no function type crosses a Component Model
-boundary, so joining the facts of every such expression of one type bounds every
-call through a value of that type, with no points-to analysis. A functor type
+type. The answer comes from a source rather than a declaration: a function value
+is minted in exactly two places — a reference to a named function, and a closure
+literal — and no function type crosses a Component Model boundary, so every
+value a call can reach was minted somewhere in the package.
+
+Which of them reaches a given call is read by following each minted value from
+where it is minted to where it is called. A value settles in a local, is handed
+to a parameter, or goes somewhere this walk does not follow — a field, a
+capture, a reference taken of the local holding it. The first two are followed:
+a local holds whatever was assigned to it anywhere in the body, and a parameter
+holds whatever every call site passed there, which makes both a whole-program
+join rather than a reading per program point. The third is not, so a function
+type whose values reach one such place is read as every value of that type — the
+join over every expression minting one, which is what the type alone can say. A
+parameter of an exported function is filled from outside the package and takes
+that same reading.
+
+A call therefore reads the values that reach it, and a closure retaining an
+argument no longer coarsens every other call through its type. A functor type
 nothing mints a value at is read conservatively, which keeps "nothing mints
 this" apart from "the fixpoint has not reached it yet".
 
@@ -289,10 +303,12 @@ part of its identity: two function types differing only in retention stay one
 type, and nothing is checked when one coerces to the other. It is also what lets
 every reader of an indirect call read the same answer — the copy analysis, the
 last-use walk and the write-back — rather than each taking a reading of its own.
+A reader outside the fixpoint names a call by its callee expression, and one the
+fixpoint published no answer for falls back to the type.
 
-The row is computed twice, since those readers sit on either side of boxing, and
-each is read over the same tree its reader walks. That is what makes a type no
-expression mints mean "nothing mints this" rather than "not minted yet": a
+The answer is computed twice, since those readers sit on either side of boxing,
+and each is read over the same tree its reader walks. That is what makes a type
+no expression mints mean "nothing mints this" rather than "not minted yet": a
 function value has to be minted in a tree to reach a call site in that tree, so
 a later phase minting one cannot widen an answer an earlier reader already gave.
 Closure lifting does mint — a `with … do` body inside a closure becomes a
@@ -354,11 +370,19 @@ destination's extent and pinning to the frame are the same answer there.
 
 ## Known gaps
 
-An indirect call is read per functor type rather than per call site. The row
-joins every function value of one type into a single answer, so one comparator
-that retains an argument coarsens every other call through the same type.
-Closing it takes knowing which function values reach which call, which is a
-points-to analysis and nothing here is one.
+A function value is followed only while it stays in a local or a parameter. One
+put in a field, captured by a closure, or reached through a reference taken of
+the local holding it goes where the walk does not, and every call that could
+reach a value of that type is then read off the type. Closing that would take
+following function values through the heap, which is a shape-level points-to
+answer and nothing here is one.
+
+The two readings of a call differ once closures are lifted. Before lifting a
+closure literal is one, and the call that names it reads that value alone; after
+it, the value is an object the walk does not recognise as a mint, so the same
+call reads its type. The write-back gets the sharper answer and the last-use
+walk the coarser one. Closing it takes reading a lifted closure as the value it
+came from.
 
 An element claim reads what a value holds, which a body fills but a signature
 never states. A parameter arrives holding whatever the caller put there, and

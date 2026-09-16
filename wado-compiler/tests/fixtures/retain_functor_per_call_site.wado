@@ -1,0 +1,58 @@
+// A call through a function value reads what the values reaching *this* call
+// keep, not what every value of the callee's type keeps. `via` is only ever
+// handed `touch`, which keeps nothing; `stash`, which escapes its argument, has
+// the same type and is called elsewhere. Joined by type, `via` would retain its
+// own argument, and the write-back `&mut b.item` needs would be refused.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+global mut HELD: Option<Keep> = null;
+
+fn stash(p: &mut Payload) -> i32 {
+    HELD = Option::Some(Keep { held: p });
+    return 0;
+}
+
+fn touch(p: &mut Payload) -> i32 {
+    *p = Payload::Text("done");
+    return 1;
+}
+
+#[inline("never")]
+fn via(f: fn(&mut Payload) -> i32, p: &mut Payload) -> i32 {
+    return f(p);
+}
+
+#[inline("never")]
+fn elsewhere(f: fn(&mut Payload) -> i32, p: &mut Payload) -> i32 {
+    return f(p);
+}
+
+fn hand_over_a_field(b: &mut Bag) -> i32 {
+    return via(touch, &mut b.item);
+}
+
+test "a field reaches a functor that keeps nothing" {
+    let mut b = Bag { item: Payload::Empty };
+    assert hand_over_a_field(&mut b) == 1;
+    assert b.item matches { Text(_) };
+
+    let mut other = Payload::Empty;
+    assert elsewhere(stash, &mut other) == 0;
+}
+
+__DATA__
+{
+    "test": {}
+}

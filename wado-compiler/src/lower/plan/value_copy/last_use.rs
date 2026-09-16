@@ -1595,7 +1595,7 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
-                let retained = self.functor_rows.retained(callee.type_id, args.len());
+                let retained = self.functor_rows.retained(callee, args.len());
                 for (pos, arg) in args.iter().enumerate().rev() {
                     let keeps = retained.contains(&u32::try_from(pos).unwrap());
                     self.walk_indirect_arg(arg, keeps, live, record);

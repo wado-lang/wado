@@ -10,8 +10,9 @@
 //! one set is in WEP 2026-05-21; [`compute_stored_params`] publishes the union,
 //! which is what a reader with no argument list must assume.
 //!
-//! An indirect call reads [`FunctorRows`], whose answer for a functor type is
-//! the join over every expression that mints a function value of that type.
+//! An indirect call reads [`FunctorRows`], which answers per call site where it
+//! can name the function values that reach one, and per functor type — the join
+//! over every expression minting a value of that type — where it cannot.
 
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
@@ -26,6 +27,7 @@ use crate::tir::{
     TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
+use crate::token::Span;
 use std::cell::RefCell;
 
 /// Per-function set of reference-parameter positions the function may store.
@@ -147,6 +149,10 @@ fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
     }
 }
 
+fn is_function_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(type_table.get(type_id), ResolvedType::Function { .. })
+}
+
 /// Insert every element of `src` into `dst`, reporting whether `dst` grew.
 fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
     let mut grew = false;
@@ -156,12 +162,124 @@ fn extend(dst: &mut IndexSet<u32>, src: &IndexSet<u32>) -> bool {
     grew
 }
 
-/// What a call through a function value of each functor type may keep.
+/// Where a function value was minted: the function whose body holds the
+/// expression, and where in that body. A synthesised expression carries no
+/// distinct range, so two mints can share a key and are then read as one, which
+/// only ever widens the answer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct MintId {
+    owner: u32,
+    span: Span,
+}
+
+/// The body a walk is analysing, as the function-typed parameters of that body
+/// are named: a named function's, or one minted closure's.
+#[derive(Clone, Copy)]
+enum Owner {
+    Named(u32),
+    Mint(MintId),
+}
+
+impl Owner {
+    /// The function whose body this one sits in, which is what a mint inside it
+    /// is keyed by. A closure's mints belong to the function holding it.
+    fn function(self) -> u32 {
+        match self {
+            Owner::Named(function) => function,
+            Owner::Mint(id) => id.owner,
+        }
+    }
+
+    fn site(self, position: u32) -> Site {
+        match self {
+            Owner::Named(function) => Site::Named(function, position),
+            Owner::Mint(id) => Site::Mint(id, position),
+        }
+    }
+}
+
+/// A function-typed parameter position, of a named function or of a closure.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Site {
+    Named(u32, u32),
+    Mint(MintId, u32),
+}
+
+/// Whose parameters a call resolving to one mint feeds. A reference to a
+/// declaration the call graph does not carry names no body, so an argument
+/// handed to one is followed no further.
+#[derive(Clone, Copy, PartialEq)]
+enum MintTarget {
+    Named(u32),
+    Closure,
+    Opaque,
+}
+
+/// What one minting expression says about the value it mints: whose parameters
+/// a call resolving to it feeds, which of those take a function value, and what
+/// the call keeps.
+#[derive(Clone)]
+struct MintRow {
+    target: MintTarget,
+    functor_params: IndexSet<u32>,
+    facts: StoresFacts,
+}
+
+/// One parameter namespace a call's arguments land in. `Unfollowed` is a body
+/// this analysis does not walk, so what reaches it is not tracked.
+#[derive(Clone, Copy)]
+enum Landing {
+    Named(u32),
+    Closure(MintId),
+    Unfollowed,
+}
+
+/// Which function values may reach a call. `Any` is every value of the callee's
+/// type, which is what a functor row answers.
+#[derive(Clone)]
+enum Callees {
+    Mints(IndexSet<MintId>),
+    Any,
+}
+
+impl Default for Callees {
+    fn default() -> Self {
+        Callees::Mints(IndexSet::default())
+    }
+}
+
+impl Callees {
+    fn one(id: MintId) -> Self {
+        let mut ids = IndexSet::default();
+        ids.insert(id);
+        Callees::Mints(ids)
+    }
+
+    fn absorb(&mut self, other: &Callees) -> bool {
+        match (&mut *self, other) {
+            (Callees::Any, _) => false,
+            (_, Callees::Any) => {
+                *self = Callees::Any;
+                true
+            }
+            (Callees::Mints(mine), Callees::Mints(theirs)) => {
+                let mut grew = false;
+                for &id in theirs {
+                    grew |= mine.insert(id);
+                }
+                grew
+            }
+        }
+    }
+}
+
+/// What a call through a function value may keep.
 ///
 /// A function value is minted in exactly two places — a reference to a named
 /// function and a closure literal — and no function type crosses a Component
 /// Model boundary, so joining the facts of every such expression of one type
-/// bounds every call through a value of that type without a points-to analysis.
+/// bounds every call through a value of that type. A call site that can name
+/// which of those values reach it joins only those instead.
 #[derive(Default, Clone)]
 pub struct FunctorRows {
     /// The functor types some expression in the package mints a value at,
@@ -170,6 +288,19 @@ pub struct FunctorRows {
     /// the bottom a least fixpoint starts from.
     minted: IndexSet<TypeId>,
     facts: IndexMap<TypeId, StoresFacts>,
+    /// Each mint's own facts, whose parameters a call resolving to it feeds,
+    /// and which of those parameters take a function value.
+    per_mint: IndexMap<MintId, MintRow>,
+    /// Which values reach each function-typed parameter position.
+    flow: IndexMap<Site, Callees>,
+    /// Function types whose values reach a position this analysis stopped
+    /// following. A parameter of such a type is read as holding any value of it.
+    escaped: IndexSet<TypeId>,
+    /// What each indirect call site keeps, by its callee expression. A reader
+    /// outside the fixpoint has the expression and not the resolution, so this
+    /// is where the per-site answer is published; two callee expressions sharing
+    /// a key answer their union.
+    at_call: IndexMap<(TypeId, Span), IndexSet<u32>>,
 }
 
 impl FunctorRows {
@@ -186,16 +317,91 @@ impl FunctorRows {
         self.facts.get(&callee_type).cloned().unwrap_or_default()
     }
 
+    /// The facts of a call the walk resolved to `callees`. A resolved set joins
+    /// exactly those mints; an unresolved one falls back to the type's row.
+    fn row_of(&self, callees: &Callees, callee_type: TypeId, arity: usize) -> StoresFacts {
+        let Callees::Mints(ids) = callees else {
+            return self.row(callee_type, arity);
+        };
+        if !self.minted.contains(&callee_type) {
+            return self.row(callee_type, arity);
+        }
+        let mut out = StoresFacts::default();
+        for id in ids {
+            if let Some(row) = self.per_mint.get(id) {
+                out.absorb(&row.facts);
+            }
+        }
+        out
+    }
+
+    /// What a value of `type_id` arriving at `site` may be. A type this analysis
+    /// stopped following anywhere is read as any value of it.
+    fn at_site(&self, site: Site, type_id: TypeId) -> Callees {
+        if self.escaped.contains(&type_id) {
+            return Callees::Any;
+        }
+        self.flow.get(&site).cloned().unwrap_or_default()
+    }
+
+    fn target(&self, id: MintId) -> Option<MintTarget> {
+        self.per_mint.get(&id).map(|row| row.target)
+    }
+
+    /// Which of a minted closure's parameters take a function value.
+    fn mint_functor_params(&self, id: MintId) -> Option<&IndexSet<u32>> {
+        self.per_mint.get(&id).map(|row| &row.functor_params)
+    }
+
     fn merge(&mut self, callee_type: TypeId, facts: &StoresFacts) -> bool {
         self.facts.entry(callee_type).or_default().absorb(facts)
     }
 
-    /// The positions a call through `callee_type` may keep, for a reader
-    /// outside the fixpoint.
-    #[must_use]
-    pub fn retained(&self, callee_type: TypeId, arity: usize) -> IndexSet<u32> {
-        self.row(callee_type, arity).union()
+    fn merge_mint(&mut self, id: MintId, row: &MintRow) -> bool {
+        let entry = self.per_mint.entry(id).or_insert_with(|| MintRow {
+            target: row.target,
+            functor_params: row.functor_params.clone(),
+            facts: StoresFacts::default(),
+        });
+        let mut grew = entry.target != row.target;
+        entry.target = row.target;
+        grew |= extend(&mut entry.functor_params, &row.functor_params);
+        grew |= entry.facts.absorb(&row.facts);
+        grew
     }
+
+    fn flow_into(&mut self, site: Site, callees: &Callees) -> bool {
+        self.flow.entry(site).or_default().absorb(callees)
+    }
+
+    /// The positions a call through `callee` may keep, for a reader outside the
+    /// fixpoint. A site the walk did not publish falls back to the type's row.
+    #[must_use]
+    pub fn retained(&self, callee: &TirExpr, arity: usize) -> IndexSet<u32> {
+        match self.at_call.get(&(callee.type_id, callee.span)) {
+            Some(positions) => positions.clone(),
+            None => self.row(callee.type_id, arity).union(),
+        }
+    }
+}
+
+/// The functor types of every parameter a call from outside the package can
+/// fill: an exported function carries values no call site here contributed, so
+/// such a parameter is read as holding any value of its type.
+fn unfollowed_functor_params(project: &FlatPackage, type_table: &TypeTable) -> IndexSet<TypeId> {
+    let mut found = IndexSet::default();
+    for func in &project.functions {
+        let func = func.borrow();
+        if !func.is_export {
+            continue;
+        }
+        for param in &func.params {
+            if is_function_type(param.type_id, type_table) {
+                found.insert(param.type_id);
+            }
+        }
+    }
+    found
 }
 
 /// Every functor type a `Closure` or `FuncRef` expression mints a value at.
@@ -238,11 +444,38 @@ impl TirRefVisitor for MintedTypes<'_> {
     }
 }
 
+/// What one body's walk contributes beyond its own facts: the row of every
+/// function value it mints, which values reach each callee's function-typed
+/// parameters, the function types whose values it stopped following, and what
+/// each of its indirect call sites keeps.
+#[derive(Default)]
+struct Contributions {
+    mints: Vec<(MintId, TypeId, MintRow)>,
+    flowed: Vec<(Site, Callees)>,
+    escaping: IndexSet<TypeId>,
+    at_call: Vec<((TypeId, Span), IndexSet<u32>)>,
+}
+
+impl Contributions {
+    fn extend(&mut self, other: Contributions) {
+        self.mints.extend(other.mints);
+        self.flowed.extend(other.flowed);
+        for type_id in other.escaping {
+            self.escaping.insert(type_id);
+        }
+        self.at_call.extend(other.at_call);
+    }
+}
+
 /// A callee's facts, in the current fixpoint iteration.
 struct StoresOracle<'a> {
     computed: &'a FuncKeyMap<StoresFacts>,
     builtins: &'a BuiltinDeclarations,
     rows: &'a FunctorRows,
+    call_graph: &'a CallGraph,
+    /// Which of each function's parameters take a function value, by the dense
+    /// id the call graph uses.
+    functor_params: &'a [IndexSet<u32>],
 }
 
 impl StoresOracle<'_> {
@@ -274,10 +507,14 @@ impl StoresOracle<'_> {
         facts
     }
 
-    /// Facts for an indirect (functor) callee, read off the row its callee type
-    /// carries.
-    fn indirect(&self, callee_type: TypeId, arity: usize) -> StoresFacts {
-        self.rows.row(callee_type, arity)
+    /// Facts for an indirect (functor) callee: the join over the values the
+    /// walk resolved it to, or the callee type's row where it resolved none.
+    fn indirect(&self, callees: &Callees, callee: &TirExpr, arity: usize) -> StoresFacts {
+        self.rows.row_of(callees, callee.type_id, arity)
+    }
+
+    fn functor_params(&self, function: u32) -> &IndexSet<u32> {
+        &self.functor_params[function as usize]
     }
 }
 
@@ -311,16 +548,30 @@ pub fn compute_stored_params(
     }
 
     let carrying = RefCarrying::new(&project.structs, &type_table);
+    let functor_params: Vec<IndexSet<u32>> = project
+        .functions
+        .iter()
+        .map(|func| {
+            func.borrow()
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, param)| is_function_type(param.type_id, &type_table))
+                .map(|(position, _)| u32::try_from(position).unwrap())
+                .collect()
+        })
+        .collect();
     let mut rows = FunctorRows {
         minted: minted_functor_types(project, &type_table),
-        facts: IndexMap::default(),
+        escaped: unfollowed_functor_params(project, &type_table),
+        ..FunctorRows::default()
     };
     // A row is a whole-program join, so a function's facts depend on a minting
     // site the call graph gives no edge to. The worklist settles each round
     // against the rows it was given, and the round is repeated while any row
     // still grows; both lattices only ever gain positions, so this terminates.
     loop {
-        let mut minted: Vec<(TypeId, StoresFacts)> = Vec::new();
+        let mut round = Contributions::default();
         call_graph.solve(project, |id| {
             let func = project.functions[id as usize].borrow();
             let Some(body) = &func.body else {
@@ -336,6 +587,8 @@ pub fn compute_stored_params(
                     computed: &computed,
                     builtins,
                     rows: &rows,
+                    call_graph,
+                    functor_params: &functor_params,
                 };
                 facts_of_body(
                     &positions,
@@ -343,10 +596,11 @@ pub fn compute_stored_params(
                     &oracle,
                     &type_table,
                     &carrying,
+                    Owner::Named(id),
                     BodyRef::Block(body),
                 )
             };
-            minted.extend(from_body);
+            round.extend(from_body);
             let mut merged = computed
                 .get(&func.module_source, &func.name)
                 .cloned()
@@ -358,8 +612,18 @@ pub fn compute_stored_params(
             true
         });
         let mut grew = false;
-        for (callee_type, facts) in minted {
-            grew |= rows.merge(callee_type, &facts);
+        for (id, callee_type, row) in round.mints {
+            grew |= rows.merge(callee_type, &row.facts);
+            grew |= rows.merge_mint(id, &row);
+        }
+        for (site, callees) in round.flowed {
+            grew |= rows.flow_into(site, &callees);
+        }
+        for type_id in round.escaping {
+            grew |= rows.escaped.insert(type_id);
+        }
+        for (key, positions) in round.at_call {
+            extend(rows.at_call.entry(key).or_default(), &positions);
         }
         if !grew {
             break;
@@ -722,18 +986,21 @@ fn anchors_of_body(param_of_local: &IndexMap<u32, u32>, body: BodyRef) -> Anchor
 /// Walk one body over `params`, given as `(local index, type)` so a closure's
 /// own parameters are read the same way a function's are. `tail` is the
 /// expression a body without a `return` yields, which a closure has and a
-/// function does not. Returns the body's own facts, and what every function
-/// value it mints contributes to that value's functor row.
+/// function does not. `owner` names the body, which is how a function value
+/// reaching one of its parameters is addressed. Returns the body's own facts
+/// and what it contributes to the whole-program tables.
 fn facts_of_body(
     params: &[(u32, TypeId)],
     tail: Option<&TirExpr>,
     oracle: &StoresOracle,
     type_table: &TypeTable,
     carrying: &RefCarrying,
+    owner: Owner,
     body: BodyRef,
-) -> (StoresFacts, Vec<(TypeId, StoresFacts)>) {
+) -> (StoresFacts, Contributions) {
     let mut carries: IndexMap<u32, Carried> = IndexMap::default();
     let mut param_of_local: IndexMap<u32, u32> = IndexMap::default();
+    let mut reaching: IndexMap<u32, Callees> = IndexMap::default();
     for (i, (local_index, type_id)) in params.iter().enumerate() {
         let position = u32::try_from(i).unwrap();
         param_of_local.insert(*local_index, position);
@@ -742,6 +1009,10 @@ fn facts_of_body(
             entry.is.insert(position);
         } else if carrying.holds(*type_id) {
             entry.holds.insert(position);
+        }
+        if is_function_type(*type_id, type_table) {
+            let callees = oracle.rows.at_site(owner.site(position), *type_id);
+            reaching.insert(*local_index, callees);
         }
     }
     let anchors = anchors_of_body(&param_of_local, body);
@@ -752,14 +1023,19 @@ fn facts_of_body(
         oracle,
         type_table,
         carrying,
+        owner,
+        reaching,
         facts: StoresFacts::default(),
-        minted: Vec::new(),
+        contributions: Contributions::default(),
         grew: false,
     };
     // One walk propagates a carrier only as far forward as it appears; a loop
     // carrying a reference backwards needs another. Repeat until nothing grows.
     loop {
         walker.grew = false;
+        // Each pass reads more than the one before, so only the last one's
+        // contributions are kept: the earlier ones are subsets of it.
+        walker.contributions = Contributions::default();
         body.walk(&mut walker);
         if let Some(tail) = tail {
             let carried = walker.carried(tail).all();
@@ -769,7 +1045,7 @@ fn facts_of_body(
             break;
         }
     }
-    (walker.facts, walker.minted)
+    (walker.facts, walker.contributions)
 }
 
 struct StoresWalker<'a> {
@@ -784,9 +1060,13 @@ struct StoresWalker<'a> {
     oracle: &'a StoresOracle<'a>,
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
+    /// The body being walked, which names both the mints inside it and the
+    /// positions its own parameters occupy.
+    owner: Owner,
+    /// Which function values each function-typed local may hold.
+    reaching: IndexMap<u32, Callees>,
     facts: StoresFacts,
-    /// What each function value this body mints contributes to its functor row.
-    minted: Vec<(TypeId, StoresFacts)>,
+    contributions: Contributions,
     grew: bool,
 }
 
@@ -859,7 +1139,9 @@ impl StoresWalker<'_> {
                 self.placed(expr.type_id, routed)
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let facts = self.oracle.indirect(callee.type_id, args.len());
+                let facts = self
+                    .oracle
+                    .indirect(&self.reaching_of(callee), callee, args.len());
                 let routed = self.carried_args(args.iter(), &facts.into_result, &facts);
                 self.placed(expr.type_id, routed)
             }
@@ -976,13 +1258,56 @@ impl StoresWalker<'_> {
         self.grew |= extend(&mut self.facts.escapes, positions);
     }
 
+    /// Which function values `expr` may evaluate to. A mint is itself, a local
+    /// is what reached it, and anything else — a field, a capture, a call
+    /// result — is every value of the type.
+    fn reaching_of(&self, expr: &TirExpr) -> Callees {
+        if !is_function_type(expr.type_id, self.type_table) {
+            return Callees::default();
+        }
+        match &expr.kind {
+            TirExprKind::Closure { .. } | TirExprKind::FuncRef { .. } => {
+                Callees::one(self.mint_id(expr.span))
+            }
+            TirExprKind::Local { index, .. } => {
+                self.reaching.get(index).cloned().unwrap_or(Callees::Any)
+            }
+            _ => Callees::Any,
+        }
+    }
+
+    fn mint_id(&self, span: Span) -> MintId {
+        MintId {
+            owner: self.owner.function(),
+            span,
+        }
+    }
+
+    /// Give up on naming what a local holds.
+    fn reaches_any(&mut self, local: u32) {
+        self.grew |= self
+            .reaching
+            .entry(local)
+            .or_default()
+            .absorb(&Callees::Any);
+    }
+
+    /// A function value settling in a local: the local may be any of the values
+    /// that reached it.
+    fn reaches_local(&mut self, local: u32, value: &TirExpr) {
+        if !is_function_type(value.type_id, self.type_table) {
+            return;
+        }
+        let callees = self.reaching_of(value);
+        self.grew |= self.reaching.entry(local).or_default().absorb(&callees);
+    }
+
     /// Record what a function value minted here contributes to its row.
-    fn mint(&mut self, callee_type: TypeId, facts: StoresFacts) {
-        if matches!(
-            self.type_table.get(callee_type),
-            ResolvedType::Function { .. }
-        ) {
-            self.minted.push((callee_type, facts));
+    fn mint(&mut self, span: Span, callee_type: TypeId, row: MintRow) {
+        if is_function_type(callee_type, self.type_table) {
+            self.contributions
+                .mints
+                .push((self.mint_id(span), callee_type, row));
         }
     }
 
@@ -990,7 +1315,13 @@ impl StoresWalker<'_> {
     /// occupy local indices `0..params.len()` in the closure's namespace, and a
     /// `Capture` reaches none of them. A body with no `return` yields its tail,
     /// so that is what reaches the result.
-    fn mint_closure(&mut self, callee_type: TypeId, params: &[(String, TypeId)], body: &TirExpr) {
+    fn mint_closure(
+        &mut self,
+        span: Span,
+        callee_type: TypeId,
+        params: &[(String, TypeId)],
+        body: &TirExpr,
+    ) {
         let positions: Vec<(u32, TypeId)> = params
             .iter()
             .enumerate()
@@ -1002,10 +1333,105 @@ impl StoresWalker<'_> {
             self.oracle,
             self.type_table,
             self.carrying,
+            Owner::Mint(self.mint_id(span)),
             BodyRef::Expr(body),
         );
-        self.minted.extend(nested);
-        self.mint(callee_type, facts);
+        self.contributions.extend(nested);
+        let functor_params = positions
+            .iter()
+            .filter(|(_, type_id)| is_function_type(*type_id, self.type_table))
+            .map(|(position, _)| *position)
+            .collect();
+        self.mint(
+            span,
+            callee_type,
+            MintRow {
+                target: MintTarget::Closure,
+                functor_params,
+                facts,
+            },
+        );
+    }
+
+    /// Follow every function value this call hands over into the parameter it
+    /// lands at. A callee this walk could not name leaves the argument's type
+    /// unfollowed, so a parameter of that type is read as holding any value.
+    fn functor_args_reach(&mut self, landings: Option<&[Landing]>, args: &[&TirExpr]) {
+        let Some(landings) = landings else {
+            for arg in args {
+                if is_function_type(arg.type_id, self.type_table) {
+                    self.contributions.escaping.insert(arg.type_id);
+                }
+            }
+            return;
+        };
+        // Which positions carry a function value is the callee's to say, not the
+        // argument's: a phase that rewrites a call can leave an argument spelled
+        // at a type its parameter is not, and reading the parameter is what keeps
+        // such a position from looking like one nothing reaches.
+        let oracle = self.oracle;
+        for landing in landings {
+            let sites: Vec<Site> = match landing {
+                Landing::Named(function) => oracle
+                    .functor_params(*function)
+                    .iter()
+                    .map(|&position| Site::Named(*function, position))
+                    .collect(),
+                Landing::Closure(id) => oracle
+                    .rows
+                    .mint_functor_params(*id)
+                    .into_iter()
+                    .flatten()
+                    .map(|&position| Site::Mint(*id, position))
+                    .collect(),
+                Landing::Unfollowed => {
+                    for arg in args {
+                        if is_function_type(arg.type_id, self.type_table) {
+                            self.contributions.escaping.insert(arg.type_id);
+                        }
+                    }
+                    continue;
+                }
+            };
+            for site in sites {
+                let position = match site {
+                    Site::Named(_, position) | Site::Mint(_, position) => position,
+                };
+                let callees = match args.get(position as usize) {
+                    Some(arg) => self.arg_callees(arg),
+                    None => Callees::Any,
+                };
+                self.contributions.flowed.push((site, callees));
+            }
+        }
+    }
+
+    /// What an argument hands the parameter it lands at. Anything but a function
+    /// value this walk can name is every value of the parameter's type.
+    fn arg_callees(&self, arg: &TirExpr) -> Callees {
+        if !is_function_type(arg.type_id, self.type_table) {
+            return Callees::Any;
+        }
+        self.reaching_of(arg)
+    }
+
+    /// The parameter namespaces an indirect call's arguments may land in, or
+    /// `None` where the callee is unresolved. A mint the rows do not carry yet
+    /// is left out: the round that records it runs the whole walk again.
+    fn landings(&self, callees: &Callees) -> Option<Vec<Landing>> {
+        let Callees::Mints(ids) = callees else {
+            return None;
+        };
+        Some(
+            ids.iter()
+                .filter_map(|&id| match self.oracle.rows.target(id) {
+                    Some(MintTarget::Named(function)) => Some(Landing::Named(function)),
+                    Some(MintTarget::Closure) => Some(Landing::Closure(id)),
+                    Some(MintTarget::Opaque) => Some(Landing::Unfollowed),
+                    None => None,
+                })
+                .collect(),
+        )
     }
 
     fn reaches_result(&mut self, positions: &IndexSet<u32>) {
@@ -1127,6 +1553,16 @@ impl StoresWalker<'_> {
             self.rebind(b, &carried);
         }
     }
+
+    /// A pattern names a part of its scrutinee, which this walk does not follow
+    /// for function values, so every local it binds may hold any of them.
+    fn pattern_reaches_any(&mut self, pattern: &TirPattern) {
+        let mut binds: IndexSet<u32> = IndexSet::default();
+        analyze::collect_pattern_bindings(pattern, &mut binds);
+        for b in binds {
+            self.reaches_any(b);
+        }
+    }
 }
 
 /// Unions what every `break` inside a labeled block hands out of it. Which
@@ -1154,9 +1590,11 @@ impl TirRefVisitor for StoresWalker<'_> {
             } => {
                 let c = self.carried(value);
                 self.rebind(*local_index, &c);
+                self.reaches_local(*local_index, value);
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.bind_pattern(pattern, value);
+                self.pattern_reaches_any(pattern);
             }
             TirStmtKind::Return { value: Some(v) } => {
                 let c = self.carried(v).all();
@@ -1169,7 +1607,19 @@ impl TirRefVisitor for StoresWalker<'_> {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::Assign { target, value } => self.write(target, value),
+            TirExprKind::Assign { target, value } => {
+                self.write(target, value);
+                match &target.kind {
+                    TirExprKind::Local { index, .. } => self.reaches_local(*index, value),
+                    // A function value written anywhere else is read back out of
+                    // a place this walk does not follow, which answers `Any`.
+                    _ => {
+                        if is_function_type(value.type_id, self.type_table) {
+                            self.contributions.escaping.insert(value.type_id);
+                        }
+                    }
+                }
+            }
             TirExprKind::GlobalVarSet { value, .. } => {
                 let c = self.carried(value).all();
                 self.escape(&c);
@@ -1177,24 +1627,62 @@ impl TirRefVisitor for StoresWalker<'_> {
             TirExprKind::Match { expr: scrut, arms } => {
                 for arm in arms {
                     self.bind_pattern(&arm.pattern, scrut);
+                    self.pattern_reaches_any(&arm.pattern);
                 }
             }
             TirExprKind::Call { func, args, .. } => {
                 let facts = self.oracle.direct(func);
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 self.call_hands_on(&exprs, &facts);
+                let landing = match self.oracle.call_graph.id_of(func) {
+                    Some(id) => Landing::Named(id),
+                    None => Landing::Unfollowed,
+                };
+                self.functor_args_reach(Some(&[landing]), &exprs);
             }
             TirExprKind::IndirectCall { callee, args } => {
-                let facts = self.oracle.indirect(callee.type_id, args.len());
+                let callees = self.reaching_of(callee);
+                let facts = self.oracle.indirect(&callees, callee, args.len());
                 let exprs: Vec<&TirExpr> = args.iter().collect();
                 self.call_hands_on(&exprs, &facts);
+                let landings = self.landings(&callees);
+                self.functor_args_reach(landings.as_deref(), &exprs);
+                self.contributions
+                    .at_call
+                    .push(((callee.type_id, callee.span), facts.union()));
+            }
+            // A reference to a function-typed local is a way to replace what it
+            // holds that this walk does not read, so the local may hold any
+            // function value from here on.
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: place,
+            } => {
+                if is_function_type(place.type_id, self.type_table)
+                    && let TirExprKind::Local { index, .. } = &place.kind
+                {
+                    self.reaches_any(*index);
+                }
+            }
+            TirExprKind::CmRawCall { args, .. } => {
+                let exprs: Vec<&TirExpr> = args.iter().collect();
+                self.functor_args_reach(None, &exprs);
             }
             // A function value's own facts belong to its functor type, not to
             // the body that mints it. The closure body is analysed in its own
             // parameter namespace, so the default walk must not descend into it
-            // with this body's carriers.
-            TirExprKind::Closure { params, body, .. } => {
-                self.mint_closure(expr.type_id, params, body);
+            // with this body's carriers. A capture the closure may replace is
+            // the same hole a reference is, so the outer local widens too.
+            TirExprKind::Closure {
+                params,
+                body,
+                captures,
+                ..
+            } => {
+                for capture in captures {
+                    self.reaches_any(capture.outer_index);
+                }
+                self.mint_closure(expr.span, expr.type_id, params, body);
                 return;
             }
             TirExprKind::FuncRef {
@@ -1209,7 +1697,22 @@ impl TirRefVisitor for StoresWalker<'_> {
                     method_info: None,
                 };
                 let facts = self.oracle.direct(&referenced);
-                self.mint(expr.type_id, facts);
+                let (target, functor_params) = match self.oracle.call_graph.id_of(&referenced) {
+                    Some(id) => (
+                        MintTarget::Named(id),
+                        self.oracle.functor_params(id).clone(),
+                    ),
+                    None => (MintTarget::Opaque, IndexSet::default()),
+                };
+                self.mint(
+                    expr.span,
+                    expr.type_id,
+                    MintRow {
+                        target,
+                        functor_params,
+                        facts,
+                    },
+                );
             }
             _ => {}
         }
