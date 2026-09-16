@@ -26,8 +26,8 @@ spike = []
 # component so the bundle is no_std (zero wasi imports); `compiled_data` still
 # bakes in all CLDR data. Every component crate (locale, casemap, collator,
 # segmenter, plurals, decimal, datetime, ...) is an unconditional dependency of
-# the meta-crate, so they all remain available — we do NOT slice here; Wado
-# tree-shakes the final artifact, so the bundle stays whole.
+# the meta-crate, so they all remain available. What the built world reaches is
+# what survives LTO, so the WIT surface does the slicing, not this list.
 icu = { version = "2.3", default-features = false, features = ["compiled_data"] }
 # Same icu_segmenter instance the `icu` meta-crate re-exports, but with the
 # `auto` feature so WordSegmenter/LineSegmenter::new_auto are available (this is

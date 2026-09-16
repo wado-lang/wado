@@ -1,9 +1,5 @@
-//! ICU4X bundled as a self-contained Wasm Component Model component. Built
-//! no_std for wasm32-unknown-unknown so the resulting module imports nothing; a
-//! post-build `wasm-tools component new` wraps it into a component.
-//!
-//! The default build is the shippable `core:icu` surface (`wit-properties/`);
-//! `--features spike` builds the wider technical-validation one (`wit/`).
+//! ICU4X bundled as a self-contained Wasm Component Model component. The
+//! default build is the `core:icu` surface, `--features spike` the wider one.
 
 #![no_std]
 

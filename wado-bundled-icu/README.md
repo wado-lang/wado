@@ -9,41 +9,43 @@ wit-bindgen) never perturbs the main workspace's pinned wasm-tools generation.
 
 The crate builds one of two worlds:
 
-| build                       | world            | WIT               | what it is                                   |
-| --------------------------- | ---------------- | ----------------- | -------------------------------------------- |
-| `cargo build --release`     | `icu-properties` | `wit-properties/` | the shippable `core:icu` stage-1 surface     |
+| build                        | world            | WIT               | what it is                                   |
+| ---------------------------- | ---------------- | ----------------- | -------------------------------------------- |
+| `cargo build --release`      | `icu-properties` | `wit-properties/` | the shippable `core:icu` stage-1 surface     |
 | `--release --features spike` | `icu`            | `wit/`            | the wider technical-validation surface below |
 
 ## The shippable surface: character properties
 
-Resource-free, so the Wado import path consumes it today. Two operations —
-`ranges` for a property's inclusive code point ranges, `contains` for one
-character — each taking a property name and, for an enumerated property, a
-value. Names match as UAX #44 matches them, loosely.
+Resource-free, so the Wado import path consumes it today. `ranges` gives a
+property's inclusive code point ranges and `contains` answers for one
+character. Both take a property name and, for an enumerated property, a value.
+Names match as UAX #44 matches them, loosely.
 
 **287 KB** import-free component, covering 63 binary properties, 15 enumerated
 ones, and General_Category groups (`L` as well as `Lu`).
 
-Three things it deliberately does not answer, so a caller rejects rather than
-approximates — `\P{...}` complements what comes back, so a close-enough answer
-admits real members rather than missing some:
+Three things it deliberately does not answer:
 
-- **`Block`** — ICU4X ships no Block data.
-- **The UCD's contributory `Other_*` properties** — UAX #44 defines them as
-  inputs to derived properties, not as properties to query, and ICU4X follows
-  that.
-- **`Decomposition_Type`** — ICU4X ships no data for it.
+- **`Block`.** ICU4X ships no Block data.
+- **The UCD's contributory `Other_*` properties.** UAX #44 defines them as
+  inputs to derived properties rather than as properties to query, and ICU4X
+  follows that.
+- **`Decomposition_Type`.** ICU4X ships no data for it.
+
+Each returns `none` rather than a close-enough set. A caller complementing an
+approximate set would admit real members of the property instead of missing
+some.
 
 None of the three occurs in a live rule anywhere in
-[antlr/grammars-v4](https://github.com/antlr/grammars-v4) (1,150 grammars):
-`Block` and `Decomposition_Type` never appear at all, and every `Other_*`
-occurrence sits in a comment — Python's and Rust's lexers spell the code points
+[antlr/grammars-v4](https://github.com/antlr/grammars-v4) (1,150 grammars).
+`Block` and `Decomposition_Type` never appear at all. Every `Other_*`
+occurrence sits in a comment: Python's and Rust's lexers spell the code points
 out by hand instead.
 
 ## What the spike surface exposes
 
-See [`wit/world.wit`](wit/world.wit). The current surface is the
-**string-oriented** slice of ICU4X plus character properties:
+See [`wit/world.wit`](wit/world.wit). It is the **string-oriented** slice of
+ICU4X plus per-character properties:
 
 | interface    | operations                                                                     |
 | ------------ | ------------------------------------------------------------------------------ |
@@ -58,22 +60,26 @@ It exercises every marshalling shape Wado needs: `string` in/out, `list<u32>`,
 `char`, `enum`, `result<_, string>`, opaque `resource` handles, and
 `borrow<resource>` params.
 
-## Size
+## Size of the spike surface
 
 Import-free component, **~3.7 MB** with all six interfaces. Because Rust LTO
-slices ICU by reachability, the WIT surface is the size knob when rebuilding. Per-interface
-attribution (measured by building with interfaces removed):
+slices ICU by reachability, the WIT surface is the size knob when rebuilding.
+Per-interface attribution, measured by building with interfaces removed:
 
-| interface          | added size | notes                                                        |
-| ------------------ | ---------: | ------------------------------------------------------------ |
-| segmenter (`auto`) |   ~2.35 MB | LSTM + CJK/SE-Asian **dictionary** data — by far the largest |
-| collator           |   ~1.12 MB | root UCA collation table                                     |
-| normalizer         |    ~125 KB | NFC/NFD/NFKC/NFKD tables                                     |
-| locale + casemap   |     ~92 KB | baseline                                                     |
-| properties         |     ~44 KB | the gc/script tries + binary sets are cheap                  |
+| interface          | added size | notes                                       |
+| ------------------ | ---------: | ------------------------------------------- |
+| segmenter (`auto`) |   ~2.35 MB | LSTM + CJK/SE-Asian **dictionary** data     |
+| collator           |   ~1.12 MB | root UCA collation table                    |
+| normalizer         |    ~125 KB | NFC/NFD/NFKC/NFKD tables                    |
+| locale + casemap   |     ~92 KB | baseline                                    |
+| properties         |     ~44 KB | the gc/script tries + binary sets are cheap |
 
-So segmenter+collator are ~93% of the bytes; dropping word/line segmentation
+So segmenter+collator are ~93% of the bytes. Dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
+
+The 44 KB row answers seven properties by name in the WIT. The shippable
+surface takes the name at run time instead, which roots every property's data
+at once and is what puts it at 287 KB.
 
 ## Post-hoc slicing: one asset, sliced per program
 
@@ -117,14 +123,14 @@ can express: `graphemes only` would need the WIT surface split first.
 Correctness is checked, not inferred. `runtime-check` passes against the
 all-exports re-link, and its `casemap-only` binary asserts Turkish, German and
 en-US casing against the 93 KB component built from the re-linked slice
-(`wit-casemap/` narrows the world) — locale-aware data that survived the
+(`wit-casemap/` narrows the world). That is locale-aware data surviving the
 collection.
 
 ```sh
 cd runtime-check && cargo run --release --bin casemap-only -- <component.wasm>
 ```
 
-## Build (no_std, zero-import, self-contained — the libm model)
+## Build: no_std, zero-import, self-contained, the libm model
 
 The crate is `#![no_std]`, supplies its own global allocator (dlmalloc), and
 maps `panic` straight to a Wasm trap (Wado has no exceptions). It builds for
@@ -146,7 +152,7 @@ wasm-tools validate target/wado_bundled_icu.component.wasm
 wasm-tools component wit target/wado_bundled_icu.component.wasm
 ```
 
-Result: a component whose `world` has only exports, no imports (see Size above).
+Result: a component whose `world` has only exports, no imports.
 
 ### Alternative: wasm32-wasip2
 
@@ -157,11 +163,12 @@ bundled asset.
 
 ## Runtime check
 
-[`runtime-check/`](runtime-check/) instantiates the built component under
+[`runtime-check/`](runtime-check/) instantiates the spike component under
 wasmtime and calls into it, proving the baked Unicode/CLDR data is live across
-the component boundary — including the locale `resource` path (Turkish
+the component boundary. It covers the locale `resource` path (Turkish
 `istanbul` → `İSTANBUL`, not ASCII toupper), NFC/NFD round-trips, grapheme
-segmentation of a ZWJ family-emoji cluster, and character properties.
+segmentation of a ZWJ family-emoji cluster, and character properties. It binds
+`wit/`, so build the asset with `--features spike` first.
 
 ```sh
 cd runtime-check && cargo run --release
@@ -172,13 +179,14 @@ cd runtime-check && cargo run --release
 - Full `icu` (all components, `compiled_data`) compiles to wasm cleanly.
 - `wit-bindgen` marshals strings, resources, borrows and results across CM WIT.
 - Rust LTO tree-shakes ICU by reachability: only what the WIT surface uses
-  survives, so the WIT surface is the size knob (see Size above).
+  survives, so the WIT surface is the size knob.
 - no_std + wasm32-unknown-unknown yields a zero-import, fully self-contained
-  component — the same self-contained model as `wado-bundled-libm`.
+  component, the same model as `wado-bundled-libm`.
 
 ## Follow-up: data/code separation
 
-This spike bakes data into the component via `compiled_data`. The alternative —
-a **data-free feature component** that loads a postcard blob at runtime via
-ICU4X's `BlobDataProvider`, with the blob supplied by a shared **data** component
-composed in over the Component Model — is validated in [`bdp-spike/`](bdp-spike/).
+Both worlds bake their data in via `compiled_data`. The alternative is a
+**data-free feature component** that loads a postcard blob at runtime via
+ICU4X's `BlobDataProvider`, with the blob supplied by a shared **data**
+component composed in over the Component Model. It is validated in
+[`bdp-spike/`](bdp-spike/).

@@ -1,7 +1,5 @@
-//! Technical-validation wrapper exposing the string-oriented slice of ICU4X
-//! over a Wasm Component Model interface, including the `resource`-bearing
-//! locale and collator the import path does not yet consume. See
-//! `wit/world.wit` for the exported surface.
+//! The technical-validation surface: the string-oriented slice of ICU4X,
+//! including the `resource`-bearing locale and collator. See `wit/world.wit`.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

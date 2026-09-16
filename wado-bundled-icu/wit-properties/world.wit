@@ -3,22 +3,20 @@
 // the component today. `wit/world.wit` keeps the full spike surface.
 package wado:icu@0.1.0;
 
+// Both operations take a binary property's name with `value` absent, and an
+// enumerated one's with `value` present — `gc` (whose value may name a group
+// such as `L`), `sc`, `bc`, `lb`, `wb`, `sb`, `gcb`, `incb`, `ea`, `hst`,
+// `nt`, `insc`, `jt`, `jg`, `vo` or `ccc`. Names match as UAX #44 matches
+// them, loosely.
+//
+// A name this build does not answer returns `none`, never an approximation: a
+// caller complementing an approximate set admits real members of the property
+// rather than missing some.
 interface properties {
   /// Inclusive code point ranges of a property value, lowest first.
-  ///
-  /// `value` absent names a binary property (`Alphabetic`, `Hex_Digit`, …).
-  /// `value` present names an enumerated one, `property` being `gc` (whose
-  /// value may be a group such as `L`), `sc`, `bc`, `lb`, `wb`, `sb`, `gcb`,
-  /// `incb`, `ea`, `hst`, `nt`, `insc`, `jt`, `jg`, `vo` or `ccc`.
-  ///
-  /// Names match as UAX #44 matches them, loosely. `none` when the property or
-  /// the value is not one this build answers — never an approximation, since a
-  /// caller complementing the result would admit real members rather than miss
-  /// some.
   ranges: func(property: string, value: option<string>) -> option<list<tuple<u32, u32>>>;
 
-  /// Whether `ch` has the property value `ranges` describes, without building
-  /// the ranges. `none` on the same unknown names.
+  /// Whether `ch` has that property value, without building the ranges.
   contains: func(property: string, value: option<string>, ch: char) -> option<bool>;
 }
 
