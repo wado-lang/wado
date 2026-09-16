@@ -2617,21 +2617,41 @@ fn args_without_declared_defaults(
     kept
 }
 
-/// Whether a bare bound on the trait selects this header. A bound writes no
-/// arguments, so it asks for the declared default where a position has one
-/// (`T: Mul` is `Mul<Self>`) and nothing where it has none (`T: Pick`).
-pub(super) fn header_answers_bare_bound(
+/// Whether the header answers a bound writing `wanted`. At every position each
+/// side says its written argument, or the trait's default at `target` where it
+/// wrote none — so `T: Mul` reaches `impl Mul for Cm` and not `impl Mul<Inch>
+/// for Cm`.
+pub(super) fn header_answers_bound_args(
     trait_type: &ast::Type,
     target: &ast::Type,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
+    wanted: &[name::FqTypeName],
 ) -> bool {
     let ast_args = written_arg_nodes(trait_type);
-    ast_args.iter().enumerate().all(|(i, arg)| {
+    let default_at = |i: usize| {
         params
+            .get(i)?
+            .default
+            .as_ref()
+            .map(|default| match default {
+                ast::Type::Named(named) if named.name == "Self" => {
+                    written_type_arg(target, resolutions)
+                }
+                _ => written_type_arg(default, resolutions),
+            })
+    };
+    (0..ast_args.len().max(wanted.len())).all(|i| {
+        // A position the bound leaves open and the trait gives no default is
+        // one no bound can name, so every impl answers there.
+        let Some(asks) = wanted.get(i).cloned().or_else(|| default_at(i)) else {
+            return true;
+        };
+        ast_args
             .get(i)
-            .and_then(|p| p.default.as_ref())
-            .is_none_or(|default| restates_default(arg, default, Some(target), resolutions))
+            .map(|arg| written_type_arg(arg, resolutions))
+            .or_else(|| default_at(i))
+            == Some(asks)
     })
 }
 

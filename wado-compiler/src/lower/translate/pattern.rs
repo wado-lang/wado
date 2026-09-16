@@ -137,7 +137,6 @@ pub struct Lowering {
 
 /// What a string-literal pattern's `Eq::eq` call is spelled from, resolved once
 /// from the compiler-item registry so stdlib renames carry.
-#[derive(Clone)]
 struct TextEq {
     trait_name: FqTraitName,
     string_name: FqTypeName,
@@ -145,10 +144,15 @@ struct TextEq {
     /// holds the type table immutably.
     string_type: TypeId,
     string_ref_type: TypeId,
+    /// The module defining each `eq` method, by mangled name. An impl need not
+    /// live in the module declaring its receiver, and a call naming the wrong
+    /// one mints an extern stub for a function the package defines.
+    eq_modules: IndexMap<String, ModuleSource>,
 }
 
 impl TextEq {
-    fn new(type_table: &mut TypeTable) -> Self {
+    fn new(flat: &FlatPackage) -> Self {
+        let mut type_table = flat.type_table.borrow_mut();
         let string_def = StructDef::Decl(
             type_table
                 .compiler_item_def(CompilerItem::String)
@@ -158,11 +162,19 @@ impl TextEq {
             def: string_def,
             type_args: Vec::new(),
         });
+        let mut eq_modules: IndexMap<String, ModuleSource> = IndexMap::default();
+        for func in &flat.functions {
+            let func = func.borrow();
+            if func.name.ends_with("::eq") {
+                eq_modules.insert(func.name.clone(), func.module_source.clone());
+            }
+        }
         Self {
             trait_name: type_table.compiler_trait_fq(CompilerItem::Eq),
             string_name: type_table.compiler_struct_fq_name(CompilerItem::String),
             string_type,
             string_ref_type: type_table.make_ref(string_type),
+            eq_modules,
         }
     }
 }
@@ -194,7 +206,7 @@ impl Lowering {
 
         Self {
             struct_fields_map,
-            text_eq: TextEq::new(&mut flat.type_table.borrow_mut()),
+            text_eq: TextEq::new(flat),
             const_int_globals,
             returns_receiver_alias: returns_receiver_alias.clone(),
         }
@@ -212,7 +224,7 @@ impl Lowering {
         let mut lowerer = PatternLowerer::new(
             local_count,
             locals,
-            self.text_eq.clone(),
+            &self.text_eq,
             &self.struct_fields_map,
             &self.const_int_globals,
             &self.returns_receiver_alias,
@@ -231,7 +243,7 @@ struct PatternLowerer<'a> {
     local_count: u32,
     locals: Vec<TirLocal>,
     temp_counter: u32,
-    text_eq: TextEq,
+    text_eq: &'a TextEq,
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
@@ -278,7 +290,7 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
-        text_eq: TextEq,
+        text_eq: &'a TextEq,
         struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
         returns_receiver_alias: &'a FuncKeySet,
@@ -1439,13 +1451,17 @@ impl<'a> PatternLowerer<'a> {
                 .clone()
                 .with_args(vec![self.text_eq.string_name.clone()])
         };
-        let module_source = type_table
-            .nominal_head(scrutinee)
-            .map_or_else(ModuleSource::string, |(_, module)| module);
         // `translate` adjusts the receiver for the method's self-kind; only the
         // argument is spelled out here.
         let method_info = LocalMethodName::new(receiver_name, Some(trait_name), "eq".to_string());
         let mangled_name = method_info.to_mangled_name();
+        let module_source = self
+            .text_eq
+            .eq_modules
+            .get(&mangled_name)
+            .cloned()
+            .or_else(|| type_table.nominal_head(scrutinee).map(|(_, module)| module))
+            .unwrap_or_else(ModuleSource::string);
         TirExpr::new(
             TirExprKind::method_call(
                 Box::new(receiver),

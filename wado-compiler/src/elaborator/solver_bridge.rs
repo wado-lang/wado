@@ -6,12 +6,12 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::is_builtin_shape_name;
+use crate::name::{FqTypeName, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId,
-    TypeDeclId, TypeDef, candidates, derive, holds, rank,
+    TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -1250,6 +1250,7 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> Option<Question> {
         if tysys
             .compiler_item_of_trait(trait_)
@@ -1268,11 +1269,21 @@ impl SolverBridge {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
+        let args = wanted
+            .iter()
+            .map(|name| {
+                let head = self
+                    .lowering
+                    .known_type(&DeclKey::Def(name.head().def()?))?;
+                Some(SolverType::Decl(head, Vec::new()))
+            })
+            .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
             ty,
             trait_,
             module,
+            args,
         })
     }
 
@@ -1285,9 +1296,10 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> Option<bool> {
-        let q = self.question(tysys, ctx, scope, type_id, trait_)?;
-        Some(holds(&self.program, &q.env, &q.ty, q.trait_, q.module).is_some())
+        let q = self.question(tysys, ctx, scope, type_id, trait_, wanted)?;
+        Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in
@@ -1397,8 +1409,9 @@ impl SolverBridge {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> String {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, trait_) else {
+        let Some(q) = self.question(tysys, ctx, scope, type_id, trait_, wanted) else {
             return "outside what the lowering states".to_string();
         };
         let name_of = |id: u32| -> String {
@@ -1424,7 +1437,7 @@ impl SolverBridge {
             .zip(&q.env.param_bounds)
             .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.0)).collect()))
             .collect();
-        let answer = holds(&self.program, &q.env, &q.ty, q.trait_, q.module);
+        let answer = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
         let impls: Vec<_> = self
             .program
             .impls
@@ -1496,4 +1509,6 @@ struct Question {
     ty: SolverType,
     trait_: TraitDeclId,
     module: ModuleId,
+    /// The arguments the asking bound writes for the trait's own parameters.
+    args: Vec<SolverType>,
 }

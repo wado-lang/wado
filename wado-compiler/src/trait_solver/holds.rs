@@ -25,6 +25,20 @@ pub fn holds(
     trait_: TraitDeclId,
     scope: ModuleId,
 ) -> Option<Holds> {
+    holds_with_args(program, env, ty, trait_, scope, &[])
+}
+
+/// [`holds`] where the asking bound writes arguments for the trait's own
+/// parameters; an empty list asks for the declared defaults.
+#[must_use]
+pub fn holds_with_args(
+    program: &Program,
+    env: &Env,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+    scope: ModuleId,
+    args: &[SolverType],
+) -> Option<Holds> {
     Query {
         program,
         env,
@@ -32,7 +46,7 @@ pub fn holds(
         asking: Vec::new(),
         at_itself: None,
     }
-    .holds(ty, trait_)
+    .holds(ty, trait_, args)
 }
 
 /// One question and the questions open under it.
@@ -51,7 +65,12 @@ struct Query<'a> {
 }
 
 impl Query<'_> {
-    fn holds(&mut self, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+    fn holds(
+        &mut self,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+    ) -> Option<Holds> {
         if self.asking.iter().any(|(t, tr)| t == ty && *tr == trait_) {
             return None;
         }
@@ -112,27 +131,31 @@ impl Query<'_> {
             .impls
             .iter()
             .find_map(|(&id, def)| {
-                // A bound spells no arguments, so only an impl at the trait's
-                // defaults answers one. Selection asks without this gate.
+                // The bound's arguments are what the impl must answer at.
+                // Selection asks without this gate.
                 let implemented = def.trait_?;
-                if !program.bound_reaches(implemented, trait_) || !restates_defaults(program, def) {
+                if !program.bound_reaches(implemented, trait_) {
                     return None;
                 }
-                Some(self.impl_answers(id, def, ty)?.holds)
+                let answer = self.impl_answers(id, def, ty)?;
+                if !answers_args(program, def, ty, &answer.trait_args, args) {
+                    return None;
+                }
+                Some(answer.holds)
             })
             .or_else(|| {
                 if self.at_itself.as_ref() == Some(ty) {
                     return None;
                 }
                 let base = newtype_base(program, ty)?;
-                self.holds(&base, trait_)
+                self.holds(&base, trait_, args)
             })
             .or_else(|| {
                 let SolverType::Ref { inner, .. } = ty else {
                     return None;
                 };
                 match on_ref {
-                    RefRule::Inherits => self.holds(inner, trait_),
+                    RefRule::Inherits => self.holds(inner, trait_, args),
                     RefRule::Always | RefRule::Never => None,
                 }
             });
@@ -185,7 +208,7 @@ impl Query<'_> {
             };
             for &bound in &param.bounds {
                 for element in &elements {
-                    let answer = self.holds(element, bound)?;
+                    let answer = self.holds(element, bound, &[])?;
                     // An impl binding the pinned assoc otherwise is refuted;
                     // one binding nothing is not.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound) {
@@ -301,14 +324,33 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
     )
 }
 
-/// Whether the impl's written trait arguments say what the trait's defaults
-/// do: a bound spells no arguments, so `impl Mul<Inch> for Cm` answers no
-/// `T: Mul`.
-fn restates_defaults(program: &Program, def: &ImplDef) -> bool {
-    def.trait_args.iter().enumerate().all(|(i, arg)| {
-        program
-            .default_arg(def, i)
-            .is_none_or(|default| default == *arg)
+/// Whether the impl answers a bound writing `args`. At every position each side
+/// says its written argument, or the trait's default at `ty` where it wrote
+/// none — so `T: Mul` reaches `impl Mul for Cm` and not `impl Mul<Inch> for Cm`.
+fn answers_args(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    written: &[SolverType],
+    args: &[SolverType],
+) -> bool {
+    // A `Self` default lowers to the impl's target, which the match bound to `ty`.
+    let default_at = |i: usize| {
+        program.default_arg(def, i).map(|default| {
+            if default == def.target {
+                ty.clone()
+            } else {
+                default
+            }
+        })
+    };
+    (0..written.len().max(args.len())).all(|i| {
+        // A position the bound leaves open and the trait gives no default is
+        // one no bound can name, so every impl answers there.
+        let Some(asks) = args.get(i).cloned().or_else(|| default_at(i)) else {
+            return true;
+        };
+        written.get(i).cloned().or_else(|| default_at(i)) == Some(asks)
     })
 }
 

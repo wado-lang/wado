@@ -3717,16 +3717,19 @@ fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
 fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
 ```
 
-A bound cannot write a trait argument — the parser reads `<...>` after one as
-associated-type bindings — so `T: Add` names the defaulted `Add<Self>`.
-`T::Output` under two bounds that both declare `Output` is ambiguous unless
-they bind it to the same type.
+A bound that writes no argument names the declared default, so `T: Add` is
+`Add<Self>` and reaches `impl Add for Cm`, not `impl Add<Inch> for Cm`. Writing
+one asks for that argument instead: `T: Eq<String>` reaches `impl Eq<String> for
+StrSlice`, and on a `String` receiver it reaches `impl Eq for String`, whose
+`Rhs` restates `Self`. `T::Output` under two bounds that both declare `Output`
+is ambiguous unless they bind it to the same type.
 
 An operator names these traits by construction, not by spelling: a trait
 declared as `Add` elsewhere shadows the name but does not answer `+`.
 
-A parameter with no default is therefore unconstrained by a bound: `T: Pick`
-holds for every `impl Pick<K>`, and the body cannot pass an argument for `K`.
+A parameter with no default is left open by a bound that writes nothing there:
+`T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
+`T: Pick<String>` names it, and holds only for `impl Pick<String>`.
 
 ### Indexing Traits
 

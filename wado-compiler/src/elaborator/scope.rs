@@ -322,8 +322,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Add `bound` unless the list already holds its declaration, in which case
-    /// the constrained spelling wins — `T: Iterator + Iterator<Item = i32>` is
-    /// one bound, and it is the one carrying the associated type.
+    /// the merged bound carries what either spelling wrote — `T: Iterator +
+    /// Iterator<Item = i32>` is one bound, and it carries the associated type.
     ///
     /// A `fn(..)` bound names no trait, so it has no declaration to merge on
     /// and falls back to merging on its own site: two bounds written at two
@@ -353,8 +353,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .find(|(b, d)| d.is_none() && b.name == bound.name),
         };
         if let Some((existing, _)) = duplicate {
-            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
-                *existing = bound.clone();
+            if existing.type_args.is_empty() {
+                existing.type_args = bound.type_args.clone();
+            }
+            if existing.assoc_types.is_empty() {
+                existing.assoc_types = bound.assoc_types.clone();
             }
             return;
         }

@@ -3346,6 +3346,12 @@ impl Monomorphizer {
         true
     }
 
+    /// [`Self::trait_named_by_receiver_impl`] applied to every candidate a
+    /// receiver produces, so the newtype and base spellings settle alike.
+    fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
+        self.trait_named_by_receiver_impl(&info).unwrap_or(info)
+    }
+
     /// The name re-spelled the way the impl that answers it spells the trait.
     /// An impl names a declared default by leaving it out where a bound writes
     /// it, and an instance minted under the longer name defines nothing.
@@ -3450,12 +3456,8 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
-            // `has_impl` answers for the trait, not for the arguments a bound
-            // wrote on it, so the spelling is settled against the impl first.
             let candidate = self
-                .trait_named_by_receiver_impl(&candidate)
-                .unwrap_or(candidate);
+                .named_by_impl(info.with_substituted_struct_name(&type_table.fq_type_name(inner)));
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
@@ -3466,12 +3468,16 @@ impl Monomorphizer {
                 .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
                 .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
             {
-                info.with_substituted_struct_name(&type_table.fq_type_name(link))
+                self.named_by_impl(
+                    info.with_substituted_struct_name(&type_table.fq_type_name(link)),
+                )
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.representation_head(inner);
-                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
+                self.named_by_impl(
+                    info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner)),
+                )
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key

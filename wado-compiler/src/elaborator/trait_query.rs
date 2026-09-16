@@ -27,7 +27,7 @@ use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    get_type_name_static, header_answers_bare_bound,
+    get_type_name_static, header_answers_bound_args,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -599,11 +599,24 @@ impl TypeSystem {
         type_id: TypeId,
         trait_: DefId,
     ) -> bool {
+        self.type_implements_trait_with_args(ctx, scope, type_id, trait_, &[])
+    }
+
+    /// [`Self::type_implements_trait`] where the asking bound writes arguments
+    /// for the trait's own parameters, which the answering impl must write too.
+    pub(super) fn type_implements_trait_with_args(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
         let result = Self::asking(ctx, type_id, trait_, || {
-            self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_)
+            self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_, wanted)
         });
-        self.check_solver_agreement(ctx, scope, type_id, trait_, result);
+        self.check_solver_agreement(ctx, scope, type_id, trait_, wanted, result);
         result
     }
 
@@ -639,6 +652,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
+        wanted: &[FqTypeName],
         expected: bool,
     ) {
         // The solver is built in every profile, since selection asks it, but
@@ -649,7 +663,7 @@ impl TypeSystem {
         let Some(bridge) = self.solver.as_ref() else {
             return;
         };
-        let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_) else {
+        let Some(actual) = bridge.answer(self, ctx, scope, type_id, trait_, wanted) else {
             return;
         };
         assert_eq!(
@@ -658,7 +672,7 @@ impl TypeSystem {
             "the trait solver disagrees with type_implements_trait: `{}: {}` is {expected} to the compiler and {actual} to the solver ({})",
             self.type_table.borrow().type_name(type_id),
             self.resolutions.defs().name(trait_),
-            bridge.explain(self, ctx, scope, type_id, trait_),
+            bridge.explain(self, ctx, scope, type_id, trait_, wanted),
         );
     }
 
@@ -1208,6 +1222,7 @@ impl TypeSystem {
         type_id: TypeId,
         resolved: &ResolvedType,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> bool {
         let on_bound = self.on_bound_of(trait_);
 
@@ -1353,7 +1368,14 @@ impl TypeSystem {
         {
             let base = *base_type;
             let base_resolved = self.type_table.borrow().get(base).clone();
-            return self.type_implements_trait_inner(ctx, scope, base, &base_resolved, trait_);
+            return self.type_implements_trait_inner(
+                ctx,
+                scope,
+                base,
+                &base_resolved,
+                trait_,
+                wanted,
+            );
         }
 
         // Get the type name and type args for looking up implementations
@@ -1393,13 +1415,14 @@ impl TypeSystem {
                     trait_,
                     Some(&[inner_id]),
                     NewtypePeel::Follow,
+                    wanted,
                 ) {
                     return true;
                 }
                 if self.ref_denies_bound(on_bound, trait_) {
                     return false;
                 }
-                return self.type_implements_trait(ctx, scope, inner_id, trait_);
+                return self.type_implements_trait_with_args(ctx, scope, inner_id, trait_, wanted);
             }
             ResolvedType::MutRef(inner) => {
                 // Mutable references always implement Eq via ref.eq (identity comparison)
@@ -1415,13 +1438,14 @@ impl TypeSystem {
                     trait_,
                     Some(&[inner_id]),
                     NewtypePeel::Follow,
+                    wanted,
                 ) {
                     return true;
                 }
                 if self.ref_denies_bound(on_bound, trait_) {
                     return false;
                 }
-                return self.type_implements_trait(ctx, scope, inner_id, trait_);
+                return self.type_implements_trait_with_args(ctx, scope, inner_id, trait_, wanted);
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if
@@ -1432,19 +1456,21 @@ impl TypeSystem {
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_subject(
+                if self.find_trait_impl_for_type_with_args(
                     ctx,
                     scope,
                     Some(type_id),
                     &receiver,
                     trait_,
+                    None,
                     NewtypePeel::Follow,
+                    wanted,
                 ) {
                     return true;
                 }
                 // Fall back to base type's trait implementation
                 let base_id = *base_type;
-                return self.type_implements_trait(ctx, scope, base_id, trait_);
+                return self.type_implements_trait_with_args(ctx, scope, base_id, trait_, wanted);
             }
             // `()` names no declaring module, so an `impl Trait for ()` is
             // indexed under the builtin spelling the unit type mangles as.
@@ -1474,6 +1500,7 @@ impl TypeSystem {
             trait_,
             type_args.as_deref(),
             NewtypePeel::Follow,
+            wanted,
         )
     }
 
@@ -1489,7 +1516,16 @@ impl TypeSystem {
         trait_: DefId,
         peel: NewtypePeel,
     ) -> bool {
-        self.find_trait_impl_for_type_with_args(ctx, scope, subject, type_key, trait_, None, peel)
+        self.find_trait_impl_for_type_with_args(
+            ctx,
+            scope,
+            subject,
+            type_key,
+            trait_,
+            None,
+            peel,
+            &[],
+        )
     }
 
     pub(super) fn has_real_trait_impl_for_type(
@@ -1512,20 +1548,21 @@ impl TypeSystem {
             )
     }
 
-    /// Whether a bare bound on the header's trait selects it — see
-    /// [`super::trait_env::header_answers_bare_bound`].
-    fn header_answers_bare_bound(&self, header: &ImplHeader) -> bool {
+    /// Whether a bound writing `wanted` selects the header — see
+    /// [`super::trait_env::header_answers_bound_args`].
+    fn header_answers_bound_args(&self, header: &ImplHeader, wanted: &[FqTypeName]) -> bool {
         let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
             return true;
         };
         let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
             return true;
         };
-        header_answers_bare_bound(
+        header_answers_bound_args(
             trait_type,
             &header.ty,
             &decl_header.type_params,
             &self.resolutions,
+            wanted,
         )
     }
 
@@ -1540,6 +1577,7 @@ impl TypeSystem {
         trait_: DefId,
         type_args: Option<&[TypeId]>,
         peel: NewtypePeel,
+        wanted: &[FqTypeName],
     ) -> bool {
         let trait_env = self.trait_env.clone();
         {
@@ -1554,7 +1592,7 @@ impl TypeSystem {
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
                 if header.trait_ref == Some(trait_)
-                    && self.header_answers_bare_bound(header)
+                    && self.header_answers_bound_args(header, wanted)
                     && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
                         ctx,
@@ -2318,9 +2356,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
+                let wanted = self.bound_written_args(bound);
                 for &subject in &subjects {
                     let bound_def = self.bound_trait_def(bound.id);
-                    self.enforce_single_bound(subject, &bound.name, bound_def, &param.name, span);
+                    self.enforce_single_bound_args(
+                        subject,
+                        &bound.name,
+                        bound_def,
+                        &param.name,
+                        span,
+                        &wanted,
+                    );
                     self.enforce_assoc_type_bounds(subject, bound, span);
                 }
             }
@@ -2353,12 +2399,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param_name: &str,
         span: Span,
     ) -> bool {
+        self.enforce_single_bound_args(type_arg, trait_name, trait_, param_name, span, &[])
+    }
+
+    /// [`Self::enforce_single_bound`] for a bound writing arguments for the
+    /// trait's own parameters.
+    pub(super) fn enforce_single_bound_args(
+        &mut self,
+        type_arg: TypeId,
+        trait_name: &str,
+        trait_: Option<DefId>,
+        param_name: &str,
+        span: Span,
+        wanted: &[FqTypeName],
+    ) -> bool {
         // A bound whose site names no declaration cannot be enforced against an
         // identity; the unresolved name is diagnosed where it was written.
         let Some(trait_) = trait_ else {
             return true;
         };
-        if self.check_and_register_bound(type_arg, trait_) {
+        if self.check_and_register_bound_args(type_arg, trait_, wanted) {
             return true;
         }
         let type_name = self.tysys.type_id_to_string(type_arg);
@@ -2476,15 +2536,47 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.resolutions.declared(site)
     }
 
+    /// The arguments a bound writes for the trait's own parameters, spelled the
+    /// way the impl that answers it spells them.
+    fn bound_written_args(&self, bound: &ast::TraitBound) -> Vec<FqTypeName> {
+        if bound.type_args.is_empty() {
+            return Vec::new();
+        }
+        let Some(decl) = self.bound_trait_def(bound.id) else {
+            return Vec::new();
+        };
+        self.tysys
+            .trait_env
+            .fq_trait_named_by_bound(
+                FqTraitName::declared(self.tysys.resolutions.defs(), decl),
+                bound,
+                &self.tysys.resolutions,
+            )
+            .args()
+            .to_vec()
+    }
+
     /// Whether `type_arg` satisfies `trait_name`, registering its associated
     /// types when it does. Asking is what records an on-demand derivation
     /// request, so callers that do not report the answer still ask.
     pub(super) fn check_and_register_bound(&mut self, type_arg: TypeId, trait_: DefId) -> bool {
-        if !self.tysys.type_implements_trait(
+        self.check_and_register_bound_args(type_arg, trait_, &[])
+    }
+
+    /// [`Self::check_and_register_bound`] for a bound writing arguments for the
+    /// trait's own parameters.
+    pub(super) fn check_and_register_bound_args(
+        &mut self,
+        type_arg: TypeId,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+    ) -> bool {
+        if !self.tysys.type_implements_trait_with_args(
             &self.annotate_ctx,
             &self.type_lookup(),
             type_arg,
             trait_,
+            wanted,
         ) {
             return false;
         }
