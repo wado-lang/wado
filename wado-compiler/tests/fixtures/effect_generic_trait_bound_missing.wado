@@ -1,0 +1,34 @@
+#![TODO]
+// A method called through a generic trait bound must carry the effects the
+// selected impl declares. `Source` declares none, `HostSource::next_u64`
+// adds `Stdout`, and `draw` lacks it, so the missing effect must be reported
+// the way the direct call `h.next_u64()` already is.
+use { println, Stdout } from "core:cli";
+
+trait Source {
+    fn next(&mut self) -> i32;
+}
+
+struct HostSource {
+    n: i32,
+}
+
+impl Source for HostSource {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 {
+    return s.next();
+}
+
+export fn run() with Stdout {
+    let mut h = HostSource { n: 0 };
+    println(`${draw(&mut h)}`);
+}
+
+__DATA__
+{"compile_error": "Stdout"}
