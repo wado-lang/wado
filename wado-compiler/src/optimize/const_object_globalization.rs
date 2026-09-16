@@ -872,11 +872,10 @@ fn let_stmt_qualifies(
     if !gate.is_reference_type(type_id) {
         return decline("not a reference type");
     }
-    // A `&` / `*` chain over one binding names storage that already exists, so
-    // a global for it aliases whatever holds that storage — itself a candidate
-    // — rather than saving an allocation.
-    if aliases_one_binding(body, value) {
-        return decline("initializer only re-borrows another binding");
+    // Such an initializer names storage that already exists, so its global
+    // aliases the candidate holding that storage instead of saving one.
+    if references_one_binding(body, value) {
+        return decline("initializer only references another binding");
     }
     if !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone()) {
         return decline("initializer is not a closed constant");
@@ -1337,9 +1336,9 @@ fn block_is_const(body: &Body, block: BlockId, gate: &Gate<'_>, bound: &mut Inde
     }
 }
 
-/// Whether `value` reduces to a single local read through `&`, `*` and casts,
-/// which allocate nothing of their own.
-fn aliases_one_binding(body: &Body, value: Operand) -> bool {
+/// Whether `value` reduces to one local read, under any number of `&`, `*` and
+/// casts, none of which allocate.
+fn references_one_binding(body: &Body, value: Operand) -> bool {
     let Some(mut expr) = value.as_expr() else {
         return false;
     };

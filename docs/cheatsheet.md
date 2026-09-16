@@ -339,8 +339,8 @@ part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
 
-fn byte_len<S: AsStrSlice>(s: &S) -> i32 {
-    return s.as_str_slice().len();
+fn byte_len<S: AsStrSlice>(s: S) -> i32 {
+    return s.len();
 }
 byte_len("banana");              // a String, a &String, or a StrSlice
 ```
