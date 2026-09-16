@@ -5490,6 +5490,15 @@ impl MutatedVarsCollector<'_> {
         body(self);
         self.shadowed.truncate(depth);
     }
+
+    /// Walk a condition and the block its bindings reach. They reach that block
+    /// and nothing else — an `else` arm and the statements after do not see them.
+    fn conditional(&mut self, condition: &ast::Condition, then_block: &ast::Block) {
+        self.scoped(|c| {
+            c.visit_condition(condition);
+            c.visit_block(then_block);
+        });
+    }
 }
 
 impl AstVisitor for MutatedVarsCollector<'_> {
@@ -5512,8 +5521,17 @@ impl AstVisitor for MutatedVarsCollector<'_> {
                 s.shadowed.extend(c.params.iter().map(|p| p.name.clone()));
                 s.visit_expr(&c.body);
             }),
-            // A `matches` pattern binds for its guard alone.
-            ast::Expr::Matches(_) => self.scoped(|s| ast::walk_expr(s, expr)),
+            ast::Expr::If(e) => {
+                self.conditional(&e.condition, &e.then_block);
+                if let Some(eb) = &e.else_block {
+                    self.visit_block(eb);
+                }
+            }
+            // A `matches` pattern binds for its guard, a comprehension's for its
+            // body, and neither outlives the expression.
+            ast::Expr::Matches(_) | ast::Expr::TupleComprehension(_) => {
+                self.scoped(|s| ast::walk_expr(s, expr));
+            }
             // Everything else: let the generic walker recurse into every
             // sub-expression. Adding new `Expr` variants therefore does
             // not require touching this collector.
@@ -5522,12 +5540,8 @@ impl AstVisitor for MutatedVarsCollector<'_> {
     }
 
     fn visit_pattern(&mut self, pattern: &ast::Pattern) {
-        match pattern {
-            ast::Pattern::Ident { name, .. } | ast::Pattern::MutIdent { name, .. } => {
-                self.shadowed.push(name.clone());
-            }
-            _ => ast::walk_pattern(self, pattern),
-        }
+        let shadowed = &mut self.shadowed;
+        ast::for_each_pattern_name(pattern, &mut |name, _| shadowed.push(name.to_string()));
     }
 
     fn visit_block(&mut self, block: &ast::Block) {
@@ -5539,8 +5553,14 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             // A `let`'s binding reaches the rest of its block, which
             // `visit_block` closes.
             ast::Stmt::Let(_) => ast::walk_stmt(self, stmt),
-            // Every other statement's bindings — a `for` init, a `for-of` or
-            // `if let` pattern — reach no further than the statement.
+            ast::Stmt::If(s) => {
+                self.conditional(&s.condition, &s.then_block);
+                if let Some(eb) = &s.else_block {
+                    self.visit_block(eb);
+                }
+            }
+            // Every other statement's bindings — a `for` init, a `for-of`
+            // pattern, a `while let` — reach no further than the statement.
             _ => self.scoped(|s| ast::walk_stmt(s, stmt)),
         }
     }

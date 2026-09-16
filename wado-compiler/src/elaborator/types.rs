@@ -2623,20 +2623,22 @@ impl FunctionContext {
             }
         }
 
-        // Compute box types for address-taken outer locals
+        // Box types, asked of the binding each name actually resolves to. A
+        // parent local shadowing a boxed one is not boxed, so driving this off
+        // `outer_locals` rather than off every scope keeps the two in step.
         let mut outer_box_types = IndexMap::default();
-        for scope in &outer_ctx.scopes {
-            for (name, local) in scope {
-                if outer_ctx.address_taken_locals.contains(&local.index) {
-                    let ref_type = type_table.borrow_mut().make_mut_ref(local.type_id);
-                    outer_box_types.insert(name.clone(), ref_type);
-                }
+        for (name, binding) in &outer_locals {
+            let ref_type = match binding.reach {
+                OuterReach::ParentLocal(index) => outer_ctx
+                    .address_taken_locals
+                    .contains(&index)
+                    .then(|| type_table.borrow_mut().make_mut_ref(binding.local.type_id)),
+                // Boxed where it is owned, however many frames out that is.
+                OuterReach::ParentEnv => outer_ctx.outer_box_types.get(name).copied(),
+            };
+            if let Some(ref_type) = ref_type {
+                outer_box_types.insert(name.clone(), ref_type);
             }
-        }
-        // A binding the parent reaches by capture is boxed where it is owned,
-        // so its box type carries down with it.
-        for (name, ref_type) in &outer_ctx.outer_box_types {
-            outer_box_types.entry(name.clone()).or_insert(*ref_type);
         }
 
         // Closure function name is parent::{closure}
@@ -2855,7 +2857,7 @@ impl FunctionContext {
     /// The captures in slot order, for building `TirCapture` entries. For an
     /// address-taken outer local the type is the box type (`&mut T`). `reach`
     /// says where the enclosing frame finds each; a `ParentEnv` one is resolved
-    /// to a slot by [`super::Elaborator::link_parent_captures`].
+    /// to a slot by [`super::closure::link_parent_captures`].
     pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
         let mut captures: Vec<_> = self
             .captured_vars

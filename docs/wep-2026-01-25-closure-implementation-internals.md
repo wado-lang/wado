@@ -48,7 +48,7 @@ The `stores` annotation for non-closure reference parameters stays a separate me
 
 ### A capture is handed inward one frame at a time
 
-Environments are flat, not chained. A closure's environment holds exactly the bindings its own body names and nothing else. A closure nested in another therefore reaches an enclosing function's local only if every frame between them carries it, so each frame captures whatever the frame inside it asked for and did not own. Capture is transitive to any depth that way.
+Environments are flat, not chained. A closure's environment holds the bindings reached from its body, and a nested closure's body is part of that: a frame carries what the frame inside it asked for and did not own, as well as what it names itself. Capture is transitive to any depth that way, one frame at a time, and a frame between two others carries a binding it never mentions.
 
 Each capture records where the frame building the closure reads the value from: its own local, or its own environment slot. The second case is what a nested closure needs, and resolving it makes that frame capture the binding in turn.
 
@@ -105,6 +105,7 @@ A host callback does not need one to: the closure stays in a guest-side registry
 
 ## Open
 
+- [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run. Closing it takes a capture case in each walk, attributing the read to the environment rather than to a local.
 - [ ] **Detect mutation through a method call.** A closure is tagged `fn mut` from assignments to captured bindings, so mutating a capture via a `&mut self` method leaves it typed `fn`.
 - [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.

@@ -1,3 +1,5 @@
+#![allow(shadowed_name)]
+
 // A closure nested in a closure reaches a binding of any enclosing frame: each
 // frame captures what the one inside it asked for, so the value is handed
 // inward one environment at a time.
@@ -82,7 +84,7 @@ test "a let-bound nested closure writes the same binding" {
 
 test "a shadowing parameter is not the outer binding" {
     let mut count = 7;
-    let bump = |#[allow(shadowed_name)] mut count: i32| {
+    let bump = |mut count: i32| {
         count += 1;
         return count;
     };
@@ -93,7 +95,6 @@ test "a shadowing parameter is not the outer binding" {
 test "a shadowing let is not the outer binding" {
     let mut count = 7;
     let n = apply(|| {
-        #[allow(shadowed_name)]
         let mut count = 0;
         count += 1;
         return count;
@@ -102,11 +103,90 @@ test "a shadowing let is not the outer binding" {
     assert count == 7;
 }
 
+test "the enclosing closure's own captures keep their slots" {
+    let a = 1;
+    let b = 20;
+    let n = apply(|| {
+        let inner = apply(|| a);
+        return inner + b;
+    });
+    assert n == 21;
+}
+
+test "a slot mix-up would not even typecheck" {
+    let word: String = "ab";
+    let n = 40;
+    let total = apply(|| {
+        let len = apply(|| word.len());
+        return len + n;
+    });
+    assert total == 42;
+}
+
+test "a nested write crosses three frames" {
+    let mut count = 0;
+    apply_mut(|| {
+        apply_mut(|| {
+            apply_mut(|| count += 1);
+        });
+    });
+    assert count == 1;
+}
+
+test "two nested closures write one binding" {
+    let mut count = 0;
+    apply_mut(|| {
+        apply_mut(|| count += 1);
+        apply_mut(|| count += 10);
+    });
+    assert count == 11;
+}
+
+test "a nested closure only reading a mut binding stays fn" {
+    let mut count = 5;
+    let read = apply(|| apply(|| count));
+    count += 1;
+    assert read == 5;
+    assert count == 6;
+}
+
+test "a shadowing local is not the boxed outer one" {
+    let mut a = 0;
+    apply_mut(|| {
+        apply_mut(|| a += 1);
+        let a = 5;
+        assert apply(|| a) == 5;
+    });
+    assert a == 1;
+}
+
+test "an if-let binding does not reach the else branch" {
+    let mut n = 0;
+    let absent: Option<i32> = null;
+    apply_mut(|| {
+        if let Some(n) = absent {
+            let _ = n;
+        } else {
+            n = 7;
+        }
+    });
+    assert n == 7;
+}
+
+test "an if-let binding does not outlive the expression" {
+    let mut n = 0;
+    let one: Option<i32> = Some(1);
+    apply_mut(|| {
+        let v = if let Some(n) = one { n } else { 0 };
+        n = v;
+    });
+    assert n == 1;
+}
+
 test "a shadowing binder's scope ends with its block" {
     let mut count = 0;
     let mut bump = || {
         inner: {
-            #[allow(shadowed_name)]
             let count = 99;
             let _ = count;
         }

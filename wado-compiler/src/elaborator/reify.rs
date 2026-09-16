@@ -36,6 +36,7 @@ use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::omits_a_default;
+use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
@@ -6681,9 +6682,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        use crate::tir::{
-            ResolvedType, TirBlock, TirCapture, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable,
-        };
+        use crate::tir::{ResolvedType, TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = closure.span;
 
@@ -6812,17 +6811,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Step 5: assemble the capture list from the recorded entries.
-        let captures: Vec<TirCapture> = cap_info
-            .captures
-            .iter()
-            .map(|c| TirCapture {
-                name: c.name.clone(),
-                source: c.source,
-                type_id: c.type_id,
-                is_mut: c.is_mut,
-            })
-            .collect();
+        // Step 5: assemble the capture list, making this frame capture whatever
+        // the closure only reached through it — the step `resolve_closure` ran,
+        // which also allocates this frame's own slots in the same order.
+        let captures = relink_recorded_captures(&cap_info.captures, &closure_ctx, ctx);
 
         // An explicit annotation wins; otherwise single-expression closure
         // bodies (e.g. `|c| c.method()`) take their body's type as the return

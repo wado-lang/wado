@@ -8,12 +8,45 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{CaptureSource, ResolvedType, TypeId, TypeTable};
+use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
+
+/// The captures reify emits: sources resolved against `ctx` by the same step
+/// annotate ran, so the two walks agree on which environment slot holds what;
+/// types from the recorded entries, which hole inference substitutes into after
+/// annotate is done.
+pub(super) fn relink_recorded_captures(
+    recorded: &[CaptureEntry],
+    closure_ctx: &FunctionContext,
+    ctx: &mut FunctionContext,
+) -> Vec<TirCapture> {
+    let linked = link_parent_captures(closure_ctx, ctx);
+    assert_eq!(
+        linked.len(),
+        recorded.len(),
+        "annotate and reify disagree on how many captures this closure has"
+    );
+    linked
+        .iter()
+        .zip(recorded)
+        .map(|(linked, recorded)| {
+            assert_eq!(
+                linked.name, recorded.name,
+                "annotate and reify disagree on this closure's capture order"
+            );
+            TirCapture {
+                name: recorded.name.clone(),
+                source: linked.source,
+                type_id: recorded.type_id,
+                is_mut: recorded.is_mut,
+            }
+        })
+        .collect()
+}
 
 /// Expected function-type info extracted from an `expected_type` hint.
 struct ExpectedFn {
@@ -39,7 +72,7 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
 /// A binding `ctx` owns is read from its local. One it only reaches through its
 /// own environment makes `ctx` capture it too, which is what makes capture
 /// transitive: every frame runs this against its own parent, to any depth.
-fn link_parent_captures(
+pub(super) fn link_parent_captures(
     closure_ctx: &FunctionContext,
     ctx: &mut FunctionContext,
 ) -> Vec<CaptureEntry> {
