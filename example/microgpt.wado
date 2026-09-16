@@ -549,16 +549,28 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) ->
     return sample;
 }
 
+fn parse_docs(text: &String) -> List<String> {
+    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
+}
+
 // Let there be a Dataset `docs`: a list of documents, here a list of names.
 fn load_docs() -> List<String> with (Stderr, Preopens) {
-    let text = match fs::read_to_string(&"input.txt") {
-        Ok(contents) => contents,
+    match fs::read_to_string(&"input.txt") {
+        Ok(contents) => {
+            let docs = parse_docs(&contents);
+            if !docs.is_empty() {
+                return docs;
+            }
+            eprintln("microgpt: input.txt holds no documents; falling back to the built-in names");
+        },
         Err(e) => {
             eprintln(`microgpt: ${e}; falling back to the built-in names`);
-            #data;
         },
-    };
-    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
+    }
+    let builtin = #data;
+    let docs = parse_docs(&builtin);
+    assert !docs.is_empty();
+    return docs;
 }
 
 fn requested_steps() -> i32 with (Stderr, Environment) {
