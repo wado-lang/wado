@@ -22,10 +22,8 @@ use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
 use crate::wir_build::translate::ref_binding_needs_boxing;
 
-/// The compile-time constant of a SIMD lane operand — a promoted
-/// `Operand::Value` int constant in the function's value pool. The elaborator
-/// rejects a call whose lane index is not a literal in range, so anything else
-/// reaching here is the compiler's own fault.
+/// The compile-time constant of a SIMD lane operand, promoted into the
+/// function's value pool. The elaborator has already rejected anything else.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
     let Some(lane) = body.operand_const_int(op) else {
         panic!("SIMD lane index survived elaboration unfolded")

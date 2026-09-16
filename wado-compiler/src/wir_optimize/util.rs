@@ -240,6 +240,17 @@ pub(super) fn next_non_nop(stmts: &[WirInstr], from: usize) -> Option<usize> {
     (from..stmts.len()).find(|&k| !matches!(stmts[k], WirInstr::Nop))
 }
 
+/// Both operands are the same constant or the same local read, so evaluating
+/// one twice costs nothing and yields the same value.
+pub(super) fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
+    match (a, b) {
+        (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
+        (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
+        (WirInstr::I64Const(x), WirInstr::I64Const(y)) => x == y,
+        _ => false,
+    }
+}
+
 /// Count every `LocalGet` in an expression tree, per local name.
 pub(super) fn count_local_gets(instr: &WirInstr, counts: &mut IndexMap<String, u32>) {
     if let WirInstr::LocalGet { name, .. } = instr {

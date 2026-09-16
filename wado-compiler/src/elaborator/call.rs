@@ -3683,19 +3683,20 @@ impl TypeSystem {
     }
 }
 
-/// The lane a literal argument names. A negative one is a negation applied to
-/// a literal rather than a literal, and reaches the range check either way.
+/// The lane a literal argument names. A negative one parses as a negation
+/// applied to a literal, and reaches the range check either way.
 fn lane_literal(arg: &Expr) -> Option<i128> {
-    match arg {
-        Expr::Literal(lit) => match &lit.value {
-            ast::Literal::Number(repr) => parse_i128_literal(repr).ok(),
-            _ => None,
-        },
-        Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
-            lane_literal(&unary.expr)?.checked_neg()
-        }
-        _ => None,
-    }
+    let (sign, operand) = match arg {
+        Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => ("-", &unary.expr),
+        _ => ("", arg),
+    };
+    let Expr::Literal(lit) = operand else {
+        return None;
+    };
+    let ast::Literal::Number(repr) = &lit.value else {
+        return None;
+    };
+    parse_i128_literal(&format!("{sign}{repr}")).ok()
 }
 
 /// Where a SIMD builtin keeps its lane immediates, and what they may name.

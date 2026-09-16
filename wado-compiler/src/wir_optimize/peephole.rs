@@ -7,7 +7,7 @@
 use crate::compiler_trace;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
-use crate::wir_optimize::util::{self, is_side_effect_free, may_trap_in};
+use crate::wir_optimize::util::{self, is_same_free_read, is_side_effect_free, may_trap_in};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
 
@@ -897,17 +897,6 @@ fn rotate_from_halves(a: &WirInstr, b: &WirInstr) -> Option<WirInstr> {
         Box::new(value.as_ref().clone()),
         Box::new(amount.as_ref().clone()),
     ))
-}
-
-/// Both halves read the same value, and reading it costs nothing to repeat —
-/// the rotate that replaces them reads it once.
-fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
-    match (a, b) {
-        (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
-        (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
-        (WirInstr::I64Const(x), WirInstr::I64Const(y)) => x == y,
-        _ => false,
-    }
 }
 
 /// `complement` is `width - amount`, written either as the subtraction itself
