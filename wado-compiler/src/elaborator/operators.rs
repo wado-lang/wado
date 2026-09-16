@@ -514,7 +514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
             {
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
-                    && let Some((_bound_trait_name, info)) = {
+                    && let Some((bound_trait_name, info)) = {
                         let required = self.required_operator_trait(CompilerItem::Eq);
                         self.find_method_in_trait_bounds(
                             &bounds,
@@ -525,14 +525,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         )
                     }
                 {
-                    let eq_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_fq(CompilerItem::Eq);
+                    // The bound's own spelling, so an argument it writes
+                    // (`S: Eq<String>`) names the impl that answers it.
                     let resolved = ResolvedTraitMethod {
                         method_def: info.method_def,
-                        trait_name: eq_trait_name,
+                        trait_name: bound_trait_name,
                         method_name: "eq".to_string(),
                         impl_def: None,
                         impl_name: name.clone(),
