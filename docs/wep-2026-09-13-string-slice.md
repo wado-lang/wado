@@ -52,8 +52,9 @@ What follows:
   literal bare — `f("banana")`, never `f(&"banana")` — and a `&String` still
   passes through the blanket `impl<T: AsStrSlice> AsStrSlice for &T`.
 - `AsStrSlice` requires `Eq<String>`, so a body generic over it compares its
-  text with `==` against a literal, and a string-literal pattern matches it —
-  `==` on a type parameter reads the parameter's bounds, not the impls.
+  text with `==` against a literal, and a string-literal pattern matches it.
+  The requirement is what carries that: `==` on a type parameter reads the
+  parameter's bounds, not the impls.
 - Every `StrSlice` method that returns another view declares `stores[self]` too.
   A view holds its bytes in a reference field, and the spec's reference-storage
   rule counts reading one out of the receiver as the receiver escaping.

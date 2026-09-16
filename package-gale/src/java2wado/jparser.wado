@@ -151,16 +151,7 @@ fn is_local_decl(tokens: &List<JToken>, pos: i32) -> bool {
 }
 
 fn is_type_keyword<S: AsStrSlice>(name: S) -> bool {
-    return name == "int"
-        || name == "boolean"
-        || name == "String"
-        || name == "long"
-        || name == "short"
-        || name == "byte"
-        || name == "char"
-        || name == "double"
-        || name == "float"
-        || name == "void";
+    return name matches { "byte" | "short" | "int" | "long" | "float" | "double" | "char" | "boolean" | "String" | "void" };
 }
 
 fn is_assign_op(tokens: &List<JToken>, pos: i32) -> bool {

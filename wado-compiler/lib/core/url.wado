@@ -103,7 +103,7 @@ fn split_off_query_and_fragment<S: AsStrSlice>(input: S) -> [String, Option<Stri
 }
 
 fn is_special_scheme<S: AsStrSlice>(s: S) -> bool {
-    return s == "http" || s == "https" || s == "ws" || s == "wss";
+    return s matches { "http" | "https" | "ws" | "wss" };
 }
 
 fn is_unreserved_char(c: char) -> bool {

@@ -2045,13 +2045,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Unit
         );
         drop(type_table);
+        if !settled {
+            return None;
+        }
         // An arm tests the scrutinee against the literal with `==`, so any text
         // answering `Eq<String>` — a `StrSlice`, a newtype over one — matches a
         // string literal the way a `String` does.
         if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
             return None;
         }
-        settled.then(|| expected.to_string())
+        Some(expected.to_string())
     }
 
     /// Whether `scrutinee == "…"` resolves, which is what a string-literal

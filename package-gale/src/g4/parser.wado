@@ -271,19 +271,14 @@ impl G4Parser {
                     continue;
                 }
                 if self.is_kind(G4Token::Identifier) {
-                    let text = &self.peek().text;
-                    if *text == "public" {
-                        visibility = Visibility::Public;
-                        self.advance();
-                        continue;
-                    }
-                    if *text == "private" {
-                        visibility = Visibility::Private;
-                        self.advance();
-                        continue;
-                    }
-                    if *text == "protected" {
-                        visibility = Visibility::Protected;
+                    let modifier = match self.peek().text {
+                        "public" => Option::Some(Visibility::Public),
+                        "private" => Option::Some(Visibility::Private),
+                        "protected" => Option::Some(Visibility::Protected),
+                        _ => null,
+                    };
+                    if let Some(v) = modifier {
+                        visibility = v;
                         self.advance();
                         continue;
                     }

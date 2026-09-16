@@ -914,8 +914,8 @@ match command {
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
-A string-literal pattern tests the scrutinee with `==` against a `String`, so it
-matches any text that implements `Eq<String>` — a `String`, a `StrSlice`, a
+A string-literal pattern tests the scrutinee with `==` against a `String`. Any
+text that implements `Eq<String>` matches one: a `String`, a `StrSlice`, a
 newtype over either, and a body generic over `AsStrSlice`, which requires it.
 
 ```wado

@@ -1464,20 +1464,8 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
-    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
-    /// blanket impl and for a receiver no concrete impl represents (an
-    /// anonymous function type whose `Inspect` synthesis auto-derives
-    /// per-module).
-    ///
-    /// The AST layer answers first: it holds the impls a module wrote, and the
-    /// synthesis layer records both receiver namespaces, so preferring it would
-    /// return a different module. When several modules implement the trait for
-    /// same-named receivers, `type_module` picks the entry whose module matches.
     /// How many arguments the impl on `receiver` writes for `trait_`, among
-    /// those a bound writing `wanted` reaches. An impl names a declared default
-    /// by leaving it out (`impl Eq for String` is `Eq<String>`), so a bound
-    /// that writes one still has to arrive at the shorter spelling the impl was
-    /// mangled under.
+    /// those a bound writing `wanted` reaches.
     pub(crate) fn impl_written_arg_count(
         &self,
         receiver: &name::Receiver,
@@ -1509,6 +1497,15 @@ impl TraitEnv {
         })
     }
 
+    /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
+    /// blanket impl and for a receiver no concrete impl represents (an
+    /// anonymous function type whose `Inspect` synthesis auto-derives
+    /// per-module).
+    ///
+    /// The AST layer answers first: it holds the impls a module wrote, and the
+    /// synthesis layer records both receiver namespaces, so preferring it would
+    /// return a different module. When several modules implement the trait for
+    /// same-named receivers, `type_module` picks the entry whose module matches.
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,

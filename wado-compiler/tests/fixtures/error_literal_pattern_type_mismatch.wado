@@ -1,6 +1,6 @@
-// A literal pattern was never checked against the scrutinee, so the mismatch
-// reached codegen: a string pattern on an `i32` panicked in WIR build. Text
-// that answers `Eq<String>` is a match, and `match_string_literal_text` pins it.
+// A string pattern on an `i32` reached codegen unchecked and panicked in WIR
+// build. Text answering `Eq<String>` is a match; `match_string_literal_text`
+// pins that side.
 
 test "a string pattern needs a scrutinee that compares with a String" {
     let n = 3;

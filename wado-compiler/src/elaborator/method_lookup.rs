@@ -2811,27 +2811,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// every operand, so keeping both leaves an `impl<R: B> Eq<R> for T`
     /// shadowing the `impl Eq<String> for T` beside it.
     fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
-        if found.len() < 2 {
-            return;
+        if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
+            found.retain(|info| self.writes_rhs_type(info));
         }
-        let written: Vec<bool> = found
-            .iter()
-            .map(|info| info.rhs_type.is_some_and(|t| !self.is_impl_type_param(t)))
-            .collect();
-        if !written.iter().any(|w| *w) {
-            return;
-        }
-        let mut keep = written.iter();
-        found.retain(|_| *keep.next().unwrap_or(&true));
     }
 
-    /// Whether `ty` is an impl's own type parameter, through any references.
-    fn is_impl_type_param(&self, ty: TypeId) -> bool {
-        let table = self.tysys.type_table.borrow();
-        matches!(
-            table.get(table.peel_refs(ty)),
-            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
-        )
+    /// Whether the impl writes a type for its right-hand parameter, rather than
+    /// one mentioning its own type parameter.
+    fn writes_rhs_type(&self, info: &ArithmeticTraitInfo) -> bool {
+        info.rhs_type
+            .is_some_and(|rhs| !self.tysys.type_table.borrow().contains_rigid_param(rhs))
     }
 
     /// Every impl of `trait_name` on the receiver whose right-hand parameter
