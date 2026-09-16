@@ -25,6 +25,7 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
+use super::util::parse_i128_literal;
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
@@ -549,6 +550,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
+    /// an instruction immediate, so only a literal naming a lane that exists
+    /// can be lowered — anything else reaches codegen as an invalid module.
+    fn check_simd_lane_immediates(&mut self, builtin: &str, args: &[Expr]) {
+        let Some((count, lanes)) = simd_lane_immediates(builtin) else {
+            return;
+        };
+        for arg in args.iter().take(count) {
+            let literal = match arg {
+                Expr::Literal(lit) => match &lit.value {
+                    ast::Literal::Number(repr) => parse_i128_literal(repr).ok(),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let message = match literal {
+                None => format!("`builtin::{builtin}` needs an integer literal lane index"),
+                Some(lane) if lane < 0 || lane >= lanes => {
+                    format!("lane index out of range for `builtin::{builtin}`: {lane} (0..{lanes})")
+                }
+                Some(_) => continue,
+            };
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message,
+                span: arg.span(),
+            });
+        }
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -935,6 +965,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if prefix == "builtin" {
                 let builtin_source = ModuleSource::builtin();
                 self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
+                self.check_simd_lane_immediates(suffix, &call.args);
                 (
                     self.callee_in_module(&builtin_source, suffix),
                     effective_name.to_string(),
@@ -3647,6 +3678,27 @@ impl TypeSystem {
             .borrow_mut()
             .make_generic_instance(def, type_args)
     }
+}
+
+/// The lane immediates a SIMD builtin takes: how many leading arguments are
+/// lane indices, and how many lanes they may name. `i8x16.shuffle` indexes a
+/// pair of vectors, so its bound is twice a single vector's.
+fn simd_lane_immediates(builtin: &str) -> Option<(usize, i128)> {
+    if builtin == "i8x16_shuffle" {
+        return Some((16, 32));
+    }
+    let (vector, operation) = builtin.split_once('_')?;
+    if !operation.starts_with("extract_lane") && !operation.starts_with("replace_lane") {
+        return None;
+    }
+    let lanes = match vector {
+        "i8x16" => 16,
+        "i16x8" => 8,
+        "i32x4" | "f32x4" => 4,
+        "i64x2" | "f64x2" => 2,
+        _ => return None,
+    };
+    Some((1, lanes))
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

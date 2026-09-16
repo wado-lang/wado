@@ -23,20 +23,14 @@ use crate::wir::WirFuncId;
 use crate::wir_build::translate::ref_binding_needs_boxing;
 
 /// The compile-time constant of a SIMD lane operand — a promoted
-/// `Operand::Value` int constant in the function's value pool.
+/// `Operand::Value` int constant in the function's value pool. The elaborator
+/// rejects a call whose lane index is not a literal in range, so anything else
+/// reaching here is the compiler's own fault.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
-    match body.operand_const_int(op) {
-        Some(n) => n as u8,
-        None => panic!("SIMD lane index must be a constant integer literal"),
-    }
-}
-
-/// One of `i8x16.shuffle`'s sixteen lane immediates. It indexes the pair of
-/// operands, so the range is twice a single vector's.
-fn operand_shuffle_lane_const(body: &Body, op: Operand) -> u8 {
-    let lane = operand_lane_const(body, op);
-    assert!(lane < 32, "shuffle lane index out of range: {lane}");
-    lane
+    let Some(lane) = body.operand_const_int(op) else {
+        panic!("SIMD lane index survived elaboration unfolded")
+    };
+    lane as u8
 }
 
 /// Mechanical builtin shapes — each evaluates its operand expressions
@@ -814,7 +808,7 @@ impl FunctionTranslator<'_, '_> {
             "builtin::v128_bitselect" => ternary!(self, args, WirInstr::V128Bitselect),
             "builtin::i8x16_splat" => unary!(self, args, WirInstr::I8x16Splat),
             "builtin::i8x16_shuffle" => {
-                let lanes = array::from_fn(|i| operand_shuffle_lane_const(self.body, args[i].expr));
+                let lanes = array::from_fn(|i| operand_lane_const(self.body, args[i].expr));
                 let a = self.translate_operand(args[16].expr);
                 let b = self.translate_operand(args[17].expr);
                 WirInstr::I8x16Shuffle(lanes, Box::new(a), Box::new(b))
