@@ -1,7 +1,6 @@
-// A `for v of c` loop drives a user iterator whose `next()` carries `with
-// Stdout`. The synthetic `.into_iter()` / `.next()` calls leave no
-// method_dispatch fact, so the effect checker consults the `for_of_iterator`
-// fact; `consume` lacks `with Stdout`, so the missing effect must be reported.
+// A user iterator whose `next()` carries `with Stdout` implements a trait
+// method that declares no effects. The trait's `with` clause bounds every
+// impl of it, so the impl is reported where it is written.
 use { println, Stdout } from "core:cli";
 
 struct Counter {
@@ -40,4 +39,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"compile_error": "Stdout"}
+{"compile_error": "effect 'Stdout' is not declared by trait method 'Iterator::next'"}

@@ -1325,6 +1325,14 @@ fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 
+// A trait method's `with` clause bounds every impl of it, and a call requires
+// what the trait declares — through a bound there is no impl to read.
+trait Source { fn next(&mut self) -> i32 with Stdout; }
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching; more is an error
+}
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout { return s.next(); }
+
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }

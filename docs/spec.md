@@ -5167,6 +5167,30 @@ Effect parameters:
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
 
+### Effects on Trait Methods
+
+A trait method's `with` clause is the contract every impl of it writes to. An impl method may not declare an effect the trait method leaves out, and a call to the method requires what the trait declares, whichever impl runs.
+
+```wado
+trait Source {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching the declaration
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` needs it
+    return s.next();
+}
+```
+
+A call reaches a method through a type parameter's bound in three shapes: a method on a receiver the parameter types, a static call written `T::make()`, and a `for-of` whose iterable the parameter types. None of them knows which impl runs, so each demands what the trait method declares.
+
+`stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+
+An impl that needs an effect its trait does not declare has no spelling today. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for what closing that would take.
+
 ### Variadic Type Packs
 
 Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.

@@ -40,15 +40,24 @@ impl EffectKind {
     }
 }
 
+/// What the effect checker found at the reported position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectFault {
+    /// The caller does not hold what its callee requires.
+    Missing(EffectKind),
+    /// An `impl` method declares an effect its trait method leaves out.
+    UndeclaredByTrait,
+}
+
 /// Error from effect checking
 #[derive(Debug, Clone)]
 pub struct EffectError {
-    /// The function being called
+    /// The function being called, or the trait method being implemented
     pub callee: String,
-    /// The missing effect
+    /// The effect the caller lacks, or the impl adds
     pub missing_effect: String,
-    /// Whether the missing item is a resource or a regular effect
-    pub kind: EffectKind,
+    /// Which violation this is, and how it words itself
+    pub fault: EffectFault,
     /// Source location of the call
     pub span: Span,
     pub module: String,
@@ -57,15 +66,22 @@ pub struct EffectError {
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::TypeMismatch,
-            message: format!(
+        let message = match e.fault {
+            EffectFault::Missing(kind) => format!(
                 "missing {} '{}' required by '{}'",
-                e.kind.noun(),
+                kind.noun(),
                 e.missing_effect,
                 e.callee
             ),
+            EffectFault::UndeclaredByTrait => format!(
+                "effect '{}' is not declared by trait method '{}'",
+                e.missing_effect, e.callee
+            ),
+        };
+        Diagnostic {
+            severity: Severity::Error,
+            code: Code::TypeMismatch,
+            message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
@@ -353,6 +369,7 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                 }
                 Item::Impl(impl_block) => {
                     let handled = handled_effect(sem, src, impl_block, index);
+                    check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
                         check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
                     }
@@ -375,6 +392,10 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
     }
 }
 
+/// A trait method, by the trait's declaring module, the trait name, and the
+/// method name.
+type TraitMethodKey = (ModuleSource, String, String);
+
 /// Owns the cross-module effect maps so multiple checks (effects, default
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
@@ -383,6 +404,7 @@ struct OwnedEffectData {
     fn_params: IndexMap<AstId, Vec<TypeId>>,
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
     resource_names: IndexSet<(ModuleSource, String)>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
@@ -454,6 +476,38 @@ impl OwnedEffectData {
             }
         }
 
+        // Every trait method, whether or not it declares an effect: an entry
+        // holding an empty list is what says a trait method by this name
+        // exists and grants nothing. A declaration has no body, so its effects
+        // are read off the `with` clause rather than out of `fn_effects`.
+        let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
+            IndexMap::default();
+        for (src, module) in &sem.modules {
+            for item in &module.items {
+                let Item::Trait(trait_decl) = item else {
+                    continue;
+                };
+                for method in &trait_decl.methods {
+                    let effects = method
+                        .effects
+                        .iter()
+                        .map(|name| {
+                            effect_by_name.get(name).cloned().unwrap_or_else(|| {
+                                EffectRef::Concrete {
+                                    name: name.clone(),
+                                    module_source: src.clone(),
+                                }
+                            })
+                        })
+                        .collect();
+                    trait_method_effects.insert(
+                        (src.clone(), trait_decl.name.clone(), method.name.clone()),
+                        effects,
+                    );
+                }
+            }
+        }
+
         let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
             IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
@@ -488,6 +542,7 @@ impl OwnedEffectData {
             fn_params,
             mangled_index,
             mangled_params,
+            trait_method_effects,
             resource_names,
             members,
             closure,
@@ -504,6 +559,7 @@ impl OwnedEffectData {
             fn_params: &self.fn_params,
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
+            trait_method_effects: &self.trait_method_effects,
             resource_names: &self.resource_names,
             members: &self.members,
             closure: &self.closure,
@@ -525,6 +581,9 @@ struct EffectIndex<'a> {
     mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     /// `(module, mangled name)` → parameter type ids.
     mangled_params: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Trait method → the effects it declares. A call through a type
+    /// parameter's bound selects no impl, so this is what it can demand.
+    trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// Declared members, for nested-resource detection.
@@ -682,6 +741,61 @@ fn handled_effect(
         module_source: trait_name.module()?.clone(),
     };
     index.closure.contains_key(&effect).then_some(effect)
+}
+
+/// An impl method may not declare an effect its trait method leaves out. A call
+/// through a type parameter's bound sees the declaration and no impl, so the
+/// trait's `with` clause has to bound every impl of it. An `interface` handler
+/// and a `resource` impl are exempt: neither declares effects for its methods.
+fn check_impl_effect_conformance(
+    sem: &Semantics,
+    module: &ModuleSource,
+    impl_block: &ImplBlock,
+    index: &EffectIndex,
+    out: &mut Vec<EffectError>,
+) {
+    let Some(trait_name) = sem
+        .state
+        .as_ref()
+        .and_then(|state| state.module_semantics.get(module))
+        .and_then(|module_sem| module_sem.types.impl_facts.get(&impl_block.id))
+        .and_then(|facts| facts.trait_name.as_ref())
+    else {
+        return;
+    };
+    let Some(trait_module) = trait_name.module() else {
+        return;
+    };
+    for method in &impl_block.methods {
+        let key = (
+            trait_module.clone(),
+            trait_name.base_name().to_string(),
+            method.name.clone(),
+        );
+        let Some(declared_by_trait) = index.trait_method_effects.get(&key) else {
+            continue;
+        };
+        let Some(declared) = index.fn_effects.get(&method.id) else {
+            continue;
+        };
+        let allowed: IndexSet<EffectRef> = declared_by_trait
+            .iter()
+            .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
+            .collect();
+        for effect in declared {
+            let effect = &canonicalize_effect(effect, index.closure, index.effect_by_name);
+            if effect.is_param() || allowed.contains(effect) {
+                continue;
+            }
+            out.push(EffectError {
+                callee: format!("{}::{}", trait_name.base_name(), method.name),
+                missing_effect: effect.name().to_string(),
+                fault: EffectFault::UndeclaredByTrait,
+                span: method.span,
+                module: module.to_string(),
+            });
+        }
+    }
 }
 
 /// `handled` is the effect a method of `impl E for T` handles.
@@ -1109,11 +1223,17 @@ impl EffectIndex<'_> {
     /// Effects a method dispatch requires: the callee's declared effects plus,
     /// for a direct (non-trait) method on a `resource`, the resource effect.
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
-        let mut effects = self
-            .mangled_index
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default();
+        // A trait method's `with` clause is what any call to it requires,
+        // whichever impl runs: it bounds every impl, and a dispatch through a
+        // type parameter's bound has no impl to read in the first place.
+        let mut effects = match self.declared_by_trait(func_ref) {
+            Some(declared) => declared.to_vec(),
+            None => self
+                .mangled_index
+                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                .cloned()
+                .unwrap_or_default(),
+        };
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
         {
@@ -1135,6 +1255,21 @@ impl EffectIndex<'_> {
             }
         }
         effects
+    }
+
+    /// The effects the trait method behind a dispatch declares. `None` where
+    /// the dispatch names no trait, or names an `interface` or a `resource`.
+    fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
+        let method_info = func_ref.method_info.as_ref()?;
+        let trait_name = method_info.trait_name.as_ref()?;
+        let module = trait_name.module()?;
+        self.trait_method_effects
+            .get(&(
+                module.clone(),
+                trait_name.base_name().to_string(),
+                method_info.method_name.clone(),
+            ))
+            .map(Vec::as_slice)
     }
 
     /// Parameter type ids for a method / static dispatch target.
@@ -1277,7 +1412,7 @@ impl SemEffectWalker<'_> {
             self.out.push(EffectError {
                 callee: callee.to_string(),
                 missing_effect: effect.name().to_string(),
-                kind,
+                fault: EffectFault::Missing(kind),
                 span,
                 module: self.module.clone(),
             });
@@ -2886,7 +3021,7 @@ mod tests {
         let error = EffectError {
             callee: "println".to_string(),
             missing_effect: "Stdout".to_string(),
-            kind: EffectKind::Effect,
+            fault: EffectFault::Missing(EffectKind::Effect),
             span: Span {
                 start: 100,
                 end: 107,

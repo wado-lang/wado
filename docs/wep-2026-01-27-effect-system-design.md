@@ -345,6 +345,43 @@ Limitations — these require separate work and are pinned by `#![TODO]` fixture
 - Closure body effects (`effect_propagation_indirect.wado`): a closure body that uses `Stream::new()` assigned to a declared `fn() with Stdout` cannot be rescued, because the closure's signature doesn't name `Stream`. Requires effect-set propagation-closure equivalence at the closure-typing site.
 - Generic body effects (`effect_propagation_generic_body.wado`): a `<effect E>` function body that uses a concrete resource cannot be rescued by signature inference either. Requires body-effect inference + generic monomorphization.
 
+### Traits and Effects
+
+- [x] Implemented.
+
+A trait method's `with` clause is the contract every impl writes to. An impl method may not declare an effect the trait method leaves out:
+
+```wado
+trait Source {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    // error: effect 'Stdout' is not declared by trait method 'Source::next'
+    fn next(&mut self) -> i32 with Stdout { ... }
+}
+```
+
+`stores` is exempt: it says which reference parameters the body keeps, so each impl declares its own.
+
+An `interface` is exempt as a whole. Its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+
+A call reaches a method through a type parameter's bound in three shapes: a method on a receiver the parameter types, a static call written `T::make()`, and a `for-of` whose iterable the parameter types. Each demands the effects the trait method declares.
+
+```wado
+trait Source {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // `with Stdout` is required here
+    return s.next();
+}
+```
+
+The impl is not known at such a call, so the declaration is the only thing it can demand. The conformance rule is what makes that sound: the trait's `with` clause bounds every impl.
+
+Resolving the selected impl's effects at each instantiation would admit more programs, since an impl could then add an effect and still be caught where it is used. It would also cost the property that a signature is the whole contract. A call added inside `draw` could change what every caller of `draw` must declare, with nothing in `draw`'s signature to show it.
+
 ### Handlers
 
 See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for the full handler design including syntax, resume semantics, MockCM, handler bundling, and testing patterns.
@@ -358,6 +395,16 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
     // ...
 }
 ```
+
+## Known gaps
+
+### An impl cannot bring its own effect
+
+A trait fixes one effect set for every impl of it. `Iterator` declares none, so no `impl Iterator` can read a file or write a line, and the trait cannot grant that to one impl without granting it to all.
+
+Closing this takes an associated effect: the trait declares a hole, each impl fills it, and a use site names it through the type parameter the way an associated type is named today. The impl then chooses its effects, and a generic function still says in its signature what it needs, so neither property the conformance rule protects is given up. Flix's associated effects and Rust's `~const Trait` bounds are the closest precedents; Java's generic exception parameters solve the same problem for checked exceptions.
+
+The syntax is open. `effect` is a keyword and `effects` is not, so the declaration form, the way an impl fills the hole, and the spelling a use site writes for it are all undecided.
 
 ## Consequences
 

@@ -1,6 +1,5 @@
-// A method reached through a type parameter's bound requires what the trait
-// method declares. The impl is not known at the call, so `draw` carries the
-// effect itself or the call is reported.
+// The other side of `effect_generic_trait_bound_missing`: a generic function
+// that declares what the trait method needs compiles and runs.
 use { println, Stdout } from "core:cli";
 
 trait Source {
@@ -19,14 +18,15 @@ impl Source for Loud {
     }
 }
 
-fn draw<S: Source>(s: &mut S) -> i32 {
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {
     return s.next();
 }
 
 export fn run() with Stdout {
     let mut loud = Loud { n: 0 };
     println(`${draw(&mut loud)}`);
+    println(`${draw(&mut loud)}`);
 }
 
 __DATA__
-{"compile_error": "missing effect 'Stdout'"}
+{"stdout": "tick\n1\ntick\n2\n"}
