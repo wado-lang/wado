@@ -35,12 +35,8 @@ impl DataRange {
 
     /// The single byte at `offset`, which is what a pointer site occupies for
     /// the purpose of asking whether the asset holds it.
-    pub(crate) fn at(segment: u32, offset: u32) -> Self {
-        DataRange {
-            segment,
-            offset,
-            size: 1,
-        }
+    pub(crate) fn at(segment: u32, offset: u32) -> Option<Self> {
+        DataRange::new(segment, offset, 1)
     }
 
     pub(crate) fn end(&self) -> u32 {

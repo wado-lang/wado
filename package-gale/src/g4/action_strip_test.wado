@@ -79,6 +79,15 @@ test "strip: char class with a literal '[' ends at the first unescaped ']'" {
     assert result == "REGEX : ~[/[] ; r : 'a'  ;", `got '${result}'`;
 }
 
+// The stripper is the classifier's second consumer, and the one whose failure
+// is silent: a lexer rule read as a parser rule scans `~[/[]` as a nesting
+// argument list and swallows every action after it.
+test "strip: a rule name outside ASCII still picks the char-class scan" {
+    let g = "ÀBC : ~[/[] ; r : 'a' { act(); } ;";
+    let result = strip_action_bodies(&g);
+    assert result == "ÀBC : ~[/[] ; r : 'a'  ;", `got '${result}'`;
+}
+
 test "strip: removes catch [...] { ... } handlers" {
     let g = "start : 'a' ; catch [Exception e] { handle(e); }";
     let result = strip_action_bodies(&g);

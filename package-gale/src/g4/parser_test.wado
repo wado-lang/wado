@@ -35,6 +35,12 @@ test "a rule name outside ASCII parses and is typed by Uppercase" {
     assert upper.lexer_rules[0].name == "ÀBC";
     assert upper.parser_rules.is_empty();
 
+    // U+2160 is `Nl` with `Other_Uppercase`, so `Uppercase` admits it where `Lu`
+    // alone would not.
+    let other = parse("grammar Test;\nⅠbc : [0-9]+ ;").unwrap();
+    assert other.lexer_rules.len() == 1;
+    assert other.lexer_rules[0].name == "Ⅰbc";
+
     let lower = parse("grammar Test;\nàbc : 'x' ;").unwrap();
     assert lower.parser_rules.len() == 1;
     assert lower.parser_rules[0].name == "àbc";

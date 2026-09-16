@@ -566,7 +566,12 @@ fn resolve_map<'a>(
 
     let mut edges = Vec::new();
     for pointer in refs.pointers() {
-        let site = DataRange::at(pointer.segment, pointer.offset);
+        let site = DataRange::at(pointer.segment, pointer.offset).ok_or_else(|| {
+            Error::DataRef(format!(
+                "a pointer sits at {}:{}, which no segment can reach",
+                pointer.segment, pointer.offset
+            ))
+        })?;
         check_range(asset, &site, "a pointer")?;
         let target = match &pointer.target {
             Target::Data(range) => {

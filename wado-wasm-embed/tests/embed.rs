@@ -817,6 +817,11 @@ fn a_range_that_cannot_end_is_rejected() {
         embed_err(&quarters(Some("a 0:1+4294967295\n"))),
         Error::DataRef(_)
     );
+    // A pointer site is a range of one byte, and its offset is read the same way.
+    assert_matches!(
+        embed_err(&quarters(Some("a 0:0+4\n@0:4294967295 a\n"))),
+        Error::DataRef(_)
+    );
 }
 
 /// Honouring one would spend a segment header to write nothing.
