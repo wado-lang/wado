@@ -6818,7 +6818,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .iter()
             .map(|c| TirCapture {
                 name: c.name.clone(),
-                outer_index: c.outer_index,
+                source: c.source,
                 type_id: c.type_id,
                 is_mut: c.is_mut,
             })

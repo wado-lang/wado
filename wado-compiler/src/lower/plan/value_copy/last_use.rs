@@ -1214,8 +1214,8 @@ impl Analyzer<'_> {
                 None => self.scan_place_uses(place, conflict),
             },
             TirExprKind::Closure { captures, .. } => {
-                for c in captures {
-                    conflict.insert(c.outer_index);
+                for index in captures.iter().filter_map(|c| c.source.local()) {
+                    conflict.insert(index);
                 }
             }
             _ => {
@@ -1675,12 +1675,13 @@ impl Analyzer<'_> {
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
-                for c in captures {
-                    live.insert(c.outer_index);
+                let sources: Vec<u32> = captures.iter().filter_map(|c| c.source.local()).collect();
+                for index in sources {
+                    live.insert(index);
                     if record {
-                        self.mark_escaped(c.outer_index, None);
-                        self.mark_local_mutated(c.outer_index, false, live);
-                        let at = self.consumed.entry(c.outer_index).or_default();
+                        self.mark_escaped(index, None);
+                        self.mark_local_mutated(index, false, live);
+                        let at = self.consumed.entry(index).or_default();
                         at.extend(live.iter().copied());
                     }
                 }

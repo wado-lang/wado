@@ -43,11 +43,12 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags,
-    TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
-    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
+    StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
+    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
+    TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -319,6 +320,9 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
 /// methods, fn-param specialized callees).
 struct FunctionTranslator<'a, 'p> {
     base: &'a Translator<'p>,
+    /// This function's own environment type, `Some` only inside a `$call`
+    /// method. A nested closure built here reads through it.
+    enclosing_env: Option<tir::TypeId>,
     /// `Some` only inside a synthesized fn-param-specialized callee.
     specialized: Option<&'p [closure::SpecializedLocal]>,
     /// `None` for global initializers / struct field defaults, where
@@ -377,6 +381,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .specialized_locals
             .get(&key)
             .map(std::vec::Vec::as_slice);
+        let enclosing_env = base.closure.call_method_envs.get(&key).copied();
         let immutable_locals = func
             .locals
             .iter()
@@ -452,6 +457,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             && value_copy::needs_value_copy(func.return_type, &base.type_table.borrow());
         Self {
             base,
+            enclosing_env,
             specialized,
             extra: Some(ExtraLocals {
                 base_count: func.local_count,
@@ -480,6 +486,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
     fn for_top_level(base: &'a Translator<'p>) -> Self {
         Self {
             base,
+            enclosing_env: None,
             specialized: None,
             extra: None,
             immutable_locals: IndexSet::default(),
@@ -2345,7 +2352,12 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .enumerate()
             .map(|(i, cap)| {
-                let value = self.read_local(cap.outer_index, &cap.name, cap.type_id, span);
+                let value = match cap.source {
+                    CaptureSource::Local(index) => {
+                        self.read_local(index, &cap.name, cap.type_id, span)
+                    }
+                    CaptureSource::Capture(slot) => self.read_enclosing_capture(cap, slot, span),
+                };
                 ArenaStructField {
                     name: format!("$capture_{i}"),
                     value: value.into(),
@@ -2353,6 +2365,35 @@ impl FunctionTranslator<'_, '_> {
                 }
             })
             .collect()
+    }
+
+    /// `self.$capture_<slot>` of the `$call` method being translated, for a
+    /// binding its own closure reached the same way.
+    fn read_enclosing_capture(&self, cap: &TirCapture, slot: u32, span: Span) -> ExprId {
+        let Some(self_type) = self.enclosing_env else {
+            panic!(
+                "capture `{}` reads slot {slot} of an enclosing environment, \
+                 but the translated function has none",
+                cap.name,
+            );
+        };
+        let self_expr = self.alloc_expr(
+            ExprKind::Local {
+                index: 0,
+                name: "self".to_string(),
+            },
+            self_type,
+            span,
+        );
+        self.alloc_expr(
+            ExprKind::FieldAccess {
+                expr: self_expr.into(),
+                field_index: slot,
+                field_name: format!("$capture_{slot}"),
+            },
+            cap.type_id,
+            span,
+        )
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
@@ -2610,7 +2651,6 @@ fn convert_literal_pattern(lit: &TirLiteralPattern) -> NirLiteralPattern {
 fn convert_capture(c: &TirCapture) -> NirCapture {
     NirCapture {
         name: c.name.clone(),
-        outer_index: c.outer_index,
         type_id: c.type_id,
         is_mut: c.is_mut,
     }

@@ -11,7 +11,9 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, MethodName, Receiver};
 use crate::tir;
-use crate::tir::{EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable};
+use crate::tir::{
+    CaptureSource, EffectRef, FunctionRef, TirEffectOp, TirTypeParam, TypeId, TypeTable,
+};
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
@@ -857,7 +859,7 @@ pub(crate) struct MutCapture {
 #[derive(Clone)]
 pub(crate) struct CaptureEntry {
     pub(crate) name: String,
-    pub(crate) outer_index: u32,
+    pub(crate) source: CaptureSource,
     pub(crate) type_id: TypeId,
     pub(crate) is_mut: bool,
 }

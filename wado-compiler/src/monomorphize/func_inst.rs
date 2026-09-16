@@ -508,9 +508,13 @@ impl TirMutVisitor for LocalIndexRewriter {
                 // doing so would rewrite a closure-scoped local that happens to
                 // share `old_idx`.
                 for cap in captures {
-                    if cap.outer_index == self.old_idx {
-                        cap.outer_index = self.new_idx;
-                    }
+                    cap.source = cap.source.map_local(|index| {
+                        if index == self.old_idx {
+                            self.new_idx
+                        } else {
+                            index
+                        }
+                    });
                 }
                 return;
             }

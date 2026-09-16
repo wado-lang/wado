@@ -241,12 +241,8 @@ impl StoresWalker<'_> {
             } => self.carries(p),
             TirExprKind::Closure { captures, .. } => captures
                 .iter()
-                .flat_map(|c| {
-                    self.carries
-                        .get(&c.outer_index)
-                        .cloned()
-                        .unwrap_or_default()
-                })
+                .filter_map(|c| c.source.local())
+                .flat_map(|index| self.carries.get(&index).cloned().unwrap_or_default())
                 .collect(),
             // Which positions a call routes to its result is read off a body,
             // and a builtin has none — `a[i]`'s `array_get_ref` hands back a

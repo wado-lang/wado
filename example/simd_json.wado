@@ -143,10 +143,6 @@ fn count_runs(len: i32, scan: fn(i32) -> i32) -> i32 {
     return runs;
 }
 
-// These three exist because a closure nested in a closure cannot capture the
-// enclosing function's local, so `bench.run(|| count_runs(len, |from| ...))`
-// does not compile — `closure_nested_transitive_capture_todo`. Named, they keep
-// the inner closure one level deep.
 fn count_runs_scalar(s: &String, len: i32) -> i32 {
     return count_runs(len, |from| scan_scalar(s, from, len));
 }

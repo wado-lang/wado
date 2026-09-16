@@ -7,8 +7,8 @@ use super::value_copy::funcset::FuncKeyMap;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeTable,
+    CaptureSource, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -181,7 +181,13 @@ impl<'a> WriteWalker<'a> {
             let Some(capture) = captures.get(index as usize) else {
                 continue;
             };
-            self.found.insert(capture.outer_index);
+            match capture.source {
+                // Storage this frame owns.
+                CaptureSource::Local(outer) => self.found.insert(outer),
+                // Storage a frame further out owns: report it as this frame's
+                // own capture, so the walk one level up maps it again.
+                CaptureSource::Capture(slot) => self.found_captures.insert(slot),
+            };
         }
     }
 }

@@ -13,9 +13,10 @@ use crate::name::{
     MethodName, is_fn_type_name,
 };
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
+    StructDef, TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    TypeTable,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
@@ -74,6 +75,11 @@ pub struct ClosurePlan {
     /// `ClosureSafetyAnalyzer`). The fold emits a raw `StructLiteral`
     /// for these and a `ClosureToCanonical` wrap for the rest.
     pub specializable: IndexSet<u32>,
+    /// Each generated `$call` method's own environment type, keyed by the
+    /// method. A nested closure built inside one reads a capture its parent
+    /// also only captured out of that environment, so the translator needs the
+    /// `self` type to emit the read.
+    pub call_method_envs: IndexMap<(ModuleSource, String), TypeId>,
 }
 
 /// Run the closure planner.
@@ -86,10 +92,22 @@ pub struct ClosurePlan {
 pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
     let mut closure_lowerer = ClosureLowerer::new(&flat.entry_module_source);
     closure_lowerer.lower_module(flat);
+    let functor_infos = std::mem::take(&mut closure_lowerer.functor_infos);
+    let call_method_envs = functor_infos
+        .iter()
+        .map(|f| {
+            let call_method = f.call_method.borrow();
+            (
+                (call_method.module_source.clone(), call_method.name.clone()),
+                f.ref_type_id,
+            )
+        })
+        .collect();
     ClosurePlan {
-        functor_infos: std::mem::take(&mut closure_lowerer.functor_infos),
+        functor_infos,
         specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
         specializable: std::mem::take(&mut closure_lowerer.specializable),
+        call_method_envs,
     }
 }
 
@@ -118,23 +136,64 @@ fn format_closure_signature(
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
-/// Build the `$capture_<i>` struct-field list for a functor literal from
-/// the closure's captures. Each field reads the captured value from the
-/// outer scope at `cap.outer_index`.
-fn build_capture_fields(captures: &[TirCapture], span: Span) -> Vec<TirStructField> {
+/// The frame a functor literal is built in, for a capture whose source is the
+/// frame's own environment: `self`'s local index and reference type. `None` in
+/// a plain function, which has no environment to read.
+type EnclosingSelf = Option<(u32, TypeId)>;
+
+/// The expression filling one `$capture_<i>` field.
+fn capture_field_value(cap: &TirCapture, enclosing_self: EnclosingSelf, span: Span) -> TirExpr {
+    match cap.source {
+        CaptureSource::Local(index) => TirExpr::new(
+            TirExprKind::Local {
+                index,
+                name: cap.name.clone(),
+            },
+            cap.type_id,
+            span,
+        ),
+        CaptureSource::Capture(slot) => {
+            let Some((self_index, self_type)) = enclosing_self else {
+                panic!(
+                    "capture `{}` reads slot {slot} of an enclosing environment, \
+                     but the frame building the functor has none",
+                    cap.name,
+                );
+            };
+            let self_expr = TirExpr::new(
+                TirExprKind::Local {
+                    index: self_index,
+                    name: "self".to_string(),
+                },
+                self_type,
+                span,
+            );
+            TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(self_expr),
+                    field_index: slot,
+                    field_name: format!("$capture_{slot}"),
+                },
+                cap.type_id,
+                span,
+            )
+        }
+    }
+}
+
+/// Build the `$capture_<i>` struct-field list for a functor literal from the
+/// closure's captures.
+fn build_capture_fields(
+    captures: &[TirCapture],
+    enclosing_self: EnclosingSelf,
+    span: Span,
+) -> Vec<TirStructField> {
     captures
         .iter()
         .enumerate()
         .map(|(i, cap)| TirStructField {
             name: format!("$capture_{i}"),
-            value: TirExpr::new(
-                TirExprKind::Local {
-                    index: cap.outer_index,
-                    name: cap.name.clone(),
-                },
-                cap.type_id,
-                span,
-            ),
+            value: capture_field_value(cap, enclosing_self, span),
             field_index: i as u32,
         })
         .collect()
@@ -355,7 +414,20 @@ impl ClosureLowerer {
                 )
             })
             .collect();
+        // A `$call` method's own environment, found by identity on the functor
+        // that generated it rather than by any naming convention. `self` is
+        // local 0 there by construction (see `generate_functor_items`).
+        let call_method_envs: Vec<(Rc<RefCell<TirFunction>>, TypeId)> = self
+            .functor_infos
+            .iter()
+            .map(|f| (Rc::clone(&f.call_method), f.ref_type_id))
+            .collect();
+
         for func_rc in &lowered_funcs {
+            let enclosing_self = call_method_envs
+                .iter()
+                .find(|(call_method, _)| Rc::ptr_eq(call_method, func_rc))
+                .map(|(_, ref_type)| (0, *ref_type));
             let mut func = func_rc.borrow_mut();
             // Snapshot param `(local_index, type_id)` so the seed pass
             // can run while `func.body` is borrowed mutably.
@@ -378,6 +450,7 @@ impl ClosureLowerer {
                     module_source: &self.module_source,
                     type_table: &mut tt,
                     self_offsets: &self_offsets,
+                    enclosing_self,
                 }
                 .visit_block(body);
             }
@@ -1610,6 +1683,10 @@ struct ClosureCallSiteLowerer<'a> {
     /// without borrowing the callee mid-walk (a recursive call would be a
     /// `RefCell` double-borrow).
     self_offsets: &'a IndexMap<(ModuleSource, String), u32>,
+    /// The walked function's own environment, when it is a `$call` method. A
+    /// nested closure capturing a binding its parent also only captured reads
+    /// it from here.
+    enclosing_self: EnclosingSelf,
 }
 
 impl ClosureCallSiteLowerer<'_> {
@@ -1667,7 +1744,7 @@ impl ClosureCallSiteLowerer<'_> {
                 arg.expr.kind = TirExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,
                     struct_name: functor.struct_name.clone(),
-                    fields: build_capture_fields(captures, arg.expr.span),
+                    fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
                 };
                 arg.expr.type_id = functor.ref_type_id;
             }

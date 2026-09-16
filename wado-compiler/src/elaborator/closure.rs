@@ -8,10 +8,10 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{CaptureSource, ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
@@ -19,6 +19,19 @@ use crate::hashmap::IndexMap;
 struct ExpectedFn {
     params: Vec<TypeId>,
     return_type: TypeId,
+}
+
+/// The environment slot `ctx` holds `name` in, registering the capture if this
+/// is the first inner closure to ask for it. `ctx` reaches the binding through
+/// its own environment by construction, so a local answer is a contradiction.
+fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
+    match ctx.lookup_or_capture(name) {
+        Some(VarRef::Capture { index, .. } | VarRef::DerefCapture { index, .. }) => index,
+        Some(VarRef::Local { .. }) => {
+            panic!("`{name}` is a local of the frame that was recorded as reaching it by capture")
+        }
+        None => panic!("`{name}` was reached through the enclosing environment but is not in it"),
+    }
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -78,6 +91,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
+    /// Turn a closure's captures into [`CaptureEntry`] values, resolving each
+    /// against the frame that builds the closure.
+    ///
+    /// A binding that frame owns is read from its local. One it only reaches
+    /// through its own environment makes it capture the binding too, so the
+    /// value is handed inward one frame at a time. Doing this as each closure
+    /// finishes is what makes capture transitive: the enclosing closure runs
+    /// the same step against *its* enclosing frame, to any depth.
+    pub(super) fn link_parent_captures(
+        &mut self,
+        closure_ctx: &FunctionContext,
+        ctx: &mut FunctionContext,
+    ) -> Vec<CaptureEntry> {
+        closure_ctx
+            .get_captures()
+            .into_iter()
+            .map(|(name, local, reach)| {
+                let source = match reach {
+                    OuterReach::ParentLocal(index) => CaptureSource::Local(index),
+                    OuterReach::ParentEnv => {
+                        CaptureSource::Capture(parent_capture_slot(ctx, &name))
+                    }
+                };
+                CaptureEntry {
+                    name,
+                    source,
+                    type_id: local.type_id,
+                    is_mut: local.is_mut,
+                }
+            })
+            .collect()
+    }
+
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
@@ -103,7 +149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Collect outer bindings the body assigns to.
         let mut assigned_names: IndexSet<String> = IndexSet::default();
-        Self::collect_mutated_vars(&closure.body, &mut assigned_names);
+        Self::collect_mutated_vars(closure, &mut assigned_names);
 
         // For each assigned name that resolves to an outer `mut` local,
         // record a `MutCapture` (so reify replays the `$ref_<var>`
@@ -116,9 +162,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut any_mutating_capture = false;
 
         for var_name in &assigned_names {
-            if let Some(local) = ctx.lookup(var_name)
-                && local.is_mut
-            {
+            let Some(local) = ctx.lookup(var_name) else {
+                // A binding the enclosing frame itself only reaches by capture
+                // is boxed by whichever frame owns it; this one writes through
+                // the box, which still makes it `fn mut`.
+                any_mutating_capture |= ctx.reaches_mut_outer(var_name);
+                continue;
+            };
+            if local.is_mut {
                 any_mutating_capture = true;
                 let inner_type = local.type_id;
                 let outer_index = local.index;
@@ -186,17 +237,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Build the recorded capture list from the closure scope's captures.
-        let recorded_captures: Vec<CaptureEntry> = closure_ctx
-            .get_captures()
-            .into_iter()
-            .map(|(name, _index, local)| CaptureEntry {
-                name,
-                outer_index: local.index,
-                type_id: local.type_id,
-                is_mut: local.is_mut,
-            })
-            .collect();
+        // Build the recorded capture list from the closure scope's captures,
+        // making the enclosing frame capture whatever it only reached through
+        // its own environment.
+        let recorded_captures = self.link_parent_captures(&closure_ctx, ctx);
 
         // WEP 2026-05-26: the only signal reify needs
         // for the closure's capture analysis.

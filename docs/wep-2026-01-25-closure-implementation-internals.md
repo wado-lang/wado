@@ -36,7 +36,7 @@ There are no `Fn` / `FnMut` traits. `ResolvedType::Function` carries an `is_mut`
 
 Wasm has no shared-versus-exclusive reference distinction, so both compile to the same `call_ref`. What the split buys is a check at the call site: a `fn mut` callee requires the binding holding it to be `mut`.
 
-A closure is `fn mut` when its body assigns to a captured `mut` binding. Capturing a `mut` binding it only reads leaves it `fn`.
+A closure is `fn mut` when its body assigns to a captured `mut` binding. Capturing a `mut` binding it only reads leaves it `fn`. The body is the whole body, nested closures included: a write reaching an outer binding from any depth is a write. What the closure binds itself — a parameter, a `let`, a pattern — shadows, and a write to one leaves the outer binding of that name alone.
 
 ### Captures are implicit
 
@@ -45,6 +45,12 @@ Captures are auto-by-reference and are not part of the closure type. They live i
 A closure that escapes outlives the bindings it captured, so a boxing pass promotes those bindings to the heap. For a non-escaping closure the environment may be skipped entirely by inlining the call and reading the bindings as locals — an optimization, not a semantic guarantee, and one that has to be expressed as call rewriting because Wasm GC has no stack-slot references.
 
 The `stores` annotation for non-closure reference parameters stays a separate mechanism (see [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)).
+
+### A capture is handed inward one frame at a time
+
+Environments are flat, not chained: a closure's environment holds exactly the bindings its own body names, and nothing else. A closure nested in another therefore reaches an enclosing function's local only if every frame between them carries it, so each frame captures whatever the frame inside it asked for and did not own. That makes capture transitive to any depth, and it is why a capture records where the constructing frame reads the value from — its own local, or its own environment slot.
+
+The closure that owns the binding is the one that boxes it. A write from any depth boxes it there, and every frame in between passes the box along, so all the frames see the one cell.
 
 ### Wasm GC representation
 
@@ -97,7 +103,7 @@ A host callback does not need one to: the closure stays in a guest-side registry
 
 ## Open
 
-- [ ] **Detect mutation through a method call.** A closure is tagged `fn mut` from assignments to captured bindings, so mutating a capture via a `&mut self` method leaves it typed `fn`. Nested closures are not walked either.
+- [ ] **Detect mutation through a method call.** A closure is tagged `fn mut` from assignments to captured bindings, so mutating a capture via a `&mut self` method leaves it typed `fn`.
 - [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.
 - [ ] **`Fn` / `FnMut` as user-namable traits**, for user-defined callable types. Closure literals never need them.

@@ -1,0 +1,117 @@
+// A closure nested in a closure reaches a binding of any enclosing frame: each
+// frame captures what the one inside it asked for, so the value is handed
+// inward one environment at a time.
+
+fn apply(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+fn apply1(f: fn(i32) -> i32, v: i32) -> i32 {
+    return f(v);
+}
+
+fn apply_mut(mut f: fn mut()) {
+    f();
+}
+
+fn transitive() -> i32 {
+    let x = 42;
+    return apply(|| {
+        return apply(|| x);
+    });
+}
+
+fn three_levels() -> i32 {
+    let x = 40;
+    return apply(|| {
+        let y = 2;
+        return apply(|| {
+            return apply(|| x + y);
+        });
+    });
+}
+
+test "an inner closure reaches the enclosing function's local" {
+    assert transitive() == 42;
+}
+
+test "an inner closure reaches the outer closure's own local" {
+    let n = apply(|| {
+        let y = 41;
+        return apply(|| y + 1);
+    });
+    assert n == 42;
+}
+
+test "an inner closure reaches the outer closure's parameter" {
+    let n = apply1(|p| apply(|| p + 1), 41);
+    assert n == 42;
+}
+
+test "capture crosses three closure frames" {
+    assert three_levels() == 42;
+}
+
+test "an inner closure writes the enclosing function's local" {
+    let mut count = 0;
+    apply_mut(|| {
+        apply_mut(|| count += 1);
+        count += 10;
+    });
+    assert count == 11;
+}
+
+test "a nested write alone boxes the binding" {
+    let mut count = 0;
+    apply_mut(|| {
+        apply_mut(|| count += 1);
+    });
+    assert count == 1;
+}
+
+test "a let-bound nested closure writes the same binding" {
+    let mut count = 0;
+    let mut outer = || {
+        let mut inner = || count += 1;
+        inner();
+        inner();
+    };
+    outer();
+    assert count == 2;
+}
+
+test "a shadowing parameter is not the outer binding" {
+    let mut count = 7;
+    let bump = |#[allow(shadowed_name)] mut count: i32| {
+        count += 1;
+        return count;
+    };
+    assert bump(1) == 2;
+    assert count == 7;
+}
+
+test "a shadowing let is not the outer binding" {
+    let mut count = 7;
+    let n = apply(|| {
+        #[allow(shadowed_name)]
+        let mut count = 0;
+        count += 1;
+        return count;
+    });
+    assert n == 1;
+    assert count == 7;
+}
+
+test "a shadowing binder's scope ends with its block" {
+    let mut count = 0;
+    let mut bump = || {
+        inner: {
+            #[allow(shadowed_name)]
+            let count = 99;
+            let _ = count;
+        }
+        count += 1;
+    };
+    bump();
+    assert count == 1;
+}

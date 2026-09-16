@@ -231,10 +231,12 @@ pub enum NirLiteralPattern {
     Null,
 }
 
+/// One environment field of a closure functor. Carries no source index: the
+/// read that fills it is already a `StructLiteral` field by the time NIR is
+/// built, so an index here could only go stale.
 #[derive(Debug, Clone)]
 pub struct NirCapture {
     pub name: String,
-    pub outer_index: u32,
     pub type_id: TypeId,
     pub is_mut: bool,
 }
