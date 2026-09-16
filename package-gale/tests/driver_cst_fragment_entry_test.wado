@@ -21,9 +21,9 @@ use fe_off from "./grammars/fragment_entry_off.g4"
 fn assert_clean_identical<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let on = fe_on::to_string_tree(&fe_on::parse(input));
     let off = fe_off::to_string_tree(&fe_off::parse(input));
-    assert on == expected.to_string(), `on:\n  expected: ${expected.to_string()}\n  actual:   ${on}`;
+    assert on == expected.to_string(), `on:\n  expected: ${expected}\n  actual:   ${on}`;
     assert on == off, `option changed a clean parse:\n  on:  ${on}\n  off: ${off}`;
-    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${input.to_string()}`;
+    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${input}`;
 }
 
 test "clean parse unchanged: bare item" {
@@ -77,8 +77,8 @@ fn assert_balanced<S: AsStrSlice>(input: S) {
             min_depth = depth;
         }
     }
-    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${input.to_string()}`;
-    assert min_depth >= 0, `Close before Open for: ${input.to_string()}`;
+    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${input}`;
+    assert min_depth >= 0, `Close before Open for: ${input}`;
 }
 
 test "recovered fragments keep a balanced CST" {

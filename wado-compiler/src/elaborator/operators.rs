@@ -900,9 +900,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let float_name = {
                 let table = self.tysys.type_table.borrow();
-                match table.get(table.representation_head(left)) {
-                    ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
-                    ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
+                match table.primitive_head(left) {
+                    Some(PrimitiveType::F32) => Some("f32"),
+                    Some(PrimitiveType::F64) => Some("f64"),
                     _ => None,
                 }
             };

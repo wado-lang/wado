@@ -14,9 +14,9 @@ use nrg from "./grammars/nested_repeat_greedy.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = nrg::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
+    assert result.ok(), `unexpected diagnostics for ${input}`;
     let actual = nrg::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // The three `+`-then-`'x'` arms are one grammar spelled three ways, and they

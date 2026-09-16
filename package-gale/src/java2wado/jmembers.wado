@@ -340,7 +340,7 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
     let ty = match map_java_type(ty_java) {
         Some(t) => t,
         None => {
-            return Result::Err(`java2wado: @members: unsupported field type '${ty_java.to_string()}'`);
+            return Result::Err(`java2wado: @members: unsupported field type '${ty_java}'`);
         },
     };
     let init = if punct_is(tokens, *pos, "=") {
@@ -349,10 +349,10 @@ fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
         let e = parse_java_expr(&slice)?;
         emit_member_expr(&e, env)?;
     } else {
-        return Result::Err(`java2wado: @members: field '${name.to_string()}' needs an initializer`);
+        return Result::Err(`java2wado: @members: field '${name}' needs an initializer`);
     };
     if !punct_is(tokens, *pos, ";") {
-        return Result::Err(`java2wado: @members: expected ';' after field '${name.to_string()}'`);
+        return Result::Err(`java2wado: @members: expected ';' after field '${name}'`);
     }
     *pos += 1;
     // snake_cased at the declaration, as a method name is: every read of it —
@@ -369,7 +369,7 @@ fn parse_method<S: AsStrSlice, S1: AsStrSlice>(
 ) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
     if !punct_is(tokens, *pos, "{") {
-        return Result::Err(`java2wado: @members: expected '{' for method '${name.to_string()}'`);
+        return Result::Err(`java2wado: @members: expected '{' for method '${name}'`);
     }
     let close = find_braced_end(tokens, *pos)?;
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
@@ -467,7 +467,7 @@ fn is_modifier(tokens: &List<JToken>, pos: i32) -> bool {
 fn member_ident<S: AsStrSlice>(tokens: &List<JToken>, pos: i32, what: S) -> Result<String, String> {
     return match ident_at(tokens, pos) {
         Some(n) => Result::Ok(n),
-        None => Result::Err(`java2wado: @members: expected ${what.to_string()} identifier`),
+        None => Result::Err(`java2wado: @members: expected ${what} identifier`),
     };
 }
 

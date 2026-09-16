@@ -664,7 +664,7 @@ pub fn follow_forward_args() -> String {
 pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
     let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
     let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
-    return `(${prefix.to_string()} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    return `(${prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
@@ -674,7 +674,7 @@ pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> 
 
 /// A `follow_yields` call on a continuation held in one local.
 pub fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(tokens: S, pos: S1, head: S2) -> String {
-    return `follow_yields(${tokens.to_string()}, ${pos.to_string()}, ${head.to_string()}, &FOLLOW_SETS, TK_EOF)`;
+    return `follow_yields(${tokens}, ${pos}, ${head}, &FOLLOW_SETS, TK_EOF)`;
 }
 
 /// `", <forwarded continuation>"` when the callee declares the parameter, else

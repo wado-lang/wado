@@ -449,7 +449,7 @@ fn check_epsilon_closure(grammar: &Grammar, ctx: &LeftCornerCtx) -> Result<(), P
 
 fn epsilon_closure_error<S: AsStrSlice>(rule_name: S) -> ParseError {
     return ParseError::new(
-        `rule "${rule_name.to_string()}" contains a closure with at least one alternative that can match an empty string`,
+        `rule "${rule_name}" contains a closure with at least one alternative that can match an empty string`,
         Span::new(0, 0),
         ["a closure whose body always consumes at least one token"],
     );
@@ -1412,7 +1412,7 @@ fn visit_delegate<S: AsStrSlice>(
     let Some(found) = by_name.get(name.to_string()) else {
         return Result::Err(
             ParseError::new(
-                `imported grammar "${name.to_string()}" is not among the supplied inputs`,
+                `imported grammar "${name}" is not among the supplied inputs`,
                 Span::new(0, 0),
                 ["a supplied grammar declaring that name"],
             ),
@@ -2105,7 +2105,7 @@ pub fn assert_canonical_shape(grammar: &Grammar) {
 fn assert_canonical_element<S: AsStrSlice>(elem: &Element, rule: S) {
     match elem {
         Repeat(rep) => {
-            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${rule.to_string()}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
+            assert !peel_nested_repeat(&rep.element) matches { Some(_) }, `rule "${rule}": a repeat over a repeat reached lowering — every Repeat canonicalization mints must go through canon_repeat, which collapses the pair`;
             assert_canonical_element(&rep.element, rule);
         },
         Group(g) => {

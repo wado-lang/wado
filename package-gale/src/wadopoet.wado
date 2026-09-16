@@ -320,7 +320,7 @@ pub fn lit_name<S: AsStrSlice>(text: S) -> LitName {
 
 impl Display for LitName {
     pub fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&wado`'${*self as String}'`);
+        f.write_str(wado`'${*self as String}'`);
     }
 }
 
@@ -334,10 +334,10 @@ impl Display for CharRangePat {
     pub fn fmt(&self, f: &mut Formatter) {
         let range = *self as RangeInclusive<char>;
         if range.start == range.end {
-            f.write_str(&wado`'${range.start}'`);
+            f.write_str(wado`'${range.start}'`);
             return;
         }
-        f.write_str(&wado`'${range.start}'..='${range.end}'`);
+        f.write_str(wado`'${range.start}'..='${range.end}'`);
     }
 }
 

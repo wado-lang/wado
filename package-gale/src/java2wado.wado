@@ -62,7 +62,7 @@ pub fn translate_action<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>(
             };
             translate_java_stmts(rule, rules, body, vals_in_scope, bindings, &env);
         },
-        Other(name) => Result::Err(`unsupported action language '${*name}' for action '${body.to_string()}'`),
+        Other(name) => Result::Err(`unsupported action language '${*name}' for action '${body}'`),
     };
 }
 
@@ -112,7 +112,7 @@ pub fn translate_predicate<S: AsStrSlice, S1: AsStrSlice>(
             };
             translate_java_expr(rule, rules, body, vals_in_scope, bindings, &env);
         },
-        Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${body.to_string()}'`),
+        Other(name) => Result::Err(`unsupported action language '${*name}' for predicate '${body}'`),
     };
 }
 

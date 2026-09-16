@@ -22,9 +22,9 @@ use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
-/// The non-generic `Formatter` entry point a lowered body writes through.
-/// Lowering runs after monomorphization, so a call to generic `write_str`
-/// minted here would never be instantiated.
+/// The non-generic `Formatter` entry point a lowered body writes through, since
+/// lowering runs past monomorphization and a generic call minted here is never
+/// instantiated.
 const FORMATTER_WRITE_LITERAL: &str = "internal_write_literal";
 
 /// Body a per-functor format impl gets.

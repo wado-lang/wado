@@ -176,7 +176,7 @@ fn write_output<S: AsStrSlice, S1: AsStrSlice>(path: S, source: S1) with (Stderr
     // Await the completion future so a partial or failed write is reported
     // rather than silently treated as success.
     if let Some(Err(_)) = sub.read() {
-        eprintln(`gale: ${path.to_string()}: write failed`);
+        eprintln(`gale: ${path}: write failed`);
         exit(1);
     }
     sub.drop();
@@ -272,14 +272,14 @@ fn read_source_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Ex
     let bytes = match read_all(&file) {
         Ok(b) => b,
         Err(_) => {
-            eprintln(`gale: ${path.to_string()}: read error`);
+            eprintln(`gale: ${path}: read error`);
             exit(1);
         },
     };
     return match String::from_utf8(bytes) {
         Ok(s) => s,
         Err(_) => {
-            eprintln(`gale: ${path.to_string()}: not valid UTF-8`);
+            eprintln(`gale: ${path}: not valid UTF-8`);
             exit(1);
         },
     };
@@ -309,7 +309,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Ex
         }
         grants.push(dirs[i].1);
     }
-    eprintln(`gale: ${path.to_string()}: cannot open file`);
+    eprintln(`gale: ${path}: cannot open file`);
     if grants.is_empty() {
         eprintln("gale: no directory was granted to this program (try without --no-dir)");
     } else if path.starts_with("/") {
@@ -333,7 +333,7 @@ fn open_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Ex
 fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, Exit) {
     let dirs = Preopens::get_directories();
     if dirs.is_empty() {
-        eprintln(`gale: ${path.to_string()}: cannot open for writing`);
+        eprintln(`gale: ${path}: cannot open for writing`);
         eprintln("gale: no directory was granted to this program (try without --no-dir)");
         exit(1);
     }
@@ -347,7 +347,7 @@ fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, 
     if let Ok(file) = opened {
         return file;
     }
-    eprintln(`gale: ${path.to_string()}: cannot open for writing`);
+    eprintln(`gale: ${path}: cannot open for writing`);
     if path.starts_with("/") {
         eprintln(
             `gale: a path opens inside a granted directory, so an absolute path never does: ${grant_hint(path)}`,

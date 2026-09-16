@@ -267,7 +267,7 @@ fn property_keys<S: AsStrSlice>(aliases: &List<NamedRanges>, property: S) -> Lis
         }
         return keys;
     }
-    panic(`PropertyAliases.txt names no property '${property.to_string()}'`);
+    panic(`PropertyAliases.txt names no property '${property}'`);
 }
 
 /// Property matching ignores case, `_`, `-` and spaces (UAX #44 loose
@@ -376,7 +376,7 @@ fn partition_runs<S: AsStrSlice, S1: AsStrSlice>(
     // (`DerivedBidiClass.txt` gives whole blocks their own default), but none
     // of them overrides a code point the file lists.
     let missing = parse_missing(content);
-    assert missing.is_empty() == gc_default, `${property.to_string()}: expected either @missing lines or the General_Category default rule, not both or neither`;
+    assert missing.is_empty() == gc_default, `${property}: expected either @missing lines or the General_Category default rule, not both or neither`;
     let mut widest = missing;
     widest.sort_by(|a: &PropRun, b: &PropRun| (b.end - b.start).cmp(&(a.end - a.start)));
     let mut default_slot: List<i32> = List::filled(CODE_POINT_MAX + 1, 0);
@@ -414,7 +414,7 @@ fn partition_runs<S: AsStrSlice, S1: AsStrSlice>(
     let mut runs: List<PropRun> = [];
     let mut start = 0;
     for let mut c = 0; c <= CODE_POINT_MAX; c += 1 {
-        assert slot[c] != 0, `${property.to_string()}: U+${c:X} has no value; the values do not partition the code-point space`;
+        assert slot[c] != 0, `${property}: U+${c:X} has no value; the values do not partition the code-point space`;
         if c == CODE_POINT_MAX || slot[c + 1] != slot[c] {
             runs.push(PropRun { start, end: c, value: names[slot[c] - 1] });
             start = c + 1;
@@ -687,7 +687,7 @@ fn emit_module<S: AsStrSlice>(
 ) -> String {
     let mut w = CodeWriter::with_capacity(1024 * 1024);
     emit_module_doc(&mut w, version);
-    GlobalSpec::new("UNICODE_VERSION", "String", &wado`"${version.to_string()}"`, Vis::Pub).emit(&mut w);
+    GlobalSpec::new("UNICODE_VERSION", "String", wado`"${version.to_string()}"`, Vis::Pub).emit(&mut w);
     w.blank();
     emit_category_ranges(&mut w, runs);
     w.blank();
@@ -746,11 +746,11 @@ fn emit_enumerated_dispatch(w: &mut CodeWriter, tables: &List<EnumeratedTable>) 
                 keys.push_str(" | ");
             }
             first = false;
-            keys.push_str(&wado`"${*key}"`);
+            keys.push_str(wado`"${*key}"`);
         }
-        w.line(&wado`${keys} => ${table.fn_name}(value),`);
+        w.line(wado`${keys} => ${table.fn_name}(value),`);
     }
-    w.line(&wado`_ => "",`);
+    w.line(wado`_ => "",`);
     w.end_with(";");
     w.end();
 }
@@ -780,29 +780,29 @@ fn emit_named_table<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, 
                 keys.push_str(" | ");
             }
             first = false;
-            keys.push_str(&wado`"${key}"`);
+            keys.push_str(wado`"${key}"`);
         }
         if first {
             // Every name this entry answers to is already an arm, so the entry
             // would be unreachable and `\p{...}` would call it unsupported.
             // The UCD has no such collision today; one appearing needs a
             // resolution rule, not a silent drop.
-            panic(`unicode table ${name.to_string()}: ${entry.names[0]} has no unclaimed key`);
+            panic(`unicode table ${name}: ${entry.names[0]} has no unclaimed key`);
         }
-        w.line(&wado`${keys} => "${encode(&entry.ranges)}",`);
+        w.line(wado`${keys} => "${encode(&entry.ranges)}",`);
     }
-    w.line(&wado`_ => "",`);
+    w.line(wado`_ => "",`);
     w.end_with(";");
     w.end();
 }
 
 fn emit_module_doc<S: AsStrSlice>(w: &mut CodeWriter, version: S) {
-    w.line(&wado`#![generated(by = "scripts/regen-unicode-tables.sh", sources = [])]`);
+    w.line(wado`#![generated(by = "scripts/regen-unicode-tables.sh", sources = [])]`);
     w.line("//! Unicode property ranges for `\\p{...}` / `\\P{...}` char sets: general");
     w.line("//! categories, scripts, blocks, binary properties, and the enumerated");
     w.line("//! `Property=Value` names ANTLR4 answers.");
     w.line("//!");
-    w.line(`//! Do not edit by hand — regenerate from UCD ${version.to_string()} with`);
+    w.line(`//! Do not edit by hand — regenerate from UCD ${version} with`);
     w.line("//! `scripts/regen-unicode-tables.sh`.");
     w.line("//!");
     w.line("//! A property's ranges are base64 over `(gap from the previous range's");
@@ -827,7 +827,7 @@ fn emit_category_ranges(w: &mut CodeWriter, runs: &List<CategoryRun>) {
             &wado`"${normalize_name(&cat.0)}" | "${normalize_name(&cat.1)}" => "${encode(&ranges)}",`,
         );
     }
-    w.line(&wado`_ => "",`);
+    w.line(wado`_ => "",`);
     w.end_with(";");
     w.end();
 }
@@ -850,9 +850,9 @@ fn emit_category_groups(w: &mut CodeWriter) {
                 subs.push_str(", ");
             }
             first = false;
-            subs.push_str(&wado`"${normalize_name(&cat.0)}"`);
+            subs.push_str(wado`"${normalize_name(&cat.0)}"`);
         }
-        w.line(&wado`"${normalize_name(&group.0)}" | "${normalize_name(&group.1)}" => [${subs}],`);
+        w.line(wado`"${normalize_name(&group.0)}" | "${normalize_name(&group.1)}" => [${subs}],`);
     }
     w.line("_ => [],");
     w.end_with(";");

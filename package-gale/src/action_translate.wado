@@ -142,15 +142,15 @@ pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 /// The value-struct fields a labeled rule call is captured into: the token
 /// range `$<label>.text` reads, and the builder row `$<label>.ctx` renders.
 pub fn rule_span_lo_field<S: AsStrSlice>(field: S) -> String {
-    return `_span_lo_${field.to_string()}`;
+    return `_span_lo_${field}`;
 }
 
 pub fn rule_span_hi_field<S: AsStrSlice>(field: S) -> String {
-    return `_span_hi_${field.to_string()}`;
+    return `_span_hi_${field}`;
 }
 
 pub fn rule_node_field<S: AsStrSlice>(field: S) -> String {
-    return `_node_${field.to_string()}`;
+    return `_node_${field}`;
 }
 
 /// Those fields as an expression. They live on the value struct because a
@@ -169,7 +169,7 @@ pub fn rule_node_ref<S: AsStrSlice>(field: S) -> String {
 }
 
 fn vals_field_ref<S: AsStrSlice>(field: S) -> String {
-    return `${VALS_LOCAL}.${field.to_string()}`;
+    return `${VALS_LOCAL}.${field}`;
 }
 
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
@@ -319,13 +319,13 @@ fn action_attr_expr<S: AsStrSlice>(
 fn parser_special_expr<S: AsStrSlice>(r: &ResolvedAttr, is_lr: bool, handle: S) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `${handle.to_string()}.rule_text(${RULE_START_TOK_LOCAL})`,
+            `${handle}.rule_text(${RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
-        "stop" => token_member_of(`(${handle.to_string()}.pos - 1)`, &r.member, handle),
+        "stop" => token_member_of(`(${handle}.pos - 1)`, &r.member, handle),
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::Ok(`${handle.to_string()}.${method}()`);
+            Result::Ok(`${handle}.${method}()`);
         },
         "_p" && r.member matches { None } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
         _ => Result::Err(`$${r.name}: this parser special is not yet emitted`),
@@ -480,7 +480,7 @@ pub fn resolve_lexer_attr_ref<S: AsStrSlice>(
     let refs = find_attr_refs(text);
     if refs.len() != 1 {
         builtin::cold_path();
-        return Result::Err(`lexer attribute: '${text.to_string()}' is not a single $-reference`);
+        return Result::Err(`lexer attribute: '${text}' is not a single $-reference`);
     }
     return lexer_attr_expr(&refs[0], env, use_);
 }
@@ -570,11 +570,11 @@ fn token_member_of<S: AsStrSlice, S1: AsStrSlice>(idx: S, member: &Option<String
         },
     };
     return match m {
-        "text" => Result::Ok(`${handle.to_string()}.token_text(${idx.to_string()})`),
-        "int" => Result::Ok(`${handle.to_string()}.token_int(${idx.to_string()})`),
-        "type" => Result::Ok(`${handle.to_string()}.token_kind(${idx.to_string()})`),
-        "line" => Result::Ok(`${handle.to_string()}.token_line(${idx.to_string()})`),
-        "pos" => Result::Ok(`${handle.to_string()}.token_col(${idx.to_string()})`),
+        "text" => Result::Ok(`${handle}.token_text(${idx})`),
+        "int" => Result::Ok(`${handle}.token_int(${idx})`),
+        "type" => Result::Ok(`${handle}.token_kind(${idx})`),
+        "line" => Result::Ok(`${handle}.token_line(${idx})`),
+        "pos" => Result::Ok(`${handle}.token_col(${idx})`),
         "index" => Result::Ok(idx.to_string()),
         "channel" => Result::Ok(String::from("0")),
         _ => Result::Err(`.${m}: unknown token member`),
@@ -591,13 +591,13 @@ fn rule_member_expr<S: AsStrSlice>(
     // `.text` is the invocation's own span, not a value-channel field.
     if let Some(m) = &r.member && *m == "text" {
         return Result::Ok(
-            `${handle.to_string()}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
+            `${handle}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
         );
     }
     // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
     // resolves straight to the rendering (java2wado drops the call above it).
     if let Some(m) = &r.member && *m == "ctx" {
-        return Result::Ok(`${handle.to_string()}.rule_tree_at(${rule_node_ref(&binding)})`);
+        return Result::Ok(`${handle}.rule_tree_at(${rule_node_ref(&binding)})`);
     }
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,

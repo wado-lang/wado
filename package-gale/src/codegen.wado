@@ -436,7 +436,7 @@ fn warn_superclass_refused<S: AsStrSlice, S1: AsStrSlice>(ctx: &mut GenContext, 
     ctx.warn(
         &DiagnosticOwner::host("superClass"),
         DiagnosticKind::UnsupportedAction,
-        `superClass '${base.to_string()}' ${refusal.to_string()}, so the base is not wired`,
+        `superClass '${base}' ${refusal}, so the base is not wired`,
     );
 }
 
@@ -619,7 +619,7 @@ fn member_field<S: AsStrSlice>(members: &MemberDecls, name: S) -> [String, Strin
             return [mf.ty, mf.init];
         }
     }
-    panic(`gen_scan_gate_global: '${name.to_string()}' is simulated but no member declares it`);
+    panic(`gen_scan_gate_global: '${name}' is simulated but no member declares it`);
 }
 
 /// Emit the decoded `LATN_SIM` global for the runtime lexer simulator. Same
@@ -648,7 +648,7 @@ fn emit_atn_blob_global<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, atn: 
     for let b of &bytes {
         push_hex_byte(&mut body, *b);
     }
-    w.line(`global ${sim_name.to_string()}: AtnSim = atn_decode(&b"${body}"${extra_args.to_string()});`);
+    w.line(`global ${sim_name}: AtnSim = atn_decode(&b"${body}"${extra_args});`);
 }
 
 /// Append the `\xNN` byte escape (lowercase, zero-padded to two digits) for

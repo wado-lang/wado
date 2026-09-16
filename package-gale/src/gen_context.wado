@@ -987,7 +987,7 @@ impl GenContext {
         if kind_id >= 0 {
             return kind_id;
         }
-        return self.token_kinds.intern(`TK_${name.to_string()}`);
+        return self.token_kinds.intern(`TK_${name}`);
     }
 
     pub fn literal_id<S: AsStrSlice>(&mut self, text: S, kind_id: i32) -> i32 {
@@ -2154,11 +2154,11 @@ impl GenContext {
     pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
         assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
-            return `${expr.to_string()} == ${tokens[0]}`;
+            return `${expr} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
         self.mark_kind_set_used(id);
-        return `_kind_set_${id}(${expr.to_string()})`;
+        return `_kind_set_${id}(${expr})`;
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
@@ -2323,11 +2323,11 @@ impl GenContext {
     pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
         assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
-            return `${expr.to_string()} != ${tokens[0]}`;
+            return `${expr} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
         self.mark_kind_set_used(id);
-        return `!_kind_set_${id}(${expr.to_string()})`;
+        return `!_kind_set_${id}(${expr})`;
     }
 }
 

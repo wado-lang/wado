@@ -10,8 +10,7 @@ use { TK_EOF } from "./grammars/lexer_keyword_carrier_len.g4";
 
 fn assert_tokens<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let actual = g::to_lexer_string(&g::tokenize(input), TK_EOF);
-    assert actual == expected.to_string(), `\ninput: ${input.to_string()}\nactual:\n${actual}\nexpected:\n${expected.to_string(
-    )}`;
+    assert actual == expected.to_string(), `\ninput: ${input}\nactual:\n${actual}\nexpected:\n${expected.to_string()}`;
 }
 
 // `D`'s only carrier is the one-char catch-all, so the shortcut cannot reach

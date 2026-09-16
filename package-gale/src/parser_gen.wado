@@ -333,7 +333,7 @@ fn gen_alt_scan_if_possible<S: AsStrSlice, S1: AsStrSlice>(
         panic(`gen_alt_scan_if_possible: no scan body for alt ${alt_index}`);
     };
 
-    let scan_name = `${fn_name.to_string()}_scan_${alt_index}`;
+    let scan_name = `${fn_name}_scan_${alt_index}`;
 
     let mut f = FnSpec::new(&scan_name);
     f.add_param("tokens", "&Array<i32>");
@@ -452,7 +452,7 @@ fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     let slot = `${SCAN_GATE_HANDLE}.${scope.field}`;
     w.line(`let _gate_saved = ${slot};`);
     w.line(`${slot} = ${scope.value};`);
-    w.line(`let _gate_end = ${inner.to_string()}(tokens, pos${follow_sep(reads_follow)});`);
+    w.line(`let _gate_end = ${inner}(tokens, pos${follow_sep(reads_follow)});`);
     w.line(`${slot} = _gate_saved;`);
     w.line("return _gate_end;");
     w.end();
@@ -679,7 +679,7 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     atn_loop_dec: i32,
     mid_operand_gated: bool = false,
 ) {
-    let atom_name = `${fn_name.to_string()}_atom`;
+    let atom_name = `${fn_name}_atom`;
 
     let mut non_lr_alts: List<Alternative> = [];
     for let idx of non_lr_indices {
@@ -781,7 +781,7 @@ fn gen_scan_lr_suffix_helpers<S: AsStrSlice>(
     for let vi of valid_lr_alts {
         let lr_alt = &lr_alts[*vi];
         let lr_idx = lr_alt.alt_index;
-        let suffix_fn = `${fn_name.to_string()}_lr_${lr_idx}`;
+        let suffix_fn = `${fn_name}_lr_${lr_idx}`;
 
         let mut f = FnSpec::new(&suffix_fn);
         f.add_param("tokens", "&Array<i32>");
@@ -838,7 +838,7 @@ fn gen_lr_suffix_dispatch_atn<S: AsStrSlice>(
     let mut is_first = true;
     for let mut i = 0; i < valid.len(); i += 1 {
         let lr_idx = lr_alts[valid[i]].alt_index;
-        let suffix_fn = `${fn_name.to_string()}_lr_${lr_idx}`;
+        let suffix_fn = `${fn_name}_lr_${lr_idx}`;
         if is_first {
             w.begin(`if _atn_alt == ${i}`);
             is_first = false;
@@ -976,8 +976,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
             w.line(
-                `_lr_s_${*gi} = ${scan_fn.to_string()}_lr_${lr.alt_index}(${tokens_expr.to_string()}, ${pos_expr.to_string(
-                )}${fsep});`,
+                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr.to_string()}${fsep});`,
             );
             w.end();
         }
@@ -1043,7 +1042,7 @@ fn gen_scan_lr_call_with_prec<S: AsStrSlice>(
     if let Some(local) = prebound {
         gen_scan_rewind(w, ctx, local);
     } else {
-        w.line(`pos = ${suffix_fn.to_string()}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
+        w.line(`pos = ${suffix_fn}(tokens, pos${follow_sep(ctx.current_rule_reads_follow())});`);
     }
     gen_scan_rewind_break(w, ctx, "lr_saved_pos", "pos < 0");
     if mid_operand_gated {
@@ -1140,9 +1139,9 @@ global NO_PREBOUND: Option<String> = null;
 /// Open the arm for one leading token, chaining onto any arm already open.
 fn begin_lr_arm<S: AsStrSlice>(w: &mut CodeWriter, site: &LrOverlapSite, tk: S, chained: bool) {
     if chained {
-        w.else_begin(`else if ${site.kind_expr} == ${tk.to_string()}`);
+        w.else_begin(`else if ${site.kind_expr} == ${tk}`);
     } else {
-        w.begin(`if ${site.kind_expr} == ${tk.to_string()}`);
+        w.begin(`if ${site.kind_expr} == ${tk}`);
     }
 }
 
@@ -1383,7 +1382,7 @@ impl ScanAltPlan {
 }
 
 fn scan_alt_helper_name<S: AsStrSlice>(base: S, alt: i32) -> String {
-    return `${base.to_string()}_alt_${alt}`;
+    return `${base}_alt_${alt}`;
 }
 
 fn plan_scan_multi_alt(alts: &List<Alternative>, ctx: &mut GenContext) -> ScanAltPlan {
@@ -1839,7 +1838,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
 ) {
     match se {
         Token(t) => {
-            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt.to_string()} }`);
+            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt} }`);
             w.line("pos += 1;");
         },
         RuleCall(rc) => {
@@ -1878,10 +1877,10 @@ fn gen_scan_op_element<S: AsStrSlice>(
             } else {
                 w.line(`pos = ${fn_name}(tokens, pos${follow_arg_str}${min_prec_arg}${cont});`);
             }
-            w.line(`if pos < 0 { ${fail_stmt.to_string()} }`);
+            w.line(`if pos < 0 { ${fail_stmt} }`);
         },
         Wildcard => {
-            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${fail_stmt.to_string()} }`);
+            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF { ${fail_stmt} }`);
             w.line("pos += 1;");
         },
         Excluded(e) => {
@@ -1896,7 +1895,7 @@ fn gen_scan_op_element<S: AsStrSlice>(
                 }
                 check.push_str(&check_parts[i]);
             }
-            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${fail_stmt.to_string()} }`);
+            w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${fail_stmt} }`);
             w.line("pos += 1;");
         },
         Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt),
@@ -2106,7 +2105,7 @@ fn scan_repeat_guard_excluding<S: AsStrSlice>(
         parts.push(admitted);
     }
     if !caller_follow_gate.is_empty() {
-        parts.push(`!(${caller_follow_gate.to_string()})`);
+        parts.push(`!(${caller_follow_gate})`);
     }
     return parts.join(" && ");
 }
@@ -2126,7 +2125,7 @@ global PEEK_KIND: String = "p.peek_kind()";
 fn repeat_guard_cond<S: AsStrSlice>(admits: &Admits, excluded: &List<String>, expr: S, ctx: &mut GenContext) -> String {
     let mut parts: List<String> = [];
     if admits_is_everything(admits) {
-        parts.push(`${expr.to_string()} != TK_EOF`);
+        parts.push(`${expr} != TK_EOF`);
     }
     let narrowed = admits_check_excluding(admits, excluded, expr, ctx);
     if narrowed != "true" {
@@ -2467,7 +2466,7 @@ fn gen_scan_gate_check<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, gate_c
     if gate_cond.is_empty() {
         return;
     }
-    w.line(`if !(${gate_cond.to_string()}) { ${fail_stmt.to_string()} }`);
+    w.line(`if !(${gate_cond}) { ${fail_stmt} }`);
 }
 
 /// Enter an inlined scan from parse context: the parser's tokens, where the
@@ -2521,7 +2520,7 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
     gates: &List<ScanGate> = &NO_SCAN_GATES,
     gate_cond: &String = &NO_SCAN_GATE_COND,
 ) {
-    let fail = `break ${label.to_string()};`;
+    let fail = `break ${label};`;
     gen_scan_gate_check(w, gate_cond, &fail);
     for let mut i = start; i <= end; i += 1 {
         gen_scan_gates_before(w, gates, i, start, end);
@@ -2713,7 +2712,7 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     // to the entry without opening spurious nodes (the infallible analogue of a
     // `?` that would have skipped this call entirely).
     if returns_vals {
-        w.line(`if p.recovering { return ${result_type.to_string()} {}; }`);
+        w.line(`if p.recovering { return ${result_type} {}; }`);
     } else {
         w.line("if p.recovering { return; }");
     }
@@ -2723,9 +2722,9 @@ fn gen_rule_entry_wrapper<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let argfwd = wrapper_arg_forward(rule, ctx);
     let contfwd = if mid_operand_gated { ", lr_cont" } else { "" };
     let call = if takes_min_prec {
-        `${inner_name.to_string()}(p${fsep}, min_prec${contfwd}${argfwd})`;
+        `${inner_name}(p${fsep}, min_prec${contfwd}${argfwd})`;
     } else {
-        `${inner_name.to_string()}(p${fsep}${contfwd}${argfwd})`;
+        `${inner_name}(p${fsep}${contfwd}${argfwd})`;
     };
     // open this rule's `CstNode` before the body and close it after, so the
     // body's appended terminals / subtrees become its children. The body may
@@ -2987,7 +2986,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
                 for let gi of group {
                     let alt_index = non_lr_indices[gi];
                     let alt = &rule.alternatives[alt_index];
-                    let helper_name = `${fn_name.to_string()}_alt_${alt_index}`;
+                    let helper_name = `${fn_name}_alt_${alt_index}`;
 
                     let mut f = FnSpec::new(&helper_name);
                     add_parser_super_effect(&mut f, ctx);
@@ -3037,7 +3036,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     let has_lr = lowered_rule matches { LeftRecursive(_) };
 
     if has_lr {
-        let atom_name = `${fn_name.to_string()}_atom`;
+        let atom_name = `${fn_name}_atom`;
         let mut f = FnSpec::new(&atom_name);
         add_parser_super_effect(&mut f, ctx);
         f.add_param(&PARSER_HANDLE, "&mut Parser");
@@ -3175,7 +3174,7 @@ fn gen_trace_pick(w: &mut CodeWriter, rule: &ParserRule, alt_index: i32, ctx: &G
     if !ctx.is_trace() || all_alts_are_single_token(&rule.alternatives) {
         return;
     }
-    w.line(&wado`trace_pick(p, "${rule.name}", ${alt_index});`);
+    w.line(wado`trace_pick(p, "${rule.name}", ${alt_index});`);
 }
 
 fn gen_alt_body<S: AsStrSlice>(
@@ -3572,7 +3571,7 @@ fn gen_atn_ret_pending(w: &mut CodeWriter, ctx: &GenContext, call_site: i32) {
 /// A label binding exists only for a semantic action to read.
 fn leaf_binding<S: AsStrSlice>(ctx: &GenContext, field: S) -> String {
     if ctx.emit_actions() {
-        return `let ${field.to_string()} = `;
+        return `let ${field} = `;
     }
     return String::new();
 }
@@ -3797,11 +3796,11 @@ fn gen_alt_commit<S: AsStrSlice>(
     let last = order.len() - 1;
     for let mut k = 0; k < order.len(); k += 1 {
         if k == 0 {
-            w.begin(`if ${winner.to_string()} == ${order[k]}`);
+            w.begin(`if ${winner} == ${order[k]}`);
         } else if k == last {
             w.else_begin("else");
         } else {
-            w.else_begin(`else if ${winner.to_string()} == ${order[k]}`);
+            w.else_begin(`else if ${winner} == ${order[k]}`);
         }
         gen_ops(w, &alt_by_index(alts, order[k]).ops, ctx, nc);
     }
@@ -3869,9 +3868,9 @@ fn gen_lr_fn<S: AsStrSlice>(
     // The atom seeds the accumulator (the left operand's value); each LR
     // continuation folds a right operand into it (`emit_lr_branch_body`).
     if emits_vals {
-        w.line(`let mut _lr_acc = ${fn_name.to_string()}_atom(p${fsep}, vals, min_prec);`);
+        w.line(`let mut _lr_acc = ${fn_name}_atom(p${fsep}, vals, min_prec);`);
     } else {
-        w.line(`${fn_name.to_string()}_atom(p${fsep}, min_prec);`);
+        w.line(`${fn_name}_atom(p${fsep}, min_prec);`);
     }
     w.line("p.b.finish_node(p.last_end());");
     // ATN-class LR: the suffix loop-entry can't be resolved by static
@@ -4011,7 +4010,7 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn.to_string()}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${follow_sep(ctx.current_rule_reads_follow())})`;
     };
     if mid_operand_gated {
         // A caller that needs this operand to leave a delimiter behind hands
@@ -4045,7 +4044,7 @@ fn emit_lr_branch_body<S: AsStrSlice>(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
 ) {
-    w.line(`p.b.start_node_at(_cp, ${rk.to_string()}, _start);`);
+    w.line(`p.b.start_node_at(_cp, ${rk}, _start);`);
     // Stamp this continuation's labeled-alternative index on the wrap node
     // (gated on the rule being labeled, mirroring the atom path).
     if labeled {
@@ -4193,16 +4192,16 @@ fn emit_probe_verdict<S: AsStrSlice>(w: &mut CodeWriter, probe_viable: &List<Str
     };
     if probe_viable.is_empty() {
         if mask == "true" {
-            w.line(`${verdict.to_string()} = true;`);
+            w.line(`${verdict} = true;`);
         } else {
-            w.line(`if ${mask} { ${verdict.to_string()} = true; }`);
+            w.line(`if ${mask} { ${verdict} = true; }`);
         }
         return;
     }
     w.line("let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };");
     let viable = ctx.kind_check_str(probe_viable, "probe_kind");
     let cond = if mask == "true" { viable } else { `(${mask}) && (${viable})` };
-    w.line(`if ${cond} { ${verdict.to_string()} = true; }`);
+    w.line(`if ${cond} { ${verdict} = true; }`);
 }
 
 /// Greedy `*` / `+` / `?` under the emitter: loop the body (which
@@ -4754,7 +4753,7 @@ fn atn_optional_enter_cond(ctx: &GenContext, rep_op: &RepeatOp) -> String {
 /// `gen_op_repeat_optional_{leaf,rulecall}`'s gate.
 fn gate_cond_with_caller_follow<S: AsStrSlice>(cond: S, gate_caller_follow: bool) -> String {
     if gate_caller_follow {
-        return `!(${caller_follow_yields()}) && (${cond.to_string()})`;
+        return `!(${caller_follow_yields()}) && (${cond})`;
     }
     return cond.to_string();
 }
@@ -4793,7 +4792,7 @@ fn gen_op_storable_optional_body<S: AsStrSlice>(
 ) {
     // the inner body appends to the builder, so the
     // `Option<T>` wrapper collapses to a present/absent statement.
-    w.begin(`if ${entry.to_string()}`);
+    w.begin(`if ${entry}`);
     let mut nch: List<[String, i32]> = [];
     gen_op_inner_for_storable_repeat(
         w,
@@ -5009,7 +5008,7 @@ fn looped() -> GroupEntry {
 /// optional comes to admit a token its gated body then has no arm for.
 fn optional_entry_test<S: AsStrSlice>(own: S, inner: &Element, ctx: &mut GenContext) -> String {
     return match group_entry_condition(inner, ctx) {
-        Some(gate) => `${own.to_string()} && (${gate})`,
+        Some(gate) => `${own} && (${gate})`,
         None => own.to_string(),
     };
 }
@@ -5041,7 +5040,7 @@ fn gen_mandatory_first_report<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element
         return;
     };
     let expected_ref = sync_set_ref(ctx, &admits.expected);
-    w.begin(`if ${plus_flag.to_string()} && !(${admits.condition})`);
+    w.begin(`if ${plus_flag} && !(${admits.condition})`);
     w.line(`p.no_viable("no viable alternative", p.peek_span(), ${expected_ref});`);
     w.line("break;");
     w.end();
@@ -5069,11 +5068,11 @@ fn gen_repeat_gate_break<S: AsStrSlice>(w: &mut CodeWriter, inner: &Element, ctx
         return;
     }
     if group_dispatch_reports(inner) {
-        w.line(`if !${plus_flag.to_string()} && !(${cond}) { break; }`);
+        w.line(`if !${plus_flag} && !(${cond}) { break; }`);
         return;
     }
     w.begin(`if !(${cond})`);
-    w.line(`if ${plus_flag.to_string()} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
+    w.line(`if ${plus_flag} { p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC); }`);
     w.line("break;");
     w.end();
 }
@@ -5713,7 +5712,7 @@ fn gen_op_repeat_non_greedy_storable<S: AsStrSlice>(
         return;
     }
     if !while_cond.eq_str("false") {
-        let guard = if is_plus { `!p.recovering && (${while_cond.to_string()})` } else { while_cond.to_string() };
+        let guard = if is_plus { `!p.recovering && (${while_cond})` } else { while_cond.to_string() };
         w.begin(`while ${guard}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_inner_for_storable_repeat(w, rep_op, inner, ctx, &mut nc, &empty_iter_follow, looped());
@@ -5768,7 +5767,7 @@ fn gen_op_repeat_non_greedy_transparent<S: AsStrSlice>(
         return;
     }
     if !while_cond.eq_str("false") {
-        w.begin(`while ${while_cond.to_string()}`);
+        w.begin(`while ${while_cond}`);
         let mut nc: List<[String, i32]> = [];
         gen_op_group(w, g_op, inner, ctx, &mut nc, looped());
         w.end();
@@ -5943,11 +5942,7 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
     cond: S1,
     ctx: &mut GenContext,
 ) {
-    let guard = if gate_expr.is_empty() {
-        cond.to_string();
-    } else {
-        `!(${gate_expr.to_string()}) && (${cond.to_string()})`;
-    };
+    let guard = if gate_expr.is_empty() { cond.to_string() } else { `!(${gate_expr}) && (${cond})` };
     w.begin(`if ${guard}`);
     let mut nc: List<[String, i32]> = [];
     gen_op_leaf(w, body, ctx, &mut nc);
@@ -6005,7 +6000,7 @@ fn gen_iter_caller_follow_gate<S: AsStrSlice>(w: &mut CodeWriter, rep_op: &Repea
         gen_caller_follow_gate(w, rep_op);
         return;
     }
-    w.begin(`if !${plus_flag.to_string()}`);
+    w.begin(`if !${plus_flag}`);
     gen_caller_follow_gate(w, rep_op);
     w.end();
 }
@@ -6331,7 +6326,7 @@ fn gen_rep_iteration_entry<S: AsStrSlice>(
     }
     let guarded_only = !plus_flag.is_empty();
     if guarded_only {
-        w.begin(`if !${plus_flag.to_string()}`);
+        w.begin(`if !${plus_flag}`);
     }
     gen_caller_follow_gate(w, rep_op);
     let body_admits = admits_kinds(&rep_op.body_admits);
@@ -6381,7 +6376,7 @@ fn gen_rep_decline_stranded<S: AsStrSlice>(
     }
     let cont_kind = dedup_name("decline_kind", nc);
     let dead_end = dedup_name("decline_dead", nc);
-    w.begin(`if ${scan_pos.to_string()} >= 0`);
+    w.begin(`if ${scan_pos} >= 0`);
     gen_kind_read(w, &cont_kind, "p.kinds", scan_pos);
     let can_continue = join_or(&[
         kind_check_or_none(body_admits, &cont_kind, ctx),
@@ -6470,7 +6465,7 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
     let ok = dedup_name("rep_reserve_ok", nc);
     // Prediction picked nothing: `at` is no position, and the caller reports
     // that a line below.
-    w.begin(`if ${at.to_string()} >= 0`);
+    w.begin(`if ${at} >= 0`);
     w.line(`let mut ${ok} = false;`);
     w.begin(`${label}:`);
     // `at` is where the iteration the entry committed to ended, so the reserve
@@ -6501,7 +6496,7 @@ fn gen_rep_reserve_at<S: AsStrSlice>(
 /// marking and rewinding are whole operations, not a two-line idiom each site
 /// repeats and one site can write half of.
 fn gen_scan_mark<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S) {
-    w.line(`let ${slot.to_string()} = pos;`);
+    w.line(`let ${slot} = pos;`);
     gen_scan_gate_save(w, ctx, slot);
 }
 
@@ -6511,7 +6506,7 @@ fn gen_scan_mark<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S) {
 /// a token the guard already proved consumes no gate, so `start + 1` is `start`'s
 /// reading of the input.
 fn gen_scan_rewind<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S, skip: i32 = 0) {
-    w.line(&if skip == 0 { `pos = ${slot.to_string()};` } else { `pos = ${slot.to_string()} + ${skip};` });
+    w.line(&if skip == 0 { `pos = ${slot};` } else { `pos = ${slot} + ${skip};` });
     gen_scan_gate_restore(w, ctx, slot);
 }
 
@@ -6527,10 +6522,10 @@ fn gen_scan_rewind_break<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>
     brk: S2 = PLAIN_BREAK,
 ) {
     if !ctx.emit_scan_gate() {
-        w.line(`if ${cond.to_string()} { pos = ${slot.to_string()}; ${brk.to_string()} }`);
+        w.line(`if ${cond} { pos = ${slot}; ${brk} }`);
         return;
     }
-    w.begin(`if ${cond.to_string()}`);
+    w.begin(`if ${cond}`);
     gen_scan_rewind(w, ctx, slot);
     w.line(brk);
     w.end();
@@ -6541,7 +6536,7 @@ fn gen_scan_rewind_break<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice = String>
 /// in the same space as the suffixes the emitter mints (`_ok`, `_exit`), where a
 /// gate named `ok` collides with a reserve probe's verdict.
 fn scan_gate_local<S: AsStrSlice>(slot: S) -> String {
-    return `${slot.to_string()}_gate`;
+    return `${slot}_gate`;
 }
 
 /// The gate half of `gen_scan_mark`, for the one slot that is not a position
@@ -6567,7 +6562,7 @@ fn scan_gate_snapshot<S: AsStrSlice>(ctx: &GenContext, slot: S) -> List<String> 
 /// under. The twin of `gen_scan_rewind`: a slot nothing snapshots into is a
 /// position whose gate is lost, and the next reader of it invents one.
 fn gen_scan_commit<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, slot: S, end: S1) {
-    w.line(`${slot.to_string()} = ${end.to_string()};`);
+    w.line(`${slot} = ${end};`);
     for let line of scan_gate_snapshot(ctx, slot) {
         w.line(&line);
     }
@@ -6581,11 +6576,11 @@ fn scan_gate_best_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     wins: S1,
     end: S2,
 ) -> String {
-    let mut body = `${best.to_string()} = ${end.to_string()};`;
+    let mut body = `${best} = ${end};`;
     for let line of scan_gate_snapshot(ctx, best) {
         body.push_str(` ${line}`);
     }
-    return `if ${wins.to_string()} { ${body} }`;
+    return `if ${wins} { ${body} }`;
 }
 
 /// Undo an iteration the scan is abandoning: the position it started at, and
@@ -6614,8 +6609,7 @@ fn gen_scan_gate_restore<S: AsStrSlice>(w: &mut CodeWriter, ctx: &GenContext, sl
 /// past the end. `stream` is `tokens` inside a scan and `p.kinds` outside one.
 fn gen_kind_read<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, name: S, stream: S1, at: S2) {
     w.line(
-        `let ${name.to_string()} = if ${at.to_string()} < ${stream.to_string()}.len() { ${stream.to_string()}[${at.to_string(
-        )}] } else { TK_EOF };`,
+        `let ${name} = if ${at} < ${stream}.len() { ${stream}[${at.to_string()}] } else { TK_EOF };`,
     );
 }
 
@@ -6663,7 +6657,7 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     if plus_flag.is_empty() {
         w.line(`if ${best} <= p.pos { break; }`);
     } else {
-        w.line(`if !${plus_flag.to_string()} && ${best} <= p.pos { break; }`);
+        w.line(`if !${plus_flag} && ${best} <= p.pos { break; }`);
     }
     let refusable = if plus_flag.is_empty() { Refusable::Always } else { Refusable::UnlessFirst(plus_flag.to_string()) };
     gen_iteration_duties(
@@ -6684,10 +6678,10 @@ fn gen_rep_decided_entry<S: AsStrSlice>(
     // prediction picked nothing is there an answer to give here.
     w.begin(`if ${winner} < 0`);
     let expected_ref = sync_set_ref(ctx, &decision.expected);
-    w.line(`if ${plus_flag.to_string()} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
+    w.line(`if ${plus_flag} { p.no_viable("no viable alternative", p.peek_span(), ${expected_ref}); }`);
     w.line("break;");
     w.end();
-    w.line(`${plus_flag.to_string()} = false;`);
+    w.line(`${plus_flag} = false;`);
     return winner;
 }
 
@@ -6805,12 +6799,12 @@ fn gen_reserve_probe<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut GenContext,
 ) {
     gen_scan_mark(w, ctx, slot);
-    w.line(`let mut ${ok.to_string()} = false;`);
-    w.begin(`${label.to_string()}:`);
+    w.line(`let mut ${ok} = false;`);
+    w.begin(`${label}:`);
     for let se of reserve {
-        gen_scan_op_element(w, se, ctx, `break ${label.to_string()};`);
+        gen_scan_op_element(w, se, ctx, `break ${label};`);
     }
-    w.line(`${ok.to_string()} = true;`);
+    w.line(`${ok} = true;`);
     w.end();
     gen_scan_rewind(w, ctx, slot);
 }
@@ -6840,7 +6834,7 @@ fn reserve_starved_cond<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3: AsStr
     // nobody would see.
     assert !body_admits.is_empty(), "reserve_starved_cond: a reserve whose loop admits nothing would starve every iteration";
     gen_kind_read(w, kind, stream, at);
-    return `!${ok.to_string()} && !(${ctx.kind_check_str(body_admits, kind)})`;
+    return `!${ok} && !(${ctx.kind_check_str(body_admits, kind)})`;
 }
 
 /// Refuse the iteration whose end starves the alternative's mandatory suffix.
@@ -6853,12 +6847,12 @@ fn gen_reserve_check<S: AsStrSlice, S1: AsStrSlice>(
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
 ) {
-    let ok = dedup_name(`${body_end.to_string()}_ok`, name_counts);
-    let label = dedup_name(`${body_end.to_string()}_scan`, name_counts);
+    let ok = dedup_name(`${body_end}_ok`, name_counts);
+    let label = dedup_name(`${body_end}_scan`, name_counts);
     gen_reserve_probe(w, reserve, body_end, &ok, &label, ctx);
-    let kind = dedup_name(`${body_end.to_string()}_kind`, name_counts);
+    let kind = dedup_name(`${body_end}_kind`, name_counts);
     let starved = reserve_starved_cond(w, &ok, &kind, "tokens", "pos", body_admits, ctx);
-    w.line(`if ${starved} { ${fail.to_string()} }`);
+    w.line(`if ${starved} { ${fail} }`);
 }
 
 fn gen_scan_guard_with_prefix<S: AsStrSlice, S1: AsStrSlice>(
@@ -6967,9 +6961,9 @@ fn emit_argmax_update<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     end_expr: S2,
     winner_value: i32,
 ) {
-    w.begin(`if ${end_expr.to_string()} > ${best_var.to_string()}`);
-    w.line(`${best_var.to_string()} = ${end_expr.to_string()};`);
-    w.line(`${winner_var.to_string()} = ${winner_value};`);
+    w.begin(`if ${end_expr} > ${best_var}`);
+    w.line(`${best_var} = ${end_expr};`);
+    w.line(`${winner_var} = ${winner_value};`);
     w.end();
 }
 
@@ -6985,13 +6979,13 @@ fn emit_argmax_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     from: &ScanOrigin,
     ctx: &GenContext,
 ) {
-    w.begin(`if ${end_expr.to_string()} > ${best_var.to_string()}`);
+    w.begin(`if ${end_expr} > ${best_var}`);
     gen_scan_gate_from(w, ctx, from);
     for let line of scan_gate_snapshot(ctx, best_var) {
         w.line(&line);
     }
-    w.line(`${best_var.to_string()} = ${end_expr.to_string()};`);
-    w.line(`${winner_var.to_string()} = ${winner_value};`);
+    w.line(`${best_var} = ${end_expr};`);
+    w.line(`${winner_var} = ${winner_value};`);
     w.end();
 }
 
@@ -7058,7 +7052,7 @@ fn gen_scan_winner_round<S: AsStrSlice, S1: AsStrSlice>(
         // The early exit skips the alts still to come; after the last one
         // there are none.
         if oi + 1 < order.len() {
-            w.begin(`if ${best_var.to_string()} >= p.kinds.len()`);
+            w.begin(`if ${best_var} >= p.kinds.len()`);
             w.line(`break ${tourney_label};`);
             w.end();
         }
@@ -7242,7 +7236,7 @@ fn gen_decision_measure<S: AsStrSlice, S1: AsStrSlice>(
     winner_var: S,
     best_var: S1,
 ) {
-    w.line(`${winner_var.to_string()} = ${alt_index};`);
+    w.line(`${winner_var} = ${alt_index};`);
     let sb = &scan_alts[alt_index];
     if sb.elements.is_empty() {
         // An empty alternative walks nowhere, so it ends where the parse is and
@@ -7916,19 +7910,19 @@ fn emit_index_pick_dispatch<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &GenContext,
 ) {
     if ctx.is_trace() {
-        w.line(&wado`trace_pick(p, "${rule_display.to_string()}", ${var.to_string()});`);
+        w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${var.to_string()});`);
     }
     // The last index needs no test: the tail below is the same call.
     for let mut i = 0; i < sorted_indices.len() - 1; i += 1 {
         let idx = sorted_indices[i];
-        w.begin(`if ${var.to_string()} == ${idx}`);
-        w.line(`return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+        w.begin(`if ${var} == ${idx}`);
+        w.line(`return ${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
             ctx,
         )});`);
         w.end();
     }
     let last_idx = sorted_indices[sorted_indices.len() - 1];
-    w.line(`return ${fn_name.to_string()}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+    w.line(`return ${fn_name}_alt_${last_idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
         ctx,
     )});`);
 }
@@ -7984,7 +7978,7 @@ fn emit_scan_tournament<S: AsStrSlice, S1: AsStrSlice>(
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
         // Without the caller follow, a trailing token the helper's
         // `follow_yields` gate rejects still counts toward the score.
-        let scan = `${fn_name.to_string()}_scan_${idx}(_sd_tokens, _sd_pos${fsep})`;
+        let scan = `${fn_name}_scan_${idx}(_sd_tokens, _sd_pos${fsep})`;
         // An alt-initial predicate says whether the alternative exists at all,
         // and a scan is a pure token function that cannot ask one. Evaluate it
         // here, where the parser is in scope, and score a refused alternative as
@@ -8143,7 +8137,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 w.line(`p.pos -= ${skip};`);
             }
             w.line(
-                `return ${fn_name.to_string()}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
+                `return ${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(
                     ctx,
                 )});`,
             );
@@ -8204,10 +8198,9 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 // is not a parser rule, which `ir.wado` rejects first. Assert
                 // that rather than keep the try-fail-retry lowerings only
                 // breaking it could reach.
-                assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display.to_string()} carries ${sorted_indices.len(
-                )} alt(s), expected 2 or more`;
+                assert sorted_indices.len() >= 2, `Ambiguous node for ${rule_display} carries ${sorted_indices.len()} alt(s), expected 2 or more`;
                 let all_scan_full = alts_all_scan_full(&sorted_indices, alts, ctx);
-                assert all_scan_full, `an alternative of ${rule_display.to_string()} is not fully scannable`;
+                assert all_scan_full, `an alternative of ${rule_display} is not fully scannable`;
                 emit_scan_tournament(w, &sorted_indices, fn_name, rule_display, ctx);
             } else {
                 // Prefix already consumed — should not happen.

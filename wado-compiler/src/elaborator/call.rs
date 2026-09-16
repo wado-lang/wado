@@ -3500,10 +3500,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, sig)| sig)
     }
 
-    /// The signature of a trait default body `key` inherits without overriding
-    /// it, rebased on the receiver so only the method's own slots remain to
-    /// solve. No impl block lists such a method, so every impl-keyed index
-    /// misses it.
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses.
     fn inherited_default_method_sig(
         &self,
         key: &ImplTargetKey,

@@ -8,9 +8,9 @@ use nc from "./grammars/lr_overlap_nullable_carrier.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = nc::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = nc::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "lr-overlap-nullable: the optional is taken" {

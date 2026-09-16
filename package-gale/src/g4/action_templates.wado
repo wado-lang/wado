@@ -340,7 +340,7 @@ fn expand_helper<S: AsStrSlice>(name: S, recv: &Option<String>, args: &List<Stri
 
     // Everything below is receiver-free.
     if recv matches { Some(_) } {
-        return Result::Err(`template helper '${name.to_string()}' does not take a chained receiver`);
+        return Result::Err(`template helper '${name}' does not take a chained receiver`);
     }
 
     return match name.to_string() {
@@ -468,19 +468,19 @@ fn expand_helper<S: AsStrSlice>(name: S, recv: &Option<String>, args: &List<Stri
             require_args(args, 3, name)?;
             Result::Ok(`this.${args[0]} % ${args[1]} != ${args[2]}`);
         },
-        _ => Result::Err(`unknown template helper '${name.to_string()}'`),
+        _ => Result::Err(`unknown template helper '${name}'`),
     };
 }
 
 fn chain_or_arg<S: AsStrSlice>(recv: &Option<String>, args: &List<String>, name: S) -> Result<String, String> {
     if let Some(r) = recv {
         if !args.is_empty() {
-            return Result::Err(`template helper '${name.to_string()}' takes a receiver or one argument, not both`);
+            return Result::Err(`template helper '${name}' takes a receiver or one argument, not both`);
         }
         return Result::Ok(*r);
     }
     if args.len() != 1 {
-        return Result::Err(`template helper '${name.to_string()}' expects exactly one argument`);
+        return Result::Err(`template helper '${name}' expects exactly one argument`);
     }
     return Result::Ok(args[0]);
 }
@@ -488,7 +488,7 @@ fn chain_or_arg<S: AsStrSlice>(recv: &Option<String>, args: &List<String>, name:
 fn require_receiver<S: AsStrSlice>(recv: &Option<String>, name: S) -> Result<String, String> {
     return match recv {
         Some(r) => Result::Ok(*r),
-        None => Result::Err(`template helper '${name.to_string()}' requires a chained receiver`),
+        None => Result::Err(`template helper '${name}' requires a chained receiver`),
     };
 }
 
@@ -496,7 +496,7 @@ fn require_receiver<S: AsStrSlice>(recv: &Option<String>, name: S) -> Result<Str
 /// list copy). `?`-propagates the arity error.
 fn require_args<S: AsStrSlice>(args: &List<String>, count: i32, name: S) -> Result<(), String> {
     if args.len() != count {
-        return Result::Err(`template helper '${name.to_string()}' expects ${count} argument(s), got ${args.len()}`);
+        return Result::Err(`template helper '${name}' expects ${count} argument(s), got ${args.len()}`);
     }
     return Result::Ok(());
 }

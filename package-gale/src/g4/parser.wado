@@ -1126,7 +1126,7 @@ impl G4Parser {
             let expected: List<String> = if allow_int { ["identifier", "int"] } else { ["identifier"] };
             return Result::<String, ParseError>::Err(
                 ParseError::new(
-                    `${found_desc(tok)} as the argument of \`${command.to_string()}\``,
+                    `${found_desc(tok)} as the argument of \`${command}\``,
                     tok.span,
                     expected,
                 ),
@@ -1629,7 +1629,7 @@ fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange
 /// so an empty entry is generator drift, not user input — except `gc=Cs`,
 /// whose surrogates `clip_to_scalars` drops on the way in.
 fn required_ranges<S: AsStrSlice, S1: AsStrSlice>(encoded: S, name: S1) -> List<CharRange> {
-    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${name.to_string()}'`;
+    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${name}'`;
     let mut out: List<CharRange> = [];
     push_encoded_ranges(encoded, &mut out);
     return out;

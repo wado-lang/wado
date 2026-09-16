@@ -11,9 +11,9 @@ use wp from "./grammars/lr_wildcard_postfix.g4"
 
 fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = wp::parse(input);
-    assert r.ok(), `unexpected diagnostics for ${input.to_string()}: ${wp::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${input}: ${wp::to_string_tree(&r)}`;
     let a = wp::to_string_tree(&r);
-    assert a == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${a}`;
+    assert a == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${a}`;
 }
 
 test "wildcard-postfix: a real operator wins over the catch-all" {

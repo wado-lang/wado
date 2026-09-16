@@ -321,10 +321,8 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
     func.return_type != TypeTable::UNIT && func.stores.is_empty() && is_ctfe_runnable(func)
 }
 
-/// Derive the [`MaterializingGlobals`] set: claim a global on the block that
-/// stores into it, and drop it again on any mention that block does not enclose.
-/// What survives is stored in one place and read only under it. One derivation
-/// for the fold and the remark alike, which must agree on what a store means.
+/// The globals stored in one place and read only under it. One derivation for
+/// the fold and the remark alike, which must agree on what a store means.
 #[must_use]
 pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     enum Step {

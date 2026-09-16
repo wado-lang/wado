@@ -336,7 +336,7 @@ fn gen_highlight_mapping(
             Some(c) => c,
             None => "",
         };
-        w.line(&wado`"${capture}",  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
+        w.line(wado`"${capture}",  // ${slot_comment(&slots[i], lexer_rules, lit_tokens)}`);
     }
     w.dedent();
     w.line("];");
@@ -347,7 +347,7 @@ fn gen_highlight_mapping(
     w.line("let rule_names: List<String> = [");
     w.indent();
     for let rule of parser_rules {
-        w.line(&wado`"${rule.name}",`);
+        w.line(wado`"${rule.name}",`);
     }
     w.dedent();
     w.line("];");
@@ -399,7 +399,7 @@ fn gen_capture_vocabulary(
         w.line("return [");
         w.indent();
         for let capture of &vocabulary {
-            w.line(&wado`"${*capture}",`);
+            w.line(wado`"${*capture}",`);
         }
         w.dedent();
         w.line("];");

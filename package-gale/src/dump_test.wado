@@ -368,7 +368,7 @@ STR : '\"' ;";
 /// `rule r2 — …`) and the summary opens with `warnings`, which is what bounds
 /// the last rule's section.
 fn section_of<S: AsStrSlice, S1: AsStrSlice>(report: S, rule_name: S1) -> String {
-    let header = `rule ${rule_name.to_string()} — `;
+    let header = `rule ${rule_name} — `;
     let mut out = String::new();
     let mut inside = false;
     for let line of report.split("\n") {
@@ -382,7 +382,7 @@ fn section_of<S: AsStrSlice, S1: AsStrSlice>(report: S, rule_name: S1) -> String
             out.push('\n');
         }
     }
-    assert !out.is_empty(), `no '${header}' section in:\n${report.to_string()}`;
+    assert !out.is_empty(), `no '${header}' section in:\n${report}`;
     return out;
 }
 

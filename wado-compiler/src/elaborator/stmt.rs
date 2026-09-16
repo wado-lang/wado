@@ -2017,9 +2017,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         variant_info.cases.iter().any(|c| c.name == none_case_name)
     }
 
-    /// The type a literal pattern demands of its scrutinee, when the scrutinee
-    /// is not it. Only the literals carrying a representation of their own:
-    /// an integer literal's range is the coercion's answer, not a pattern rule.
+    /// The type a literal pattern demands of its scrutinee, when the scrutinee is
+    /// not it. An integer literal's range is the coercion's answer, not a pattern's.
     fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);

@@ -11,7 +11,7 @@ use errrec from "./grammars/error_recovery.g4"
 
 fn first_diag_col<S: AsStrSlice>(input: S) -> i32 {
     let r = errrec::parse(input);
-    assert !r.ok(), `expected a diagnostic for ${input.to_string()}`;
+    assert !r.ok(), `expected a diagnostic for ${input}`;
     return r.diagnostics[0].col;
 }
 
@@ -33,7 +33,7 @@ test "error position: non-item token stays put" {
 fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
-    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)

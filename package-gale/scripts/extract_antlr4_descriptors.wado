@@ -82,7 +82,7 @@ fn finalize_attr() -> String {
 /// The shared `// Triage data: …([<axis>_*]).` comment line. `axis` is
 /// `stage_a` / `stage_b` / `stage_b_oracle`.
 fn triage_doc_line<S: AsStrSlice>(axis: S) -> String {
-    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${axis.to_string()}_*]).`;
+    return `// Triage data: package-gale/tests/antlr4-compat/status.toml ([${axis}_*]).`;
 }
 
 // ===== Descriptor format =====
@@ -498,7 +498,7 @@ fn write_file_string<S: AsStrSlice, S1: AsStrSlice>(dir: &Descriptor, path: S, c
 fn expand_grammar_templates<S: AsStrSlice, S1: AsStrSlice>(key: S, grammar: S1) -> String with Stderr {
     let outcome = expand_action_templates(grammar);
     for let w of outcome.warnings {
-        eprintln(`extract: ${key.to_string()}: ${w}`);
+        eprintln(`extract: ${key}: ${w}`);
     }
     return outcome.text;
 }
@@ -612,7 +612,7 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
     w.line(&generator_attr());
     w.line("// Do not edit by hand — re-run the generator to regenerate.");
     w.line("//");
-    w.line(`// Source category: ${category.to_string()} (ANTLR4 runtime-testsuite).`);
+    w.line(`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
     w.line("// Triage data: package-gale/tests/antlr4-compat/status.toml");
     w.blank();
     let imports = claim_a_imports(entries);
@@ -640,7 +640,7 @@ fn emit_test_file_for_category<S: AsStrSlice>(category: S, entries: &List<Descri
             },
         }
         needs_separator = true;
-        w.begin(`test "${category.to_string()}/${e.name}"`);
+        w.begin(`test "${category}/${e.name}"`);
         if e.slave_relpaths.is_empty() {
             w.line(`let input = #include_str("./grammars/${e.g4_relpath}");`);
             w.line("let result = parse(input);");
@@ -729,13 +729,13 @@ global DESCRIPTORS_PER_FILE: i32 = 10;
 /// names are plain identifiers and unique within a category, so this is what
 /// lets one module carry many grammars.
 fn chunk_namespace<S: AsStrSlice>(name: S) -> String {
-    return `t_${name.to_string()}`;
+    return `t_${name}`;
 }
 
 /// Where the descriptor's `i`-th `[slaveGrammar]` lands, for both the writer
 /// and the `inputs` that name it.
 fn slave_filename<S: AsStrSlice>(base: S, i: i32) -> String {
-    return `${base.to_string()}.slave${i + 1}.g4`;
+    return `${base}.slave${i + 1}.g4`;
 }
 
 fn emit_test_chunk(spec: &TestChunkSpec, body: fn(&mut CodeWriter, &String)) -> TestChunk {
@@ -785,7 +785,7 @@ fn emit_category_test_file<S: AsStrSlice, S1: AsStrSlice>(attr: S, category: S1,
     w.line(attr);
     w.line("// Do not edit by hand — re-run the generator to regenerate.");
     w.line("//");
-    w.line(`// Source category: ${category.to_string()} (ANTLR4 runtime-testsuite).`);
+    w.line(`// Source category: ${category} (ANTLR4 runtime-testsuite).`);
     w.line("// Triage data: package-gale/tests/antlr4-compat/status.toml");
     if !helpers.is_empty() {
         w.blank();
@@ -813,10 +813,10 @@ fn write_category_test_files<S: AsStrSlice, S1: AsStrSlice>(
     let mut index = 0;
     for let group of chunks.chunks(DESCRIPTORS_PER_FILE) {
         index += 1;
-        let filename = `${category.to_string()}_${index}_test.wado`;
+        let filename = `${category}_${index}_test.wado`;
         let src = emit_category_test_file(attr, category, group);
         if let Err(_) = write_file_string(dir, &filename, &src) {
-            eprintln(`extract: cannot write ${category.to_string()}/${filename}`);
+            eprintln(`extract: cannot write ${category}/${filename}`);
             failed = true;
         } else {
             written.push(filename);
@@ -858,7 +858,7 @@ fn output_is_tree_print<S: AsStrSlice>(output: S) -> bool {
 /// marker normaliser when the descriptor deletes a token.
 fn actual_expr<S: AsStrSlice>(inner: S, strip: bool) -> String {
     if strip {
-        return `strip_skip_markers(&${inner.to_string()})`;
+        return `strip_skip_markers(&${inner})`;
     }
     return inner.to_string();
 }
@@ -959,8 +959,7 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
     slave_count: i32,
 ) -> TestChunk {
     let mut doc_lines: List<String> = [
-        triage_doc_line("stage_b"), "//",
-        `// Stage B sub-tree: [output] is the labelled child '${sub_rule.to_string()}' subtree,`,
+        triage_doc_line("stage_b"), "//", `// Stage B sub-tree: [output] is the labelled child '${sub_rule}' subtree,`,
         "// not the start rule's full tree. Navigate via find_first_child_node.",
     ];
     for let line of &strip_doc_lines(strip) {
@@ -980,7 +979,7 @@ fn emit_stage_sub_b_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice, S3
         w.line(`let input = "${escape_for_wado_str(input)}";`);
         w.line(`let expected = "${escape_for_wado_str(expected_tree)}";`);
         w.line(`let result = ${*ns}::${parse_call_for_start(start)}(&input);`);
-        w.line(`let actual = ${actual_expr(`${*ns}::to_string_subtree(&result, "${sub_rule.to_string()}")`, strip)};`);
+        w.line(`let actual = ${actual_expr(`${*ns}::to_string_subtree(&result, "${sub_rule}")`, strip)};`);
         w.line("let norm = normalize_tree(&expected);");
         w.line("assert actual == norm, `actual:   ${actual}\\nexpected: ${norm}`;");
     });
@@ -2201,7 +2200,7 @@ fn emit_stage_b_oracle_test_chunk<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice,
         category: category.to_string(),
         name: name.to_string(),
         doc_lines: [
-            `// Expected tree: antlr-${oracle_version.to_string()}-complete.jar on the action-body-stripped grammar.`,
+            `// Expected tree: antlr-${oracle_version}-complete.jar on the action-body-stripped grammar.`,
             triage_doc_line("stage_b_oracle"),
         ],
         output_subdir: "antlr4_compat_b_oracle",
@@ -2478,10 +2477,10 @@ fn assert_triage_skip<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     expected_reason: S2,
 ) {
     if let Skip(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.as_str_slice(), `axis ${axis.to_string()} key '${key.to_string()}': expected Skip('${expected_reason.to_string(
+        assert *reason == expected_reason.as_str_slice(), `axis ${axis} key '${key}': expected Skip('${expected_reason.to_string(
         )}'), got Skip('${*reason}')`;
     } else {
-        panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Skip, got other`);
+        panic(`axis ${axis} key '${key}': expected Skip, got other`);
     }
 }
 
@@ -2492,15 +2491,15 @@ fn assert_triage_todo<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     expected_reason: S2,
 ) {
     if let Todo(reason) = &lookup_for_axis(maps, axis, key) {
-        assert *reason == expected_reason.as_str_slice(), `axis ${axis.to_string()} key '${key.to_string()}': expected Todo('${expected_reason.to_string(
+        assert *reason == expected_reason.as_str_slice(), `axis ${axis} key '${key}': expected Todo('${expected_reason.to_string(
         )}'), got Todo('${*reason}')`;
     } else {
-        panic(`axis ${axis.to_string()} key '${key.to_string()}': expected Todo, got other`);
+        panic(`axis ${axis} key '${key}': expected Todo, got other`);
     }
 }
 
 fn assert_triage_pass<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1) {
-    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis ${axis.to_string()} key '${key.to_string()}': expected Pass, got other`;
+    assert lookup_for_axis(maps, axis, key) matches { Pass }, `axis ${axis} key '${key}': expected Pass, got other`;
 }
 
 test "triage: missing file yields empty maps on all axes" {

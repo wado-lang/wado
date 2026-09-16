@@ -1964,7 +1964,7 @@ CMT : '//' .*? '\\n' CMT?? ;";
 
 fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Ident(v) = &opt.value {
-        assert expected.eq_str(*v), `option '${opt.name}': expected Ident('${expected.to_string()}'), got Ident('${*v}')`;
+        assert expected.eq_str(*v), `option '${opt.name}': expected Ident('${expected}'), got Ident('${*v}')`;
     } else {
         panic(`option '${opt.name}': expected Ident, got other`);
     }
@@ -1972,7 +1972,7 @@ fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
 
 fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Str(v) = &opt.value {
-        assert expected.eq_str(*v), `option '${opt.name}': expected Str('${expected.to_string()}'), got Str('${*v}')`;
+        assert expected.eq_str(*v), `option '${opt.name}': expected Str('${expected}'), got Str('${*v}')`;
     } else {
         panic(`option '${opt.name}': expected Str, got other`);
     }

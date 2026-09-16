@@ -731,7 +731,7 @@ pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// Emit `interface Foo { ... }` for a parser base: one predicate operation per
 /// op, each reading the recognizer the way an ANTLR base method reads `this`.
 pub fn gen_parser_super_interface<S: AsStrSlice>(w: &mut CodeWriter, name: S, ops: &List<SuperOp>) {
-    w.line(`pub interface ${name.to_string()} {`);
+    w.line(`pub interface ${name} {`);
     for let op of ops {
         w.line(`    fn ${to_snake_case(&op.name)}(p: &Parser${super_op_params(op)}) -> bool;`);
     }

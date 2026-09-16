@@ -64,7 +64,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 /// lookup rather than the table alone. Null when Gale rejects the escape —
 /// unsupported is a different finding from a set that disagrees.
 fn gale_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<List<[i32, i32]>> {
-    let source = `lexer grammar T;\nX : [\\p{${property.to_string()}=${value.to_string()}}] ;`;
+    let source = `lexer grammar T;\nX : [\\p{${property}=${value}}] ;`;
     let parsed = parse(source);
     if let Err(_) = &parsed {
         return null;
@@ -77,7 +77,7 @@ fn gale_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<
         }
         return Option::Some(out);
     }
-    panic(`\\p{${property.to_string()}=${value.to_string()}} did not parse into a character class`);
+    panic(`\\p{${property}=${value}} did not parse into a character class`);
 }
 
 /// `VALUE<TAB>START-END` lines, grouped by value in first-seen order. A `?`
@@ -125,7 +125,7 @@ fn report<S: AsStrSlice, S1: AsStrSlice>(
     actual: &List<[i32, i32]>,
 ) with Stdout {
     println(
-        `${property.to_string()}=${value.to_string()}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`,
+        `${property}=${value}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`,
     );
     let mut shown = 0;
     for let mut i = 0; i < i32::max(expected.len(), actual.len()) && shown < 4; i += 1 {

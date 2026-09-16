@@ -134,7 +134,7 @@ fn disambiguate_const_name<S: AsStrSlice>(base: S, result: &List<LitToken>) -> S
     let mut candidate = base.to_string();
     let mut n = 2;
     while const_name_taken(result, &candidate) {
-        candidate = `${base.to_string()}_${n}`;
+        candidate = `${base}_${n}`;
         n += 1;
     }
     return candidate;
@@ -598,7 +598,7 @@ fn gen_lexer_mode_commands(w: &mut CodeWriter, vis: Vis, surface: &LexerSurface)
 
 fn gen_current_mode_write<S: AsStrSlice>(w: &mut CodeWriter, surface: &LexerSurface, value: S) {
     if surface.current_mode {
-        w.line(`self.${LEXER_MODE_FIELD} = ${value.to_string()};`);
+        w.line(`self.${LEXER_MODE_FIELD} = ${value};`);
     }
 }
 
@@ -632,7 +632,7 @@ fn lexer_reader<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, fiel
     f.set_receiver("&self");
     f.set_return_type("i32");
     f.emit_begin(w);
-    w.line(`return self.${field.to_string()};`);
+    w.line(`return self.${field};`);
     w.end();
 }
 
@@ -647,7 +647,7 @@ fn lexer_setter<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     f.set_receiver("&mut self");
     f.add_param(arg, "i32");
     f.emit_begin(w);
-    w.line(`self.${field.to_string()} = ${arg.to_string()};`);
+    w.line(`self.${field} = ${arg};`);
     w.end();
 }
 
@@ -655,7 +655,7 @@ fn lexer_flag<S: AsStrSlice, S1: AsStrSlice>(w: &mut CodeWriter, name: S, field:
     let mut f = FnSpec::new(name, vis);
     f.set_receiver("&mut self");
     f.emit_begin(w);
-    w.line(`self.${field.to_string()} = true;`);
+    w.line(`self.${field} = true;`);
     w.end();
 }
 
@@ -918,7 +918,7 @@ fn fragment_elem_refs_self<S: AsStrSlice>(
 /// `try_ID` / `try_Id`) without any collision-resolution bookkeeping.
 /// Single source of truth so every emit site agrees on the name.
 pub fn lexer_try_fn_name<S: AsStrSlice>(name: S) -> String {
-    return `try_${name.to_string()}`;
+    return `try_${name}`;
 }
 
 /// Whether some lexer rule reaches `rule` through a generated `try_` call rather
@@ -1271,7 +1271,7 @@ fn emit_lexer_action_stmt<S: AsStrSlice>(w: &mut CodeWriter, body: S) {
 }
 
 fn apply_fn_name<S: AsStrSlice>(rule_name: S) -> String {
-    return `apply_${rule_name.to_string()}_actions`;
+    return `apply_${rule_name}_actions`;
 }
 
 /// Emit the post-tournament replay dispatch: for the winning rule (`best_act`),
@@ -1578,7 +1578,7 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
             w.end();
         }
     }
-    w.line(`if sel_alt_${id} < 0 { ${fail_action.to_string()}; }`);
+    w.line(`if sel_alt_${id} < 0 { ${fail_action}; }`);
     w.line(`pos = sel_saved_${id};`);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i == 0 {
@@ -2834,7 +2834,7 @@ fn gen_lexer_repeat_lookahead_aware<S: AsStrSlice>(
     w.end();
 
     w.begin(`if ${accept_var} < 0`);
-    w.line(`${fail_action.to_string()};`);
+    w.line(`${fail_action};`);
     w.end();
 
     if replay {
@@ -2877,10 +2877,10 @@ fn gen_lexer_replay_to<S: AsStrSlice>(
 ) {
     let msg = `lexer replay invariant: the action pass must re-walk exactly the iterations the scan accepted`;
     let fail = `panic("${msg}")`;
-    w.begin(`while pos < ${bound.to_string()}`);
+    w.begin(`while pos < ${bound}`);
     gen_lexer_elem(w, inner, inner_plan, all_rules, &fail, ci, /*ea=*/ false, hm, /*replay=*/ true);
     w.end();
-    w.line(`if pos != ${bound.to_string()} { ${fail}; }`);
+    w.line(`if pos != ${bound} { ${fail}; }`);
 }
 
 /// Maximal-munch emit for an alternation that has a suffix after it.
@@ -2942,7 +2942,7 @@ fn gen_lexer_alts_lookahead_aware<S: AsStrSlice>(
         w.end();
         w.end();
     }
-    w.line(`if la_win_${id} < 0 { ${fail_action.to_string()}; }`);
+    w.line(`if la_win_${id} < 0 { ${fail_action}; }`);
     if !replay {
         w.line(`pos = la_end_${id};`);
         return;
@@ -3024,7 +3024,7 @@ fn gen_lexer_suffix_peek<S: AsStrSlice>(
     w.end();
     w.line(`pos = ${save_var};`);
     w.begin(`if ${matched_var}`);
-    w.line(`${accept_var.to_string()} = ${if record_end { end_var } else { save_var }};`);
+    w.line(`${accept_var} = ${if record_end { end_var } else { save_var }};`);
     w.end();
 }
 
@@ -3137,9 +3137,9 @@ fn gen_char_class<S: AsStrSlice>(w: &mut CodeWriter, cc: &CharClass, fail_action
     w.line(`if pos >= chars.len() { ${fail_action}; }`);
     let cond = char_class_disjunction(cc);
     if cc.negated {
-        w.line(`if ${cond} { ${fail_action.to_string()}; }`);
+        w.line(`if ${cond} { ${fail_action}; }`);
     } else {
-        w.line(`if !(${cond}) { ${fail_action.to_string()}; }`);
+        w.line(`if !(${cond}) { ${fail_action}; }`);
     }
     w.line("pos += 1;");
 }
@@ -3239,7 +3239,7 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
         gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, pea, hm, false);
         // Same bound as the action-carrying form below: the replay stops where
         // the match did, whatever the match consulted to stop there.
-        w.line(`if pos > end { ${fail_action.to_string()}; }`);
+        w.line(`if pos > end { ${fail_action}; }`);
         return;
     }
     let probe = `rep_probe_${id}`;
@@ -3251,7 +3251,7 @@ fn gen_lexer_repeat_iteration<S: AsStrSlice>(
     w.end();
     // The winner's extent bounds the replay: an iteration reaching past `end`
     // is not part of the match, however the match pass came to stop there.
-    w.line(`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action.to_string()}; }`);
+    w.line(`if !${probe}_ok || pos > end { pos = ${probe}_saved; ${fail_action}; }`);
     w.line(`pos = ${probe}_saved;`);
     gen_lexer_elem(w, &rep.element, inner, all_rules, fail_action, ci, ea, hm, true);
 }
@@ -3911,9 +3911,9 @@ fn gen_keyword_check(w: &mut CodeWriter, kw: &KeywordInfo, first_char_dispatched
         }
         let lower = kw_chars[kc];
         if kw.char_ci[kc] {
-            w.write(&wado`chars[start + ${kc}].eq_ignore_ascii_case(&'${lower}')`);
+            w.write(wado`chars[start + ${kc}].eq_ignore_ascii_case(&'${lower}')`);
         } else {
-            w.write(&wado`chars[start + ${kc}] == '${lower}'`);
+            w.write(wado`chars[start + ${kc}] == '${lower}'`);
         }
     }
     w.write(` { return TK_${kw.rule_name}; }\n`);
@@ -4488,7 +4488,7 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         }
         // Check if this group already exists
         if let Some(gi) = group_by_calls.get(matching) {
-            groups[gi].pattern.push_str(&wado` | '${*c}'`);
+            groups[gi].pattern.push_str(wado` | '${*c}'`);
         } else {
             group_by_calls[matching] = groups.len();
             groups.push(DispatchGroup {
@@ -5027,7 +5027,7 @@ fn gen_lexer_emit_hook<S: AsStrSlice>(
 /// Emit a default-channel token commit: push it with the pending leading-trivia
 /// range `[triv_lo, trivia_mark())`, then reopen the range for the next token.
 fn emit_token_commit<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(w: &mut CodeWriter, kind: S, start: S1, end: S2) {
-    w.line(`ts.push_token(${kind.to_string()}, ${start.to_string()}, ${end.to_string()}, triv_lo, ts.trivia_mark());`);
+    w.line(`ts.push_token(${kind}, ${start}, ${end}, triv_lo, ts.trivia_mark());`);
     w.line("triv_lo = ts.trivia_mark();");
 }
 
@@ -5078,7 +5078,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     for let rule of lexer_rules {
         if !rule.is_fragment {
             let trailer = if rule.is_virtual { "  // virtual" } else { "" };
-            w.line(&wado`TK_${rule.name} => "${rule.name}",${trailer}`);
+            w.line(wado`TK_${rule.name} => "${rule.name}",${trailer}`);
         }
     }
     w.line("TK_EOF => \"Eof\",");
@@ -5092,7 +5092,7 @@ fn gen_token_kind_name_fn(w: &mut CodeWriter, lexer_rules: &List<LexerRule>, lit
     // Gale interned it under. This is the one vocabulary every user-facing
     // name is read from: `expected` sets and `<missing X>` alike.
     for let lit of lit_tokens {
-        w.line(&wado`${lit.const_name} => "${lit_name(lit.text)}",`);
+        w.line(wado`${lit.const_name} => "${lit_name(lit.text)}",`);
     }
     w.line("_ => \"Unknown\",");
     w.dedent();

@@ -40,7 +40,7 @@ fn members_grammar<S: AsStrSlice>(members: S) -> String {
     return `grammar C;
 options { language = Java; }
 @parser::members {
-${members.to_string()}
+${members}
 }
 r : A { n = 1; } A ;
 A : 'a' ;
@@ -251,17 +251,17 @@ fn gate_source<S: AsStrSlice, S1: AsStrSlice = String, S2: AsStrSlice = String, 
     scope_body: S2 = SCOPE_BODY,
     head_body: S3 = HEAD_BODY,
 ) -> String {
-    let after_clause = if after.is_empty() { String::new() } else { `@after { ${after.to_string()} }` };
+    let after_clause = if after.is_empty() { String::new() } else { `@after { ${after} }` };
     return `grammar G;
 options { language = Java; }
 @parser::members { ${GATE_MEMBERS} }
 r : scope | head ;
 scope
 locals [int sv]
-@init { ${init.to_string()} }
+@init { ${init} }
 ${after_clause}
- : ${scope_body.to_string()} ;
-head : ${head_body.to_string()} ;
+ : ${scope_body} ;
+head : ${head_body} ;
 A : 'a' ;
 `;
 }

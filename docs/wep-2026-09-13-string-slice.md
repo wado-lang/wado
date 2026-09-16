@@ -57,6 +57,11 @@ What follows:
 - The view must scalarize: a three-field struct built and read in one function
   leaves no `struct.new` behind. That is a property of the optimizer, so it is
   tested as one.
+- `StrSlice` carries the search and split surface — `contains`, `starts_with`,
+  `find`, `split`, `split_once`, the trims and `strip_*` — and `String`'s own
+  delegate to it. The ones that answer with part of their input return a view,
+  so working on part of a string does not copy it out. `to_string` is where a
+  caller that wants an owned string asks for one.
 
 ## Known gaps
 
@@ -66,11 +71,6 @@ What follows:
   fields would take the fields instead.
 - `String::push_str_range_unchecked` still takes a `(text, start, end)` triple
   rather than a view, and Kiln's generated parsers call it.
-- `StrSlice` carries the search and split surface — `contains`, `starts_with`,
-  `find`, `split`, `split_once`, the trims and `strip_*` — and `String`'s own
-  delegate to it. The ones that answer with part of their input return a view,
-  so working on part of a string no longer copies it out. `to_string` is where
-  a caller that wants an owned string asks for one.
 - A cast between two references whose referents share one representation head
   (`&ByteSlice` to `&Slice<u8>`) is not dropped, so it still hides the operand's
   shape from the rules that match on one. Only the unreferenced case is covered.

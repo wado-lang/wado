@@ -2750,10 +2750,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         is_type_param: bool,
         rhs: Option<&ArgClass>,
     ) -> Option<ResolvedTraitMethod> {
-        // A user-written impl first, then the Eq / Ord auto-derive fallback.
-        // Both fix their return types (`bool`, `Ordering`) whatever a user impl
-        // writes, so normalize here: `find_arithmetic_trait_impl` would default
-        // `output_type` to the receiver type absent a `type Output`.
+        // `Eq` and `Ord` fix their return types whatever a user impl writes, and
+        // `find_arithmetic_trait_impl` would default `output_type` to the
+        // receiver type absent a `type Output`.
         //
         // Retrying unselected is what leaves a lone `Eq<Self>` impl to
         // type-check the operand and report a mismatch as one.

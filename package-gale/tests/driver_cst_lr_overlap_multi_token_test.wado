@@ -8,9 +8,9 @@ use lr from "./grammars/lr_overlap_multi_token.g4"
 
 fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = lr::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = lr::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "lr-overlap-multi: a single > is a comparison" {
@@ -40,9 +40,9 @@ use opaque from "./grammars/lr_overlap_opaque_op.g4"
 
 fn assert_opaque_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = opaque::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = opaque::to_string_tree(&result);
-    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // Neither walk can measure `op`, so the sub-dispatch runs its scan instead —

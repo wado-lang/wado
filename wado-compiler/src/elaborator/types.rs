@@ -374,8 +374,7 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A type application writing more arguments than the head declares
-    /// parameters, `expected == 0` included.
+    /// A type application writing more arguments than the head declares.
     SurplusTypeArguments {
         name: String,
         expected: usize,
@@ -1305,16 +1304,21 @@ impl TypeError {
                 span,
             } => (
                 Code::TypeMismatch,
-                if *expected == 0 {
-                    format!(
-                        "`{name}` takes no type arguments, but {found} {} supplied",
-                        if *found == 1 { "was" } else { "were" },
-                    )
-                } else {
-                    format!(
-                        "`{name}` takes {expected} type argument{}, but {found} were supplied",
-                        if *expected == 1 { "" } else { "s" },
-                    )
+                {
+                    // Surplus, so a declared parameter puts `found` at two or
+                    // more and only the `expected == 0` wording needs "was".
+                    debug_assert!(found > expected);
+                    if *expected == 0 {
+                        format!(
+                            "`{name}` takes no type arguments, but {found} {} supplied",
+                            if *found == 1 { "was" } else { "were" },
+                        )
+                    } else {
+                        format!(
+                            "`{name}` takes {expected} type argument{}, but {found} were supplied",
+                            if *expected == 1 { "" } else { "s" },
+                        )
+                    }
                 },
                 *span,
             ),

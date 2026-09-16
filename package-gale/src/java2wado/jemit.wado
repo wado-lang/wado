@@ -531,7 +531,7 @@ fn emit_recognizer_call<S: AsStrSlice, S1: AsStrSlice>(env: &JEnv, name: S, args
         return api_expr(env, ApiCall::RuleStack, `${env.this_bind}.rule_stack()`);
     }
     check_member_call_reachable(env, name)?;
-    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${args_w.to_string()})`);
+    return Result::Ok(`${env.this_bind}.${to_snake_case(name)}(${args_w})`);
 }
 
 /// `((XContext)$ctx).TOK() != null` asks whether the alternative has matched
@@ -648,10 +648,10 @@ fn emit_member_call<S: AsStrSlice>(
         return api_expr(env, ApiCall::TokenText, `${env.this_bind}.token_text(${r})`);
     }
     if meth == "LA" && name_is(&m.recv, "_input") {
-        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${args_w.to_string()})`);
+        return api_expr(env, ApiCall::La, `${env.this_bind}.la(${args_w})`);
     }
     if meth == "LT" && name_is(&m.recv, "_input") {
-        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${args_w.to_string()})`);
+        return api_expr(env, ApiCall::Lt, `${env.this_bind}.lt(${args_w})`);
     }
     if meth == "equals" {
         if raw_args.is_empty() {
@@ -663,7 +663,7 @@ fn emit_member_call<S: AsStrSlice>(
     }
     check_member_call_reachable(env, &meth)?;
     let recv_w = emit_expr(rule, rules, &m.recv, vals_in_scope, bindings, env)?;
-    return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${args_w.to_string()})`);
+    return Result::Ok(`${recv_w}.${to_snake_case(&meth)}(${args_w})`);
 }
 
 /// What a name at a *name* position denotes — Java's variable namespace, which
@@ -716,11 +716,11 @@ fn name_expr<S: AsStrSlice>(
     }
     return match resolve_name(env, name) {
         Local => Result::Ok(escape_ident(name)),
-        RuleArg => resolve_attr_ref(rule, rules, `$${name.to_string()}`, vals_in_scope, bindings, &env.this_bind),
+        RuleArg => resolve_attr_ref(rule, rules, `$${name}`, vals_in_scope, bindings, &env.this_bind),
         Field => Result::Ok(`${env.this_bind}.${to_snake_case(name)}`),
         Unknown => if env.lexer {
             builtin::cold_path();
-            Result::Err(`java2wado: unsupported lexer name '${name.to_string()}': not a @members field`);
+            Result::Err(`java2wado: unsupported lexer name '${name}': not a @members field`);
         } else {
             Result::Ok(name.to_string());
         },
@@ -736,7 +736,7 @@ fn this_field_expr<S: AsStrSlice>(env: &JEnv, name: S) -> Result<String, String>
         return Result::Ok(`${env.this_bind}.${snake}`);
     }
     builtin::cold_path();
-    return Result::Err(`java2wado: unsupported lexer name 'this.${name.to_string()}': not a @members field`);
+    return Result::Err(`java2wado: unsupported lexer name 'this.${name}': not a @members field`);
 }
 
 /// Refuse a member call this body cannot make. Both spellings — `this.m()` and
@@ -751,14 +751,14 @@ fn check_member_call_reachable<S: AsStrSlice>(env: &JEnv, meth: S) -> Result<(),
     if env.read_only && env.mut_methods.contains(&to_snake_case(meth)) {
         builtin::cold_path();
         return Result::Err(
-            `java2wado: @members method '${meth.to_string()}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
+            `java2wado: @members method '${meth}' writes through the recognizer, which a lexer predicate — evaluated for losing candidates too — must not do`,
         );
     }
     return Result::Ok(());
 }
 
 fn unknown_method_err<S: AsStrSlice>(name: S) -> String {
-    return `java2wado: unsupported method '${name.to_string()}': not a @members method or a recognizer API method`;
+    return `java2wado: unsupported method '${name}': not a @members method or a recognizer API method`;
 }
 
 /// Whether `e` names the grammar's own parser / lexer class (`<Name>Parser` /

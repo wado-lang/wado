@@ -95,7 +95,7 @@ fn highlight_file<S: AsStrSlice, S1: AsStrSlice>(
     let elapsed = MonotonicClock::now() - start;
     let ms = elapsed as f64 / 1000000.0;
 
-    let out_path = `${output_dir.to_string()}/${path.to_string()}.html`;
+    let out_path = `${output_dir}/${path}.html`;
     if let Err(e) = fs::create_dir_all(&parent_of(&out_path)) {
         error(`cannot create output directory`, { out_path, reason: `${e}` });
         return null;

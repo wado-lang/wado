@@ -57,11 +57,8 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
     }
 }
 
-/// The globals a block stores into directly, each once. Constant-object
-/// globalization leaves a store wherever it names a constant at a use site: on
-/// its own as a statement where a `let` held the constant, and inside
-/// [`materialization_pair`] where an expression did. A global stored twice is
-/// left out: a second store is a mutation, not a materialization.
+/// The globals a block stores into directly, each stored exactly once. Stored
+/// twice is a mutation rather than a materialization, and is left out.
 #[must_use]
 pub(super) fn materialized_globals(body: &Body, block: BlockId) -> Vec<niri::GlobalKey> {
     let mut once: Vec<niri::GlobalKey> = Vec::new();
