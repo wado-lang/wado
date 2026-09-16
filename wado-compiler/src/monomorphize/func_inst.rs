@@ -3347,10 +3347,8 @@ impl Monomorphizer {
     }
 
     /// The name re-spelled the way the impl that answers it spells the trait.
-    /// A bound writes the arguments it means (`S: Eq<String>`), and the impl
-    /// answering for one receiver writes them too while the impl for another
-    /// leaves a declared default out — so the two spellings meet here or the
-    /// instance is minted under a name nothing defines.
+    /// An impl names a declared default by leaving it out where a bound writes
+    /// it, and an instance minted under the longer name defines nothing.
     fn trait_named_by_receiver_impl(&self, info: &LocalMethodName) -> Option<LocalMethodName> {
         let trait_fq = info.trait_name.as_ref()?;
         if trait_fq.args().is_empty() {

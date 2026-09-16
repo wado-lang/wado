@@ -1435,9 +1435,8 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
-    /// [`Self::fq_trait_named_by_impl`] for a bound, whose arguments are written
-    /// on the bound itself and whose `Self` is the bounded parameter. Naming the
-    /// two the same way is what lets a bound reach the impl that answers it.
+    /// [`Self::fq_trait_named_by_impl`] for a bound, which writes its arguments
+    /// itself. Naming the two alike is what lets a bound reach its impl.
     pub(super) fn fq_trait_named_by_bound(
         &self,
         fq: name::FqTraitName,
@@ -1473,8 +1472,7 @@ impl TraitEnv {
         wanted: &[name::FqTypeName],
     ) -> Option<usize> {
         let params = &self.trait_decl_headers.get(&trait_)?.type_params;
-        let entries: Vec<DefId> = self.entries_by_receiver(receiver).collect();
-        entries.into_iter().find_map(|entry| {
+        self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
             if header.trait_ref != Some(trait_) {
                 return None;

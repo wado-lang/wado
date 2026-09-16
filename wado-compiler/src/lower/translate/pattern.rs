@@ -128,19 +128,43 @@ fn peel_refs_and_box(
 pub struct Lowering {
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
-    /// Canonical stdlib name of the `Eq` trait.
-    eq_trait_name: FqTraitName,
-    /// Canonical stdlib name of the `String` struct.
-    string_struct_name: FqTypeName,
-    /// `String` and `&String`, the types a string-literal pattern and the
-    /// argument of the `Eq::eq` it tests with carry. Interned once here because
-    /// the per-function walk holds the type table immutably.
-    string_type: TypeId,
-    string_ref_type: TypeId,
+    text_eq: TextEq,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
     /// Callees whose every return aliases the receiver.
     returns_receiver_alias: FuncKeySet,
+}
+
+/// What a string-literal pattern's `Eq::eq` call is spelled from, resolved once
+/// from the compiler-item registry so stdlib renames carry.
+#[derive(Clone)]
+struct TextEq {
+    trait_name: FqTraitName,
+    string_name: FqTypeName,
+    /// `String` and `&String`. Interned here because the per-function walk
+    /// holds the type table immutably.
+    string_type: TypeId,
+    string_ref_type: TypeId,
+}
+
+impl TextEq {
+    fn new(type_table: &mut TypeTable) -> Self {
+        let string_def = StructDef::Decl(
+            type_table
+                .compiler_item_def(CompilerItem::String)
+                .expect("the prelude always defines String"),
+        );
+        let string_type = type_table.intern(ResolvedType::Struct {
+            def: string_def,
+            type_args: Vec::new(),
+        });
+        Self {
+            trait_name: type_table.compiler_trait_fq(CompilerItem::Eq),
+            string_name: type_table.compiler_struct_fq_name(CompilerItem::String),
+            string_type,
+            string_ref_type: type_table.make_ref(string_type),
+        }
+    }
 }
 
 impl Lowering {
@@ -168,25 +192,9 @@ impl Lowering {
             }
         }
 
-        let mut type_table = flat.type_table.borrow_mut();
-        let eq_trait_name = type_table.compiler_trait_fq(CompilerItem::Eq);
-        let string_struct_name = type_table.compiler_struct_fq_name(CompilerItem::String);
-        let string_def = StructDef::Decl(
-            type_table
-                .compiler_item_def(CompilerItem::String)
-                .expect("the prelude always defines String"),
-        );
-        let string_type = type_table.intern(ResolvedType::Struct {
-            def: string_def,
-            type_args: Vec::new(),
-        });
-        let string_ref_type = type_table.make_ref(string_type);
         Self {
             struct_fields_map,
-            eq_trait_name,
-            string_struct_name,
-            string_type,
-            string_ref_type,
+            text_eq: TextEq::new(&mut flat.type_table.borrow_mut()),
             const_int_globals,
             returns_receiver_alias: returns_receiver_alias.clone(),
         }
@@ -204,10 +212,7 @@ impl Lowering {
         let mut lowerer = PatternLowerer::new(
             local_count,
             locals,
-            self.eq_trait_name.clone(),
-            self.string_struct_name.clone(),
-            self.string_type,
-            self.string_ref_type,
+            self.text_eq.clone(),
             &self.struct_fields_map,
             &self.const_int_globals,
             &self.returns_receiver_alias,
@@ -226,17 +231,7 @@ struct PatternLowerer<'a> {
     local_count: u32,
     locals: Vec<TirLocal>,
     temp_counter: u32,
-    /// Canonical stdlib name of the `Eq` trait. Resolved once from the
-    /// compiler-item registry so synthesised `Eq::eq` calls follow stdlib
-    /// renames without falling back to a hard-coded `"Eq"` literal.
-    eq_trait_name: FqTraitName,
-    /// Canonical stdlib name of the `String` struct, resolved through the same
-    /// registry so the `Eq<String>` a synthesised `LocalMethodName` names
-    /// tracks renames too.
-    string_struct_name: FqTypeName,
-    /// `String` and `&String`; see `Lowering::string_type`.
-    string_type: TypeId,
-    string_ref_type: TypeId,
+    text_eq: TextEq,
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
     /// Immutable integer-literal globals; see `Lowering::const_int_globals`.
@@ -283,10 +278,7 @@ impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
         locals: Vec<TirLocal>,
-        eq_trait_name: FqTraitName,
-        string_struct_name: FqTypeName,
-        string_type: TypeId,
-        string_ref_type: TypeId,
+        text_eq: TextEq,
         struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
         returns_receiver_alias: &'a FuncKeySet,
@@ -295,10 +287,7 @@ impl<'a> PatternLowerer<'a> {
             local_count,
             locals,
             temp_counter: 0,
-            eq_trait_name,
-            string_struct_name,
-            string_type,
-            string_ref_type,
+            text_eq,
             struct_fields_map,
             const_int_globals,
             returns_receiver_alias,
@@ -1403,7 +1392,7 @@ impl<'a> PatternLowerer<'a> {
             }
             TirLiteralPattern::String(val) => TirExpr::new(
                 TirExprKind::StringLiteral(val.clone()),
-                self.string_type,
+                self.text_eq.string_type,
                 span,
             ),
             TirLiteralPattern::Null => TirExpr::new(TirExprKind::Null, TypeTable::UNKNOWN, span),
@@ -1426,8 +1415,7 @@ impl<'a> PatternLowerer<'a> {
     }
 
     /// Build the `Eq::eq(&self, &other)` call a string-literal pattern tests
-    /// with. The literal is a `String`, so the scrutinee answers through its
-    /// `Eq<String>` impl — written bare on `String`, where `Rhs` is `Self`.
+    /// with, against the scrutinee's own `Eq<String>` impl.
     ///
     /// The argument carries the callee's own `&String`: typed as `String` the
     /// fold reads it as a value the literal must be defended from, and builds
@@ -1442,12 +1430,14 @@ impl<'a> PatternLowerer<'a> {
         // A newtype's `Eq` is the base's, so the call names the base.
         let scrutinee = type_table.representation_head(type_table.peel_refs(receiver.type_id));
         let receiver_name = type_table.fq_base_type_name(scrutinee);
-        let trait_name = if receiver_name == self.string_struct_name {
-            self.eq_trait_name.clone()
+        // `String` writes no argument, its `Rhs` being the restated `Self`.
+        let trait_name = if receiver_name == self.text_eq.string_name {
+            self.text_eq.trait_name.clone()
         } else {
-            self.eq_trait_name
+            self.text_eq
+                .trait_name
                 .clone()
-                .with_args(vec![self.string_struct_name.clone()])
+                .with_args(vec![self.text_eq.string_name.clone()])
         };
         let module_source = type_table
             .nominal_head(scrutinee)
@@ -1472,7 +1462,7 @@ impl<'a> PatternLowerer<'a> {
                             op: TirUnaryOp::Ref,
                             expr: Box::new(other),
                         },
-                        self.string_ref_type,
+                        self.text_eq.string_ref_type,
                         span,
                     ),
                     false,

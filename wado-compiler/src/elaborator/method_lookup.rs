@@ -2806,10 +2806,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Drop the impls whose right-hand parameter is the impl's own type
-    /// parameter, where one writes a type instead. A bare parameter admits
-    /// every operand, so keeping both leaves an `impl<R: B> Eq<R> for T`
-    /// shadowing the `impl Eq<String> for T` beside it.
+    /// Keep only the impls writing a type for the right-hand parameter, where
+    /// one does: a bare parameter admits every operand and would shadow them.
     fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
         if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
             found.retain(|info| self.writes_rhs_type(info));

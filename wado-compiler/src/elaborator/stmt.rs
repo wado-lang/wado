@@ -2064,17 +2064,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         };
         let written = self.tysys.type_table.borrow().type_name(scrutinee);
-        let (struct_name, scrutinee) = self
+        // A newtype inherits its base's `Eq`, which is where the impl is.
+        let (name, receiver) = self
             .tysys
             .trait_impl_base_lookup(&written, scrutinee, eq_trait);
-        self.find_arithmetic_trait_impl(
-            &struct_name,
-            scrutinee,
-            eq_trait,
-            "eq",
-            Some(&ArgClass::StrLit),
-        )
-        .is_some()
+        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, "eq", Some(&ArgClass::StrLit))
+            .is_some()
     }
 
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,

@@ -4326,19 +4326,18 @@ pub(crate) fn unparse_bound_arguments_into(bound: &TraitBound, o: &mut String) {
         return;
     }
     o.push('<');
-    for (i, arg) in bound.type_args.iter().enumerate() {
-        if i > 0 {
-            o.push_str(", ");
-        }
+    let mut sep = "";
+    for arg in &bound.type_args {
+        o.push_str(sep);
         unparse_type_into(arg, o);
+        sep = ", ";
     }
-    for (i, assoc) in bound.assoc_types.iter().enumerate() {
-        if i > 0 || !bound.type_args.is_empty() {
-            o.push_str(", ");
-        }
+    for assoc in &bound.assoc_types {
+        o.push_str(sep);
         o.push_str(&assoc.name);
         o.push_str(" = ");
         unparse_type_into(&assoc.ty, o);
+        sep = ", ";
     }
     o.push('>');
 }

@@ -2398,9 +2398,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// What a bound binds `decl`'s slots to: slot 0 is `Self`, and the trait's
-    /// own parameters take what the bound writes positionally (`T: Eq<String>`),
-    /// or their declared defaults where it writes nothing (`T: Mul` is
-    /// `Mul<Self>`).
+    /// own parameters what it writes (`T: Eq<String>`), else their defaults.
     pub(super) fn bound_slots(
         &mut self,
         bound: &ast::TraitBound,
