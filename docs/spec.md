@@ -914,9 +914,10 @@ match command {
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
-A string-literal pattern tests the scrutinee with `==` against a `String`. Any
-text that implements `Eq<String>` matches one: a `String`, a `StrSlice`, a
-newtype over either, and a body generic over `AsStrSlice`, which requires it.
+A string-literal pattern tests the scrutinee with `==` against a `String`, so
+any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
+newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
+since `AsStrSlice` requires `Eq<String>`.
 
 ```wado
 fn kind<S: AsStrSlice>(s: S) -> i32 {
@@ -3717,12 +3718,16 @@ fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
 fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
 ```
 
-A bound that writes no argument names the declared default, so `T: Add` is
-`Add<Self>` and reaches `impl Add for Cm`, not `impl Add<Inch> for Cm`. Writing
-one asks for that argument instead: `T: Eq<String>` reaches `impl Eq<String> for
-StrSlice`, and on a `String` receiver it reaches `impl Eq for String`, whose
-`Rhs` restates `Self`. `T::Output` under two bounds that both declare `Output`
-is ambiguous unless they bind it to the same type.
+A bound that writes no argument names the declared default. `T: Add` is
+`Add<Self>`, which `impl Add for Cm` answers and `impl Add<Inch> for Cm` does
+not.
+
+A bound that writes one asks for that argument. `T: Eq<String>` reaches
+`impl Eq<String> for StrSlice`. On a `String` receiver it reaches
+`impl Eq for String`, whose `Rhs` is the restated `Self`.
+
+`T::Output` under two bounds that both declare `Output` is ambiguous unless
+they bind it to the same type.
 
 An operator names these traits by construction, not by spelling: a trait
 declared as `Add` elsewhere shadows the name but does not answer `+`.

@@ -2617,10 +2617,8 @@ fn args_without_declared_defaults(
     kept
 }
 
-/// Whether the header answers a bound writing `wanted`. At every position each
-/// side says its written argument, or the trait's default at `target` where it
-/// wrote none — so `T: Mul` reaches `impl Mul for Cm` and not `impl Mul<Inch>
-/// for Cm`.
+/// Whether the header answers a bound writing `wanted`: at every position each
+/// side says its written argument, or the declared default where it wrote none.
 pub(super) fn header_answers_bound_args(
     trait_type: &ast::Type,
     target: &ast::Type,
@@ -2629,18 +2627,7 @@ pub(super) fn header_answers_bound_args(
     wanted: &[name::FqTypeName],
 ) -> bool {
     let ast_args = written_arg_nodes(trait_type);
-    let default_at = |i: usize| {
-        params
-            .get(i)?
-            .default
-            .as_ref()
-            .map(|default| match default {
-                ast::Type::Named(named) if named.name == "Self" => {
-                    written_type_arg(target, resolutions)
-                }
-                _ => written_type_arg(default, resolutions),
-            })
-    };
+    let default_at = |i: usize| declared_default_arg(params, i, Some(target), resolutions);
     (0..ast_args.len().max(wanted.len())).all(|i| {
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
@@ -2655,23 +2642,20 @@ pub(super) fn header_answers_bound_args(
     })
 }
 
-/// Whether a written trait argument says exactly what the declared default
-/// does, `Self` meaning the impl's target. A bound has no target node to
-/// compare against, so there only the `Self` spelling itself restates one.
-fn restates_default(
-    arg: &ast::Type,
-    default: &ast::Type,
+/// What the trait's declared default at `index` says, `Self` meaning the impl's
+/// target. A bound has no target node, so there a `Self` default says nothing.
+fn declared_default_arg(
+    params: &[ast::GenericParam],
+    index: usize,
     target: Option<&ast::Type>,
     resolutions: &Resolutions,
-) -> bool {
+) -> Option<name::FqTypeName> {
+    let default = params.get(index)?.default.as_ref()?;
     match default {
         ast::Type::Named(named) if named.name == "Self" => {
-            matches!(arg, ast::Type::Named(a) if a.name == "Self")
-                || target.is_some_and(|target| {
-                    written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
-                })
+            Some(written_type_arg(target?, resolutions))
         }
-        _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
+        _ => Some(written_type_arg(default, resolutions)),
     }
 }
 
@@ -2686,18 +2670,37 @@ pub(super) fn non_default_arg_count(
 ) -> usize {
     let mut kept = ast_args.len();
     while let Some(last) = kept.checked_sub(1) {
-        let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {
+        let Some(arg) = ast_args.get(last) else {
             break;
         };
-        let Some(default) = param.default.as_ref() else {
-            break;
-        };
-        if !restates_default(arg, default, target, resolutions) {
+        if !restates_default(arg, params, last, target, resolutions) {
             break;
         }
         kept = last;
     }
     kept
+}
+
+/// Whether a written trait argument says exactly what the declared default at
+/// `index` does.
+fn restates_default(
+    arg: &ast::Type,
+    params: &[ast::GenericParam],
+    index: usize,
+    target: Option<&ast::Type>,
+    resolutions: &Resolutions,
+) -> bool {
+    let Some(default) = params.get(index).and_then(|p| p.default.as_ref()) else {
+        return false;
+    };
+    // A bound has no target, so there only the `Self` spelling restates `Self`.
+    if matches!(default, ast::Type::Named(d) if d.name == "Self")
+        && matches!(arg, ast::Type::Named(a) if a.name == "Self")
+    {
+        return true;
+    }
+    declared_default_arg(params, index, target, resolutions)
+        .is_some_and(|default| written_type_arg(arg, resolutions) == default)
 }
 
 /// One written type argument as the identity it names.

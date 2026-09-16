@@ -1960,10 +1960,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => param_ty,
                 };
                 // A trait spelled with an argument (`Add<Feet>`) declares a
-                // referent of its own, where a bare `Add` declares `&Self` and a
-                // variadic `impl Ord for [..T]` resolves that to a shape the
-                // operand does not equal. A bound's slots say the same: what it
-                // wrote, or `Self` where it wrote nothing.
+                // referent of its own. A bare `Add` declares `&Self`, which a
+                // variadic `impl Ord for [..T]` resolves to a shape the operand
+                // does not equal.
                 let declares_rhs = (resolved.is_type_param_receiver
                     || !resolved.trait_name.args().is_empty())
                     && referent != receiver

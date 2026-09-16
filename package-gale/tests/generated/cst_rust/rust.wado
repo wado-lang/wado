@@ -74,32 +74,24 @@ impl LexerSlice {
     }
 }
 
-impl Eq<String> for LexerSlice {
-    fn eq(&self, other: &String) -> bool {
-        let mut chars = other.chars();
-        let mut i = self.start;
-        loop {
-            let next = chars.next();
-            if i >= self.end {
-                return next matches { None };
-            }
-            if let Some(c) = next {
-                if c != self.chars[i] {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-            i += 1;
-        }
-    }
-}
-
 impl Display for LexerSlice {
     fn fmt(&self, f: &mut Formatter) {
         for let mut i = self.start; i < self.end; i += 1 {
             f.write_char(self.chars[i]);
         }
+    }
+}
+
+impl Eq<String> for LexerSlice {
+    fn eq(&self, other: &String) -> bool {
+        let mut i = self.start;
+        for let c of other.chars() {
+            if i >= self.end || c != self.chars[i] {
+                return false;
+            }
+            i += 1;
+        }
+        return i == self.end;
     }
 }
 

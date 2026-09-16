@@ -324,9 +324,8 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
     )
 }
 
-/// Whether the impl answers a bound writing `args`. At every position each side
-/// says its written argument, or the trait's default at `ty` where it wrote
-/// none — so `T: Mul` reaches `impl Mul for Cm` and not `impl Mul<Inch> for Cm`.
+/// Whether the impl answers a bound writing `args`: at every position each side
+/// says its written argument, or the trait's default at `ty` where it wrote none.
 fn answers_args(
     program: &Program,
     def: &ImplDef,
@@ -334,7 +333,8 @@ fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    // A `Self` default lowers to the impl's target, which the match bound to `ty`.
+    // A `Self` default lowers to the impl's target, and the match bound that
+    // target to `ty`.
     let default_at = |i: usize| {
         program.default_arg(def, i).map(|default| {
             if default == def.target {

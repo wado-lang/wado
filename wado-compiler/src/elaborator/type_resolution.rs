@@ -192,13 +192,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return TraitRef::bare(trait_decl);
         };
-        let kept = non_default_arg_count(
-            written_arg_nodes(trait_type),
-            Some(target),
-            &params,
-            &self.tysys.resolutions,
-        );
-        let args = written_arg_nodes(trait_type)
+        let written = written_arg_nodes(trait_type);
+        let kept = non_default_arg_count(written, Some(target), &params, &self.tysys.resolutions);
+        let args = written
             .iter()
             .take(kept)
             .map(|arg| self.resolve_type(arg))

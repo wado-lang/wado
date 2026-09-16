@@ -713,6 +713,7 @@ impl TypeSystem {
                 &receiver,
                 trait_,
                 NewtypePeel::Here,
+                &[],
             )
         })
     }
@@ -1281,6 +1282,7 @@ impl TypeSystem {
                 &Receiver::Type(FqTypeName::builtin(prim.as_str())),
                 trait_,
                 NewtypePeel::Follow,
+                wanted,
             );
         }
 
@@ -1456,13 +1458,12 @@ impl TypeSystem {
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)
                 let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-                if self.find_trait_impl_for_type_with_args(
+                if self.find_trait_impl_for_subject(
                     ctx,
                     scope,
                     Some(type_id),
                     &receiver,
                     trait_,
-                    None,
                     NewtypePeel::Follow,
                     wanted,
                 ) {
@@ -1484,10 +1485,17 @@ impl TypeSystem {
                     &receiver,
                     trait_,
                     NewtypePeel::Follow,
+                    wanted,
                 ) {
                     return true;
                 }
-                return self.type_implements_trait(ctx, scope, TypeTable::U32, trait_);
+                return self.type_implements_trait_with_args(
+                    ctx,
+                    scope,
+                    TypeTable::U32,
+                    trait_,
+                    wanted,
+                );
             }
             _ => return false,
         };
@@ -1515,16 +1523,10 @@ impl TypeSystem {
         type_key: &Receiver,
         trait_: DefId,
         peel: NewtypePeel,
+        wanted: &[FqTypeName],
     ) -> bool {
         self.find_trait_impl_for_type_with_args(
-            ctx,
-            scope,
-            subject,
-            type_key,
-            trait_,
-            None,
-            peel,
-            &[],
+            ctx, scope, subject, type_key, trait_, None, peel, wanted,
         )
     }
 
@@ -1666,16 +1668,28 @@ impl TypeSystem {
             (NewtypePeel::Here, Some(id)) => {
                 self.type_implements_trait_here(ctx, scope, id, bound_trait)
             }
-            (NewtypePeel::Here, None) => {
-                self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
-            }
+            (NewtypePeel::Here, None) => self.find_trait_impl_for_subject(
+                ctx,
+                scope,
+                subject,
+                type_key,
+                bound_trait,
+                peel,
+                &[],
+            ),
             // The general question already searches the impls, under the guard.
             (NewtypePeel::Follow, Some(id)) => {
                 self.type_implements_trait(ctx, scope, id, bound_trait)
             }
-            (NewtypePeel::Follow, None) => {
-                self.find_trait_impl_for_subject(ctx, scope, subject, type_key, bound_trait, peel)
-            }
+            (NewtypePeel::Follow, None) => self.find_trait_impl_for_subject(
+                ctx,
+                scope,
+                subject,
+                type_key,
+                bound_trait,
+                peel,
+                &[],
+            ),
         }
     }
 

@@ -16,16 +16,22 @@ fn same<T: Eq>(a: T, b: T) -> bool {
     return a == b;
 }
 
+// A newtype inherits the base's `Eq`, which writes no argument where the bound
+// writes one. The two spellings must still name the same impl.
+type Name = String;
+
 export fn run() with Stdout {
     println(`${is_http("http" as String)}`);
     println(`${is_http("https" as String)}`);
     println(`${is_http(Tag { name: "http" })}`);
     println(`${is_http(Tag { name: "ftp" })}`);
+    println(`${is_http("http" as Name)}`);
+    println(`${is_http("ftp" as Name)}`);
     println(`${same(1, 1)}`);
     println(`${same("a" as String, "a")}`);
 }
 
 __DATA__
 {
-  "stdout": "true\nfalse\ntrue\nfalse\ntrue\ntrue\n"
+  "stdout": "true\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\n"
 }

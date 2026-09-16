@@ -1,7 +1,7 @@
-// The arguments a bound writes for the trait's own parameters must reach the
-// impl that writes them, whatever else the parameter is bounded by, whatever
-// the receiver's newtype chain, and whether or not the parameter has a
-// declared default.
+// A bound writes arguments for the trait's own parameters. They must reach the
+// impl that writes them whatever else the parameter is bounded by, and whether
+// or not the parameter has a declared default. The newtype side is in
+// `bound_trait_argument`.
 
 trait Pick<A = i32> {
     fn pick(&self, a: &A) -> bool;
@@ -29,12 +29,6 @@ fn ord_first<S: Ord + AsStrSlice>(s: S) -> bool {
     return s == "x";
 }
 
-type Name = String;
-
-fn is_http<S: Eq<String>>(s: S) -> bool {
-    return s == "http";
-}
-
 test "a bound writes a non-default argument for a defaulted parameter" {
     assert picks(Slot { width: 3 }, "abc");
     assert !picks(Slot { width: 2 }, "abc");
@@ -45,12 +39,4 @@ test "a bound writing an argument reaches the impl whatever its position" {
     assert ord_first("x");
     assert !text_first("y");
     assert !ord_first("y");
-}
-
-test "a newtype receiver takes the spelling its base's impl writes" {
-    let n: Name = "http";
-    assert is_http(n);
-    assert is_http("http" as Name);
-    assert !is_http("ftp" as Name);
-    assert is_http("http");
 }

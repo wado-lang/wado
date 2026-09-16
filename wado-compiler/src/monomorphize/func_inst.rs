@@ -3346,27 +3346,24 @@ impl Monomorphizer {
         true
     }
 
-    /// [`Self::trait_named_by_receiver_impl`] applied to every candidate a
-    /// receiver produces, so the newtype and base spellings settle alike.
+    /// The name with the trait's arguments cut back to what the answering impl
+    /// writes. An instance minted under a longer name defines nothing.
     fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
-        self.trait_named_by_receiver_impl(&info).unwrap_or(info)
-    }
-
-    /// The name re-spelled the way the impl that answers it spells the trait.
-    /// An impl names a declared default by leaving it out where a bound writes
-    /// it, and an instance minted under the longer name defines nothing.
-    fn trait_named_by_receiver_impl(&self, info: &LocalMethodName) -> Option<LocalMethodName> {
-        let trait_fq = info.trait_name.as_ref()?;
-        if trait_fq.args().is_empty() {
-            return None;
-        }
-        let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
-        let kept = self.functions.trait_env.impl_written_arg_count(
-            info.receiver(),
-            trait_,
-            trait_fq.args(),
-        )?;
-        (kept < trait_fq.args().len()).then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
+        let shorter = || {
+            let trait_fq = info.trait_name.as_ref()?;
+            if trait_fq.args().is_empty() {
+                return None;
+            }
+            let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
+            let kept = self.functions.trait_env.impl_written_arg_count(
+                info.receiver(),
+                trait_,
+                trait_fq.args(),
+            )?;
+            (kept < trait_fq.args().len())
+                .then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
+        };
+        shorter().unwrap_or(info)
     }
 
     /// Resolve a method call in a generic body to its concrete target after
