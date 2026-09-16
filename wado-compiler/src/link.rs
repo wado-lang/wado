@@ -6,7 +6,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
-use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::ModuleSource;
@@ -181,7 +180,7 @@ pub fn link(package: Package) -> FlatPackage {
 /// stubs and `core:builtin` / `core:rt` intrinsic pairs are not collisions.
 #[cfg(debug_assertions)]
 pub(crate) fn assert_no_stub_shadowing(functions: &[Rc<RefCell<TirFunction>>], stage: &str) {
-    let mut bodied: hashmap::IndexMap<String, ModuleSource> = hashmap::IndexMap::default();
+    let mut bodied: IndexMap<String, ModuleSource> = IndexMap::default();
     for f in functions {
         let f = f.borrow();
         if f.body.is_some() {
