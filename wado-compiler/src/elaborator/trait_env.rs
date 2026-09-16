@@ -1473,6 +1473,42 @@ impl TraitEnv {
     /// synthesis layer records both receiver namespaces, so preferring it would
     /// return a different module. When several modules implement the trait for
     /// same-named receivers, `type_module` picks the entry whose module matches.
+    /// How many arguments the impl on `receiver` writes for `trait_`, among
+    /// those a bound writing `wanted` reaches. An impl names a declared default
+    /// by leaving it out (`impl Eq for String` is `Eq<String>`), so a bound
+    /// that writes one still has to arrive at the shorter spelling the impl was
+    /// mangled under.
+    pub(crate) fn impl_written_arg_count(
+        &self,
+        receiver: &name::Receiver,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+    ) -> Option<usize> {
+        let params = &self.trait_decl_headers.get(&trait_)?.type_params;
+        let entries: Vec<DefId> = self.entries_by_receiver(receiver).collect();
+        entries.into_iter().find_map(|entry| {
+            let header = self.impl_headers.get(&entry)?;
+            if header.trait_ref != Some(trait_) {
+                return None;
+            }
+            let written = written_arg_nodes(header.trait_type.as_ref()?);
+            let answers = wanted.iter().enumerate().all(|(i, want)| {
+                let Some(node) = written
+                    .get(i)
+                    .or_else(|| params.get(i).and_then(|p| p.default.as_ref()))
+                else {
+                    return false;
+                };
+                let effective = match node {
+                    ast::Type::Named(named) if named.name == "Self" => &header.ty,
+                    _ => node,
+                };
+                get_type_name_static(effective) == want.head_only().to_display()
+            });
+            answers.then_some(written.len())
+        })
+    }
+
     pub(crate) fn impl_module_for(
         &self,
         receiver: ImplReceiver<'_>,

@@ -1,0 +1,31 @@
+use { println } from "core:cli";
+
+struct Tag { name: String }
+
+impl Eq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        return self.name == *other;
+    }
+}
+
+fn is_http<S: Eq<String>>(s: S) -> bool {
+    return s == "http";
+}
+
+fn same<T: Eq>(a: T, b: T) -> bool {
+    return a == b;
+}
+
+export fn run() with Stdout {
+    println(`${is_http("http" as String)}`);
+    println(`${is_http("https" as String)}`);
+    println(`${is_http(Tag { name: "http" })}`);
+    println(`${is_http(Tag { name: "ftp" })}`);
+    println(`${same(1, 1)}`);
+    println(`${same("a" as String, "a")}`);
+}
+
+__DATA__
+{
+  "stdout": "true\nfalse\ntrue\nfalse\ntrue\ntrue\n"
+}

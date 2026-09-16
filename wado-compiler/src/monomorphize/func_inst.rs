@@ -21,7 +21,6 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use super::state::Monomorphizer;
 use super::{generic_function_key, module_source_for_trait_impl};
-use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::monomorphize::{dispatch_receiver_head, dispatch_receiver_name};
 use crate::name::{DeclName, FqTraitName, MangledName};
@@ -3347,35 +3346,23 @@ impl Monomorphizer {
         true
     }
 
-    /// The same name with every trailing trait argument that restates the
-    /// receiver dropped. A bound writes `Eq<String>` for a parameter the caller
-    /// instantiates at `String`, where the impl that answers is the bare
-    /// `impl Eq for String`: a declared default is named by its absence.
-    fn trait_args_dropped_for_receiver(
-        &self,
-        info: &LocalMethodName,
-        receiver: TypeId,
-        type_table: &TypeTable,
-    ) -> Option<LocalMethodName> {
-        let args = info.trait_name.as_ref()?.args();
-        if args.is_empty() {
+    /// The name re-spelled the way the impl that answers it spells the trait.
+    /// A bound writes the arguments it means (`S: Eq<String>`), and the impl
+    /// answering for one receiver writes them too while the impl for another
+    /// leaves a declared default out — so the two spellings meet here or the
+    /// instance is minted under a name nothing defines.
+    fn trait_named_by_receiver_impl(&self, info: &LocalMethodName) -> Option<LocalMethodName> {
+        let trait_fq = info.trait_name.as_ref()?;
+        if trait_fq.args().is_empty() {
             return None;
         }
-        // By spelling: the bound's argument names a declaration and the
-        // receiver arrives as the type table resolved it, so the two heads can
-        // hold different identities for the one type.
-        let receiver_name = type_table.fq_type_name(receiver).to_mangled();
-        let mut kept = args.to_vec();
-        while kept.last().is_some_and(|last| last.to_mangled() == receiver_name) {
-            kept.pop();
-        }
-        compiler_trace!(
-            "bound-args",
-            "receiver {receiver_name}, args {}, kept {}",
-            args.len(),
-            kept.len()
-        );
-        (kept.len() != args.len()).then(|| info.with_trait_type_args(&kept))
+        let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
+        let kept = self.functions.trait_env.impl_written_arg_count(
+            info.receiver(),
+            trait_,
+            trait_fq.args(),
+        )?;
+        (kept < trait_fq.args().len()).then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
     }
 
     /// Resolve a method call in a generic body to its concrete target after
@@ -3466,20 +3453,15 @@ impl Monomorphizer {
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
             let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
-            compiler_trace!(
-                "bound-args",
-                "candidate {} has_impl {}",
-                candidate.to_mangled_name(),
-                self.functions.has_impl(&candidate)
-            );
+            // `has_impl` answers for the trait, not for the arguments a bound
+            // wrote on it, so the spelling is settled against the impl first.
+            let candidate = self
+                .trait_named_by_receiver_impl(&candidate)
+                .unwrap_or(candidate);
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
                 candidate
-            } else if let Some(bare) = self.trait_args_dropped_for_receiver(&candidate, inner, type_table)
-                && self.functions.has_impl(&bare)
-            {
-                bare
             } else if let Some(link) = info
                 .trait_name
                 .as_ref()
