@@ -25,6 +25,15 @@ All types are newtypes of the primitive `v128` and can be freely reinterpreted v
 - `extract_lane(index)` — returns the lane value (i32/i64/f32/f64 depending on type)
 - `extract_lane_s(index)` / `extract_lane_u(index)` — sign/zero-extended extraction for sub-32-bit types (i8x16, i16x8)
 
+## Byte Selection
+
+`swizzle(indices)` picks each byte of one vector by a runtime index, zeroing
+an index of 16 or more. To pick from two vectors, or to pick at no runtime
+cost, use `builtin::i8x16_shuffle(l0, ..., l15, a, b)`: `0..=15` names a byte
+of `a` and `16..=31` a byte of `b`. Its sixteen indices are Wasm immediates,
+so they must be written as literals at the call — a method could not carry
+them until const generic parameters land.
+
 ## Operators
 
 All types support `+`, `-`, `*`, `&`, `|`, `^`, `~`, `<<`, `>>`, and unary `-`.
@@ -55,8 +64,8 @@ Common methods: `abs`, `all_true`, `bitmask`, `bitselect`.
 
 ## Unsigned Integer Types (u8x16, u16x8, u32x4, u64x2)
 
-**u8x16:** `abs`, `add_sat`, `sub_sat`, `min`, `max`, `avgr`,
-`all_true`, `bitmask`, `popcnt`, `bitselect`.
+**u8x16:** `swizzle`, `relaxed_swizzle`, `abs`, `add_sat`, `sub_sat`, `min`,
+`max`, `avgr`, `all_true`, `bitmask`, `popcnt`, `bitselect`.
 
 **u16x8:** `abs`, `add_sat`, `sub_sat`, `min`, `max`, `avgr`,
 `all_true`, `bitmask`, `bitselect`.

@@ -1,0 +1,58 @@
+// Test: `i8x16.shuffle` selects from a pair of vectors by constant index, and
+// `u8x16::swizzle` selects from one by a runtime index.
+//
+// Shuffle's sixteen indices are Wasm immediates, so they are written as
+// literals at the call and there is no typed wrapper to put them behind until
+// const generic parameters land.
+
+use { u8x16 } from "core:simd";
+
+fn lane(v: u8x16, i: i32) -> i32 {
+    return v.extract_lane(i);
+}
+
+test "shuffle names a byte of either operand" {
+    let a = u8x16::from_string(&"0123456789abcdef", 0);
+    let b = u8x16::from_string(&"ABCDEFGHIJKLMNOP", 0);
+
+    // Take the first four bytes of `b`, then the first twelve of `a`.
+    let rotated = builtin::i8x16_shuffle(
+        16, 17, 18, 19, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        a as v128,
+        b as v128,
+    ) as u8x16;
+
+    assert lane(rotated, 0) == 'A' as i32;
+    assert lane(rotated, 3) == 'D' as i32;
+    assert lane(rotated, 4) == '0' as i32;
+    assert lane(rotated, 15) == 'b' as i32;
+}
+
+test "shuffle may repeat and reverse" {
+    let a = u8x16::from_string(&"0123456789abcdef", 0);
+    let broadcast = builtin::i8x16_shuffle(
+        7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+        a as v128,
+        a as v128,
+    ) as u8x16;
+
+    assert lane(broadcast, 0) == '7' as i32;
+    assert lane(broadcast, 15) == '7' as i32;
+}
+
+test "swizzle takes its indices at runtime, and zeroes an out-of-range one" {
+    let a = u8x16::from_string(&"0123456789abcdef", 0);
+    let indices: u8x16 = [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 99];
+
+    let picked = a.swizzle(&indices);
+
+    assert lane(picked, 0) == 'f' as i32;
+    assert lane(picked, 14) == '1' as i32;
+    assert lane(picked, 15) == 0;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O2": ["i8x16.shuffle", "i8x16.swizzle"]
+}

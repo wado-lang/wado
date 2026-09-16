@@ -5,6 +5,8 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use std::array;
+
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
 use crate::tir::{TypeId, TypeTable};
@@ -27,6 +29,14 @@ fn operand_lane_const(body: &Body, op: Operand) -> u8 {
         Some(n) => n as u8,
         None => panic!("SIMD lane index must be a constant integer literal"),
     }
+}
+
+/// One of `i8x16.shuffle`'s sixteen lane immediates. It indexes the pair of
+/// operands, so the range is twice a single vector's.
+fn operand_shuffle_lane_const(body: &Body, op: Operand) -> u8 {
+    let lane = operand_lane_const(body, op);
+    assert!(lane < 32, "shuffle lane index out of range: {lane}");
+    lane
 }
 
 /// Mechanical builtin shapes — each evaluates its operand expressions
@@ -803,6 +813,12 @@ impl FunctionTranslator<'_, '_> {
             "builtin::v128_xor" => binary!(self, args, WirInstr::V128Xor),
             "builtin::v128_bitselect" => ternary!(self, args, WirInstr::V128Bitselect),
             "builtin::i8x16_splat" => unary!(self, args, WirInstr::I8x16Splat),
+            "builtin::i8x16_shuffle" => {
+                let lanes = array::from_fn(|i| operand_shuffle_lane_const(self.body, args[i].expr));
+                let a = self.translate_operand(args[16].expr);
+                let b = self.translate_operand(args[17].expr);
+                WirInstr::I8x16Shuffle(lanes, Box::new(a), Box::new(b))
+            }
             "builtin::i8x16_extract_lane_s" => {
                 extract_lane!(self, args, WirInstr::I8x16ExtractLaneS)
             }
