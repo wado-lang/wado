@@ -1695,7 +1695,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
-- [`core:random`](./stdlib-core-random.md) — entropy buffering for `wasi:random`
+- [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable
+  randomness from `wasi:random`, with entropy buffering
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time on the TC39 Temporal
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)
