@@ -78,12 +78,12 @@ impl Rng {
     }
 }
 
-global mut NEXT_VALUE_ID: i32 = 0;
-
 // Let there be Autograd to recursively apply the chain rule through a
 // computation graph. A Python reference to a `Value` is a `&mut Value` here,
 // and `Graph` is the heap those nodes live in.
 struct Value {
+    // Python's `visited` set keys on object identity; `id` is this node's slot
+    // in `Graph.nodes`, so the set is a dense `List<bool>` instead of a tree.
     id: i32,
     data: f64,
     grad: f64,
@@ -105,8 +105,7 @@ impl Graph {
     }
 
     fn value(&mut self, data: f64, children: List<&mut Value>, local_grads: List<f64>) -> &mut Value with stores[self] {
-        NEXT_VALUE_ID += 1;
-        self.nodes.push(Value { id: NEXT_VALUE_ID, data, grad: 0.0, children, local_grads });
+        self.nodes.push(Value { id: self.nodes.len(), data, grad: 0.0, children, local_grads });
         return &mut self.nodes[self.nodes.len() - 1];
     }
 
@@ -184,19 +183,20 @@ impl Graph {
     }
 }
 
-fn build_topo(v: &mut Value, visited: &mut TreeSet<i32>, topo: &mut List<&mut Value>) with stores[v] {
-    if !visited.insert(v.id) {
+fn build_topo(v: &mut Value, visited: &mut List<bool>, topo: &mut List<&mut Value>) with stores[v] {
+    if visited[v.id] {
         return;
     }
+    visited[v.id] = true;
     for let mut i = 0; i < v.children.len(); i += 1 {
         build_topo(v.children[i], visited, topo);
     }
     topo.push(v);
 }
 
-fn backward(root: &mut Value) with stores[root] {
+fn backward(root: &mut Value, node_count: i32) with stores[root] {
     let mut topo: List<&mut Value> = [];
-    let mut visited = TreeSet::<i32>::new();
+    let mut visited = List::<bool>::filled(node_count, false);
     build_topo(root, &mut visited, &mut topo);
 
     root.grad = 1.0;
@@ -514,7 +514,7 @@ fn train(
         let loss = forward_loss(g, state, &tokens);
 
         // Backward the loss, calculating the gradients of every parameter.
-        backward(loss);
+        backward(loss, g.len());
 
         let loss_value = loss.data;
         // Adam update, with a linear learning rate decay.
@@ -609,7 +609,7 @@ test "autograd matches the hand-computed gradient" {
     let xy = g.mul(x, y);
     let x2 = g.pow(x, 2.0);
     let f = g.add(xy, x2);
-    backward(f);
+    backward(f, g.len());
 
     assert f.data == 21.0;
     assert x.grad == 10.0;
@@ -621,7 +621,7 @@ test "a shared node is visited once" {
     let x = g.leaf(3.0);
     // f = x * x  =>  df/dx = 2x = 6
     let f = g.mul(x, x);
-    backward(f);
+    backward(f, g.len());
     assert f.data == 9.0;
     assert x.grad == 6.0;
 }
@@ -630,14 +630,14 @@ test "relu, exp, and log carry their local gradients" {
     let mut g = Graph::new();
     let neg = g.leaf(-2.0);
     let r = g.relu(neg);
-    backward(r);
+    backward(r, g.len());
     assert r.data == 0.0;
     assert neg.grad == 0.0;
 
     let a = g.leaf(2.0);
     let e = g.exp(a);
     let l = g.log(e);
-    backward(l);
+    backward(l, g.len());
     assert f64::abs(l.data - 2.0) < 1e-12;
     assert f64::abs(a.grad - 1.0) < 1e-12;
 }
@@ -685,7 +685,7 @@ test "the graph rewinds to the parameters between steps" {
     let p = g.leaf(1.0);
     let n_params = g.len();
     let doubled = g.mul_num(p, 2.0);
-    backward(doubled);
+    backward(doubled, g.len());
     assert p.grad == 2.0;
 
     g.rewind(n_params);
