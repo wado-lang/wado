@@ -1,13 +1,13 @@
 //! microgpt — train a GPT and sample from it, in pure Wado.
 //!
-//! A port of Andrej Karpathy's dependency-free Python microgpt,
-//! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>,
+//! A port of Andrej Karpathy's dependency-free Python microgpt.
 //! Copyright (c) Andrej Karpathy, MIT License.
+//! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
 //!
 //!     wado run example/microgpt.wado [num_steps]
 //!
-//! The training set is `input.txt` in the working directory, one document per
-//! line; without it the names in this file's `__DATA__` section are used.
+//! Training reads `input.txt` from the working directory, one document per
+//! line. Without it, the names in this file's `__DATA__` section are used.
 
 use { args, print, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use { TreeMap, TreeSet } from "core:collections";
@@ -21,6 +21,7 @@ global N_EMBD: i32 = 16;
 global BLOCK_SIZE: i32 = 16;
 global N_HEAD: i32 = 4;
 global HEAD_DIM: i32 = N_EMBD / N_HEAD;
+global ATTN_SCALE: f64 = 1.0 / f64::sqrt(HEAD_DIM as f64);
 global INIT_STD: f64 = 0.08;
 
 global NUM_STEPS: i32 = 1000;
@@ -44,15 +45,16 @@ impl Rng {
     }
 
     fn next_u64(&mut self) -> u64 {
-        self.state = self.state + 0x9E3779B97F4A7C15 as u64;
+        self.state = self.state + 0x9E3779B97F4A7C15;
         let mut z = self.state;
-        z = (z ^ z >> 30 as u64) * 0xBF58476D1CE4E5B9 as u64;
-        z = (z ^ z >> 27 as u64) * 0x94D049BB133111EB as u64;
-        return z ^ z >> 31 as u64;
+        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
+        z = (z ^ z >> 27) * 0x94D049BB133111EB;
+        return z ^ z >> 31;
     }
 
+    // 53 bits, the mantissa of an f64, scaled into [0, 1).
     fn next_f64(&mut self) -> f64 {
-        return (self.next_u64() >> 11 as u64) as f64 / 9007199254740992.0;
+        return (self.next_u64() >> 11) as f64 / 9007199254740992.0;
     }
 
     fn below(&mut self, n: i32) -> i32 {
@@ -97,9 +99,8 @@ impl Tape {
     }
 
     fn node(&mut self, value: f64, a: i32, da: f64, b: i32, db: f64) -> i32 {
-        let id = self.data.len();
-        assert a < id;
-        assert b < id;
+        let id = self.len();
+        assert a < id && b < id;
         self.data.push(value);
         self.grad.push(0.0);
         self.lhs.push(a);
@@ -201,10 +202,7 @@ impl Tokenizer {
                 seen.insert(c);
             }
         }
-        let mut uchars: List<char> = [];
-        for let c of seen.iter_value() {
-            uchars.push(c);
-        }
+        let mut uchars: List<char> = seen.iter_value().collect();
         uchars.sort();
 
         let mut ids = TreeMap::<char, i32>::new();
@@ -241,8 +239,8 @@ impl Matrix {
         return Matrix { rows, cols, ids };
     }
 
-    fn row(&self, row: i32) -> List<i32> {
-        let base = row * self.cols;
+    fn row(&self, index: i32) -> List<i32> {
+        let base = index * self.cols;
         let mut out: List<i32> = List::with_capacity(self.cols);
         for let mut i = 0; i < self.cols; i += 1 {
             out.push(self.ids[base + i]);
@@ -308,17 +306,30 @@ impl Cache {
     }
 }
 
+fn dot(t: &mut Tape, a: &List<i32>, a_base: i32, b: &List<i32>, b_base: i32, n: i32) -> i32 {
+    assert n > 0;
+    let mut acc = t.mul(a[a_base], b[b_base]);
+    for let mut i = 1; i < n; i += 1 {
+        let term = t.mul(a[a_base + i], b[b_base + i]);
+        acc = t.add(acc, term);
+    }
+    return acc;
+}
+
+fn sum(t: &mut Tape, xs: &List<i32>) -> i32 {
+    assert !xs.is_empty();
+    let mut acc = xs[0];
+    for let mut i = 1; i < xs.len(); i += 1 {
+        acc = t.add(acc, xs[i]);
+    }
+    return acc;
+}
+
 fn linear(t: &mut Tape, x: &List<i32>, w: &Matrix) -> List<i32> {
     assert w.cols == x.len();
     let mut out: List<i32> = List::with_capacity(w.rows);
     for let mut o = 0; o < w.rows; o += 1 {
-        let base = o * w.cols;
-        let mut acc = t.mul(w.ids[base], x[0]);
-        for let mut i = 1; i < w.cols; i += 1 {
-            let p = t.mul(w.ids[base + i], x[i]);
-            acc = t.add(acc, p);
-        }
-        out.push(acc);
+        out.push(dot(t, &w.ids, o * w.cols, x, 0, w.cols));
     }
     return out;
 }
@@ -338,10 +349,7 @@ fn softmax(t: &mut Tape, logits: &List<i32>) -> List<i32> {
         exps.push(t.exp(shifted));
     }
 
-    let mut total = exps[0];
-    for let mut i = 1; i < exps.len(); i += 1 {
-        total = t.add(total, exps[i]);
-    }
+    let total = sum(t, &exps);
     let inv_total = t.pow_scalar(total, -1.0);
 
     let mut out: List<i32> = List::with_capacity(exps.len());
@@ -352,11 +360,7 @@ fn softmax(t: &mut Tape, logits: &List<i32>) -> List<i32> {
 }
 
 fn rmsnorm(t: &mut Tape, x: &List<i32>) -> List<i32> {
-    let mut sum_sq = t.mul(x[0], x[0]);
-    for let mut i = 1; i < x.len(); i += 1 {
-        let sq = t.mul(x[i], x[i]);
-        sum_sq = t.add(sum_sq, sq);
-    }
+    let sum_sq = dot(t, x, 0, x, 0, x.len());
     let mean_sq = t.mul_scalar(sum_sq, 1.0 / x.len() as f64);
     let shifted = t.add_scalar(mean_sq, RMSNORM_EPS);
     let scale = t.pow_scalar(shifted, -0.5);
@@ -378,20 +382,14 @@ fn add_vec(t: &mut Tape, a: &List<i32>, b: &List<i32>) -> List<i32> {
 }
 
 fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32) -> List<i32> {
-    let inv_scale = 1.0 / f64::sqrt(HEAD_DIM as f64);
     let mut out: List<i32> = List::with_capacity(N_EMBD);
     for let h of 0..<N_HEAD {
         let hs = h * HEAD_DIM;
 
         let mut logits: List<i32> = List::with_capacity(pos_id + 1);
         for let p of 0..=pos_id {
-            let base = Cache::offset(p, layer) + hs;
-            let mut dot = t.mul(q[hs], cache.keys[base]);
-            for let mut j = 1; j < HEAD_DIM; j += 1 {
-                let term = t.mul(q[hs + j], cache.keys[base + j]);
-                dot = t.add(dot, term);
-            }
-            logits.push(t.mul_scalar(dot, inv_scale));
+            let score = dot(t, q, hs, &cache.keys, Cache::offset(p, layer) + hs, HEAD_DIM);
+            logits.push(t.mul_scalar(score, ATTN_SCALE));
         }
         let weights = softmax(t, &logits);
 
@@ -409,14 +407,14 @@ fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32
 
 // GPT-2, blessed among the GPTs, with minor differences: layernorm -> rmsnorm,
 // no biases, GeLU -> ReLU.
-fn gpt(t: &mut Tape, m: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32) -> List<i32> {
-    let tok_emb = m.wte.row(token_id);
-    let pos_emb = m.wpe.row(pos_id);
+fn gpt(t: &mut Tape, model: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32) -> List<i32> {
+    let tok_emb = model.wte.row(token_id);
+    let pos_emb = model.wpe.row(pos_id);
     let mut x = add_vec(t, &tok_emb, &pos_emb);
     x = rmsnorm(t, &x);
 
     for let li of 0..<N_LAYER {
-        let layer = &m.layers[li];
+        let layer = &model.layers[li];
 
         let attn_residual = x;
         x = rmsnorm(t, &x);
@@ -439,21 +437,21 @@ fn gpt(t: &mut Tape, m: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32) -> 
         x = add_vec(t, &x, &mlp_residual);
     }
 
-    return linear(t, &x, &m.lm_head);
+    return linear(t, &x, &model.lm_head);
 }
 
-// Forward a whole document; the returned node is its mean loss.
-fn forward_loss(t: &mut Tape, m: &Gpt, tokens: &List<i32>) -> i32 {
+// The returned node is the document's mean loss.
+fn forward_loss(t: &mut Tape, model: &Gpt, tokens: &List<i32>) -> i32 {
     let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
     let mut cache = Cache::new();
-    let mut total = -1;
+    let mut losses: List<i32> = List::with_capacity(n);
     for let pos_id of 0..<n {
-        let logits = gpt(t, m, &mut cache, tokens[pos_id], pos_id);
+        let logits = gpt(t, model, &mut cache, tokens[pos_id], pos_id);
         let probs = softmax(t, &logits);
         let log_prob = t.log(probs[tokens[pos_id + 1]]);
-        let loss = t.mul_scalar(log_prob, -1.0);
-        total = if total < 0 { loss } else { t.add(total, loss) };
+        losses.push(t.mul_scalar(log_prob, -1.0));
     }
+    let total = sum(t, &losses);
     return t.mul_scalar(total, 1.0 / n as f64);
 }
 
@@ -486,12 +484,12 @@ impl Adam {
     }
 }
 
-fn train(t: &mut Tape, m: &Gpt, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
+fn train(t: &mut Tape, model: &Gpt, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
     let n_params = t.len();
     let mut adam = Adam::new(n_params);
     for let step of 0..<num_steps {
         let tokens = tok.encode(&docs[step % docs.len()]);
-        let loss = forward_loss(t, m, &tokens);
+        let loss = forward_loss(t, model, &tokens);
         t.backward(loss);
 
         let loss_value = t.data[loss];
@@ -518,13 +516,13 @@ fn sample_token(rng: &mut Rng, probs: &List<f64>) -> i32 {
     return probs.len() - 1;
 }
 
-fn generate(t: &mut Tape, m: &Gpt, tok: &Tokenizer, rng: &mut Rng) -> String {
+fn generate(t: &mut Tape, model: &Gpt, tok: &Tokenizer, rng: &mut Rng) -> String {
     let n_params = t.len();
     let mut cache = Cache::new();
     let mut token_id = tok.bos;
     let mut sample = String::with_capacity(BLOCK_SIZE);
     for let pos_id of 0..<BLOCK_SIZE {
-        let logits = gpt(t, m, &mut cache, token_id, pos_id);
+        let logits = gpt(t, model, &mut cache, token_id, pos_id);
         let mut scaled: List<i32> = List::with_capacity(logits.len());
         for let mut i = 0; i < logits.len(); i += 1 {
             scaled.push(t.mul_scalar(logits[i], 1.0 / TEMPERATURE));
@@ -694,20 +692,13 @@ test "training drives the loss down" {
     let model = Gpt::new(&mut tape, &mut rng, tok.vocab_size);
 
     let n_params = tape.len();
-    let mut adam = Adam::new(n_params);
-    let first_tokens = tok.encode(&docs[0]);
-    let start = tape.data[forward_loss(&mut tape, &model, &first_tokens)];
+    let tokens = tok.encode(&docs[0]);
+    let start = tape.data[forward_loss(&mut tape, &model, &tokens)];
     tape.rewind(n_params);
 
-    for let step of 0..<40 {
-        let tokens = tok.encode(&docs[step % docs.len()]);
-        let loss = forward_loss(&mut tape, &model, &tokens);
-        tape.backward(loss);
-        adam.step(&mut tape, LEARNING_RATE, step);
-        tape.rewind(n_params);
-    }
+    train(&mut tape, &model, &tok, &docs, 40);
 
-    let end = tape.data[forward_loss(&mut tape, &model, &first_tokens)];
+    let end = tape.data[forward_loss(&mut tape, &model, &tokens)];
     assert end < start;
 }
 
