@@ -206,8 +206,8 @@ impl Tokenizer {
         uchars.sort();
 
         let mut ids = TreeMap::<char, i32>::new();
-        for let mut i = 0; i < uchars.len(); i += 1 {
-            ids[uchars[i]] = i;
+        for let [i, c] of uchars.into_iter().enumerate() {
+            ids[c] = i;
         }
         let bos = uchars.len();
         return Tokenizer { uchars, ids, bos, vocab_size: bos + 1 };
@@ -232,20 +232,13 @@ struct Matrix {
 
 impl Matrix {
     fn new(t: &mut Tape, rng: &mut Rng, rows: i32, cols: i32) -> Matrix {
-        let mut ids: List<i32> = List::with_capacity(rows * cols);
-        for let _ of 0..<rows * cols {
-            ids.push(t.leaf(rng.gauss(INIT_STD)));
-        }
+        let ids: List<i32> = (0..<rows * cols).into_iter().map(|_| t.leaf(rng.gauss(INIT_STD))).collect();
         return Matrix { rows, cols, ids };
     }
 
     fn row(&self, index: i32) -> List<i32> {
         let base = index * self.cols;
-        let mut out: List<i32> = List::with_capacity(self.cols);
-        for let mut i = 0; i < self.cols; i += 1 {
-            out.push(self.ids[base + i]);
-        }
-        return out;
+        return self.ids[base..<base + self.cols].into_iter().collect();
     }
 }
 
@@ -306,79 +299,50 @@ impl Cache {
     }
 }
 
-fn dot(t: &mut Tape, a: &List<i32>, a_base: i32, b: &List<i32>, b_base: i32, n: i32) -> i32 {
-    assert n > 0;
-    let mut acc = t.mul(a[a_base], b[b_base]);
-    for let mut i = 1; i < n; i += 1 {
-        let term = t.mul(a[a_base + i], b[b_base + i]);
+// The innermost loop of the whole program, so it stays an index walk: an
+// iterator chain here costs about a fifth of the run time.
+fn dot(t: &mut Tape, a: Slice<i32>, b: Slice<i32>) -> i32 {
+    assert a.len() == b.len() && !a.is_empty();
+    let mut acc = t.mul(a[0], b[0]);
+    for let mut i = 1; i < a.len(); i += 1 {
+        let term = t.mul(a[i], b[i]);
         acc = t.add(acc, term);
     }
     return acc;
 }
 
-fn sum(t: &mut Tape, xs: &List<i32>) -> i32 {
-    assert !xs.is_empty();
-    let mut acc = xs[0];
-    for let mut i = 1; i < xs.len(); i += 1 {
-        acc = t.add(acc, xs[i]);
-    }
-    return acc;
+fn sum(t: &mut Tape, xs: Slice<i32>) -> i32 {
+    return xs.into_iter().reduce(|x, y| t.add(x, y)).expect("sum of no nodes");
 }
 
 fn linear(t: &mut Tape, x: &List<i32>, w: &Matrix) -> List<i32> {
     assert w.cols == x.len();
-    let mut out: List<i32> = List::with_capacity(w.rows);
-    for let mut o = 0; o < w.rows; o += 1 {
-        out.push(dot(t, &w.ids, o * w.cols, x, 0, w.cols));
-    }
-    return out;
+    return (0..<w.rows).into_iter().map(|o| dot(t, w.ids[o * w.cols..<(o + 1) * w.cols], x.as_slice())).collect();
 }
 
 fn softmax(t: &mut Tape, logits: &List<i32>) -> List<i32> {
-    let mut max_val = t.data[logits[0]];
-    for let mut i = 1; i < logits.len(); i += 1 {
-        let val = t.data[logits[i]];
-        if val > max_val {
-            max_val = val;
-        }
-    }
+    let max_val = logits.into_iter().fold(f64::NEG_INFINITY, |acc, id| f64::max(acc, t.data[*id]));
+    let exps: List<i32> = logits.into_iter().map(|id| {
+        let shifted = t.add_scalar(*id, -max_val);
+        return t.exp(shifted);
+    }).collect();
 
-    let mut exps: List<i32> = List::with_capacity(logits.len());
-    for let mut i = 0; i < logits.len(); i += 1 {
-        let shifted = t.add_scalar(logits[i], -max_val);
-        exps.push(t.exp(shifted));
-    }
-
-    let total = sum(t, &exps);
+    let total = sum(t, exps.as_slice());
     let inv_total = t.pow_scalar(total, -1.0);
-
-    let mut out: List<i32> = List::with_capacity(exps.len());
-    for let mut i = 0; i < exps.len(); i += 1 {
-        out.push(t.mul(exps[i], inv_total));
-    }
-    return out;
+    return exps.into_iter().map(|e| t.mul(e, inv_total)).collect();
 }
 
 fn rmsnorm(t: &mut Tape, x: &List<i32>) -> List<i32> {
-    let sum_sq = dot(t, x, 0, x, 0, x.len());
+    let sum_sq = dot(t, x.as_slice(), x.as_slice());
     let mean_sq = t.mul_scalar(sum_sq, 1.0 / x.len() as f64);
     let shifted = t.add_scalar(mean_sq, RMSNORM_EPS);
     let scale = t.pow_scalar(shifted, -0.5);
-
-    let mut out: List<i32> = List::with_capacity(x.len());
-    for let mut i = 0; i < x.len(); i += 1 {
-        out.push(t.mul(x[i], scale));
-    }
-    return out;
+    return x.into_iter().map(|xi| t.mul(*xi, scale)).collect();
 }
 
 fn add_vec(t: &mut Tape, a: &List<i32>, b: &List<i32>) -> List<i32> {
     assert a.len() == b.len();
-    let mut out: List<i32> = List::with_capacity(a.len());
-    for let mut i = 0; i < a.len(); i += 1 {
-        out.push(t.add(a[i], b[i]));
-    }
-    return out;
+    return a.into_iter().zip(b.into_iter()).map(|pair| t.add(*pair.0, *pair.1)).collect();
 }
 
 fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32) -> List<i32> {
@@ -386,20 +350,19 @@ fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32
     for let h of 0..<N_HEAD {
         let hs = h * HEAD_DIM;
 
-        let mut logits: List<i32> = List::with_capacity(pos_id + 1);
-        for let p of 0..=pos_id {
-            let score = dot(t, q, hs, &cache.keys, Cache::offset(p, layer) + hs, HEAD_DIM);
-            logits.push(t.mul_scalar(score, ATTN_SCALE));
-        }
+        let logits: List<i32> = (0..=pos_id).into_iter().map(|p| {
+            let head = Cache::offset(p, layer) + hs;
+            let score = dot(t, q[hs..<hs + HEAD_DIM], cache.keys[head..<head + HEAD_DIM]);
+            return t.mul_scalar(score, ATTN_SCALE);
+        }).collect();
         let weights = softmax(t, &logits);
 
         for let mut j = 0; j < HEAD_DIM; j += 1 {
-            let mut acc = t.mul(weights[0], cache.values[Cache::offset(0, layer) + hs + j]);
-            for let mut p = 1; p <= pos_id; p += 1 {
-                let term = t.mul(weights[p], cache.values[Cache::offset(p, layer) + hs + j]);
-                acc = t.add(acc, term);
-            }
-            out.push(acc);
+            let blend = (0..=pos_id).into_iter().map(|p| {
+                let value = cache.values[Cache::offset(p, layer) + hs + j];
+                return t.mul(weights[p], value);
+            }).reduce(|x, y| t.add(x, y)).expect("attention over no positions");
+            out.push(blend);
         }
     }
     return out;
@@ -430,9 +393,7 @@ fn gpt(t: &mut Tape, model: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32)
         let mlp_residual = x;
         x = rmsnorm(t, &x);
         x = linear(t, &x, &layer.mlp_fc1);
-        for let mut i = 0; i < x.len(); i += 1 {
-            x[i] = t.relu(x[i]);
-        }
+        x = x.into_iter().map(|id| t.relu(id)).collect();
         x = linear(t, &x, &layer.mlp_fc2);
         x = add_vec(t, &x, &mlp_residual);
     }
@@ -451,7 +412,7 @@ fn forward_loss(t: &mut Tape, model: &Gpt, tokens: &List<i32>) -> i32 {
         let log_prob = t.log(probs[tokens[pos_id + 1]]);
         losses.push(t.mul_scalar(log_prob, -1.0));
     }
-    let total = sum(t, &losses);
+    let total = sum(t, losses.as_slice());
     return t.mul_scalar(total, 1.0 / n as f64);
 }
 
@@ -502,10 +463,7 @@ fn train(t: &mut Tape, model: &Gpt, tok: &Tokenizer, docs: &List<String>, num_st
 }
 
 fn sample_token(rng: &mut Rng, probs: &List<f64>) -> i32 {
-    let mut total = 0.0;
-    for let p of probs {
-        total += *p;
-    }
+    let total = probs.as_slice().into_iter().sum().unwrap_or(0.0);
     let mut r = rng.next_f64() * total;
     for let mut i = 0; i < probs.len(); i += 1 {
         r -= probs[i];
@@ -523,15 +481,9 @@ fn generate(t: &mut Tape, model: &Gpt, tok: &Tokenizer, rng: &mut Rng) -> String
     let mut sample = String::with_capacity(BLOCK_SIZE);
     for let pos_id of 0..<BLOCK_SIZE {
         let logits = gpt(t, model, &mut cache, token_id, pos_id);
-        let mut scaled: List<i32> = List::with_capacity(logits.len());
-        for let mut i = 0; i < logits.len(); i += 1 {
-            scaled.push(t.mul_scalar(logits[i], 1.0 / TEMPERATURE));
-        }
+        let scaled: List<i32> = logits.into_iter().map(|id| t.mul_scalar(id, 1.0 / TEMPERATURE)).collect();
         let probs = softmax(t, &scaled);
-        let mut weights: List<f64> = List::with_capacity(probs.len());
-        for let mut i = 0; i < probs.len(); i += 1 {
-            weights.push(t.data[probs[i]]);
-        }
+        let weights: List<f64> = probs.into_iter().map(|id| t.data[id]).collect();
         token_id = sample_token(rng, &weights);
         if token_id == tok.bos {
             break;
@@ -550,14 +502,7 @@ fn load_docs() -> List<String> with (Stderr, Preopens) {
             #data;
         },
     };
-    let mut docs: List<String> = [];
-    for let line of text.lines() {
-        let doc = line.trim();
-        if !doc.is_empty() {
-            docs.push(doc);
-        }
-    }
-    return docs;
+    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
 }
 
 fn requested_steps() -> i32 with (Stderr, Environment) {
