@@ -341,12 +341,13 @@ impl Walk<'_, '_> {
     }
 
     fn mark_func(&mut self, index: u32) {
-        if !self.live.funcs.insert(index) {
+        // A stub already sits in `live.funcs`, so that set alone cannot say
+        // whether the body has been walked. Something else reached it after
+        // all, and the body the stub would have taken away is kept.
+        let was_stub = self.live.stub.remove(&index);
+        if !self.live.funcs.insert(index) && !was_stub {
             return;
         }
-        // Something else reached it after all, so the body a stub would have
-        // taken away is walked and kept.
-        self.live.stub.remove(&index);
         self.queue.push(Item::Func(index));
         for range in self.data_refs.get(&index).copied().unwrap_or_default() {
             self.mark_data_range(*range);

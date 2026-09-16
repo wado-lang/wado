@@ -578,23 +578,33 @@ fn a_stubbed_export_reaches_nothing() {
     );
 }
 
-/// The two predicates disagree where one export traps and another calls the
-/// same function. A reached body wins: it is still a body something calls.
+/// `$deep` is reachable through `$lifted` alone, so it survives only if the
+/// call from `$caller` un-stubs `$lifted` and its body is walked.
+const CALLED_STUB: &str = r#"
+    (module
+      (memory 1)
+      (func $deep (result i32) (i32.const 9))
+      (func $lifted (export "lifted") (param i32) (result i64) (i64.extend_i32_u (call $deep)))
+      (func $caller (export "caller") (result i64) (call $lifted (i32.const 1))))
+"#;
+
+/// The two predicates disagree where one export is stubbed and another calls
+/// it. A reached body wins: it is still a body something calls.
 #[test]
 fn a_function_a_kept_export_reaches_is_kept_whole() {
     let pruned = embed_checked(
-        LIFTED,
+        CALLED_STUB,
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|_| true,
-            stub_export: &|name| name == "used",
+            stub_export: &|name| name == "lifted",
             strip_custom_sections: false,
         },
     );
     assert_eq!(
         function_count(&pruned),
         3,
-        "`lifted` still calls `$only_here`"
+        "`$lifted` kept its body, so `$deep` is still reached"
     );
 }
 
@@ -636,7 +646,7 @@ fn indirect(map: &str) -> String {
 
 #[test]
 fn a_pointer_in_live_data_keeps_what_it_points_at() {
-    let pruned = prune(&indirect("deref 0:0+4\n@0:0 0:8+4\n"), &["deref"]);
+    let pruned = prune(&indirect("deref 0:0+4\n@0:0 @0:8+4\n"), &["deref"]);
     assert_eq!(
         data_segments(&pruned),
         [(Some(8), b"\x10\x00\x00\x00BBBBCCCC".to_vec())],
@@ -646,7 +656,7 @@ fn a_pointer_in_live_data_keeps_what_it_points_at() {
 
 #[test]
 fn a_pointer_in_pruned_data_keeps_nothing() {
-    let pruned = prune(&indirect("deref 0:4+4\n@0:0 0:8+4\n"), &["deref"]);
+    let pruned = prune(&indirect("deref 0:4+4\n@0:0 @0:8+4\n"), &["deref"]);
     assert_eq!(
         data_segments(&pruned),
         [(Some(12), b"BBBB".to_vec())],
@@ -674,6 +684,29 @@ fn a_function_pointer_in_live_data_keeps_the_function() {
             .iter()
             .any(|(_, name)| name == "target"),
         "a function only a live pointer names must survive"
+    );
+}
+
+/// A lift thunk's symbol is its WIT name, colons and all, so what tells a
+/// function target from a data one cannot be the presence of a `:`.
+#[test]
+fn a_pointer_reaches_a_function_whose_name_carries_a_colon() {
+    let source = r#"
+        (module
+          (memory 1)
+          (table 1 funcref)
+          (data (i32.const 8) "\00\00\00\00")
+          (elem (i32.const 0) $wado:icu/props#set)
+          (func $wado:icu/props#set (result i32) (i32.const 7))
+          (func $call (export "call") (result i32)
+            (call_indirect (result i32) (i32.load (i32.const 8))))
+          (@custom "wado.dataref" (after data) "call 0:0+4\n@0:0 wado:icu/props#set\n"))
+    "#;
+    assert!(
+        function_names(&prune(source, &["call"]))
+            .iter()
+            .any(|(_, name)| name == "wado:icu/props#set"),
+        "the target resolved despite the colons in its name"
     );
 }
 

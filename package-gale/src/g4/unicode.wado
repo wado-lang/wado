@@ -199,7 +199,8 @@ fn emoji_presentation_ranges(value: &String) -> Option<List<CharRange>> {
 pub fn unsupported_property_message(name: &String) -> String {
     let key = normalize_property_name(name);
     let head = key.split("=").next().unwrap();
-    if head == "block" || head == "blk" || key.starts_with("in") {
+    let in_block = head.starts_with("in") && !IN_PREFIXED_PROPERTIES.contains(&head);
+    if head == "block" || head == "blk" || in_block {
         return `Gale does not answer the Block property ("${*name}"): ICU ships no Block data. Name a script (\\p{Greek}) or the code point range itself.`;
     }
     if head == "decompositiontype" || head == "dt" {
@@ -210,6 +211,12 @@ pub fn unsupported_property_message(name: &String) -> String {
     }
     return `unsupported Unicode property "${*name}" in a character set`;
 }
+
+/// Property names, folded, that begin with the `In` a Block query begins with.
+/// Without them `\p{Indic_Syllabic_Category}` reads as a Block query.
+global IN_PREFIXED_PROPERTIES: List<String> = [
+    "indicsyllabiccategory", "insc", "indicconjunctbreak", "incb", "indicpositionalcategory", "inpc",
+];
 
 /// The UCD's contributory properties, folded, in long and short form. ICU omits
 /// them; a general category spelling `Other_*` (`Lo`, `No`) is answered as a

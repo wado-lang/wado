@@ -188,7 +188,7 @@ impl DataRefs {
         }
         for (site, pointer) in sites.iter().zip(&self.pointers) {
             let target = match &pointer.target {
-                Target::Data(r) => format!("{}:{}+{}", r.segment, r.offset, r.size),
+                Target::Data(r) => format!("@{}:{}+{}", r.segment, r.offset, r.size),
                 Target::Func(name) => name.clone(),
             };
             writeln!(text, "{site:width$} {target}").expect("writing to a String cannot fail");
@@ -207,13 +207,14 @@ fn parse_range(field: &str) -> Option<DataRange> {
     )
 }
 
-/// A target spelling a range is one; anything else names a function. A `:` is
-/// what tells them apart, and no symbol name carries one.
+/// `@<segment>:<offset>+<size>` is a range, and anything else names a function.
+/// The `@` is what tells them apart: a WIT-derived symbol carries `:`, so the
+/// shape of the field cannot.
 fn parse_target(field: &str) -> Option<Target> {
-    if field.contains(':') {
-        return parse_range(field).map(Target::Data);
+    match field.strip_prefix('@') {
+        Some(range) => parse_range(range).map(Target::Data),
+        None => Some(Target::Func(field.to_string())),
     }
-    Some(Target::Func(field.to_string()))
 }
 
 /// Sort-then-merge the ranges of each segment, absorbing gaps up to `gap`: a

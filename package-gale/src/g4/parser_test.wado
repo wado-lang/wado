@@ -468,6 +468,11 @@ test "a property Gale deliberately does not answer says so" {
     assert dt.unwrap_err().message.contains("Decomposition_Type");
     let contributory = parse("grammar Test;\nX : [\\p{Other_ID_Start}] ;");
     assert contributory.unwrap_err().message.contains("contributory property");
+    // A property of its own beginning with `In`, which the Block reading would
+    // otherwise swallow. ICU answers its two siblings, so only this one reaches
+    // the message at all.
+    let indic = parse("grammar Test;\nX : [\\p{Indic_Positional_Category=Top}] ;");
+    assert !indic.unwrap_err().message.contains("Block");
 }
 
 test "a script property complements like a category" {
