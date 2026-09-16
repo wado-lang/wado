@@ -3,7 +3,7 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::stores::StoredParams;
+use super::value_copy::stores::{FunctorRows, StoredParams};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -22,6 +22,7 @@ pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
     escaping: &StoredParams,
+    functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
     let type_table = flat.type_table.clone();
@@ -45,6 +46,7 @@ pub fn insert_write_backs(
         let mut pass = WriteBack {
             type_table: &type_table,
             escaping,
+            functor_rows,
             replaced: &replaced,
             replaced_locals,
             local_count,
@@ -85,6 +87,10 @@ pub fn insert_write_backs(
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
     escaping: &'a FuncKeyMap<IndexSet<u32>>,
+    /// What a call through a function value of each functor type keeps. Read
+    /// where no callee name is available, so an indirect call is refused on the
+    /// same ground a direct one is rather than on a different reading.
+    functor_rows: &'a FunctorRows,
     /// Positions a callee replaces outright — what a lost write-back costs.
     replaced: &'a WholeValueWrites,
     /// Local slots this body replaces through, so a binding used only to mutate
@@ -221,6 +227,7 @@ impl WriteBack<'_> {
         let mut inner = WriteBack {
             type_table: self.type_table,
             escaping: self.escaping,
+            functor_rows: self.functor_rows,
             replaced: self.replaced,
             // A closure body's slots are its own, so what it replaces through
             // is its own question too.
@@ -426,13 +433,13 @@ impl WriteBack<'_> {
                     *has_receiver,
                     args.iter_mut().map(|a| &mut a.expr).collect(),
                 ),
-                TirExprKind::IndirectCall { args, .. } => {
-                    // Nothing here names the body that will run, and reading
-                    // that as "keeps everything" refuses a write-back no
-                    // program can make acceptable — WEP 2026-01-12, "An
-                    // inferred row for the functor type". What it replaces is
-                    // unknown the other way.
-                    let stores = IndexSet::default();
+                TirExprKind::IndirectCall { callee, args } => {
+                    // Nothing here names the body that will run, so what it
+                    // keeps is the join over every function value of the
+                    // callee's type — the same reading the copy analysis takes,
+                    // so the two no longer disagree. What it replaces is still
+                    // unknown, and over-approximating that only costs a store.
+                    let stores = self.functor_rows.retained(callee.type_id, args.len());
                     let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
                     (
                         "a function value".to_string(),

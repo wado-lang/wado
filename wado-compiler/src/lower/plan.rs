@@ -71,7 +71,13 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // before boxing, while `&mut T` still names its referent.
     let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
     let retained = value_copy::stores::compute_stored_params(flat, &pre_boxing_calls, &builtins);
-    mut_ref_writeback::insert_write_backs(flat, &pre_boxing_calls, &retained, errors)?;
+    mut_ref_writeback::insert_write_backs(
+        flat,
+        &pre_boxing_calls,
+        &retained.stored_params,
+        &retained.rows,
+        errors,
+    )?;
     // Confinement and receiver-ref capture run before boxing collapses `&mut T`
     // / `&T` onto `Box<T>`; both results key on parameter position, unchanged by
     // boxing.

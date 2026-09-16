@@ -1,0 +1,40 @@
+// The same refusal through a function value. Nothing at the call site names the
+// body that will run, so the callee's row answers instead: every closure and
+// function reference of this functor type is joined, and this one keeps its
+// parameter. Reading an indirect call as "keeps nothing" would have emitted a
+// write-back onto a borrow that outlives the call.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+global mut KEPT: Option<Keep> = null;
+
+fn stash(p: &mut Payload) {
+    KEPT = Option::Some(Keep { held: p });
+}
+
+fn hand_over_a_field(b: &mut Bag, f: fn(&mut Payload)) {
+    f(&mut b.item);
+}
+
+test "unreachable" {
+    let mut b = Bag { item: Payload::Empty };
+    hand_over_a_field(&mut b, stash);
+    assert b.item matches { Empty };
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "stores it, so it outlives the call"
+}

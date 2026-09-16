@@ -8,7 +8,7 @@ use crate::ast::{
     ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
     Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
     ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InterfaceDecl, Item, LabeledBlockExpr,
+    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
@@ -465,12 +465,8 @@ impl<'a> Unparser<'a> {
 
     fn unparse_module(&mut self, module: &Module) {
         for attr in module.inner_attributes() {
-            self.output.push_str("#![");
-            self.output.push_str(&attr.name);
-            if !attr.args.is_empty() {
-                self.delimited("(", ")", &attr.args, Unparser::unparse_attr_arg);
-            }
-            self.output.push_str("]\n");
+            unparse_inner_attribute_into(attr, &mut self.output);
+            self.output.push('\n');
             // Anchor `last_source_line` to the inner attr so blank lines
             // between it and the first item are preserved.
             self.last_source_line = attr.span.end_line();
@@ -910,37 +906,8 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    fn unparse_attr_arg(&mut self, arg: &AttrArg) {
-        match arg {
-            AttrArg::Str(s) => self.output.push_str(&quoted(s)),
-            AttrArg::Ident(s) | AttrArg::Number(s) => {
-                self.output.push_str(s);
-            }
-            AttrArg::KeyValue(k, v) => {
-                self.output.push_str(k);
-                self.output.push_str(" = ");
-                self.output.push_str(&quoted(v));
-            }
-            AttrArg::KeyArray(k, vs) => {
-                self.output.push_str(k);
-                self.output.push_str(" = ");
-                self.delimited("[", "]", vs, |s, v| s.output.push_str(&quoted(v)));
-            }
-            AttrArg::KeyIdent(k, v) => {
-                self.output.push_str(k);
-                self.output.push_str(" = ");
-                self.output.push_str(v);
-            }
-        }
-    }
-
     fn unparse_attribute(&mut self, attr: &Attribute) {
-        self.output.push_str("#[");
-        self.output.push_str(&attr.name);
-        if !attr.args.is_empty() {
-            self.delimited("(", ")", &attr.args, Unparser::unparse_attr_arg);
-        }
-        self.output.push(']');
+        unparse_attribute_into(attr, &mut self.output);
     }
 
     fn unparse_struct(&mut self, s: &StructDecl) {
@@ -4118,12 +4085,69 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
     }
 }
 
+/// `#[name(args)]`, the one spelling every reader of an attribute shares.
+pub fn unparse_attribute_into(attr: &Attribute, output: &mut String) {
+    output.push_str("#[");
+    unparse_attr_body_into(&attr.name, &attr.args, output);
+    output.push(']');
+}
+
+/// `#![name(args)]` — the module's own, spelled by the same body.
+pub fn unparse_inner_attribute_into(attr: &InnerAttribute, output: &mut String) {
+    output.push_str("#![");
+    unparse_attr_body_into(&attr.name, &attr.args, output);
+    output.push(']');
+}
+
+fn unparse_attr_body_into(name: &str, args: &[AttrArg], output: &mut String) {
+    output.push_str(name);
+    if args.is_empty() {
+        return;
+    }
+    output.push('(');
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            output.push_str(", ");
+        }
+        unparse_attr_arg_into(arg, output);
+    }
+    output.push(')');
+}
+
+fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
+    match arg {
+        AttrArg::Str(s) => output.push_str(&quoted(s)),
+        AttrArg::Ident(s) | AttrArg::Number(s) => output.push_str(s),
+        AttrArg::KeyValue(k, v) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            output.push_str(&quoted(v));
+        }
+        AttrArg::KeyArray(k, vs) => {
+            output.push_str(k);
+            output.push_str(" = [");
+            for (i, v) in vs.iter().enumerate() {
+                if i > 0 {
+                    output.push_str(", ");
+                }
+                output.push_str(&quoted(v));
+            }
+            output.push(']');
+        }
+        AttrArg::KeyIdent(k, v) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            output.push_str(v);
+        }
+    }
+}
+
 /// Signature-only unparsers for AST declarations.
 ///
-/// These produce a single-line textual signature suitable for hover, completion
-/// detail, document symbols, etc. — without emitting the body, attributes, or
-/// surrounding indentation. They are stateless (no trivia attachment
-/// needed) and match the canonical source syntax of the language.
+/// These produce a textual signature suitable for hover, completion detail,
+/// document symbols, etc. — without emitting the body or surrounding
+/// indentation. They are stateless (no trivia attachment needed) and match the
+/// canonical source syntax of the language.
 pub fn unparse_function_signature(f: &Function) -> String {
     let mut out = String::new();
     unparse_function_signature_into(f, &mut out);
@@ -4131,6 +4155,12 @@ pub fn unparse_function_signature(f: &Function) -> String {
 }
 
 pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
+    // Every attribute, with no allowlist: `#[retain]` and `#[returns]` reach a
+    // reader because attributes do, and a new one needs no change here.
+    for attr in &f.attrs {
+        unparse_attribute_into(attr, output);
+        output.push('\n');
+    }
     output.push_str(function_decl_keyword(f.is_export, f.visibility));
     emit_kw_if_into(f.is_async, "async ", output);
     output.push_str("fn ");

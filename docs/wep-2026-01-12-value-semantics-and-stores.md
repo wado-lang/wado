@@ -89,8 +89,15 @@ A fact is one of three, by where the reference lands:
 Retain is two channels rather than one because a destination the caller can name
 bounds the retention: a reference put into a parameter the caller owns lives as
 long as that parameter, while one that reaches a global is bounded by nothing.
-`into_param` is designed and not yet built, so a reference landing in a
-parameter is read today as reaching somewhere unseen.
+A caller resolves `into_param` against its own argument at that position —
+into a local of its own the reference is carried, not escaped; through one of
+its own reference parameters it is `into_param` again, one level up. So a
+retention that ends in a local stops there instead of propagating out of every
+frame it passes through.
+
+What a caller cannot resolve, it must assume: the published facts name retained
+positions and not where each landed, so a reader outside the fixpoint — the
+last-use walk, the write-back — takes the union of all three channels.
 
 Keeping the channels apart is what makes each precise. An iterator holds a
 reference to what it walks, so folding `into_result` into `escapes` would make
@@ -128,26 +135,39 @@ without the attribute grammar growing a way to group them:
 A bare name is the parameter as a whole, and `elements_of = p` is that
 parameter's elements — the difference a copy between arrays needs, where what
 reaches the destination is what the source holds rather than the source. `into =
-q` names where it lands; without it the destination is unknown, which is the
-conservative reading. Every form names a parameter rather than a position,
-reusing the shape `part_of` already has, and an argument naming no parameter is
-reported. `elements_of` and `into` are accepted and carried but not yet read, so
-a declaration writing them gets the destinationless reading either way.
+q` names where it lands; without it the destination is unknown, so the reference
+takes both unbounded channels, the result being one of the places it could be.
+Every form names a parameter rather than a position, reusing the shape `part_of`
+already has, and an argument naming no parameter is reported.
+
+The two spellings differ at every call. A bare source hands on the reference
+itself, which the argument always carries. `elements_of = p` hands on what the
+referent holds instead: nothing where the element type cannot hold a reference,
+and never the parameter the argument is rooted at, which is a carrier by being
+the reference to the container rather than by anything the container holds.
+Copying between two of a caller's own arrays therefore carries what was put in
+them and not the arrays' own parameters. Where a join meets both spellings of a
+position — a function value of one type minted from two declarations — the
+reference is the wider claim and wins.
 
 Silence is the safe reading for `#[retain]` and not for `#[returns]`: a missing
 `#[returns]` is taken for "allocates", which elides copies and is wrong for a
-declaration that does hand out an argument's storage. Since only
-compiler-owned declarations carry these today, a missing one there is the
-compiler's own bug and is asserted rather than diagnosed.
+declaration that does hand out an argument's storage. A declaration that owes
+one is reported at the declaration, wherever it lives.
 
 Where each is accepted:
 
 | Declaration                                        | `#[retain]` / `#[returns]`   |
 | -------------------------------------------------- | ---------------------------- |
 | `core:builtin`, body-less                          | Yes                          |
-| CM component import, WASI, `.wasm` / `.wat` import | Parsed, not yet read         |
+| CM component import, WASI, `.wasm` / `.wat` import | Yes                          |
 | `trait` / `interface` method requirement           | Error — the impl's body does |
 | Anything with a body                               | Error — the body states it   |
+
+A Component Model import declares no `#[returns]` and owes none: the boundary
+copies ([Component Model Boundaries](#component-model-boundaries)), so its
+result is owned by construction. The answer is the same for every one of them,
+so it is read off the declaration rather than written on each.
 
 A trait method requirement has no body of its own, but every call to it is
 statically dispatched to an impl that has one, and monomorphization resolves
@@ -173,7 +193,10 @@ the compiler may stop doing to the argument:
 - A local passed where the callee retains it or hands it out cannot be moved out
   of, so it is copied; one passed where the callee keeps nothing can be moved.
 - A `&mut` argument is not written back at a call that retains it: the borrow
-  outlives the call, so the call is no place to write it.
+  outlives the call, so the call is no place to write it. Where no place in the
+  body can be written back to, the call is refused — which is why an indirect
+  call must read the same answer as a direct one, or the same program is
+  accepted through a function value and refused by name.
 - A constant is not forwarded into a retained parameter.
 - A call whose result could embed a retained reference is not folded at compile
   time, since compile-time evaluation has no reference values to embed and the
@@ -217,8 +240,7 @@ mechanisms.
 ### The Functor Type Carries No Retention
 
 Retention is a fact about a function, not about its type, so a function type
-says nothing about it and an indirect call has nothing to read. The copy
-analysis therefore assumes an indirect call retains every reference argument.
+says nothing about it and an indirect call has no row on the type to read.
 
 ```wado
 fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
@@ -226,16 +248,20 @@ fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
 }
 ```
 
-`apply` keeps nothing of its own, but what `f` does with `x` is not in `f`'s
-type, so the call through it is read as an escape.
+`apply` keeps nothing of its own, and what `f` does with `x` is not in `f`'s
+type. The answer comes from a source rather than a new analysis: a function
+value of a given type is minted in exactly two places — a reference to a named
+function, and a closure literal — and no function type crosses a Component Model
+boundary, so joining the facts of every such expression of one type bounds every
+call through a value of that type, with no points-to analysis. A functor type
+nothing mints a value at is read conservatively, which keeps "nothing mints
+this" apart from "the fixpoint has not reached it yet".
 
-Recovering precision here needs a source for the fact, not a new analysis. A
-function value of a given type is minted in exactly two places — a reference to
-a named function, and a closure literal — so joining the facts of every such
-expression of one type bounds every call through a value of that type, with no
-points-to analysis. Sourcing it that way keeps retention a derived fact about a
-type rather than part of its identity: two function types differing only in
-retention stay one type, and nothing is checked when one coerces to the other.
+Sourcing it that way keeps retention a derived fact about a type rather than
+part of its identity: two function types differing only in retention stay one
+type, and nothing is checked when one coerces to the other. It is also what lets
+every reader of an indirect call read the same answer — the copy analysis, the
+last-use walk and the write-back — rather than each taking a reading of its own.
 
 ### Component Model Boundaries
 
@@ -273,80 +299,60 @@ written. Wasm GC uses the same word for the same thing.
 In order. Each is named rather than numbered, so a reference to one from the
 code survives the list changing around it.
 
-### Attributes on declarations the compiler does not own
+### A bounded destination the caller can read
 
-Read the attributes of every body-less declaration, not only the compiler's own,
-so that a CM import or a `.wasm` / `.wat` asset import can carry them, and
-surface every attribute a declaration carries in `wado query hover` and `wado
-doc` with no per-attribute allowlist — `#[retain]` and `#[returns]` should reach
-a reader because attributes do.
+The fixpoint resolves `into_param` against its own arguments, so a retention
+that ends in a local stops there. Outside the fixpoint it does not: the published
+facts name retained positions and not where each landed, so the last-use walk and
+the write-back take the union and assume the worst even with the argument list in
+hand.
 
-The obstacle on the reading side is the asymmetry in
-[A Declaration Only Where There Is No Body](#a-declaration-only-where-there-is-no-body):
-a missing `#[returns]` is asserted rather than diagnosed, which is right while
-only compiler-owned code reaches it and wrong for a user-supplied declaration.
-
-Done when that assert is a diagnostic against the declaration everywhere outside
-the compiler's own library with a panic nowhere, a body-less declaration's
-attributes appear in both hover and `wado doc`, and adding an attribute needs no
-change to either.
+Done when a reader outside the fixpoint can ask where a position landed, an
+argument retained into a local the caller owns is pinned only for that local's
+extent rather than for the frame, and a fixture shows the difference.
 
 ### The numbers
 
-Measure what the conservative reading of an indirect call costs, across the
-signatures in the corpus that take a functor with a reference parameter, since
-that number says how much the inferred row below is worth and how much the gap
-under it would leave. Record the effect of the retention redesign on
-`benchmark/` and `wasm-size/`.
+Record the effect of the retention redesign on `benchmark/` and `wasm-size/`.
+The corpus cost of the old conservative reading is known: 666 functor-typed
+parameters carry a reference, and 661 of them are one shape — the
+`entry: fn(&mut Parser)` that every Gale-generated parser's `_run_parse_entry`
+takes — so the reading was paid on the hot path of every generated parser and
+almost nowhere else.
 
-Done when that cost is known and both READMEs carry the new numbers.
-
-### An inferred row for the functor type
-
-Give the functor type's row the inferred source
-[The Functor Type Carries No Retention](#the-functor-type-carries-no-retention)
-describes, joining the facts of every function reference and closure literal of
-one type.
-
-Done when every reader of an indirect call reads that join, a comparator that
-retains neither argument stops pinning them, and the disagreement in the gaps
-below is closed with it.
-
-### A bounded destination
-
-Add `into_param` as the third channel, fed both by `into = q` on a declaration
-and by a body that puts a reference into one of its own parameters, and read
-`elements_of` alongside it so a declaration can also say whether what lands is
-the parameter or its elements.
-
-Recording is the smaller half: what a caller does with a bounded retention is a
-reading the published facts have no shape for today, since they name retained
-positions and not where each landed. A copy between arrays is the case that
-needs both halves — without them the whole source reference is marked escaped at
-every call site, including the many whose elements are scalars that escape
-nothing.
-
-Done when the facts carry retained parameter to destination parameter, the
-fixpoint propagates it, `List::push` reaches it from its body with no attribute,
-a caller reasons about the destination's extent instead of assuming the worst,
-and those array-copy sites stop paying for a retention they do not perform.
+Done when both READMEs carry the new numbers.
 
 ## Known gaps
 
-An indirect call is read per functor type rather than per call site. The
-inferred row above joins every function value of one type into a single answer,
-so one comparator that retains an argument coarsens every other call through the
-same type. Closing it takes knowing which function values reach which call,
-which is a points-to analysis and nothing here is one.
+An indirect call is read per functor type rather than per call site. The row
+joins every function value of one type into a single answer, so one comparator
+that retains an argument coarsens every other call through the same type.
+Closing it takes knowing which function values reach which call, which is a
+points-to analysis and nothing here is one.
 
-An indirect call is not read the same way everywhere. The copy analysis assumes
-it retains every argument; the write-back assumes it retains none, so a
-write-back through a functor is emitted on a body that may keep the reference.
-The frontend used to refuse such a program, and that refusal is gone; the
-conservative reading that would replace it rejects programs nothing in the
-language can now make acceptable, which is worse, and unlike the other readers
-it costs a refusal rather than a copy. The inferred row closes it by giving
-every reader the same join.
+A pass between the two rows could widen one behind the other's back. The row is
+computed twice — once before boxing, for the write-back, and once after closure
+lifting, for the last-use walk — and each reader sees only the tree of its own
+phase. Lifting mints nothing new: it rewrites a reference to a named function
+into a zero-capture closure forwarding to that same function, so the retention
+is the one the reference already carried. A later synthesis pass that minted a
+function value of an existing functor type with wider retention would leave the
+earlier reader's answer too narrow. Closing it takes a check that the minted set
+does not grow between the two, rather than the reading of the one pass there is.
+
+An element claim on a local hands on everything that local carries. There is one
+carrier set per value, so "what was written into this array" and "what a
+reference to it was derived from" are the same set: an `elements_of` source
+rooted at a local that carries a reference for some other reason hands that on
+too. Only a parameter root is told apart, that being the one case where the two
+readings provably differ. Closing it takes separating a reference from what it
+points at in the carrier model.
+
+A retention into a reference-typed local reads as an escape. The bounded channel
+resolves a destination rooted at one of this body's own parameters; a local
+holding a reference derived from a parameter is not one, and the walk cannot say
+it holds only that, since a carrier set records what a local may hold and not
+what it must. Closing it takes a must-alias reading of such a local.
 
 ## References
 

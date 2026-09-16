@@ -116,12 +116,14 @@ pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 
 /// Copies elements between builtin::arrays.
 /// Copies `len` elements from src[src_offset..] to dst[dst_offset..].
+#[retain(elements_of = src, into = dst)]
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 
 /// Allocates a new Array<T> and copies every element of `src` into
 /// it. Used by the synthesized `$value_copy$` functions to deep-copy raw
 /// array fields of value-semantic structs.
 #[returns(owned)]
+#[retain(elements_of = src)]
 pub fn array_clone<T>(src: &Array<T>) -> Array<T>;
 
 /// Allocates a new Array<T> of exactly `len` and copies `src`'s first `len`
@@ -129,6 +131,7 @@ pub fn array_clone<T>(src: &Array<T>) -> Array<T>;
 /// right-size the backing array to `used` — a value copy does not inherit the
 /// source's slack capacity. `len` must be <= `src.len()`.
 #[returns(owned)]
+#[retain(elements_of = src)]
 pub fn array_clone_prefix<T>(src: &Array<T>, len: i32) -> Array<T>;
 
 /// Fills a Array<T> with a value.

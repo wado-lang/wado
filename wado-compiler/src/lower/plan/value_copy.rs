@@ -128,6 +128,10 @@ pub struct ValueCopyPlan {
     /// what a `#[retain(...)]` states. Position 0 is the receiver, so
     /// `receiver_storing_methods` is subsumed by this.
     pub stored_params: stores::StoredParams,
+    /// Per-functor-type reference storage: what a call through a function value
+    /// of that type may keep, joined over every expression that mints one. The
+    /// answer an indirect call reads, where no callee name is available.
+    pub functor_rows: stores::FunctorRows,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis
     /// treats such a call's receiver as a sibling mutation, so a by-value
@@ -184,7 +188,7 @@ pub fn plan(
     );
     let conventions =
         ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtins);
-    let stored_params = stores::compute_stored_params(flat, &call_graph, &builtins);
+    let stores = stores::compute_stored_params(flat, &call_graph, &builtins);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
@@ -219,7 +223,8 @@ pub fn plan(
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         builtins,
-        stored_params,
+        stored_params: stores.stored_params,
+        functor_rows: stores.rows,
         mut_receiver_methods,
         confined_params,
         mut_ref_params,

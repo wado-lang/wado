@@ -12,6 +12,7 @@ use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
+use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
@@ -1426,7 +1427,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
-        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.resolved_return_convention(
+            func,
+            &params,
+            return_type,
+            body.is_some(),
+            self.reify_return_convention_attr(&func.attrs, &params),
+        );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
@@ -1842,7 +1849,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
-        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.resolved_return_convention(
+            func,
+            &params,
+            return_type,
+            body.is_some(),
+            self.reify_return_convention_attr(&func.attrs, &params),
+        );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
@@ -2121,6 +2134,48 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             None
         }
+    }
+
+    /// A body-less declaration reading through a reference and returning
+    /// something that can carry storage must say which: silence reads as
+    /// "allocates", and a declaration that does hand out an argument's storage
+    /// then has its caller's copies elided. Reported here, where the declaration
+    /// has a span, rather than asserted in a later phase that has none.
+    ///
+    /// A Component Model import declares nothing and owes nothing: the boundary
+    /// copies, so its result is owned by construction, and the answer is the
+    /// same for every one of them.
+    fn resolved_return_convention(
+        &self,
+        func: &ast::Function,
+        params: &[tir::TirParam],
+        return_type: tir::TypeId,
+        has_body: bool,
+        declared: Option<tir::ReturnConvention>,
+    ) -> Option<tir::ReturnConvention> {
+        if has_body || declared.is_some() {
+            return declared;
+        }
+        if func.is_cm_import() {
+            return Some(tir::ReturnConvention::Owned);
+        }
+        if !owes_return_convention(params, return_type, &self.tysys.type_table.borrow()) {
+            return None;
+        }
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::ReturnsAttr,
+                message: format!(
+                    "`{}` reads through a reference and returns storage: \
+                     declare #[returns(part_of = p)], or #[returns(owned)] that it allocates",
+                    func.name
+                ),
+                span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
+            },
+        );
+        None
     }
 
     /// The `#[returns(...)]` convention, `None` where the declaration states

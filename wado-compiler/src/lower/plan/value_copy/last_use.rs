@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
-use super::stores::StoredParams;
+use super::stores::{FunctorRows, StoredParams};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -163,6 +163,7 @@ pub fn analyze_ownership(
 
     let mut a = Analyzer {
         stored_params,
+        functor_rows: &plan.functor_rows,
         mut_receiver_methods,
         ref_receiver_methods: &plan.ref_receiver_methods,
         returns_receiver_alias: &plan.returns_receiver_alias,
@@ -755,6 +756,9 @@ struct Analyzer<'a> {
     /// Which parameter positions each callee may persist a reference to
     /// (position 0 is the receiver). Elsewhere a `&`/`&mut` is transient.
     stored_params: &'a StoredParams,
+    /// What a call through a function value of each functor type keeps — the
+    /// answer an indirect call reads, where no callee name is available.
+    functor_rows: &'a FunctorRows,
     mut_receiver_methods: &'a FuncKeySet,
     /// Methods whose receiver is `&self` / `&mut self`: the receiver is a place
     /// they read through, not a value they take.
@@ -910,11 +914,17 @@ impl Analyzer<'_> {
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
     }
 
-    /// An indirect-call argument. Its referent always escapes: retention is no
-    /// part of a function's type, so nothing here names the body that will run.
-    // WEP 2026-01-12, "An inferred row for the functor type", gives that row a
-    // source, and a transient borrow through one becomes provable again.
-    fn walk_indirect_arg(&mut self, arg: &TirExpr, live: &mut IndexSet<u32>, record: bool) {
+    /// An indirect-call argument. Nothing here names the body that will run, so
+    /// the row the callee's type carries says whether this position escapes:
+    /// through a functor nothing mints a retaining value for, a borrow is as
+    /// transient as it is through a named callee that keeps nothing.
+    fn walk_indirect_arg(
+        &mut self,
+        arg: &TirExpr,
+        retained: bool,
+        live: &mut IndexSet<u32>,
+        record: bool,
+    ) {
         if let TirExprKind::Unary {
             op: op @ (TirUnaryOp::Ref | TirUnaryOp::MutRef),
             expr: place,
@@ -924,7 +934,10 @@ impl Analyzer<'_> {
                 self.record_mutation(place, live);
             }
             let referent = self.borrow_read(place, live, record);
-            if record && let Some(r) = referent {
+            if record
+                && retained
+                && let Some(r) = referent
+            {
                 self.mark_escaped(r, top_field_of(place));
             }
         } else {
@@ -1582,8 +1595,10 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = args.iter().collect();
                     self.mark_sibling_mut_aliases(&exprs, None);
                 }
-                for arg in args.iter().rev() {
-                    self.walk_indirect_arg(arg, live, record);
+                let retained = self.functor_rows.retained(callee.type_id, args.len());
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    let keeps = retained.contains(&u32::try_from(pos).unwrap());
+                    self.walk_indirect_arg(arg, keeps, live, record);
                 }
                 self.walk_expr(callee, live, record);
             }
