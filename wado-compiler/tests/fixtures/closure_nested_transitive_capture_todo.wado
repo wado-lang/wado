@@ -1,0 +1,39 @@
+#![TODO]
+// A closure nested in a closure cannot reach a local of the enclosing
+// function: `FunctionContext::new_closure` seeds `outer_locals` from
+// `outer_ctx.scopes` alone, so what the outer closure holds as a capture is
+// invisible to the inner one and resolution reports `unknown identifier`.
+// One level works, and so does an inner capture of the outer closure's own
+// local or parameter — only the transitive case fails.
+
+fn apply(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+fn apply1(f: fn(i32) -> i32, v: i32) -> i32 {
+    return f(v);
+}
+
+fn transitive() -> i32 {
+    let x = 42;
+    return apply(|| {
+        return apply(|| x);
+    });
+}
+
+test "an inner closure reaches the enclosing function's local" {
+    assert transitive() == 42;
+}
+
+test "an inner closure reaches the outer closure's own local" {
+    let n = apply(|| {
+        let y = 41;
+        return apply(|| y + 1);
+    });
+    assert n == 42;
+}
+
+test "an inner closure reaches the outer closure's parameter" {
+    let n = apply1(|p| apply(|| p + 1), 41);
+    assert n == 42;
+}

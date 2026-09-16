@@ -1,23 +1,22 @@
 // Does a SIMD string representation pay for `core:json`?
 //
 // `core:json` spends its string time in `scan_string_run`: walk bytes until the
-// next `"`, `\`, or non-ASCII lead. This measures that one loop three ways over
-// the same bytes, to find the ceiling of a SIMD representation before anyone
-// pays for it:
+// next `"`, `\`, or non-ASCII lead. This runs that loop three ways over the same
+// bytes.
 //
-// - `scalar`     — one `array.get_u` per byte, the shape `core:json` runs today.
-// - `gathered`   — `u8x16::from_string`, which builds each vector from sixteen
-//                  `array.get_u` and sixteen lane inserts. The bridge that
-//                  exists today, because Wasm has no GC-array-to-v128 load.
-// - `packed`     — the same SIMD scan over an `Array<u8x16>`, where one
-//                  `array.get` yields a whole vector. This is what `String`
-//                  would become, and its number is the ceiling of that change.
+// - `scalar` reads one `array.get_u` per byte, the shape `core:json` runs today.
+// - `gathered` goes through `u8x16::from_string`, sixteen `array.get_u` and
+//   sixteen lane inserts per vector. It is the only bridge there is, because
+//   Wasm cannot load a v128 from a GC array.
+// - `packed` scans an `Array<u8x16>`, where one `array.get` yields a vector.
+//   That is what `String` would become, so it is the ceiling of the change.
 //
-// `pack` measures the one-off cost of turning a `String` into that form, which
-// is what a staging buffer would pay if `String` itself stayed as it is.
+// `pack` is the one-off conversion, which a staging buffer would pay to leave
+// `String` alone. `byte read` is what a packed `String` would cost every
+// consumer still reading a byte at a time.
 //
-// Two run lengths, because the run is what SIMD amortizes over: 1024 bytes is
-// the best case, and 12 bytes is what a JSON key or a short value actually is.
+// Two run lengths, because the run is what SIMD amortizes over. 1024 bytes is
+// the best case; 12 bytes is a JSON key or a short value.
 
 use { println, Stdout } from "core:cli";
 use { Benchmark } from "core:benchmark";
@@ -63,7 +62,8 @@ fn scan_gathered(s: &String, from: i32, len: i32) -> i32 {
 
 // `scan_scalar` over an already-packed `Array<u8x16>`: one `array.get` per
 // vector. `from` need not be vector-aligned, so the lanes before it are masked
-// out of the first vector's answer.
+// out of the first vector's answer. Every lane holds a real byte (`pack`
+// asserts it), so a hit is always below `len`.
 fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     let quote = u8x16::splat(b'"' as i32);
     let escape = u8x16::splat(b'\\' as i32);
@@ -73,11 +73,7 @@ fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     while chunk << 4 < len {
         let m = delimiters(&chunks.get_unchecked(chunk), &quote, &escape) >> skip << skip;
         if m != 0 {
-            let hit = (chunk << 4) + i32::ctz(m);
-            if hit >= len {
-                return len;
-            }
-            return hit;
+            return (chunk << 4) + i32::ctz(m);
         }
         skip = 0;
         chunk += 1;
@@ -85,8 +81,8 @@ fn scan_packed(chunks: &Array<u8x16>, from: i32, len: i32) -> i32 {
     return len;
 }
 
-// `s.len()` must be a multiple of 16: no lane of the last vector may be left
-// undefined, and `replace_lane` needs a const index Wado cannot yet write.
+// A partial last vector would need `replace_lane`, whose const index Wado
+// cannot yet write, so the length has to come out even.
 fn pack(s: &String) -> Array<u8x16> {
     let len = s.len();
     assert len % 16 == 0, "pack needs a whole number of vectors";
@@ -107,6 +103,10 @@ fn byte_at_packed(chunks: &Array<u8x16>, i: i32) -> u8 {
     return v.extract_lane(0) as u8;
 }
 
+// These two share a loop, but hoisting it behind a `fn(i32) -> u8` costs the
+// packed arm 18% and the scalar arm nothing, which is the difference being
+// measured. `count_runs` calls its parameter once per run and specializes
+// cleanly; once per byte, it does not.
 fn sum_bytes_scalar(s: &String, len: i32) -> i32 {
     let mut total = 0;
     let mut i = 0;
@@ -129,11 +129,11 @@ fn sum_bytes_packed(chunks: &Array<u8x16>, len: i32) -> i32 {
 
 // One scan per run, as `core:json` does: stop at the quote, step over it, scan
 // the next value. Returns the number of runs, so nothing here is dead.
-fn count_runs_scalar(s: &String, len: i32) -> i32 {
+fn count_runs(len: i32, scan: fn(i32) -> i32) -> i32 {
     let mut runs = 0;
     let mut i = 0;
     while i < len {
-        let end = scan_scalar(s, i, len);
+        let end = scan(i);
         if end >= len {
             break;
         }
@@ -141,38 +141,24 @@ fn count_runs_scalar(s: &String, len: i32) -> i32 {
         i = end + 1;
     }
     return runs;
+}
+
+// These three exist because a closure nested in a closure cannot capture the
+// enclosing function's local, so `bench.run(|| count_runs(len, |from| ...))`
+// does not compile — `closure_nested_transitive_capture_todo`. Named, they keep
+// the inner closure one level deep.
+fn count_runs_scalar(s: &String, len: i32) -> i32 {
+    return count_runs(len, |from| scan_scalar(s, from, len));
 }
 
 fn count_runs_gathered(s: &String, len: i32) -> i32 {
-    let mut runs = 0;
-    let mut i = 0;
-    while i < len {
-        let end = scan_gathered(s, i, len);
-        if end >= len {
-            break;
-        }
-        runs += 1;
-        i = end + 1;
-    }
-    return runs;
+    return count_runs(len, |from| scan_gathered(s, from, len));
 }
 
 fn count_runs_packed(chunks: &Array<u8x16>, len: i32) -> i32 {
-    let mut runs = 0;
-    let mut i = 0;
-    while i < len {
-        let end = scan_packed(chunks, i, len);
-        if end >= len {
-            break;
-        }
-        runs += 1;
-        i = end + 1;
-    }
-    return runs;
+    return count_runs(len, |from| scan_packed(chunks, from, len));
 }
 
-// `total` ASCII bytes, a `"` every `run_len + 1`th byte. `total` must be a
-// multiple of 16 so `pack` accepts it.
 fn make_input(total: i32, run_len: i32) -> String {
     let mut s = String::with_capacity(total);
     let mut i = 0;
@@ -261,7 +247,8 @@ export fn run() with (Stdout, MonotonicClock) {
     assert packed_total == total;
 
     println("");
-    println("`packed` is the ceiling of an Array<v128> String. If it does not");
-    println("clear `scalar` by a wide margin at run=12, the representation does");
-    println("not pay for core:json.");
+    println("`packed` is the ceiling of an Array<v128> String, `scalar` what");
+    println("core:json runs today, and `byte read` the price every consumer");
+    println("that was not rewritten would pay. `pack` below `scalar` means a");
+    println("staging buffer costs more than scanning without one.");
 }
