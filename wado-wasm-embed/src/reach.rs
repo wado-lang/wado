@@ -32,8 +32,8 @@ pub(crate) struct Live {
     /// Functions a surviving `ref.func` names that nothing left in the module
     /// declares. They need a declarative segment of their own.
     pub declare: Vec<u32>,
-    /// Functions kept for their name and signature alone, emitted as a trap.
-    pub trap: BTreeSet<u32>,
+    /// Functions kept for their name and signature alone.
+    pub stub: BTreeSet<u32>,
 }
 
 /// How much of a surviving data segment survives.
@@ -88,12 +88,12 @@ pub(crate) fn live(asset: &Asset<'_>, opts: &Embed<'_>) -> Result<Live, Error> {
         if !keep_export(export.name) {
             continue;
         }
-        // A trapped export keeps its index and its type but roots nothing, so
+        // A stubbed export keeps its index and its type but roots nothing, so
         // its body is never walked and whatever only it reached is collected.
-        if (opts.trap_export)(export.name)
+        if (opts.stub_export)(export.name)
             && matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
         {
-            walk.mark_trap(export.index);
+            walk.mark_stub(export.index);
             continue;
         }
         match export.kind {
@@ -346,9 +346,9 @@ impl Walk<'_, '_> {
         if !self.live.funcs.insert(index) {
             return;
         }
-        // Something else reached it after all, so the body it would have traded
-        // for a trap is walked and kept.
-        self.live.trap.remove(&index);
+        // Something else reached it after all, so the body a stub would have
+        // taken away is walked and kept.
+        self.live.stub.remove(&index);
         self.queue.push(Item::Func(index));
         for range in self.data_refs.get(&index).copied().unwrap_or_default() {
             self.mark_data_range(*range);
@@ -356,8 +356,8 @@ impl Walk<'_, '_> {
     }
 
     /// Keep a function's slot and signature without walking its body. Its type
-    /// stays live: the export and the trapping body both still name it.
-    fn mark_trap(&mut self, index: u32) {
+    /// stays live: the export and the body left behind both still name it.
+    fn mark_stub(&mut self, index: u32) {
         if self.live.funcs.contains(&index) {
             return;
         }
@@ -365,7 +365,7 @@ impl Walk<'_, '_> {
             self.mark_type(self.asset.funcs[defined]);
         }
         self.live.funcs.insert(index);
-        self.live.trap.insert(index);
+        self.live.stub.insert(index);
     }
 
     fn mark_table(&mut self, index: u32) {

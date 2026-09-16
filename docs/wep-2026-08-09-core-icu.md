@@ -366,12 +366,12 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   pull the enumerated properties, `General_Category` and the name tables, which
   the enum-named `has` and `set` do not.
 
-- **The trapped export is a body, not a hole.** A lift the program does not
-  import keeps its name and signature in the core module, with a trapping body,
-  because the component's `canon lift` still aliases it. Dropping it outright
-  would mean renumbering the component's own index spaces. What remains is one
-  short function per unused lift — the data and code it reached are already
-  gone, so the cost is bytes rather than kilobytes.
+- **A dropped lift leaves a stub, not a hole.** A lift the program does not
+  import keeps its name and signature in the core module, because the
+  component's `canon lift` still aliases it. Dropping it outright would mean
+  renumbering the component's own index spaces. What remains is one short
+  function per unused lift — the data and code it reached are already gone, so
+  the cost is bytes rather than kilobytes.
 
 ## Open questions
 
@@ -422,9 +422,9 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 - [x] Collect over a component asset. Each core module it holds is embedded and
       every other section copied byte for byte, so nothing is renumbered and
       each `alias core export` still resolves. The root set is the lifted
-      functions the program imports; the rest keep their name and signature with
-      a trapping body. A program reaching one property carries 104 KB where it
-      carried 303 KB.
+      functions the program imports; the rest keep their name and signature as
+      a stub. A program reaching one property carries 104 KB where it carried
+      303 KB.
 - [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
       data range or a function. A live data range can root a function, so the
       data and code edges close over one worklist rather than the code seeding

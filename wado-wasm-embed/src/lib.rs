@@ -26,6 +26,8 @@ mod reach;
 
 use std::fmt;
 
+use wasm_encoder::Encode;
+
 /// How to embed an asset.
 pub struct Embed<'a> {
     /// `(module, name)` the memory is imported under. `None` leaves the asset's
@@ -33,11 +35,11 @@ pub struct Embed<'a> {
     pub memory_import: Option<(&'a str, &'a str)>,
     /// The exports to keep. Everything unreachable from them is dropped.
     pub keep_export: &'a dyn Fn(&str) -> bool,
-    /// Exports to keep as a name and a signature, with a trapping body. For an
-    /// export something still names — a component's `canon lift` — but nothing
-    /// can call: the name survives, and everything only its body reached does
-    /// not. A dropped export is not asked.
-    pub trap_export: &'a dyn Fn(&str) -> bool,
+    /// Exports to keep as a name and a signature only. For an export something
+    /// still names — a component's `canon lift` — but nothing can call: the
+    /// name survives, and everything only its body reached does not. The body
+    /// left behind traps. A dropped export is not asked.
+    pub stub_export: &'a dyn Fn(&str) -> bool,
     /// Drop every custom section, the `name` section included (`-Os`).
     pub strip_custom_sections: bool,
 }
@@ -134,8 +136,8 @@ pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
 ///
 /// The component's own items are untouched, so nothing is renumbered and every
 /// `alias core export` still resolves. What that costs is the reason
-/// [`Embed::trap_export`] exists: a lift the program does not import names a
-/// core export that has to stay, and trapping it is how its body goes anyway.
+/// [`Embed::stub_export`] exists: a lift the program does not import names a
+/// core export that has to stay, and stubbing it is how its body goes anyway.
 pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     use wasmparser::Payload;
 
@@ -151,11 +153,11 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
                 // one's business; only the top level's are the asset's.
                 if nesting == 0 {
                     out.extend_from_slice(&component[copied..unchecked_range.start]);
-                    let embedded = embed(&component[unchecked_range.clone()], opts)?;
                     // The length already written ahead of the range describes
-                    // the module that was there, so it is rewritten with it.
-                    rewrite_module_length(&mut out, embedded.len());
-                    out.extend_from_slice(&embedded);
+                    // the module that was there, so it goes with it. `Encode`
+                    // writes the new one back, length and payload together.
+                    drop_module_length(&mut out);
+                    embed(&component[unchecked_range.clone()], opts)?.encode(&mut out);
                     copied = unchecked_range.end;
                 }
                 nesting += 1;
@@ -172,12 +174,12 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
     Ok(out)
 }
 
-/// Replace the length already written at the tail of `out` with `len`.
+/// Take the module length off the tail of `out`.
 ///
 /// A module section is `0x01` then the payload's length as a LEB128, and the
 /// range `wasmparser` hands over starts after both. Read backwards the length
 /// is its one byte without a continuation bit, then however many with one.
-fn rewrite_module_length(out: &mut Vec<u8>, len: usize) {
+fn drop_module_length(out: &mut Vec<u8>) {
     out.pop();
     while out.last().is_some_and(|byte| byte & 0x80 != 0) {
         out.pop();
@@ -187,19 +189,6 @@ fn rewrite_module_length(out: &mut Vec<u8>, len: usize) {
         Some(&0x01),
         "a module section is the byte 0x01 and a length"
     );
-    leb128_write(out, len as u64);
-}
-
-fn leb128_write(out: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let byte = (value & 0x7f) as u8;
-        value >>= 7;
-        if value == 0 {
-            out.push(byte);
-            return;
-        }
-        out.push(byte | 0x80);
-    }
 }
 
 /// Everything the pass needs from the asset, in its original index space.

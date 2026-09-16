@@ -186,11 +186,13 @@ pub(crate) fn encode(asset: &Asset<'_>, live: &Live, opts: &Embed<'_>) -> Result
         if !live.funcs.contains(&index) {
             continue;
         }
-        if live.trap.contains(&index) {
-            let mut trap = wasm_encoder::Function::new([]);
-            trap.instruction(&wasm_encoder::Instruction::Unreachable);
-            trap.instruction(&wasm_encoder::Instruction::End);
-            code.function(&trap);
+        // A stub keeps the signature and drops the body. Nothing can call it —
+        // the program's own import type does not name it — so the body says so.
+        if live.stub.contains(&index) {
+            let mut stub = wasm_encoder::Function::new([]);
+            stub.instruction(&wasm_encoder::Instruction::Unreachable);
+            stub.instruction(&wasm_encoder::Instruction::End);
+            code.function(&stub);
             continue;
         }
         remap.parse_function_body(&mut code, body.clone())?;

@@ -14,7 +14,7 @@ fn embed_err(source: &str) -> Error {
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|_| true,
-            trap_export: &|_| false,
+            stub_export: &|_| false,
             strip_custom_sections: false,
         },
     )
@@ -27,7 +27,7 @@ fn prune_with(source: &str, keep: &[&str], strip: bool) -> Vec<u8> {
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|name| keep.contains(&name),
-            trap_export: &|_| false,
+            stub_export: &|_| false,
             strip_custom_sections: strip,
         },
     )
@@ -547,13 +547,13 @@ const LIFTED: &str = r#"
 "#;
 
 #[test]
-fn a_trapped_export_keeps_its_name_and_signature() {
+fn a_stubbed_export_keeps_its_name_and_signature() {
     let pruned = embed_checked(
         LIFTED,
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|_| true,
-            trap_export: &|name| name == "lifted",
+            stub_export: &|name| name == "lifted",
             strip_custom_sections: false,
         },
     );
@@ -561,13 +561,13 @@ fn a_trapped_export_keeps_its_name_and_signature() {
 }
 
 #[test]
-fn a_trapped_export_reaches_nothing() {
+fn a_stubbed_export_reaches_nothing() {
     let pruned = embed_checked(
         LIFTED,
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|name| name == "lifted",
-            trap_export: &|name| name == "lifted",
+            stub_export: &|name| name == "lifted",
             strip_custom_sections: false,
         },
     );
@@ -587,7 +587,7 @@ fn a_function_a_kept_export_reaches_is_kept_whole() {
         &Embed {
             memory_import: Some(("env", "memory")),
             keep_export: &|_| true,
-            trap_export: &|name| name == "used",
+            stub_export: &|name| name == "used",
             strip_custom_sections: false,
         },
     );
@@ -607,7 +607,7 @@ fn leaving_the_memory_alone_keeps_the_definition() {
         &Embed {
             memory_import: None,
             keep_export: &|name| name == "used",
-            trap_export: &|_| false,
+            stub_export: &|_| false,
             strip_custom_sections: false,
         },
     );
@@ -826,7 +826,7 @@ fn a_component_asset_is_collected_through_its_core_module() {
         &Embed {
             memory_import: None,
             keep_export: &|_| true,
-            trap_export: &|name| name.contains("properties@0.1.0#") && name != used,
+            stub_export: &|name| name.contains("properties@0.1.0#") && name != used,
             strip_custom_sections: true,
         },
     )

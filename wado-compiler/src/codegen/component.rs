@@ -907,7 +907,7 @@ fn embed_imported_wasm_modules(
             &wado_wasm_embed::Embed {
                 memory_import: Some(("env", "memory")),
                 keep_export: &|name| used_exports.contains(name),
-                trap_export: &|_| false,
+                stub_export: &|_| false,
                 strip_custom_sections: strip_names,
             },
         )
@@ -4024,8 +4024,8 @@ fn import_resource_using_interfaces(
 /// Collect a component asset down to the lifted functions the program imports.
 ///
 /// The component's own items are left alone, so a lift the program does not
-/// import still names a core export. The export therefore stays, with a
-/// trapping body: what only that body reached is what the collection takes away.
+/// import still names a core export. The export therefore stays as a stub: what
+/// only its body reached is what the collection takes away.
 /// An asset the pass cannot read is composed whole rather than failing — it is
 /// a size question, and the program is correct either way.
 fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
@@ -4066,7 +4066,7 @@ fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
         &wado_wasm_embed::Embed {
             memory_import: None,
             keep_export: &|_| true,
-            trap_export: &fate,
+            stub_export: &fate,
             strip_custom_sections: true,
         },
     )
