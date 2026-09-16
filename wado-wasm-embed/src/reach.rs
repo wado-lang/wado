@@ -11,7 +11,7 @@ use std::convert::Infallible;
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
-use crate::dataref::{DataRange, DataRefs, merge_with_gap};
+use crate::dataref::{DataRange, DataRefs, Target, merge_with_gap};
 use crate::{Asset, Error, segment_base};
 
 /// A gap this small is cheaper to keep than to split around: a second segment
@@ -51,6 +51,10 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
         data_refs: match &asset.data_refs {
             Some(refs) => func_ranges(asset, refs)?,
             None => BTreeMap::new(),
+        },
+        pointers: match &asset.data_refs {
+            Some(refs) => pointer_edges(asset, refs)?,
+            None => Vec::new(),
         },
         // Only an active segment at a constant base can have its pieces name
         // their own addresses. A passive one is reached through the
@@ -178,8 +182,25 @@ struct Walk<'a, 'b> {
     /// map. Reaching a function reaches its ranges, so the data edges close
     /// over the same worklist the code edges do.
     data_refs: BTreeMap<u32, &'a [DataRange]>,
+    /// Where each pointer stored in the data sits, and what it reaches. Keeping
+    /// the bytes a pointer occupies reaches its target, which is what lets a
+    /// live data range root a function.
+    pointers: Vec<Edge>,
     /// Which segments a range may narrow, by segment index.
     splittable: Vec<bool>,
+}
+
+/// A pointer site with its target resolved against the asset's own indices.
+struct Edge {
+    segment: u32,
+    offset: u32,
+    target: Reached,
+    fired: bool,
+}
+
+enum Reached {
+    Data(DataRange),
+    Func(u32),
 }
 
 impl Walk<'_, '_> {
@@ -349,6 +370,29 @@ impl Walk<'_, '_> {
         if self.live.datas.insert(index, Keep::Whole).is_none() {
             self.queue.push(Item::Data(index));
         }
+        self.fire(|edge| edge.segment == index);
+    }
+
+    /// Follow every not-yet-followed pointer whose site `covers` keeps. An edge
+    /// fires once, so a chain of pointers costs one step each however many
+    /// ranges cover it.
+    fn fire<F: Fn(&Edge) -> bool>(&mut self, covers: F) {
+        let mut reached = Vec::new();
+        for edge in &mut self.pointers {
+            if !edge.fired && covers(edge) {
+                edge.fired = true;
+                reached.push(match edge.target {
+                    Reached::Data(range) => Reached::Data(range),
+                    Reached::Func(index) => Reached::Func(index),
+                });
+            }
+        }
+        for target in reached {
+            match target {
+                Reached::Data(range) => self.mark_data_range(range),
+                Reached::Func(index) => self.mark_func(index),
+            }
+        }
     }
 
     /// Keep one range of a segment, and queue the segment so its offset
@@ -372,6 +416,11 @@ impl Walk<'_, '_> {
                 Keep::Ranges(ranges) => ranges.push(range),
             },
         }
+        self.fire(|edge| {
+            edge.segment == range.segment
+                && range.offset <= edge.offset
+                && edge.offset < range.end()
+        });
     }
 
     fn mark_type(&mut self, index: u32) {
@@ -448,6 +497,87 @@ impl Reencode for Recorder<'_> {
         self.0.datas.push(data);
         Ok(data)
     }
+}
+
+/// Resolve each pointer edge against the asset's segments and `name` section.
+///
+/// A site or a target outside its segment, or a name landing on no function,
+/// means the map has drifted from the module — and an edge not followed is a
+/// pointer left dangling, so it is an error rather than an edge to skip.
+fn pointer_edges(asset: &Asset<'_>, refs: &DataRefs) -> Result<Vec<Edge>, Error> {
+    if refs.pointers().is_empty() {
+        return Ok(Vec::new());
+    }
+    let funcs = function_indices(asset)?;
+    let segment_len = |index: u32| {
+        asset
+            .datas
+            .get(index as usize)
+            .map(|data| data.data.len() as u32)
+    };
+
+    let mut edges = Vec::new();
+    for pointer in refs.pointers() {
+        let len = segment_len(pointer.segment).ok_or_else(|| {
+            Error::DataRef(format!(
+                "a pointer sits in segment {}, which the asset does not have",
+                pointer.segment
+            ))
+        })?;
+        if pointer.offset >= len {
+            return Err(Error::DataRef(format!(
+                "a pointer sits at {} of segment {}, which is {len} bytes",
+                pointer.offset, pointer.segment
+            )));
+        }
+        let target = match &pointer.target {
+            Target::Data(range) => {
+                let len = segment_len(range.segment).ok_or_else(|| {
+                    Error::DataRef(format!(
+                        "a pointer reaches segment {}, which the asset does not have",
+                        range.segment
+                    ))
+                })?;
+                if range.end() > len {
+                    return Err(Error::DataRef(format!(
+                        "a pointer reaches {}..{} of segment {}, which is {len} bytes",
+                        range.offset,
+                        range.end(),
+                        range.segment
+                    )));
+                }
+                Reached::Data(*range)
+            }
+            Target::Func(name) => Reached::Func(*funcs.get(name.as_str()).ok_or_else(|| {
+                Error::DataRef(format!(
+                    "a pointer reaches `{name}`, which the asset's `name` section does not name"
+                ))
+            })?),
+        };
+        edges.push(Edge {
+            segment: pointer.segment,
+            offset: pointer.offset,
+            target,
+            fired: false,
+        });
+    }
+    Ok(edges)
+}
+
+fn function_indices<'a>(asset: &Asset<'a>) -> Result<BTreeMap<&'a str, u32>, Error> {
+    let names = asset.names.clone().ok_or_else(|| {
+        Error::DataRef("the asset has no `name` section to resolve the map against".into())
+    })?;
+    let mut funcs = BTreeMap::new();
+    for subsection in names {
+        if let wasmparser::Name::Function(map) = subsection? {
+            for naming in map {
+                let naming = naming?;
+                funcs.insert(naming.name, naming.index);
+            }
+        }
+    }
+    Ok(funcs)
 }
 
 /// Resolve the asset's map against its `name` section.

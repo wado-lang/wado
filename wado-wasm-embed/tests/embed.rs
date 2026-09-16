@@ -530,6 +530,65 @@ fn a_map_reaching_past_the_end_of_its_segment_is_rejected() {
     assert_matches!(embed_err(&quarters(Some("a 0:0+64\n"))), Error::DataRef(_));
 }
 
+/// A segment holding a pointer into itself: `[0,4)` is the address of `"CCCC"`.
+/// `deref` reads `[0,4)` and follows it, so keeping `[0,4)` alone would leave it
+/// loading from bytes the prune took away.
+fn indirect(map: &str) -> String {
+    format!(
+        r#"
+        (module
+          (memory 1)
+          (data (i32.const 8) "\10\00\00\00BBBBCCCCDDDD")
+          (func $deref (export "deref") (result i32) (i32.load (i32.load (i32.const 8))))
+          (func $unused (export "unused") (result i32) (i32.load (i32.const 20)))
+          (@custom "wado.dataref" (after data) {map:?}))
+    "#
+    )
+}
+
+#[test]
+fn a_pointer_in_live_data_keeps_what_it_points_at() {
+    let pruned = prune(&indirect("deref 0:0+4\n@0:0 0:8+4\n"), &["deref"]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(8), b"\x10\x00\x00\x00BBBBCCCC".to_vec())],
+        "the pointer's target survives; the gap to it is shorter than a header"
+    );
+}
+
+#[test]
+fn a_pointer_in_pruned_data_keeps_nothing() {
+    let pruned = prune(&indirect("deref 0:4+4\n@0:0 0:8+4\n"), &["deref"]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(12), b"BBBB".to_vec())],
+        "nothing live covers the pointer's own bytes, so its target stays dead"
+    );
+}
+
+/// A function pointer stored in data: nothing calls `$target` directly, so only
+/// the data edge keeps it.
+#[test]
+fn a_function_pointer_in_live_data_keeps_the_function() {
+    let source = r#"
+        (module
+          (memory 1)
+          (table 1 funcref)
+          (data (i32.const 8) "\00\00\00\00")
+          (elem (i32.const 0) $target)
+          (func $target (result i32) (i32.const 7))
+          (func $call (export "call") (result i32)
+            (call_indirect (result i32) (i32.load (i32.const 8))))
+          (@custom "wado.dataref" (after data) "call 0:0+4\n@0:0 target\n"))
+    "#;
+    assert!(
+        function_names(&prune(source, &["call"]))
+            .iter()
+            .any(|(_, name)| name == "target"),
+        "a function only a live pointer names must survive"
+    );
+}
+
 /// `memory.init` names a segment by index, so a passive segment is never split
 /// and the indices of the ones that remain still have to line up.
 #[test]
