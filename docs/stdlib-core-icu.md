@@ -37,3 +37,133 @@ name written into the source.
 
 Whether `ch` has that enumerated property value, without building the
 ranges.
+
+## Enums
+
+### `pub enum BinaryProperty`
+
+#### `Alnum`
+
+#### `Alphabetic`
+
+#### `AsciiHexDigit`
+
+#### `BidiControl`
+
+#### `BidiMirrored`
+
+#### `Blank`
+
+#### `CaseIgnorable`
+
+#### `Cased`
+
+#### `ChangesWhenCasefolded`
+
+#### `ChangesWhenCasemapped`
+
+#### `ChangesWhenLowercased`
+
+#### `ChangesWhenNfkcCasefolded`
+
+#### `ChangesWhenTitlecased`
+
+#### `ChangesWhenUppercased`
+
+#### `Dash`
+
+#### `DefaultIgnorableCodePoint`
+
+#### `Deprecated`
+
+#### `Diacritic`
+
+#### `Emoji`
+
+#### `EmojiComponent`
+
+#### `EmojiModifier`
+
+#### `EmojiModifierBase`
+
+#### `EmojiPresentation`
+
+#### `ExtendedPictographic`
+
+#### `Extender`
+
+#### `FullCompositionExclusion`
+
+#### `Graph`
+
+#### `GraphemeBase`
+
+#### `GraphemeExtend`
+
+#### `GraphemeLink`
+
+#### `HexDigit`
+
+#### `Hyphen`
+
+#### `IdCompatMathContinue`
+
+#### `IdCompatMathStart`
+
+#### `IdContinue`
+
+#### `IdStart`
+
+#### `Ideographic`
+
+#### `IdsBinaryOperator`
+
+#### `IdsTrinaryOperator`
+
+#### `IdsUnaryOperator`
+
+#### `JoinControl`
+
+#### `LogicalOrderException`
+
+#### `Lowercase`
+
+#### `Math`
+
+#### `ModifierCombiningMark`
+
+#### `NoncharacterCodePoint`
+
+#### `PatternSyntax`
+
+#### `PatternWhiteSpace`
+
+#### `PrependedConcatenationMark`
+
+#### `Print`
+
+#### `QuotationMark`
+
+#### `Radical`
+
+#### `RegionalIndicator`
+
+#### `SentenceTerminal`
+
+#### `SoftDotted`
+
+#### `TerminalPunctuation`
+
+#### `UnifiedIdeograph`
+
+#### `Uppercase`
+
+#### `VariationSelector`
+
+#### `WhiteSpace`
+
+#### `Xdigit`
+
+#### `XidContinue`
+
+#### `XidStart`
