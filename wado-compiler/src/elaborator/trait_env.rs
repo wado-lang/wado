@@ -1427,11 +1427,40 @@ impl TraitEnv {
         };
         let args = args_without_declared_defaults(
             fq.args().to_vec(),
-            trait_type,
-            target,
+            written_arg_nodes(trait_type),
+            Some(target),
             params,
             resolutions,
         );
+        fq.with_args(args)
+    }
+
+    /// [`Self::fq_trait_named_by_impl`] for a bound, whose arguments are written
+    /// on the bound itself and whose `Self` is the bounded parameter. Naming the
+    /// two the same way is what lets a bound reach the impl that answers it.
+    pub(super) fn fq_trait_named_by_bound(
+        &self,
+        fq: name::FqTraitName,
+        bound: &ast::TraitBound,
+        resolutions: &Resolutions,
+    ) -> name::FqTraitName {
+        if bound.type_args.is_empty() {
+            return fq;
+        }
+        let Some(params) = fq
+            .canonical()
+            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .map(|header| &header.type_params)
+        else {
+            return fq;
+        };
+        let written = bound
+            .type_args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect();
+        let args =
+            args_without_declared_defaults(written, &bound.type_args, None, params, resolutions);
         fq.with_args(args)
     }
 
@@ -2547,18 +2576,13 @@ pub(super) fn written_type_args(
 /// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
 fn args_without_declared_defaults(
     written: Vec<name::FqTypeName>,
-    trait_type: &ast::Type,
-    target: &ast::Type,
+    ast_args: &[ast::Type],
+    target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     let mut kept = written;
-    kept.truncate(non_default_arg_count(
-        trait_type,
-        target,
-        params,
-        resolutions,
-    ));
+    kept.truncate(non_default_arg_count(ast_args, target, params, resolutions));
     kept
 }
 
@@ -2576,22 +2600,25 @@ pub(super) fn header_answers_bare_bound(
         params
             .get(i)
             .and_then(|p| p.default.as_ref())
-            .is_none_or(|default| restates_default(arg, default, target, resolutions))
+            .is_none_or(|default| restates_default(arg, default, Some(target), resolutions))
     })
 }
 
 /// Whether a written trait argument says exactly what the declared default
-/// does, `Self` meaning the impl's target.
+/// does, `Self` meaning the impl's target. A bound has no target node to
+/// compare against, so there only the `Self` spelling itself restates one.
 fn restates_default(
     arg: &ast::Type,
     default: &ast::Type,
-    target: &ast::Type,
+    target: Option<&ast::Type>,
     resolutions: &Resolutions,
 ) -> bool {
     match default {
         ast::Type::Named(named) if named.name == "Self" => {
             matches!(arg, ast::Type::Named(a) if a.name == "Self")
-                || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+                || target.is_some_and(|target| {
+                    written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+                })
         }
         _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
     }
@@ -2601,12 +2628,11 @@ fn restates_default(
 /// defaults do not. One rule behind both an impl's name and the identity its
 /// associated types register under, so the two cannot disagree.
 pub(super) fn non_default_arg_count(
-    trait_type: &ast::Type,
-    target: &ast::Type,
+    ast_args: &[ast::Type],
+    target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> usize {
-    let ast_args = written_arg_nodes(trait_type);
     let mut kept = ast_args.len();
     while let Some(last) = kept.checked_sub(1) {
         let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {

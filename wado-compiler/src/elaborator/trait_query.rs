@@ -2085,6 +2085,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(&bound.id)
             .cloned()
             .unwrap_or_else(|| FqTraitName::declared(self.tysys.resolutions.defs(), decl));
+        // The arguments the bound writes name the trait the way the impl that
+        // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
+        let fq_trait_name = self.tysys.trait_env.fq_trait_named_by_bound(
+            fq_trait_name,
+            &bound,
+            &self.tysys.resolutions,
+        );
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bound_slots(&bound, decl, self_type_id);

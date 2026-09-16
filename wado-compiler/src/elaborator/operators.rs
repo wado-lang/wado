@@ -514,7 +514,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .cloned()
             {
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
-                    && let Some((_trait_name, info)) = {
+                    && let Some((_bound_trait_name, info)) = {
                         let required = self.required_operator_trait(CompilerItem::Eq);
                         self.find_method_in_trait_bounds(
                             &bounds,
@@ -1965,8 +1965,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Only a trait spelled with an argument (`Add<Feet>`) declares
                 // a referent of its own; a bare `Add` — like `Eq` and `Ord` —
                 // declares `&Self`, and a variadic `impl Ord for [..T]`
-                // resolves that to a shape the operand does not equal.
-                let declares_rhs = !resolved.trait_name.args().is_empty()
+                // resolves that to a shape the operand does not equal. A bound
+                // says so by its slots instead: they hold what it wrote, or
+                // `Self` where it wrote nothing.
+                let declares_rhs = (resolved.is_type_param_receiver
+                    || !resolved.trait_name.args().is_empty())
                     && referent != receiver
                     && referent != self.tysys.get_base_type(receiver);
                 if declares_rhs { referent } else { receiver }
