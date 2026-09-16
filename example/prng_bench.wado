@@ -185,6 +185,7 @@ struct XoshiroSimd {
     o1: u64x2,
     o2: u64x2,
     o3: u64x2,
+    vpos: i32,
 }
 
 fn vrotl(v: u64x2, n: u32) -> u64x2 {
@@ -233,6 +234,7 @@ impl XoshiroSimd {
             o1: [0, 0],
             o2: [0, 0],
             o3: [0, 0],
+            vpos: 4,
         };
     }
 
@@ -325,6 +327,7 @@ struct Shishua {
     o7: u64x2,
     out: List<u64>,
     pos: i32,
+    vpos: i32,
 }
 
 fn shu0_lo(lo: u64x2, hi: u64x2) -> u64x2 {
@@ -444,6 +447,7 @@ impl Shishua {
             o7: [0, 0],
             out: List::<u64>::filled(ROUND_WORDS, 0),
             pos: ROUND_WORDS,
+            vpos: 8,
         };
     }
 
@@ -638,7 +642,103 @@ fn drain_shishua_bulk(rng: &mut Shishua, n: i32) -> u64 {
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
 }
 
+// What a `core:prng` vector trait would cost. The round crosses the boundary
+// as a tuple: `multi_value_return` flattens a tuple return whose call site
+// destructures, so nothing is allocated and the eight vectors stay in
+// registers — the same WIR the boundary-free version compiles to.
+//
+// The width is fixed at eight here because a generic consumer cannot yet be
+// written. Projecting the round through an associated type works
+// (`R: RoundRng<Round = [..V]>` type-checks and `for let v of` unrolls), but
+// saying what the members admit does not: a bound takes only `Name = Type`, so
+// `..V: BitXor<u64x2, Output = u64x2>` will not parse. `BitXor`'s `Rhs` is a
+// type parameter rather than an associated type, and nothing can name it.
+trait VectorRound {
+    fn round_of(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
+}
+
+impl VectorRound for Shishua {
+    fn round_of(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
+        self.round();
+        return [self.o0, self.o1, self.o2, self.o3, self.o4, self.o5, self.o6, self.o7];
+    }
+}
+
+fn drain_through_trait<R: VectorRound>(rng: &mut R, n: i32) -> u64 {
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += ROUND_WORDS {
+        let [a, b, c, d, e, f, g, h] = rng.round_of();
+        acc = acc ^ a ^ b ^ c ^ d;
+        acc = acc ^ e ^ f ^ g ^ h;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+// The uniform alternative: hand out one vector at a time, whatever the round's
+// width, off a cursor the engine keeps. It costs a branch and a select per
+// vector, which SHISHUA's round cannot absorb — its own output is about that
+// cheap per vector.
+trait VectorSource {
+    fn next_vector(&mut self) -> u64x2;
+}
+
+impl VectorSource for Shishua {
+    fn next_vector(&mut self) -> u64x2 {
+        if self.vpos == 8 {
+            self.round();
+            self.vpos = 0;
+        }
+        let v = match self.vpos {
+            0 => self.o0,
+            1 => self.o1,
+            2 => self.o2,
+            3 => self.o3,
+            4 => self.o4,
+            5 => self.o5,
+            6 => self.o6,
+            _ => self.o7,
+        };
+        self.vpos += 1;
+        return v;
+    }
+}
+
+impl VectorSource for XoshiroSimd {
+    fn next_vector(&mut self) -> u64x2 {
+        if self.vpos == 4 {
+            self.step();
+            self.vpos = 0;
+        }
+        let v = match self.vpos {
+            0 => self.o0,
+            1 => self.o1,
+            2 => self.o2,
+            _ => self.o3,
+        };
+        self.vpos += 1;
+        return v;
+    }
+}
+
+fn drain_by_vector<R: VectorSource>(rng: &mut R, n: i32) -> u64 {
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += 2 {
+        acc = acc ^ rng.next_vector();
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
 global DRAW_COUNT: i32 = 1 << 16;
+
+test "the trait boundary hands back the same stream" {
+    let mut direct = Shishua::new(5);
+    let mut through = Shishua::new(5);
+    let mut by_vector = Shishua::new(5);
+
+    let expected = drain_shishua_bulk(&mut direct, 1024);
+    assert drain_through_trait(&mut through, 1024) == expected;
+    assert drain_by_vector(&mut by_vector, 1024) == expected;
+}
 
 test "each generator moves, and no two agree" {
     let mut romu = RomuTrio::new(1);
@@ -779,8 +879,26 @@ export fn run() with (Stdout, MonotonicClock) {
         return drain_shishua_bulk(&mut shishua_bulk, DRAW_COUNT);
     });
 
+    let mut through = Shishua::new(12345);
+    let trait_acc = bench.run("SHISHUA, a round through a trait", || {
+        return drain_through_trait(&mut through, DRAW_COUNT);
+    });
+
+    let mut by_vector = Shishua::new(12345);
+    let vector_acc = bench.run("SHISHUA, a vector through a trait", || {
+        return drain_by_vector(&mut by_vector, DRAW_COUNT);
+    });
+
+    let mut simd_by_vector = XoshiroSimd::new(12345);
+    let simd_vector_acc = bench.run("xoshiro256++ x8, a vector through a trait", || {
+        return drain_by_vector(&mut simd_by_vector, DRAW_COUNT);
+    });
+
     bench.println(
         `checksums: ${romu_acc} ${xoshiro_acc} ${simd_acc} ${shishua_acc} ${bulk_acc}`,
+    );
+    bench.println(
+        `trait checksums: ${trait_acc} ${vector_acc} ${simd_vector_acc}`,
     );
     bench.println(
         `fill checksums: ${romu_fill_acc} ${simd_fill_acc} ${fill_acc}`,
