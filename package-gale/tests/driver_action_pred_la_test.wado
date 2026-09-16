@@ -9,16 +9,16 @@ use pl from "./grammars/wado_pred_la.g4"
     };
 
 test "a p-reading predicate gates the token-led branch" {
-    let num = pl::parse_takes(&"5");
+    let num = pl::parse_takes("5");
     assert num.ok(), "clean parse when p.la(1) == TK_NUM holds";
     assert num.output == "num", `output: '${num.output}'`;
 
-    let id = pl::parse_takes(&"x");
+    let id = pl::parse_takes("x");
     assert id.ok(), "the unpredicated ID branch is unaffected";
     assert id.output == "id", `output: '${id.output}'`;
 }
 
 test "a false p-reading predicate fails the selected branch" {
-    let bad = pl::parse_rejects(&"5");
+    let bad = pl::parse_rejects("5");
     assert !bad.ok(), "p.la(1) == TK_ID is false on a NUM token, so no viable alternative";
 }

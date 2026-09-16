@@ -35,13 +35,13 @@ internal struct Parsed {
     internal refs: RefTable,
 }
 
-pub fn parse(source: &String) -> Parsed {
+pub fn parse<S: AsStrSlice>(source: S) -> Parsed {
     let lines: List<String> = source.lines().collect();
     let refs = collect_ref_defs(&lines);
     return Parsed { document: build_document(&lines, &refs), refs };
 }
 
-pub fn parse_document(source: &String) -> Node {
+pub fn parse_document<S: AsStrSlice>(source: S) -> Node {
     let lines: List<String> = source.lines().collect();
     let refs = collect_ref_defs(&lines);
     return build_document(&lines, &refs);
@@ -135,7 +135,7 @@ fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     if url.len() == 0 {
         return null;
     }
-    return Option::Some(LinkReferenceDef { label: label.trim(), url, title });
+    return Option::Some(LinkReferenceDef { label: label.trim().to_string(), url, title });
 }
 
 // --- front matter ---
@@ -145,12 +145,12 @@ fn try_front_matter(lines: &List<String>) -> Option<[FrontMatterNode, i32]> {
         return null;
     }
     let first = lines[0].trim_end();
-    let [k, delim] = match first {
-        "---" => [FrontMatterKind::Yaml, "---"],
-        "+++" => [FrontMatterKind::Toml, "+++"],
-        _ => {
-            return null;
-        },
+    let [k, delim] = if first == "---" {
+        [FrontMatterKind::Yaml, "---"];
+    } else if first == "+++" {
+        [FrontMatterKind::Toml, "+++"];
+    } else {
+        return null;
     };
     let mut body_lines: List<String> = [];
     for let mut i = 1; i < lines.len(); i += 1 {
@@ -192,7 +192,7 @@ fn parse_blocks(lines: &List<String>, start: i32, end: i32, refs: &RefTable) -> 
         if is_html_block_start(&chars) && (para.is_empty() || html_block_interrupts_paragraph(&chars)) {
             flush_paragraph(&mut out, &mut para, refs);
             let block_end = html_block_bounds(lines, i, end);
-            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end()));
+            out.push(Node::Html(lines_slice(lines, i, block_end).join("\n").trim_end().to_string()));
             i = block_end;
             continue;
         }
@@ -311,13 +311,13 @@ fn html_block_bounds(lines: &List<String>, start: i32, end: i32) -> i32 {
 
 // --- fenced and indented code ---
 
-fn parse_fenced_code(
+fn parse_fenced_code<S: AsStrSlice>(
     lines: &List<String>,
     open: i32,
     end: i32,
     ch: char,
     fence_len: i32,
-    info: &String,
+    info: S,
     out: &mut List<Node>,
 ) -> i32 {
     let tag = first_word(info);
@@ -379,14 +379,14 @@ fn fence_marker(chars: &List<char>) -> Option<[char, i32, String]> {
     if run < 3 {
         return null;
     }
-    let info = slice_chars(chars, p, len).trim();
+    let info = slice_chars(chars, p, len).trim().to_string();
     if ch == '`' && info.contains("`") {
         return null;
     }
     return Option::Some([ch, run, info]);
 }
 
-fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
+fn is_code_fence_close<S: AsStrSlice>(line: S, ch: char, fence_len: i32) -> bool {
     let mut indent = 0;
     let mut run = 0;
     let mut counting = true;
@@ -412,7 +412,7 @@ fn is_code_fence_close(line: &String, ch: char, fence_len: i32) -> bool {
     return run >= fence_len;
 }
 
-fn first_word(s: &String) -> String {
+fn first_word<S: AsStrSlice>(s: S) -> String {
     let mut out = String::new();
     for let c of s.chars() {
         if c matches { ' ' | '\t' } {
@@ -446,7 +446,7 @@ fn heading_content(chars: &List<char>, level: i32) -> String {
     return strip_atx_closing(&slice_chars(chars, start, len).trim());
 }
 
-fn strip_atx_closing(s: &String) -> String {
+fn strip_atx_closing<S: AsStrSlice>(s: S) -> String {
     let chars = s.to_chars();
     let len = chars.len();
     let mut e = len;
@@ -454,18 +454,18 @@ fn strip_atx_closing(s: &String) -> String {
         e -= 1;
     }
     if e == len {
-        return *s;
+        return s.to_string();
     }
     if e == 0 {
         return "";
     }
     if chars[e - 1] matches { ' ' | '\t' } {
-        return slice_chars(&chars, 0, e).trim();
+        return slice_chars(&chars, 0, e).trim().to_string();
     }
-    return *s;
+    return s.to_string();
 }
 
-fn is_thematic_break(line: &String) -> bool {
+fn is_thematic_break<S: AsStrSlice>(line: S) -> bool {
     let trimmed = line.trim();
     if trimmed.len() < 3 {
         return false;
@@ -500,7 +500,7 @@ fn is_blockquote(chars: &List<char>) -> bool {
     return p < len && chars[p] == '>';
 }
 
-fn strip_blockquote_marker(line: &String) -> String {
+fn strip_blockquote_marker<S: AsStrSlice>(line: S) -> String {
     let chars = line.to_chars();
     let len = chars.len();
     let mut p = skip_indent(&chars, len);
@@ -678,7 +678,7 @@ fn parse_list(lines: &List<String>, start: i32, end: i32, refs: &RefTable, out: 
     return k;
 }
 
-fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
+fn strip_task_marker<S: AsStrSlice>(line: S) -> [Option<TaskMarker>, String] {
     let chars = line.to_chars();
     let len = chars.len();
     if len >= 3 && chars[0] == '[' && chars[2] == ']' && chars[1] matches { ' ' | 'x' | 'X' } {
@@ -692,15 +692,15 @@ fn strip_task_marker(line: &String) -> [Option<TaskMarker>, String] {
             slice_chars(&chars, rest_start, len),
         ];
     }
-    return [null, *line];
+    return [null, line.to_string()];
 }
 
-fn cut_prefix(line: &String, n: i32) -> String {
+fn cut_prefix<S: AsStrSlice>(line: S, n: i32) -> String {
     let chars = line.to_chars();
     return slice_chars(&chars, n, chars.len());
 }
 
-fn dedent(line: &String, n: i32) -> String {
+fn dedent<S: AsStrSlice>(line: S, n: i32) -> String {
     let chars = line.to_chars();
     let len = chars.len();
     let mut p = 0;
@@ -714,7 +714,7 @@ fn dedent(line: &String, n: i32) -> String {
 /// the same dispatch conditions `parse_blocks` checks before falling
 /// through to plain paragraph text, reused here to decide whether an
 /// under-indented list-item line is a lazy continuation or the item's end.
-fn interrupts_paragraph(line: &String) -> bool {
+fn interrupts_paragraph<S: AsStrSlice>(line: S) -> bool {
     let chars = line.to_chars();
     if is_html_block_start(&chars) {
         return true;
@@ -737,7 +737,7 @@ fn interrupts_paragraph(line: &String) -> bool {
     return false;
 }
 
-fn line_indent(line: &String) -> i32 {
+fn line_indent<S: AsStrSlice>(line: S) -> i32 {
     let mut n = 0;
     for let c of line.chars() {
         if is_indent(c) {
@@ -751,18 +751,18 @@ fn line_indent(line: &String) -> i32 {
 
 // --- tables (GFM) ---
 
-fn line_has_pipe(line: &String) -> bool {
+fn line_has_pipe<S: AsStrSlice>(line: S) -> bool {
     return line.contains("|");
 }
 
 /// A GFM table requires a well-formed delimiter row whose column count equals
 /// the header's; otherwise the two lines are not a table (they stay a
 /// paragraph), matching pulldown-cmark / dprint.
-fn is_table_header(header: &String, delim: &String) -> bool {
+fn is_table_header<S: AsStrSlice, S1: AsStrSlice>(header: S, delim: S1) -> bool {
     return is_delimiter_row(delim) && split_row(header).len() == split_row(delim).len();
 }
 
-fn is_delimiter_row(line: &String) -> bool {
+fn is_delimiter_row<S: AsStrSlice>(line: S) -> bool {
     let cells = split_row(line);
     if cells.is_empty() {
         return false;
@@ -775,7 +775,7 @@ fn is_delimiter_row(line: &String) -> bool {
     return true;
 }
 
-fn is_delim_cell(cell: &String) -> bool {
+fn is_delim_cell<S: AsStrSlice>(cell: S) -> bool {
     let chars = cell.to_chars();
     let len = chars.len();
     if len == 0 {
@@ -799,7 +799,7 @@ fn is_delim_cell(cell: &String) -> bool {
     return p == len;
 }
 
-fn column_alignment(cell: &String) -> ColumnAlign {
+fn column_alignment<S: AsStrSlice>(cell: S) -> ColumnAlign {
     let left = cell.starts_with(":");
     let right = cell.ends_with(":");
     return match [left, right] {
@@ -810,7 +810,7 @@ fn column_alignment(cell: &String) -> ColumnAlign {
     };
 }
 
-fn split_row(line: &String) -> List<String> {
+fn split_row<S: AsStrSlice>(line: S) -> List<String> {
     let chars = line.to_chars();
     let len = chars.len();
     let mut s = 0;
@@ -855,7 +855,7 @@ fn split_row(line: &String) -> List<String> {
             continue;
         }
         if c == '|' {
-            cells.push(cur.trim());
+            cells.push(cur.trim().to_string());
             cur = String::new();
             k += 1;
             continue;
@@ -863,7 +863,7 @@ fn split_row(line: &String) -> List<String> {
         cur.push(c);
         k += 1;
     }
-    cells.push(cur.trim());
+    cells.push(cur.trim().to_string());
     return cells;
 }
 
@@ -933,7 +933,7 @@ fn cells_to_nodes(cells: &List<String>, ncol: i32, refs: &RefTable) -> List<List
 
 // --- character classification ---
 
-fn is_blank(line: &String) -> bool {
+fn is_blank<S: AsStrSlice>(line: S) -> bool {
     return line.trim().len() == 0;
 }
 

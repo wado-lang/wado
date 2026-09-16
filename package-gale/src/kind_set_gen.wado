@@ -47,12 +47,12 @@ fn join_lookahead_condition(
     let mut result = String::with_capacity(128);
     for let mut d = 0; d < depth; d += 1 {
         if d > 0 {
-            result.push_str(&" && ");
+            result.push_str(" && ");
         }
         let part = match access {
             Scan => {
                 let idx_expr = if d == 0 { `pos` } else { `pos + ${d}` };
-                let check = ctx.kind_check_str(&sig[d], &`tokens[${idx_expr}]`);
+                let check = ctx.kind_check_str(&sig[d], `tokens[${idx_expr}]`);
                 `${idx_expr} < tokens.len() && ${check}`;
             },
             Parse => {
@@ -141,8 +141,8 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     for let set of &sets {
         rendered.push(`[${join_kinds(&ctx.token_names_of(set))}]`);
     }
-    w.line(&`global FOLLOW_KINDS: List<List<i32>> = [${join_kinds(&rendered)}];`);
-    w.line(&"global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);");
+    w.line(`global FOLLOW_KINDS: List<List<i32>> = [${join_kinds(&rendered)}];`);
+    w.line("global FOLLOW_SETS: List<List<i32>> = follow_bitsets(&FOLLOW_KINDS);");
     for let mask of &masks {
         w.line(mask);
     }
@@ -168,27 +168,27 @@ fn intern_position_set(sets: &mut List<List<i32>>, set: &List<i32>) -> i32 {
 pub fn gen_sync_set_globals(w: &mut CodeWriter, ctx: &GenContext) {
     // Also the empty wanted-set `fail` takes, so a lexer-only grammar — whose
     // `Parser` runtime is still emitted — needs it too.
-    w.line(&"global EMPTY_SYNC: List<i32> = [];");
+    w.line("global EMPTY_SYNC: List<i32> = [];");
     for let entry of &ctx.sync_sets() {
-        w.line(&`global SYNC_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
+        w.line(`global SYNC_${entry.id}: List<i32> = [${join_kinds(&ctx.token_names_of(&entry.tokens))}];`);
     }
     w.blank();
 }
 
 fn gen_kind_set_helper_raw(w: &mut CodeWriter, id: i32, tokens: &List<String>) {
-    let mut f = FnSpec::new(&`_kind_set_${id}`);
-    f.add_param(&"k", &"i32");
-    f.set_return_type(&"bool");
+    let mut f = FnSpec::new(`_kind_set_${id}`);
+    f.add_param("k", "i32");
+    f.set_return_type("bool");
     f.emit_begin(w);
     let mut body = String::with_capacity(64);
-    body.push_str(&"return k matches { ");
+    body.push_str("return k matches { ");
     for let mut i = 0; i < tokens.len(); i += 1 {
         if i > 0 {
-            body.push_str(&" | ");
+            body.push_str(" | ");
         }
         body.push_str(&tokens[i]);
     }
-    body.push_str(&" };");
+    body.push_str(" };");
     w.line(&body);
     w.end();
     w.blank();

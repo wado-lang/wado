@@ -40,7 +40,7 @@ global CBOR_TAG_UUID: u64 = 37;
 
 #[synopsis]
 test {
-    assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
+    assert Uuid::parse("550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
         && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 }
 
@@ -107,7 +107,7 @@ impl Uuid {
     /// Parse a UUID string (case-insensitive), accepting every form Go's
     /// `uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,
     /// `{8-4-4-4-12}`, and `urn:uuid:8-4-4-4-12`.
-    pub fn parse(s: &String) -> Result<Uuid, ParseError> {
+    pub fn parse<S: AsStrSlice>(s: S) -> Result<Uuid, ParseError> {
         let len = s.len();
         let mut start = 0;
         let mut hyphenated = true;
@@ -216,7 +216,7 @@ struct UuidVisitor {
 impl Visitor for UuidVisitor {
     type Value = Uuid;
 
-    fn visit_string(&mut self, v: String) -> Result<Uuid, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Uuid, DeserializeError> {
         return match Uuid::parse(&v) {
             Ok(id) => Result::Ok(id),
             Err(_) => Result::Err(DeserializeError::invalid_value("invalid UUID", -1)),
@@ -321,7 +321,7 @@ fn hex_digit(nibble: i32) -> char {
     return if nibble < 10 { (b'0' + nibble as u8) as char } else { (b'a' + (nibble - 10) as u8) as char };
 }
 
-fn has_urn_prefix(s: &String) -> bool {
+fn has_urn_prefix<S: AsStrSlice>(s: S) -> bool {
     assert s.len() >= 9;
     let prefix = "urn:uuid:";
     for let mut i = 0; i < 9; i += 1 {

@@ -17,7 +17,7 @@ use { ResolvedAttr } from "./attr_resolve.wado";
 /// with the corresponding entry in `replacements`. `refs` must be in
 /// ascending, non-overlapping span order (as `attr_resolve` produces them)
 /// and the same length as `replacements`.
-pub fn splice_attrs(body: &String, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String {
+pub fn splice_attrs<S: AsStrSlice>(body: S, refs: &List<ResolvedAttr>, replacements: &List<String>) -> String {
     assert refs.len() == replacements.len(), "splice_attrs: refs / replacements length mismatch";
     let chars: List<char> = body.chars().collect();
     let n = chars.len();

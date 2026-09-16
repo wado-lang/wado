@@ -1,0 +1,15 @@
+// One parameter, two arguments. Extra arguments used to ride along into the
+// instantiation, which then failed to match the initializer's type and reported
+// a mismatch between two spellings of the same head.
+
+struct Box<T> {
+    v: T,
+}
+
+test "an application past a declaration's arity is reported at the head" {
+    let b: Box<i32, i64> = Box { v: 1 };
+    assert b.v == 1;
+}
+
+__DATA__
+{"compile_error": "`Box` takes 1 type argument, but 2 were supplied"}

@@ -11,7 +11,7 @@ use { Alternative, Element, ParserRule } from "./ir.wado";
 
 /// True iff the alternative starts with a self-reference to the
 /// enclosing rule. Mirrors ANTLR4's direct-LR detection.
-fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
+fn is_left_recursive<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
     if alt.elements.len() == 0 {
         return false;
     }
@@ -33,7 +33,7 @@ fn is_left_recursive(alt: &Alternative, rule_name: &String) -> bool {
 ///
 /// Gale's IR has already stripped action bodies and semantic predicates,
 /// so the upstream `epsilonElement*` tail collapses to the empty case.
-fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
+fn is_prefix_alt<S: AsStrSlice>(alt: &Alternative, rule_name: S) -> bool {
     if is_left_recursive(alt, rule_name) {
         return false;
     }
@@ -48,9 +48,9 @@ fn is_prefix_alt(alt: &Alternative, rule_name: &String) -> bool {
 /// wrapped in a single `Label`). Mirrors `is_left_recursive`'s use of
 /// `unwrap_label` so labeled self-refs at the alt tail (e.g. `b=e`)
 /// are still recognised.
-pub fn is_self_ref_element(elem: &Element, rule_name: &String) -> bool {
+pub fn is_self_ref_element<S: AsStrSlice>(elem: &Element, rule_name: S) -> bool {
     if let RuleRef(r) = unwrap_label(elem) {
-        return r.name == *rule_name;
+        return r.name == rule_name.as_str_slice();
     }
     return false;
 }

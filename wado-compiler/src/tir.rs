@@ -1060,6 +1060,13 @@ impl TypeTable {
         id
     }
 
+    /// [`Self::get`] for a caller holding an id from another table. One this
+    /// table does not carry answers `None` rather than panicking.
+    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
+        let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types.get(id)
+    }
+
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types
@@ -1099,14 +1106,25 @@ impl TypeTable {
         self.types.iter()
     }
 
+    /// The primitive `id` bottoms out in, through any newtype chain.
+    pub fn primitive_head(&self, id: TypeId) -> Option<PrimitiveType> {
+        match self.get(self.representation_head(id)) {
+            ResolvedType::Primitive(p) => Some(*p),
+            _ => None,
+        }
+    }
+
+    /// Whether `id` resolves to exactly `want`, through any newtype chain.
+    pub fn is_primitive(&self, id: TypeId, want: PrimitiveType) -> bool {
+        self.primitive_head(id) == Some(want)
+    }
+
     /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
     /// `false`: no Wasm integer instruction takes them.
     pub fn is_integer(&self, id: TypeId) -> bool {
-        // Follow newtype chain to get ultimate base type
-        let base_id = self.representation_head(id);
         matches!(
-            self.get(base_id),
-            ResolvedType::Primitive(
+            self.primitive_head(id),
+            Some(
                 PrimitiveType::I8
                     | PrimitiveType::I16
                     | PrimitiveType::I32
@@ -1120,11 +1138,9 @@ impl TypeTable {
     }
 
     pub fn is_float(&self, id: TypeId) -> bool {
-        // Follow newtype chain to get ultimate base type
-        let base_id = self.representation_head(id);
         matches!(
-            self.get(base_id),
-            ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
+            self.primitive_head(id),
+            Some(PrimitiveType::F32 | PrimitiveType::F64)
         )
     }
 
@@ -1957,15 +1973,12 @@ impl TypeTable {
     /// literal pattern asks this to pick the `u128` over the `i128` comparison.
     #[must_use]
     pub fn is_unsigned_int(&self, type_id: TypeId) -> bool {
-        // Through the newtype chain, as `is_integer` reads it: a newtype over
-        // `u32` compares unsigned, or a bound past `i32::MAX` never matches.
-        let base_id = self.representation_head(type_id);
+        // Through the newtype chain: a newtype over `u32` compares unsigned, or
+        // a bound past `i32::MAX` never matches.
         matches!(
-            self.get(base_id),
-            ResolvedType::Primitive(
-                PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64
-            )
-        ) || self.wide_int_item(base_id) == Some(CompilerItem::U128)
+            self.primitive_head(type_id),
+            Some(PrimitiveType::U8 | PrimitiveType::U16 | PrimitiveType::U32 | PrimitiveType::U64)
+        ) || self.wide_int_item(self.representation_head(type_id)) == Some(CompilerItem::U128)
     }
 
     /// Which wide-integer prelude struct `type_id` is, `None` for anything else.
@@ -2030,7 +2043,12 @@ impl TypeTable {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
-        let id = self.peel_refs(id);
+        // A dead declaration's body is cleared in place and its signature types
+        // go with the prune, so an optimizer pass reading one off a function
+        // record holds an id this table no longer carries.
+        let Some(id) = self.try_peel_refs(id) else {
+            return false;
+        };
         match (self.nominal_def(id), self.defs.of_ast_id(decl)) {
             (Some(named), Some(declared)) => named == declared,
             _ => self.decl_of_type(id) == Some(decl),
@@ -2556,18 +2574,15 @@ impl TypeTable {
         self.types.replace(id, new_ty);
     }
 
-    /// Check if a type is a primitive (including following newtypes).
+    /// Whether `id` bottoms out in a primitive, through any newtype chain.
     pub fn is_primitive_like(&self, id: TypeId) -> bool {
-        let base = self.representation_head(id);
-        matches!(self.get(base), ResolvedType::Primitive(_))
+        self.primitive_head(id).is_some()
     }
 
     /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
-    /// but `v128`, whose arithmetic is lane-wise and known only to the lane
-    /// type's own impl.
+    /// but `v128`, whose arithmetic is known only to the lane type's own impl.
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
-        let base = self.representation_head(id);
-        matches!(self.get(base), ResolvedType::Primitive(p) if *p != PrimitiveType::V128)
+        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128)
     }
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit or
@@ -2583,6 +2598,17 @@ impl TypeTable {
             match self.get(type_id) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
                 _ => return type_id,
+            }
+        }
+    }
+
+    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// table does not carry answers `None` rather than panicking.
+    pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
+        loop {
+            match self.try_get(type_id)? {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
+                _ => return Some(type_id),
             }
         }
     }

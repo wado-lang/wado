@@ -171,7 +171,7 @@ pub fn char_display_width(c: char) -> i32 {
 
 /// The display width of a string: the sum of its characters' widths. No
 /// grapheme clustering — matches this repo's actual usage (see module doc).
-pub fn display_width(s: &String) -> i32 {
+pub fn display_width<S: AsStrSlice>(s: S) -> i32 {
     let mut w = 0;
     for let c of s.chars() {
         w += char_display_width(c);

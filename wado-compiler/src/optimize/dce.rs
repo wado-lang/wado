@@ -318,17 +318,15 @@ fn extend_reachable_for_optimizer_passes(
 ) {
     use crate::compiler_item::CompilerItem;
 
-    let mut push_str_id: Option<FunctionId> = None;
-    let mut push_char_id: Option<FunctionId> = None;
+    // `push_str` is generic over `AsStrSlice`, so the item marks one id per
+    // monomorph; any of them reaching the fusion keeps the primitives alive.
+    let mut append_ids: Vec<FunctionId> = Vec::new();
     let mut fused: Vec<FunctionId> = Vec::new();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         match func.compiler_item {
-            Some(CompilerItem::StringPushStr) => {
-                push_str_id = Some(function_id_for(&func));
-            }
-            Some(CompilerItem::StringPushChar) => {
-                push_char_id = Some(function_id_for(&func));
+            Some(CompilerItem::StringPushStr | CompilerItem::StringPushChar) => {
+                append_ids.push(function_id_for(&func));
             }
             Some(
                 CompilerItem::StringLen
@@ -350,9 +348,7 @@ fn extend_reachable_for_optimizer_passes(
     // `push_ascii_unchecked` needs no root: both rules only recognise it, and
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
-    if push_str_id.is_some_and(|id| reachable.contains(&id))
-        || push_char_id.is_some_and(|id| reachable.contains(&id))
-    {
+    if append_ids.iter().any(|id| reachable.contains(id)) {
         for id in fused {
             reachable.extend(compute_reachable(call_graph, &id));
         }

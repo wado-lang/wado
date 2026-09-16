@@ -8,7 +8,7 @@ use { Preopens } from "wasi:filesystem";
 /// The paths to process: every `--paths-from <file>` list, one path per line,
 /// plus any bare argument ending in `extension`. A list that cannot be read
 /// yields its own path, so the run reports it rather than looking clean.
-pub fn collect_paths(argv: &List<String>, extension: &String) -> List<String> with (Stderr, Preopens) {
+pub fn collect_paths<S: AsStrSlice>(argv: &List<String>, extension: S) -> List<String> with (Stderr, Preopens) {
     let mut paths: List<String> = [];
     for let mut i = 0; i < argv.len(); i += 1 {
         if argv[i] == "--paths-from" {
@@ -27,7 +27,7 @@ pub fn collect_paths(argv: &List<String>, extension: &String) -> List<String> wi
                     paths.push(argv[i]);
                 },
             }
-        } else if argv[i].ends_with(*extension) {
+        } else if argv[i].ends_with(extension.to_string()) {
             paths.push(argv[i]);
         }
     }
@@ -35,7 +35,7 @@ pub fn collect_paths(argv: &List<String>, extension: &String) -> List<String> wi
 }
 
 /// The 1-based line holding byte offset `at`.
-pub fn line_of(source: &String, at: i32) -> i32 {
+pub fn line_of<S: AsStrSlice>(source: S, at: i32) -> i32 {
     let mut line = 1;
     let mut i = 0;
     while i < at && i < source.len() {

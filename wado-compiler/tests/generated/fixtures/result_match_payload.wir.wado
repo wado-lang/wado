@@ -89,64 +89,64 @@ fn "result_match_payload.wado/run"() with Stdout {
     let s_6: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_11: ref "core:prelude/string.wado//String";
-    let self_27: i32;
-    let new_used_30: i32;
-    let start_31: i32;
-    let handle_36: i32;
-    let packed_38: i64;
-    let rx_39: i32;
-    let tx_40: i32;
-    let self_60: i32;
-    let new_used_63: i32;
-    let start_64: i32;
-    let handle_69: i32;
-    let packed_71: i64;
-    let rx_72: i32;
-    let tx_73: i32;
+    let n_32: i32;
+    let new_used_36: i32;
+    let start_37: i32;
+    let handle_42: i32;
+    let packed_44: i64;
+    let rx_45: i32;
+    let tx_46: i32;
+    let n_71: i32;
+    let new_used_75: i32;
+    let start_76: i32;
+    let handle_81: i32;
+    let packed_83: i64;
+    let rx_84: i32;
+    let tx_85: i32;
     ok_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("success"), used: 7 } };
     err_val = struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("failure"), used: 7 } };
     s_2 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok"(ok_val).payload_0;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     $local_8.used = 4;
     builtin::array_copy<u8>($local_8.repr, 0, global:result_match_payload.wado::$const_obj_1, 0, 4);
-    $inline_core_prelude_string_wado_String__push_str_6: block {
-        self_27 = s_2.used;
-        break_if $inline_core_prelude_string_wado_String__push_str_6 self_27 == 0;
-        new_used_30 = 4 + self_27;
-        if @unlikely(new_used_30 > 20) {
+    $inline_core_prelude_string_wado_String__internal_push_string_9: block {
+        n_32 = s_2.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_9 n_32 == 0;
+        new_used_36 = 4 + n_32;
+        if @unlikely(new_used_36 > 20) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_30);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_8, new_used_36);
         }
-        start_31 = $local_8.used;
-        $local_8.used = new_used_30;
-        builtin::array_copy<u8>($local_8.repr, start_31, s_2.repr, 0, self_27);
+        start_37 = $local_8.used;
+        $local_8.used = new_used_36;
+        builtin::array_copy<u8>($local_8.repr, start_37, s_2.repr, 0, n_32);
     };
-    rx_39 = builtin::i32_wrap_i64(local.tee packed_38("wasi/stream-new"()));
-    tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
-    handle_36 = "result_match_payload.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
-    "core:rt/write_string_to_stream"(tx_40, $local_8);
-    "wasi/future-drop-readable:transmission-cli"(handle_36);
+    rx_45 = builtin::i32_wrap_i64(local.tee packed_44("wasi/stream-new"()));
+    tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
+    handle_42 = "result_match_payload.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
+    "core:rt/write_string_to_stream"(tx_46, $local_8);
+    "wasi/future-drop-readable:transmission-cli"(handle_42);
     s_6 = ref.cast "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err"(err_val).payload_0;
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_11.used = 5;
     builtin::array_copy<u8>($local_11.repr, 0, global:result_match_payload.wado::$const_obj_0, 0, 5);
-    $inline_core_prelude_string_wado_String__push_str_19: block {
-        self_60 = s_6.used;
-        break_if $inline_core_prelude_string_wado_String__push_str_19 self_60 == 0;
-        new_used_63 = 5 + self_60;
-        if @unlikely(new_used_63 > 21) {
+    $inline_core_prelude_string_wado_String__internal_push_string_24: block {
+        n_71 = s_6.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_24 n_71 == 0;
+        new_used_75 = 5 + n_71;
+        if @unlikely(new_used_75 > 21) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_63);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_75);
         }
-        start_64 = $local_11.used;
-        $local_11.used = new_used_63;
-        builtin::array_copy<u8>($local_11.repr, start_64, s_6.repr, 0, self_60);
+        start_76 = $local_11.used;
+        $local_11.used = new_used_75;
+        builtin::array_copy<u8>($local_11.repr, start_76, s_6.repr, 0, n_71);
     };
-    rx_72 = builtin::i32_wrap_i64(local.tee packed_71("wasi/stream-new"()));
-    tx_73 = builtin::i32_wrap_i64(packed_71 >> 32_i64);
-    handle_69 = "result_match_payload.wado/$cm_binding__Stdout_write_via_stream"(rx_72);
-    "core:rt/write_string_to_stream"(tx_73, $local_11);
-    "wasi/future-drop-readable:transmission-cli"(handle_69);
+    rx_84 = builtin::i32_wrap_i64(local.tee packed_83("wasi/stream-new"()));
+    tx_85 = builtin::i32_wrap_i64(packed_83 >> 32_i64);
+    handle_81 = "result_match_payload.wado/$cm_binding__Stdout_write_via_stream"(rx_84);
+    "core:rt/write_string_to_stream"(tx_85, $local_11);
+    "wasi/future-drop-readable:transmission-cli"(handle_81);
 }
 
 fn "result_match_payload.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -38,7 +38,7 @@ test "the winner's actions replay, the losing candidate's stay silent" {
     let mut base = SaBaseImpl { on: true, log: [] };
     with SaBase => &mut base do {
         // AB + EOF.
-        let toks = sa::tokenize(&"ab");
+        let toks = sa::tokenize("ab");
         assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
         let name = sa::token_kind_name(toks.kinds[0]);
         assert name == "AB", `expected AB, got ${name}`;
@@ -52,7 +52,7 @@ test "the shorter rule's action runs when it is the winner" {
     let mut base = SaBaseImpl { on: true, log: [] };
     with SaBase => &mut base do {
         // A + EOF.
-        let toks = sa::tokenize(&"a");
+        let toks = sa::tokenize("a");
         assert toks.len() == 2, `expected 2 tokens, got ${toks.len()}`;
         let name = sa::token_kind_name(toks.kinds[0]);
         assert name == "A", `expected A, got ${name}`;
@@ -64,7 +64,7 @@ test "actions replay once per token, in match order" {
     let mut base = SaBaseImpl { on: true, log: [] };
     with SaBase => &mut base do {
         // AB + A + EOF.
-        let toks = sa::tokenize(&"ab a");
+        let toks = sa::tokenize("ab a");
         assert toks.len() == 3, `expected 3 tokens, got ${toks.len()}`;
     };
     assert joined(&base.log) == "mark@1,done@2:ab,mark@4", `got ${joined(&base.log)}`;
@@ -73,13 +73,13 @@ test "actions replay once per token, in match order" {
 test "a predicate op shares the interface with the action ops" {
     let mut base = SaBaseImpl { on: true, log: [] };
     with SaBase => &mut base do {
-        let toks = sa::tokenize(&"xyz");
+        let toks = sa::tokenize("xyz");
         let name = sa::token_kind_name(toks.kinds[0]);
         assert name == "KW", `expected KW, got ${name}`;
     };
     let mut off = SaBaseImpl { on: false, log: [] };
     with SaBase => &mut off do {
-        let toks = sa::tokenize(&"xyz");
+        let toks = sa::tokenize("xyz");
         let name = sa::token_kind_name(toks.kinds[0]);
         assert name == "ID", `expected ID, got ${name}`;
     };

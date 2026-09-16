@@ -26,7 +26,7 @@ impl SlBase for SlBaseImpl {
 test "superclass predicate true: KW wins the tie" {
     let mut base = SlBaseImpl { on: true };
     with SlBase => &mut base do {
-        let toks = sup::tokenize(&"abc");
+        let toks = sup::tokenize("abc");
         assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
         let name = sup::token_kind_name(toks.kinds[0]);
         assert name == "KW", `expected KW, got ${name}`;
@@ -36,7 +36,7 @@ test "superclass predicate true: KW wins the tie" {
 test "superclass predicate false: KW rejected, ID wins" {
     let mut base = SlBaseImpl { on: false };
     with SlBase => &mut base do {
-        let toks = sup::tokenize(&"abc");
+        let toks = sup::tokenize("abc");
         assert toks.len() >= 1, `expected at least 1 token, got ${toks.len()}`;
         let name = sup::token_kind_name(toks.kinds[0]);
         assert name == "ID", `expected ID, got ${name}`;

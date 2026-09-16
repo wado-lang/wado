@@ -4,7 +4,7 @@
 
 /// Collapse whitespace runs to single spaces and trim, so an expected tree can
 /// be written indented across lines. Whitespace inside double quotes is kept.
-pub fn normalize_tree(s: &String) -> String {
+pub fn normalize_tree<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     let mut in_string = false;
     let mut space_pending = false;
@@ -39,7 +39,7 @@ pub fn normalize_tree(s: &String) -> String {
 /// A marker closes at the first `>` followed by a space, `)`, or end of input.
 /// A deleted token whose own text holds such a `>` therefore cuts early and
 /// leaves a stray `>`, which surfaces as a mismatch rather than a false match.
-pub fn strip_skip_markers(s: &String) -> String {
+pub fn strip_skip_markers<S: AsStrSlice>(s: S) -> String {
     let chars: List<char> = s.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(s.len());

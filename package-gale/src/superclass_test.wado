@@ -20,14 +20,14 @@ use { Grammar, GrammarKind, GrammarOption, OptionValue, ActionKind, superclass_b
 use { CodeWriter } from "./wadopoet.wado";
 
 test "find_this_calls picks up this.method( sites" {
-    let calls = find_this_calls(&"this.isRegexPossible() && x > 0");
+    let calls = find_this_calls("this.isRegexPossible() && x > 0");
     assert calls.len() == 1;
     assert calls[0].name == "isRegexPossible";
     assert calls[0].args.is_empty();
 }
 
 test "find_this_calls handles multiple and whitespace" {
-    let calls = find_this_calls(&"this.a(); this . b ( ) ; foo.c()");
+    let calls = find_this_calls("this.a(); this . b ( ) ; foo.c()");
     assert calls.len() == 2;
     assert calls[0].name == "a";
     assert calls[1].name == "b";
@@ -35,18 +35,18 @@ test "find_this_calls handles multiple and whitespace" {
 }
 
 test "find_this_calls ignores strings and comments" {
-    let calls = find_this_calls(&"\"this.x()\" /* this.y() */ this.z()");
+    let calls = find_this_calls("\"this.x()\" /* this.y() */ this.z()");
     assert calls.len() == 1;
     assert calls[0].name == "z";
 }
 
 test "find_this_calls ignores a bare field access without a call" {
-    let calls = find_this_calls(&"this.field + 1");
+    let calls = find_this_calls("this.field + 1");
     assert calls.is_empty();
 }
 
 test "find_this_calls does not match a longer identifier" {
-    let calls = find_this_calls(&"thistle.x() + other_this.y()");
+    let calls = find_this_calls("thistle.x() + other_this.y()");
     assert calls.is_empty();
 }
 
@@ -97,7 +97,7 @@ test "add_super_op dedups and fixes the first role" {
 }
 
 test "find_this_calls records a call that passes arguments" {
-    let calls = find_this_calls(&"this.setChannel(2); this.plain()");
+    let calls = find_this_calls("this.setChannel(2); this.plain()");
     assert calls.len() == 2;
     assert calls[0].name == "setChannel" && calls[0].args == ["2"];
     assert calls[1].name == "plain" && calls[1].args.is_empty();
@@ -132,7 +132,7 @@ test "call sites agreeing on literal arguments give the operation its signature"
 }
 
 test "a Wado template argument is one String argument" {
-    let calls = find_this_calls(&"this.log(`a,b`)");
+    let calls = find_this_calls("this.log(`a,b`)");
     assert calls.len() == 1, `calls: ${calls.len()}`;
     assert calls[0].args == ["`a,b`"], `args: ${calls[0].args}`;
 
@@ -143,25 +143,25 @@ test "a Wado template argument is one String argument" {
 }
 
 test "a delimiter inside a template does not close the call" {
-    let calls = find_this_calls(&"this.p(`)`) && this.q(1)");
+    let calls = find_this_calls("this.p(`)`) && this.q(1)");
     assert calls.len() == 2, `calls: ${calls.len()}`;
     assert calls[0].args == ["`)`"], `args: ${calls[0].args}`;
     assert calls[1].name == "q", `second call: ${calls[1].name}`;
 }
 
 test "a template's interpolation holds its own commas and quotes" {
-    let calls = find_this_calls(&"this.log(`${f(1, 2)},x`, 3)");
+    let calls = find_this_calls("this.log(`${f(1, 2)},x`, 3)");
     assert calls.len() == 1, `calls: ${calls.len()}`;
     assert calls[0].args == ["`${f(1, 2)},x`", "3"], `args: ${calls[0].args}`;
 }
 
 test "a call nested in an argument gets its own operation and rewrite" {
-    let calls = find_this_calls(&"this.p(`${this.q()}`)");
+    let calls = find_this_calls("this.p(`${this.q()}`)");
     assert calls.len() == 2, `calls: ${calls.len()}`;
     assert calls[0].name == "q", `inner: ${calls[0].name}`;
     assert calls[1].name == "p", `outer: ${calls[1].name}`;
 
-    let out = rewrite_this_calls(&"this.p(`${this.q()}`)", &"Base", SuperSite::ParserPredicate);
+    let out = rewrite_this_calls("this.p(`${this.q()}`)", "Base", SuperSite::ParserPredicate);
     assert !body_names_this(&out), `a rewritten body keeps no receiver: ${out}`;
 }
 
@@ -212,29 +212,29 @@ test "super_ops_without_signature is empty for the zero-argument ops a base can 
 }
 
 test "body_is_base_calls_only accepts both the source and the rewritten call form" {
-    assert body_is_base_calls_only(&"this.processOpenBrace();", &"B");
-    assert body_is_base_calls_only(&" this.a(); this.b() ", &"B");
+    assert body_is_base_calls_only("this.processOpenBrace();", "B");
+    assert body_is_base_calls_only(" this.a(); this.b() ", "B");
     // The same body after `rewrite_lexer_superclass_calls` — the answer must not move.
-    assert body_is_base_calls_only(&"B::process_open_brace(LexerView { chars, start, pos });", &"B");
+    assert body_is_base_calls_only("B::process_open_brace(LexerView { chars, start, pos });", "B");
 }
 
 test "body_is_base_calls_only rejects host code around the call" {
-    assert !body_is_base_calls_only(&"int n = 1; this.a();", &"B");
-    assert !body_is_base_calls_only(&"this.a() && x > 0", &"B");
-    assert !body_is_base_calls_only(&"System.out.println(\"x\");", &"B");
+    assert !body_is_base_calls_only("int n = 1; this.a();", "B");
+    assert !body_is_base_calls_only("this.a() && x > 0", "B");
+    assert !body_is_base_calls_only("System.out.println(\"x\");", "B");
     // Another base's call is host code as far as this grammar is concerned.
-    assert !body_is_base_calls_only(&"C::m(LexerView { chars, start, pos });", &"B");
+    assert !body_is_base_calls_only("C::m(LexerView { chars, start, pos });", "B");
 }
 
 test "body_is_base_calls_only sees past a comment" {
-    assert body_is_base_calls_only(&"/* note */ this.a(); // trailing", &"B");
+    assert body_is_base_calls_only("/* note */ this.a(); // trailing", "B");
     // A bare string is host code, not a call.
-    assert !body_is_base_calls_only(&"\"x\"", &"B");
+    assert !body_is_base_calls_only("\"x\"", "B");
 }
 
 test "body_is_base_calls_only holds vacuously for an empty body" {
-    assert body_is_base_calls_only(&"", &"B");
-    assert body_is_base_calls_only(&"  ", &"B");
+    assert body_is_base_calls_only("", "B");
+    assert body_is_base_calls_only("  ", "B");
 }
 
 test "gen_super_interface emits predicate and action ops" {
@@ -243,7 +243,7 @@ test "gen_super_interface emits predicate and action ops" {
         SuperOp { name: "processOpenBrace", is_predicate: false },
     ];
     let mut w = CodeWriter::new();
-    gen_super_interface(&mut w, &"LexerBase", &ops);
+    gen_super_interface(&mut w, "LexerBase", &ops);
     let out = w.to_string();
     assert out.contains("pub interface LexerBase {");
     assert out.contains("fn is_regex_possible(view: LexerView) -> bool;");
@@ -255,7 +255,7 @@ test "the interface carries the emit lifecycle hook with a pass-through default"
         SuperOp { name: "hit", is_predicate: false },
     ];
     let mut w = CodeWriter::new();
-    gen_super_interface(&mut w, &"B", &ops);
+    gen_super_interface(&mut w, "B", &ops);
     let out = w.to_string();
     assert out.contains("fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {");
     assert out.contains("return ty;");
@@ -277,35 +277,35 @@ test "an action op receives the lexer, a predicate op does not" {
         SuperOp { name: "isRegexPossible", is_predicate: true },
     ];
     let mut w = CodeWriter::new();
-    gen_super_interface(&mut w, &"LexerAdaptor", &ops);
+    gen_super_interface(&mut w, "LexerAdaptor", &ops);
     let out = w.to_string();
     assert out.contains("fn handle_end_argument(view: LexerView, lx: &mut Lexer);");
     assert !out.contains("fn is_regex_possible(view: LexerView, lx: &mut Lexer)");
 }
 
 test "super_call_expr passes a LexerView built from the match-fn locals" {
-    assert super_call_expr(&"LexerBase", &"isRegexPossible", SuperSite::LexerPredicate, &[]) == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
+    assert super_call_expr("LexerBase", "isRegexPossible", SuperSite::LexerPredicate, &[]) == "LexerBase::is_regex_possible(LexerView { chars, start, pos })";
 }
 
 test "super_call_expr hands an action op the lexer alongside the view" {
-    assert super_call_expr(&"LexerAdaptor", &"handleEndArgument", SuperSite::LexerAction, &[]) == "LexerAdaptor::handle_end_argument(LexerView { chars, start, pos }, lx)";
+    assert super_call_expr("LexerAdaptor", "handleEndArgument", SuperSite::LexerAction, &[]) == "LexerAdaptor::handle_end_argument(LexerView { chars, start, pos }, lx)";
 }
 
 test "rewrite_this_calls maps this.m() to the ambient op with a view" {
-    assert rewrite_this_calls(&"this.isOk()", &"B", SuperSite::LexerPredicate) == "B::is_ok(LexerView { chars, start, pos })";
-    assert rewrite_this_calls(&"this.a() && x > 0", &"B", SuperSite::LexerPredicate) == "B::a(LexerView { chars, start, pos }) && x > 0";
+    assert rewrite_this_calls("this.isOk()", "B", SuperSite::LexerPredicate) == "B::is_ok(LexerView { chars, start, pos })";
+    assert rewrite_this_calls("this.a() && x > 0", "B", SuperSite::LexerPredicate) == "B::a(LexerView { chars, start, pos }) && x > 0";
 }
 
 test "rewrite_this_calls threads the lexer through an action body" {
-    assert rewrite_this_calls(&"this.hit();", &"B", SuperSite::LexerAction) == "B::hit(LexerView { chars, start, pos }, lx);";
+    assert rewrite_this_calls("this.hit();", "B", SuperSite::LexerAction) == "B::hit(LexerView { chars, start, pos }, lx);";
 }
 
 test "rewrite_this_calls carries the original arguments through" {
-    assert rewrite_this_calls(&"this.check(1, 2)", &"B", SuperSite::LexerPredicate) == "B::check(LexerView { chars, start, pos }, 1, 2)";
+    assert rewrite_this_calls("this.check(1, 2)", "B", SuperSite::LexerPredicate) == "B::check(LexerView { chars, start, pos }, 1, 2)";
 }
 
 test "rewrite_this_calls leaves strings and non-this text untouched" {
-    assert rewrite_this_calls(&"\"this.x()\" other.y()", &"B", SuperSite::LexerPredicate) == "\"this.x()\" other.y()";
+    assert rewrite_this_calls("\"this.x()\" other.y()", "B", SuperSite::LexerPredicate) == "\"this.x()\" other.y()";
 }
 
 test "superclass_bases routes the option by grammar kind" {
@@ -327,35 +327,35 @@ test "superclass_bases keeps a dotted base's last component" {
 }
 
 test "find_this_calls skips a template string" {
-    assert find_this_calls(&"p.emit(`this.tag()`)").is_empty();
-    assert find_this_calls(&"p.emit(`x`); this.tag()").len() == 1;
+    assert find_this_calls("p.emit(`this.tag()`)").is_empty();
+    assert find_this_calls("p.emit(`x`); this.tag()").len() == 1;
 }
 
 test "rewrite_this_calls leaves a template string untouched" {
-    assert rewrite_this_calls(&"p.emit(`this.x()`)", &"B", SuperSite::LexerPredicate) == "p.emit(`this.x()`)";
+    assert rewrite_this_calls("p.emit(`this.x()`)", "B", SuperSite::LexerPredicate) == "p.emit(`this.x()`)";
 }
 
 test "a template interpolation is code, so its calls are call sites" {
-    let calls = find_this_calls(&"p.emit(`a${this.tag()}b${this.n(1)}`)");
+    let calls = find_this_calls("p.emit(`a${this.tag()}b${this.n(1)}`)");
     assert calls.len() == 2;
     assert calls[0].name == "tag" && calls[0].args.is_empty();
     assert calls[1].name == "n" && calls[1].args == ["1"];
 }
 
 test "rewrite_this_calls rewrites inside a template interpolation" {
-    assert rewrite_this_calls(&"p.emit(`a${this.x()}this.y()`)", &"B", SuperSite::ParserPredicate) == "p.emit(`a${B::x(p)}this.y()`)";
+    assert rewrite_this_calls("p.emit(`a${this.x()}this.y()`)", "B", SuperSite::ParserPredicate) == "p.emit(`a${B::x(p)}this.y()`)";
 }
 
 test "a call after a template interpolation is still rewritten" {
-    assert rewrite_this_calls(&"p.emit(`${1}`); this.z()", &"B", SuperSite::ParserPredicate) == "p.emit(`${1}`); B::z(p)";
+    assert rewrite_this_calls("p.emit(`${1}`); this.z()", "B", SuperSite::ParserPredicate) == "p.emit(`${1}`); B::z(p)";
 }
 
 test "body_names_this sees a field read and a bare receiver" {
-    assert body_names_this(&"this.flag");
-    assert body_names_this(&"x && this");
-    assert body_names_this(&"p.emit(`${this.n}`)");
-    assert !body_names_this(&"other.this_thing() + \"this\"");
-    assert !body_names_this(&"// this\np.emit(`this`)");
+    assert body_names_this("this.flag");
+    assert body_names_this("x && this");
+    assert body_names_this("p.emit(`${this.n}`)");
+    assert !body_names_this("other.this_thing() + \"this\"");
+    assert !body_names_this("// this\np.emit(`this`)");
 }
 
 test "an operation's inferred arguments reach its interface and its call sites" {
@@ -367,7 +367,7 @@ test "an operation's inferred arguments reach its interface and its call sites" 
         },
     ];
     let mut w = CodeWriter::new();
-    gen_parser_super_interface(&mut w, &"TsBase", &ops);
+    gen_parser_super_interface(&mut w, "TsBase", &ops);
     assert w.to_string().contains("fn p(p: &Parser, a0: String) -> bool;"), `interface: ${w.to_string()}`;
-    assert rewrite_this_calls(&"this.p(\"of\")", &"TsBase", SuperSite::ParserPredicate) == "TsBase::p(p, \"of\")";
+    assert rewrite_this_calls("this.p(\"of\")", "TsBase", SuperSite::ParserPredicate) == "TsBase::p(p, \"of\")";
 }

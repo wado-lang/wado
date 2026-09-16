@@ -88,8 +88,8 @@ pub struct AttrEnv {
 /// `rules` is the parser-rule table, used to validate a rule member against
 /// the referenced rule's `returns` fields. Returns the resolved list, or an
 /// error message naming the first unresolvable reference / member.
-pub fn resolve_attrs(
-    body: &String,
+pub fn resolve_attrs<S: AsStrSlice>(
+    body: S,
     rule: &ParserRule,
     rules: &List<ParserRule>,
     bindings: &List<AltBinding> = &NO_BINDINGS,
@@ -116,16 +116,16 @@ fn resolve_one(
         return ok_attr(r, target, &lab.ref_name);
     }
     if contains(&env.attrs, &r.name) {
-        check_member(r, &AttrTarget::RuleAttr, &"", rules)?;
-        return ok_attr(r, AttrTarget::RuleAttr, &"");
+        check_member(r, &AttrTarget::RuleAttr, "", rules)?;
+        return ok_attr(r, AttrTarget::RuleAttr, "");
     }
     if is_parser_special(&r.name) {
-        check_member(r, &AttrTarget::ParserSpecial, &"", rules)?;
-        return ok_attr(r, AttrTarget::ParserSpecial, &"");
+        check_member(r, &AttrTarget::ParserSpecial, "", rules)?;
+        return ok_attr(r, AttrTarget::ParserSpecial, "");
     }
     if contains(&env.token_refs, &r.name) {
-        check_member(r, &AttrTarget::TokenRef, &"", rules)?;
-        return ok_attr(r, AttrTarget::TokenRef, &"");
+        check_member(r, &AttrTarget::TokenRef, "", rules)?;
+        return ok_attr(r, AttrTarget::TokenRef, "");
     }
     if contains(&env.rule_refs, &r.name) {
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
@@ -156,13 +156,13 @@ global NO_BINDINGS: List<AltBinding> = [];
 /// so pick the one the *enclosing alternative* actually bound. Without that,
 /// every alternative resolves as the first one declared. Falls back to
 /// first-match when the alternative binds nothing by that name.
-fn label_named(env: &AttrEnv, name: &String, bindings: &List<AltBinding>) -> Option<LabelInfo> {
+fn label_named<S: AsStrSlice>(env: &AttrEnv, name: S, bindings: &List<AltBinding>) -> Option<LabelInfo> {
     // Compare on the name codegen derived, not the surface one: `myLabel` would
     // otherwise never match a binding and every alternative would take `first`.
     let key = escape_ident(&to_snake_case(name));
     let mut first: Option<LabelInfo> = null;
     for let lab of &env.labels {
-        if lab.name != *name {
+        if lab.name != name.as_str_slice() {
             continue;
         }
         if first matches { None } {
@@ -194,19 +194,24 @@ fn label_target(lab: &LabelInfo) -> AttrTarget {
     };
 }
 
-fn ok_attr(r: &AttrRef, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
+fn ok_attr<S: AsStrSlice>(r: &AttrRef, target: AttrTarget, rule_name: S) -> Result<ResolvedAttr, String> {
     return ok_attr_named(r, &r.name, target, rule_name);
 }
 
 /// Like `ok_attr` but with an explicit binding `name` (the fragment span still
 /// comes from `r`). Used when `$e` aliases a labeled ref `q=e`: the binding name
 /// is the label (`q`), the rewritten span the original `$e`.
-fn ok_attr_named(r: &AttrRef, name: &String, target: AttrTarget, rule_name: &String) -> Result<ResolvedAttr, String> {
+fn ok_attr_named<S: AsStrSlice, S1: AsStrSlice>(
+    r: &AttrRef,
+    name: S,
+    target: AttrTarget,
+    rule_name: S1,
+) -> Result<ResolvedAttr, String> {
     return Result::Ok(ResolvedAttr {
         target,
-        name: *name,
+        name: name.to_string(),
         member: r.member,
-        rule_name: *rule_name,
+        rule_name: rule_name.to_string(),
         start: r.start,
         end: r.end,
     });
@@ -215,20 +220,25 @@ fn ok_attr_named(r: &AttrRef, name: &String, target: AttrTarget, rule_name: &Str
 /// Map a reference name through the label-alias table: a labeled ref `q=e` /
 /// `x=ID` makes `$e` / `$ID` resolve to its label. Returns the name unchanged
 /// when it is not an alias.
-fn alias_target(env: &AttrEnv, name: &String) -> String {
+fn alias_target<S: AsStrSlice>(env: &AttrEnv, name: S) -> String {
     for let a of &env.label_aliases {
-        if a.0 == *name {
+        if a.0 == name.as_str_slice() {
             return a.1;
         }
     }
-    return *name;
+    return name.to_string();
 }
 
 /// Validate `r.member` against what `target` legally exposes. A token-like
 /// target admits the token member set; a rule-like target admits the rule
 /// pseudo-members plus the referenced rule's `returns` fields; specials and
 /// scalar attrs admit no member.
-fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &List<ParserRule>) -> Result<(), String> {
+fn check_member<S: AsStrSlice>(
+    r: &AttrRef,
+    target: &AttrTarget,
+    rule_name: S,
+    rules: &List<ParserRule>,
+) -> Result<(), String> {
     let member = match &r.member {
         Some(m) => *m,
         None => {
@@ -255,18 +265,18 @@ fn check_member(r: &AttrRef, target: &AttrTarget, rule_name: &String, rules: &Li
     return Result::Err(`invalid member '.$${member}' on '$${r.name}'`);
 }
 
-fn is_token_member(m: &String) -> bool {
+fn is_token_member<S: AsStrSlice>(m: S) -> bool {
     return m matches { "text" | "type" | "line" | "pos" | "index" | "channel" | "int" };
 }
 
-fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> bool {
+fn is_rule_member<S: AsStrSlice, S1: AsStrSlice>(m: S, rule_name: S1, rules: &List<ParserRule>) -> bool {
     if is_rule_pseudo_member(m) {
         return true;
     }
     for let rule of rules {
-        if rule.name == *rule_name {
+        if rule.name == rule_name.as_str_slice() {
             for let d of &rule.returns_decls {
-                if d.name == *m {
+                if d.name == m.as_str_slice() {
                     return true;
                 }
             }
@@ -277,16 +287,16 @@ fn is_rule_member(m: &String, rule_name: &String, rules: &List<ParserRule>) -> b
 
 /// The CST pseudo-members every rule reference exposes (`.text` / `.ctx` /
 /// `.start` / `.stop`), independent of its declared `returns`.
-pub fn is_rule_pseudo_member(name: &String) -> bool {
+pub fn is_rule_pseudo_member<S: AsStrSlice>(name: S) -> bool {
     return name matches { "text" | "ctx" | "start" | "stop" };
 }
 
-fn is_parser_special(name: &String) -> bool {
-    return is_rule_pseudo_member(name) || *name == "_p";
+fn is_parser_special<S: AsStrSlice>(name: S) -> bool {
+    return is_rule_pseudo_member(name) || name.eq_str("_p");
 }
 
-fn contains(names: &List<String>, name: &String) -> bool {
-    return names.iter_ref().any(|n| *n == *name);
+fn contains<S: AsStrSlice>(names: &List<String>, name: S) -> bool {
+    return names.iter_ref().any(|n| *n == name.as_str_slice());
 }
 
 /// Build a rule's attribute environment by collecting its declared
@@ -340,10 +350,10 @@ fn build_label_aliases(
     return aliases;
 }
 
-fn count_labeled_ref(labels: &List<LabelInfo>, ref_name: &String, is_token: bool) -> i32 {
+fn count_labeled_ref<S: AsStrSlice>(labels: &List<LabelInfo>, ref_name: S, is_token: bool) -> i32 {
     let mut n = 0;
     for let lab of labels {
-        if !lab.list && lab.is_token == is_token && lab.ref_name == *ref_name {
+        if !lab.list && lab.is_token == is_token && lab.ref_name == ref_name.as_str_slice() {
             n += 1;
         }
     }

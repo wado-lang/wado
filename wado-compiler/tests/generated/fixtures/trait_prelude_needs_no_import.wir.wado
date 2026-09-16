@@ -4,15 +4,21 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//trait_prelude_needs_no_import.wado/$cm_export__$test_0_prelude_traits_carry_no_import_burden" = fn();  // TypeId(1)
+type "functype//trait_prelude_needs_no_import.wado/$test_0_prelude_traits_carry_no_import_burden" = fn();  // TypeId(1)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(2)
+type "functype//trait_prelude_needs_no_import.wado/$cm_export__$test_0_prelude_traits_carry_no_import_burden" = fn();  // TypeId(2)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
+fn "trait_prelude_needs_no_import.wado/$test_0_prelude_traits_carry_no_import_burden"() {
+}
+
 fn "trait_prelude_needs_no_import.wado/$cm_export__$test_0_prelude_traits_carry_no_import_burden"() {
+    "trait_prelude_needs_no_import.wado/$test_0_prelude_traits_carry_no_import_burden"();
     "wasi/task-return"(0);
 }
 

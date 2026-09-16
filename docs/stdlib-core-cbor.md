@@ -92,7 +92,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn is_human_readable(&self) -> bool`
 
@@ -106,11 +106,11 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<CborMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CborStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<CborStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CborVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<CborVariantSerializer, SerializeError>`
 
 ### `pub struct CanonicalCborSerializer`
 
@@ -138,7 +138,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn is_human_readable(&self) -> bool`
 
@@ -152,11 +152,11 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<CanonicalCborMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalCborStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<CanonicalCborStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalCborVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<CanonicalCborVariantSerializer, SerializeError>`
 
 ### `pub struct CborDeserializer`
 
@@ -190,7 +190,7 @@ _Fields are private._
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-##### `fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError>`
+##### `fn begin_container<S: AsStrSlice>(&mut self, want_major: u8, expected: S) -> Result<[i64, bool, i32], DeserializeError>`
 
 Open a container of the expected major type, unwrapping any
 self-described prefix. `remaining` is `-1` when indefinite; `expected`
@@ -200,8 +200,8 @@ is the type-mismatch diagnostic, by reference so success allocates none.
 
 ##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
 
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`

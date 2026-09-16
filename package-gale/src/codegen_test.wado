@@ -109,21 +109,21 @@ test "generate token kind" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub enum TokenKind {");
-    assert str_contains(&output, &"    NUMBER,");
-    assert str_contains(&output, &"    WS,");
-    assert str_contains(&output, &"    Eof,");
-    assert str_contains(&output, &"    Error,");
-    assert !str_contains(&output, &"    DIGIT,");
+    assert str_contains(&output, "pub enum TokenKind {");
+    assert str_contains(&output, "    NUMBER,");
+    assert str_contains(&output, "    WS,");
+    assert str_contains(&output, "    Eof,");
+    assert str_contains(&output, "    Error,");
+    assert !str_contains(&output, "    DIGIT,");
 }
 
 test "node-kind constants are pub so consumers can dispatch on CstNode.kind" {
     let mut grammar = parse("grammar T; prog : expr ; expr : INT ; INT : [0-9]+ ;").unwrap();
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub global RK_PROG:");
-    assert str_contains(&output, &"pub global RK_EXPR:");
+    assert str_contains(&output, "pub global RK_PROG:");
+    assert str_contains(&output, "pub global RK_EXPR:");
     // No non-pub `global RK_` line should remain.
-    assert !str_contains(&output, &"\nglobal RK_");
+    assert !str_contains(&output, "\nglobal RK_");
 }
 
 test "duplicate same-rule alt labels coalesce to one enum case (valid in ANTLR4)" {
@@ -138,17 +138,17 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub enum EAlt {");
+    assert str_contains(&output, "pub enum EAlt {");
     // The shared label appears once (no `Bin,\n    Bin,` duplicate variant).
-    assert !str_contains(&output, &"    Bin,\n    Bin,");
-    assert str_contains(&output, &"    Num,");
+    assert !str_contains(&output, "    Bin,\n    Bin,");
+    assert str_contains(&output, "    Num,");
     // The accessor returns Option so an unstamped/error node is None, not a
     // silent first-alternative; both `# Bin` alts (0 and 1) map to one case.
-    assert str_contains(&output, &"pub fn e_alt(&self, node: i32) -> Option<EAlt>");
-    assert str_contains(&output, &"0 => Option::Some(EAlt::Bin),");
-    assert str_contains(&output, &"1 => Option::Some(EAlt::Bin),");
-    assert str_contains(&output, &"2 => Option::Some(EAlt::Num),");
-    assert str_contains(&output, &"_ => null,");
+    assert str_contains(&output, "pub fn e_alt(&self, node: i32) -> Option<EAlt>");
+    assert str_contains(&output, "0 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, "1 => Option::Some(EAlt::Bin),");
+    assert str_contains(&output, "2 => Option::Some(EAlt::Num),");
+    assert str_contains(&output, "_ => null,");
 }
 
 test "reserved-word alt labels are escaped to valid identifiers" {
@@ -164,15 +164,15 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub enum RAlt {");
-    assert str_contains(&output, &"    else_,");
-    assert str_contains(&output, &"    loop_,");
-    assert str_contains(&output, &"    Keep,");
-    assert !str_contains(&output, &"    else,");
-    assert !str_contains(&output, &"    loop,");
-    assert str_contains(&output, &"0 => Option::Some(RAlt::else_),");
-    assert str_contains(&output, &"1 => Option::Some(RAlt::loop_),");
-    assert str_contains(&output, &"2 => Option::Some(RAlt::Keep),");
+    assert str_contains(&output, "pub enum RAlt {");
+    assert str_contains(&output, "    else_,");
+    assert str_contains(&output, "    loop_,");
+    assert str_contains(&output, "    Keep,");
+    assert !str_contains(&output, "    else,");
+    assert !str_contains(&output, "    loop,");
+    assert str_contains(&output, "0 => Option::Some(RAlt::else_),");
+    assert str_contains(&output, "1 => Option::Some(RAlt::loop_),");
+    assert str_contains(&output, "2 => Option::Some(RAlt::Keep),");
 }
 
 test "generate wildcard element" {
@@ -205,7 +205,7 @@ test "generate wildcard element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"p.any();");
+    assert str_contains(&output, "p.any();");
 }
 
 test "generate parser not element" {
@@ -238,7 +238,7 @@ test "generate parser not element" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"p.expect_not(&SYNC_");
+    assert str_contains(&output, "p.expect_not(&SYNC_");
 }
 
 test "generate scalar-labeled group `t=(a | b)`" {
@@ -252,14 +252,14 @@ test "generate scalar-labeled group `t=(a | b)`" {
     // and the surface field name survives via the rebound op.
     let mut grammar = parse_grammar("grammar T; a : t=('x' | 'y') ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"TK_LIT_X");
-    assert str_contains(&output, &"TK_LIT_Y");
-    assert str_contains(&output, &"p.expect_set(&SYNC_");
+    assert str_contains(&output, "TK_LIT_X");
+    assert str_contains(&output, "TK_LIT_Y");
+    assert str_contains(&output, "p.expect_set(&SYNC_");
     // A peel regression panics in `gen_op_group`; transparency is what is left.
     let mut bare = parse_grammar("grammar T; a : ('x' | 'y') ;", "(test)");
     let bare_output = generate(&mut bare, &DEFAULT_OPTIONS).source;
-    let labeled_body = extract_fn_body(&output, &"fn _parse_a__inner(");
-    let bare_body = extract_fn_body(&bare_output, &"fn _parse_a__inner(");
+    let labeled_body = extract_fn_body(&output, "fn _parse_a__inner(");
+    let bare_body = extract_fn_body(&bare_output, "fn _parse_a__inner(");
     assert labeled_body == bare_body, `scalar label changed the emit:\nlabeled: ${labeled_body}\nbare:    ${bare_body}`;
 }
 
@@ -273,8 +273,8 @@ test "generate scalar-labeled single-alt group `t=(A B)`" {
         "(test)",
     );
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"p.expect(TK_A,");
-    assert str_contains(&output, &"p.expect(TK_B,");
+    assert str_contains(&output, "p.expect(TK_A,");
+    assert str_contains(&output, "p.expect(TK_B,");
 }
 
 test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
@@ -285,7 +285,7 @@ test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
     // wildcard-in-set / wildcard-in-group ANTLR4 patterns.
     let mut grammar = parse_grammar("grammar T; a : t=(.)* ; A : 'a' ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"any");
+    assert str_contains(&output, "any");
 }
 
 test "generate lexer set_mode" {
@@ -343,9 +343,9 @@ test "generate lexer set_mode" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"best_set_mode");
-    assert str_contains(&output, &"best_set_mode = 1");
-    assert str_contains(&output, &"current_mode = best_set_mode");
+    assert str_contains(&output, "best_set_mode");
+    assert str_contains(&output, "best_set_mode = 1");
+    assert str_contains(&output, "current_mode = best_set_mode");
 }
 
 test "generate lexer more" {
@@ -383,9 +383,9 @@ test "generate lexer more" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"best_more");
-    assert str_contains(&output, &"more_start");
-    assert str_contains(&output, &"best_more = true");
+    assert str_contains(&output, "best_more");
+    assert str_contains(&output, "more_start");
+    assert str_contains(&output, "best_more = true");
 }
 
 test "generate lexer type_override" {
@@ -444,10 +444,10 @@ test "generate lexer type_override" {
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // IF rule should produce tokens tagged as TK_ID (not TK_IF).
-    assert str_contains(&output, &"best_kind = TK_ID");
+    assert str_contains(&output, "best_kind = TK_ID");
     // TK_IF should still exist as a token kind (not renamed), because
     // type_override only rewrites emission, not the rule identifier.
-    assert str_contains(&output, &"    IF,");
+    assert str_contains(&output, "    IF,");
 }
 
 test "generate lexer channel" {
@@ -485,14 +485,14 @@ test "generate lexer channel" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"best_channel");
-    assert str_contains(&output, &"best_channel = 2");
+    assert str_contains(&output, "best_channel");
+    assert str_contains(&output, "best_channel = 2");
     // Non-default channels must be routed to trivia, not tokens — ANTLR4
     // hides channels other than DEFAULT from parser rules.
-    assert str_contains(&output, &"if best_channel != 0");
-    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+    assert str_contains(&output, "if best_channel != 0");
+    assert str_contains(&output, "ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
     // No `-> skip` rule and no action to latch one, so `is_skip` never exists.
-    assert !str_contains(&output, &"let is_skip");
+    assert !str_contains(&output, "let is_skip");
 }
 
 test "generate lexer hidden channel routes to trivia" {
@@ -514,9 +514,9 @@ ID : [a-z]+ ;";
     // != 0` matches to trivia via `Token::with_channel`, not to the tokens
     // stream.
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"if best_channel != 0");
-    assert str_contains(&output, &"ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
-    assert !str_contains(&output, &"let is_skip");
+    assert str_contains(&output, "if best_channel != 0");
+    assert str_contains(&output, "ts.push_trivia(best_kind, tok_start, best_end, best_channel);");
+    assert !str_contains(&output, "let is_skip");
 }
 
 test "generate left-associative LR alt passes own_prec+1 on right operand" {
@@ -530,7 +530,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr(p, 2)");
+    assert str_contains(&output, "_parse_expr(p, 2)");
 }
 
 test "generate right-associative LR alt passes own_prec on right operand" {
@@ -543,14 +543,14 @@ WS : [ \\t\\r\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"_parse_expr(p, 1)");
+    assert str_contains(&output, "_parse_expr(p, 1)");
     // And the scan-side mirror must be kept in sync.
-    assert str_contains(&output, &"scan_expr(tokens, pos, 1)");
+    assert str_contains(&output, "scan_expr(tokens, pos, 1)");
 }
 
-fn parse_grammar(input: String, path: String) -> Grammar {
+fn parse_grammar<S: AsStrSlice, S1: AsStrSlice>(input: S, path: S1) -> Grammar {
     let mut g = parse(input).unwrap();
-    g.source_files.push(path);
+    g.source_files.push(path.to_string());
     return g;
 }
 
@@ -570,11 +570,11 @@ letterA : 'a' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let scan_body = extract_fn_body(&output, &"fn scan_statement(");
+    let scan_body = extract_fn_body(&output, "fn scan_statement(");
     // The LR loop must save `pos` before the suffix call and restore it on
     // failure. Look for the save+restore pair around `scan_statement_lr_1(`.
-    assert str_contains(&scan_body, &"let lr_saved_pos = pos;");
-    assert str_contains(&scan_body, &"pos = lr_saved_pos; break;");
+    assert str_contains(&scan_body, "let lr_saved_pos = pos;");
+    assert str_contains(&scan_body, "pos = lr_saved_pos; break;");
 }
 
 test "LR helper stamps min_prec on a self-ref nested inside a Repeat group" {
@@ -594,14 +594,14 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
+    let helper = extract_fn_body(&output, "fn _parse_expr__inner(");
     // Send is the second LR alt of two left-assoc: own_prec=1, conflict_min=2.
     // The self-refs in the Send suffix must be stamped with min_prec 2.
-    assert !str_contains(&helper, &"_parse_expr(p)");
-    assert str_contains(&helper, &"_parse_expr(p, 2)");
-    let scan_helper = extract_fn_body(&output, &"fn scan_expr_lr_1");
-    assert !str_contains(&scan_helper, &"scan_expr(tokens, pos, 0)");
-    assert str_contains(&scan_helper, &"scan_expr(tokens, pos, 2)");
+    assert !str_contains(&helper, "_parse_expr(p)");
+    assert str_contains(&helper, "_parse_expr(p, 2)");
+    let scan_helper = extract_fn_body(&output, "fn scan_expr_lr_1");
+    assert !str_contains(&scan_helper, "scan_expr(tokens, pos, 0)");
+    assert str_contains(&scan_helper, "scan_expr(tokens, pos, 2)");
 }
 
 test "SimpleCst group emit threads min_prec_arg on a self-ref alt inside an LR suffix" {
@@ -618,10 +618,10 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let helper = extract_fn_body(&output, &"fn _parse_expr__inner(");
+    let helper = extract_fn_body(&output, "fn _parse_expr__inner(");
     assert helper.len() > 0;
-    assert !str_contains(&helper, &"_parse_expr(p)");
-    assert str_contains(&helper, &"_parse_expr(p, 2)");
+    assert !str_contains(&helper, "_parse_expr(p)");
+    assert str_contains(&helper, "_parse_expr(p, 2)");
 }
 
 test "LR parse loop predicts via scan when suffix's first token is shared with the atom" {
@@ -637,8 +637,8 @@ letterA : 'a' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let parse_body = extract_fn_body(&output, &"fn _parse_statement__inner(");
-    assert str_contains(&parse_body, &"scan_statement_lr_1(") || str_contains(&parse_body, &"scan_statement_lr_1 (");
+    let parse_body = extract_fn_body(&output, "fn _parse_statement__inner(");
+    assert str_contains(&parse_body, "scan_statement_lr_1(") || str_contains(&parse_body, "scan_statement_lr_1 (");
 }
 
 test "generate emits pub fn parse_<rule>(input) per parser rule" {
@@ -654,19 +654,19 @@ b : 'y' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_a(input: &String");
-    assert str_contains(&output, &"pub fn parse_b(input: &String");
+    assert str_contains(&output, "pub fn parse_a<S: AsStrSlice>(input: S");
+    assert str_contains(&output, "pub fn parse_b<S: AsStrSlice>(input: S");
     // Each `parse_<rule>` is a thin wrapper that hands the rule's
     // `_parse_<rule>` entry to the shared `_run_parse_entry` helper as a fn value;
     // `_run_parse_entry` builds the Parser and folds the error into the diagnostics.
     assert str_contains(
         &output,
-        &"fn _run_parse_entry(input: &String, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
+        "fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Parser)) -> ParseResult",
     );
-    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
-    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
+    assert str_contains(&output, "return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_a(p));");
+    assert str_contains(&output, "return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_b(p));");
     // `pub fn parse` is a thin alias for the first rule's entry.
-    assert str_contains(&output, &"return parse_a(input, max_errors);");
+    assert str_contains(&output, "return parse_a(input, max_errors);");
 }
 
 test "trace option emits per-rule enter/ok/fail instrumentation" {
@@ -683,22 +683,22 @@ b : 'y' ;
     // depth field, and the per-rule calls are all present.
     assert str_contains(
         &traced,
-        &"use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";",
+        "use { Level, Log, TextSink, enabled, log_level, set_log_level, trace } from \"core:log\";",
     );
-    assert str_contains(&traced, &"fn trace_enter(p: &Parser, rule: &String)");
-    assert str_contains(&traced, &"pub fn trace_to_stderr<T, effect E>");
-    assert str_contains(&traced, &"trace_depth: i32,");
-    assert str_contains(&traced, &"trace_enter(p, &\"a\");");
-    assert str_contains(&traced, &"trace_fail(p, &\"a\", &p.pending_message());");
-    assert str_contains(&traced, &"trace_ok(p, &\"b\");");
+    assert str_contains(&traced, "fn trace_enter<S: AsStrSlice>(p: &Parser, rule: S)");
+    assert str_contains(&traced, "pub fn trace_to_stderr<T, effect E>");
+    assert str_contains(&traced, "trace_depth: i32,");
+    assert str_contains(&traced, "trace_enter(p, \"a\");");
+    assert str_contains(&traced, "trace_fail(p, \"a\", p.pending_message());");
+    assert str_contains(&traced, "trace_ok(p, \"b\");");
 
     // Default generation (trace off) must contain none of it — the feature
     // is strictly opt-in and adds zero instrumentation otherwise.
     let mut grammar2 = parse_grammar(input, "test.g4");
     let plain = generate(&mut grammar2, &GenerateOptions { trace: false }).source;
-    assert !str_contains(&plain, &"trace_enter");
-    assert !str_contains(&plain, &"trace_depth");
-    assert !str_contains(&plain, &"core:log");
+    assert !str_contains(&plain, "trace_enter");
+    assert !str_contains(&plain, "trace_depth");
+    assert !str_contains(&plain, "core:log");
 }
 
 test "token-led overlap dispatch emits no per-alt scan helpers" {
@@ -713,10 +713,10 @@ a : 'x' ;
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // Both alts are reached (the group resolved, not collapsed)...
-    assert str_contains(&output, &"fn _parse_r__inner_alt_0(");
-    assert str_contains(&output, &"fn _parse_r__inner_alt_1(");
+    assert str_contains(&output, "fn _parse_r__inner_alt_0(");
+    assert str_contains(&output, "fn _parse_r__inner_alt_1(");
     // ...but neither scan helper is emitted.
-    assert !str_contains(&output, &"fn _parse_r__inner_scan_");
+    assert !str_contains(&output, "fn _parse_r__inner_scan_");
 
     // A shared-prefix tournament rule still emits its scan helpers, so the
     // gate is not over-pruning.
@@ -727,7 +727,7 @@ Y : 'Y' ;
 ";
     let mut tg = parse_grammar(tinput, "test.g4");
     let tout = generate(&mut tg, &DEFAULT_OPTIONS).source;
-    assert str_contains(&tout, &"fn _parse_s__inner_scan_0(");
+    assert str_contains(&tout, "fn _parse_s__inner_scan_0(");
 }
 
 test "trace option instruments the scan tournament and alt picks" {
@@ -749,16 +749,16 @@ Z : 'Z' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
-    assert str_contains(&traced, &"trace_scan_alt(p, &\"a\",");
-    assert str_contains(&traced, &"trace_pick(p, &\"a\", _sd_best_i);");
-    assert str_contains(&traced, &"fn trace_scan_alt(p: &Parser, rule: &String, alt: i32, end: i32)");
+    assert str_contains(&traced, "trace_scan_alt(p, \"a\",");
+    assert str_contains(&traced, "trace_pick(p, \"a\", _sd_best_i);");
+    assert str_contains(&traced, "fn trace_scan_alt<S: AsStrSlice>(p: &Parser, rule: S, alt: i32, end: i32)");
 
     // Default generation (trace off) emits none of the decision-point hooks.
     let mut grammar2 = parse_grammar(input, "test.g4");
     let plain = generate(&mut grammar2, &GenerateOptions { trace: false }).source;
-    assert !str_contains(&plain, &"trace_scan_alt");
-    assert !str_contains(&plain, &"trace_pick");
-    assert !str_contains(&plain, &"trace_try");
+    assert !str_contains(&plain, "trace_scan_alt");
+    assert !str_contains(&plain, "trace_pick");
+    assert !str_contains(&plain, "trace_try");
 }
 
 test "trace suppresses the pick line for all-single-token rules" {
@@ -778,8 +778,8 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let traced = generate(&mut grammar, &GenerateOptions { trace: true }).source;
-    assert !str_contains(&traced, &"trace_pick(p, &\"tok\",");
-    assert str_contains(&traced, &"trace_pick(p, &\"sub\",");
+    assert !str_contains(&traced, "trace_pick(p, \"tok\",");
+    assert str_contains(&traced, "trace_pick(p, \"sub\",");
 }
 
 test "generate emits pub fn parse_<rule>(input) for LR rule with min_prec=0" {
@@ -792,8 +792,8 @@ WS : [ \\t\\n]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"pub fn parse_expr(input: &String");
-    assert str_contains(&output, &"return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));");
+    assert str_contains(&output, "pub fn parse_expr<S: AsStrSlice>(input: S");
+    assert str_contains(&output, "return _run_parse_entry(input, max_errors, |p: &mut Parser| _parse_expr(p));");
 }
 
 test "token-only group `(K_A | K_B)` gates p.advance() on a kind-check" {
@@ -810,28 +810,28 @@ a : 'a' ('b' | 'c') 'd' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_a__inner(");
-    assert str_contains(&body, &"p.expect_set(&SYNC_");
-    assert !str_contains(&body, &"p.advance();");
+    let body = extract_fn_body(&output, "fn _parse_a__inner(");
+    assert str_contains(&body, "p.expect_set(&SYNC_");
+    assert !str_contains(&body, "p.advance();");
 }
 
-fn extract_fn_body(output: &String, header: &String) -> String {
+fn extract_fn_body<S: AsStrSlice, S1: AsStrSlice>(output: S, header: S1) -> String {
     let start = find_substr(output, header);
     if start < 0 {
         return "";
     }
     // Find the next "\nfn " (start of the next top-level fn) or end of file.
     let after = start + header.len();
-    let next = find_substr_from(output, &"\nfn ", after);
+    let next = find_substr_from(output, "\nfn ", after);
     let end = if next < 0 { output.len() } else { next };
     return output.substr_bytes(start, end);
 }
 
-fn find_substr(haystack: &String, needle: &String) -> i32 {
+fn find_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     return find_substr_from(haystack, needle, 0);
 }
 
-fn find_substr_from(haystack: &String, needle: &String, from: i32) -> i32 {
+fn find_substr_from<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1, from: i32) -> i32 {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -861,8 +861,8 @@ WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // A case-insensitive 'i' must use the branchless CI comparison helper.
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')");
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'f')");
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')");
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'f')");
 }
 
 test "caseInsensitive grammar option makes char-range match CI" {
@@ -872,7 +872,7 @@ ID : [a-z]+ ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // A case-insensitive [a-z] must also accept [A-Z].
-    assert str_contains(&output, &"'A'..='Z'");
+    assert str_contains(&output, "'A'..='Z'");
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {
@@ -884,11 +884,11 @@ WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // IF still CI: the literal 'i' must use the branchless CI helper.
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'i')");
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'i')");
     // STRICT: rule-level caseInsensitive=false means 'x' must NOT be folded,
     // regardless of which match path the optimisation chose for the rule
     // (keyword classifier, regular dispatch, or shared literal).
-    assert !str_contains(&output, &"eq_ignore_ascii_case(&'x')");
+    assert !str_contains(&output, "eq_ignore_ascii_case(&'x')");
 }
 
 test "lexer rule caseInsensitive=true enables CI when grammar-level absent" {
@@ -897,9 +897,9 @@ KW options { caseInsensitive = true; } : 'go' ;
 ID : [a-z]+ ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"!chars[pos].eq_ignore_ascii_case(&'g')");
+    assert str_contains(&output, "!chars[pos].eq_ignore_ascii_case(&'g')");
     // ID is not CI; its range must stay [a-z] without a mirrored [A-Z].
-    assert !str_contains(&output, &"'A'..='Z'");
+    assert !str_contains(&output, "'A'..='Z'");
 }
 
 test "virtual tokens are marked and not match-generated" {
@@ -916,10 +916,10 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"    VIRTUAL_TOK,  // virtual");
-    assert str_contains(&output, &"global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, &";  // virtual");
-    assert str_contains(&output, &"TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
-    assert !str_contains(&output, &"fn try_VIRTUAL_TOK(");
+    assert str_contains(&output, "    VIRTUAL_TOK,  // virtual");
+    assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, ";  // virtual");
+    assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
+    assert !str_contains(&output, "fn try_VIRTUAL_TOK(");
 }
 
 test "caseInsensitive does not fold non-letters" {
@@ -930,10 +930,10 @@ SEMI : ';' ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     // Digit range must not be duplicated.
-    assert str_contains(&output, &"'0'..='9'");
+    assert str_contains(&output, "'0'..='9'");
     // Non-letter literal must not be duplicated — plain mismatch form.
-    assert str_contains(&output, &"chars[pos] != ';'");
-    assert !str_contains(&output, &"chars[pos].eq_ignore_ascii_case(");
+    assert str_contains(&output, "chars[pos] != ';'");
+    assert !str_contains(&output, "chars[pos].eq_ignore_ascii_case(");
 }
 
 test "metadata comment lists grammar-level options" {
@@ -956,12 +956,12 @@ test "metadata comment lists grammar-level options" {
         parser_superclass: "BaseParser",
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
-    assert str_contains(&output, &"//   option language = Python");
-    assert str_contains(&output, &"//   option superClass = BaseParser (parser)");
-    assert !str_contains(&output, &"//   option superClass = my.pkg.BaseParser");
-    assert str_contains(&output, &"//   option tokenVocab = TestLexer");
-    assert str_contains(&output, &"//   option caseInsensitive = true");
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:");
+    assert str_contains(&output, "//   option language = Python");
+    assert str_contains(&output, "//   option superClass = BaseParser (parser)");
+    assert !str_contains(&output, "//   option superClass = my.pkg.BaseParser");
+    assert str_contains(&output, "//   option tokenVocab = TestLexer");
+    assert str_contains(&output, "//   option caseInsensitive = true");
 }
 
 test "metadata comment formats string and int option values" {
@@ -982,9 +982,9 @@ test "metadata comment formats string and int option values" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"//   option tokenVocab = \"foo.g4\"");
-    assert str_contains(&output, &"//   option k = 3");
-    assert str_contains(&output, &"//   option init = { ... }");
+    assert str_contains(&output, "//   option tokenVocab = \"foo.g4\"");
+    assert str_contains(&output, "//   option k = 3");
+    assert str_contains(&output, "//   option init = { ... }");
 }
 
 test "metadata comment lists named actions" {
@@ -1005,10 +1005,10 @@ test "metadata comment lists named actions" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
-    assert str_contains(&output, &"//   @header");
-    assert str_contains(&output, &"//   @parser::members");
-    assert str_contains(&output, &"//   @lexer::members");
+    assert str_contains(&output, "// Grammar metadata from source .g4 prequels:");
+    assert str_contains(&output, "//   @header");
+    assert str_contains(&output, "//   @parser::members");
+    assert str_contains(&output, "//   @lexer::members");
 }
 
 test "metadata block omitted when no options and no named actions" {
@@ -1025,7 +1025,7 @@ test "metadata block omitted when no options and no named actions" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, &"// Grammar metadata from source .g4 prequels:");
+    assert !str_contains(&output, "// Grammar metadata from source .g4 prequels:");
 }
 
 test "visibility comment emitted on non-default parser rule" {
@@ -1067,9 +1067,9 @@ test "visibility comment emitted on non-default parser rule" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"// rule visibility: public (ignored by codegen, matches ANTLR4)");
+    assert str_contains(&output, "// rule visibility: public (ignored by codegen, matches ANTLR4)");
     // Default visibility must not add any comment.
-    assert !str_contains(&output, &"// rule visibility: default");
+    assert !str_contains(&output, "// rule visibility: default");
 }
 
 test "visibility comment emitted on non-default lexer rule" {
@@ -1088,7 +1088,7 @@ test "visibility comment emitted on non-default lexer rule" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"// rule visibility: protected (ignored by codegen, matches ANTLR4)");
+    assert str_contains(&output, "// rule visibility: protected (ignored by codegen, matches ANTLR4)");
 }
 
 test "single-char literal lexer rule without an identifier carrier emits its own try_ matcher" {
@@ -1106,10 +1106,10 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"fn try_A(");
-    assert str_contains(&output, &"fn try_B(");
-    assert str_contains(&output, &"first_char matches { 'A' }");
-    assert str_contains(&output, &"first_char matches { 'B' }");
+    assert str_contains(&output, "fn try_A(");
+    assert str_contains(&output, "fn try_B(");
+    assert str_contains(&output, "first_char matches { 'A' }");
+    assert str_contains(&output, "first_char matches { 'B' }");
 }
 
 test "set list-label `name+=(A | B)*` emits List<Token> + expect_set" {
@@ -1122,9 +1122,9 @@ WS : (' '|'\\n') -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_b__inner(");
-    assert str_contains(&body, &"p.expect_set(&SYNC_");
-    assert str_contains(&output, &"global SYNC_0: List<i32> = [TK_FLOAT, TK_INT];");
+    let body = extract_fn_body(&output, "fn _parse_b__inner(");
+    assert str_contains(&body, "p.expect_set(&SYNC_");
+    assert str_contains(&output, "global SYNC_0: List<i32> = [TK_FLOAT, TK_INT];");
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {
@@ -1135,18 +1135,18 @@ ifStmt : 'if' 'y' statement ('else' statement)?? ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_if_stmt__inner(");
+    let body = extract_fn_body(&output, "fn _parse_if_stmt__inner(");
     // The non-greedy `??` enter/skip decision is taken at runtime by the
     // ATN simulator (full context), not by a static first-set peek — so the
     // shape is still a single `Option<T>` if (not a `while` loop), but the
     // condition is the simulator call. The decision number is stamped at
     // compile time (`atn_predict_with_stack`), retiring the old
     // `atn_ng_optional_enter` exit-first BlockStart search.
-    assert str_contains(&body, &"if atn_predict_with_stack(&ATN_SIM,");
-    assert str_contains(&body, &") == 1");
-    assert !str_contains(&body, &"atn_ng_optional_enter(");
-    assert !str_contains(&body, &"if p.peek_kind() == TK_LIT_ELSE");
-    assert !str_contains(&body, &"while p.peek_kind() == TK_LIT_ELSE");
+    assert str_contains(&body, "if atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, ") == 1");
+    assert !str_contains(&body, "atn_ng_optional_enter(");
+    assert !str_contains(&body, "if p.peek_kind() == TK_LIT_ELSE");
+    assert !str_contains(&body, "while p.peek_kind() == TK_LIT_ELSE");
 }
 
 test "single-char literal with an ID carrier stays a keyword (no try_ matcher)" {
@@ -1161,8 +1161,8 @@ WS : [ \\t\\n\\r]+ -> skip ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, &"fn try_A(");
-    assert str_contains(&output, &"classify_keyword");
+    assert !str_contains(&output, "fn try_A(");
+    assert str_contains(&output, "classify_keyword");
 }
 
 test "keyword candidate declared after a colliding carrier falls back to its own matcher" {
@@ -1181,7 +1181,7 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"fn try_B(");
+    assert str_contains(&output, "fn try_B(");
 }
 
 test "generate returns source and lowering diagnostics from one lowering" {
@@ -1234,10 +1234,10 @@ C : 'c' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&out, &"p.no_viable("), out;
+    assert str_contains(&out, "p.no_viable("), out;
     // Both paths read one vocabulary: `kind_names` over the interned kind ids.
-    assert str_contains(&out, &"kind_names(expected)"), out;
-    assert !str_contains(&out, &"\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
+    assert str_contains(&out, "kind_names(expected)"), out;
+    assert !str_contains(&out, "\"TK_A\""), `a kind constant leaked into a user-facing list:\n${out}`;
 }
 
 test "the vocabulary names a literal by its source form" {
@@ -1250,9 +1250,9 @@ A : 'a' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let out = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&out, &"TK_LIT_PLUS => \"'+'\""), out;
+    assert str_contains(&out, "TK_LIT_PLUS => \"'+'\""), out;
     // A lexer rule still answers with its rule name.
-    assert str_contains(&out, &"TK_A => \"A\""), out;
+    assert str_contains(&out, "TK_A => \"A\""), out;
 }
 
 test "generate raises no diagnostics for disjoint alts" {
@@ -1284,15 +1284,15 @@ B : 'b' ;
 ";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_stmt__inner(");
+    let body = extract_fn_body(&output, "fn _parse_stmt__inner(");
     assert body.len() > 0, "expected a _parse_stmt__inner body";
-    let scans_a = count_substr(&body, &"scan_a(");
-    let scans_b = count_substr(&body, &"scan_b(");
+    let scans_a = count_substr(&body, "scan_a(");
+    let scans_b = count_substr(&body, "scan_b(");
     assert scans_a == 2, `alts 0 and 2 name 'a' once each; scanned it ${scans_a} times`;
     assert scans_b == 2, `alts 1 and 2 name 'b' once each; scanned it ${scans_b} times`;
 }
 
-fn str_contains(haystack: &String, needle: &String) -> bool {
+fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -1330,9 +1330,9 @@ test "non-greedy ?? inside a left-recursive rule threads min_prec" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     // The atom fn carries `min_prec`, and the `??` enter check forwards it
     // to the simulator (stamped decision number, `== 1` for ENTER).
-    assert str_contains(&output, &"fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
-    assert str_contains(&output, &", &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
-    assert str_contains(&output, &"atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&output, "fn _parse_e__inner_atom(p: &mut Parser, min_prec: i32");
+    assert str_contains(&output, ", &p.atn_stack, &p.kinds, p.pos, TK_EOF, min_prec) == 1");
+    assert str_contains(&output, "atn_predict_with_stack(&ATN_SIM,");
 }
 
 // Two non-greedy `??` in one rule must emit two distinct ATN decision numbers.
@@ -1345,10 +1345,10 @@ WS : ' ' -> skip ;
 test "multiple ?? in a rule emit distinct ATN decision numbers" {
     let mut g = parse(TWO_QQ_CODEGEN_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    assert str_contains(&body, &"atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
-    assert str_contains(&body, &"atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
-    assert !str_contains(&body, &"atn_ng_optional_enter(");
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert str_contains(&body, "atn_predict_with_stack(&ATN_SIM, 1, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0) == 1");
+    assert !str_contains(&body, "atn_ng_optional_enter(");
 }
 
 // A multi-alt `AtEndConflict` must route through the ATN simulator, not the
@@ -1363,10 +1363,10 @@ WS : ' ' -> skip ;
 test "at-end-conflict multi-alt rule routes through the ATN simulator" {
     let mut g = parse(AT_END_CONFLICT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
-    assert str_contains(&body, &"if _atn_alt ==");
-    assert !str_contains(&body, &"_sd_best_i");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert str_contains(&body, "if _atn_alt ==");
+    assert !str_contains(&body, "_sd_best_i");
 }
 
 global AT_END_DISJOINT_G4: String = "
@@ -1379,10 +1379,10 @@ WS : ' ' -> skip ;
 test "FOLLOW-disjoint at-end conflict keeps the static tournament" {
     let mut g = parse(AT_END_DISJOINT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    assert str_contains(&body, &"_sd_best_i");
-    assert !str_contains(&body, &"atn_predict_with_stack");
-    assert !str_contains(&output, &"global ATN_SIM");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    assert str_contains(&body, "_sd_best_i");
+    assert !str_contains(&body, "atn_predict_with_stack");
+    assert !str_contains(&output, "global ATN_SIM");
 }
 
 global AT_END_NULLABLE_GAP_G4: String = "
@@ -1396,9 +1396,9 @@ WS : ' ' -> skip ;
 test "at-end conflict routes through the ATN when a nullable rule hides the caller token" {
     let mut g = parse(AT_END_NULLABLE_GAP_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
-    assert !str_contains(&body, &"_sd_best_i");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, "_sd_best_i");
 }
 
 global AT_END_WILDCARD_FOLLOW_G4: String = "
@@ -1411,16 +1411,16 @@ WS : ' ' -> skip ;
 test "wildcard caller suffix keeps the at-end conflict on the ATN" {
     let mut g = parse(AT_END_WILDCARD_FOLLOW_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    assert str_contains(&body, &"let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
-    assert !str_contains(&body, &"_sd_best_i");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    assert str_contains(&body, "let _atn_alt = atn_predict_with_stack(&ATN_SIM,");
+    assert !str_contains(&body, "_sd_best_i");
 }
 
 test "non-LR ATN grammar opts out of the decoder's LR tables" {
     let mut g = parse(AT_END_CONFLICT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
-    assert str_contains(&output, &"\", false);");
+    assert str_contains(&output, "global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, "\", false);");
 }
 
 global LR_WILDCARD_CODEGEN_G4: String = "
@@ -1434,11 +1434,11 @@ WS : ' ' -> skip ;
 test "ATN-class LR grammar keeps the decoder's LR tables" {
     let mut g = parse(LR_WILDCARD_CODEGEN_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"global ATN_SIM: AtnSim = atn_decode(&b\"");
-    assert str_contains(&output, &"\", true);");
+    assert str_contains(&output, "global ATN_SIM: AtnSim = atn_decode(&b\"");
+    assert str_contains(&output, "\", true);");
 }
 
-fn count_substr(haystack: &String, needle: &String) -> i32 {
+fn count_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {
     let mut n = 0;
     let mut at = find_substr(haystack, needle);
     while at >= 0 {
@@ -1607,9 +1607,9 @@ test "an undecided dispatch keeps every alternative reachable" {
     // owes the empty alternative's absent first set the same reading.
     let mut g = parse(UNDECIDED_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_r__inner(");
+    assert count_substr(&body, "else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 
 test "an empty alternative keeps its fallback where the follow set is a prefix" {
@@ -1619,18 +1619,18 @@ test "an empty alternative keeps its fallback where the follow set is a prefix" 
     // `r` derives nothing.
     let mut g = parse(INEXACT_FOLLOW_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    assert count_substr(&body, &"grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
-    assert count_substr(&body, &"no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
-    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_r__inner(");
+    assert count_substr(&body, "grp_kind == TK_C") == 0, `a prefix of the follow set became the whole test: ${body}`;
+    assert count_substr(&body, "no_viable") == 0, `the group can match nothing, so it cannot report: ${body}`;
+    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 
 test "the overlap rule dispatch orders its fallback last too" {
     let mut g = parse(RULE_OVERLAP_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    let empty_arm = find_substr(&body, &"if true");
-    let a_arm = find_substr(&body, &"if kind == TK_A");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    let empty_arm = find_substr(&body, "if true");
+    let a_arm = find_substr(&body, "if kind == TK_A");
     assert a_arm >= 0, `the A-led alternatives lost their arm: ${body}`;
     assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
     assert empty_arm > a_arm, `the empty alternative runs before A can be tested: ${body}`;
@@ -1641,8 +1641,8 @@ test "an optional over a wildcard has no first set to guard on" {
     // the renderer does not answer that for its callers, so the guard says so.
     let mut g = parse(WILDCARD_OPTIONAL_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    assert count_substr(&body, &"p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert count_substr(&body, "p.any()") > 0, `the wildcard body must still be emitted: ${body}`;
 }
 
 test "a nullable alternative with a first set keeps its index" {
@@ -1651,9 +1651,9 @@ test "a nullable alternative with a first set keeps its index" {
     // demoting it lets `B` take the `b` that the rule's caller needs.
     let mut g = parse(NULLABLE_BUT_SELECTABLE_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    let opt_arm = find_substr(&body, &"scope:");
-    let b_arm = find_substr(&body, &"kind == TK_B");
+    let body = extract_fn_body(&output, "fn _parse_r__inner(");
+    let opt_arm = find_substr(&body, "scope:");
+    let b_arm = find_substr(&body, "kind == TK_B");
     assert opt_arm >= 0, `the nullable alternative lost its arm: ${body}`;
     assert b_arm < 0 || opt_arm < b_arm, `a nullable alternative is not the trailing arm: ${body}`;
 }
@@ -1663,8 +1663,8 @@ test "a wildcard behind a nullable prefix still makes its alternative open-ended
     // by every other token, so partitioning by `{A}` leaves `c` no alternative.
     let mut g = parse(PREFIXED_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    assert count_substr(&body, &"no_viable") == 0, `a token the wildcard matches must reach it: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert count_substr(&body, "no_viable") == 0, `a token the wildcard matches must reach it: ${body}`;
 }
 
 test "an epsilon alternative earns its follow set however it is spelled" {
@@ -1672,9 +1672,9 @@ test "an epsilon alternative earns its follow set however it is spelled" {
     // element count: `( A | x | B )` gets the branch `( A | | B )` gets.
     let mut g = parse(INDIRECT_EPSILON_ADMITS_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    assert count_substr(&body, &"grp_kind == TK_EOF") > 0, `the epsilon alternative must test the follow set: ${body}`;
-    assert count_substr(&body, &"no viable alternative") > 0, `a lookahead no alternative admits must report: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert count_substr(&body, "grp_kind == TK_EOF") > 0, `the epsilon alternative must test the follow set: ${body}`;
+    assert count_substr(&body, "no viable alternative") > 0, `a lookahead no alternative admits must report: ${body}`;
 }
 
 test "an alternative that derives only epsilon through a rule is selected by its follow" {
@@ -1683,18 +1683,18 @@ test "an alternative that derives only epsilon through a rule is selected by its
     // ANTLR4 parses `b` as `(s x b)` and `a b` as `(s a b)`.
     let mut g = parse(INDIRECT_EPSILON_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    assert count_substr(&body, &"grp_kind == TK_A") > 0, `the A alternative lost its test: ${body}`;
-    assert count_substr(&body, &"grp_kind == TK_B") > 0, `the epsilon alternative must test the follow set: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    assert count_substr(&body, "else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, "grp_kind == TK_A") > 0, `the A alternative lost its test: ${body}`;
+    assert count_substr(&body, "grp_kind == TK_B") > 0, `the epsilon alternative must test the follow set: ${body}`;
 }
 
 test "the op walker keeps an alternative open-ended through a rule in place" {
     let mut g = parse(OP_INDIRECT_WILDCARD_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
-    let wild_arm = find_substr(&body, &"_parse_w(p)");
-    let named_arm = find_substr(&body, &"_gk == TK_A");
+    let body = extract_fn_body(&output, "fn _parse_e__inner(");
+    let wild_arm = find_substr(&body, "_parse_w(p)");
+    let named_arm = find_substr(&body, "_gk == TK_A");
     assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `it was demoted behind a later alternative: ${body}`;
 }
@@ -1705,9 +1705,9 @@ test "an alternative open-ended through a rule keeps its index too" {
     // for one reached through `w`.
     let mut g = parse(INDIRECT_WILDCARD_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
-    let wild_arm = find_substr(&body, &"scope:");
-    let named_arm = find_substr(&body, &"TK_A");
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
+    let wild_arm = find_substr(&body, "scope:");
+    let named_arm = find_substr(&body, "TK_A");
     assert wild_arm >= 0, `the open-ended alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `it was moved past a later alternative: ${body}`;
 }
@@ -1718,10 +1718,10 @@ test "a wildcard alternative keeps its index against a narrower one" {
     // can test belongs at the end.
     let mut g = parse(WILDCARD_FIRST_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_s__inner(");
+    let body = extract_fn_body(&output, "fn _parse_s__inner(");
     // A rule's unconditional arm is a bare `scope:` block, not `if true`.
-    let wild_arm = find_substr(&body, &"scope:");
-    let named_arm = find_substr(&body, &"TK_A");
+    let wild_arm = find_substr(&body, "scope:");
+    let named_arm = find_substr(&body, "TK_A");
     assert wild_arm >= 0, `the wildcard alternative lost its arm: ${body}`;
     assert named_arm < 0 || wild_arm < named_arm, `the wildcard alternative was moved past a later one: ${body}`;
 }
@@ -1753,9 +1753,9 @@ test "a rule's empty alternative does not shadow the ones after it" {
     // belongs after every arm a lookahead can select.
     let mut g = parse(RULE_LEVEL_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_x__inner(");
-    let empty_arm = find_substr(&body, &"scope:");
-    let b_arm = find_substr(&body, &"TK_B");
+    let body = extract_fn_body(&output, "fn _parse_x__inner(");
+    let empty_arm = find_substr(&body, "scope:");
+    let b_arm = find_substr(&body, "TK_B");
     assert b_arm >= 0, `alt B is missing: ${body}`;
     assert empty_arm >= 0, `the empty alternative lost its arm: ${body}`;
     assert empty_arm > b_arm, `the empty alternative runs before B can be tested: ${body}`;
@@ -1767,9 +1767,9 @@ test "the op walker's undecided chain keeps every alternative reachable" {
     // same `true`, one emitter further out.
     let mut g = parse(OP_WALKER_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_e__inner(");
-    assert count_substr(&body, &"else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
-    assert count_substr(&body, &"TK_B") > 0, `alt B is unreachable: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_e__inner(");
+    assert count_substr(&body, "else if true") == 0, `an unconditional arm shadows what follows it: ${body}`;
+    assert count_substr(&body, "TK_B") > 0, `alt B is unreachable: ${body}`;
 }
 
 test "a wildcard puts every alternative in one branch, epsilon included" {
@@ -1780,21 +1780,21 @@ test "a wildcard puts every alternative in one branch, epsilon included" {
     // which no input reaches.
     let mut g = parse(WILDCARD_AND_EMPTY_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_r__inner(");
-    assert count_substr(&body, &"if true") == 0, `one branch over every alternative needs no chain: ${body}`;
-    assert count_substr(&body, &"gd_tourney") > 0, `the three alternatives must share a tournament: ${body}`;
+    let body = extract_fn_body(&output, "fn _parse_r__inner(");
+    assert count_substr(&body, "if true") == 0, `one branch over every alternative needs no chain: ${body}`;
+    assert count_substr(&body, "gd_tourney") > 0, `the three alternatives must share a tournament: ${body}`;
     // Epsilon is `p.pos` — the empty alternative measured without scanning.
-    assert count_substr(&body, &"= p.pos;") > 0, `the empty alternative must be ranked, not dropped: ${body}`;
+    assert count_substr(&body, "= p.pos;") > 0, `the empty alternative must be ranked, not dropped: ${body}`;
 }
 
 test "dispatch branches sharing a sub-dispatch are emitted once" {
     let mut g = parse(SHARED_SUBDISPATCH_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    let body = extract_fn_body(&output, &"fn _parse_tp__inner(");
-    let copies = count_substr(&body, &"p.peek_at(1)");
+    let body = extract_fn_body(&output, "fn _parse_tp__inner(");
+    let copies = count_substr(&body, "p.peek_at(1)");
     assert copies > 0, `expected a depth-1 sub-dispatch in tp: ${body}`;
     assert copies <= 2, `sub-dispatch duplicated once per first token (${copies} copies): ${body}`;
-    assert count_substr(&body, &"if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
+    assert count_substr(&body, "if p.peek_kind() == TK_A") == 0, `A got its own branch: ${body}`;
 }
 
 // Alt 1 (`n`) is reachable from the {A,B} partition it shares with alt 0 and
@@ -1815,14 +1815,14 @@ WS : [ \\t\\r\\n]+ -> skip ;
 test "a scan alt reached from several partitions is emitted once" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, &"fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
-    let scan_e = extract_fn_body(&output, &"fn scan_e(");
-    assert count_substr(&scan_e, &"scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
-    assert count_substr(&scan_e, &"scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
+    assert str_contains(&output, "fn scan_e_alt_1("), `alt 1 was not hoisted into a helper: ${output}`;
+    let scan_e = extract_fn_body(&output, "fn scan_e(");
+    assert count_substr(&scan_e, "scan_e_alt_1(tokens, start") == 2, `both partitions must call the hoisted helper: ${scan_e}`;
+    assert count_substr(&scan_e, "scan_n(tokens, pos") == 0, `alt 1 body still inlined in scan_e: ${scan_e}`;
 }
 
 test "a scan alt reached once stays inline" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert !str_contains(&output, &"fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
+    assert !str_contains(&output, "fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
 }

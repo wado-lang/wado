@@ -9,23 +9,23 @@ use g from "./grammars/lr_suffix_gate_action.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_gate_action" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // The hit case: inside the `IF` head the subscript's brackets lift the ban, so
 // `b { c }` is the braced form and the `{ d }` after `]` is the head's block.
 test "a suffix action the scan runs too" {
     assert_tree(
-        &"if a[b { c }] { d }",
-        &"(start (stmt if (expr (expr a) [ (expr b { c }) ]) (block { d })))",
+        "if a[b { c }] { d }",
+        "(start (stmt if (expr (expr a) [ (expr b { c }) ]) (block { d })))",
     );
 }
 
 // The rejection case: the ban still applies where the suffix does not lift it.
 test "the head's own ban is unchanged" {
-    assert_tree(&"if a { b }", &"(start (stmt if (expr a) (block { b })))");
+    assert_tree("if a { b }", "(start (stmt if (expr a) (block { b })))");
 }

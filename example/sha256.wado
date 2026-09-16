@@ -10,7 +10,7 @@ use { println, Stdout } from "core:cli";
 
 #[synopsis]
 test {
-    let digest = sha256(&bytes_of(&"abc"));
+    let digest = sha256(&bytes_of("abc"));
     assert to_hex(&digest) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 }
 
@@ -161,13 +161,13 @@ fn sha256(data: &List<u8>) -> List<u8> {
 fn to_hex(digest: &List<u8>) -> String {
     let mut s = String::with_capacity(digest.len() * 2);
     for let mut i = 0; i < digest.len(); i += 1 {
-        s.push_str(&`${digest[i]:02x}`);
+        s.push_str(`${digest[i]:02x}`);
     }
     return s;
 }
 
 // Encode the UTF-8 bytes of a string into a List<u8>.
-fn bytes_of(s: &String) -> List<u8> {
+fn bytes_of<S: AsStrSlice>(s: S) -> List<u8> {
     let mut v: List<u8> = [];
     for let b of s.bytes() {
         v.push(b);
@@ -181,7 +181,7 @@ test "empty input" {
 }
 
 test "abc" {
-    let digest = sha256(&bytes_of(&"abc"));
+    let digest = sha256(&bytes_of("abc"));
     assert to_hex(&digest) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 }
 
@@ -195,11 +195,11 @@ test "incremental update matches one-shot" {
     // Splitting the message across update() calls (and across a block
     // boundary) must yield the same digest as hashing it all at once.
     let mut hasher = Sha256::new();
-    hasher.update(&bytes_of(&"The quick brown fox "));
-    hasher.update(&bytes_of(&"jumps over the lazy dog"));
+    hasher.update(&bytes_of("The quick brown fox "));
+    hasher.update(&bytes_of("jumps over the lazy dog"));
     let incremental = to_hex(&hasher.finalize());
 
-    let oneshot = to_hex(&sha256(&bytes_of(&"The quick brown fox jumps over the lazy dog")));
+    let oneshot = to_hex(&sha256(&bytes_of("The quick brown fox jumps over the lazy dog")));
     assert incremental == oneshot;
     assert oneshot == "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592";
 }

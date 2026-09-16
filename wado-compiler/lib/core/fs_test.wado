@@ -35,7 +35,7 @@ test "bytes that are not UTF-8 do not read as text" {
 
 test "a path that names nothing is NotFound" {
     let dir = scratch(&"missing");
-    let e = fs::read_to_string(&`${dir}/nope.txt`).unwrap_err();
+    let e = fs::read_to_string(`${dir}/nope.txt`).unwrap_err();
     assert e.kind matches { NotFound };
 }
 
@@ -50,7 +50,7 @@ test "create_dir creates one directory, and will not take an occupied path" {
 
 test "create_dir needs the parent to be there" {
     let dir = scratch(&"create-dir-parent");
-    let e = fs::create_dir(&`${dir}/absent/child`).unwrap_err();
+    let e = fs::create_dir(`${dir}/absent/child`).unwrap_err();
     assert e.kind matches { NotFound };
 }
 
@@ -79,9 +79,9 @@ test "a directory does not read as a file" {
 }
 
 test "an absolute path is not rebuilt under the preopen" {
-    let e = fs::create_dir_all(&"/rooted/elsewhere").unwrap_err();
+    let e = fs::create_dir_all("/rooted/elsewhere").unwrap_err();
     assert e.kind matches { Io(NotPermitted) };
-    assert fs::read_dir(&"rooted").is_err();
+    assert fs::read_dir("rooted").is_err();
 }
 
 test "a file occupying the path is not the directory it names" {
@@ -94,15 +94,15 @@ test "a file occupying the path is not the directory it names" {
 
 test "directory entries carry their type" {
     let dir = scratch(&"entries");
-    fs::create_dir_all(&`${dir}/sub`).unwrap();
-    fs::write(&`${dir}/sub/leaf.txt`, &"leaf").unwrap();
+    fs::create_dir_all(`${dir}/sub`).unwrap();
+    fs::write(`${dir}/sub/leaf.txt`, &"leaf").unwrap();
 
     let nested = fs::read_dir(&dir).unwrap();
     assert nested.len() == 1;
     assert nested[0].name == "sub";
     assert nested[0].type matches { Directory };
 
-    let leaves = fs::read_dir(&`${dir}/sub`).unwrap();
+    let leaves = fs::read_dir(`${dir}/sub`).unwrap();
     assert leaves.len() == 1;
     assert leaves[0].name == "leaf.txt";
     assert leaves[0].type matches { File };
@@ -110,11 +110,11 @@ test "directory entries carry their type" {
 
 test "the empty path and \".\" both name the preopen" {
     let mut here: List<String> = [];
-    for let entry of fs::read_dir(&"").unwrap() {
+    for let entry of fs::read_dir("").unwrap() {
         here.push(entry.name);
     }
     let mut dot: List<String> = [];
-    for let entry of fs::read_dir(&".").unwrap() {
+    for let entry of fs::read_dir(".").unwrap() {
         dot.push(entry.name);
     }
     here.sort();

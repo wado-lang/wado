@@ -188,7 +188,7 @@ fn parse_descriptor_text(text: &String) -> ParsedDescriptor {
                 slaves.push(unescape_st_text(&processed));
             },
             "type" => {
-                descriptor_type = processed.trim();
+                descriptor_type = processed.trim().to_string();
             },
             "input" => {
                 input = processed;
@@ -283,7 +283,7 @@ fn post_process(raw: &String) -> String {
         s.push('\n');
         return s;
     }
-    return trimmed;
+    return trimmed.to_string();
 }
 
 // ===== Status file =====

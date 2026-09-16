@@ -8,17 +8,17 @@ use g from "./grammars/ll_multi_alt.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_multi_alt" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "tree: X Y picks (a b) when a is multi-alt" {
-    assert_tree(&"X Y", &"(r (a X) (b Y))");
+    assert_tree("X Y", "(r (a X) (b Y))");
 }
 
 test "tree: Z picks a's second alt" {
-    assert_tree(&"Z", &"(r (a Z))");
+    assert_tree("Z", "(r (a Z))");
 }

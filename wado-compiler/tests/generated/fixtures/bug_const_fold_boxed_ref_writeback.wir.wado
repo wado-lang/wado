@@ -53,7 +53,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(20)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(21)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
@@ -78,7 +78,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(50), used: 1 };
 global global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(109, 97, 114, 107, 101, 100), used: 6 };
-global global:core:prelude/primitive.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_const_fold_boxed_ref_writeback.wado/bump"(x) {
     x.value = x.value * 3;
@@ -303,7 +302,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_6, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -320,26 +319,26 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     if is_negative {
-        new_used_21 = self.used + 1;
-        if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_22 = self.used;
-        self.used = new_used_21;
-        builtin::array_set_u8(self.repr, start_22, 45);
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_56 = self.used + digit_count, if @unlikely(new_used_56 > builtin::array_len(self.repr)) {
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
-    }, start_57 = self.used, self.used = new_used_56, start_57;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 export fn "bug_const_fold_boxed_ref_writeback.wado/$cm_export__run" as "run"

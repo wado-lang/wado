@@ -18,17 +18,17 @@ assert Url::parse("https://wado.dev/docs?q=synopsis") matches { Ok(url) && url.s
 
 ## Functions
 
-### `pub fn percent_encode(input: String) -> String`
+### `pub fn percent_encode<S: AsStrSlice>(input: S) -> String`
 
 Percent-encodes a string. Encodes all characters except unreserved
 characters (A-Z, a-z, 0-9, '-', '.', '_', '~') per RFC 3986 §2.3.
 
-### `pub fn percent_decode(input: String) -> Result<String, ParseError>`
+### `pub fn percent_decode<S: AsStrSlice>(input: S) -> Result<String, ParseError>`
 
 Decodes percent-encoded sequences (%XX).
 Returns Err if the input contains invalid percent-encoding or invalid UTF-8.
 
-### `pub fn parse_query(query: String) -> TreeMap<String, String>`
+### `pub fn parse_query<S: AsStrSlice>(query: S) -> TreeMap<String, String>`
 
 Parses a query string into key-value pairs (insertion-order preserved).
 Input should not include the leading "?".
@@ -83,12 +83,12 @@ The query string without the leading "?". None if absent.
 
 The fragment without the leading "#". None if absent.
 
-#### `pub fn parse(input: String) -> Result<Url, ParseError>`
+#### `pub fn parse<S: AsStrSlice>(input: S) -> Result<Url, ParseError>`
 
 Parses a URL string. Only special schemes (http, https, ws, wss)
 are accepted.
 
-#### `pub fn from_parts(scheme: String, authority: String, path_with_query: Option<String>, fragment: Option<String>) -> Url`
+#### `pub fn from_parts<S: AsStrSlice, S1: AsStrSlice>(scheme: S, authority: S1, path_with_query: Option<String>, fragment: Option<String>) -> Url`
 
 Constructs a Url from its scheme, authority, path-with-query, and
 fragment. This constructor is infallible: any scheme is accepted,
@@ -123,7 +123,7 @@ Returns path with query: /path[?query]. Matches wasi:http path_with_query.
 
 Returns the effective port (explicit port or default for the scheme).
 
-#### `pub fn resolve(&self, reference: String) -> Result<Url, ParseError>`
+#### `pub fn resolve<S: AsStrSlice>(&self, reference: S) -> Result<Url, ParseError>`
 
 Resolves a relative URL reference against this URL as the base.
 Follows RFC 3986 §5.
@@ -132,11 +132,11 @@ Follows RFC 3986 §5.
 
 Parses the query string into a TreeMap (insertion-order preserved).
 
-#### `pub fn query_get(&self, key: String) -> Option<String>`
+#### `pub fn query_get<S: AsStrSlice>(&self, key: S) -> Option<String>`
 
 Returns the value for the given query parameter key.
 
-#### `pub fn query_get_all(&self, key: String) -> List<String>`
+#### `pub fn query_get_all<S: AsStrSlice>(&self, key: S) -> List<String>`
 
 Returns all values for the given query parameter key.
 Computed from the raw query string to preserve duplicate keys.

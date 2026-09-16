@@ -9,25 +9,25 @@ use g from "./grammars/group_tie_catch_all.g4"
     };
 use { normalize_tree } from "./support/tree_compare.wado";
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
     let actual = g::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "tie: single item picks the first alt, not the catch-all" {
-    assert_tree(&"F a", &"(s F (item a))");
+    assert_tree("F a", "(s F (item a))");
 }
 
 test "tie: comma list picks the first alt, not the catch-all" {
-    assert_tree(&"F a , b", &"(s F (item a) , (item b))");
+    assert_tree("F a , b", "(s F (item a) , (item b))");
 }
 
 test "catch-all wins on a strictly longer scan" {
-    assert_tree(&"F a J b", &"(s F (pair (item a) (op J) (item b) opt_tail))");
+    assert_tree("F a J b", "(s F (pair (item a) (op J) (item b) opt_tail))");
 }
 
 test "catch-all with tail consumed" {
-    assert_tree(&"F a J b T", &"(s F (pair (item a) (op J) (item b) (opt_tail T)))");
+    assert_tree("F a J b T", "(s F (pair (item a) (op J) (item b) (opt_tail T)))");
 }

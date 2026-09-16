@@ -2433,8 +2433,13 @@ impl FunctionTranslator<'_, '_> {
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
-                            "[WIR] unresolved Call: name={:?} module={} builtin={:?} mono={:?}",
-                            func.name, func.module_source, builtin, func.monomorph_info
+                            "[WIR] unresolved Call: name={:?} module={} builtin={:?} mono={:?} in={:?} span={:?}",
+                            func.name,
+                            func.module_source,
+                            builtin,
+                            func.monomorph_info,
+                            self.tir_func.name,
+                            expr.span
                         )
                     })
                 }

@@ -1271,8 +1271,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let payload = args.into_iter().next();
 
-                    // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
+                        // A generic case's payload type is a parameter
+                        // `infer_variant_type_args` binds from this very
+                        // argument, so only a concrete one has a type to check.
+                        if let Some(payload) = payload {
+                            self.typecheck(payload, case_data.payload, call.span);
+                        }
                         self.tysys
                             .type_table
                             .borrow()
@@ -3289,8 +3294,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) =
-            self.static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+        let Some(sig) = self
+            .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+            .or_else(|| {
+                let key = receiver_key
+                    .cloned()
+                    .unwrap_or_else(|| self.impl_target(struct_name));
+                self.inherited_default_method_sig(&key, method_name)
+            })
         else {
             return (vec![], vec![]);
         };
@@ -3487,6 +3498,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.resource_instance_method(def, method_name)
             .map(|(_, sig)| sig)
+    }
+
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.tysys.trait_env;
+        let mut sig = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_ref)
+            .find_map(|trait_decl| {
+                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method.default_body.as_ref()?;
+                Some(method.sig.clone())
+            })?;
+        let split = sig.declaring_split();
+        sig.decl.type_params.drain(..split);
+        sig.declaring_slot_count = 0;
+        sig.method_slot_base = 0;
+        Some(sig)
     }
 
     /// `Type::method()` reaching a value blanket's static, which is indexed

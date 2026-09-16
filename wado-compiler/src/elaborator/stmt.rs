@@ -6,7 +6,7 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -1534,6 +1534,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     _ => {}
                 }
+                if let Some(expected) = self.literal_pattern_mismatch(lit, scrutinee_type) {
+                    let _ = self.emit(TypeError::PatternTypeMismatch {
+                        expected,
+                        found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                        span,
+                    });
+                }
                 Vec::new()
             }
             Pattern::Tuple(patterns, has_rest) => {
@@ -2008,6 +2015,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .compiler_variant_case_name(CompilerItem::OptionNone)
             .to_string();
         variant_info.cases.iter().any(|c| c.name == none_case_name)
+    }
+
+    /// The type a literal pattern demands of its scrutinee, when the scrutinee is
+    /// not it. An integer literal's range is the coercion's answer, not a pattern's.
+    fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
+        let type_table = self.tysys.type_table.borrow();
+        let head = type_table.representation_head(scrutinee_type);
+        let expected = match lit {
+            Literal::String(_) if !type_table.is_string(head) => "String",
+            Literal::Char(_) if !type_table.is_primitive(head, PrimitiveType::Char) => "char",
+            Literal::Bool(_) if !type_table.is_primitive(head, PrimitiveType::Bool) => "bool",
+            _ => return None,
+        };
+        // An unsettled head judges nothing: an unresolved type is reported
+        // where it is unresolved, and a type parameter decided per instance.
+        matches!(
+            type_table.get(head),
+            ResolvedType::Primitive(_)
+                | ResolvedType::Struct { .. }
+                | ResolvedType::Enum { .. }
+                | ResolvedType::Variant { .. }
+                | ResolvedType::Flags { .. }
+                | ResolvedType::Unit
+        )
+        .then(|| expected.to_string())
     }
 
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,

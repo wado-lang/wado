@@ -13,9 +13,9 @@ use g from "./grammars/ll_multi_alt_overlap.g4"
     };
 
 test "traced parser compiles and parses a shared-prefix tournament" {
-    let ok = g::parse(&"X X Y");
+    let ok = g::parse("X X Y");
     assert ok.ok(), "expected a clean parse";
 
-    let bad = g::parse(&"Y");
+    let bad = g::parse("Y");
     assert !bad.ok(), "expected a diagnostic";
 }

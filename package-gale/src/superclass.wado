@@ -159,17 +159,17 @@ pub fn parser_superclass_name(grammar: &Grammar) -> Option<String> {
     return non_empty(&grammar.parser_superclass);
 }
 
-fn non_empty(s: &String) -> Option<String> {
+fn non_empty<S: AsStrSlice>(s: S) -> Option<String> {
     if s.is_empty() {
         return null;
     }
-    return Option::<String>::Some(*s);
+    return Option::<String>::Some(s.to_string());
 }
 
 /// The `this.<method>(` call sites in a body, in source order, skipping string
 /// and comment text — but not a template's `${ ... }`, which is code. Only the
 /// `this.` receiver is a superClass call; `m()` or `other.m()` is not.
-pub fn find_this_calls(body: &String) -> List<SuperCall> {
+pub fn find_this_calls<S: AsStrSlice>(body: S) -> List<SuperCall> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out: List<SuperCall> = [];
@@ -206,7 +206,7 @@ pub fn find_this_calls(body: &String) -> List<SuperCall> {
 
 /// Whether the body names `this` at all — a call, a field read, or the bare
 /// word. Wado has no such name, so nothing here can be emitted as written.
-pub fn body_names_this(body: &String) -> bool {
+pub fn body_names_this<S: AsStrSlice>(body: S) -> bool {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut i = 0;
@@ -325,7 +325,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
             ')' | ']' | '}' => depth -= 1,
             ',' => {
                 if depth == 0 {
-                    out.push(collect_range(chars, arg_start, i).trim());
+                    out.push(collect_range(chars, arg_start, i).trim().to_string());
                     arg_start = i + 1;
                 }
             },
@@ -336,7 +336,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
     }
     let last = collect_range(chars, arg_start, close - 1).trim();
     if !last.is_empty() || !out.is_empty() {
-        out.push(last);
+        out.push(last.to_string());
     }
     return out;
 }
@@ -344,7 +344,7 @@ fn call_args(chars: &List<char>, start: i32, close: i32) -> List<String> {
 /// Whether `text` is one whole string literal, not an expression that merely
 /// starts and ends with a quote (`"a" + x + "b"`) — that one has no evident
 /// type, and splicing it would emit the host expression verbatim.
-fn is_string_literal(text: &String) -> bool {
+fn is_string_literal<S: AsStrSlice>(text: S) -> bool {
     let chars: List<char> = text.chars().collect();
     if chars.len() < 2 || chars[0] != '"' || chars[chars.len() - 1] != '"' {
         return false;
@@ -354,7 +354,7 @@ fn is_string_literal(text: &String) -> bool {
 
 /// The same question for a Wado template literal, which is a `String` however
 /// its holes evaluate.
-fn is_template_literal(text: &String) -> bool {
+fn is_template_literal<S: AsStrSlice>(text: S) -> bool {
     let chars: List<char> = text.chars().collect();
     if chars.len() < 2 || chars[0] != '`' || chars[chars.len() - 1] != '`' {
         return false;
@@ -384,14 +384,14 @@ fn fits_i32(digits: &List<char>, first: i32, negative: bool) -> bool {
 
 /// The Wado type a literal argument evidently has, or `null` for anything a
 /// signature would have to guess at.
-fn literal_arg_type(text: &String) -> Option<String> {
+fn literal_arg_type<S: AsStrSlice>(text: S) -> Option<String> {
     if text.is_empty() {
         return null;
     }
     if is_string_literal(text) || is_template_literal(text) {
         return Option::Some("String");
     }
-    if *text == "true" || *text == "false" {
+    if text.eq_str("true") || text.eq_str("false") {
         return Option::Some("bool");
     }
     let digits: List<char> = text.chars().collect();
@@ -604,7 +604,7 @@ pub fn collect_lexer_super_ops(grammar: &Grammar) -> List<SuperOp> {
 /// without the host translator a `superClass` grammar carves out; one carrying
 /// host code around the call needs that translator. Both forms are accepted so
 /// the answer does not move across the rewrite.
-pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
+pub fn body_is_base_calls_only<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1) -> bool {
     let chars: List<char> = body.chars().collect();
     let base: List<char> = base_name.chars().collect();
     let n = chars.len();
@@ -638,7 +638,7 @@ pub fn body_is_base_calls_only(body: &String, base_name: &String) -> bool {
 
 /// Whether every lexer `{ ... }` action body is base-calls-only, which is what
 /// lets a `language = Java` `superClass` grammar run its actions at all.
-pub fn lexer_action_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
+pub fn lexer_action_bodies_are_base_calls<S: AsStrSlice>(grammar: &Grammar, base_name: S) -> bool {
     return lexer_bodies(grammar).iter_ref().all(|b: &SuperBody| !b.kind matches { Action }
         || body_is_base_calls_only(&b.text, base_name));
 }
@@ -730,18 +730,18 @@ pub fn collect_parser_super_ops(grammar: &Grammar) -> List<SuperOp> {
 
 /// Emit `interface Foo { ... }` for a parser base: one predicate operation per
 /// op, each reading the recognizer the way an ANTLR base method reads `this`.
-pub fn gen_parser_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
-    w.line(&`pub interface ${*name} {`);
+pub fn gen_parser_super_interface<S: AsStrSlice>(w: &mut CodeWriter, name: S, ops: &List<SuperOp>) {
+    w.line(`pub interface ${name} {`);
     for let op of ops {
-        w.line(&`    fn ${to_snake_case(&op.name)}(p: &Parser${super_op_params(op)}) -> bool;`);
+        w.line(`    fn ${to_snake_case(&op.name)}(p: &Parser${super_op_params(op)}) -> bool;`);
     }
-    w.line(&"}");
+    w.line("}");
     w.blank();
 }
 
 /// Rewrite every parser predicate body in place, `this.<method>(...)` into
 /// `Foo::<method>(p)`. Alternatives only: a prequel call is refused earlier.
-pub fn rewrite_parser_superclass_calls(grammar: &mut Grammar, base_name: &String) {
+pub fn rewrite_parser_superclass_calls<S: AsStrSlice>(grammar: &mut Grammar, base_name: S) {
     for let rule of &mut grammar.parser_rules {
         for let alt of &mut rule.alternatives {
             rewrite_parser_alt(alt, base_name);
@@ -749,7 +749,7 @@ pub fn rewrite_parser_superclass_calls(grammar: &mut Grammar, base_name: &String
     }
 }
 
-fn rewrite_parser_alt(alt: &mut Alternative, base_name: &String) {
+fn rewrite_parser_alt<S: AsStrSlice>(alt: &mut Alternative, base_name: S) {
     for let a of &mut alt.actions {
         a.source.text = rewrite_this_calls(&a.source.text, base_name, SuperSite::ParserPredicate);
     }
@@ -758,7 +758,7 @@ fn rewrite_parser_alt(alt: &mut Alternative, base_name: &String) {
     }
 }
 
-fn rewrite_parser_elem(elem: &Element, base_name: &String) -> Element {
+fn rewrite_parser_elem<S: AsStrSlice>(elem: &Element, base_name: S) -> Element {
     return match elem {
         Group(g) => {
             let mut ng = *g;
@@ -788,7 +788,7 @@ fn rewrite_parser_elem(elem: &Element, base_name: &String) -> Element {
 
 /// Whether every parser action / predicate body is base-calls-only, which is
 /// what lets a `language = Java` `superClass` grammar run them at all.
-pub fn parser_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bool {
+pub fn parser_bodies_are_base_calls<S: AsStrSlice>(grammar: &Grammar, base_name: S) -> bool {
     return parser_bodies(grammar).iter_ref().all(|b: &SuperBody| body_is_base_calls_only(&b.text, base_name));
 }
 
@@ -799,26 +799,31 @@ pub fn parser_bodies_are_base_calls(grammar: &Grammar, base_name: &String) -> bo
 /// `all_rules`, and `visited` breaks cycles. Matched on the rewritten `Foo::`
 /// form, since op collection rewrote the `this.` sites first. Only predicates
 /// count: a match fn never emits an action, which runs from the replay.
-pub fn lexer_rule_match_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
+pub fn lexer_rule_match_calls_super<S: AsStrSlice>(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: S) -> bool {
     return rule_calls_super_with(rule, all_rules, base_name, false);
 }
 
 /// The same for a rule's `apply_<rule>_actions` replay, which also runs the
 /// alternatives' actions.
-pub fn lexer_rule_replay_calls_super(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String) -> bool {
+pub fn lexer_rule_replay_calls_super<S: AsStrSlice>(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: S) -> bool {
     return rule_calls_super_with(rule, all_rules, base_name, true);
 }
 
-fn rule_calls_super_with(rule: &LexerRule, all_rules: &List<LexerRule>, base_name: &String, actions: bool) -> bool {
-    let needle = `${*base_name}::`;
+fn rule_calls_super_with<S: AsStrSlice>(
+    rule: &LexerRule,
+    all_rules: &List<LexerRule>,
+    base_name: S,
+    actions: bool,
+) -> bool {
+    let needle = `${base_name.to_string()}::`;
     let mut visited: List<String> = [];
     return rule_calls_super(rule, all_rules, &needle, actions, &mut visited);
 }
 
-fn rule_calls_super(
+fn rule_calls_super<S: AsStrSlice>(
     rule: &LexerRule,
     all_rules: &List<LexerRule>,
-    needle: &String,
+    needle: S,
     actions: bool,
     visited: &mut List<String>,
 ) -> bool {
@@ -829,10 +834,10 @@ fn rule_calls_super(
     return rule.body.iter_ref().any(|alt| alt_calls_super(alt, all_rules, needle, actions, visited));
 }
 
-fn alt_calls_super(
+fn alt_calls_super<S: AsStrSlice>(
     alt: &LexerAlternative,
     all_rules: &List<LexerRule>,
-    needle: &String,
+    needle: S,
     actions: bool,
     visited: &mut List<String>,
 ) -> bool {
@@ -840,17 +845,17 @@ fn alt_calls_super(
         if !actions && a.kind matches { Action } {
             continue;
         }
-        if a.source.text.contains(*needle) {
+        if a.source.text.contains(needle.to_string()) {
             return true;
         }
     }
     return alt.elements.iter_ref().any(|e| elem_calls_super(e, all_rules, needle, actions, visited));
 }
 
-fn elem_calls_super(
+fn elem_calls_super<S: AsStrSlice>(
     elem: &LexerElement,
     all_rules: &List<LexerRule>,
-    needle: &String,
+    needle: S,
     actions: bool,
     visited: &mut List<String>,
 ) -> bool {
@@ -884,51 +889,57 @@ fn elem_calls_super(
 /// Emit `interface Foo { ... }`, one operation per op, then the lifecycle hooks.
 /// A predicate takes the read-only `LexerView` and returns `bool`; an action
 /// also takes the `Lexer`, for the command surface.
-pub fn gen_super_interface(w: &mut CodeWriter, name: &String, ops: &List<SuperOp>) {
-    w.line(&`pub interface ${*name} {`);
+pub fn gen_super_interface<S: AsStrSlice>(w: &mut CodeWriter, name: S, ops: &List<SuperOp>) {
+    w.line(`pub interface ${name.to_string()} {`);
     for let op of ops {
         if op.is_predicate {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView${super_op_params(op)}) -> bool;`);
+            w.line(`    fn ${to_snake_case(&op.name)}(view: LexerView${super_op_params(op)}) -> bool;`);
         } else {
-            w.line(&`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer${super_op_params(op)});`);
+            w.line(`    fn ${to_snake_case(&op.name)}(view: LexerView, lx: &mut Lexer${super_op_params(op)});`);
         }
     }
     gen_super_hooks(w);
-    w.line(&"}");
+    w.line("}");
     w.blank();
 }
 
 /// A default body means a base opts in by implementing one, the way an
 /// `@Override` does, and every other base is unaffected.
 fn gen_super_hooks(w: &mut CodeWriter) {
-    w.line(&"    /// Called with the span, type and channel of each token the lexer");
-    w.line(&"    /// commits — not a skipped or `more`d match, and not the EOF");
-    w.line(&"    /// sentinel. Returns the type to emit.");
-    w.line(&"    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {");
-    w.line(&"        return ty;");
-    w.line(&"    }");
+    w.line("    /// Called with the span, type and channel of each token the lexer");
+    w.line("    /// commits — not a skipped or `more`d match, and not the EOF");
+    w.line("    /// sentinel. Returns the type to emit.");
+    w.line("    fn emit(view: LexerView, ty: i32, channel: i32) -> i32 {");
+    w.line("        return ty;");
+    w.line("    }");
 }
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
-pub fn super_emit_hook_expr(base_name: &String, channel: &String) -> String {
-    return `${*base_name}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${*channel})`;
+pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
+    return `${base_name.to_string()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.to_string(
+    )})`;
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
 /// there and passing `args` after the receiver.
-pub fn super_call_expr(base_name: &String, method: &String, site: SuperSite, args: &List<String>) -> String {
+pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
+    base_name: S,
+    method: S1,
+    site: SuperSite,
+    args: &List<String>,
+) -> String {
     let recv = match site {
         LexerPredicate => "LexerView { chars, start, pos }",
         LexerAction => "LexerView { chars, start, pos }, lx",
         ParserPredicate => "p",
     };
-    return `${*base_name}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
+    return `${base_name.to_string()}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each
 /// `this.<method>(...)` into `Foo::<method>(...)`. Run after op collection, so
 /// the identity translator then passes the body through as ordinary Wado.
-pub fn rewrite_lexer_superclass_calls(grammar: &mut Grammar, base_name: &String) {
+pub fn rewrite_lexer_superclass_calls<S: AsStrSlice>(grammar: &mut Grammar, base_name: S) {
     for let rule of &mut grammar.lexer_rules {
         for let alt of &mut rule.body {
             rewrite_lexer_alt(alt, base_name);
@@ -936,7 +947,7 @@ pub fn rewrite_lexer_superclass_calls(grammar: &mut Grammar, base_name: &String)
     }
 }
 
-fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
+fn rewrite_lexer_alt<S: AsStrSlice>(alt: &mut LexerAlternative, base_name: S) {
     for let a of &mut alt.actions {
         let site = if a.kind matches { Action } { SuperSite::LexerAction } else { SuperSite::LexerPredicate };
         a.source.text = rewrite_this_calls(&a.source.text, base_name, site);
@@ -946,7 +957,7 @@ fn rewrite_lexer_alt(alt: &mut LexerAlternative, base_name: &String) {
     }
 }
 
-fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
+fn rewrite_lexer_elem<S: AsStrSlice>(elem: &LexerElement, base_name: S) -> LexerElement {
     return match elem {
         Group(alts) => {
             let mut new_alts: List<LexerAlternative> = [];
@@ -969,7 +980,7 @@ fn rewrite_lexer_elem(elem: &LexerElement, base_name: &String) -> LexerElement {
 
 /// Replace each `this.<method>(...)` call in `body` with the ambient operation
 /// call for `site`, over the same spans `find_this_calls` reads.
-pub fn rewrite_this_calls(body: &String, base_name: &String, site: SuperSite) -> String {
+pub fn rewrite_this_calls<S: AsStrSlice, S1: AsStrSlice>(body: S, base_name: S1, site: SuperSite) -> String {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(n + 8);

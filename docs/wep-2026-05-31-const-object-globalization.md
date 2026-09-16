@@ -99,9 +99,9 @@ Three shapes are matched, collected in a single exhaustive walk:
 
 - A `let` binding of a qualifying value.
 - A qualifying value referenced via `&` directly at an expression position with
-  no enclosing `let` — the shape a synthesized `serde` field key takes
-  (`st.field(&"id_str", …)`). It is rewritten in place: the `Unary::Ref`'s inner
-  expression becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`.
+  no enclosing `let` — the shape a call whose parameter is a reference takes
+  (`digest::sha256(&"wado")`). It is rewritten in place: the `Unary::Ref`'s
+  inner expression becomes `{ GlobalVarSet(G, …); GlobalVarGet(G) }`.
 - A qualifying value passed to a call _by value_ — a constant header value
   handed straight to `Fields::append`. Rewritten in place like the `&` shape,
   wrapping the argument node itself, and gated additionally on the callee (see
@@ -127,6 +127,16 @@ what would let a reference escape. Without that exclusion no `String`-building
 function would qualify.
 
 Reads of other globals are excluded — a non-const value cannot promote.
+
+#### Gate: allocating initializer
+
+A `let` whose value reduces to one local read through `&`, `*` and casts names
+storage that already exists. Its global would alias whatever holds that storage,
+and that binding is a candidate of its own, so the literal ends up in two
+globals with one pointing at the other. `references_one_binding` declines it,
+leaving the binding that does allocate to hoist. A `&String` argument reaching
+an `S: AsStrSlice` parameter has exactly this shape once the blanket
+`impl AsStrSlice for &T` inlines.
 
 #### Gate: read-only
 

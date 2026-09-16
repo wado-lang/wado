@@ -77,11 +77,11 @@ WS : ' ' -> skip ;
 }
 
 /// Fail if `decl` appears twice before the next `\nfn ` boundary.
-fn assert_declared_once_per_fn(out: &String, decl: &String) {
+fn assert_declared_once_per_fn<S: AsStrSlice, S1: AsStrSlice>(out: S, decl: S1) {
     let mut pos = 0;
     loop {
         let rest = out.substr_bytes(pos, out.len());
-        let opt_i = rest.find(*decl);
+        let opt_i = rest.find(decl.to_string());
         if opt_i matches { None } {
             break;
         }
@@ -97,12 +97,12 @@ fn assert_declared_once_per_fn(out: &String, decl: &String) {
         } else {
             after.len();
         };
-        let next_decl = if let Some(j) = after.find(*decl) {
+        let next_decl = if let Some(j) = after.find(decl.to_string()) {
             j;
         } else {
             after.len();
         };
-        assert next_decl >= next_fn, `two '${*decl}' in the same function body — bug repro at offset ${abs}`;
+        assert next_decl >= next_fn, `two '${decl}' in the same function body — bug repro at offset ${abs}`;
         pos = abs + decl.len();
     }
 }

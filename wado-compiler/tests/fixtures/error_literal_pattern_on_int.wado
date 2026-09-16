@@ -1,0 +1,14 @@
+// The same class on a primitive scrutinee, where the mismatch panicked the WIR
+// builder instead of reaching the validator.
+
+test "a string pattern needs a String scrutinee, not an i32" {
+    let n = 3;
+    let k = match n {
+        "---" => 1,
+        _ => 0,
+    };
+    assert k == 0;
+}
+
+__DATA__
+{"compile_error": "pattern mismatch: expected 'String', found 'i32'"}

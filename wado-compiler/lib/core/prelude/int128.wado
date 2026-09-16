@@ -77,12 +77,12 @@ impl u128 {
     }
 
     /// Parse a hexadecimal `u128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: &String) -> Result<u128, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u128, ParseIntError> {
         return u128::from_str_radix(s, 16);
     }
 
     /// Parse a `u128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<u128, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u128, ParseIntError> {
         return u128::from_str_radix_slice(&s.as_str_slice(), radix);
     }
 
@@ -458,14 +458,14 @@ impl FromStr for u128 {
 impl LenientFromStr for u128 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<u128, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u128, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match u128::from_str_radix(&cleaned, radix) {
+        return match u128::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };
@@ -847,12 +847,12 @@ impl i128 {
     }
 
     /// Parse a hexadecimal `i128` from a string (equivalent to `from_str_radix(s, 16)`).
-    pub fn from_str_hex(s: &String) -> Result<i128, ParseIntError> {
+    pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i128, ParseIntError> {
         return i128::from_str_radix(s, 16);
     }
 
     /// Parse an `i128` from a string in the given radix. `radix` must be in 2..=36.
-    pub fn from_str_radix(s: &String, radix: u32) -> Result<i128, ParseIntError> {
+    pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i128, ParseIntError> {
         return i128::from_str_radix_slice(&s.as_str_slice(), radix);
     }
 
@@ -1047,14 +1047,14 @@ impl FromStr for i128 {
 impl LenientFromStr for i128 {
     type Err = LenientParseError;
 
-    fn from_str_lenient(s: &String) -> Result<i128, LenientParseError> {
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i128, LenientParseError> {
         let [cleaned, radix] = match lenient_int_preprocess(s) {
             Ok(p) => p,
             Err(e) => {
                 return Result::Err(e);
             },
         };
-        return match i128::from_str_radix(&cleaned, radix) {
+        return match i128::from_str_radix(cleaned, radix) {
             Ok(v) => Result::Ok(v),
             Err(e) => Result::Err(lenient_int_error(e)),
         };

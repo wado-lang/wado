@@ -51,7 +51,7 @@ internal struct OpenTok {
     internal keep_asterisk: bool,
 }
 
-pub fn parse_inline(text: &String, refs: &RefTable) -> List<Node> {
+pub fn parse_inline<S: AsStrSlice>(text: S, refs: &RefTable) -> List<Node> {
     let chars = text.to_chars();
     return parse_inline_chars(StrCursor::over(&chars), refs);
 }
@@ -543,7 +543,7 @@ fn try_html_span(cur: &StrCursor, i: i32) -> Option<[Node, i32]> {
     return null;
 }
 
-fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i32]> {
+fn try_html_to_close<S: AsStrSlice>(cur: &StrCursor, i: i32, closer: S) -> Option<[Node, i32]> {
     let end = cur.end();
     let closer_len = closer.to_chars().len();
     let mut j = i;
@@ -556,7 +556,7 @@ fn try_html_to_close(cur: &StrCursor, i: i32, closer: String) -> Option<[Node, i
     return null;
 }
 
-fn starts_with_at(cur: &StrCursor, i: i32, pat: String) -> bool {
+fn starts_with_at<S: AsStrSlice>(cur: &StrCursor, i: i32, pat: S) -> bool {
     let mut k = 0;
     for let pc of pat.chars() {
         if !cur.is_at(i + k, pc) {
@@ -589,7 +589,7 @@ fn try_link(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]> 
             Option::Some([
                 Node::ShortcutLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
-                    label: raw_label.trim(),
+                    label: raw_label.trim().to_string(),
                 }), close + 1,
             ]);
         },
@@ -689,7 +689,7 @@ fn try_reference_link(cur: &StrCursor, open: i32, close: i32, refs: &RefTable) -
             Option::Some([
                 Node::ReferenceLink(ReferenceLinkNode {
                     children: parse_inline_chars(cur.sub(open + 1, close), refs),
-                    label: raw_label.trim(),
+                    label: raw_label.trim().to_string(),
                 }), second_close + 1,
             ]);
         },
@@ -725,13 +725,15 @@ fn try_image(cur: &StrCursor, open: i32, refs: &RefTable) -> Option<[Node, i32]>
         let raw_label = if inner.trim().len() == 0 { alt } else { inner };
         return match ref_table_get(refs, &raw_label) {
             Some(_) => Option::Some([
-                Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim() }), second_close + 1,
+                Node::ReferenceImage(ReferenceImageNode { alt, label: raw_label.trim().to_string() }), second_close + 1,
             ]),
             None => null,
         };
     }
     return match ref_table_get(refs, &alt) {
-        Some(_) => Option::Some([Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim() }), close + 1]),
+        Some(_) => Option::Some([
+            Node::ReferenceImage(ReferenceImageNode { alt, label: alt.trim().to_string() }), close + 1,
+        ]),
         None => null,
     };
 }

@@ -13,7 +13,7 @@ test "lexer predicates read the token-start and cursor columns" {
     // column 3, so LATE wins the tie against ID. The two spaces opening line 2
     // are an INDENT (token start at column 0), the single space on line 1 is
     // not. `x` sits at column 2, late enough for LATE.
-    let actual = t::to_lexer_string(&t::tokenize(&"ab cd\n  x"), TK_EOF);
+    let actual = t::to_lexer_string(&t::tokenize("ab cd\n  x"), TK_EOF);
     let expected = "INDENT
 [@0,0:1='ab',<3>,1:0]
 [@1,2:2=' ',<4>,1:2]

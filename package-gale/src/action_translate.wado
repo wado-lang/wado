@@ -28,10 +28,10 @@ pub fn vals_struct_name(rule: &ParserRule) -> String {
 /// value channel and leaving surrounding Wado verbatim. `vals_in_scope` is true
 /// when the enclosing rule emits a `vals` local. Errors on the first unsupported
 /// reference.
-pub fn translate_wado_action(
+pub fn translate_wado_action<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    body: &String,
+    body: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
@@ -55,10 +55,10 @@ pub fn translate_wado_action(
 /// Resolve a single `$name(.member)?` reference to its Wado expression, shared
 /// by the identity translator and java2wado (attribute resolution is
 /// language-independent). `ref_text` is exactly the reference (`$x`, `$x.v`).
-pub fn resolve_attr_ref(
+pub fn resolve_attr_ref<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
-    ref_text: &String,
+    ref_text: S,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
     handle: &String = &PARSER_HANDLE,
@@ -68,8 +68,8 @@ pub fn resolve_attr_ref(
 
 /// The single source of truth for the `$ctx.toStringTree` special: a `ctx`
 /// reference with the `toStringTree` member.
-fn is_ctx_to_string_tree_ref(name: &String, member: &Option<String>) -> bool {
-    return *name == "ctx" && *member matches { Some("toStringTree") };
+fn is_ctx_to_string_tree_ref<S: AsStrSlice>(name: S, member: &Option<String>) -> bool {
+    return name.eq_str("ctx") && *member matches { Some("toStringTree") };
 }
 
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
@@ -81,14 +81,14 @@ fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
 /// `(...)` / `(this)` — the parser argument ANTLR's `toStringTree(this)` needs
 /// but Gale does not — is redundant and swallowed. Shared with java2wado, whose
 /// `$`-attr lexer captures `$ctx.toStringTree` as the call target.
-pub fn ref_is_ctx_to_string_tree(ref_text: &String) -> bool {
+pub fn ref_is_ctx_to_string_tree<S: AsStrSlice>(ref_text: S) -> bool {
     let refs = find_attr_refs(ref_text);
     return refs.len() == 1 && is_ctx_to_string_tree_ref(&refs[0].name, &refs[0].member);
 }
 
 /// Whether `ref_text` is exactly one `$<label>.ctx` — the node reference a
 /// trailing `toStringTree` call resolves to. Any other reference keeps its call.
-pub fn ref_is_call_ctx(ref_text: &String) -> bool {
+pub fn ref_is_call_ctx<S: AsStrSlice>(ref_text: S) -> bool {
     let refs = find_attr_refs(ref_text);
     return refs.len() == 1 && refs[0].member matches { Some("ctx") };
 }
@@ -128,10 +128,10 @@ fn swallow_trailing_call(chars: &List<char>, end: i32) -> i32 {
 
 /// The actual local a `$ref` binds to: the post-dedup binding (so `e_2` resolves
 /// correctly), falling back to `base` when the reference is not in the map.
-fn binding_for(bindings: &List<AltBinding>, is_token: bool, base: &String) -> String {
-    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == *base) {
+fn binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, is_token: bool, base: S) -> String {
+    return match bindings.iter_ref().find(|b: &AltBinding| b.is_token == is_token && b.base == base.as_str_slice()) {
         Some(b) => b.field,
-        None => *base,
+        None => base.to_string(),
     };
 }
 
@@ -141,42 +141,42 @@ pub global RULE_START_TOK_LOCAL: String = "_rule_start_tok";
 
 /// The value-struct fields a labeled rule call is captured into: the token
 /// range `$<label>.text` reads, and the builder row `$<label>.ctx` renders.
-pub fn rule_span_lo_field(field: &String) -> String {
-    return `_span_lo_${*field}`;
+pub fn rule_span_lo_field<S: AsStrSlice>(field: S) -> String {
+    return `_span_lo_${field}`;
 }
 
-pub fn rule_span_hi_field(field: &String) -> String {
-    return `_span_hi_${*field}`;
+pub fn rule_span_hi_field<S: AsStrSlice>(field: S) -> String {
+    return `_span_hi_${field}`;
 }
 
-pub fn rule_node_field(field: &String) -> String {
-    return `_node_${*field}`;
+pub fn rule_node_field<S: AsStrSlice>(field: S) -> String {
+    return `_node_${field}`;
 }
 
 /// Those fields as an expression. They live on the value struct because a
 /// capture outlives the block it is written in — see `action.md`, "The value
 /// channel is the context object".
-pub fn rule_span_lo_ref(field: &String) -> String {
+pub fn rule_span_lo_ref<S: AsStrSlice>(field: S) -> String {
     return vals_field_ref(&rule_span_lo_field(field));
 }
 
-pub fn rule_span_hi_ref(field: &String) -> String {
+pub fn rule_span_hi_ref<S: AsStrSlice>(field: S) -> String {
     return vals_field_ref(&rule_span_hi_field(field));
 }
 
-pub fn rule_node_ref(field: &String) -> String {
+pub fn rule_node_ref<S: AsStrSlice>(field: S) -> String {
     return vals_field_ref(&rule_node_field(field));
 }
 
-fn vals_field_ref(field: &String) -> String {
-    return `${VALS_LOCAL}.${*field}`;
+fn vals_field_ref<S: AsStrSlice>(field: S) -> String {
+    return `${VALS_LOCAL}.${field}`;
 }
 
 /// Whether `body` reads `$<label>.text` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's token range captured.
-pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
+pub fn action_reads_rule_span<S: AsStrSlice, S1: AsStrSlice>(body: S, dedup_base: S1) -> bool {
     for let r of &find_attr_refs(body) {
-        if r.member matches { Some("text") } && binding_name(&r.name) == *dedup_base {
+        if r.member matches { Some("text") } && binding_name(&r.name) == dedup_base.as_str_slice() {
             return true;
         }
     }
@@ -185,9 +185,9 @@ pub fn action_reads_rule_span(body: &String, dedup_base: &String) -> bool {
 
 /// Whether `body` reads `$<label>.ctx` for the rule-call binding `dedup_base`,
 /// the one reference that needs the call's builder row captured.
-pub fn action_reads_rule_ctx(body: &String, dedup_base: &String) -> bool {
+pub fn action_reads_rule_ctx<S: AsStrSlice, S1: AsStrSlice>(body: S, dedup_base: S1) -> bool {
     for let r of &find_attr_refs(body) {
-        if r.member matches { Some("ctx") } && binding_name(&r.name) == *dedup_base {
+        if r.member matches { Some("ctx") } && binding_name(&r.name) == dedup_base.as_str_slice() {
             return true;
         }
     }
@@ -201,7 +201,7 @@ pub global LR_ACC_LOCAL: String = "_lr_acc";
 /// The Wado local a rule-child reference binds to (post-dedup), for a rule child
 /// named `name` — the same lookup the identity translator uses for `$rule`.
 /// Shared with java2wado's ctx-child accessor (`((Ctx)$ctx).<rule>(k)`).
-pub fn rule_binding_for(bindings: &List<AltBinding>, name: &String) -> String {
+pub fn rule_binding_for<S: AsStrSlice>(bindings: &List<AltBinding>, name: S) -> String {
     return binding_for(bindings, false, &binding_name(name));
 }
 
@@ -256,7 +256,7 @@ fn push_element_action_bodies(elem: &Element, out: &mut List<String>) {
     }
 }
 
-fn body_uses_rule_span(body: &String, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
+fn body_uses_rule_span<S: AsStrSlice>(body: S, rule: &ParserRule, rules: &List<ParserRule>) -> bool {
     if let Ok(resolved) = resolve_attrs(body, rule, rules) {
         for let r of &resolved {
             if r.target matches { ParserSpecial } && (r.name == "text" || r.name == "start" || r.name == "stop") {
@@ -269,13 +269,13 @@ fn body_uses_rule_span(body: &String, rule: &ParserRule, rules: &List<ParserRule
 
 /// The Wado expression a resolved reference becomes, or an error if this
 /// slice cannot emit it yet.
-fn action_attr_expr(
+fn action_attr_expr<S: AsStrSlice>(
     rule: &ParserRule,
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     vals_in_scope: bool,
     bindings: &List<AltBinding>,
-    handle: &String,
+    handle: S,
 ) -> Result<String, String> {
     if r.target matches { ParserSpecial } {
         return parser_special_expr(r, rule_is_left_recursive(rule), handle);
@@ -316,16 +316,16 @@ fn action_attr_expr(
 /// a `min_prec` parameter, so `$_p` reads `min_prec` there and the literal `0`
 /// (its only value outside a precedence context) elsewhere. `$text`/`$start`
 /// read the codegen-captured `_rule_start_tok`.
-fn parser_special_expr(r: &ResolvedAttr, is_lr: bool, handle: &String) -> Result<String, String> {
+fn parser_special_expr<S: AsStrSlice>(r: &ResolvedAttr, is_lr: bool, handle: S) -> Result<String, String> {
     return match r.name {
         "text" && r.member matches { None } => Result::Ok(
-            `${*handle}.rule_text(${RULE_START_TOK_LOCAL})`,
+            `${handle}.rule_text(${RULE_START_TOK_LOCAL})`,
         ),
         "start" => token_member_of(&RULE_START_TOK_LOCAL, &r.member, handle),
-        "stop" => token_member_of(&`(${*handle}.pos - 1)`, &r.member, handle),
+        "stop" => token_member_of(`(${handle}.pos - 1)`, &r.member, handle),
         "ctx" && r.member matches { Some("toStringTree") } => {
             let method = if is_lr { "rule_string_tree_final" } else { "rule_string_tree" };
-            Result::Ok(`${*handle}.${method}()`);
+            Result::Ok(`${handle}.${method}()`);
         },
         "_p" && r.member matches { None } => Result::Ok(if is_lr { MIN_PREC_LOCAL } else { "0" }),
         _ => Result::Err(`$${r.name}: this parser special is not yet emitted`),
@@ -344,7 +344,7 @@ pub struct LexerAttrEnv {
 /// `pos` and the `lx` commit latches, leaving the surrounding host text (already
 /// Wado) verbatim. An unresolved `$`-reference is a loud error, so codegen never
 /// emits one. A `$`-free body (`pos - start == 4`) passes through unchanged.
-pub fn translate_lexer_body(body: &String, env: &LexerAttrEnv) -> Result<String, String> {
+pub fn translate_lexer_body<S: AsStrSlice>(body: S, env: &LexerAttrEnv) -> Result<String, String> {
     let raw = find_attr_refs(body);
     let chars: List<char> = body.chars().collect();
     let mut refs: List<ResolvedAttr> = [];
@@ -402,8 +402,8 @@ variant LexerAttr {
     Unsupported,
 }
 
-fn lexer_attr(name: &String) -> LexerAttr {
-    return match *name {
+fn lexer_attr<S: AsStrSlice>(name: S) -> LexerAttr {
+    return match name.to_string() {
         "text" => LexerAttr::Window(lexer_matched_text_expr()),
         "pos" => LexerAttr::Window(lexer_cursor_column_expr()),
         "index" => LexerAttr::Window("pos"),
@@ -472,15 +472,15 @@ pub global LEXER_SET_MODE_FIELD: String = "act_set_mode";
 /// Resolve one whole `$ref` occurrence (delimiters included) in a lexer body,
 /// for a front end that has already isolated the reference (java2wado) and so
 /// knows from its own syntax tree how the site uses it.
-pub fn resolve_lexer_attr_ref(
-    text: &String,
+pub fn resolve_lexer_attr_ref<S: AsStrSlice>(
+    text: S,
     env: &LexerAttrEnv,
     use_: AttrUse = AttrUse::Read,
 ) -> Result<String, String> {
     let refs = find_attr_refs(text);
     if refs.len() != 1 {
         builtin::cold_path();
-        return Result::Err(`lexer attribute: '${*text}' is not a single $-reference`);
+        return Result::Err(`lexer attribute: '${text}' is not a single $-reference`);
     }
     return lexer_attr_expr(&refs[0], env, use_);
 }
@@ -494,7 +494,7 @@ pub struct ModeAttrUse {
 
 /// Accumulate one body's `$mode` uses. Language-independent: a `$`-reference is
 /// ANTLR syntax, spelled the same in every host language java2wado admits.
-pub fn body_mode_attr_use(body: &String, out: &mut ModeAttrUse) {
+pub fn body_mode_attr_use<S: AsStrSlice>(body: S, out: &mut ModeAttrUse) {
     let refs = find_attr_refs(body);
     if refs.is_empty() {
         return;
@@ -550,54 +550,54 @@ fn char_at(chars: &List<char>, i: i32) -> char {
 
 /// The local a call site binds a rule / label / token result to, matching
 /// `RuleRefElement` / `LabelElement` field-name derivation.
-pub fn binding_name(name: &String) -> String {
+pub fn binding_name<S: AsStrSlice>(name: S) -> String {
     return escape_ident(&to_snake_case(name));
 }
 
 /// A token reference resolves to its bound stream index; a member reads that
 /// token through the context API.
-fn token_member_expr(r: &ResolvedAttr, bindings: &List<AltBinding>, handle: &String) -> Result<String, String> {
+fn token_member_expr<S: AsStrSlice>(r: &ResolvedAttr, bindings: &List<AltBinding>, handle: S) -> Result<String, String> {
     return token_member_of(&binding_for(bindings, true, &binding_name(&r.name)), &r.member, handle);
 }
 
 /// A token member read on a token-index expression `idx`. `.index` is `idx`
 /// itself and `.channel` is `0`; the rest go through the `token_*` context API.
-fn token_member_of(idx: &String, member: &Option<String>, handle: &String) -> Result<String, String> {
+fn token_member_of<S: AsStrSlice, S1: AsStrSlice>(idx: S, member: &Option<String>, handle: S1) -> Result<String, String> {
     let m = match member {
         Some(m) => *m,
         None => {
-            return Result::Ok(*idx);
+            return Result::Ok(idx.to_string());
         },
     };
     return match m {
-        "text" => Result::Ok(`${*handle}.token_text(${*idx})`),
-        "int" => Result::Ok(`${*handle}.token_int(${*idx})`),
-        "type" => Result::Ok(`${*handle}.token_kind(${*idx})`),
-        "line" => Result::Ok(`${*handle}.token_line(${*idx})`),
-        "pos" => Result::Ok(`${*handle}.token_col(${*idx})`),
-        "index" => Result::Ok(*idx),
+        "text" => Result::Ok(`${handle}.token_text(${idx})`),
+        "int" => Result::Ok(`${handle}.token_int(${idx})`),
+        "type" => Result::Ok(`${handle}.token_kind(${idx})`),
+        "line" => Result::Ok(`${handle}.token_line(${idx})`),
+        "pos" => Result::Ok(`${handle}.token_col(${idx})`),
+        "index" => Result::Ok(idx.to_string()),
         "channel" => Result::Ok(String::from("0")),
         _ => Result::Err(`.${m}: unknown token member`),
     };
 }
 
-fn rule_member_expr(
+fn rule_member_expr<S: AsStrSlice>(
     rules: &List<ParserRule>,
     r: &ResolvedAttr,
     bindings: &List<AltBinding>,
-    handle: &String,
+    handle: S,
 ) -> Result<String, String> {
     let binding = binding_for(bindings, false, &binding_name(&r.name));
     // `.text` is the invocation's own span, not a value-channel field.
     if let Some(m) = &r.member && *m == "text" {
         return Result::Ok(
-            `${*handle}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
+            `${handle}.text_between(${rule_span_lo_ref(&binding)}, ${rule_span_hi_ref(&binding)})`,
         );
     }
     // Only `toStringTree` is modelled on ANTLR's context object, so `.ctx`
     // resolves straight to the rendering (java2wado drops the call above it).
     if let Some(m) = &r.member && *m == "ctx" {
-        return Result::Ok(`${*handle}.rule_tree_at(${rule_node_ref(&binding)})`);
+        return Result::Ok(`${handle}.rule_tree_at(${rule_node_ref(&binding)})`);
     }
     let target = match rules.iter_ref().find(|c| c.name == r.rule_name) {
         Some(t) => t,
@@ -626,29 +626,29 @@ fn rule_member_expr(
 
 /// The `wado_type_default` of a rule's returns/locals field named `name`, or
 /// `None` if there is no such field or its type has no Wado default.
-fn field_default(rule: &ParserRule, name: &String) -> Option<String> {
+fn field_default<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<String> {
     return match find_field(rule, name) {
         Some(d) => wado_type_default(&d.type_text),
         None => null,
     };
 }
 
-fn field_type(rule: &ParserRule, name: &String) -> String {
+fn field_type<S: AsStrSlice>(rule: &ParserRule, name: S) -> String {
     return match find_field(rule, name) {
         Some(d) => d.type_text,
         None => "",
     };
 }
 
-fn find_field(rule: &ParserRule, name: &String) -> Option<&AttrDecl> with stores[rule] {
-    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == *name) {
+fn find_field<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<&AttrDecl> with stores[rule] {
+    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == name.as_str_slice()) {
         return Option::Some(d);
     }
-    return rule.locals_decls.iter_ref().find(|d| d.name == *name);
+    return rule.locals_decls.iter_ref().find(|d| d.name == name.as_str_slice());
 }
 
-fn is_arg(rule: &ParserRule, name: &String) -> bool {
-    return rule.args.iter_ref().any(|d| d.name == *name);
+fn is_arg<S: AsStrSlice>(rule: &ParserRule, name: S) -> bool {
+    return rule.args.iter_ref().any(|d| d.name == name.as_str_slice());
 }
 
 /// Whether a rule exposes a value channel to callers (a defaultable
@@ -711,7 +711,7 @@ pub fn field_in_vals(d: &AttrDecl) -> bool {
 
 /// A Wado default-value expression for a value-channel field type, or `None` if
 /// the type has no known Wado default (a non-Wado name like `int` is skipped).
-pub fn wado_type_default(type_text: &String) -> Option<String> {
+pub fn wado_type_default<S: AsStrSlice>(type_text: S) -> Option<String> {
     let t = type_text.trim();
     if t == "bool" {
         return Option::Some("false");
@@ -728,17 +728,17 @@ pub fn wado_type_default(type_text: &String) -> Option<String> {
     return null;
 }
 
-fn is_numeric_type(t: &String) -> bool {
-    return *t == "i8"
-        || *t == "i16"
-        || *t == "i32"
-        || *t == "i64"
-        || *t == "u8"
-        || *t == "u16"
-        || *t == "u32"
-        || *t == "u64"
-        || *t == "f32"
-        || *t == "f64"
-        || *t == "usize"
-        || *t == "isize";
+fn is_numeric_type<S: AsStrSlice>(t: S) -> bool {
+    return t.eq_str("i8")
+        || t.eq_str("i16")
+        || t.eq_str("i32")
+        || t.eq_str("i64")
+        || t.eq_str("u8")
+        || t.eq_str("u16")
+        || t.eq_str("u32")
+        || t.eq_str("u64")
+        || t.eq_str("f32")
+        || t.eq_str("f64")
+        || t.eq_str("usize")
+        || t.eq_str("isize");
 }

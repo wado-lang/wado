@@ -8,17 +8,17 @@
 // See WEP: Format Traits (wep-2026-02-01-format-traits.md)
 
 use { Display, Inspect } from "core:prelude/traits.wado";
-use { String, StrCharIter, StrSlice, is_char_start } from "core:prelude/string.wado";
+use { String, StrCharIter, StrSlice, AsStrSlice, is_char_start } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
 use { unreachable } from "core:rt";
 
 /// Bytes the leading sign occupies in the `len` bytes at `at` — where zero
 /// padding starts, so `-42` pads to `-0042` and not `00-42`.
-fn leading_sign_byte_len(s: &String, at: i32, len: i32) -> i32 {
+fn leading_sign_byte_len<S: AsStrSlice>(s: S, at: i32, len: i32) -> i32 {
     if len == 0 {
         return 0;
     }
-    let first = s.get_byte_unchecked(at);
+    let first = s.as_str_slice().get_byte_unchecked(at);
     if first == b'-' || first == b'+' {
         return 1;
     }
@@ -110,8 +110,15 @@ impl Formatter {
         };
     }
 
-    /// Write a string to the output buffer.
-    pub fn write_str(&mut self, s: &String) {
+    /// Write any `AsStrSlice` text to the output buffer.
+    pub fn write_str<S: AsStrSlice>(&mut self, s: S) {
+        self.buf.push_str(s);
+    }
+
+    /// `write_str` for the compiler's own synthesized bodies. Lowering runs
+    /// after monomorphization, so a call it mints can only name a target that
+    /// needs no instantiation.
+    internal fn internal_write_literal(&mut self, s: String) {
         self.buf.push_str(s);
     }
 
@@ -130,40 +137,44 @@ impl Formatter {
     /// Pad a pre-formatted content string to the configured width.
     /// If no width is set or content is already as wide, writes content as-is.
     /// Width counts characters, so a multi-byte content pads by what it renders.
-    pub fn pad(&mut self, content: String) {
+    pub fn pad<S: AsStrSlice>(&mut self, content: S) {
+        // The unpadded paths append `content` itself rather than a view of it:
+        // a view hides the append's operands from the constant-folding frame,
+        // and every `${x}` with no width specifier lands here.
         if self.width <= 0 {
-            self.buf.push_str(&content);
+            self.buf.push_str(content);
             return;
         }
-        let content_len = content.chars().count();
+        let view = content.as_str_slice();
+        let content_len = view.chars().count();
         if content_len >= self.width {
-            self.buf.push_str(&content);
+            self.buf.push_str(content);
             return;
         }
         let padding = self.width - content_len;
         if self.zero_pad {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
-            let sign_len = leading_sign_byte_len(&content, 0, content.len());
-            self.buf.push_str_range_unchecked(&content, 0, sign_len);
+            let sign_len = leading_sign_byte_len(view, 0, view.len());
+            self.buf.push_str(view.sub_unchecked(0, sign_len));
             self.write_char_n('0', padding);
-            self.buf.push_str_range_unchecked(&content, sign_len, content.len());
+            self.buf.push_str(view.sub_unchecked(sign_len, view.len()));
             return;
         }
         let align = self.align;
         if align matches { Left } {
-            self.buf.push_str(&content);
+            self.buf.push_str(content);
             self.write_char_n(self.fill, padding);
         } else if align matches { Center } {
             let left_pad = padding / 2;
             let right_pad = padding - left_pad;
             self.write_char_n(self.fill, left_pad);
-            self.buf.push_str(&content);
+            self.buf.push_str(content);
             self.write_char_n(self.fill, right_pad);
         } else {
             // Right (default)
             self.write_char_n(self.fill, padding);
-            self.buf.push_str(&content);
+            self.buf.push_str(content);
         }
     }
 
@@ -300,16 +311,17 @@ impl Formatter {
     /// `alt_prefix` is the radix marker (`0x`, `0b`, `0o`) the alternate form
     /// asks for; a plain spec drops it without the caller having to hand over an
     /// empty string, which would leave a value copy behind.
-    pub fn prepare_int_write(&mut self, is_negative: bool, alt_prefix: String, digit_count: i32) -> i32 {
+    pub fn prepare_int_write<S: AsStrSlice>(&mut self, is_negative: bool, alt_prefix: S, digit_count: i32) -> i32 {
+        let prefix = alt_prefix.as_str_slice();
         let sign_len = if is_negative || self.sign_plus { 1 } else { 0 };
-        let prefix_len = if self.alternate { alt_prefix.len() } else { 0 };
+        let prefix_len = if self.alternate { prefix.len() } else { 0 };
         let content_len = sign_len + prefix_len + digit_count;
 
         if self.width <= 0 || content_len >= self.width {
             // No padding — write sign/prefix, reserve digit area
             self.write_sign(is_negative);
             if prefix_len > 0 {
-                self.buf.push_str(&alt_prefix);
+                self.buf.push_str(prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -320,7 +332,7 @@ impl Formatter {
             // sign + prefix + zeros + [digits]
             self.write_sign(is_negative);
             if prefix_len > 0 {
-                self.buf.push_str(&alt_prefix);
+                self.buf.push_str(prefix);
             }
             self.write_char_n('0', padding);
             return self.buf.internal_reserve_uninit(digit_count);
@@ -331,7 +343,7 @@ impl Formatter {
             // [sign prefix digits] [fill...]
             self.write_sign(is_negative);
             if prefix_len > 0 {
-                self.buf.push_str(&alt_prefix);
+                self.buf.push_str(prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, padding);
@@ -343,7 +355,7 @@ impl Formatter {
             self.write_char_n(self.fill, left_pad);
             self.write_sign(is_negative);
             if prefix_len > 0 {
-                self.buf.push_str(&alt_prefix);
+                self.buf.push_str(prefix);
             }
             let offset = self.buf.internal_reserve_uninit(digit_count);
             self.write_char_n(self.fill, right_pad);
@@ -353,7 +365,7 @@ impl Formatter {
             self.write_char_n(self.fill, padding);
             self.write_sign(is_negative);
             if prefix_len > 0 {
-                self.buf.push_str(&alt_prefix);
+                self.buf.push_str(prefix);
             }
             return self.buf.internal_reserve_uninit(digit_count);
         }
@@ -362,7 +374,7 @@ impl Formatter {
     /// Write indentation (2 spaces per level) for pretty-printing.
     pub fn write_indent(&mut self) {
         for let mut i = 0; i < self.indent; i += 1 {
-            self.write_str(&"  ");
+            self.internal_write_literal("  ");
         }
     }
 
@@ -373,16 +385,16 @@ impl Formatter {
     }
 
     /// Open a pretty-printed brace: write opening delimiter, increase indent.
-    pub fn open_brace(&mut self, open: String) {
-        self.write_str(&open);
+    pub fn open_brace<S: AsStrSlice>(&mut self, open: S) {
+        self.write_str(open);
         self.indent += 1;
     }
 
     /// Close a pretty-printed brace: decrease indent, write newline+indent, write closing delimiter.
-    pub fn close_brace(&mut self, close: String) {
+    pub fn close_brace<S: AsStrSlice>(&mut self, close: S) {
         self.indent -= 1;
         self.write_newline_indent();
-        self.write_str(&close);
+        self.write_str(close);
     }
 }
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
@@ -403,7 +415,7 @@ impl Display for String {
 
 /// Writes a `Display` value into a `String` in place, skipping the temporary
 /// `String` that a `` `${value}` `` template allocates before copying it in. The
-/// alloc-free counterpart to `buf.push_str(&`${value}`)` for a single value with
+/// alloc-free counterpart to `buf.push_str(`${value}`)` for a single value with
 /// no format spec — the hot path in the serde numeric encoders.
 ///
 /// A trait (not an inherent `impl String`, which the coherence rules forbid on a
@@ -457,8 +469,8 @@ impl Inspect for String {
                 let code = c as i32;
                 if code < 0x20 || code == 0x7f {
                     // Control char with no named escape: `\u{HEX}`, never raw.
-                    f.write_str(&"\\u{");
-                    f.write_str(&`${code:x}`);
+                    f.write_str("\\u{");
+                    f.write_str(`${code:x}`);
                     f.write_char('}');
                 } else {
                     f.write_char(c);
@@ -468,7 +480,7 @@ impl Inspect for String {
         }
         f.write_char('"');
         if truncated {
-            f.write_str(&"...");
+            f.write_str("...");
         }
     }
 }
@@ -495,7 +507,7 @@ impl Inspect for ! {
 
 impl<T: Inspect> Inspect for &T {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&"&");
+        f.write_str("&");
         let inner: &T = *self;
         (*inner).inspect(f);
     }
@@ -503,7 +515,7 @@ impl<T: Inspect> Inspect for &T {
 
 impl<T: Inspect> Inspect for &mut T {
     pub fn inspect(&mut self, f: &mut Formatter) {
-        f.write_str(&"&mut ");
+        f.write_str("&mut ");
         let inner: &mut T = *self;
         (*inner).inspect(f);
     }

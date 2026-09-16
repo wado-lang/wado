@@ -16,21 +16,21 @@ use g from "./grammars/ll_follow_mask_coverage.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_follow_mask_coverage" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "a mandatory continuation takes the token" {
-    assert_tree(&"keep X Y ;", &"(prog (stmt keep (a X) (t Y) ;))");
+    assert_tree("keep X Y ;", "(prog (stmt keep (a X) (t Y) ;))");
 }
 
 test "an optional continuation does not" {
-    assert_tree(&"free X Y ;", &"(prog (stmt free (a X Y) ;))");
+    assert_tree("free X Y ;", "(prog (stmt free (a X Y) ;))");
 }
 
 test "with nothing to compete for, both alternatives parse" {
-    assert_tree(&"free X ;", &"(prog (stmt free (a X) ;))");
+    assert_tree("free X ;", "(prog (stmt free (a X) ;))");
 }

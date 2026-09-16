@@ -8,14 +8,21 @@ description: "Cut the branch down to what the code cannot say: reuse what exists
 ## Scope
 
 ```sh
-git diff "$(git merge-base origin/main HEAD)" --stat
-git status --short
+B=$(git merge-base origin/main HEAD)
+scripts/changed-sources.sh              # the files, one per line
+git diff "$B" --stat -- $(scripts/changed-sources.sh)
+git diff "$B" -- $(scripts/changed-sources.sh)
 ```
 
-Every file those report, whatever its type, plus any doc it made stale. Whatever
-you notice on the way in is in scope too, pre-existing or not. Generated files
-are the one exclusion — `.gitattributes` marks them. A WEP keeps the sections
-`docs/AGENTS.md` requires.
+Every file that reports, whatever its type, plus any doc it made stale. Whatever
+you notice on the way in is in scope too, pre-existing or not. A WEP keeps the
+sections `docs/AGENTS.md` requires.
+
+Generated files are the one exclusion, and the script is what applies it:
+`.gitattributes` marks them `linguist-generated`, so a new generated path is
+excluded the moment it is marked and nothing here lists paths a second time.
+A plain `git diff` buries the branch under them — on a generator change they
+outnumber the sources five to one. Read the sources; regenerate the rest.
 
 This is the scope on every run. Distilling again means the whole branch again,
 never the diff since the last distill: an earlier pass is not a clean bill, and

@@ -61,14 +61,14 @@ impl RustParserBase for RustPBase {
     }
 }
 
-fn rlex_tok(input: &String) -> rust::TokenStream {
+fn rlex_tok<S: AsStrSlice>(input: S) -> rust::TokenStream {
     let mut base = RustBase {};
     with RustLexerBase => &mut base do {
         return rust::tokenize(input);
     };
 }
 
-fn rlex_prs(input: &String) -> rust::ParseResult {
+fn rlex_prs<S: AsStrSlice>(input: S) -> rust::ParseResult {
     let mut base = RustBase {};
     let mut pbase = RustPBase {};
     with RustLexerBase => &mut base, RustParserBase => &mut pbase do {
@@ -78,61 +78,61 @@ fn rlex_prs(input: &String) -> rust::ParseResult {
 
 
 test "tokenize fn declaration" {
-    let tokens = rlex_tok(&"fn main() {}");
+    let tokens = rlex_tok("fn main() {}");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_FN", `expected KW_FN, got ${first}`;
 }
 
 test "tokenize struct" {
-    let tokens = rlex_tok(&"struct Point { x: i32, y: i32 }");
+    let tokens = rlex_tok("struct Point { x: i32, y: i32 }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_STRUCT", `expected KW_STRUCT, got ${first}`;
 }
 
 test "tokenize enum" {
-    let tokens = rlex_tok(&"enum Color { Red, Green, Blue }");
+    let tokens = rlex_tok("enum Color { Red, Green, Blue }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_ENUM", `expected KW_ENUM, got ${first}`;
 }
 
 test "tokenize impl block" {
-    let tokens = rlex_tok(&"impl Point { fn new() -> Self { Self { x: 0, y: 0 } } }");
+    let tokens = rlex_tok("impl Point { fn new() -> Self { Self { x: 0, y: 0 } } }");
     assert tokens.len() >= 15, `expected at least 15 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_IMPL", `expected KW_IMPL, got ${first}`;
 }
 
 test "tokenize use statement" {
-    let tokens = rlex_tok(&"use std::collections::HashMap;");
+    let tokens = rlex_tok("use std::collections::HashMap;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_USE", `expected KW_USE, got ${first}`;
 }
 
 test "tokenize trait" {
-    let tokens = rlex_tok(&"trait Foo { fn bar(&self); }");
+    let tokens = rlex_tok("trait Foo { fn bar(&self); }");
     assert tokens.len() >= 8, `expected at least 8 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_TRAIT", `expected KW_TRAIT, got ${first}`;
 }
 
 test "tokenize match expression" {
-    let tokens = rlex_tok(&"match x { 1 => true, _ => false }");
+    let tokens = rlex_tok("match x { 1 => true, _ => false }");
     assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "KW_MATCH", `expected KW_MATCH, got ${first}`;
 }
 
 test "tokenize lifetime" {
-    let tokens = rlex_tok(&"fn foo<'a>(x: &'a str) -> &'a str { x }");
+    let tokens = rlex_tok("fn foo<'a>(x: &'a str) -> &'a str { x }");
     assert tokens.len() >= 10, `expected at least 10 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize closure" {
-    let tokens = rlex_tok(&"|x: i32| x + 1");
+    let tokens = rlex_tok("|x: i32| x + 1");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
@@ -143,19 +143,19 @@ test "tokenize closure" {
 // on its own would leave `INTEGER_LITERAL` one char long and hand the token
 // to `HEX_LITERAL` (oracle-checked against the published jar).
 test "tokenize hex literal" {
-    let tokens = rlex_tok(&"0x1f");
+    let tokens = rlex_tok("0x1f");
     let first = rust::token_kind_name(tokens.kinds[0]);
     assert first == "INTEGER_LITERAL", `expected INTEGER_LITERAL, got ${first}`;
 }
 
 test "tokenize macro invocation" {
-    let tokens = rlex_tok(&"println!(\"hello {}\", name);");
+    let tokens = rlex_tok("println!(\"hello {}\", name);");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 
 test "parse empty crate" {
-    let result = rlex_prs(&"");
+    let result = rlex_prs("");
     if !result.ok() {
         panic(`parse failed: ${result.diagnostics[0].message}`);
     }
@@ -165,12 +165,12 @@ test "parse empty crate" {
 // `FIRST(item)` only reaches `KW_FN` when it is computed through the nullable
 // `visibility` reference. This used to fail with `expected Eof, got "fn"`.
 test "top-level fn item routes through the nullable visibility rule" {
-    let r = rlex_prs(&"fn main() {}");
+    let r = rlex_prs("fn main() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 test "a visible top-level fn item still parses" {
-    let r = rlex_prs(&"pub fn main() {}");
+    let r = rlex_prs("pub fn main() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
@@ -192,7 +192,7 @@ test "a visible top-level fn item still parses" {
 // tail Optional, and the scan-side mirror keeps the alt tournament in
 // lockstep so the cascade reaches parse.
 test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
-    let r = rlex_prs(&"const X: i32 = if return { 1 } else { 2 };");
+    let r = rlex_prs("const X: i32 = if return { 1 } else { 2 };");
     if !r.ok() {
         panic(`parse failed: ${r.diagnostics[0].message}`);
     }
@@ -202,21 +202,21 @@ test "tree: bare `return` as if condition (caller-FOLLOW gate)" {
 // `useTree : (simplePath? PATHSEP)? (STAR | …)` — the group's end is not the
 // rule's tail, so a probe that asks the caller's FOLLOW there rejects this.
 test "tree: glob `use` path (probe continuation past the enclosing group)" {
-    let r = rlex_prs(&"use foo::*;");
+    let r = rlex_prs("use foo::*;");
     if !r.ok() {
         panic(`parse failed: ${r.diagnostics[0].message}`);
     }
 }
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = rlex_prs(input);
     let actual = rust::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "tree: operator precedence" {
-    assert_tree(&"const X: i32 = 1 + 2 * 3 - 4;", &"
+    assert_tree("const X: i32 = 1 + 2 * 3 - 4;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -237,7 +237,7 @@ test "tree: operator precedence" {
 }
 
 test "tree: deeply nested grouping" {
-    assert_tree(&"const X: i32 = ((((42))));", &"
+    assert_tree("const X: i32 = ((((42))));", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -263,7 +263,7 @@ test "tree: negation scoping with boolean and comparison" {
     // precedence — the boolean and comparison operators below it do not
     // attach. `!true && 1 != 2 || false` therefore parses as
     // `((!true) && (1 != 2)) || false`.
-    assert_tree(&"const X: i32 = !true && 1 != 2 || false;", &"
+    assert_tree("const X: i32 = !true && 1 != 2 || false;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -284,7 +284,7 @@ test "tree: negation scoping with boolean and comparison" {
 }
 
 test "tree: array with complex elements" {
-    assert_tree(&"const X: i32 = [1 + 2, !true, &42];", &"
+    assert_tree("const X: i32 = [1 + 2, !true, &42];", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -306,7 +306,7 @@ test "tree: array with complex elements" {
 }
 
 test "tree: bitwise operator precedence" {
-    assert_tree(&"const X: i32 = 1 ^ 2 & 3 | 4 + 5;", &"
+    assert_tree("const X: i32 = 1 ^ 2 & 3 | 4 + 5;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -330,7 +330,7 @@ test "tree: bitwise operator precedence" {
 }
 
 test "tree: closure returning closure" {
-    assert_tree(&"const X: i32 = |x: i32| || 42;", &"
+    assert_tree("const X: i32 = |x: i32| || 42;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -352,7 +352,7 @@ test "tree: closure returning closure" {
 }
 
 test "tree: alternating reference and dereference" {
-    assert_tree(&"const X: i32 = &*&*&42;", &"
+    assert_tree("const X: i32 = &*&*&42;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -369,7 +369,7 @@ test "tree: alternating reference and dereference" {
 }
 
 test "tree: array index with error propagation" {
-    assert_tree(&"const X: i32 = [1, 2][0]??;", &"
+    assert_tree("const X: i32 = [1, 2][0]??;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -392,7 +392,7 @@ test "tree: array index with error propagation" {
 }
 
 test "tree: multiple items with use, const, and as cast" {
-    assert_tree(&"use ::*; const X: i32 = &[1][0]; const Y: i32 = 42 as i64;", &"
+    assert_tree("use ::*; const X: i32 = &[1][0]; const Y: i32 = 42 as i64;", "
         (crate
             (item (visItem (useDeclaration use (useTree :: *) ;)))
             (item (visItem (constantItem
@@ -420,7 +420,7 @@ test "tree: multiple items with use, const, and as cast" {
 }
 
 test "tree: move closure with comparison" {
-    assert_tree(&"const X: i32 = move |x: i32| 1 + 2 == 3 + 4;", &"
+    assert_tree("const X: i32 = move |x: i32| 1 + 2 == 3 + 4;", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -454,7 +454,7 @@ test "tree: move closure with comparison" {
 // Item and type tests
 
 test "tree: struct with fields" {
-    assert_tree(&"struct Point { x: i32, y: i32 }", &"
+    assert_tree("struct Point { x: i32, y: i32 }", "
         (crate (item (visItem (struct_ (structStruct
             struct (identifier Point)
             { (structFields
@@ -470,7 +470,7 @@ test "tree: struct with fields" {
 }
 
 test "tree: type alias with lifetime reference" {
-    assert_tree(&"type Ref<'a> = &'a i32;", &"
+    assert_tree("type Ref<'a> = &'a i32;", "
         (crate (item (visItem (typeAlias
             type (identifier Ref)
             (genericParams < (genericParam (lifetimeParam 'a)) >)
@@ -484,7 +484,7 @@ test "tree: type alias with lifetime reference" {
 }
 
 test "tree: type alias with mutable lifetime reference" {
-    assert_tree(&"type MutRef<'a> = &'a mut i32;", &"
+    assert_tree("type MutRef<'a> = &'a mut i32;", "
         (crate (item (visItem (typeAlias
             type (identifier MutRef)
             (genericParams < (genericParam (lifetimeParam 'a)) >)
@@ -498,7 +498,7 @@ test "tree: type alias with mutable lifetime reference" {
 }
 
 test "tree: pub struct and pub static mut" {
-    assert_tree(&"pub struct Foo; pub static mut COUNT: i32 = 0;", &"
+    assert_tree("pub struct Foo; pub static mut COUNT: i32 = 0;", "
         (crate
             (item (visItem (visibility pub) (struct_ (structStruct
                 struct (identifier Foo) ;))))
@@ -511,7 +511,7 @@ test "tree: pub struct and pub static mut" {
 }
 
 test "tree: extern crate with rename" {
-    assert_tree(&"extern crate alloc as core;", &"
+    assert_tree("extern crate alloc as core;", "
         (crate (item (visItem (externCrate
             extern crate (crateRef (identifier alloc))
             (asClause as (identifier core)) ;))))
@@ -519,7 +519,7 @@ test "tree: extern crate with rename" {
 }
 
 test "tree: three items combined" {
-    assert_tree(&"struct Foo<'a>; type Ref<'a> = &'a i32; const X: i32 = 42;", &"
+    assert_tree("struct Foo<'a>; type Ref<'a> = &'a i32; const X: i32 = 42;", "
         (crate
             (item (visItem (struct_ (structStruct
                 struct (identifier Foo)
@@ -545,7 +545,7 @@ test "tree: three items combined" {
 // Trait and impl tests
 
 test "tree: trait with associated type" {
-    assert_tree(&"trait Iterator { type Item; }", &"
+    assert_tree("trait Iterator { type Item; }", "
         (crate (item (visItem (trait_
             trait (identifier Iterator) {
                 (associatedItem (typeAlias type (identifier Item) ;))
@@ -554,7 +554,7 @@ test "tree: trait with associated type" {
 }
 
 test "tree: impl trait for type" {
-    assert_tree(&"impl Clone for Foo {}", &"
+    assert_tree("impl Clone for Foo {}", "
         (crate (item (visItem (implementation (traitImpl
             impl
             (typePath (typePathSegment (pathIdentSegment (identifier Clone))))
@@ -566,7 +566,7 @@ test "tree: impl trait for type" {
 }
 
 test "tree: impl with associated const" {
-    assert_tree(&"impl Foo { const MAX: i32 = 100; }", &"
+    assert_tree("impl Foo { const MAX: i32 = 100; }", "
         (crate (item (visItem (implementation (inherentImpl
             impl
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -582,7 +582,7 @@ test "tree: impl with associated const" {
 }
 
 test "tree: enum with tuple, struct, and unit variants" {
-    assert_tree(&"enum Expr { Lit(i32), Add { left: i32, right: i32 }, Unit }", &"
+    assert_tree("enum Expr { Lit(i32), Add { left: i32, right: i32 }, Unit }", "
         (crate (item (visItem (enumeration
             enum (identifier Expr) {
                 (enumItems
@@ -611,7 +611,7 @@ test "tree: enum with tuple, struct, and unit variants" {
 // Expression with block tests
 
 test "tree: if else expression" {
-    assert_tree(&"const X: i32 = if true { 1 } else { 2 };", &"
+    assert_tree("const X: i32 = if true { 1 } else { 2 };", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -627,7 +627,7 @@ test "tree: if else expression" {
 }
 
 test "tree: block expression" {
-    assert_tree(&"const X: i32 = { 1 + 2 };", &"
+    assert_tree("const X: i32 = { 1 + 2 };", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -644,7 +644,7 @@ test "tree: block expression" {
 }
 
 test "tree: method call chain" {
-    assert_tree(&"const X: i32 = x.foo().bar();", &"
+    assert_tree("const X: i32 = x.foo().bar();", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (traitObjectTypeOneBound (traitBound
@@ -663,7 +663,7 @@ test "tree: method call chain" {
 // Advanced type tests
 
 test "tree: struct with trait bounds" {
-    assert_tree(&"struct Bounded<T: Clone + Send> { x: T }", &"
+    assert_tree("struct Bounded<T: Clone + Send> { x: T }", "
         (crate (item (visItem (struct_ (structStruct
             struct (identifier Bounded)
             (genericParams < (genericParam (typeParam
@@ -683,7 +683,7 @@ test "tree: struct with trait bounds" {
 }
 
 test "tree: never type and slice type" {
-    assert_tree(&"type Never = !; type Slice = [u8];", &"
+    assert_tree("type Never = !; type Slice = [u8];", "
         (crate
             (item (visItem (typeAlias
                 type (identifier Never) = (type_ (typeNoBounds (neverType !))) ;)))
@@ -698,7 +698,7 @@ test "tree: never type and slice type" {
 }
 
 test "tree: array type with const size" {
-    assert_tree(&"const X: [i32; 3] = [1, 2, 3];", &"
+    assert_tree("const X: [i32; 3] = [1, 2, 3];", "
         (crate (item (visItem (constantItem
             const (identifier X) :
             (type_ (typeNoBounds (arrayType [
@@ -719,8 +719,8 @@ test "tree: array type with const size" {
 
 test "tree: nested generics" {
     assert_tree(
-        &"struct Wrap<T> { inner: Option<Vec<T>> }",
-        &"
+        "struct Wrap<T> { inner: Option<Vec<T>> }",
+        "
         (crate (item (visItem (struct_ (structStruct
             struct (identifier Wrap)
             (genericParams < (genericParam (typeParam (identifier T))) >)
@@ -747,22 +747,22 @@ test "tree: nested generics" {
 // `<` / `>` the lexer emits, and only the base can tell `a >> b` from
 // `a > > b`.
 test "shift: an adjacent pair is one operator" {
-    let r = rlex_prs(&"const X: i32 = 1 >> 2;");
+    let r = rlex_prs("const X: i32 = 1 >> 2;");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 test "shift: a separated pair is not a shift" {
-    let r = rlex_prs(&"const X: i32 = 1 > > 2;");
+    let r = rlex_prs("const X: i32 = 1 > > 2;");
     assert !r.ok(), "a gap between the two `>` fails the base predicate";
 }
 
 test "comparison: a bare > is not a shift" {
-    let r = rlex_prs(&"const X: bool = 1 > 2;");
+    let r = rlex_prs("const X: bool = 1 > 2;");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 test "comparison: a bare < is not a shift" {
-    let r = rlex_prs(&"const X: bool = 1 < 2;");
+    let r = rlex_prs("const X: bool = 1 < 2;");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
@@ -771,20 +771,20 @@ test "comparison: a bare < is not a shift" {
 // gave the whole first line to the hidden channel, so an attribute on one line
 // vanished without a diagnostic and one across two lines left `)]` behind.
 test "shebang: a crate-level inner attribute is not a shebang" {
-    let r = rlex_prs(&"#![allow(dead_code)]\nfn main() {}");
+    let r = rlex_prs("#![allow(dead_code)]\nfn main() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
     let actual = rust::to_string_tree(&r);
     assert actual.contains("innerAttribute"), `the attribute went to the hidden channel: ${actual}`;
 }
 
 test "shebang: an inner attribute spanning lines keeps its closing bracket" {
-    let r = rlex_prs(&"#![allow(\n    dead_code\n)]\nfn main() {}");
+    let r = rlex_prs("#![allow(\n    dead_code\n)]\nfn main() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 // The rejection case: a real shebang is still stripped.
 test "shebang: a real one is still hidden" {
-    let r = rlex_prs(&"#!/usr/bin/env run-cargo-script\nfn main() {}");
+    let r = rlex_prs("#!/usr/bin/env run-cargo-script\nfn main() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
     let actual = rust::to_string_tree(&r);
     assert !actual.contains("innerAttribute"), `a real shebang is not an attribute: ${actual}`;
@@ -793,11 +793,11 @@ test "shebang: a real one is still hidden" {
 // `#[unsafe(...)]` wraps the attributes that were always unsafe (Rust 2024).
 // `unsafe` is a keyword, so `attr`'s `simplePath` cannot start with it.
 test "attr: the unsafe attribute wrapper" {
-    let r = rlex_prs(&"#[unsafe(no_mangle)]\npub extern \"C\" fn f() {}");
+    let r = rlex_prs("#[unsafe(no_mangle)]\npub extern \"C\" fn f() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }
 
 test "attr: an unsafe attribute with a value" {
-    let r = rlex_prs(&"#[unsafe(export_name = \"g\")]\npub fn f() {}");
+    let r = rlex_prs("#[unsafe(export_name = \"g\")]\npub fn f() {}");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics:?}`;
 }

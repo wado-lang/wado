@@ -13,31 +13,31 @@ use g from "./grammars/plus_first_iteration_never_declines.g4"
         },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // The rejection case, and the one the bug turned into a parse: the loop owes at
 // least one iteration, so `a b e` has no reading — the suffix cannot have the
 // `a b` the loop must take.
 test "a `+` that would strand its suffix still takes its first iteration" {
-    let result = g::parse(&"a b e");
+    let result = g::parse("a b e");
     assert !result.ok(), `expected a diagnostic: ${g::to_string_tree(&result)}`;
 }
 
 // The hit cases: with an iteration to spare the loop yields the suffix's input,
 // and with none to spare it keeps iterating.
 test "a later iteration still yields what the suffix needs" {
-    assert_tree(&"a b a b e", &"(start (body a b a b e))");
+    assert_tree("a b a b e", "(start (body a b a b e))");
 }
 
 test "the loop keeps iterating where the suffix cannot start" {
-    assert_tree(&"a b a b", &"(start (body a b a b))");
+    assert_tree("a b a b", "(start (body a b a b))");
 }
 
 test "the loop's other alternative takes the mandatory iteration too" {
-    assert_tree(&"c d a b e", &"(start (body c d a b e))");
+    assert_tree("c d a b e", "(start (body c d a b e))");
 }

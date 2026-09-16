@@ -48,10 +48,10 @@ test "char_display_width treats combining marks and variation selectors as width
 }
 
 test "display_width sums per-character widths" {
-    assert display_width(&"hello") == 5;
-    assert display_width(&"中文") == 4;
-    assert display_width(&"a中b") == 4;
-    assert display_width(&"") == 0;
+    assert display_width("hello") == 5;
+    assert display_width("中文") == 4;
+    assert display_width("a中b") == 4;
+    assert display_width("") == 0;
 }
 
 test "display_width measures the tc39-temporal.md table cell case" {
@@ -60,5 +60,5 @@ test "display_width measures the tc39-temporal.md table cell case" {
     // explicitly zero-width (unlike dprint's unicode-width dependency, which
     // has no zero-width case at all — see the WEP's Unicode width section),
     // and " [-1]" is 5 ASCII columns.
-    assert display_width(&"\u{2B06}\u{FE0F} [-1]") == 6;
+    assert display_width("\u{2B06}\u{FE0F} [-1]") == 6;
 }

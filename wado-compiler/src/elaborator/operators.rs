@@ -417,6 +417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &eq_trait_name,
                         "eq",
                         false,
+                        Some(&ArgClass::Exact(right)),
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
@@ -463,6 +464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &ord_trait_name,
                         "cmp",
                         false,
+                        None,
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = match op {
@@ -898,9 +900,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let float_name = {
                 let table = self.tysys.type_table.borrow();
-                match table.get(table.representation_head(left)) {
-                    ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
-                    ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
+                match table.primitive_head(left) {
+                    Some(PrimitiveType::F32) => Some("f32"),
+                    Some(PrimitiveType::F64) => Some("f64"),
                     _ => None,
                 }
             };
@@ -1189,6 +1191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &trait_name,
                         method_name,
                         false,
+                        None,
                     )
                     .or_else(|| {
                         self.resolve_trait_method_for_op(
@@ -1198,6 +1201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &trait_name,
                             method_name,
                             false,
+                            None,
                         )
                     });
                 if let Some(resolved) = resolved {
