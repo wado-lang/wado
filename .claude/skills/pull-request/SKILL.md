@@ -5,8 +5,17 @@ description: The rules for opening a PR you must read before creating or editing
 
 ## Before writing
 
-Read `git diff origin/main...HEAD` (three dots). The title and description come
-from that diff, not from the session that produced it.
+Read the branch's own changes, generated files left out:
+
+```sh
+git diff origin/main...HEAD -- $(scripts/changed-sources.sh)
+```
+
+The title and description come from that diff, not from the session that
+produced it. `scripts/changed-sources.sh` drops what `.gitattributes` marks
+`linguist-generated`, which is where a regenerated corpus would otherwise bury
+the change the PR is actually about. Say in the description that the generated
+output was regenerated, not what moved inside it.
 
 Revise the branch while you are there: clean up comments and docs according to
 the project rules.
