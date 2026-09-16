@@ -8,7 +8,7 @@ seedable or reproducible.
 
 A host call costs about the same for 16 bytes as for 4096, so drawing many
 small values pays that fixed cost over and over. `BufferedRandom` draws in
-blocks and serves reads from one, reaching the outer handler to refill.
+blocks and serves reads from one.
 
 ## Synopsis
 

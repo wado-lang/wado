@@ -4,7 +4,7 @@
 //!
 //! A host call costs about the same for 16 bytes as for 4096, so drawing many
 //! small values pays that fixed cost over and over. `BufferedRandom` draws in
-//! blocks and serves reads from one, reaching the outer handler to refill.
+//! blocks and serves reads from one.
 
 use { Random } from "wasi:random";
 
@@ -36,8 +36,7 @@ impl Random for BufferedRandom {
         }
         // A WASI caller already tolerates a short read: the block's remainder
         // is an answer, not a reason to reach the host again.
-        let take = if n < self.available() { n } else { self.available() };
-        resume self.take(take);
+        resume self.take(i32::min(n, self.available()));
     }
 
     fn get_random_u64(&mut self) -> u64 {
@@ -63,18 +62,13 @@ impl BufferedRandom {
 
     fn refill(&mut self) with Random {
         self.buf = self.take(self.available());
-        for let byte of Random::get_random_bytes(POOL_BYTES as u64) {
-            self.buf.push(byte);
-        }
+        self.buf.extend(&Random::get_random_bytes(POOL_BYTES as u64));
         self.pos = 0;
         assert self.buf.len() > 0, "wasi:random returned no data";
     }
 
     fn take(&mut self, n: i32) -> List<u8> {
-        let mut out: List<u8> = [];
-        for let mut i = 0; i < n; i += 1 {
-            out.push(self.buf[self.pos + i]);
-        }
+        let out = self.buf[self.pos..<self.pos + n].to_list();
         self.pos += n;
         return out;
     }

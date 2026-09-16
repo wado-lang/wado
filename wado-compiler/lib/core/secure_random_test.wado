@@ -4,9 +4,9 @@ use { Random } from "wasi:random";
 // Counts host calls and hands out a known stream: what the buffer served, and
 // how often it reached past itself to get it.
 struct CountingRandom {
-    next: u8,
-    calls: i32,
-    chunk: i32,
+    next: u8 = 0,
+    calls: i32 = 0,
+    chunk: i32 = 0,
 }
 
 impl Random for CountingRandom {
@@ -28,7 +28,7 @@ impl Random for CountingRandom {
 }
 
 test "one host call serves many reads" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut host = CountingRandom {};
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -41,12 +41,12 @@ test "one host call serves many reads" {
 }
 
 test "the buffer serves the host's byte stream unchanged" {
-    let mut direct = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut direct = CountingRandom {};
     let expected = with Random => &mut direct do {
         Random::get_random_bytes(48);
     };
 
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut host = CountingRandom {};
     let mut served: List<u8> = [];
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
@@ -63,7 +63,7 @@ test "the buffer serves the host's byte stream unchanged" {
 
 test "a short read from the host is tolerated" {
     // The host hands back 10 bytes however many are asked for.
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 10 };
+    let mut host = CountingRandom { chunk: 10 };
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -79,7 +79,7 @@ test "a short read from the host is tolerated" {
 }
 
 test "get_random_u64 assembles from the buffer" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut host = CountingRandom {};
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -92,7 +92,7 @@ test "get_random_u64 assembles from the buffer" {
 }
 
 test "get_random_u64 spans a refill" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 4 };
+    let mut host = CountingRandom { chunk: 4 };
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -103,7 +103,7 @@ test "get_random_u64 spans a refill" {
 }
 
 test "a read larger than the block goes straight to the host" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut host = CountingRandom {};
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -114,7 +114,7 @@ test "a read larger than the block goes straight to the host" {
 }
 
 test "a read too large for an i32 goes straight to the host" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 16 };
+    let mut host = CountingRandom { chunk: 16 };
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
@@ -126,7 +126,7 @@ test "a read too large for an i32 goes straight to the host" {
 }
 
 test "leftover bytes survive a refill" {
-    let mut host = CountingRandom { next: 0, calls: 0, chunk: 0 };
+    let mut host = CountingRandom {};
     with Random => &mut host do {
         let mut rng = BufferedRandom {};
         with Random => &mut rng do {
