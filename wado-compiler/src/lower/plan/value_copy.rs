@@ -128,6 +128,10 @@ pub struct ValueCopyPlan {
     /// what a `#[retain(...)]` states. Position 0 is the receiver, so
     /// `receiver_storing_methods` is subsumed by this.
     pub stored_params: stores::StoredParams,
+    /// Where each bounded retention lands, so a caller with its argument list in
+    /// hand can tell a reference that stops at a local it owns from one that
+    /// outlives the frame.
+    pub bounded_retention: stores::BoundedRetention,
     /// Per-functor-type reference storage: what a call through a function value
     /// of that type may keep, joined over every expression that mints one. The
     /// answer an indirect call reads, where no callee name is available.
@@ -224,6 +228,7 @@ pub fn plan(
         returns_self_projection: conventions.returns_self_projection,
         builtins,
         stored_params: stores.stored_params,
+        bounded_retention: stores.bounded,
         functor_rows: stores.rows,
         mut_receiver_methods,
         confined_params,

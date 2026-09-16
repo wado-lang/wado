@@ -87,6 +87,19 @@ impl StoresFacts {
         grew
     }
 
+    /// Where each position the caller can resolve lands. A position the callee
+    /// also keeps out of sight is left out: naming one of its destinations would
+    /// say the reference goes no further than there, and it does.
+    fn bounded(&self) -> IndexMap<u32, IndexSet<u32>> {
+        self.into_param
+            .iter()
+            .filter(|(source, _)| {
+                !self.escapes.contains(*source) && !self.into_result.contains(*source)
+            })
+            .map(|(source, destinations)| (*source, destinations.clone()))
+            .collect()
+    }
+
     /// Every position that outlives the call somehow — what a reader with no
     /// argument list to resolve a destination against must assume.
     fn union(&self) -> IndexSet<u32> {
@@ -518,10 +531,41 @@ impl StoresOracle<'_> {
     }
 }
 
-/// What the fixpoint publishes: the positions each function may keep, and the
-/// row each functor type carries.
+/// Where a retained position lands, for the positions a caller can resolve.
+///
+/// A position is here only when every channel claiming it names a parameter, so
+/// the reference goes nowhere the caller cannot see. One that also escapes or
+/// reaches the result is absent, and a reader takes the union as before.
+#[derive(Default)]
+pub struct BoundedRetention {
+    at: FuncKeyMap<IndexMap<u32, IndexSet<u32>>>,
+}
+
+impl BoundedRetention {
+    /// The parameter positions the callee puts position `source` in, or `None`
+    /// where it also keeps it somewhere the caller cannot name.
+    #[must_use]
+    pub fn destinations(&self, func: &FunctionRef, source: usize) -> Option<&IndexSet<u32>> {
+        self.at
+            .get(&func.module_source, &func.name)?
+            .get(&u32::try_from(source).ok()?)
+    }
+
+    /// Whether this callee bounds any retention at all, which is what a reader
+    /// checks before doing the work of resolving one.
+    #[must_use]
+    pub fn any(&self, func: &FunctionRef) -> bool {
+        self.at
+            .get(&func.module_source, &func.name)
+            .is_some_and(|by_source| !by_source.is_empty())
+    }
+}
+
+/// What the fixpoint publishes: the positions each function may keep, where the
+/// bounded ones land, and the row each functor type carries.
 pub struct StoresSummary {
     pub stored_params: StoredParams,
+    pub bounded: BoundedRetention,
     pub rows: FunctorRows,
 }
 
@@ -631,6 +675,7 @@ pub fn compute_stored_params(
     }
 
     let mut stored_params = StoredParams::default();
+    let mut bounded = BoundedRetention::default();
     for func in &project.functions {
         let func = func.borrow();
         if let Some(facts) = computed.get(&func.module_source, &func.name) {
@@ -643,11 +688,17 @@ pub fn compute_stored_params(
                 facts.into_param
             );
             stored_params.insert(func.module_source.clone(), func.name.clone(), facts.union());
+            bounded.at.insert(
+                func.module_source.clone(),
+                func.name.clone(),
+                facts.bounded(),
+            );
         }
     }
 
     StoresSummary {
         stored_params,
+        bounded,
         rows,
     }
 }

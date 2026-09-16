@@ -102,9 +102,15 @@ rather than an escape. The reading is a must-alias one: a single assignment from
 anywhere the walk cannot name makes every write through that local an escape
 again, and a local derived from such a one is no better off.
 
-What a caller cannot resolve, it must assume: the published facts name retained
-positions and not where each landed, so a reader outside the fixpoint — the
-last-use walk, the write-back — takes the union of all three channels.
+The fixpoint publishes where a bounded position landed and not just that it was
+kept, so a reader outside it — the last-use walk — resolves the destination
+against its own argument list the way the fixpoint does. A position any channel
+keeps out of sight carries no destination and is read as the union of all three.
+One whose every channel names a parameter is read as the locals the call's
+arguments name there, and pins its referent only where one of them is still
+readable at a point the referent would be moved out of. A destination that is
+itself a parameter, or that a reference outlives, is readable everywhere, so it
+pins for the frame as before.
 
 Keeping the channels apart is what makes each precise. An iterator holds a
 reference to what it walks, so folding `into_result` into `escapes` would make
@@ -205,6 +211,9 @@ the compiler may stop doing to the argument:
 
 - A local passed where the callee retains it or hands it out cannot be moved out
   of, so it is copied; one passed where the callee keeps nothing can be moved.
+  Where the retention names a destination the caller owns, the pin lasts as long
+  as that destination is readable and no longer, so a move past its last read
+  still stands.
 - A `&mut` argument is not written back at a call that retains it: the borrow
   outlives the call, so the call is no place to write it. Where no place in the
   body can be written back to, the call is refused — which is why an indirect
@@ -221,7 +230,11 @@ anchored-local reading all together leaves every benchmark and every size progra
 byte-identical. The conservatism they remove is real — 785 generated `_parse_*`
 functions keep nothing, so `fn(&mut Parser)` reads empty where it used to read as
 keeping everything — but the locals it stops pinning have later uses anyway, so
-no move and no scalarization follows.
+no move and no scalarization follows. The bounded destination has little to work
+with for a plainer reason: 19 functions across the Gale corpus publish one at
+all, and every one is a container insert — `List::push`'s `value` into `self`,
+`array_copy`'s `src` into `dst`, `index_assign`'s `value` into `self` — where
+the destination is read after the argument would be moved anyway.
 
 What the facts do buy is correctness, and that is not free. Declaring what
 `array_copy` and `array_clone` hand on through their elements costs 478 bytes,
@@ -345,30 +358,22 @@ where there is none, stated as an attribute the type does not carry.
 non-null, with no arithmetic on it, and `Option<&T>` is how a nullable one is
 written. Wasm GC uses the same word for the same thing.
 
-## Roadmap
-
-Named rather than numbered, so a reference to one from the code survives the
-list changing around it.
-
-### A bounded destination the caller can read
-
-The fixpoint resolves `into_param` against its own arguments, so a retention
-that ends in a local stops there. Outside the fixpoint it does not: the published
-facts name retained positions and not where each landed, so the last-use walk and
-the write-back take the union and assume the worst even with the argument list in
-hand.
-
-Done when a reader outside the fixpoint can ask where a position landed, an
-argument retained into a local the caller owns is pinned only for that local's
-extent rather than for the frame, and a fixture shows the difference.
-
-What it has to work with is small: 19 functions across the Gale corpus publish a
-bounded retention at all, and every one is a container insert — `List::push`'s
-`value` into `self`, `array_copy`'s `src` into `dst`, `index_assign`'s `value`
-into `self` — where the destination outlives the argument anyway. Pinning to the
-destination's extent and pinning to the frame are the same answer there.
-
 ## Known gaps
+
+The write-back reads the union where the last-use walk reads the destination.
+Refusing a write-back is a correctness rule rather than a precision one — a
+`&mut` to a detached place cannot be stored back at a call that keeps it — and
+the destination would sharpen it the same way, but the two walks run on rows
+built from different trees, one before boxing and one after lifting, so the
+bounded map the later one reads is not the one the earlier would need. Closing
+it takes publishing the destination from both passes.
+
+An indirect call reads the union. The row a call site resolves says which
+positions the values reaching it keep, not where each landed, so a function
+value is never a bounded retention however narrow the bodies behind it are.
+Closing it takes carrying a destination through the points-to answer, where a
+position means one thing per mint and the caller's argument list is the same one
+either way.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of

@@ -6,7 +6,7 @@ use super::analyze::is_owned_value;
 use super::funcset::FuncKeySet;
 use super::is_reference_type;
 use super::ownership::OwnedCalls;
-use super::stores::{FunctorRows, StoredParams};
+use super::stores::{BoundedRetention, FunctorRows, StoredParams};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::field_owner;
 use crate::lower::plan::value_copy::{ValueCopyPlan, analyze, modref, place};
@@ -163,6 +163,9 @@ pub fn analyze_ownership(
 
     let mut a = Analyzer {
         stored_params,
+        bounded: &plan.bounded_retention,
+        params: func.params.iter().map(|p| p.local_index).collect(),
+        pending_bounded: Vec::new(),
         functor_rows: &plan.functor_rows,
         mut_receiver_methods,
         ref_receiver_methods: &plan.ref_receiver_methods,
@@ -190,7 +193,14 @@ pub fn analyze_ownership(
     let paths = a.alias_paths();
     a.resolve_alias_chains(&paths);
     a.resolve_pending_mut_aliases(&paths);
-    a.propagate_escapes_to_referents(func, type_table);
+    // Each step either settles a bounded retention against a destination the
+    // other has just marked, or there is nothing left for either to learn.
+    loop {
+        a.propagate_escapes_to_referents(func, type_table);
+        if !a.resolve_pending_bounded() {
+            break;
+        }
+    }
 
     let fresh = a.owned_locals(func, oracle, type_table);
 
@@ -756,6 +766,15 @@ struct Analyzer<'a> {
     /// Which parameter positions each callee may persist a reference to
     /// (position 0 is the receiver). Elsewhere a `&`/`&mut` is transient.
     stored_params: &'a StoredParams,
+    /// Where a callee puts the positions it keeps nowhere else, so an argument
+    /// list on hand resolves the retention to locals this body owns.
+    bounded: &'a BoundedRetention,
+    /// This body's parameter locals. A retention landing in one leaves the
+    /// frame, whatever the callee does with it.
+    params: IndexSet<u32>,
+    /// `(referent root, field, destination roots)` for each bounded retention,
+    /// answered once every escape this body makes is known.
+    pending_bounded: Vec<(u32, Option<u32>, Vec<u32>)>,
     /// What a call through a function value of each functor type keeps — the
     /// answer an indirect call reads, where no callee name is available.
     functor_rows: &'a FunctorRows,
@@ -798,6 +817,18 @@ struct Analyzer<'a> {
     consumed: IndexMap<u32, IndexSet<u32>>,
     /// Every write this body makes, with the locals live where it runs.
     mutations: Vec<Mutation>,
+}
+
+/// What a call does with a reference handed at one argument position.
+enum Kept {
+    /// Nothing: the borrow ends with the call.
+    Transient,
+    /// Something the caller cannot name, so the referent is pinned for the rest
+    /// of the frame.
+    Frame,
+    /// Only these locals of this body, so the referent is pinned only where one
+    /// of them is still readable.
+    Into(Vec<u32>),
 }
 
 /// Which fields of a local an escaped borrow reaches. A whole-local or imprecise
@@ -914,6 +945,85 @@ impl Analyzer<'_> {
             .is_some_and(|s| s.contains(&u32::try_from(pos).unwrap()))
     }
 
+    /// What this call keeps at each argument position, resolved against the
+    /// arguments it is given.
+    fn kept_at(&self, callee: &FunctionRef, args: &[&TirExpr]) -> Vec<Kept> {
+        (0..args.len())
+            .map(|pos| {
+                if !self.callee_stores(callee, pos) {
+                    return Kept::Transient;
+                }
+                match self.bounded.destinations(callee, pos) {
+                    Some(destinations) if !destinations.is_empty() => self
+                        .landing_locals(args, destinations)
+                        .map_or(Kept::Frame, Kept::Into),
+                    _ => Kept::Frame,
+                }
+            })
+            .collect()
+    }
+
+    /// The locals the callee's destination positions name, or `None` where one
+    /// of them is a place this body cannot see the end of.
+    fn landing_locals(&self, args: &[&TirExpr], destinations: &IndexSet<u32>) -> Option<Vec<u32>> {
+        destinations
+            .iter()
+            .map(|position| {
+                let arg = args.get(usize::try_from(*position).ok()?)?;
+                let root = alias_root(arg)?;
+                // A landing in a parameter leaves the frame, so the caller's
+                // caller is the one that could bound it.
+                (!self.params.contains(&root)).then_some(root)
+            })
+            .collect()
+    }
+
+    /// Pin `root.field` for as long as what the call keeps it in is readable.
+    fn pin(&mut self, root: u32, field: Option<u32>, kept: &Kept) {
+        match kept {
+            Kept::Transient => {}
+            Kept::Frame => self.mark_escaped(root, field),
+            Kept::Into(destinations) => {
+                self.pending_bounded
+                    .push((root, field, destinations.clone()));
+            }
+        }
+    }
+
+    /// Answer each deferred bounded retention against the liveness and the
+    /// escapes now known, and say whether that marked anything new.
+    fn resolve_pending_bounded(&mut self) -> bool {
+        let mut marked = false;
+        let mut unsettled = Vec::new();
+        for (root, field, destinations) in std::mem::take(&mut self.pending_bounded) {
+            if self.destination_outlives_a_move(root, &destinations) {
+                self.mark_escaped(root, field);
+                marked = true;
+            } else {
+                unsettled.push((root, field, destinations));
+            }
+        }
+        self.pending_bounded = unsettled;
+        marked
+    }
+
+    /// Whether what the call kept the reference in is still readable where the
+    /// referent would be moved out of. A destination a reference outlives is
+    /// readable anywhere, so it counts wherever it lands.
+    fn destination_outlives_a_move(&self, root: u32, destinations: &[u32]) -> bool {
+        destinations.iter().any(|destination| {
+            self.place_escaped(*destination, None)
+                || self
+                    .consumed
+                    .get(&root)
+                    .is_some_and(|at| at.contains(destination))
+                || self
+                    .place_cands
+                    .iter()
+                    .any(|site| site.base == root && site.live.contains(destination))
+        })
+    }
+
     /// An indirect-call argument. Nothing here names the body that will run, so
     /// the row the callee's type carries says whether this position escapes:
     /// through a functor nothing mints a retaining value for, a borrow is as
@@ -950,7 +1060,7 @@ impl Analyzer<'_> {
         &mut self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
-        pos: usize,
+        kept: &Kept,
         borrowing_receiver: bool,
         live: &mut IndexSet<u32>,
         record: bool,
@@ -969,15 +1079,12 @@ impl Analyzer<'_> {
                 }
             }
             let referent = self.borrow_read(place, live, record);
-            if record
-                && let Some(r) = referent
-                && callee.is_some_and(|c| self.callee_stores(c, pos))
-            {
-                self.mark_escaped(r, top_field_of(place));
+            if record && let Some(r) = referent {
+                self.pin(r, top_field_of(place), kept);
             }
         } else {
-            if record && callee.is_some_and(|c| self.callee_stores(c, pos)) {
-                self.escape_if_reference(arg);
+            if record {
+                self.pin_if_reference(arg, kept);
             }
             if borrowing_receiver {
                 self.walk_place_base(arg, live, record);
@@ -989,9 +1096,9 @@ impl Analyzer<'_> {
 
     /// A reference handed on as it stands, the spelling [`Analyzer::walk_expr`]
     /// misses. `&place` is left to that arm, which knows the field it borrows.
-    fn escape_if_reference(&mut self, expr: &TirExpr) {
+    fn pin_if_reference(&mut self, expr: &TirExpr, kept: &Kept) {
         if let Some((root, field)) = reference_escape(expr, self.type_table) {
-            self.mark_escaped(root, field);
+            self.pin(root, field, kept);
         }
     }
 
@@ -1574,11 +1681,17 @@ impl Analyzer<'_> {
                     && self
                         .ref_receiver_methods
                         .contains(&func.module_source, &func.name);
+                let kept = if record {
+                    let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
+                    self.kept_at(func, &exprs)
+                } else {
+                    Vec::new()
+                };
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(
                         &arg.expr,
                         Some(func),
-                        pos,
+                        kept.get(pos).unwrap_or(&Kept::Transient),
                         borrowing_receiver && pos == 0,
                         live,
                         record,
@@ -1586,8 +1699,8 @@ impl Analyzer<'_> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_call_arg(arg, None, pos, false, live, record);
+                for arg in args.iter().rev() {
+                    self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {
