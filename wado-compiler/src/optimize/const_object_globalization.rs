@@ -118,49 +118,7 @@ impl CandidateKind {
     }
 }
 
-/// Rewrite `&(S { f: v, .. }.f)` to `&v`, putting the constant aggregate
-/// directly under the `&`.
-///
-/// [`CandidateKind::InlineRef`] asks the `&`'s operand to be a constant
-/// *aggregate*, and a projection of one is not, so the borrowed field is rebuilt
-/// at every use. A string-literal pattern wears that shape once `String^Eq::eq`
-/// inlines: lowering hands the callee `&"alpha"` and splicing it leaves
-/// `&(String { repr: packed"alpha", .. }.repr)`.
-///
-/// `const_folding::project_struct_literal` reaches the same shape through the
-/// engine, where the redirect does not stick (#1963).
-fn deref_const_field_borrows(project: &mut NirPackage) {
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        let Some(body) = func.body.as_mut() else {
-            continue;
-        };
-        let edits: Vec<(ExprId, Operand)> = reachable_nodes(body)
-            .into_iter()
-            .filter_map(|node| {
-                let NodeRef::Expr(id) = node else { return None };
-                let ExprKind::Unary {
-                    op: NirUnaryOp::Ref,
-                    expr: Operand::Expr(inner),
-                } = &body.exprs[id].kind
-                else {
-                    return None;
-                };
-                let proj = projected_const_field(body, *inner)?;
-                Some((id, proj))
-            })
-            .collect();
-        for (id, proj) in edits {
-            body.exprs[id].kind = ExprKind::Unary {
-                op: NirUnaryOp::Ref,
-                expr: proj,
-            };
-        }
-    }
-}
-
 pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
-    deref_const_field_borrows(project);
     let type_table = project.type_table.clone();
     // One id serves every instantiation — the hoisted type rides the call node.
     let is_uninitialized = project.intern_extern(&nir::FunctionRef {
@@ -1286,6 +1244,11 @@ fn is_globalizable_const(
         ExprKind::VariantConstruct { payload, .. } => {
             payload.is_none_or(|p| is_globalizable_const_operand(body, p, gate, bound))
         }
+        // A projection of a constant aggregate is a constant. The fields it
+        // drops are pure, so the aggregate goes with them and the global holds
+        // the field alone.
+        ExprKind::FieldAccess { .. } => projected_const_field(body, expr)
+            .is_some_and(|op| is_globalizable_const_operand(body, op, gate, bound)),
         // A pure call on closed constants is itself a closed constant
         // expression: same arguments, same result, and collapsing repeats is
         // unobservable. `FnEffect` (see `mod_ref`) is what establishes that.
@@ -1390,6 +1353,11 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             contains_aggregate_operand(body, *inner, gate)
         }
+        // What a projection of an aggregate builds is what the projected field
+        // builds, not what the aggregate around it does: `String { .. }.used` is
+        // a scalar.
+        ExprKind::FieldAccess { .. } => projected_const_field(body, expr)
+            .is_some_and(|op| contains_aggregate_operand(body, op, gate)),
         ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
