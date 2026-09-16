@@ -1,0 +1,572 @@
+// Throughput of four pseudo-random generators, in u64 per second.
+//
+// - RomuTrio — https://www.romu-random.org/, Mark A. Overton's paper.
+// - xoshiro256++ — https://prng.di.unimi.it/, Blackman & Vigna.
+// - xoshiro256++ again, eight lanes at once over `core:simd`.
+// - SHISHUA — https://github.com/espadrine/shishua, over `core:simd`.
+//
+// All four are seeded with SplitMix64, so the comparison is of the generator
+// and not of its initialization. SHISHUA's own seeding runs thirteen rounds
+// over a table of digits of phi; leaving it out changes the stream but not one
+// instruction of the round being timed. Nothing here is a reference
+// implementation — `core:prng` is where a checked one would go.
+
+use { Stdout } from "core:cli";
+use { Benchmark } from "core:benchmark";
+use { u64x2 } from "core:simd";
+use { MonotonicClock } from "wasi:clocks";
+
+global SPLITMIX_GAMMA: u64 = 0x9E3779B97F4A7C15;
+
+// A seed generator in its own right, and the one every state below starts from.
+struct SplitMix64 {
+    state: u64,
+}
+
+impl SplitMix64 {
+    fn new(seed: u64) -> SplitMix64 {
+        return SplitMix64 { state: seed };
+    }
+
+    fn next(&mut self) -> u64 {
+        self.state = self.state + SPLITMIX_GAMMA;
+        let mut z = self.state;
+        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
+        z = (z ^ z >> 27) * 0x94D049BB133111EB;
+        return z ^ z >> 31;
+    }
+
+    fn pair(&mut self) -> u64x2 {
+        return [
+            self.next() as i64,
+            self.next() as i64,
+        ];
+    }
+}
+
+fn rotl(x: u64, n: u64) -> u64 {
+    return x << n | x >> 64 - n;
+}
+
+// RomuTrio: three words, one multiply and two rotates per output.
+struct RomuTrio {
+    x: u64,
+    y: u64,
+    z: u64,
+}
+
+impl RomuTrio {
+    fn new(seed: u64) -> RomuTrio {
+        let mut seeder = SplitMix64::new(seed);
+        return RomuTrio {
+            x: seeder.next(),
+            y: seeder.next(),
+            z: seeder.next(),
+        };
+    }
+
+    fn next(&mut self) -> u64 {
+        let xp = self.x;
+        let yp = self.y;
+        let zp = self.z;
+        self.x = zp * 0xD3833E804F4C574B;
+        self.y = rotl(yp - xp, 12);
+        self.z = rotl(zp - yp, 44);
+        return xp;
+    }
+}
+
+// xoshiro256++: four words, shifts and xors, with one rotate in the output
+// function and one in the state update.
+struct Xoshiro256pp {
+    s0: u64,
+    s1: u64,
+    s2: u64,
+    s3: u64,
+}
+
+impl Xoshiro256pp {
+    fn new(seed: u64) -> Xoshiro256pp {
+        let mut seeder = SplitMix64::new(seed);
+        return Xoshiro256pp {
+            s0: seeder.next(),
+            s1: seeder.next(),
+            s2: seeder.next(),
+            s3: seeder.next(),
+        };
+    }
+
+    fn next(&mut self) -> u64 {
+        let result = rotl(self.s0 + self.s3, 23) + self.s0;
+        let t = self.s1 << 17;
+        self.s2 = self.s2 ^ self.s0;
+        self.s3 = self.s3 ^ self.s1;
+        self.s1 = self.s1 ^ self.s2;
+        self.s0 = self.s0 ^ self.s3;
+        self.s2 = self.s2 ^ t;
+        self.s3 = rotl(self.s3, 45);
+        return result;
+    }
+}
+
+// The same generator, run eight times over at once: one independent stream per
+// 64-bit lane of four vectors per state word. Every step is vertical, so there
+// is no permute and nothing to split — the whole cost of SIMD here is that Wasm
+// has no vector rotate, which makes each `rotl` three instructions.
+//
+// Lanes seeded from one SplitMix64 run are independent enough to time. Streams
+// a caller may rely on being disjoint want `jump()` per lane instead.
+global XOSHIRO_LANES: i32 = 8;
+
+struct XoshiroSimd {
+    s0a: u64x2,
+    s0b: u64x2,
+    s0c: u64x2,
+    s0d: u64x2,
+    s1a: u64x2,
+    s1b: u64x2,
+    s1c: u64x2,
+    s1d: u64x2,
+    s2a: u64x2,
+    s2b: u64x2,
+    s2c: u64x2,
+    s2d: u64x2,
+    s3a: u64x2,
+    s3b: u64x2,
+    s3c: u64x2,
+    s3d: u64x2,
+    o0: u64x2,
+    o1: u64x2,
+    o2: u64x2,
+    o3: u64x2,
+}
+
+fn vrotl(v: u64x2, n: u32) -> u64x2 {
+    return v << n | v >> 64 - n;
+}
+
+impl XoshiroSimd {
+    fn new(seed: u64) -> XoshiroSimd {
+        let mut seeder = SplitMix64::new(seed);
+        return XoshiroSimd {
+            s0a: seeder.pair(),
+            s0b: seeder.pair(),
+            s0c: seeder.pair(),
+            s0d: seeder.pair(),
+            s1a: seeder.pair(),
+            s1b: seeder.pair(),
+            s1c: seeder.pair(),
+            s1d: seeder.pair(),
+            s2a: seeder.pair(),
+            s2b: seeder.pair(),
+            s2c: seeder.pair(),
+            s2d: seeder.pair(),
+            s3a: seeder.pair(),
+            s3b: seeder.pair(),
+            s3c: seeder.pair(),
+            s3d: seeder.pair(),
+            o0: [0, 0],
+            o1: [0, 0],
+            o2: [0, 0],
+            o3: [0, 0],
+        };
+    }
+
+    // One step per lane, all eight at once: eight u64 of output.
+    fn step(&mut self) {
+        self.o0 = vrotl(self.s0a + self.s3a, 23) + self.s0a;
+        self.o1 = vrotl(self.s0b + self.s3b, 23) + self.s0b;
+        self.o2 = vrotl(self.s0c + self.s3c, 23) + self.s0c;
+        self.o3 = vrotl(self.s0d + self.s3d, 23) + self.s0d;
+
+        let ta = self.s1a << 17;
+        let tb = self.s1b << 17;
+        let tc = self.s1c << 17;
+        let td = self.s1d << 17;
+
+        self.s2a = self.s2a ^ self.s0a;
+        self.s2b = self.s2b ^ self.s0b;
+        self.s2c = self.s2c ^ self.s0c;
+        self.s2d = self.s2d ^ self.s0d;
+        self.s3a = self.s3a ^ self.s1a;
+        self.s3b = self.s3b ^ self.s1b;
+        self.s3c = self.s3c ^ self.s1c;
+        self.s3d = self.s3d ^ self.s1d;
+        self.s1a = self.s1a ^ self.s2a;
+        self.s1b = self.s1b ^ self.s2b;
+        self.s1c = self.s1c ^ self.s2c;
+        self.s1d = self.s1d ^ self.s2d;
+        self.s0a = self.s0a ^ self.s3a;
+        self.s0b = self.s0b ^ self.s3b;
+        self.s0c = self.s0c ^ self.s3c;
+        self.s0d = self.s0d ^ self.s3d;
+        self.s2a = self.s2a ^ ta;
+        self.s2b = self.s2b ^ tb;
+        self.s2c = self.s2c ^ tc;
+        self.s2d = self.s2d ^ td;
+
+        self.s3a = vrotl(self.s3a, 45);
+        self.s3b = vrotl(self.s3b, 45);
+        self.s3c = vrotl(self.s3c, 45);
+        self.s3d = vrotl(self.s3d, 45);
+    }
+}
+
+// SHISHUA's state is four 256-bit vectors. Wasm's are 128-bit, so each one is
+// a `lo`/`hi` pair: `lo` holds 64-bit words 0 and 1, `hi` words 2 and 3.
+//
+// The permute the round calls for rotates the eight 32-bit words of a 256-bit
+// value — by five words for `shu0`, by three for `shu1`. Across a pair that is
+// a byte selection from two vectors at once, which is `i8x16.shuffle` and not
+// `swizzle`. The sixteen indices are Wasm immediates, so they are literals at
+// the call until const generic parameters can carry them.
+global ROUND_WORDS: i32 = 16;
+
+struct Shishua {
+    s0l: u64x2,
+    s0h: u64x2,
+    s1l: u64x2,
+    s1h: u64x2,
+    s2l: u64x2,
+    s2h: u64x2,
+    s3l: u64x2,
+    s3h: u64x2,
+    counter_l: u64x2,
+    counter_h: u64x2,
+    o0: u64x2,
+    o1: u64x2,
+    o2: u64x2,
+    o3: u64x2,
+    o4: u64x2,
+    o5: u64x2,
+    o6: u64x2,
+    o7: u64x2,
+    out: List<u64>,
+    pos: i32,
+}
+
+fn shu0_lo(lo: u64x2, hi: u64x2) -> u64x2 {
+    return builtin::i8x16_shuffle(
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        0,
+        1,
+        2,
+        3,
+        lo as v128,
+        hi as v128,
+    ) as u64x2;
+}
+
+fn shu0_hi(lo: u64x2, hi: u64x2) -> u64x2 {
+    return builtin::i8x16_shuffle(
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        lo as v128,
+        hi as v128,
+    ) as u64x2;
+}
+
+fn shu1_lo(lo: u64x2, hi: u64x2) -> u64x2 {
+    return builtin::i8x16_shuffle(
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        lo as v128,
+        hi as v128,
+    ) as u64x2;
+}
+
+fn shu1_hi(lo: u64x2, hi: u64x2) -> u64x2 {
+    return builtin::i8x16_shuffle(
+        28,
+        29,
+        30,
+        31,
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        lo as v128,
+        hi as v128,
+    ) as u64x2;
+}
+
+impl Shishua {
+    fn new(seed: u64) -> Shishua {
+        let mut seeder = SplitMix64::new(seed);
+        return Shishua {
+            s0l: seeder.pair(),
+            s0h: seeder.pair(),
+            s1l: seeder.pair(),
+            s1h: seeder.pair(),
+            s2l: seeder.pair(),
+            s2h: seeder.pair(),
+            s3l: seeder.pair(),
+            s3h: seeder.pair(),
+            // The reference advances the counter by 7, 5, 3, 1 per round.
+            counter_l: [0, 0],
+            counter_h: [0, 0],
+            o0: [0, 0],
+            o1: [0, 0],
+            o2: [0, 0],
+            o3: [0, 0],
+            o4: [0, 0],
+            o5: [0, 0],
+            o6: [0, 0],
+            o7: [0, 0],
+            out: List::<u64>::filled(ROUND_WORDS, 0),
+            pos: ROUND_WORDS,
+        };
+    }
+
+    // One round: 128 bytes of output, and a state that no input is read twice
+    // from. The order below is the reference's, which that property depends on.
+    fn round(&mut self) {
+        self.s1l = self.s1l + self.counter_l;
+        self.s1h = self.s1h + self.counter_h;
+        self.s3l = self.s3l + self.counter_l;
+        self.s3h = self.s3h + self.counter_h;
+        let increment_l: u64x2 = [7, 5];
+        let increment_h: u64x2 = [3, 1];
+        self.counter_l = self.counter_l + increment_l;
+        self.counter_h = self.counter_h + increment_h;
+
+        let u0l = self.s0l >> 1;
+        let u0h = self.s0h >> 1;
+        let u1l = self.s1l >> 3;
+        let u1h = self.s1h >> 3;
+        let u2l = self.s2l >> 1;
+        let u2h = self.s2h >> 1;
+        let u3l = self.s3l >> 3;
+        let u3h = self.s3h >> 3;
+
+        let t0l = shu0_lo(self.s0l, self.s0h);
+        let t0h = shu0_hi(self.s0l, self.s0h);
+        let t1l = shu1_lo(self.s1l, self.s1h);
+        let t1h = shu1_hi(self.s1l, self.s1h);
+        let t2l = shu0_lo(self.s2l, self.s2h);
+        let t2h = shu0_hi(self.s2l, self.s2h);
+        let t3l = shu1_lo(self.s3l, self.s3h);
+        let t3h = shu1_hi(self.s3l, self.s3h);
+
+        self.s0l = t0l + u0l;
+        self.s0h = t0h + u0h;
+        self.s1l = t1l + u1l;
+        self.s1h = t1h + u1h;
+        self.s2l = t2l + u2l;
+        self.s2h = t2h + u2h;
+        self.s3l = t3l + u3l;
+        self.s3h = t3h + u3h;
+
+        self.o0 = u0l ^ t1l;
+        self.o1 = u0h ^ t1h;
+        self.o2 = u2l ^ t3l;
+        self.o3 = u2h ^ t3h;
+        self.o4 = self.s0l ^ self.s3l;
+        self.o5 = self.s0h ^ self.s3h;
+        self.o6 = self.s2l ^ self.s1l;
+        self.o7 = self.s2h ^ self.s1h;
+    }
+
+    // Spread the round's eight vectors over the sixteen words a per-draw
+    // caller reads one at a time.
+    fn refill(&mut self) {
+        self.round();
+        self.store(0, self.o0);
+        self.store(2, self.o1);
+        self.store(4, self.o2);
+        self.store(6, self.o3);
+        self.store(8, self.o4);
+        self.store(10, self.o5);
+        self.store(12, self.o6);
+        self.store(14, self.o7);
+        self.pos = 0;
+    }
+
+    fn store(&mut self, at: i32, v: u64x2) {
+        self.out[at] = v.extract_lane(0) as u64;
+        self.out[at + 1] = v.extract_lane(1) as u64;
+    }
+
+    fn next(&mut self) -> u64 {
+        if self.pos == ROUND_WORDS {
+            self.refill();
+        }
+        let value = self.out[self.pos];
+        self.pos += 1;
+        return value;
+    }
+}
+
+// A generator that repeats a value, or returns zero throughout, would win this
+// benchmark. Fold the whole run and require the fold to move.
+fn drain_romu(rng: &mut RomuTrio, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 1 {
+        acc = acc ^ rng.next();
+    }
+    return acc;
+}
+
+fn drain_xoshiro(rng: &mut Xoshiro256pp, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 1 {
+        acc = acc ^ rng.next();
+    }
+    return acc;
+}
+
+fn drain_shishua(rng: &mut Shishua, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 1 {
+        acc = acc ^ rng.next();
+    }
+    return acc;
+}
+
+fn drain_xoshiro_simd(rng: &mut XoshiroSimd, n: i32) -> u64 {
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += XOSHIRO_LANES {
+        rng.step();
+        acc = acc ^ rng.o0 ^ rng.o1 ^ rng.o2 ^ rng.o3;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+// What SHISHUA is for: a consumer that takes a round at a time never lands a
+// word in a buffer, and extracts two lanes per run rather than two per word.
+// The gap between this and `drain_shishua` is what the per-draw API costs.
+fn drain_shishua_bulk(rng: &mut Shishua, n: i32) -> u64 {
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += ROUND_WORDS {
+        rng.round();
+        acc = acc ^ rng.o0 ^ rng.o1 ^ rng.o2 ^ rng.o3;
+        acc = acc ^ rng.o4 ^ rng.o5 ^ rng.o6 ^ rng.o7;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+global DRAW_COUNT: i32 = 1 << 16;
+
+test "each generator moves, and no two agree" {
+    let mut romu = RomuTrio::new(1);
+    let mut xoshiro = Xoshiro256pp::new(1);
+    let mut xoshiro_simd = XoshiroSimd::new(1);
+    let mut shishua = Shishua::new(1);
+
+    let a = drain_romu(&mut romu, 64);
+    let b = drain_xoshiro(&mut xoshiro, 64);
+    let c = drain_xoshiro_simd(&mut xoshiro_simd, 64);
+    let d = drain_shishua(&mut shishua, 64);
+
+    let drawn: List<u64> = [a, b, c, d];
+    for let mut i = 0; i < drawn.len(); i += 1 {
+        assert drawn[i] != 0;
+        for let mut j = i + 1; j < drawn.len(); j += 1 {
+            assert drawn[i] != drawn[j];
+        }
+    }
+}
+
+test "a seed decides the whole stream" {
+    let mut first = Shishua::new(7);
+    let mut again = Shishua::new(7);
+    let mut other = Shishua::new(8);
+
+    assert drain_shishua(&mut first, 100) == drain_shishua(&mut again, 100);
+    assert drain_shishua(&mut first, 100) != drain_shishua(&mut other, 100);
+}
+
+test "shishua crosses a round boundary without repeating itself" {
+    let mut rng = Shishua::new(3);
+    let mut seen: List<u64> = [];
+    for let mut i = 0; i < ROUND_WORDS * 2; i += 1 {
+        seen.push(rng.next());
+    }
+    for let mut i = 0; i < seen.len(); i += 1 {
+        for let mut j = i + 1; j < seen.len(); j += 1 {
+            assert seen[i] != seen[j];
+        }
+    }
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut bench = Benchmark {
+        name: `prng, ${DRAW_COUNT} draws per iteration`,
+        work_per_iter: Option::Some(DRAW_COUNT as f64),
+        unit: "u64",
+    };
+
+    let mut romu = RomuTrio::new(12345);
+    let romu_acc = bench.run("RomuTrio", || drain_romu(&mut romu, DRAW_COUNT));
+
+    let mut xoshiro = Xoshiro256pp::new(12345);
+    let xoshiro_acc = bench.run("xoshiro256++", || {
+        return drain_xoshiro(&mut xoshiro, DRAW_COUNT);
+    });
+
+    let mut xoshiro_simd = XoshiroSimd::new(12345);
+    let simd_acc = bench.run("xoshiro256++ x8, SIMD", || {
+        return drain_xoshiro_simd(&mut xoshiro_simd, DRAW_COUNT);
+    });
+
+    let mut shishua = Shishua::new(12345);
+    let shishua_acc = bench.run("SHISHUA, per draw", || {
+        return drain_shishua(&mut shishua, DRAW_COUNT);
+    });
+
+    let mut shishua_bulk = Shishua::new(12345);
+    let bulk_acc = bench.run("SHISHUA, a round at a time", || {
+        return drain_shishua_bulk(&mut shishua_bulk, DRAW_COUNT);
+    });
+
+    bench.println(
+        `checksums: ${romu_acc} ${xoshiro_acc} ${simd_acc} ${shishua_acc} ${bulk_acc}`,
+    );
+}
