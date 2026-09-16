@@ -236,6 +236,24 @@ impl XoshiroSimd {
         };
     }
 
+    fn fill(&mut self, out: &mut List<u64>) {
+        assert out.len() % XOSHIRO_LANES == 0, "fill wants whole steps";
+        let mut at = 0;
+        while at < out.len() {
+            self.step();
+            self.spill(out, at, self.o0);
+            self.spill(out, at + 2, self.o1);
+            self.spill(out, at + 4, self.o2);
+            self.spill(out, at + 6, self.o3);
+            at += XOSHIRO_LANES;
+        }
+    }
+
+    fn spill(&self, out: &mut List<u64>, at: i32, v: u64x2) {
+        out[at] = v.extract_lane(0) as u64;
+        out[at + 1] = v.extract_lane(1) as u64;
+    }
+
     // One step per lane, all eight at once: eight u64 of output.
     fn step(&mut self) {
         self.o0 = vrotl(self.s0a + self.s3a, 23) + self.s0a;
@@ -498,6 +516,32 @@ impl Shishua {
         self.out[at + 1] = v.extract_lane(1) as u64;
     }
 
+    // The middle road between a vector at a time and a word at a time: the
+    // caller still gets plain u64, but pays one array write per word rather
+    // than a write, a read and a cursor. `out.len()` must be a whole number of
+    // rounds.
+    fn fill(&mut self, out: &mut List<u64>) {
+        assert out.len() % ROUND_WORDS == 0, "fill wants whole rounds";
+        let mut at = 0;
+        while at < out.len() {
+            self.round();
+            self.spill(out, at, self.o0);
+            self.spill(out, at + 2, self.o1);
+            self.spill(out, at + 4, self.o2);
+            self.spill(out, at + 6, self.o3);
+            self.spill(out, at + 8, self.o4);
+            self.spill(out, at + 10, self.o5);
+            self.spill(out, at + 12, self.o6);
+            self.spill(out, at + 14, self.o7);
+            at += ROUND_WORDS;
+        }
+    }
+
+    fn spill(&self, out: &mut List<u64>, at: i32, v: u64x2) {
+        out[at] = v.extract_lane(0) as u64;
+        out[at + 1] = v.extract_lane(1) as u64;
+    }
+
     fn next(&mut self) -> u64 {
         if self.pos == ROUND_WORDS {
             self.refill();
@@ -541,6 +585,44 @@ fn drain_xoshiro_simd(rng: &mut XoshiroSimd, n: i32) -> u64 {
         acc = acc ^ rng.o0 ^ rng.o1 ^ rng.o2 ^ rng.o3;
     }
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+// The same shape for a scalar engine: the values arrive in registers and are
+// written out one at a time. Against the SIMD engines' `fill`, this separates
+// what the generator costs from what landing a u64 in memory costs.
+fn drain_romu_fill(rng: &mut RomuTrio, buffer: &mut List<u64>, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += buffer.len() {
+        for let mut k = 0; k < buffer.len(); k += 1 {
+            buffer[k] = rng.next();
+        }
+        for let mut k = 0; k < buffer.len(); k += 1 {
+            acc = acc ^ buffer[k];
+        }
+    }
+    return acc;
+}
+
+fn drain_simd_fill(rng: &mut XoshiroSimd, buffer: &mut List<u64>, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += buffer.len() {
+        rng.fill(buffer);
+        for let mut k = 0; k < buffer.len(); k += 1 {
+            acc = acc ^ buffer[k];
+        }
+    }
+    return acc;
+}
+
+fn drain_shishua_fill(rng: &mut Shishua, buffer: &mut List<u64>, n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += buffer.len() {
+        rng.fill(buffer);
+        for let mut k = 0; k < buffer.len(); k += 1 {
+            acc = acc ^ buffer[k];
+        }
+    }
+    return acc;
 }
 
 // What SHISHUA is for: a consumer that takes a round at a time never lands a
@@ -675,6 +757,23 @@ export fn run() with (Stdout, MonotonicClock) {
         return drain_shishua(&mut shishua, DRAW_COUNT);
     });
 
+    let mut buffer = List::<u64>::filled(1024, 0);
+
+    let mut romu_filler = RomuTrio::new(12345);
+    let romu_fill_acc = bench.run("RomuTrio, filling a buffer", || {
+        return drain_romu_fill(&mut romu_filler, &mut buffer, DRAW_COUNT);
+    });
+
+    let mut simd_filler = XoshiroSimd::new(12345);
+    let simd_fill_acc = bench.run("xoshiro256++ x8, filling a buffer", || {
+        return drain_simd_fill(&mut simd_filler, &mut buffer, DRAW_COUNT);
+    });
+
+    let mut shishua_fill = Shishua::new(12345);
+    let fill_acc = bench.run("SHISHUA, filling a buffer", || {
+        return drain_shishua_fill(&mut shishua_fill, &mut buffer, DRAW_COUNT);
+    });
+
     let mut shishua_bulk = Shishua::new(12345);
     let bulk_acc = bench.run("SHISHUA, a round at a time", || {
         return drain_shishua_bulk(&mut shishua_bulk, DRAW_COUNT);
@@ -682,5 +781,8 @@ export fn run() with (Stdout, MonotonicClock) {
 
     bench.println(
         `checksums: ${romu_acc} ${xoshiro_acc} ${simd_acc} ${shishua_acc} ${bulk_acc}`,
+    );
+    bench.println(
+        `fill checksums: ${romu_fill_acc} ${simd_fill_acc} ${fill_acc}`,
     );
 }
