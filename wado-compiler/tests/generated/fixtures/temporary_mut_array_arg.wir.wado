@@ -93,30 +93,30 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
     let $local_4_4: ref "core:prelude/string.wado//String";
     let self_15: ref "core:prelude/string.wado//String";
     let value_25: ref "tuple//[core:prelude/string.wado/String, i32]";
-    let self_35: i32;
+    let self_36: i32;
     let new_used: i32;
     let start: i32;
-    let self_41: ref Array<u8>;
-    let self_45: ref Array<u8>;
-    let value_55: ref "tuple//[core:prelude/string.wado/String, i32]";
+    let self_42: ref Array<u8>;
+    let self_46: ref Array<u8>;
+    let value_56: ref "tuple//[core:prelude/string.wado/String, i32]";
     let used: i32;
-    let $licm_used_62: i32;
-    let $licm_repr_63: ref "Array<[core:prelude/string.wado/String,i32]>";
+    let $licm_used_63: i32;
+    let $licm_repr_64: ref "Array<[core:prelude/string.wado/String,i32]>";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let b_end: i32;
     let len: i32;
-    let i_73: i32;
-    let $av_85: i32;
+    let i_74: i32;
     let $av_86: i32;
+    let $av_87: i32;
     i_2 = 0;
-    $licm_used_62 = counts.used;
-    $licm_repr_63 = counts.repr;
+    $licm_used_63 = counts.used;
+    $licm_repr_64 = counts.repr;
     b0: block {
         l1: loop {
-            break_if b0 i_2 >= $licm_used_62;
-            self_15 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_63, i_2).0;
+            break_if b0 i_2 >= $licm_used_63;
+            self_15 = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_64, i_2).0;
             if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
                 a = self_15.repr;
                 a_end = self_15.used;
@@ -126,38 +126,38 @@ fn "temporary_mut_array_arg.wado/helper"(name, counts) {
                 if len != (b_end - 0) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                 }
-                i_73 = 0;
+                i_74 = 0;
                 b4: block {
                     l5: loop {
-                        break_if b4 i_73 >= len;
-                        if builtin::array_get_value<u8>(a, 0 + i_73) != builtin::array_get_value<u8>(b, 0 + i_73) {
+                        break_if b4 i_74 >= len;
+                        if builtin::array_get_value<u8>(a, 0 + i_74) != builtin::array_get_value<u8>(b, 0 + i_74) {
                             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                         }
-                        i_73 = i_73 + 1;
+                        i_74 = i_74 + 1;
                         continue l5;
                     };
                 };
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 1;
             } {
-                prev = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_63, i_2).1;
-                value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null($av_85 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_85); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_85); $array_clone_dst_2), used: $av_85 }), 1: prev + 1 };
-                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_63, i_2, value_25);
-                return $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, self_35 = name.used, new_used = 0 + (1 + self_35), if @unlikely(new_used > builtin::array_len($local_4_4.repr)) {
+                prev = builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_64, i_2).1;
+                value_25 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null($av_86 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_86); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_86); $array_clone_dst_2), used: $av_86 }), 1: prev + 1 };
+                builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">($licm_repr_64, i_2, value_25);
+                return $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }, self_36 = name.used, new_used = 0 + (1 + self_36), if @unlikely(new_used > builtin::array_len($local_4_4.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used);
-                }, start = $local_4_4.used, $local_4_4.used = new_used, self_41 = $local_4_4.repr, builtin::array_copy<u8>(self_41, start, name.repr, 0, self_35), self_45 = $local_4_4.repr, builtin::array_copy<u8>(self_45, start + self_35, global:temporary_mut_array_arg.wado::$const_obj_1, 0, 1), "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(prev + 1, $local_4_4), $local_4_4;
+                }, start = $local_4_4.used, $local_4_4.used = new_used, self_42 = $local_4_4.repr, builtin::array_copy<u8>(self_42, start, name.repr, 0, self_36), self_46 = $local_4_4.repr, builtin::array_copy<u8>(self_46, start + self_36, global:temporary_mut_array_arg.wado::$const_obj_1, 0, 1), "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(prev + 1, $local_4_4), $local_4_4;
             }
             i_2 = i_2 + 1;
             continue l1;
         };
     };
-    value_55 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null($av_86 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = name.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_86); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_86); $array_clone_dst_5), used: $av_86 }), 1: 1 };
+    value_56 = struct.new "tuple//[core:prelude/string.wado/String, i32]" { 0: ref.as_non_null($av_87 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = name.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_87); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_87); $array_clone_dst_5), used: $av_87 }), 1: 1 };
     used = counts.used;
     if @unlikely(used >= builtin::array_len(counts.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<[core:prelude/string.wado/String,i32]>::grow"(counts);
     }
-    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(counts.repr, used, value_55);
+    builtin::array_set<ref "tuple//[core:prelude/string.wado/String, i32]">(counts.repr, used, value_56);
     counts.used = used + 1;
     return name;
 }

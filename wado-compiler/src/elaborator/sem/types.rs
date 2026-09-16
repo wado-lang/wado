@@ -1108,7 +1108,7 @@ pub(crate) enum DesugarKind {
     Assert,
     /// `expr matches { PATTERN }` → two-arm `match` expression.
     Matches,
-    /// `a < b < c` → `(a < b) && (b < c)` with middle-term let bindings.
+    /// `a < b < c` → `(a < b) & (b < c)` with middle-term let bindings.
     /// Only recorded when the chain has 2+ comparisons (single
     /// comparisons collapse to a plain `Binary` and are not tagged).
     ComparisonChain,

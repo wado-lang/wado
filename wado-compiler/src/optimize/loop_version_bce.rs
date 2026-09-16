@@ -7,18 +7,19 @@
 use std::ops::ControlFlow;
 
 use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirUnaryOp};
-use crate::nir_arena::{ArenaCallArg, BlockId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::TypeTable;
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
-use super::arena_query::block_contains_loop;
+use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
-    Binds, BoundKey, build_copy_bindings, eliminate_condition, ge_check_operands, node_modifies,
-    opaque_local, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset, resolve,
-    resolve_panic_ids, stmt_modifies,
+    Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
+    eliminate_condition, induction_entry, negated_operand, node_modifies, panic_guard_check,
+    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
+    stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -26,7 +27,10 @@ use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
-use crate::optimize::arena_query::is_pure_operand;
+use crate::optimize::arena_query::{
+    binary_parts, expr_node_may_trap_typed, is_pure_operand, local_written_by,
+    mentions_local_except, operand_local,
+};
 use crate::optimize::mod_ref::compute_fn_effects;
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
@@ -56,6 +60,7 @@ struct Plan {
 /// `if`'s then-block (holding exactly the fast `Loop` stmt) and the fast loop's
 /// body. The guard fields the fill idiom needs live on the paired [`Plan`].
 struct FastArm {
+    version_if: StmtId,
     then_block: BlockId,
     fast_body: BlockId,
 }
@@ -185,7 +190,7 @@ fn parse_loop_guard(
     loop_body: BlockId,
 ) -> Option<(usize, u32, u32, bool)> {
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
-    let inner = peel_not(engine, binds, cond)?;
+    let inner = negated_operand(engine, binds, cond)?;
     let (var, off, bound, op) = parse_cmp(engine, binds, inner)?;
     if off != 0 {
         return None;
@@ -218,47 +223,71 @@ fn parse_loop_guard(
     Some((guard_idx, var, h, guard_le))
 }
 
-/// Peel a logical `!` in either representation, returning the inner operand.
-fn peel_not(engine: &Engine, binds: &Binds, op: Operand) -> Option<Operand> {
-    match resolve(engine, binds, op) {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::Not,
-                expr,
-            } => Some(*expr),
-            _ => None,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Unary {
-                op: NirUnaryOp::Not,
-                operand,
-                ..
-            } => Some(Operand::Value(*operand)),
-            _ => None,
-        },
-    }
+/// A versionable in-body check over the guard variable.
+struct Check {
+    holder: NodeRef,
+    cond: Operand,
+    /// The check's bound local `B`.
+    bound: u32,
+    /// The strongest constant floor the check demands of `var`, or `i64::MIN`
+    /// when it demands none.
+    floor: i64,
 }
 
-/// Collect check holders `if (var >= B) { panic }` (or `!(var < B)`) nested
-/// anywhere in `node`, keyed by their bound local `B`.
+/// Collect every versionable check nested anywhere in `node`.
 fn collect_checks_in_node(
     engine: &Engine,
     binds: &Binds,
     node: NodeRef,
     var: u32,
-    out: &mut Vec<(NodeRef, Operand, u32)>,
+    out: &mut Vec<Check>,
 ) {
     engine.body.for_each_node_under(node, |n| {
         if let Some(cond) = panic_guard_check(engine, n)
-            && let Some((left, right)) = ge_check_operands(engine, binds, cond)
-            && let Some((cvar, cj)) = parse_var_offset(engine, binds, left)
-            && cvar == var
-            && cj == 0
-            && let Some(b) = parse_raw_local(engine, right)
+            && let Some(check) = parse_versionable_check(engine, binds, n, cond, var)
         {
-            out.push((n, cond, b));
+            out.push(check);
         }
     });
+}
+
+/// Read one panic guard as a versionable check: exactly one upper-bound
+/// conjunct `var < B` over the guard variable at offset 0, and any number of
+/// constant floors under that same variable — the shape `assert 0 <= i < n`
+/// lowers to. Any other conjunct refuses the check, so versioning never deletes
+/// a condition it has only half proved.
+fn parse_versionable_check(
+    engine: &Engine,
+    binds: &Binds,
+    holder: NodeRef,
+    cond: Operand,
+    var: u32,
+) -> Option<Check> {
+    let mut bound = None;
+    let mut floor = i64::MIN;
+    for part in check_conjuncts(engine, binds, cond)? {
+        match part {
+            Conjunct::Lt(left, right) => {
+                let (cvar, cj) = parse_var_offset(engine, binds, left)?;
+                if cvar != var || cj != 0 || bound.is_some() {
+                    return None;
+                }
+                bound = Some(parse_raw_local(engine, binds, right)?);
+            }
+            Conjunct::AtLeast(fvar, foff, f) => {
+                if fvar != var || foff != 0 {
+                    return None;
+                }
+                floor = floor.max(f);
+            }
+        }
+    }
+    Some(Check {
+        holder,
+        cond,
+        bound: bound?,
+        floor,
+    })
 }
 
 /// Parse an operand as a direct local read, without resolving through copy
@@ -268,14 +297,8 @@ fn collect_checks_in_node(
 /// field read) would compare a different representation. A local present as
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
-fn parse_raw_local(engine: &Engine, op: Operand) -> Option<u32> {
-    match op {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
-        },
-        Operand::Value(v) => opaque_local(engine, v),
-    }
+fn parse_raw_local(engine: &Engine, binds: &Binds, op: Operand) -> Option<u32> {
+    operand_local(engine.body, peel_capture_block(engine, binds, op))
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -295,7 +318,7 @@ fn analyze_loop(
     let (guard_idx, var, h, guard_le) = parse_loop_guard(engine, binds, loop_body)?;
     // Scan statements after the guard while `var` / `H` are unmodified —
     // within that window the guard fact `var <= H` still holds.
-    let mut checks: Vec<(NodeRef, Operand, u32)> = Vec::new();
+    let mut checks: Vec<Check> = Vec::new();
     let stmts = engine.body.blocks[loop_body].stmts.clone();
     for &s in stmts.iter().skip(guard_idx + 1) {
         if stmt_modifies(engine, s, var, BoundKey::Local(h)) {
@@ -303,7 +326,15 @@ fn analyze_loop(
         }
         collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
     }
-    let b = checks.first()?.2;
+    // A floor is answered from the fast arm's own facts, so it must hold for
+    // every collected check before any of them is deleted.
+    let demanded = checks.iter().map(|c| c.floor).max()?;
+    if demanded > i64::MIN
+        && induction_entry(engine, binds, parent, loop_stmt, loop_body, var)? < demanded
+    {
+        return None;
+    }
+    let b = checks.first()?.bound;
     if b == h {
         // Same bound as the guard: statically decidable, not our case.
         return None;
@@ -348,6 +379,18 @@ fn local_read(engine: &mut Engine, index: u32, span: Span) -> Operand {
     Operand::Expr(e)
 }
 
+fn alloc_binary(
+    engine: &mut Engine,
+    left: Operand,
+    op: NirBinaryOp,
+    right: Operand,
+    ty: TypeId,
+    span: Span,
+) -> Operand {
+    let e = engine.alloc_expr(ExprKind::Binary { left, op, right }, ty, span);
+    Operand::Expr(e)
+}
+
 /// Apply one versioning plan: clone the loop, delete the implied checks in
 /// the clone, and replace the loop with
 /// `if <residual> { fast } else { original }`.
@@ -375,18 +418,10 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     } else {
         NirBinaryOp::LtEq
     };
-    let residual = engine.alloc_expr(
-        ExprKind::Binary {
-            left: h_read,
-            op,
-            right: b_read,
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
     let if_stmt = engine.alloc_stmt(
         StmtKind::If {
-            condition: Operand::Expr(residual),
+            condition: residual,
             then_block,
             else_block: Some(else_block),
         },
@@ -401,6 +436,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     engine.set_block_stmts(plan.parent, stmts);
 
     FastArm {
+        version_if: if_stmt,
         then_block,
         fast_body,
     }
@@ -413,7 +449,7 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
 fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fast_body: BlockId) {
     let (var, h) = (plan.var, plan.bound);
-    let mut checks: Vec<(NodeRef, Operand, u32)> = Vec::new();
+    let mut checks: Vec<Check> = Vec::new();
     let stmts = engine.body.blocks[fast_body].stmts.clone();
     for &s in stmts.iter().skip(plan.guard_idx + 1) {
         if stmt_modifies(engine, s, var, BoundKey::Local(h)) {
@@ -421,12 +457,14 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         }
         collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
     }
-    for (holder, cond, b) in checks {
-        if b != plan.check_bound {
+    for check in checks {
+        // As in `condition_implication`: the elimination drops the condition
+        // expression, so a condition that writes must stay.
+        if check.bound != plan.check_bound || !is_pure_operand(engine.body, check.cond) {
             continue;
         }
-        constify_check_temp(engine, cond, plan.var, fast_body);
-        eliminate_condition(engine, holder, cond);
+        constify_check_temp(engine, binds, check.cond, plan.var, fast_body);
+        eliminate_condition(engine, check.holder, check.cond);
     }
 }
 
@@ -435,21 +473,18 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
 /// evaluates to (`!c` panics ⇒ `c` is `true`), deleting the per-iteration
 /// compare. Overwritten only when the initializer structurally *is* that
 /// comparison, a function-scoped slot being re-bindable.
-fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: BlockId) {
-    let Operand::Expr(ce) = cond else {
+fn constify_check_temp(
+    engine: &mut Engine,
+    binds: &Binds,
+    cond: Operand,
+    var: u32,
+    fast_body: BlockId,
+) {
+    let negated = negated_operand(engine, binds, cond);
+    let Some(temp) = operand_local(engine.body, negated.unwrap_or(cond)) else {
         return;
     };
-    let (temp, konst) = match &engine.body.exprs[ce].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Not,
-            expr,
-        } => match expr.as_expr().map(|e| &engine.body.exprs[e].kind) {
-            Some(ExprKind::Local { index, .. }) => (*index, true),
-            _ => return,
-        },
-        ExprKind::Local { index, .. } => (*index, false),
-        _ => return,
-    };
+    let konst = negated.is_some();
     // Find the temp's comparison `let` inside the fast clone and overwrite it.
     let mut stack = vec![NodeRef::Block(fast_body)];
     while let Some(n) = stack.pop() {
@@ -482,40 +517,14 @@ fn constify_check_temp(engine: &mut Engine, cond: Operand, var: u32, fast_body: 
 /// confirms the `let` being constified is that comparison and not an unrelated
 /// binding reusing the temp's local slot.
 fn is_check_comparison(engine: &Engine, value: Operand, var: u32) -> bool {
-    let is_relational = |op: NirBinaryOp| {
-        matches!(
-            op,
-            NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
-        )
+    let Some((left, op, right)) = binary_parts(engine.body, value) else {
+        return false;
     };
-    match value {
-        Operand::Expr(e) => match &engine.body.exprs[e].kind {
-            ExprKind::Binary { left, op, right } => {
-                is_relational(*op)
-                    && (operand_reads_local(engine, *left, var)
-                        || operand_reads_local(engine, *right, var))
-            }
-            _ => false,
-        },
-        Operand::Value(v) => match engine.body.values.kind(v) {
-            ValueKind::Binary { op, lhs, rhs, .. } => {
-                is_relational(*op)
-                    && (opaque_local(engine, *lhs) == Some(var)
-                        || opaque_local(engine, *rhs) == Some(var))
-            }
-            _ => false,
-        },
-    }
-}
-
-/// Whether `op` is a direct read of local `var`, in either operand form.
-fn operand_reads_local(engine: &Engine, op: Operand, var: u32) -> bool {
-    match op {
-        Operand::Expr(e) => {
-            matches!(&engine.body.exprs[e].kind, ExprKind::Local { index, .. } if *index == var)
-        }
-        Operand::Value(v) => opaque_local(engine, v) == Some(var),
-    }
+    let reads_var = |op| operand_local(engine.body, op) == Some(var);
+    matches!(
+        op,
+        NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
+    ) && (reads_var(left) || reads_var(right))
 }
 
 /// Whether the subtree under `block` re-binds any of `locals` via `let`, or
@@ -544,11 +553,11 @@ fn subtree_redefines(engine: &Engine, block: BlockId, locals: &[u32]) -> bool {
         .is_some()
 }
 
-/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [pure lets];
-/// array_set(A, i, CONST); i += 1 }` — into one `array_fill` plus the lets and
-/// `i` re-materialized at their final values. The count is `H + 1 - i` for `<=`
-/// (the residual proving no overflow) and `H - i` for `<`; the wrapping `if`
-/// preserves the zero-iteration case exactly.
+/// Collapse a cleaned fast arm — `loop { if !(i CMP H) break; [local writes];
+/// array_set(A, i, CONST); i += 1 }` — into one `array_fill` followed by those
+/// writes replayed once at the last iterated `i`. The count is `H + 1 - i` for
+/// `<=` (the residual proving no overflow) and `H - i` for `<`; the wrapping
+/// `if` preserves the zero-iteration case exactly.
 fn try_fill_idiom(
     engine: &mut Engine,
     binds: &Binds,
@@ -646,42 +655,33 @@ fn try_fill_idiom(
         },
         Operand::Value(_) => return false,
     };
-    // Middle statements: pure `let`s whose finals we can re-materialize —
-    // `let t = i` (final: last iterated `i`) or `let t = <const value>`.
-    enum TempFinal {
-        LastVar(u32),
-        Const(u32, Operand),
-    }
-    let mut temps: Vec<TempFinal> = Vec::new();
-    for &s in &stmts[1..n - 2] {
-        let StmtKind::Let {
-            local_index, value, ..
-        } = &engine.body.stmts[s].kind
-        else {
+    // Middle statements are replayed verbatim at the last iterated `i`, so a
+    // read of a local the sequence writes at or after it would see the wrong
+    // iteration's value.
+    let middle: Vec<StmtId> = stmts[1..n - 2].to_vec();
+    let reserved = [var, arr_local, h];
+    let mut effects: Vec<Effects> = Vec::new();
+    for &s in &middle {
+        let Some(e) = replayable_effects(engine, s, &reserved) else {
             return false;
         };
-        if *local_index == arr_local {
-            // The array local must predate the loop for the once-evaluation
-            // to be exact.
+        effects.push(e);
+    }
+    for (i, e) in effects.iter().enumerate() {
+        let carried = |r: &u32| effects[i..].iter().any(|w| w.writes.contains(r));
+        if e.reads.iter().any(carried) {
             return false;
         }
-        if !is_pure_operand(engine.body, *value) {
-            return false;
-        }
-        if parse_var_offset(engine, binds, *value) == Some((*local_index, 0)) {
-            // Self-referential resolution artifact; treat as opaque.
-            return false;
-        }
-        if parse_var_offset(engine, binds, *value) == Some((var, 0)) {
-            temps.push(TempFinal::LastVar(*local_index));
-        } else if matches!(value, Operand::Value(v) if matches!(
-            engine.body.values.kind(*v),
-            ValueKind::Int(..) | ValueKind::Float(..) | ValueKind::Bool(_) | ValueKind::Char(_)
-        )) {
-            temps.push(TempFinal::Const(*local_index, *value));
-        } else {
-            return false;
-        }
+    }
+    // A branch-guarded write is not the last iteration's to make, so it
+    // survives only where nothing can tell which iteration made it last: the
+    // slow arm alone names the local, and the version `if` runs once.
+    let mut conditional = effects.iter().flat_map(|e| &e.conditional).peekable();
+    if conditional.peek().is_some()
+        && (block_repeats(engine.body, plan.parent)
+            || conditional.any(|&l| !confined_to(engine, l, arm.version_if)))
+    {
+        return false;
     }
     let span = engine.body.stmts[loop_stmt].span;
     let ty = engine.locals()[var as usize].type_id;
@@ -691,16 +691,14 @@ fn try_fill_idiom(
     let upper = |engine: &mut Engine| -> Operand {
         let h_read = local_read(engine, h, span);
         if guard_le {
-            let e = engine.alloc_expr(
-                ExprKind::Binary {
-                    left: h_read,
-                    op: NirBinaryOp::Add,
-                    right: Operand::Value(one),
-                },
+            alloc_binary(
+                engine,
+                h_read,
+                NirBinaryOp::Add,
+                Operand::Value(one),
                 ty,
                 span,
-            );
-            Operand::Expr(e)
+            )
         } else {
             h_read
         }
@@ -708,15 +706,7 @@ fn try_fill_idiom(
 
     let upper_for_len = upper(engine);
     let i_read = local_read(engine, var, span);
-    let count = engine.alloc_expr(
-        ExprKind::Binary {
-            left: upper_for_len,
-            op: NirBinaryOp::Sub,
-            right: i_read,
-        },
-        ty,
-        span,
-    );
+    let count = alloc_binary(engine, upper_for_len, NirBinaryOp::Sub, i_read, ty, span);
     let offset = local_read(engine, var, span);
     let fill_call = engine.alloc_expr(
         ExprKind::Call {
@@ -736,7 +726,7 @@ fn try_fill_idiom(
                     is_mut: false,
                 },
                 ArenaCallArg {
-                    expr: Operand::Expr(count),
+                    expr: count,
                     is_mut: false,
                 },
             ],
@@ -748,32 +738,25 @@ fn try_fill_idiom(
     let fill_stmt = engine.alloc_stmt(StmtKind::Expr(Operand::Expr(fill_call)), span);
 
     let mut body_stmts = vec![fill_stmt];
-    // Re-materialize temp finals: `t = i` observed `i`'s last iterated value
-    // (`H` for `<=`, `H - 1` for `<`); consts keep their value.
-    for t in &temps {
-        match t {
-            TempFinal::LastVar(l) => {
-                let final_val = if guard_le {
-                    local_read(engine, h, span)
-                } else {
-                    let h_read = local_read(engine, h, span);
-                    let e = engine.alloc_expr(
-                        ExprKind::Binary {
-                            left: h_read,
-                            op: NirBinaryOp::Sub,
-                            right: Operand::Value(one),
-                        },
-                        ty,
-                        span,
-                    );
-                    Operand::Expr(e)
-                };
-                body_stmts.push(alloc_local_set(engine, *l, final_val, span));
-            }
-            TempFinal::Const(l, v) => {
-                body_stmts.push(alloc_local_set(engine, *l, *v, span));
-            }
-        }
+    // The fill consumed every iteration's store; what the middle statements
+    // leave behind is the last iteration's, so set `i` to the value that
+    // iteration saw (`H` for `<=`, `H - 1` for `<`) and run them once.
+    if !middle.is_empty() {
+        let last_iterated = if guard_le {
+            local_read(engine, h, span)
+        } else {
+            let h_read = local_read(engine, h, span);
+            alloc_binary(
+                engine,
+                h_read,
+                NirBinaryOp::Sub,
+                Operand::Value(one),
+                ty,
+                span,
+            )
+        };
+        body_stmts.push(alloc_local_set(engine, var, last_iterated, span));
+        body_stmts.extend(middle);
     }
     // `i`'s final value: `H + 1` for `<=`, `H` for `<`.
     let i_final = upper(engine);
@@ -782,23 +765,16 @@ fn try_fill_idiom(
     // `if i CMP H { ... }` preserves the zero-iteration case.
     let i_read2 = local_read(engine, var, span);
     let h_read2 = local_read(engine, h, span);
-    let enter = engine.alloc_expr(
-        ExprKind::Binary {
-            left: i_read2,
-            op: if guard_le {
-                NirBinaryOp::LtEq
-            } else {
-                NirBinaryOp::Lt
-            },
-            right: h_read2,
-        },
-        TypeTable::BOOL,
-        span,
-    );
+    let op = if guard_le {
+        NirBinaryOp::LtEq
+    } else {
+        NirBinaryOp::Lt
+    };
+    let enter = alloc_binary(engine, i_read2, op, h_read2, TypeTable::BOOL, span);
     let body_block = engine.alloc_block(body_stmts, span);
     let fill_if = engine.alloc_stmt(
         StmtKind::If {
-            condition: Operand::Expr(enter),
+            condition: enter,
             then_block: body_block,
             else_block: None,
         },
@@ -806,6 +782,203 @@ fn try_fill_idiom(
     );
     engine.set_block_stmts(arm.then_block, vec![fill_if]);
     true
+}
+
+/// The locals one middle statement reads and writes.
+struct Effects {
+    reads: Vec<u32>,
+    writes: Vec<u32>,
+    /// The writes a branch guards, which the last iteration need not have made.
+    conditional: Vec<u32>,
+}
+
+/// What `stmt` reads and writes, or `None` when running it once cannot stand
+/// for the loop's last iteration. A trap is the effect of the iteration that
+/// raises it, so a statement that may trap is not replayable either.
+fn replayable_effects(engine: &Engine, stmt: StmtId, reserved: &[u32]) -> Option<Effects> {
+    let body = &engine.body;
+    let types = engine.value_graph_type_table();
+    let mut eff = Effects {
+        reads: Vec::new(),
+        writes: Vec::new(),
+        conditional: Vec::new(),
+    };
+    // A block that binds a local and yields it reads that local only to yield
+    // it, so the read is its own write and not a value carried from before.
+    let mut captured: Vec<u32> = Vec::new();
+    let mut roots = vec![NodeRef::Stmt(stmt)];
+    while let Some(root) = roots.pop() {
+        let rejected = body.walk_nodes_under::<()>(root, |n| {
+            if !pooled_operands_are_literal(body, n) {
+                return ControlFlow::Break(());
+            }
+            match n {
+                NodeRef::Block(_) => {}
+                // A pattern binds locals of its own, which no walk over
+                // expressions accounts for.
+                NodeRef::Pat(_) => return ControlFlow::Break(()),
+                NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                    StmtKind::Let { local_index, .. } => eff.writes.push(*local_index),
+                    StmtKind::If { .. } => collect_writes(body, n, &mut eff.conditional),
+                    StmtKind::LabeledBlock { label, .. } if has_break_to(body, n, label) => {
+                        collect_writes(body, n, &mut eff.conditional);
+                    }
+                    StmtKind::Expr(_) | StmtKind::LabeledBlock { .. } => {}
+                    _ => return ControlFlow::Break(()),
+                },
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
+                    ExprKind::Local { index, .. } => eff.reads.push(*index),
+                    ExprKind::Unary {
+                        op: NirUnaryOp::MutRef,
+                        expr,
+                    } => {
+                        let Some(ExprKind::Local { index, .. }) =
+                            expr.as_expr().map(|ie| &body.exprs[ie].kind)
+                        else {
+                            return ControlFlow::Break(());
+                        };
+                        eff.writes.push(*index);
+                        return ControlFlow::Continue(false);
+                    }
+                    ExprKind::Assign { target, value } => {
+                        let ExprKind::Local { index, .. } = &body.exprs[*target].kind else {
+                            return ControlFlow::Break(());
+                        };
+                        eff.writes.push(*index);
+                        if let Some(ve) = value.as_expr() {
+                            roots.push(NodeRef::Expr(ve));
+                        }
+                        return ControlFlow::Continue(false);
+                    }
+                    ExprKind::LabeledBlock { label, .. } => {
+                        if let Some((l, _)) = capture_block_binding(engine, Operand::Expr(e))
+                            && local_read_count(body, NodeRef::Stmt(stmt), l) == 1
+                        {
+                            captured.push(l);
+                        }
+                        // A block nothing breaks out of runs to its end, so its
+                        // writes are as unconditional as the block is.
+                        if has_break_to(body, n, label) {
+                            collect_writes(body, n, &mut eff.conditional);
+                        }
+                    }
+                    ExprKind::If { .. } | ExprKind::Match { .. } | ExprKind::Switch { .. } => {
+                        collect_writes(body, n, &mut eff.conditional);
+                    }
+                    // `&&` / `||` short-circuit, so the right side runs only on
+                    // the iterations the left side let through.
+                    ExprKind::Binary {
+                        op: NirBinaryOp::And | NirBinaryOp::Or,
+                        right,
+                        ..
+                    } => {
+                        if let Some(re) = right.as_expr() {
+                            collect_writes(body, NodeRef::Expr(re), &mut eff.conditional);
+                        }
+                    }
+                    ExprKind::Dead
+                    | ExprKind::GlobalVarSet { .. }
+                    | ExprKind::Call { .. }
+                    | ExprKind::CmRawCall { .. }
+                    | ExprKind::IndirectCall { .. }
+                    | ExprKind::ClosureToCanonical { .. } => return ControlFlow::Break(()),
+                    _ if expr_node_may_trap_typed(body, e, types) => return ControlFlow::Break(()),
+                    _ => {}
+                },
+            }
+            ControlFlow::Continue(true)
+        });
+        if rejected.is_some() {
+            return None;
+        }
+    }
+    if eff.writes.iter().any(|w| reserved.contains(w)) {
+        return None;
+    }
+    eff.reads.retain(|r| !captured.contains(r));
+    Some(eff)
+}
+
+/// Whether every pooled operand of `node` is a literal. Anything else is a
+/// promoted expression, which hides reads and writes from a skeleton walk.
+fn pooled_operands_are_literal(body: &Body, node: NodeRef) -> bool {
+    let mut literal = true;
+    body.for_each_operand(node, |op| {
+        if let Operand::Value(v) = op {
+            literal &= matches!(
+                body.values.kind(v),
+                ValueKind::Int(..) | ValueKind::Float(..) | ValueKind::Bool(_) | ValueKind::Char(_)
+            );
+        }
+    });
+    literal
+}
+
+/// Every local written anywhere under `node`.
+fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
+    body.for_each_node_under(node, |n| {
+        if let Some(l) = local_written_by(body, n) {
+            out.push(l);
+        }
+        if let NodeRef::Stmt(s) = n
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+        {
+            out.push(*local_index);
+        }
+    });
+}
+
+/// Whether local `l` is named nowhere in the body but under `version_if`. The
+/// slow arm is then its only other reader, and an arm the fast one replaced
+/// does not run.
+fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
+    let body = &engine.body;
+    let root = NodeRef::Block(body.root);
+    !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
+}
+
+/// Whether `block` sits inside a loop, and so may run more than once.
+fn block_repeats(body: &Body, block: BlockId) -> bool {
+    body.find_in_nodes_under(NodeRef::Block(body.root), |n| {
+        let NodeRef::Stmt(s) = n else { return None };
+        let StmtKind::Loop { body: inner } = &body.stmts[s].kind else {
+            return None;
+        };
+        block_under(body, *inner, block).then_some(())
+    })
+    .is_some()
+}
+
+/// Whether `block` is `root` or nested under it.
+fn block_under(body: &Body, root: BlockId, block: BlockId) -> bool {
+    root == block
+        || body
+            .find_in_nodes_under(NodeRef::Block(root), |n| {
+                (n == NodeRef::Block(block)).then_some(())
+            })
+            .is_some()
+}
+
+/// How many times `root` reads local `l`. An assignment's target names a place
+/// rather than reading one, so it does not count.
+fn local_read_count(body: &Body, root: NodeRef, l: u32) -> usize {
+    let mut count = 0;
+    body.walk_nodes_under::<()>(root, |n| {
+        if let NodeRef::Expr(e) = n {
+            match &body.exprs[e].kind {
+                ExprKind::Local { index, .. } if *index == l => count += 1,
+                ExprKind::Assign { value, .. } => {
+                    if let Some(ve) = value.as_expr() {
+                        count += local_read_count(body, NodeRef::Expr(ve), l);
+                    }
+                    return ControlFlow::Continue(false);
+                }
+                _ => {}
+            }
+        }
+        ControlFlow::Continue(true)
+    });
+    count
 }
 
 /// A `Let` statement re-binding local `l` to `value` (locals are

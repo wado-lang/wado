@@ -92,7 +92,7 @@ Different languages handle chained comparisons differently:
 
 - **C/Java/Go/JS**: Left-associative (allows confusing bugs) ❌
 - **Rust**: Non-associative (compile error) ✅
-- **Python**: Special chaining syntax (`a < b < c` = `a < b and b < c`) ✅
+- **Python**: Special chaining syntax (`a < b < c` = `a < b and b < c`, short-circuiting) ✅
 
 ## Decision
 
@@ -173,7 +173,7 @@ let result = pow(x, 2);   // ✅ Correct
 
 ### 6. Comparison Operator Chaining: Mathematical Chaining
 
-Wado supports **mathematical comparison chaining** similar to Python, but with stricter rules.
+Wado supports **mathematical comparison chaining**: Python's syntax, with stricter rules and no short-circuit.
 
 **Valid chains** (same direction):
 
@@ -201,11 +201,12 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 2. **Equality chaining**: `==` can only chain with `==`
 3. **No `!=` chaining**: `!=` cannot be chained at all
 4. **No mixing**: Cannot mix equality operators with inequality operators
+5. **No short-circuit**: every operand is evaluated once, left to right, and the comparisons join with `&`. A chain is one test: a range test where the operators are inequalities, an all-equal test where they are `==`. Write `&&` where an operand must not run on some path.
 
 **Rationale**:
 
 1. **Mathematical intuition**: Range checks like `0 <= x <= 100` are natural and common
-2. **Same as Python**: Developers familiar with Python will find this familiar
+2. **Familiar syntax**: `a < b < c` reads as it does in Python. Python short-circuits it; Wado evaluates every operand
 3. **Clearer intent**: `a < b < c` is more readable than `a < b && b < c`
 4. **Reject ambiguous cases**: Mixed directions (`a < b > c`) are rarely intentional
 5. **`!=` is ambiguous**: The meaning of `a != b != c` is unclear (is it "a, b, c are all different" or "a != b AND b != c"?)
@@ -223,7 +224,7 @@ a != b != c   // ❌ Semantic error: != chaining not allowed
 2. **Avoids undefined behavior**: No `++`/`--` operators
 3. **Clear and explicit**: `pow(x, y)` instead of ambiguous `**`
 4. **Familiar to C/Java/Python developers**: `~` for bitwise NOT
-5. **Mathematical comparison chaining**: `0 <= x <= 100` works naturally like Python
+5. **Mathematical comparison chaining**: `0 <= x <= 100` reads as one range test, and is evaluated as one
 6. **Rejects ambiguous chains**: `a < b > c` and `a != b != c` are errors
 7. **Consistent with Rust precedence**: Minimal learning curve (except `~` and chaining)
 8. **Battle-tested**: Rust's precedence has been proven in production

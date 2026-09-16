@@ -2,7 +2,9 @@
 // exit proves `pos + 3 < arr.len()`, and the access index is built in two
 // hops (`p = pos + 1; q = p + 2`). The guard-fact decomposition must sum
 // nested `Add` layers (`vn(q) = ((pos + 1) + 2)`) to match `pos + 3`, so
-// the check on `arr[q]` is eliminated at O2.
+// the check on `arr[q]` is eliminated at O2. `arr` is a literal, so
+// `arr.len()` folds to `5` on both sides: the fact must carry a constant
+// bound, not only a local or a field.
 
 use { println, Stdout } from "core:cli";
 
@@ -32,7 +34,8 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "40\n0\n",
+    "wir_scope": ".wado/run\"",
     "wir_not_expect:O2": [
-        "index out of bounds"
+        "index_value$cold0"
     ]
 }

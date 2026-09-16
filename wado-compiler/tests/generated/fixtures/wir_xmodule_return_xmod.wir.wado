@@ -771,7 +771,7 @@ fn "./sub/wir_xmodule_return_parser.wado/try_INT"(chars, start) {
     if pos >= chars.used {
         return -1;
     }
-    if $m0_3 = builtin::array_get_value<char>(chars.repr, pos); select i32(48 <=u $m0_3, $m0_3 <=u 57, 0) == 0 {
+    if $m0_3 = builtin::array_get_value<char>(chars.repr, pos); (48 <=u $m0_3) & ($m0_3 <=u 57) == 0 {
         return -1;
     }
     pos = pos + 1;
@@ -782,7 +782,7 @@ fn "./sub/wir_xmodule_return_parser.wado/try_INT"(chars, start) {
             rep_saved_0 = pos;
             rep_0: block {
                 break_if rep_0 pos >= $licm_used_24;
-                break_if rep_0 $m0_5 = builtin::array_get_value<char>($licm_repr_25, pos); select i32(48 <=u $m0_5, $m0_5 <=u 57, 0) == 0;
+                break_if rep_0 $m0_5 = builtin::array_get_value<char>($licm_repr_25, pos); (48 <=u $m0_5) & ($m0_5 <=u 57) == 0;
                 pos = pos + 1;
                 continue l48;
             };
@@ -932,7 +932,7 @@ fn "./sub/wir_xmodule_return_parser.wado/tokenize"(input) {
                     best_end = end_7;
                     best_kind = 5;
                 }
-            } else if select i32(48 <=u first_char, first_char <=u 57, 0) {
+            } else if (48 <=u first_char) & (first_char <=u 57) {
                 end_7 = "./sub/wir_xmodule_return_parser.wado/try_INT"($sroa_lexer_chars, start_4);
                 if end_7 > -1 {
                     best_end = end_7;
