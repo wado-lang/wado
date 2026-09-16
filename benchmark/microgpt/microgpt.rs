@@ -593,9 +593,8 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) ->
     sample
 }
 
-// The forward path alone. Weights only steer which token is drawn, never how
-// much work a position costs, so an untrained model times the same as a trained
-// one and keeps the phase self-contained.
+// Weights steer which token is drawn, never what a position costs, so an
+// untrained model times the same as a trained one and the phase stands alone.
 fn infer(samples: usize) -> String {
     let mut rng = Rng::new(SEED);
     let tok = Tokenizer::new(&DOCS);

@@ -464,9 +464,8 @@ function generate(g, state, tok, rng) {
   return sample;
 }
 
-// The forward path alone. Weights only steer which token is drawn, never how
-// much work a position costs, so an untrained model times the same as a trained
-// one and keeps the phase self-contained.
+// Weights steer which token is drawn, never what a position costs, so an
+// untrained model times the same as a trained one and the phase stands alone.
 function infer(samples) {
   const rng = new Rng(SEED);
   const tok = new Tokenizer(DOCS);
