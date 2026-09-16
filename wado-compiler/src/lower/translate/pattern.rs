@@ -132,9 +132,10 @@ pub struct Lowering {
     eq_trait_name: FqTraitName,
     /// Canonical stdlib name of the `String` struct.
     string_struct_name: FqTypeName,
-    /// `&String`, the type of the argument a synthesised `String^Eq::eq` takes.
-    /// Interned once here because the per-function walk holds the type table
-    /// immutably.
+    /// `String` and `&String`, the types a string-literal pattern and the
+    /// argument of the `Eq::eq` it tests with carry. Interned once here because
+    /// the per-function walk holds the type table immutably.
+    string_type: TypeId,
     string_ref_type: TypeId,
     /// Immutable globals with a bare integer-literal initializer, keyed by `(module, name)`.
     const_int_globals: IndexMap<(ModuleSource, String), i128>,
@@ -184,6 +185,7 @@ impl Lowering {
             struct_fields_map,
             eq_trait_name,
             string_struct_name,
+            string_type,
             string_ref_type,
             const_int_globals,
             returns_receiver_alias: returns_receiver_alias.clone(),
@@ -204,6 +206,7 @@ impl Lowering {
             locals,
             self.eq_trait_name.clone(),
             self.string_struct_name.clone(),
+            self.string_type,
             self.string_ref_type,
             &self.struct_fields_map,
             &self.const_int_globals,
@@ -224,15 +227,15 @@ struct PatternLowerer<'a> {
     locals: Vec<TirLocal>,
     temp_counter: u32,
     /// Canonical stdlib name of the `Eq` trait. Resolved once from the
-    /// compiler-item registry so synthesised `String^Eq::eq` calls
-    /// follow stdlib renames without falling back to a hard-coded
-    /// `"Eq"` literal.
+    /// compiler-item registry so synthesised `Eq::eq` calls follow stdlib
+    /// renames without falling back to a hard-coded `"Eq"` literal.
     eq_trait_name: FqTraitName,
-    /// Canonical stdlib name of the `String` struct, resolved through
-    /// the same registry so the receiver-type slot of the synthesised
-    /// `String^Eq::eq` `LocalMethodName` tracks renames too.
+    /// Canonical stdlib name of the `String` struct, resolved through the same
+    /// registry so the `Eq<String>` a synthesised `LocalMethodName` names
+    /// tracks renames too.
     string_struct_name: FqTypeName,
-    /// `&String`; see `Lowering::string_ref_type`.
+    /// `String` and `&String`; see `Lowering::string_type`.
+    string_type: TypeId,
     string_ref_type: TypeId,
     /// Map from a struct type's head-and-args to its field definitions.
     struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
@@ -282,6 +285,7 @@ impl<'a> PatternLowerer<'a> {
         locals: Vec<TirLocal>,
         eq_trait_name: FqTraitName,
         string_struct_name: FqTypeName,
+        string_type: TypeId,
         string_ref_type: TypeId,
         struct_fields_map: &'a IndexMap<(StructDef, Vec<TypeId>), Vec<TirField>>,
         const_int_globals: &'a IndexMap<(ModuleSource, String), i128>,
@@ -293,6 +297,7 @@ impl<'a> PatternLowerer<'a> {
             temp_counter: 0,
             eq_trait_name,
             string_struct_name,
+            string_type,
             string_ref_type,
             struct_fields_map,
             const_int_globals,
@@ -575,7 +580,7 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Literal(lit) => {
                 let temp_index = self.alloc_local(elem_type);
 
-                let cond = self.literal_eq_condition(temp_index, elem_type, lit, span);
+                let cond = self.literal_eq_condition(temp_index, elem_type, lit, type_table, span);
                 conditions.push(cond);
 
                 *sub = TirPattern::Binding {
@@ -861,7 +866,8 @@ impl<'a> PatternLowerer<'a> {
                     },
                     span,
                 );
-                let eq_cond = self.literal_eq_condition(temp_index, pattern_type, lit, span);
+                let eq_cond =
+                    self.literal_eq_condition(temp_index, pattern_type, lit, type_table, span);
                 let and_expr = TirExpr::new(
                     TirExprKind::Binary {
                         op: TirBinaryOp::And,
@@ -1360,6 +1366,7 @@ impl<'a> PatternLowerer<'a> {
         local_index: u32,
         local_type: TypeId,
         lit: &TirLiteralPattern,
+        type_table: &TypeTable,
         span: Span,
     ) -> TirExpr {
         let local_expr = TirExpr::new(
@@ -1394,15 +1401,16 @@ impl<'a> PatternLowerer<'a> {
             TirLiteralPattern::Char(val) => {
                 TirExpr::new(TirExprKind::CharLiteral(*val), TypeTable::CHAR, span)
             }
-            TirLiteralPattern::String(val) => {
-                TirExpr::new(TirExprKind::StringLiteral(val.clone()), local_type, span)
-            }
+            TirLiteralPattern::String(val) => TirExpr::new(
+                TirExprKind::StringLiteral(val.clone()),
+                self.string_type,
+                span,
+            ),
             TirLiteralPattern::Null => TirExpr::new(TirExprKind::Null, TypeTable::UNKNOWN, span),
         };
 
-        // For String, use a method call to String^Eq::eq
         if matches!(lit, TirLiteralPattern::String(_)) {
-            return self.string_eq_call(local_expr, literal_expr, span);
+            return self.text_eq_call(local_expr, literal_expr, type_table, span);
         }
 
         // For primitives, use binary ==
@@ -1417,25 +1425,42 @@ impl<'a> PatternLowerer<'a> {
         )
     }
 
-    /// Build a `String^Eq::eq(&self, &other)` method call expression.
+    /// Build the `Eq::eq(&self, &other)` call a string-literal pattern tests
+    /// with. The literal is a `String`, so the scrutinee answers through its
+    /// `Eq<String>` impl — written bare on `String`, where `Rhs` is `Self`.
     ///
     /// The argument carries the callee's own `&String`: typed as `String` the
     /// fold reads it as a value the literal must be defended from, and builds
     /// the backing array a second time at every string-literal pattern.
-    fn string_eq_call(&self, receiver: TirExpr, other: TirExpr, span: Span) -> TirExpr {
+    fn text_eq_call(
+        &self,
+        receiver: TirExpr,
+        other: TirExpr,
+        type_table: &TypeTable,
+        span: Span,
+    ) -> TirExpr {
+        // A newtype's `Eq` is the base's, so the call names the base.
+        let scrutinee = type_table.representation_head(type_table.peel_refs(receiver.type_id));
+        let receiver_name = type_table.fq_base_type_name(scrutinee);
+        let trait_name = if receiver_name == self.string_struct_name {
+            self.eq_trait_name.clone()
+        } else {
+            self.eq_trait_name
+                .clone()
+                .with_args(vec![self.string_struct_name.clone()])
+        };
+        let module_source = type_table
+            .nominal_head(scrutinee)
+            .map_or_else(ModuleSource::string, |(_, module)| module);
         // `translate` adjusts the receiver for the method's self-kind; only the
         // argument is spelled out here.
-        let method_info = LocalMethodName::new(
-            self.string_struct_name.clone(),
-            Some(self.eq_trait_name.clone()),
-            "eq".to_string(),
-        );
+        let method_info = LocalMethodName::new(receiver_name, Some(trait_name), "eq".to_string());
         let mangled_name = method_info.to_mangled_name();
         TirExpr::new(
             TirExprKind::method_call(
                 Box::new(receiver),
                 FunctionRef {
-                    module_source: ModuleSource::string(),
+                    module_source,
                     name: mangled_name,
                     monomorph_info: None,
                     method_info: Some(method_info),
@@ -2165,8 +2190,13 @@ impl<'a> PatternLowerer<'a> {
                             TirPattern::Literal(lit) => lit.clone(),
                             _ => unreachable!(),
                         };
-                        let cond =
-                            self.literal_eq_condition(temp_index, scrutinee_type_id, &lit, span);
+                        let cond = self.literal_eq_condition(
+                            temp_index,
+                            scrutinee_type_id,
+                            &lit,
+                            type_table,
+                            span,
+                        );
                         arm.pattern = TirPattern::Binding {
                             name: format!("$lit_{temp_index}"),
                             local_index: temp_index,

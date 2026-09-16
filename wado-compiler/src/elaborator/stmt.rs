@@ -17,6 +17,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
 use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
@@ -2019,7 +2020,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
     /// not it. An integer literal's range is the coercion's answer, not a pattern's.
-    fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
+    fn literal_pattern_mismatch(
+        &mut self,
+        lit: &Literal,
+        scrutinee_type: TypeId,
+    ) -> Option<String> {
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
         let expected = match lit {
@@ -2030,7 +2035,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // An unsettled head judges nothing: an unresolved type is reported
         // where it is unresolved, and a type parameter decided per instance.
-        matches!(
+        let settled = matches!(
             type_table.get(head),
             ResolvedType::Primitive(_)
                 | ResolvedType::Struct { .. }
@@ -2038,8 +2043,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Flags { .. }
                 | ResolvedType::Unit
+        );
+        drop(type_table);
+        // An arm tests the scrutinee against the literal with `==`, so any text
+        // answering `Eq<String>` — a `StrSlice`, a newtype over one — matches a
+        // string literal the way a `String` does.
+        if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
+            return None;
+        }
+        settled.then(|| expected.to_string())
+    }
+
+    /// Whether `scrutinee == "…"` resolves, which is what a string-literal
+    /// pattern lowers to.
+    fn compares_with_string_literal(&mut self, scrutinee: TypeId) -> bool {
+        let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
+            return false;
+        };
+        let written = self.tysys.type_table.borrow().type_name(scrutinee);
+        let (struct_name, scrutinee) = self
+            .tysys
+            .trait_impl_base_lookup(&written, scrutinee, eq_trait);
+        self.find_arithmetic_trait_impl(
+            &struct_name,
+            scrutinee,
+            eq_trait,
+            "eq",
+            Some(&ArgClass::StrLit),
         )
-        .then(|| expected.to_string())
+        .is_some()
     }
 
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,

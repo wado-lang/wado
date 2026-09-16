@@ -1,0 +1,73 @@
+use { println } from "core:cli";
+
+struct Tag { name: String }
+
+impl Eq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        return self.name == *other;
+    }
+}
+
+fn kind_of_view(v: StrSlice) -> i32 {
+    return match v {
+        "cntrl" => 1,
+        "digit" => 2,
+        "alnum" | "blank" => 3,
+        _ => 0,
+    };
+}
+
+fn kind_of_any<S: AsStrSlice>(s: S) -> i32 {
+    return match s {
+        "cntrl" => 1,
+        "digit" => 2,
+        _ => 0,
+    };
+}
+
+fn kind_of_owned(s: String) -> i32 {
+    return match s {
+        "cntrl" => 1,
+        _ => 0,
+    };
+}
+
+fn is_http<T: Eq<String>>(t: T) -> bool {
+    return t matches { "http" };
+}
+
+type Name = String;
+type View = StrSlice;
+
+fn kind_of_name(n: Name) -> i32 {
+    return match n { "cntrl" => 1, _ => 0 };
+}
+
+fn kind_of_named_view(v: View) -> i32 {
+    return match v { "digit" => 2, _ => 0 };
+}
+
+export fn run() with Stdout {
+    let owned: String = "the digit here";
+    let view = owned.as_str_slice().sub(4, 9);
+
+    println(`${kind_of_view(view)}`);
+    println(`${kind_of_view("alnum".as_str_slice())}`);
+    println(`${kind_of_view("zzz".as_str_slice())}`);
+    println(`${kind_of_any(view)}`);
+    println(`${kind_of_any(owned)}`);
+    println(`${kind_of_owned("cntrl")}`);
+
+    if let "digit" = view {
+        println("if let took the slice");
+    }
+    println(`${is_http(Tag { name: "http" })}`);
+    println(`${is_http(Tag { name: "ftp" })}`);
+    println(`${kind_of_name("cntrl")}`);
+    println(`${kind_of_named_view(view as View)}`);
+}
+
+__DATA__
+{
+  "stdout": "2\n3\n0\n2\n0\n1\nif let took the slice\ntrue\nfalse\n1\n2\n"
+}

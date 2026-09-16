@@ -1,16 +1,15 @@
 // A literal pattern was never checked against the scrutinee, so the mismatch
-// reached codegen: a string pattern on an `i32` panicked in WIR build, and one
-// on a `StrSlice` emitted a module the validator rejected.
+// reached codegen: a string pattern on an `i32` panicked in WIR build. Text
+// that answers `Eq<String>` is a match, and `match_string_literal_text` pins it.
 
-test "a string pattern needs a String scrutinee" {
-    let owner = "---";
-    let view = owner.as_str_slice();
-    let k = match view {
+test "a string pattern needs a scrutinee that compares with a String" {
+    let n = 3;
+    let k = match n {
         "---" => 1,
         _ => 0,
     };
-    assert k == 1;
+    assert k == 0;
 }
 
 __DATA__
-{"compile_error": "pattern mismatch: expected 'String', found 'StrSlice'"}
+{"compile_error": "pattern mismatch: expected 'String', found 'i32'"}
