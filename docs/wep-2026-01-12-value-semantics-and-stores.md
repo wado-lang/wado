@@ -104,14 +104,14 @@ again, and a local derived from such a one is no better off.
 
 The fixpoint publishes where a bounded position landed and not just that it was
 kept, so a reader outside it resolves the destination against its own argument
-list the way the fixpoint does, by name or through a function value alike. A
-position any channel keeps out of sight carries no destination and is read as
-the union of all three.
-One whose every channel names a parameter is read as the locals the call's
-arguments name there, and pins its referent only where one of them is still
-readable at a point the referent would be moved out of. A destination that is
-itself a parameter, or that a reference outlives, is readable everywhere, so it
-pins for the frame as before.
+list the way the fixpoint does, by name or through a function value alike.
+
+A position any channel keeps out of sight carries no destination, and is read as
+the union of all three. One whose every channel names a parameter is read as the
+locals the call's arguments name there, and pins its referent only where one of
+them is still readable at a point the referent would be moved out of. A
+destination that is itself a parameter, or that a reference outlives, is
+readable everywhere, so it pins for the whole frame as an unbounded one does.
 
 Keeping the channels apart is what makes each precise. An iterator holds a
 reference to what it walks, so folding `into_result` into `escapes` would make
@@ -230,20 +230,20 @@ the compiler may stop doing to the argument:
   time, since compile-time evaluation has no reference values to embed and the
   result would be a snapshot the next write leaves stale.
 
-What precision buys on today's corpus is nothing. Taking the row, the bounded
-destination, the element gate, a Component Model import's owned result and the
-anchored-local reading all together leaves every benchmark and every size program
-byte-identical. The conservatism they remove is real — 785 generated `_parse_*`
-functions keep nothing, so `fn(&mut Parser)` reads empty where it used to read as
-keeping everything — but the locals it stops pinning have later uses anyway, so
-no move and no scalarization follows. The bounded destination has little to work
-with for a plainer reason: 19 functions across the Gale corpus publish one at
-all, and every one is a container insert — `List::push`'s `value` into `self`,
-`array_copy`'s `src` into `dst`, `index_assign`'s `value` into `self` — where
-the destination is read after the argument would be moved anyway. Following a
-specialization's parameter by the type its body reads it at is the same story
-larger: it takes the Gale corpus from 343 resolved call sites of 1356 to 715,
-and changes no byte of output.
+What precision buys on today's corpus is nothing. The per-site row, the bounded
+destination, the element gate, a Component Model import's owned result, the
+anchored-local reading and following a parameter by the type its body reads it
+at, all together, leave every benchmark and every size program byte-identical.
+
+The conservatism they remove is real, and measurably so: on the Gale corpus 785
+generated `_parse_*` functions keep nothing, so `fn(&mut Parser)` reads empty
+where it used to read as keeping everything, and resolved call sites go from 343
+of 1356 to 715. What follows from it is nothing, because the locals it stops
+pinning have later uses anyway, so no move and no scalarization comes of it. The
+bounded destination has little to work with for a plainer reason: 19 functions
+publish one at all, and every one is a container insert — `List::push`'s `value`
+into `self`, `array_copy`'s `src` into `dst`, `index_assign`'s `value` into
+`self` — where the destination is read after the argument would be moved anyway.
 
 What the facts do buy is correctness, and that is not free. Declaring what
 `array_copy` and `array_clone` hand on through their elements costs 478 bytes,
@@ -299,9 +299,11 @@ fn apply<T, R>(f: fn(T) -> R, x: T) -> R {
 
 `apply` keeps nothing of its own, and what `f` does with `x` is not in `f`'s
 type. The answer comes from a source rather than a declaration: a function value
-is minted in exactly two places — a reference to a named function, and a closure
-literal — and no function type crosses a Component Model boundary, so every
-value a call can reach was minted somewhere in the package.
+is minted in two places — a reference to a named function, and a closure literal
+— and no function type crosses a Component Model boundary, so every value a call
+can reach was minted somewhere in the package. Lifting rewrites the second of
+those into an object the walk does not read as a mint, which is a gap below and
+not a third place.
 
 Which of them reaches a given call is read by following each minted value from
 where it is minted to where it is called. A value settles in a local, is handed
@@ -383,14 +385,9 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Known gaps
 
-The write-back pins a local any loop or closure in the body reads, rather than
-only one that can reach a read after the call. A loop is the body's only
-backward edge — a labelled break leaves forwards, and nothing else jumps — so
-source order answers every other shape exactly, including two arms of the same
-branch. Inside a loop it answers nothing, and a closure body carries no order
-against a call at all, so both are taken whole. Closing that takes a
-control-flow reading, which this pass never builds: it rewrites a tree on the
-way down.
+Two readings the compiler does not have account for four of these: a
+shape-level points-to answer, and a per-program-point one. The fifth is a
+change to the lattice the rest are read over.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
@@ -398,6 +395,31 @@ the local holding it goes where the walk does not, and every call that could
 reach a value of that type is then read off the type. Closing that would take
 following function values through the heap, which is a shape-level points-to
 answer and nothing here is one.
+
+An element claim reads what a value holds, which a body fills but a signature
+never states. A parameter arrives holding whatever the caller put there, and
+nothing names that, so the claim is answered from the writes this body made and
+the positions those writes came from. A caller that hands on its own argument's
+elements untouched is not telling its own caller so, which is what makes the
+claim useful — it stops at the frame that filled the container — and also what
+bounds it. Closing that would take a summary of what a parameter holds on entry,
+which is the same points-to answer.
+
+A retention into a reference-typed local is bounded only where every assignment
+to that local roots at one of this body's own parameters. That is a must-alias
+reading, so one assignment from anywhere else — a call result, a global, another
+local with such an assignment — makes every write through the local an escape,
+however narrow the other assignments are. Closing it takes a per-program-point
+reading rather than one answer per local.
+
+The write-back pins a local any loop or closure in the body reads, rather than
+only one that can reach a read after the call. A loop is the body's only
+backward edge — a labelled break leaves forwards, and nothing else jumps — so
+source order answers every other shape exactly, including two arms of the same
+branch. Inside a loop it answers nothing, and a closure body carries no order
+against a call at all, so both are taken whole. Closing that takes the same
+per-program-point reading, which this pass never builds: it rewrites a tree on
+the way down.
 
 A lifted closure is not read as the value it came from. Lifting rewrites the
 closure literal at a call site into an object holding the lifted function, while
@@ -410,31 +432,15 @@ the one place exactly one value arrives.
 Closing it takes reading such an object as a mint of the function it holds,
 which the object does say — and at a shift, which is what makes it work. The
 function it holds is the lifted body, whose parameters are the closure's
-preceded by its environment, so the call's position `p` is that function's `p +
-1`. A mint would therefore have to carry where its positions start, and every
-reader of one — the join, the row a call resolves to, the destination a caller
-resolves against its own arguments — apply it. That is a change to the lattice
-rather than to one arm of the walk, and the size of it is the reason this is
-open rather than done. Reading the lifting phase's own record of which closure
-it specialized each copy for would need no shift, but the answer would then come
-from a previous phase instead of the tree the reader walks, which is what the
-decision above rests on.
-
-An element claim reads what a value holds, which a body fills but a signature
-never states. A parameter arrives holding whatever the caller put there, and
-nothing names that, so the claim is answered from the writes this body made and
-the positions those writes came from. A caller that hands on its own argument's
-elements untouched is not telling its own caller so, which is what makes the
-claim useful — it stops at the frame that filled the container — and also what
-bounds it. Closing that would take a summary of what a parameter holds on entry,
-which is a shape-level points-to answer and nothing here is one.
-
-A retention into a reference-typed local is bounded only where every assignment
-to that local roots at one of this body's own parameters. That is a must-alias
-reading, so one assignment from anywhere else — a call result, a global, another
-local with such an assignment — makes every write through the local an escape,
-however narrow the other assignments are. Closing it takes a per-program-point
-reading rather than one answer per local.
+preceded by its environment, so the call's position `p` is that function's
+`p + 1`. A mint would therefore have to carry where its positions start, and
+every reader of one — the join, the row a call resolves to, the destination a
+caller resolves against its own arguments — apply it. That is a change to the
+lattice rather than to one arm of the walk, and the size of it is the reason
+this is open rather than done. Reading the lifting phase's own record of which
+closure it specialized each copy for would need no shift, but the answer would
+then come from a previous phase instead of the tree the reader walks, which is
+what the decision above rests on.
 
 ## References
 
