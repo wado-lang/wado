@@ -2760,12 +2760,10 @@ impl FunctionContext {
         None
     }
 
-    /// Whether `name` is a `mut` binding this frame reaches through its own
-    /// environment rather than owning.
-    pub(super) fn reaches_mut_outer(&self, name: &str) -> bool {
-        self.outer_locals
-            .get(name)
-            .is_some_and(|binding| binding.local.is_mut)
+    /// Whether the binding `name` reaches through this frame's own environment
+    /// is `mut`; `None` when no such binding exists.
+    pub(super) fn outer_binding_is_mut(&self, name: &str) -> Option<bool> {
+        self.outer_locals.get(name).map(|b| b.local.is_mut)
     }
 
     /// Run `body` with the surrounding frame's bindings out of scope, keeping

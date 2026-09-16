@@ -3455,5 +3455,5 @@ fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
     if ctx.deref_overrides.contains_key(name) || ctx.outer_box_types.contains_key(name) {
         return Some(true);
     }
-    ctx.outer_locals.get(name).map(|outer| outer.local.is_mut)
+    ctx.outer_binding_is_mut(name)
 }

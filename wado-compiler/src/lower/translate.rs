@@ -28,7 +28,8 @@ use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, wide_int_literal};
 use crate::name::{
     CLOSURE_CALL_METHOD, FunctionId, case_construct_helper_name, case_extract_helper_name,
-    field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
+    closure_capture_field, field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncId, NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction,
@@ -320,9 +321,9 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
 /// methods, fn-param specialized callees).
 struct FunctionTranslator<'a, 'p> {
     base: &'a Translator<'p>,
-    /// This function's own environment type, `Some` only inside a `$call`
-    /// method. A nested closure built here reads through it.
-    enclosing_env: Option<tir::TypeId>,
+    /// This function's own environment — the `self` local and its type — `Some`
+    /// only inside a `$call` method. A nested closure reads through it.
+    enclosing_env: Option<(u32, tir::TypeId)>,
     /// `Some` only inside a synthesized fn-param-specialized callee.
     specialized: Option<&'p [closure::SpecializedLocal]>,
     /// `None` for global initializers / struct field defaults, where
@@ -2359,7 +2360,7 @@ impl FunctionTranslator<'_, '_> {
                     CaptureSource::Capture(slot) => self.read_enclosing_capture(cap, slot, span),
                 };
                 ArenaStructField {
-                    name: format!("$capture_{i}"),
+                    name: closure_capture_field(i as u32),
                     value: value.into(),
                     field_index: i as u32,
                 }
@@ -2370,7 +2371,7 @@ impl FunctionTranslator<'_, '_> {
     /// `self.$capture_<slot>` of the `$call` method being translated, for a
     /// binding its own closure reached the same way.
     fn read_enclosing_capture(&self, cap: &TirCapture, slot: u32, span: Span) -> ExprId {
-        let Some(self_type) = self.enclosing_env else {
+        let Some((self_index, self_type)) = self.enclosing_env else {
             panic!(
                 "capture `{}` reads slot {slot} of an enclosing environment, \
                  but the translated function has none",
@@ -2379,7 +2380,7 @@ impl FunctionTranslator<'_, '_> {
         };
         let self_expr = self.alloc_expr(
             ExprKind::Local {
-                index: 0,
+                index: self_index,
                 name: "self".to_string(),
             },
             self_type,
@@ -2389,7 +2390,7 @@ impl FunctionTranslator<'_, '_> {
             ExprKind::FieldAccess {
                 expr: self_expr.into(),
                 field_index: slot,
-                field_name: format!("$capture_{slot}"),
+                field_name: closure_capture_field(slot),
             },
             cap.type_id,
             span,

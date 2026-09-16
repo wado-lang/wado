@@ -296,6 +296,13 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// Field name of the `index`-th environment slot on a closure functor
+/// (`$capture_0`, `$capture_1`, …).
+#[must_use]
+pub fn closure_capture_field(index: u32) -> String {
+    format!("{INTERNAL_PREFIX}capture_{index}")
+}
+
 /// The label a block no `break` names carries: `what` says which construct put
 /// the block there, `id` makes it unique within the body.
 #[must_use]

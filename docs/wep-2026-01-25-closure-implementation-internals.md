@@ -36,7 +36,7 @@ There are no `Fn` / `FnMut` traits. `ResolvedType::Function` carries an `is_mut`
 
 Wasm has no shared-versus-exclusive reference distinction, so both compile to the same `call_ref`. What the split buys is a check at the call site: a `fn mut` callee requires the binding holding it to be `mut`.
 
-A closure is `fn mut` when its body assigns to a captured `mut` binding. Capturing a `mut` binding it only reads leaves it `fn`. The body is the whole body, nested closures included: a write reaching an outer binding from any depth is a write. What the closure binds itself — a parameter, a `let`, a pattern — shadows, and a write to one leaves the outer binding of that name alone.
+A closure is `fn mut` when its body assigns to a captured `mut` binding. Capturing a `mut` binding it only reads leaves it `fn`. The body is the whole body, nested closures included, so a write reaching an outer binding from any depth counts. What the closure binds itself shadows, whether a parameter, a `let` or a pattern, and a write to one leaves the outer binding of that name alone.
 
 ### Captures are implicit
 
@@ -48,9 +48,11 @@ The `stores` annotation for non-closure reference parameters stays a separate me
 
 ### A capture is handed inward one frame at a time
 
-Environments are flat, not chained: a closure's environment holds exactly the bindings its own body names, and nothing else. A closure nested in another therefore reaches an enclosing function's local only if every frame between them carries it, so each frame captures whatever the frame inside it asked for and did not own. That makes capture transitive to any depth, and it is why a capture records where the constructing frame reads the value from — its own local, or its own environment slot.
+Environments are flat, not chained. A closure's environment holds exactly the bindings its own body names and nothing else. A closure nested in another therefore reaches an enclosing function's local only if every frame between them carries it, so each frame captures whatever the frame inside it asked for and did not own. Capture is transitive to any depth that way.
 
-The closure that owns the binding is the one that boxes it. A write from any depth boxes it there, and every frame in between passes the box along, so all the frames see the one cell.
+Each capture records where the frame building the closure reads the value from: its own local, or its own environment slot. The second case is what a nested closure needs, and resolving it makes that frame capture the binding in turn.
+
+A binding is boxed by the frame that owns it, whatever depth the write comes from. The frames in between pass the box along, so they all see the one cell.
 
 ### Wasm GC representation
 

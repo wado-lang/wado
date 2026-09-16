@@ -22,8 +22,7 @@ struct ExpectedFn {
 }
 
 /// The environment slot `ctx` holds `name` in, registering the capture if this
-/// is the first inner closure to ask for it. `ctx` reaches the binding through
-/// its own environment by construction, so a local answer is a contradiction.
+/// is the first inner closure to ask for it.
 fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
     match ctx.lookup_or_capture(name) {
         Some(VarRef::Capture { index, .. } | VarRef::DerefCapture { index, .. }) => index,
@@ -32,6 +31,34 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
         }
         None => panic!("`{name}` was reached through the enclosing environment but is not in it"),
     }
+}
+
+/// One [`CaptureEntry`] per capture, resolved against `ctx`, the frame that
+/// builds the closure.
+///
+/// A binding `ctx` owns is read from its local. One it only reaches through its
+/// own environment makes `ctx` capture it too, which is what makes capture
+/// transitive: every frame runs this against its own parent, to any depth.
+fn link_parent_captures(
+    closure_ctx: &FunctionContext,
+    ctx: &mut FunctionContext,
+) -> Vec<CaptureEntry> {
+    closure_ctx
+        .get_captures()
+        .into_iter()
+        .map(|(name, local, reach)| {
+            let source = match reach {
+                OuterReach::ParentLocal(index) => CaptureSource::Local(index),
+                OuterReach::ParentEnv => CaptureSource::Capture(parent_capture_slot(ctx, &name)),
+            };
+            CaptureEntry {
+                name,
+                source,
+                type_id: local.type_id,
+                is_mut: local.is_mut,
+            }
+        })
+        .collect()
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -91,39 +118,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// Turn a closure's captures into [`CaptureEntry`] values, resolving each
-    /// against the frame that builds the closure.
-    ///
-    /// A binding that frame owns is read from its local. One it only reaches
-    /// through its own environment makes it capture the binding too, so the
-    /// value is handed inward one frame at a time. Doing this as each closure
-    /// finishes is what makes capture transitive: the enclosing closure runs
-    /// the same step against *its* enclosing frame, to any depth.
-    pub(super) fn link_parent_captures(
-        &mut self,
-        closure_ctx: &FunctionContext,
-        ctx: &mut FunctionContext,
-    ) -> Vec<CaptureEntry> {
-        closure_ctx
-            .get_captures()
-            .into_iter()
-            .map(|(name, local, reach)| {
-                let source = match reach {
-                    OuterReach::ParentLocal(index) => CaptureSource::Local(index),
-                    OuterReach::ParentEnv => {
-                        CaptureSource::Capture(parent_capture_slot(ctx, &name))
-                    }
-                };
-                CaptureEntry {
-                    name,
-                    source,
-                    type_id: local.type_id,
-                    is_mut: local.is_mut,
-                }
-            })
-            .collect()
-    }
-
     /// Reject default parameter values on closures. Parser accepts the syntax
     /// for uniform recovery, but defaults cannot survive the fn-type erasure
     /// closures undergo, so they're rejected here.
@@ -163,10 +157,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         for var_name in &assigned_names {
             let Some(local) = ctx.lookup(var_name) else {
-                // A binding the enclosing frame itself only reaches by capture
-                // is boxed by whichever frame owns it; this one writes through
-                // the box, which still makes it `fn mut`.
-                any_mutating_capture |= ctx.reaches_mut_outer(var_name);
+                // A binding `ctx` only reaches by capture is boxed where it is
+                // owned; writing through that box is still a mutating capture.
+                any_mutating_capture |= ctx.outer_binding_is_mut(var_name) == Some(true);
                 continue;
             };
             if local.is_mut {
@@ -237,10 +230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Build the recorded capture list from the closure scope's captures,
-        // making the enclosing frame capture whatever it only reached through
-        // its own environment.
-        let recorded_captures = self.link_parent_captures(&closure_ctx, ctx);
+        let recorded_captures = link_parent_captures(&closure_ctx, ctx);
 
         // WEP 2026-05-26: the only signal reify needs
         // for the closure's capture analysis.

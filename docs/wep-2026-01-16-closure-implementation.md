@@ -137,7 +137,7 @@ Any `&mut` capture promotes the closure type to `fn mut`. Pure read-only capture
 
 ### Nesting
 
-A closure reaches a binding of any enclosing frame, not only the nearest one, and reads or writes the same binding the source names:
+A closure reaches a binding of any enclosing frame, not only the nearest one. It reads and writes the binding the source names, however many closures sit in between:
 
 ```wado
 let mut count = 0;
@@ -150,7 +150,7 @@ outer();
 assert count == 2;
 ```
 
-What the closure binds itself shadows, as it does anywhere: `|mut count| count += 1` writes its own parameter and captures nothing, and so does a body opening with `let mut count = 0`.
+What a closure binds itself shadows, as it does anywhere. `|mut count| count += 1` writes its own parameter and captures nothing, and a body opening with `let mut count = 0` writes that.
 
 ### No `move` Keyword
 

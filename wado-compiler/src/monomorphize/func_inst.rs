@@ -499,8 +499,8 @@ impl TirMutVisitor for LocalIndexRewriter {
                 *index = self.new_idx;
             }
             TirExprKind::Closure { captures, .. } => {
-                // A capture's `outer_index` lives in the *parent* frame, so it
-                // is rewritten like any other parent-local reference (this is
+                // A capture reading a parent local names the *parent* frame, so
+                // it is rewritten like any other such reference (this is
                 // what makes a for-of binding captured by a closure follow the
                 // per-iteration rename). The closure *body*, by contrast, uses
                 // its own local-index namespace and reaches the parent only

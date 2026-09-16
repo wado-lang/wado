@@ -5439,11 +5439,9 @@ pub struct TirStructField {
     pub field_index: u32,
 }
 
-/// Where the frame constructing a closure finds a captured binding.
-///
-/// A closure nested in another reaches the enclosing *function*'s locals
-/// through the enclosing *closure*'s environment, which is what `Capture`
-/// names. See [WEP: Closure Implementation Internals](../../docs/wep-2026-01-25-closure-implementation-internals.md).
+/// Where the frame constructing a closure finds a captured binding: a local it
+/// owns, or a slot of its own environment when it is a closure itself. See
+/// [WEP: Closure Implementation Internals](../../docs/wep-2026-01-25-closure-implementation-internals.md).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureSource {
     /// A local of the constructing frame.
