@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789518697053,
+  "lastUpdate": 1789542814122,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56201,6 +56201,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8568c5038a7bf79e97373dffa1a12a4071eacff7"
         },
         "date": 1789518696109,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18944,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d9d10c0392c6387304ef1e354718b68825b283e3",
+          "message": "Merge pull request #2067 from wado-lang/claude/icu-properties-surface\n\nfeat(core:icu): Unicode character properties, at 104 KB for a program that uses one",
+          "timestamp": "2026-09-16T15:56:38+09:00",
+          "tree_id": "f22db5f31197df0649bc75bc6a4ff67254ffcb95",
+          "url": "https://github.com/wado-lang/wado/commit/d9d10c0392c6387304ef1e354718b68825b283e3"
+        },
+        "date": 1789542813550,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
