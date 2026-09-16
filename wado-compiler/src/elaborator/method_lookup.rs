@@ -2794,15 +2794,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        match self
-            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs)
-            .as_slice()
-        {
+        let mut found =
+            self.find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs);
+        self.retain_most_specific_rhs(&mut found);
+        match found.as_slice() {
             [only] => Some(only.clone()),
             // Unique-or-error, as everywhere else: several admitted impls are
             // the caller's to report, with the span it holds.
             [] | [_, _, ..] => None,
         }
+    }
+
+    /// Drop the impls whose right-hand parameter is the impl's own type
+    /// parameter, where one writes a type instead. A bare parameter admits
+    /// every operand, so keeping both leaves an `impl<R: B> Eq<R> for T`
+    /// shadowing the `impl Eq<String> for T` beside it.
+    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
+        if found.len() < 2 {
+            return;
+        }
+        let written: Vec<bool> = found
+            .iter()
+            .map(|info| info.rhs_type.is_some_and(|t| !self.is_impl_type_param(t)))
+            .collect();
+        if !written.iter().any(|w| *w) {
+            return;
+        }
+        let mut keep = written.iter();
+        found.retain(|_| *keep.next().unwrap_or(&true));
+    }
+
+    /// Whether `ty` is an impl's own type parameter, through any references.
+    fn is_impl_type_param(&self, ty: TypeId) -> bool {
+        let table = self.tysys.type_table.borrow();
+        matches!(
+            table.get(table.peel_refs(ty)),
+            ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+        )
     }
 
     /// Every impl of `trait_name` on the receiver whose right-hand parameter
