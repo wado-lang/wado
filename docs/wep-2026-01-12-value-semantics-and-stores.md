@@ -209,13 +209,18 @@ the compiler may stop doing to the argument:
   time, since compile-time evaluation has no reference values to embed and the
   result would be a snapshot the next write leaves stale.
 
-What it buys on today's corpus is nothing. Taking the row, the bounded
-destination, the element gate and a Component Model import's owned result all
-together leaves every benchmark and every size program byte-identical. The
-conservatism they remove is real — 785 generated `_parse_*` functions keep
-nothing, so `fn(&mut Parser)` reads empty where it used to read as keeping
-everything — but the locals it stops pinning have later uses anyway, so no move
-and no scalarization follows. Retention is carried for correctness, and a
+What precision buys on today's corpus is nothing. Taking the row, the bounded
+destination, the element gate, a Component Model import's owned result and the
+anchored-local reading all together leaves every benchmark and every size program
+byte-identical. The conservatism they remove is real — 785 generated `_parse_*`
+functions keep nothing, so `fn(&mut Parser)` reads empty where it used to read as
+keeping everything — but the locals it stops pinning have later uses anyway, so
+no move and no scalarization follows.
+
+What the facts do buy is correctness, and that is not free. Declaring what
+`array_copy` and `array_clone` hand on through their elements costs 478 bytes,
+in `gale_gen` (+339) and `json_catalog_v2` (+139) and nowhere else: those calls
+now pin what they really reach. Retention is carried for correctness, and a
 precision claim about it is worth only what a measurement says it is.
 
 ### Closures Capture by Reference
