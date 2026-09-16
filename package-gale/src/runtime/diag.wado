@@ -68,11 +68,11 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    pub fn error(code: DiagnosticCode, message: String, span: Span, line: i32, col: i32) -> Diagnostic {
+    pub fn error<S: AsStrSlice>(code: DiagnosticCode, message: S, span: Span, line: i32, col: i32) -> Diagnostic {
         return Diagnostic {
             severity: Severity::Error,
             code,
-            message,
+            message: message.to_string(),
             span,
             line,
             col,
@@ -90,9 +90,9 @@ impl Diagnostic {
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
+        f.write_str(`${self.severity.label()}[${self.code.name()}] at ${self.line}:${self.col}: ${self.message}`);
         for let r of &self.related {
-            f.write_str(&`\n  note: ${r.message}`);
+            f.write_str(`\n  note: ${r.message}`);
         }
     }
 }

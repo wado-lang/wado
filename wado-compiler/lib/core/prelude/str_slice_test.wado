@@ -81,13 +81,13 @@ test "a view's bytes reach the byte APIs" {
 }
 
 /// One signature takes an owned string, a reference to one, or a view of one.
-fn first_byte<S: AsStrSlice>(s: &S) -> u8 {
-    return s.as_str_slice().get_byte_unchecked(0);
+fn first_byte<S: AsStrSlice>(s: S) -> u8 {
+    return s.get_byte_unchecked(0);
 }
 
 test "AsStrSlice spans owned strings, references, and views" {
     let owned = "banana";
     assert first_byte(&owned) == b'b';
-    assert first_byte(&"banana") == b'b';
-    assert first_byte(&owned.as_str_slice().sub(1, 4)) == b'a';
+    assert first_byte("banana") == b'b';
+    assert first_byte(owned.as_str_slice().sub(1, 4)) == b'a';
 }

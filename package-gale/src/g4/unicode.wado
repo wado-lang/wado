@@ -72,7 +72,7 @@ pub fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
 /// `Property=Value` form names its property instead; the enumerated properties
 /// (`lb=`, `bc=`, …) are reachable only that way, their single-letter values
 /// being ones a bare-name lookup would collide with.
-pub fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
+pub fn expand_unicode_property<S: AsStrSlice>(name: S, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
     let head = parts.next().unwrap();
@@ -90,10 +90,10 @@ pub fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> b
     if push_found_ranges(posix_property_ranges(&key), ranges) {
         return true;
     }
-    if push_found_ranges(value_ranges(&"gc", &key), ranges) {
+    if push_found_ranges(value_ranges("gc", &key), ranges) {
         return true;
     }
-    if push_found_ranges(value_ranges(&"sc", &key), ranges) {
+    if push_found_ranges(value_ranges("sc", &key), ranges) {
         return true;
     }
     return push_found_ranges(binary_ranges(&key), ranges);
@@ -116,14 +116,14 @@ fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharR
 
 /// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
 /// does not answer, which is what lets the caller reject it.
-fn binary_ranges(property: &String) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::ranges(*property));
+fn binary_ranges<S: AsStrSlice>(property: S) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::ranges(property.to_string()));
 }
 
 /// An enumerated property value's ranges, as Unicode scalars. `gc` takes a
 /// group letter (`L`) as well as a category (`Lu`).
-fn value_ranges(property: &String, value: &String) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::value_ranges(*property, *value));
+fn value_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::value_ranges(property.to_string(), value.to_string()));
 }
 
 fn scalar_ranges(found: Option<List<[u32, u32]>>) -> Option<List<CharRange>> {
@@ -149,18 +149,18 @@ fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange
 
 /// Ranges for a property this file names literally, so a name `core:icu` does
 /// not answer is Gale's own mistake rather than user input.
-fn required_ranges(found: Option<List<CharRange>>, name: &String) -> List<CharRange> {
+fn required_ranges<S: AsStrSlice>(found: Option<List<CharRange>>, name: S) -> List<CharRange> {
     let Some(ranges) = found else {
-        panic(`core:icu does not answer '${*name}'`);
+        panic(`core:icu does not answer '${name}'`);
     };
     return ranges;
 }
 
-fn gc_set(key: &String) -> List<CharRange> {
-    return required_ranges(value_ranges(&"gc", key), key);
+fn gc_set<S: AsStrSlice>(key: S) -> List<CharRange> {
+    return required_ranges(value_ranges("gc", key), key);
 }
 
-fn binary_set(key: &String) -> List<CharRange> {
+fn binary_set<S: AsStrSlice>(key: S) -> List<CharRange> {
     return required_ranges(binary_ranges(key), key);
 }
 
@@ -169,10 +169,10 @@ fn binary_set(key: &String) -> List<CharRange> {
 /// each being a `General_Category` under another name. `Alpha`, `Lower`, `Upper`
 /// and `Space` are POSIX names too, but each is a UCD alias the binary
 /// properties already answer with the same set.
-fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
+fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
     return match key {
-        "cntrl" => Option::Some(gc_set(&"cc")),
-        "digit" => Option::Some(gc_set(&"nd")),
+        "cntrl" => Option::Some(gc_set("cc")),
+        "digit" => Option::Some(gc_set("nd")),
         "alnum" | "blank" | "graph" | "print" | "xdigit" => Option::Some(binary_set(key)),
         _ => null,
     };
@@ -181,13 +181,13 @@ fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
 /// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
 /// `lexer-rules.md` defines the three values). Derived from the UCD's `Emoji`
 /// and `Emoji_Presentation`, and pinned character-by-character.
-fn emoji_presentation_ranges(value: &String) -> Option<List<CharRange>> {
-    let emoji = binary_set(&"emoji");
+fn emoji_presentation_ranges<S: AsStrSlice>(value: S) -> Option<List<CharRange>> {
+    let emoji = binary_set("emoji");
     return match value {
         // Colourful by default.
-        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set("emojipresentation"))),
         // Emoji-capable, but drawn as text unless asked otherwise.
-        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set("emojipresentation"))),
         // Text-only: never emoji at all.
         "text" => Option::Some(complement_char_ranges(&emoji)),
         _ => null,
@@ -196,20 +196,20 @@ fn emoji_presentation_ranges(value: &String) -> Option<List<CharRange>> {
 
 /// Why `\p{name}` was refused. Three families ANTLR4 answers are deliberately
 /// not Gale's, so each says so rather than reading as a hole in a table.
-pub fn unsupported_property_message(name: &String) -> String {
+pub fn unsupported_property_message<S: AsStrSlice>(name: S) -> String {
     let key = normalize_property_name(name);
     let head = key.split("=").next().unwrap();
     let in_block = head.starts_with("in") && !IN_PREFIXED_PROPERTIES.contains(&head);
     if head == "block" || head == "blk" || in_block {
-        return `Gale does not answer the Block property ("${*name}"): ICU ships no Block data. Name a script (\\p{Greek}) or the code point range itself.`;
+        return `Gale does not answer the Block property ("${name}"): ICU ships no Block data. Name a script (\\p{Greek}) or the code point range itself.`;
     }
     if head == "decompositiontype" || head == "dt" {
-        return `Gale does not answer Decomposition_Type ("${*name}"): ICU ships no data for it.`;
+        return `Gale does not answer Decomposition_Type ("${name}"): ICU ships no data for it.`;
     }
     if CONTRIBUTORY_PROPERTIES.contains(&key) {
-        return `"${*name}" is a contributory property, which UAX #44 defines as an input to a derived property rather than one to query. Name the derived property instead (\\p{Alphabetic}, \\p{ID_Start}, …).`;
+        return `"${name}" is a contributory property, which UAX #44 defines as an input to a derived property rather than one to query. Name the derived property instead (\\p{Alphabetic}, \\p{ID_Start}, …).`;
     }
-    return `unsupported Unicode property "${*name}" in a character set`;
+    return `unsupported Unicode property "${name}" in a character set`;
 }
 
 /// Property names, folded, that begin with the `In` a Block query begins with.
@@ -229,7 +229,7 @@ global CONTRIBUTORY_PROPERTIES: List<String> = [
 
 /// Fold a property name the way UAX #44 matches one: ignoring case, `_`, `-`
 /// and spaces.
-fn normalize_property_name(name: &String) -> String {
+fn normalize_property_name<S: AsStrSlice>(name: S) -> String {
     let mut out = String::with_capacity(name.len());
     for let c of name.chars() {
         if c == '_' || c == '-' || c == ' ' {

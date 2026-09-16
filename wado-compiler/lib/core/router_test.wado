@@ -100,10 +100,10 @@ test "router: 405 vs 404 via allowed_methods" {
     assert r.match_path(Method::Post, &"/users").unwrap().handler == 2;
     assert r.match_path(Method::Put, &"/users") matches { None };
 
-    let allowed = r.allowed_methods(&"/users");
+    let allowed = r.allowed_methods("/users");
     assert allowed.len() == 2;
 
-    let none = r.allowed_methods(&"/no-such-route");
+    let none = r.allowed_methods("/no-such-route");
     assert none.is_empty();
 }
 
@@ -116,7 +116,7 @@ test "router: any matches every method including Other" {
     assert r.match_path(Method::Other("PURGE"), &"/anything").unwrap().handler == 5;
 
     // any handler does not contribute to allowed_methods (uncountable).
-    assert r.allowed_methods(&"/anything").is_empty();
+    assert r.allowed_methods("/anything").is_empty();
 }
 
 test "router: specific wins over any at same pattern" {
@@ -128,7 +128,7 @@ test "router: specific wins over any at same pattern" {
     assert r.match_path(Method::Post, &"/foo").unwrap().handler == 10;
     assert r.match_path(Method::Other("FOO"), &"/foo").unwrap().handler == 10;
 
-    let allowed = r.allowed_methods(&"/foo");
+    let allowed = r.allowed_methods("/foo");
     assert allowed.len() == 1;
 }
 

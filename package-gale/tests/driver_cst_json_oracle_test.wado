@@ -12,62 +12,62 @@ use json from "./grammars/JSON.g4"
     };
 use { normalize_tree } from "./support/tree_compare.wado";
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = json::parse(input);
     let actual = json::to_string_tree(&result);
     let norm = normalize_tree(expected);
-    assert actual == norm, `\ninput:    ${*input}\nexpected: ${norm}\nactual:   ${actual}`;
+    assert actual == norm, `\ninput:    ${input}\nexpected: ${norm}\nactual:   ${actual}`;
 }
 
 test "oracle: {a: 1}" {
-    assert_tree(&"{\"a\": 1}", &"(json (value (obj { (pair \"a\" : (value 1)) })))");
+    assert_tree("{\"a\": 1}", "(json (value (obj { (pair \"a\" : (value 1)) })))");
 }
 
 test "oracle: [1, 2, 3]" {
-    assert_tree(&"[1, 2, 3]", &"(json (value (arr [ (value 1) , (value 2) , (value 3) ])))");
+    assert_tree("[1, 2, 3]", "(json (value (arr [ (value 1) , (value 2) , (value 3) ])))");
 }
 
 test "oracle: {x: {y: [true, false, null]}}" {
     assert_tree(
-        &"{\"x\": {\"y\": [true, false, null]}}",
-        &"(json (value (obj { (pair \"x\" : (value (obj { (pair \"y\" : (value (arr [ (value true) , (value false) , (value null) ]))) }))) })))",
+        "{\"x\": {\"y\": [true, false, null]}}",
+        "(json (value (obj { (pair \"x\" : (value (obj { (pair \"y\" : (value (arr [ (value true) , (value false) , (value null) ]))) }))) })))",
     );
 }
 
 test "oracle: hello" {
-    assert_tree(&"\"hello\"", &"(json (value \"hello\"))");
+    assert_tree("\"hello\"", "(json (value \"hello\"))");
 }
 
 test "oracle: 42" {
-    assert_tree(&"42", &"(json (value 42))");
+    assert_tree("42", "(json (value 42))");
 }
 
 test "oracle: -3.14" {
-    assert_tree(&"-3.14", &"(json (value -3.14))");
+    assert_tree("-3.14", "(json (value -3.14))");
 }
 
 test "oracle: {emptyArr: [], emptyObj: {}}" {
     assert_tree(
-        &"{\"emptyArr\": [], \"emptyObj\": {}}",
-        &"(json (value (obj { (pair \"emptyArr\" : (value (arr [ ]))) , (pair \"emptyObj\" : (value (obj { }))) })))",
+        "{\"emptyArr\": [], \"emptyObj\": {}}",
+        "(json (value (obj { (pair \"emptyArr\" : (value (arr [ ]))) , (pair \"emptyObj\" : (value (obj { }))) })))",
     );
 }
 
 test "oracle: [{k: v}]" {
-    assert_tree(&"[{\"k\": \"v\"}]", &"(json (value (arr [ (value (obj { (pair \"k\" : (value \"v\")) })) ])))");
+    assert_tree("[{\"k\": \"v\"}]", "(json (value (arr [ (value (obj { (pair \"k\" : (value \"v\")) })) ])))");
 }
 
 test "oracle: true" {
-    assert_tree(&"true", &"(json (value true))");
+    assert_tree("true", "(json (value true))");
 }
 
 test "oracle: null" {
-    assert_tree(&"null", &"(json (value null))");
+    assert_tree("null", "(json (value null))");
 }
 
 test "oracle: {nested: [1, [2, [3]]]}" {
     assert_tree(
-        &"{\"nested\": [1, [2, [3]]]}",
-        &"(json (value (obj { (pair \"nested\" : (value (arr [ (value 1) , (value (arr [ (value 2) , (value (arr [ (value 3) ])) ])) ]))) })))",
+        "{\"nested\": [1, [2, [3]]]}",
+        "(json (value (obj { (pair \"nested\" : (value (arr [ (value 1) , (value (arr [ (value 2) , (value (arr [ (value 3) ])) ])) ]))) })))",
     );
 }

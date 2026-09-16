@@ -10,25 +10,25 @@ use g from "./grammars/ll_nullable_rule_head.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nullable_rule_head" },
     };
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
 }
 
 // Control: the nullable rule matches something, so `FIRST` never has to see
 // past it.
 test "a present modifier reaches the fn" {
-    assert_parses(&"pub fn a;");
+    assert_parses("pub fn a;");
 }
 
 test "an absent modifier still reaches the fn" {
-    assert_parses(&"fn a;");
+    assert_parses("fn a;");
 }
 
 test "the sibling alternative is unaffected" {
-    assert_parses(&"type T;");
+    assert_parses("type T;");
 }
 
 test "both members in one file" {
-    assert_parses(&"type T; fn a; pub fn b;");
+    assert_parses("type T; fn a; pub fn b;");
 }

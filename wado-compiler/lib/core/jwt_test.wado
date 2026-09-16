@@ -70,12 +70,12 @@ test "a round trip carries the payload back" {
 
 test "a malformed token is rejected before any hashing" {
     let key = rfc7515_key();
-    assert verify(&"", &key) matches { Err(JwtError::Malformed) };
-    assert verify(&"a.b", &key) matches { Err(JwtError::Malformed) };
-    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
+    assert verify("", &key) matches { Err(JwtError::Malformed) };
+    assert verify("a.b", &key) matches { Err(JwtError::Malformed) };
+    assert verify(`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}.x`, &key) matches { Err(JwtError::Malformed) };
     // A padded signature is a second spelling of the same bytes, so accepting
     // it would let one token be rewritten into another that verifies.
-    assert verify(&`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
+    assert verify(`${RFC7515_HEADER}.${RFC7515_PAYLOAD}.${RFC7515_SIGNATURE}=`, &key) matches { Err(JwtError::Malformed) };
 }
 
 test "the header's alg must be the key's" {
@@ -174,7 +174,7 @@ test "an out-of-tree key type plugs into the same entry points" {
     let key = StubKey { accept: accept };
     let token = `${header}.${payload}.__8`;
     assert verify(&token, &key) matches { Ok(_) };
-    assert verify(&`${header}.${payload}.__4`, &key) matches { Err(JwtError::InvalidSignature) };
+    assert verify(`${header}.${payload}.__4`, &key) matches { Err(JwtError::InvalidSignature) };
 }
 
 // A key whose `alg` is whatever it is named, so `sign` is exercised over the

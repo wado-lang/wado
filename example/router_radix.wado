@@ -56,7 +56,7 @@ impl RadixRouter {
         return r;
     }
 
-    pub fn match_path(&self, method: Method, path: &String) -> MatchResult {
+    pub fn match_path<S: AsStrSlice>(&self, method: Method, path: S) -> MatchResult {
         let mut params = TreeMap::<String, String>::new();
         let plen = path.len();
         // Empty pattern ("/") registers a handler at the root with no edge,
@@ -85,11 +85,11 @@ impl RadixRouter {
             let seg = &segs[i];
             match seg {
                 Literal(lit) => {
-                    buffer.push_str(&"/");
+                    buffer.push_str("/");
                     buffer.push_str(lit);
                 },
                 Param(name) => {
-                    buffer.push_str(&"/");
+                    buffer.push_str("/");
                     cur = self.insert_literal(cur, &buffer);
                     buffer = String::with_capacity(32);
                     if self.nodes[cur].param_target < 0 {
@@ -101,7 +101,7 @@ impl RadixRouter {
                     cur = self.nodes[cur].param_target;
                 },
                 Wildcard(name) => {
-                    buffer.push_str(&"/");
+                    buffer.push_str("/");
                     cur = self.insert_literal(cur, &buffer);
                     self.nodes[cur].wildcard_handler = handler_id;
                     self.nodes[cur].wildcard_method = method;
@@ -173,10 +173,10 @@ impl RadixRouter {
         }
     }
 
-    fn walk(
+    fn walk<S: AsStrSlice>(
         &self,
         node_id: i32,
-        path: &String,
+        path: S,
         pos: i32,
         plen: i32,
         method: Method,
@@ -271,11 +271,11 @@ test "radix: static routes" {
         RoutePattern { method: Method::Get, path: "/api/v1/users/me", handler_id: 3 },
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
-    assert r.match_path(Method::Get, &"/health").handler_id == 1;
-    assert r.match_path(Method::Get, &"/api/v1/users/list").handler_id == 2;
-    assert r.match_path(Method::Get, &"/api/v1/users/me").handler_id == 3;
-    assert r.match_path(Method::Get, &"/missing").handler_id == -1;
-    assert r.match_path(Method::Get, &"/api/v1/users").handler_id == -1;
+    assert r.match_path(Method::Get, "/health").handler_id == 1;
+    assert r.match_path(Method::Get, "/api/v1/users/list").handler_id == 2;
+    assert r.match_path(Method::Get, "/api/v1/users/me").handler_id == 3;
+    assert r.match_path(Method::Get, "/missing").handler_id == -1;
+    assert r.match_path(Method::Get, "/api/v1/users").handler_id == -1;
 }
 
 test "radix: param + literal sibling" {
@@ -286,13 +286,13 @@ test "radix: param + literal sibling" {
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
 
-    assert r.match_path(Method::Get, &"/users/list").handler_id == 1;
+    assert r.match_path(Method::Get, "/users/list").handler_id == 1;
 
-    let m = r.match_path(Method::Get, &"/users/42");
+    let m = r.match_path(Method::Get, "/users/42");
     assert m.handler_id == 2;
     assert m.params["id"] == "42";
 
-    let m2 = r.match_path(Method::Get, &"/users/42/profile");
+    let m2 = r.match_path(Method::Get, "/users/42/profile");
     assert m2.handler_id == 3;
     assert m2.params["id"] == "42";
 }
@@ -302,7 +302,7 @@ test "radix: wildcard catch-all" {
         RoutePattern { method: Method::Get, path: "/static/*path", handler_id: 9 },
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
-    let m = r.match_path(Method::Get, &"/static/css/main.css");
+    let m = r.match_path(Method::Get, "/static/css/main.css");
     assert m.handler_id == 9;
     assert m.params["path"] == "css/main.css";
 }
@@ -312,7 +312,7 @@ test "radix: deep param chain" {
         RoutePattern { method: Method::Get, path: "/api/v1/users/:uid/posts/:pid/comments/:cid", handler_id: 90 },
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
-    let m = r.match_path(Method::Get, &"/api/v1/users/12/posts/34/comments/56");
+    let m = r.match_path(Method::Get, "/api/v1/users/12/posts/34/comments/56");
     assert m.handler_id == 90;
     assert m.params["uid"] == "12";
     assert m.params["pid"] == "34";
@@ -324,8 +324,8 @@ test "radix: method mismatch is a miss" {
         RoutePattern { method: Method::Post, path: "/login", handler_id: 1 },
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
-    assert r.match_path(Method::Get, &"/login").handler_id == -1;
-    assert r.match_path(Method::Post, &"/login").handler_id == 1;
+    assert r.match_path(Method::Get, "/login").handler_id == -1;
+    assert r.match_path(Method::Post, "/login").handler_id == 1;
 }
 
 test "radix: root pattern matches /" {
@@ -334,7 +334,7 @@ test "radix: root pattern matches /" {
         RoutePattern { method: Method::Get, path: "/foo", handler_id: 8 },
     ] as List<RoutePattern>;
     let r = RadixRouter::build(&routes);
-    assert r.match_path(Method::Get, &"/").handler_id == 7;
-    assert r.match_path(Method::Get, &"/foo").handler_id == 8;
-    assert r.match_path(Method::Get, &"/bar").handler_id == -1;
+    assert r.match_path(Method::Get, "/").handler_id == 7;
+    assert r.match_path(Method::Get, "/foo").handler_id == 8;
+    assert r.match_path(Method::Get, "/bar").handler_id == -1;
 }

@@ -10,7 +10,7 @@ use json from "./grammars/JSON.g4"
 
 test "diagnostic carries a 1-based line and 0-based column" {
     // `{"a": }` — after the colon a value is required but `}` is at column 6.
-    let r = json::parse(&"{\"a\": }");
+    let r = json::parse("{\"a\": }");
     assert !r.ok(), "expected a diagnostic";
     let d = &r.diagnostics[0];
     assert d.line == 1, `line ${d.line}`;
@@ -18,7 +18,7 @@ test "diagnostic carries a 1-based line and 0-based column" {
 }
 
 test "diagnostic reports the active rule chain" {
-    let r = json::parse(&"{\"a\": }");
+    let r = json::parse("{\"a\": }");
     let d = &r.diagnostics[0];
     assert !d.rule_stack.is_empty(), "rule_stack empty";
     // Innermost rule first, start rule last.
@@ -27,26 +27,26 @@ test "diagnostic reports the active rule chain" {
 }
 
 test "diagnostic Display includes position and message" {
-    let r = json::parse(&"{\"a\": }");
+    let r = json::parse("{\"a\": }");
     let text = `${r.diagnostics[0]}`;
     assert text.contains("at 1:6:"), text;
 }
 
 test "line and column advance across newlines" {
-    let r = json::parse(&"{\n  \"a\":\n}");
+    let r = json::parse("{\n  \"a\":\n}");
     let d = &r.diagnostics[0];
     assert d.line == 3, `line ${d.line}`;
     assert d.col == 0, `col ${d.col}`;
 }
 
 test "a valid parse reports no diagnostics" {
-    let r = json::parse(&"{\"a\": 1}");
+    let r = json::parse("{\"a\": 1}");
     assert r.ok(), "unexpected diagnostics";
 }
 
 test "no viable alternative carries the NoViableAlternative code" {
     // `}` starts no `value` alternative, so the dispatch falls through to the
     // no-viable fallback.
-    let r = json::parse(&"{\"a\": }");
+    let r = json::parse("{\"a\": }");
     assert r.diagnostics[0].code matches { NoViableAlternative }, `code ${r.diagnostics[0].code.name()}`;
 }

@@ -20,7 +20,7 @@ use bw from "./Between.g4"
 
 /// Evaluate a boolean/range expression. A syntax error, or a runtime error
 /// like an out-of-range literal, surfaces as `Err` rather than a trap.
-pub fn eval(input: &String) -> Result<i64, String> {
+pub fn eval<S: AsStrSlice>(input: S) -> Result<i64, String> {
     let result = bw::parse(input);
     if !result.ok() {
         let d = &result.diagnostics[0];

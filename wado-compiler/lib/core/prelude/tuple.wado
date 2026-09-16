@@ -15,14 +15,14 @@ fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
     // rather than a brace it immediately closes. `len()` is a compile-time
     // constant, so the arm not taken folds away.
     if t.len() == 0 {
-        f.write_str(&"[]");
+        f.write_str("[]");
         return;
     }
     f.open_brace("[");
     for let v of *t {
         f.write_newline_indent();
         v.inspect(f);
-        f.write_str(&",");
+        f.write_str(",");
     }
     f.close_brace("]");
 }
@@ -35,16 +35,16 @@ impl<..T: Inspect> Inspect for [..T] {
             inspect_tuple_alternate(self, f);
             return;
         }
-        f.write_str(&"[");
+        f.write_str("[");
         let mut first = true;
         for let v of *self {
             if !first {
-                f.write_str(&", ");
+                f.write_str(", ");
             }
             first = false;
             v.inspect(f);
         }
-        f.write_str(&"]");
+        f.write_str("]");
     }
 }
 
@@ -77,14 +77,14 @@ impl<..T: Ord> Ord for [..T] {
 /// per indented line.
 fn display_tuple_alternate<..T: Display>(t: &[..T], f: &mut Formatter) {
     if t.len() == 0 {
-        f.write_str(&"[]");
+        f.write_str("[]");
         return;
     }
     f.open_brace("[");
     for let v of *t {
         f.write_newline_indent();
         v.fmt(f);
-        f.write_str(&",");
+        f.write_str(",");
     }
     f.close_brace("]");
 }
@@ -96,15 +96,15 @@ impl<..T: Display> Display for [..T] {
             display_tuple_alternate(self, f);
             return;
         }
-        f.write_str(&"[");
+        f.write_str("[");
         let mut first = true;
         for let v of *self {
             if !first {
-                f.write_str(&", ");
+                f.write_str(", ");
             }
             first = false;
             v.fmt(f);
         }
-        f.write_str(&"]");
+        f.write_str("]");
     }
 }

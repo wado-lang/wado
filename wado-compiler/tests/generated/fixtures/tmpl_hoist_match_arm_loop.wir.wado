@@ -47,7 +47,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(19)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(19)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
@@ -73,43 +73,42 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:tmpl_hoist_match_arm_loop.wado::MODE: i32 = 2;
 global global:tmpl_hoist_match_arm_loop.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(116, 111, 116, 97, 108, 61);
 global global:tmpl_hoist_match_arm_loop.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(109, 61);
-global global:core:prelude/primitive.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
     let mode: i32;
     let total: i32;
     let i: i32;
     let $local_6: ref "core:prelude/string.wado//String";
-    let new_used_16: i32;
-    let start_17: i32;
+    let new_used_19: i32;
+    let start_20: i32;
     let handle: i32;
-    let new_used_38: i32;
-    let start_39: i32;
+    let new_used_44: i32;
+    let start_45: i32;
     let packed: i64;
-    let rx_47: i32;
-    let tx_48: i32;
-    let $tmpl_buf_55: ref "core:prelude/string.wado//String";
+    let rx_53: i32;
+    let tx_54: i32;
+    let $tmpl_buf_61: ref "core:prelude/string.wado//String";
     mode = global:tmpl_hoist_match_arm_loop.wado::MODE;
     total = 0;
     if mode == 1 {
         total = -1;
     } else if mode == 2 {
         i = 0;
-        $tmpl_buf_55 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
+        $tmpl_buf_61 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
         b2: block {
             l3: loop {
                 break_if b2 i >= 4;
-                $tmpl_buf_55.used = 0;
-                new_used_16 = $tmpl_buf_55.used + 2;
-                if @unlikely(new_used_16 > builtin::array_len($tmpl_buf_55.repr)) {
+                $tmpl_buf_61.used = 0;
+                new_used_19 = $tmpl_buf_61.used + 2;
+                if @unlikely(new_used_19 > builtin::array_len($tmpl_buf_61.repr)) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_55, new_used_16);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"($tmpl_buf_61, new_used_19);
                 }
-                start_17 = $tmpl_buf_55.used;
-                $tmpl_buf_55.used = new_used_16;
-                builtin::array_copy<u8>($tmpl_buf_55.repr, start_17, global:tmpl_hoist_match_arm_loop.wado::$const_obj_2, 0, 2);
-                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_55);
-                total = total + $tmpl_buf_55.used;
+                start_20 = $tmpl_buf_61.used;
+                $tmpl_buf_61.used = new_used_19;
+                builtin::array_copy<u8>($tmpl_buf_61.repr, start_20, global:tmpl_hoist_match_arm_loop.wado::$const_obj_2, 0, 2);
+                "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(i, $tmpl_buf_61);
+                total = total + $tmpl_buf_61.used;
                 i = i + 1;
                 continue l3;
             };
@@ -118,19 +117,19 @@ fn "tmpl_hoist_match_arm_loop.wado/run"() with Stdout {
         total = -2;
     }
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
-    new_used_38 = 0 + 6;
-    if @unlikely(new_used_38 > builtin::array_len($local_6.repr)) {
+    new_used_44 = 0 + 6;
+    if @unlikely(new_used_44 > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_38);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_44);
     }
-    start_39 = $local_6.used;
-    $local_6.used = new_used_38;
-    builtin::array_copy<u8>($local_6.repr, start_39, global:tmpl_hoist_match_arm_loop.wado::$const_obj_1, 0, 6);
+    start_45 = $local_6.used;
+    $local_6.used = new_used_44;
+    builtin::array_copy<u8>($local_6.repr, start_45, global:tmpl_hoist_match_arm_loop.wado::$const_obj_1, 0, 6);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(total, $local_6);
-    rx_47 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_48 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "tmpl_hoist_match_arm_loop.wado/$cm_binding__Stdout_write_via_stream"(rx_47);
-    "core:rt/write_string_to_stream"(tx_48, $local_6);
+    rx_53 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_54 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "tmpl_hoist_match_arm_loop.wado/$cm_binding__Stdout_write_via_stream"(rx_53);
+    "core:rt/write_string_to_stream"(tx_54, $local_6);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -317,7 +316,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_5, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -334,26 +333,26 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     if is_negative {
-        new_used_21 = self.used + 1;
-        if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_22 = self.used;
-        self.used = new_used_21;
-        builtin::array_set_u8(self.repr, start_22, 45);
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_56 = self.used + digit_count, if @unlikely(new_used_56 > builtin::array_len(self.repr)) {
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
-    }, start_57 = self.used, self.used = new_used_56, start_57;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 export fn "tmpl_hoist_match_arm_loop.wado/$cm_export__run" as "run"

@@ -11,29 +11,29 @@ use g from "./grammars/decided_group_reserves_tail.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_decided_group_reserves_tail" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 // The hit case: the loop's alternative is the tail, so the last `a z` is the
 // tail's and only the reserve stops the loop taking it.
 test "a decided group body leaves the tail what it needs" {
-    assert_tree(&"a z a z", &"(start (body a z a z))");
+    assert_tree("a z a z", "(start (body a z a z))");
 }
 
 test "the group's other alternative loses its tail the same way" {
-    assert_tree(&"b y a z", &"(start (body b y a z))");
+    assert_tree("b y a z", "(start (body b y a z))");
 }
 
 // The rejection cases: the loop still runs while the tail is not the next thing
 // at stake, and takes nothing where the tail is all there is.
 test "the loop runs while the tail is still ahead" {
-    assert_tree(&"a z a z a z", &"(start (body a z a z a z))");
+    assert_tree("a z a z a z", "(start (body a z a z a z))");
 }
 
 test "the loop takes nothing where the tail is all there is" {
-    assert_tree(&"a z", &"(start (body a z))");
+    assert_tree("a z", "(start (body a z))");
 }

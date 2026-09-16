@@ -140,37 +140,37 @@ fn cst_to_string_tree_impl(
         out.push_str(&name);
         return;
     }
-    out.push_str(&"(");
+    out.push_str("(");
     out.push_str(&name);
     let mut c = i + 1;
     while c < s.next[i] {
         match s.tag[c] {
             Open => {
-                out.push_str(&" ");
+                out.push_str(" ");
                 cst_to_string_tree_impl(out, s, c, toks, rule_names, token_names);
                 c = s.next[c];
             },
             Tok => {
                 if !toks.is_empty_text(s.token_index(c)) {
-                    out.push_str(&" ");
+                    out.push_str(" ");
                     toks.push_token_text_escaped(out, s.token_index(c));
                 }
                 c += 1;
             },
             Miss => {
-                out.push_str(&` <missing ${token_names[toks.kind_at(s.token_index(c))]}>`);
+                out.push_str(` <missing ${token_names[toks.kind_at(s.token_index(c))]}>`);
                 c += 1;
             },
             Skip => {
-                out.push_str(&" <skip ");
+                out.push_str(" <skip ");
                 toks.push_token_text_escaped(out, s.token_index(c));
-                out.push_str(&">");
+                out.push_str(">");
                 c += 1;
             },
             Close => c += 1,
         }
     }
-    out.push_str(&")");
+    out.push_str(")");
 }
 
 pub struct ParseResult {
@@ -375,13 +375,13 @@ impl TreeBuilder {
         let mut out = String::from("[");
         for let mut i = self.open.len() - 1; i >= 0; i -= 1 {
             if i < self.open.len() - 1 {
-                out.push_str(&", ");
+                out.push_str(", ");
             }
             let kind = self.a[self.open[i]];
             let name = if kind == K_ERROR as i32 { "<error>" } else { rule_names[kind] };
             out.push_str(&name);
         }
-        out.push_str(&"]");
+        out.push_str("]");
         return out;
     }
 
@@ -427,38 +427,38 @@ fn render_builder_node(
         }
         return i + 1;
     }
-    out.push_str(&"(");
+    out.push_str("(");
     out.push_str(&name);
     let mut c = i + 1;
     while c < tag.len() {
         match tag[c] {
             Open => {
-                out.push_str(&" ");
+                out.push_str(" ");
                 c = render_builder_node(out, tag, a, c, toks, rule_names, token_names);
             },
             Close => {
-                out.push_str(&")");
+                out.push_str(")");
                 return c + 1;
             },
             Tok => {
                 if !toks.is_empty_text(a[c]) {
-                    out.push_str(&" ");
+                    out.push_str(" ");
                     toks.push_token_text_escaped(out, a[c]);
                 }
                 c += 1;
             },
             Miss => {
-                out.push_str(&` <missing ${token_names[toks.kind_at(a[c])]}>`);
+                out.push_str(` <missing ${token_names[toks.kind_at(a[c])]}>`);
                 c += 1;
             },
             Skip => {
-                out.push_str(&" <skip ");
+                out.push_str(" <skip ");
                 toks.push_token_text_escaped(out, a[c]);
-                out.push_str(&">");
+                out.push_str(">");
                 c += 1;
             },
         }
     }
-    out.push_str(&")");
+    out.push_str(")");
     return c;
 }

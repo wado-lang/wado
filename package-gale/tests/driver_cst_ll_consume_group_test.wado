@@ -3,15 +3,15 @@ use g from "./grammars/ll_consume_group.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_consume_group" },
     };
-fn ok(input: &String) {
-    assert g::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn ok<S: AsStrSlice>(input: S) {
+    assert g::parse(input).ok(), `unexpected diagnostics for ${input}`;
 }
 test "consume-group: i x i" {
-    ok(&"i x i");
+    ok("i x i");
 }
 test "consume-group: i y i" {
-    ok(&"i y i");
+    ok("i y i");
 }
 test "consume-group: a" {
-    ok(&"a");
+    ok("a");
 }

@@ -628,13 +628,13 @@ test "the three iterators are named for what they yield" {
 test "iter_ref_mut writes through to in-place elements" {
     let mut names: List<String> = ["a", "b"];
     for let n of names.iter_ref_mut() {
-        n.push_str(&"!");
+        n.push_str("!");
     }
     assert names[0] == "a!";
     assert names[1] == "b!";
 
     for let n of &mut names {
-        n.push_str(&"?");
+        n.push_str("?");
     }
     assert names[0] == "a!?";
     assert names[1] == "b!?";

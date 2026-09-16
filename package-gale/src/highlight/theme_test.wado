@@ -17,16 +17,16 @@ test "set is last-write-wins" {
     let mut t = Theme::new();
     t.set("keyword", "#111");
     t.set("keyword", "#222");
-    assert t.color(&"keyword").unwrap() == "#222";
+    assert t.color("keyword").unwrap() == "#222";
     assert stylesheet(&t) == ".keyword { color: #222; }\n";
 }
 
 test "default_theme colors the common vocabulary and leaves unknowns unstyled" {
     let t = default_theme();
-    assert t.color(&"comment") matches { Some(_) };
-    assert t.color(&"constant.builtin") matches { Some(_) };
-    assert t.color(&"keyword") matches { Some(_) };
-    assert t.color(&"nonexistent") matches { None };
+    assert t.color("comment") matches { Some(_) };
+    assert t.color("constant.builtin") matches { Some(_) };
+    assert t.color("keyword") matches { Some(_) };
+    assert t.color("nonexistent") matches { None };
 }
 
 test "an empty theme yields an empty stylesheet" {

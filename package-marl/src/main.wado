@@ -74,7 +74,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 
 /// Recursively collects `*.md` files under `dir`, skipping `EXCLUDED_DIRS`.
 /// `dir` is the path from the preopened root, empty at the root itself.
-fn collect_md_files(dir: &String) -> Result<List<String>, fs::FsError> with Preopens {
+fn collect_md_files<S: AsStrSlice>(dir: S) -> Result<List<String>, fs::FsError> with Preopens {
     let mut out: List<String> = [];
     for let entry of fs::read_dir(dir)? {
         if is_excluded_dir(&entry.name) {
@@ -91,18 +91,18 @@ fn collect_md_files(dir: &String) -> Result<List<String>, fs::FsError> with Preo
     return Result::Ok(out);
 }
 
-fn is_excluded_dir(name: &String) -> bool {
+fn is_excluded_dir<S: AsStrSlice>(name: S) -> bool {
     for let excluded of EXCLUDED_DIRS {
-        if *name == excluded {
+        if name.eq_str(excluded) {
             return true;
         }
     }
     return false;
 }
 
-fn join_path(prefix: &String, name: &String) -> String {
+fn join_path<S: AsStrSlice, S1: AsStrSlice>(prefix: S, name: S1) -> String {
     if prefix.is_empty() {
-        return *name;
+        return name.to_string();
     }
     return `${prefix}/${name}`;
 }

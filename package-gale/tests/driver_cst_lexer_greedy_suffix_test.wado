@@ -3,18 +3,18 @@ use g from "./grammars/lexer_greedy_suffix.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_greedy_suffix" },
     };
-fn ok(input: &String) {
-    assert g::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn ok<S: AsStrSlice>(input: S) {
+    assert g::parse(input).ok(), `unexpected diagnostics for ${input}`;
 }
 test "greedy-suffix: emoji span" {
-    ok(&"a😳😡😝🤓c");
+    ok("a😳😡😝🤓c");
 }
 test "greedy-suffix: axc" {
-    ok(&"axc");
+    ok("axc");
 }
 test "greedy-suffix: repeated" {
-    ok(&"axcxcxc");
+    ok("axcxcxc");
 }
 test "greedy-suffix: two spans" {
-    ok(&"axc azc");
+    ok("axc azc");
 }

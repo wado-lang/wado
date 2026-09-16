@@ -1,0 +1,16 @@
+// A literal pattern was never checked against the scrutinee, so the mismatch
+// reached codegen: a string pattern on an `i32` panicked in WIR build, and one
+// on a `StrSlice` emitted a module the validator rejected.
+
+test "a string pattern needs a String scrutinee" {
+    let owner = "---";
+    let view = owner.as_str_slice();
+    let k = match view {
+        "---" => 1,
+        _ => 0,
+    };
+    assert k == 1;
+}
+
+__DATA__
+{"compile_error": "pattern mismatch: expected 'String', found 'StrSlice'"}

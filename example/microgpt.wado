@@ -1,0 +1,983 @@
+//! microgpt — train a GPT and sample from it, in pure Wado.
+//!
+//! A port of Andrej Karpathy's dependency-free Python microgpt.
+//! Copyright (c) Andrej Karpathy, MIT License.
+//! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
+//!
+//!     wado run example/microgpt.wado [num_steps]
+//!
+//! The default 1000 steps take a few minutes; pass a smaller count to shorten
+//! the run. Training reads `input.txt` from the working directory, one document
+//! per line. Without it, the names in this file's `__DATA__` section are used.
+
+use { args, print, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { TreeSet } from "core:collections";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
+
+global SEED: u64 = 42;
+
+// Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
+// Python seeds Mersenne Twister, so the two draw different numbers.
+struct Rng {
+    state: u64,
+}
+
+impl Rng {
+    fn new(seed: u64) -> Rng {
+        return Rng { state: seed };
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state + 0x9E3779B97F4A7C15;
+        let mut z = self.state;
+        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
+        z = (z ^ z >> 27) * 0x94D049BB133111EB;
+        return z ^ z >> 31;
+    }
+
+    // 53 bits, the mantissa of an f64, scaled into [0, 1).
+    fn random(&mut self) -> f64 {
+        return (self.next_u64() >> 11) as f64 / 9007199254740992.0;
+    }
+
+    fn below(&mut self, n: i32) -> i32 {
+        assert n > 0;
+        return (self.next_u64() % n as u64) as i32;
+    }
+
+    fn gauss(&mut self, std: f64) -> f64 {
+        let mut u = self.random();
+        while u <= 0.0 {
+            u = self.random();
+        }
+        let v = self.random();
+        return std * f64::sqrt(-2.0 * f64::ln(u)) * f64::cos(2.0 * f64::PI * v);
+    }
+
+    fn shuffle(&mut self, items: &mut List<String>) {
+        for let mut i = items.len() - 1; i > 0; i -= 1 {
+            items.swap(i, self.below(i + 1));
+        }
+    }
+
+    // `random.choices(range(n), weights)`: one draw against the cumulative sum.
+    fn choice(&mut self, weights: &List<f64>) -> i32 {
+        let mut total = 0.0;
+        for let w of weights {
+            total += *w;
+        }
+        let mut r = self.random() * total;
+        for let [i, w] of weights.into_iter().enumerate() {
+            r -= *w;
+            if r < 0.0 {
+                return i;
+            }
+        }
+        return weights.len() - 1;
+    }
+}
+
+// Let there be Autograd to recursively apply the chain rule through a
+// computation graph. A Python reference to a `Value` is a `&mut Value` here,
+// and `Graph` is the heap those nodes live in.
+struct Value {
+    // Python's `visited` set keys on object identity; `id` is this node's slot
+    // in `Graph.nodes`, so the set is a dense `List<bool>` instead of a tree.
+    id: i32,
+    data: f64,
+    grad: f64,
+    children: List<&mut Value>,
+    local_grads: List<f64>,
+}
+
+struct Graph {
+    nodes: List<Value>,
+}
+
+impl Graph {
+    fn new() -> Graph {
+        return Graph { nodes: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.nodes.len();
+    }
+
+    fn value(&mut self, data: f64, children: List<&mut Value>, local_grads: List<f64>) -> &mut Value with stores[self] {
+        self.nodes.push(Value { id: self.nodes.len(), data, grad: 0.0, children, local_grads });
+        return &mut self.nodes[self.nodes.len() - 1];
+    }
+
+    fn leaf(&mut self, data: f64) -> &mut Value with stores[self] {
+        return self.value(data, [], []);
+    }
+
+    fn add(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+        return self.value(a.data + b.data, [a, b], [1.0, 1.0]);
+    }
+
+    fn mul(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+        return self.value(a.data * b.data, [a, b], [b.data, a.data]);
+    }
+
+    fn pow(&mut self, a: &mut Value, p: f64) -> &mut Value with stores[self, a] {
+        return self.value(f64::pow(a.data, p), [a], [p * f64::pow(a.data, p - 1.0)]);
+    }
+
+    fn log(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+        return self.value(f64::ln(a.data), [a], [1.0 / a.data]);
+    }
+
+    fn exp(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+        return self.value(f64::exp(a.data), [a], [f64::exp(a.data)]);
+    }
+
+    fn relu(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+        let slope = if a.data > 0.0 { 1.0 } else { 0.0 };
+        return self.value(f64::max(0.0, a.data), [a], [slope]);
+    }
+
+    // Python's operators wrap a bare number in a `Value` first, so the graph
+    // carries a leaf for every constant. These keep that shape.
+    fn add_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+        let n = self.leaf(c);
+        return self.add(a, n);
+    }
+
+    fn mul_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+        let n = self.leaf(c);
+        return self.mul(a, n);
+    }
+
+    fn sub_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+        return self.add_num(a, -c);
+    }
+
+    fn neg(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+        return self.mul_num(a, -1.0);
+    }
+
+    // `a / b` is `a * b**-1`, as `__truediv__` has it.
+    fn div(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+        let inv = self.pow(b, -1.0);
+        return self.mul(a, inv);
+    }
+
+    fn div_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+        return self.mul_num(a, f64::pow(c, -1.0));
+    }
+
+    // `sum(xs)` starts at 0, so Python's graph carries that leaf too.
+    fn sum(&mut self, xs: &List<&mut Value>) -> &mut Value with stores[self, xs] {
+        let mut acc = self.leaf(0.0);
+        for let mut i = 0; i < xs.len(); i += 1 {
+            acc = self.add(acc, xs[i]);
+        }
+        return acc;
+    }
+
+    // Everything above this length is one training step's graph, dropped whole.
+    fn rewind(&mut self, len: i32) {
+        self.nodes.truncate(len);
+    }
+}
+
+fn build_topo(v: &mut Value, visited: &mut List<bool>, topo: &mut List<&mut Value>) with stores[v] {
+    if visited[v.id] {
+        return;
+    }
+    visited[v.id] = true;
+    for let mut i = 0; i < v.children.len(); i += 1 {
+        build_topo(v.children[i], visited, topo);
+    }
+    topo.push(v);
+}
+
+fn backward(root: &mut Value, node_count: i32) with stores[root] {
+    let mut topo: List<&mut Value> = [];
+    let mut visited = List::<bool>::filled(node_count, false);
+    build_topo(root, &mut visited, &mut topo);
+
+    root.grad = 1.0;
+    for let mut i = topo.len() - 1; i >= 0; i -= 1 {
+        let v = topo[i];
+        for let mut j = 0; j < v.children.len(); j += 1 {
+            v.children[j].grad += v.local_grads[j] * v.grad;
+        }
+    }
+}
+
+// Let there be a Tokenizer to translate strings to sequences of integers
+// ("tokens") and back.
+struct Tokenizer {
+    uchars: List<char>,
+    bos: i32,
+    vocab_size: i32,
+}
+
+impl Tokenizer {
+    fn new(docs: &List<String>) -> Tokenizer {
+        let mut seen = TreeSet::<char>::new();
+        for let doc of docs {
+            for let c of doc.chars() {
+                seen.insert(c);
+            }
+        }
+        let mut uchars: List<char> = seen.iter_value().collect();
+        uchars.sort();
+        let bos = uchars.len();
+        return Tokenizer { uchars, bos, vocab_size: bos + 1 };
+    }
+
+    fn index(&self, c: char) -> i32 {
+        for let [i, u] of self.uchars.into_iter().enumerate() {
+            if u == c {
+                return i;
+            }
+        }
+        panic(`no token for ${c}`);
+    }
+
+    // Surround the document with the BOS token on both sides.
+    fn encode(&self, doc: &String) -> List<i32> {
+        let mut tokens: List<i32> = [self.bos];
+        for let c of doc.chars() {
+            tokens.push(self.index(c));
+        }
+        tokens.push(self.bos);
+        return tokens;
+    }
+}
+
+// Initialize the parameters, to store the knowledge of the model.
+global N_LAYER: i32 = 1;
+global N_EMBD: i32 = 16;
+global BLOCK_SIZE: i32 = 16;
+global N_HEAD: i32 = 4;
+global HEAD_DIM: i32 = N_EMBD / N_HEAD;
+
+fn matrix(g: &mut Graph, rng: &mut Rng, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> with stores[g] {
+    let mut rows: List<List<&mut Value>> = [];
+    for let _ of 0..<nout {
+        let mut row: List<&mut Value> = [];
+        for let _ of 0..<nin {
+            row.push(g.leaf(rng.gauss(std)));
+        }
+        rows.push(row);
+    }
+    return rows;
+}
+
+// Python keys these by string in one dict; the shapes are fixed, so name them.
+struct Layer {
+    attn_wq: List<List<&mut Value>>,
+    attn_wk: List<List<&mut Value>>,
+    attn_wv: List<List<&mut Value>>,
+    attn_wo: List<List<&mut Value>>,
+    mlp_fc1: List<List<&mut Value>>,
+    mlp_fc2: List<List<&mut Value>>,
+}
+
+struct StateDict {
+    wte: List<List<&mut Value>>,
+    wpe: List<List<&mut Value>>,
+    lm_head: List<List<&mut Value>>,
+    layers: List<Layer>,
+}
+
+impl StateDict {
+    fn new(g: &mut Graph, rng: &mut Rng, vocab_size: i32) -> StateDict with stores[g] {
+        let wte = matrix(g, rng, vocab_size, N_EMBD);
+        let wpe = matrix(g, rng, BLOCK_SIZE, N_EMBD);
+        let lm_head = matrix(g, rng, vocab_size, N_EMBD);
+        let mut layers: List<Layer> = [];
+        for let _ of 0..<N_LAYER {
+            layers.push(Layer {
+                attn_wq: matrix(g, rng, N_EMBD, N_EMBD),
+                attn_wk: matrix(g, rng, N_EMBD, N_EMBD),
+                attn_wv: matrix(g, rng, N_EMBD, N_EMBD),
+                attn_wo: matrix(g, rng, N_EMBD, N_EMBD),
+                mlp_fc1: matrix(g, rng, 4 * N_EMBD, N_EMBD),
+                mlp_fc2: matrix(g, rng, N_EMBD, 4 * N_EMBD),
+            });
+        }
+        return StateDict { wte, wpe, lm_head, layers };
+    }
+
+    // Flatten every matrix into a single list of parameters.
+    fn params(&self) -> List<&mut Value> with stores[self] {
+        let mut out: List<&mut Value> = [];
+        flatten_into(&mut out, &self.wte);
+        flatten_into(&mut out, &self.wpe);
+        flatten_into(&mut out, &self.lm_head);
+        for let mut i = 0; i < self.layers.len(); i += 1 {
+            let layer = &self.layers[i];
+            flatten_into(&mut out, &layer.attn_wq);
+            flatten_into(&mut out, &layer.attn_wk);
+            flatten_into(&mut out, &layer.attn_wv);
+            flatten_into(&mut out, &layer.attn_wo);
+            flatten_into(&mut out, &layer.mlp_fc1);
+            flatten_into(&mut out, &layer.mlp_fc2);
+        }
+        return out;
+    }
+}
+
+fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) with stores[m] {
+    for let mut r = 0; r < m.len(); r += 1 {
+        let row = &m[r];
+        for let mut c = 0; c < row.len(); c += 1 {
+            out.push(row[c]);
+        }
+    }
+}
+
+// Define the model architecture: a function mapping tokens and parameters to
+// logits over what comes next. Follow GPT-2, blessed among the GPTs, with minor
+// differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU.
+fn linear(g: &mut Graph, x: &List<&mut Value>, w: &List<List<&mut Value>>) -> List<&mut Value> with stores[g, x, w] {
+    let mut out: List<&mut Value> = [];
+    for let mut o = 0; o < w.len(); o += 1 {
+        let row = &w[o];
+        let terms: List<&mut Value> = (0..<row.len()).into_iter().map(|i| g.mul(row[i], x[i])).collect();
+        out.push(g.sum(&terms));
+    }
+    return out;
+}
+
+fn softmax(g: &mut Graph, logits: &List<&mut Value>) -> List<&mut Value> with stores[g, logits] {
+    let max_val = logits.into_iter().fold(f64::NEG_INFINITY, |acc, val| f64::max(acc, val.data));
+    let exps: List<&mut Value> = (0..<logits.len()).into_iter().map(|i| {
+        let shifted = g.sub_num(logits[i], max_val);
+        return g.exp(shifted);
+    }).collect();
+    let total = g.sum(&exps);
+    return (0..<exps.len()).into_iter().map(|i| g.div(exps[i], total)).collect();
+}
+
+fn rmsnorm(g: &mut Graph, x: &List<&mut Value>) -> List<&mut Value> with stores[g, x] {
+    let squares: List<&mut Value> = (0..<x.len()).into_iter().map(|i| g.mul(x[i], x[i])).collect();
+    let sum_sq = g.sum(&squares);
+    let ms = g.div_num(sum_sq, x.len() as f64);
+    let shifted = g.add_num(ms, 1e-5);
+    let scale = g.pow(shifted, -0.5);
+    return (0..<x.len()).into_iter().map(|i| g.mul(x[i], scale)).collect();
+}
+
+fn add_vec(g: &mut Graph, a: &List<&mut Value>, b: &List<&mut Value>) -> List<&mut Value> with stores[g, a, b] {
+    assert a.len() == b.len();
+    return (0..<a.len()).into_iter().map(|i| g.add(a[i], b[i])).collect();
+}
+
+fn gpt(
+    g: &mut Graph,
+    state: &StateDict,
+    token_id: i32,
+    pos_id: i32,
+    keys: &mut List<List<List<&mut Value>>>,
+    values: &mut List<List<List<&mut Value>>>,
+) -> List<&mut Value> with stores[g, state, keys, values] {
+    let tok_emb = &state.wte[token_id];
+    let pos_emb = &state.wpe[pos_id];
+    let mut x = add_vec(g, tok_emb, pos_emb);
+    // Not redundant: the backward pass reaches here via the residual connection.
+    x = rmsnorm(g, &x);
+
+    for let li of 0..<N_LAYER {
+        let layer = &state.layers[li];
+
+        // 1) Multi-head Attention block
+        let x_residual = x;
+        x = rmsnorm(g, &x);
+        let q = linear(g, &x, &layer.attn_wq);
+        let k = linear(g, &x, &layer.attn_wk);
+        let v = linear(g, &x, &layer.attn_wv);
+        keys[li].push(k);
+        values[li].push(v);
+
+        let mut x_attn: List<&mut Value> = [];
+        for let h of 0..<N_HEAD {
+            let hs = h * HEAD_DIM;
+            let layer_keys = &keys[li];
+            let layer_values = &values[li];
+
+            let mut attn_logits: List<&mut Value> = [];
+            for let mut t = 0; t < layer_keys.len(); t += 1 {
+                let kt = &layer_keys[t];
+                let terms: List<&mut Value> = (0..<HEAD_DIM).into_iter().map(|j| g.mul(q[hs + j], kt[hs + j])).collect();
+                let score = g.sum(&terms);
+                attn_logits.push(g.div_num(score, f64::pow(HEAD_DIM as f64, 0.5)));
+            }
+            let attn_weights = softmax(g, &attn_logits);
+
+            for let mut j = 0; j < HEAD_DIM; j += 1 {
+                let mut terms: List<&mut Value> = [];
+                for let mut t = 0; t < layer_values.len(); t += 1 {
+                    let vt = &layer_values[t];
+                    terms.push(g.mul(attn_weights[t], vt[hs + j]));
+                }
+                x_attn.push(g.sum(&terms));
+            }
+        }
+        x = linear(g, &x_attn, &layer.attn_wo);
+        x = add_vec(g, &x, &x_residual);
+
+        // 2) MLP block
+        let mlp_residual = x;
+        x = rmsnorm(g, &x);
+        x = linear(g, &x, &layer.mlp_fc1);
+        let activated: List<&mut Value> = x.into_iter().map(|xi| g.relu(xi)).collect();
+        x = linear(g, &activated, &layer.mlp_fc2);
+        x = add_vec(g, &x, &mlp_residual);
+    }
+
+    return linear(g, &x, &state.lm_head);
+}
+
+fn empty_cache() -> List<List<List<&mut Value>>> {
+    return (0..<N_LAYER).into_iter().map(|_| [] as List<List<&mut Value>>).collect();
+}
+
+// Forward the token sequence through the model, building up the computation
+// graph all the way to the loss.
+fn forward_loss(g: &mut Graph, state: &StateDict, tokens: &List<i32>) -> &mut Value with stores[g, state] {
+    let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
+    let mut keys = empty_cache();
+    let mut values = empty_cache();
+
+    let mut losses: List<&mut Value> = [];
+    for let pos_id of 0..<n {
+        let logits = gpt(g, state, tokens[pos_id], pos_id, &mut keys, &mut values);
+        let probs = softmax(g, &logits);
+        let log_prob = g.log(probs[tokens[pos_id + 1]]);
+        losses.push(g.neg(log_prob));
+    }
+    // The average loss over the document sequence. May yours be low.
+    let total = g.sum(&losses);
+    return g.mul_num(total, 1.0 / n as f64);
+}
+
+// Let there be Adam, the blessed optimizer and its buffers.
+global LEARNING_RATE: f64 = 0.01;
+global BETA1: f64 = 0.85;
+global BETA2: f64 = 0.99;
+global EPS_ADAM: f64 = 1e-8;
+
+struct Adam {
+    m: List<f64>,
+    v: List<f64>,
+}
+
+impl Adam {
+    fn new(n_params: i32) -> Adam {
+        return Adam {
+            m: List::filled(n_params, 0.0),
+            v: List::filled(n_params, 0.0),
+        };
+    }
+
+    fn step(&mut self, params: &mut List<&mut Value>, lr: f64, step: i32) {
+        let bias1 = 1.0 - f64::pow(BETA1, (step + 1) as f64);
+        let bias2 = 1.0 - f64::pow(BETA2, (step + 1) as f64);
+        for let mut i = 0; i < params.len(); i += 1 {
+            let p = params[i];
+            self.m[i] = BETA1 * self.m[i] + (1.0 - BETA1) * p.grad;
+            self.v[i] = BETA2 * self.v[i] + (1.0 - BETA2) * p.grad * p.grad;
+            let m_hat = self.m[i] / bias1;
+            let v_hat = self.v[i] / bias2;
+            p.data -= lr * m_hat / (f64::sqrt(v_hat) + EPS_ADAM);
+            p.grad = 0.0;
+        }
+    }
+}
+
+global NUM_STEPS: i32 = 1000;
+global TEMPERATURE: f64 = 0.5;
+global NUM_SAMPLES: i32 = 20;
+
+// Repeat in sequence.
+fn train(
+    g: &mut Graph,
+    state: &StateDict,
+    tok: &Tokenizer,
+    docs: &List<String>,
+    num_steps: i32,
+) with (Stdout, stores[g, state]) {
+    let n_params = g.len();
+    let mut params = state.params();
+    let mut adam = Adam::new(params.len());
+
+    for let step of 0..<num_steps {
+        // Take a single document and tokenize it.
+        let tokens = tok.encode(&docs[step % docs.len()]);
+        let loss = forward_loss(g, state, &tokens);
+
+        // Backward the loss, calculating the gradients of every parameter.
+        backward(loss, g.len());
+
+        let loss_value = loss.data;
+        // Adam update, with a linear learning rate decay.
+        adam.step(&mut params, LEARNING_RATE * (1.0 - step as f64 / num_steps as f64), step);
+        g.rewind(n_params);
+
+        print(`step ${step + 1:>4} / ${num_steps:>4} | loss ${loss_value:.4f}\r`);
+    }
+    println("");
+}
+
+// Inference: may the model babble back to us.
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String with stores[g, state] {
+    let n_params = g.len();
+    let mut keys = empty_cache();
+    let mut values = empty_cache();
+
+    let mut token_id = tok.bos;
+    let mut sample = String::with_capacity(BLOCK_SIZE);
+    for let pos_id of 0..<BLOCK_SIZE {
+        let logits = gpt(g, state, token_id, pos_id, &mut keys, &mut values);
+        let scaled: List<&mut Value> = logits.into_iter().map(|l| g.div_num(l, TEMPERATURE)).collect();
+        let probs = softmax(g, &scaled);
+        let weights: List<f64> = probs.into_iter().map(|p| p.data).collect();
+        token_id = rng.choice(&weights);
+        if token_id == tok.bos {
+            break;
+        }
+        sample.push(tok.uchars[token_id]);
+    }
+    g.rewind(n_params);
+    return sample;
+}
+
+fn parse_docs(text: &String) -> List<String> {
+    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
+}
+
+// Let there be a Dataset `docs`: a list of documents, here a list of names.
+fn load_docs() -> List<String> with (Stderr, Preopens) {
+    match fs::read_to_string(&"input.txt") {
+        Ok(contents) => {
+            let docs = parse_docs(&contents);
+            if !docs.is_empty() {
+                return docs;
+            }
+            eprintln("microgpt: input.txt holds no documents; falling back to the built-in names");
+        },
+        Err(e) => {
+            eprintln(`microgpt: ${e}; falling back to the built-in names`);
+        },
+    }
+    let builtin = #data;
+    let docs = parse_docs(&builtin);
+    assert !docs.is_empty();
+    return docs;
+}
+
+fn requested_steps() -> i32 with (Stderr, Environment) {
+    let arguments = args();
+    if arguments.is_empty() {
+        return NUM_STEPS;
+    }
+    match i32::from_str(&arguments[0]) {
+        Ok(n) && n > 0 => {
+            return n;
+        },
+        _ => {
+            eprintln(`microgpt: ignoring invalid step count: ${arguments[0]}`);
+            return NUM_STEPS;
+        },
+    }
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let num_steps = requested_steps();
+    let mut rng = Rng::new(SEED);
+
+    let mut docs = load_docs();
+    rng.shuffle(&mut docs);
+    println(`num docs: ${docs.len()}`);
+
+    let tok = Tokenizer::new(&docs);
+    println(`vocab size: ${tok.vocab_size}`);
+
+    let mut g = Graph::new();
+    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+    println(`num params: ${g.len()}`);
+
+    train(&mut g, &state, &tok, &docs, num_steps);
+
+    println("--- inference (new, hallucinated names) ---");
+    for let i of 0..<NUM_SAMPLES {
+        let sample = generate(&mut g, &state, &tok, &mut rng);
+        println(`sample ${i + 1:>2}: ${sample}`);
+    }
+}
+
+test "autograd matches the hand-computed gradient" {
+    let mut g = Graph::new();
+    let x = g.leaf(3.0);
+    let y = g.leaf(4.0);
+    // f = x * y + x**2  =>  df/dx = y + 2x = 10, df/dy = x = 3
+    let xy = g.mul(x, y);
+    let x2 = g.pow(x, 2.0);
+    let f = g.add(xy, x2);
+    backward(f, g.len());
+
+    assert f.data == 21.0;
+    assert x.grad == 10.0;
+    assert y.grad == 3.0;
+}
+
+test "a shared node is visited once" {
+    let mut g = Graph::new();
+    let x = g.leaf(3.0);
+    // f = x * x  =>  df/dx = 2x = 6
+    let f = g.mul(x, x);
+    backward(f, g.len());
+    assert f.data == 9.0;
+    assert x.grad == 6.0;
+}
+
+test "relu, exp, and log carry their local gradients" {
+    let mut g = Graph::new();
+    let neg = g.leaf(-2.0);
+    let r = g.relu(neg);
+    backward(r, g.len());
+    assert r.data == 0.0;
+    assert neg.grad == 0.0;
+
+    let a = g.leaf(2.0);
+    let e = g.exp(a);
+    let l = g.log(e);
+    backward(l, g.len());
+    assert f64::abs(l.data - 2.0) < 1e-12;
+    assert f64::abs(a.grad - 1.0) < 1e-12;
+}
+
+test "softmax is a distribution and rmsnorm has unit mean square" {
+    let mut g = Graph::new();
+    let mut logits: List<&mut Value> = [];
+    for let v of 0..<5 {
+        logits.push(g.leaf(v as f64));
+    }
+
+    let probs = softmax(&mut g, &logits);
+    let mut total = 0.0;
+    for let mut i = 0; i < probs.len(); i += 1 {
+        total += probs[i].data;
+    }
+    assert f64::abs(total - 1.0) < 1e-12;
+
+    let normed = rmsnorm(&mut g, &logits);
+    let mut sum_sq = 0.0;
+    for let mut i = 0; i < normed.len(); i += 1 {
+        sum_sq += normed[i].data * normed[i].data;
+    }
+    assert f64::abs(sum_sq / normed.len() as f64 - 1.0) < 1e-4;
+}
+
+test "the tokenizer round-trips a document" {
+    let docs: List<String> = ["abc", "cab"];
+    let tok = Tokenizer::new(&docs);
+    assert tok.vocab_size == 4;
+    assert tok.bos == 3;
+
+    let tokens = tok.encode(&"cab");
+    assert tokens == [3, 2, 0, 1, 3] as List<i32>;
+
+    let mut round_trip = String::with_capacity(3);
+    for let mut i = 1; i < tokens.len() - 1; i += 1 {
+        round_trip.push(tok.uchars[tokens[i]]);
+    }
+    assert round_trip == "cab";
+}
+
+test "the graph rewinds to the parameters between steps" {
+    let mut g = Graph::new();
+    let p = g.leaf(1.0);
+    let n_params = g.len();
+    let doubled = g.mul_num(p, 2.0);
+    backward(doubled, g.len());
+    assert p.grad == 2.0;
+
+    g.rewind(n_params);
+    assert g.len() == n_params;
+    assert p.data == 1.0;
+}
+
+#[timeout_ms(30000)]
+test "training drives the loss down" {
+    let docs: List<String> = ["ava", "eva", "ivy", "mia"];
+    let tok = Tokenizer::new(&docs);
+    let mut rng = Rng::new(SEED);
+    let mut g = Graph::new();
+    let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
+
+    let n_params = g.len();
+    let tokens = tok.encode(&docs[0]);
+    let start = forward_loss(&mut g, &state, &tokens).data;
+    g.rewind(n_params);
+
+    train(&mut g, &state, &tok, &docs, 20);
+
+    let end = forward_loss(&mut g, &state, &tokens).data;
+    assert end < start;
+}
+
+__DATA__
+emma
+mary
+ada
+madeleine
+katelyn
+karla
+jayde
+harleigh
+paityn
+rosalina
+rita
+margaux
+mayra
+klara
+janiah
+coralie
+blythe
+joana
+minerva
+jalani
+isra
+zariya
+rosanna
+loxley
+emmanuelle
+renae
+eveline
+yazmine
+corinna
+makyla
+marilynn
+malea
+ivyanna
+audri
+javeah
+koda
+muntaha
+xareni
+angelita
+carlin
+dempsey
+archer
+selin
+meral
+jezebel
+farryn
+zyriah
+leasia
+arika
+lemon
+aziya
+maanvi
+alexys
+korri
+amana
+jocelin
+shanzay
+dayonna
+miana
+anel
+kalahni
+retaj
+ariarose
+jaylianis
+paighton
+alene
+gwynn
+malala
+tracie
+baily
+greysen
+liylah
+saydie
+alyrica
+davionna
+kahlea
+maleeka
+rosamaria
+adessa
+breella
+grettell
+kelaiah
+milayna
+shreeya
+ahsha
+bethsaida
+enma
+jocilyn
+lissette
+niveah
+stellaluna
+afiyah
+bessy
+edelweiss
+ima
+kayelee
+mang
+nylia
+siennah
+zulma
+aneri
+brielyn
+dyna
+henya
+kaegan
+lakoda
+maziyah
+pera
+shambhavi
+xariyah
+ahmi
+ardis
+breylin
+daly
+elzie
+harmonei
+jayia
+karmon
+kymberlynn
+maiana
+myesha
+phinley
+salmah
+syenna
+xymena
+adeeva
+ameriie
+aset
+brandii
+connolly
+edin
+ffion
+iliyana
+jeselle
+kashia
+kjerstin
+life
+malk
+milaina
+novaleah
+rhettlee
+shamirah
+tani
+xaylah
+ziasia
+kayden
+kyrie
+joaquin
+alonzo
+quinton
+jamie
+elisha
+justus
+yaakov
+lazarus
+steele
+elyas
+shaurya
+renzo
+lex
+mahdi
+rashawn
+arin
+gabe
+javi
+rowyn
+musab
+kaydon
+wynston
+divine
+zein
+shlome
+mansa
+dream
+koleson
+sekou
+avyukt
+ehan
+delton
+arnulfo
+broc
+bray
+antwone
+rael
+kaesen
+beckem
+pasquale
+frederik
+treyden
+jeancarlo
+webster
+itay
+teagen
+firas
+pike
+azahel
+jeriko
+sammie
+bralyn
+jandriel
+raeden
+alyaan
+esmond
+khizar
+sahid
+amirr
+ezri
+kelso
+red
+abdelrahman
+chazz
+hassen
+kevaughn
+orien
+uzay
+arshaan
+davud
+jaelin
+kierce
+nasai
+seraphim
+zarif
+ayiden
+dechlan
+grigor
+jorell
+lamon
+neill
+rustam
+treylin
+aben
+ayeden
+chukwuebuka
+efran
+hennessy
+joban
+kiylan
+mcclane
+pius
+shloima
+vail
+abdulelah
+anzar
+bol
+covan
+dune
+georgi
+ivin
+jerold
+kazden
+kyston
+matrim
+oakleigh
+rohi
+stavro
+vahan

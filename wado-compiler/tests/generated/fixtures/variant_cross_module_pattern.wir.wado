@@ -55,9 +55,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 import fn wasi/task-return from "wasi/task-return";
 
-global mut global:variant_cross_module_pattern.wado::$const_obj_0: ref null Array<u8> = ref.null none;
-global mut global:variant_cross_module_pattern.wado::$const_obj_1: ref null Array<u8> = ref.null none;
-global mut global:variant_cross_module_pattern.wado::$const_obj_2: ref null Array<u8> = ref.null none;
+global global:variant_cross_module_pattern.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(53, 32, 62, 32, 49);
+global global:variant_cross_module_pattern.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(51, 32, 61, 61, 32, 51);
+global global:variant_cross_module_pattern.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(49, 32, 60, 32, 50);
 
 fn "variant_cross_module_pattern.wado/run"() with Stdout {
     let handle_6: i32;
@@ -78,9 +78,6 @@ fn "variant_cross_module_pattern.wado/run"() with Stdout {
     rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
     tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
     handle_6 = "variant_cross_module_pattern.wado/$cm_binding__Stdout_write_via_stream"(rx_19);
-    if ref.is_null(global:variant_cross_module_pattern.wado::$const_obj_2) {
-        global:variant_cross_module_pattern.wado::$const_obj_2 = array.new_data<u8>("1 < 2");
-    }
     new_repr_28 = builtin::array_new<u8>(6);
     builtin::array_copy<u8>(new_repr_28, 0, global:variant_cross_module_pattern.wado::$const_obj_2, 0, 5);
     builtin::array_set_u8(new_repr_28, 5, 10);
@@ -90,9 +87,6 @@ fn "variant_cross_module_pattern.wado/run"() with Stdout {
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_11 = "variant_cross_module_pattern.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
-    if ref.is_null(global:variant_cross_module_pattern.wado::$const_obj_1) {
-        global:variant_cross_module_pattern.wado::$const_obj_1 = array.new_data<u8>("3 == 3");
-    }
     new_repr_49 = builtin::array_new<u8>(7);
     builtin::array_copy<u8>(new_repr_49, 0, global:variant_cross_module_pattern.wado::$const_obj_1, 0, 6);
     builtin::array_set_u8(new_repr_49, 6, 10);
@@ -102,9 +96,6 @@ fn "variant_cross_module_pattern.wado/run"() with Stdout {
     rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
     tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
     handle_16 = "variant_cross_module_pattern.wado/$cm_binding__Stdout_write_via_stream"(rx_61);
-    if ref.is_null(global:variant_cross_module_pattern.wado::$const_obj_0) {
-        global:variant_cross_module_pattern.wado::$const_obj_0 = array.new_data<u8>("5 > 1");
-    }
     new_repr_70 = builtin::array_new<u8>(6);
     builtin::array_copy<u8>(new_repr_70, 0, global:variant_cross_module_pattern.wado::$const_obj_0, 0, 5);
     builtin::array_set_u8(new_repr_70, 5, 10);
@@ -150,14 +141,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
-        l5: loop {
+        l2: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b6: block {
-                l7: loop {
-                    break_if b6 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b3: block {
+                l4: loop {
+                    break_if b3 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
-                    continue l7;
+                    continue l4;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -190,7 +181,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l5;
+            continue l2;
         };
     };
 }

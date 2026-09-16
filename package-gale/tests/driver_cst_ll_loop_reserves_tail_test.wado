@@ -13,30 +13,30 @@ use g from "./grammars/ll_loop_reserves_tail.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_loop_reserves_tail" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "a lone arm goes to the tail, not the loop" {
-    assert_tree(&"a", &"(start (arms (arm a)))");
+    assert_tree("a", "(start (arms (arm a)))");
 }
 
 // The hit case: the loop body matches `a ;` whole, and taking it strands the
 // mandatory tail.
 test "a lone arm with its separator still goes to the tail" {
-    assert_tree(&"a;", &"(start (arms (arm a) ;))");
+    assert_tree("a;", "(start (arms (arm a) ;))");
 }
 
 // The rejection case: the loop must still run when there IS an arm left over
 // for the tail. A repair that declines whenever the body matches parses only
 // the last arm here and drops the rest.
 test "the loop runs for every arm but the last" {
-    assert_tree(&"a; b; c", &"(start (arms (arm a) ; (arm b) ; (arm c)))");
+    assert_tree("a; b; c", "(start (arms (arm a) ; (arm b) ; (arm c)))");
 }
 
 test "and keeps running when the last arm is separated too" {
-    assert_tree(&"a; b; c;", &"(start (arms (arm a) ; (arm b) ; (arm c) ;))");
+    assert_tree("a; b; c;", "(start (arms (arm a) ; (arm b) ; (arm c) ;))");
 }

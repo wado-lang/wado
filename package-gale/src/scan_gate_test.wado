@@ -27,8 +27,8 @@ fn gate_fields(g: &Grammar) -> List<String> {
     return *ctx.scan_gate_fields();
 }
 
-fn gen_source(src: &String) -> String {
-    let mut g = parse(*src).unwrap();
+fn gen_source<S: AsStrSlice>(src: S) -> String {
+    let mut g = parse(src.to_string()).unwrap();
     return generate(&mut g, &GEN_OPTS).source;
 }
 
@@ -36,11 +36,11 @@ fn gen_source(src: &String) -> String {
 // and either can come back empty on its own. A block the translator refuses
 // declares nothing, so the fields its actions name have no type to copy — the
 // gate has to go unsimulated, which is warn-and-degrade, not a dead emit.
-fn members_grammar(members: &String) -> String {
+fn members_grammar<S: AsStrSlice>(members: S) -> String {
     return `grammar C;
 options { language = Java; }
 @parser::members {
-${*members}
+${members}
 }
 r : A { n = 1; } A ;
 A : 'a' ;
@@ -49,7 +49,7 @@ A : 'a' ;
 
 test "a members block the translator refuses leaves the gate unsimulated" {
     let out = gen_source(&members_grammar(
-        &"    java.util.Map<String, Integer> seen = new java.util.HashMap<>();\n    int n = 0;",
+        "    java.util.Map<String, Integer> seen = new java.util.HashMap<>();\n    int n = 0;",
     ));
     assert !out.contains("struct ScanGate"), `a field no member declares must not reach the scan gate: ${out}`;
 }
@@ -58,7 +58,7 @@ test "a members block the translator refuses leaves the gate unsimulated" {
 // with a members block the translator accepts. Without it that assertion would
 // hold for a grammar that simulates nothing to begin with.
 test "the same action with a translatable members block reaches the gate" {
-    let out = gen_source(&members_grammar(&"    int n = 0;"));
+    let out = gen_source(&members_grammar("    int n = 0;"));
     assert out.contains("struct ScanGate"), `a declared field stays simulable: ${out}`;
     assert out.contains("n: i32 = 0"), `the gate copies the member's own type and initialiser: ${out}`;
 }
@@ -69,7 +69,7 @@ test "the same action with a translatable members block reaches the gate" {
 // which is what left the pre-bound ones measuring under a sibling candidate's
 // reading.
 test "every parse-launched LR suffix scan is seeded" {
-    let out = gen_source(&"grammar L;
+    let out = gen_source("grammar L;
 @parser::members {
     int noStruct = 0;
 }
@@ -106,7 +106,7 @@ WS : [ \\t\\r\\n]+ -> skip ;
 // The hit case, so the test above is not passing because nothing ever simulates:
 // the same grammar with a members block that does translate keeps its gate.
 test "a members block that translates keeps its field simulable" {
-    let out = gen_source(&"grammar C;
+    let out = gen_source("grammar C;
 options { language = Java; }
 @parser::members {
     int n = 0;
@@ -123,7 +123,7 @@ A : 'a' ;
 // the member reached through the parser handle, named as the members block
 // declares it.
 test "gate_assignment: a constant assignment" {
-    let hit = gate_assignment(&"p.no_struct = 1;");
+    let hit = gate_assignment("p.no_struct = 1;");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.0 == "no_struct", &h.0;
@@ -135,7 +135,7 @@ test "gate_assignment: a constant assignment" {
 // through the same handle. Snake_casing it was what left every such grammar
 // without a simulable gate.
 test "gate_assignment: a member the translator did not rename" {
-    let hit = gate_assignment(&"p.noBrace = 1;");
+    let hit = gate_assignment("p.noBrace = 1;");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.0 == "noBrace", &h.0;
@@ -144,7 +144,7 @@ test "gate_assignment: a member the translator did not rename" {
 }
 
 test "gate_assignment: whitespace and a missing semicolon" {
-    let hit = gate_assignment(&"  p.no_struct   =   0  ");
+    let hit = gate_assignment("  p.no_struct   =   0  ");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.0 == "no_struct", &h.0;
@@ -153,7 +153,7 @@ test "gate_assignment: whitespace and a missing semicolon" {
 }
 
 test "gate_assignment: a negative constant" {
-    let hit = gate_assignment(&"p.depth = -1;");
+    let hit = gate_assignment("p.depth = -1;");
     assert hit matches { Some(_) }, `${hit:?}`;
     if let Some(h) = hit {
         assert h.1 == -1, `${h.1}`;
@@ -163,30 +163,30 @@ test "gate_assignment: a negative constant" {
 // The rejection cases. Each is a body a scan cannot run by walking alone, so
 // simulating it would answer with a value the parse never holds.
 test "gate_assignment: a comparison is not an assignment" {
-    assert gate_assignment(&"p.no_struct == 0") matches { None };
+    assert gate_assignment("p.no_struct == 0") matches { None };
 }
 
 test "gate_assignment: an expression right-hand side" {
-    assert gate_assignment(&"p.no_struct = p.no_struct + 1;") matches { None };
+    assert gate_assignment("p.no_struct = p.no_struct + 1;") matches { None };
 }
 
 test "gate_assignment: a second statement" {
-    assert gate_assignment(&"p.no_struct = 1; p.depth = 2;") matches { None };
+    assert gate_assignment("p.no_struct = 1; p.depth = 2;") matches { None };
 }
 
 test "gate_assignment: a call" {
-    assert gate_assignment(&"p.reset();") matches { None };
+    assert gate_assignment("p.reset();") matches { None };
 }
 
 // Not reached through the parser handle, so not a member write the scan can
 // claim to run — a local, or a receiver the translator left standing.
 test "gate_assignment: a write that does not go through the handle" {
-    assert gate_assignment(&"no_struct = 1;") matches { None };
-    assert gate_assignment(&"this.no_struct = 1;") matches { None };
+    assert gate_assignment("no_struct = 1;") matches { None };
+    assert gate_assignment("this.no_struct = 1;") matches { None };
 }
 
 test "gate_assignment: a subscript is not a member" {
-    assert gate_assignment(&"p.stack[0] = 1;") matches { None };
+    assert gate_assignment("p.stack[0] = 1;") matches { None };
 }
 
 // A gate scope: the save/restore a members field alone cannot express, because
@@ -194,7 +194,7 @@ test "gate_assignment: a subscript is not a member" {
 // `$L` reaches the translated body as the rule's own value channel, the way a
 // member reaches it through the parser handle.
 test "gate_scope: the @init / @after pair" {
-    let s = gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = vals.sv;");
+    let s = gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = vals.sv;");
     assert s matches { Some(_) }, `${s:?}`;
     if let Some(g) = s {
         assert g.field == "no_struct", &g.field;
@@ -203,7 +203,7 @@ test "gate_scope: the @init / @after pair" {
 }
 
 test "gate_scope: a member the translator did not rename" {
-    let s = gate_scope_of(&"vals.sv = p.noBrace; p.noBrace = 0;", &"p.noBrace = vals.sv;");
+    let s = gate_scope_of("vals.sv = p.noBrace; p.noBrace = 0;", "p.noBrace = vals.sv;");
     assert s matches { Some(_) }, `${s:?}`;
     if let Some(g) = s {
         assert g.field == "noBrace", &g.field;
@@ -213,19 +213,19 @@ test "gate_scope: a member the translator did not rename" {
 // The rejection cases. Each is a pair a scan cannot run as a save/restore, so
 // running it anyway would leave the gate holding a value the parse never does.
 test "gate_scope: a restore of a different field" {
-    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.depth = vals.sv;") matches { None };
+    assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.depth = vals.sv;") matches { None };
 }
 
 test "gate_scope: a save the restore does not read" {
-    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = vals.other;") matches { None };
+    assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = vals.other;") matches { None };
 }
 
 test "gate_scope: a restore from something other than the value channel" {
-    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"p.no_struct = p.saved;") matches { None };
+    assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "p.no_struct = p.saved;") matches { None };
 }
 
 test "gate_scope: no @after is no scope" {
-    assert gate_scope_of(&"vals.sv = p.no_struct; p.no_struct = 0;", &"") matches { None };
+    assert gate_scope_of("vals.sv = p.no_struct; p.no_struct = 0;", "") matches { None };
 }
 
 // A gate field is simulated only when the scan can run *every* write to it, and
@@ -245,29 +245,29 @@ global HEAD_BODY: String = "A { noStruct = 1; } A";
 /// Written as source and parsed, not built as IR: a rule reaches `$sv` through
 /// its `locals`, and the translator that resolves it is what the gate analysis
 /// now reads.
-fn gate_source(
-    init: &String,
-    after: &String = &"",
-    scope_body: &String = &SCOPE_BODY,
-    head_body: &String = &HEAD_BODY,
+fn gate_source<S: AsStrSlice, S1: AsStrSlice = String, S2: AsStrSlice = String, S3: AsStrSlice = String>(
+    init: S,
+    after: S1 = "",
+    scope_body: S2 = SCOPE_BODY,
+    head_body: S3 = HEAD_BODY,
 ) -> String {
-    let after_clause = if after.is_empty() { String::new() } else { `@after { ${*after} }` };
+    let after_clause = if after.is_empty() { String::new() } else { `@after { ${after} }` };
     return `grammar G;
 options { language = Java; }
 @parser::members { ${GATE_MEMBERS} }
 r : scope | head ;
 scope
 locals [int sv]
-@init { ${*init} }
+@init { ${init} }
 ${after_clause}
- : ${*scope_body} ;
-head : ${*head_body} ;
+ : ${scope_body} ;
+head : ${head_body} ;
 A : 'a' ;
 `;
 }
 
-fn gate_fields_of(src: &String) -> List<String> {
-    let g = parse(*src).unwrap();
+fn gate_fields_of<S: AsStrSlice>(src: S) -> List<String> {
+    let g = parse(src.to_string()).unwrap();
     return gate_fields(&g);
 }
 
@@ -284,12 +284,12 @@ test "scan_gate_fields: the recognised scope pair leaves its field simulable" {
 // that rule: leaving it in the set would have every other scan restoring a ban
 // this one never lifts.
 test "scan_gate_fields: a left-recursive rule's scope disqualifies its field" {
-    let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, &"scope A | A"));
+    let f = gate_fields_of(&gate_source(&GATE_SCOPE_INIT, &GATE_SCOPE_AFTER, "scope A | A"));
     assert f.is_empty(), `${f:?}`;
 }
 
 test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
-    let f = gate_fields_of(&gate_source(&"noStruct = depth();"));
+    let f = gate_fields_of(&gate_source("noStruct = depth();"));
     assert f.is_empty(), `${f:?}`;
 }
 
@@ -299,7 +299,7 @@ test "scan_gate_fields: an unrunnable rule-level write disqualifies the field" {
 // shapes has one it does not know.
 test "scan_gate_fields: a compound assignment disqualifies the field" {
     for let op of ["+=", "|=", "&=", "^=", "%=", "<<=", ">>="] as List<String> {
-        let f = gate_fields_of(&gate_source(&`noStruct ${op} 1;`));
+        let f = gate_fields_of(&gate_source(`noStruct ${op} 1;`));
         assert f.is_empty(), `${op} left the field simulable`;
     }
 }
@@ -325,26 +325,26 @@ test "scan_gate_fields: an increment disqualifies the field" {
 // what the body does to the names it mentions is exactly what could not be
 // read, and over-rejecting only leaves the gate unsimulated.
 test "scan_gate_fields: a body that merely names the field disqualifies it" {
-    let f = gate_fields_of(&gate_source(&"noStruct;"));
+    let f = gate_fields_of(&gate_source("noStruct;"));
     assert f.is_empty(), `${f:?}`;
 }
 
 // A call names the method, not the field it writes, so no reading of the body
 // says which fields it leaves alone. The whole set goes.
 test "scan_gate_fields: a body that can call disqualifies every field" {
-    let f = gate_fields_of(&gate_source(&"ban();"));
+    let f = gate_fields_of(&gate_source("ban();"));
     assert f.is_empty(), `${f:?}`;
 }
 
 // The rejection case for both rules above: a body that names something else and
 // cannot call leaves the field alone, so the set is not simply always empty.
 test "scan_gate_fields: a body naming other things leaves the field simulable" {
-    let f = gate_fields_of(&gate_source(&"depth = depth + 1;"));
+    let f = gate_fields_of(&gate_source("depth = depth + 1;"));
     assert f == ["no_struct"], `${f:?}`;
 }
 
 test "scan_gate_fields: a write through a receiver disqualifies the field" {
-    let f = gate_fields_of(&gate_source(&"this.noStruct = depth();"));
+    let f = gate_fields_of(&gate_source("this.noStruct = depth();"));
     assert f.is_empty(), `${f:?}`;
 }
 
@@ -353,43 +353,43 @@ test "scan_gate_fields: a write through a receiver disqualifies the field" {
 // them however simply they are written.
 test "scan_gate_fields: a write inside a group disqualifies the field" {
     let f = gate_fields_of(&gate_source(
-        &"other = 1;",
-        &"",
+        "other = 1;",
+        "",
         &SCOPE_BODY,
-        &"A ( { noStruct = 0; } A | A ) A",
+        "A ( { noStruct = 0; } A | A ) A",
     ));
     assert f.is_empty(), `${f:?}`;
 }
 
 // A condition the scan may evaluate reads simulated fields and nothing else.
 test "reads_only_scan_gate_fields: a simulated field" {
-    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct == 0)", &["no_struct"]);
+    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: two of them" {
     let fields = ["no_struct", "depth"] as List<String>;
-    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct == 0 && SCAN_GATE.depth > 1)", &fields);
+    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct == 0 && SCAN_GATE.depth > 1)", &fields);
 }
 
 // One field name can be a prefix of another. Taking the short one out of the
 // long one leaves `_tail`, which is a read of a field the global does not have.
 test "reads_only_scan_gate_fields: a field whose name extends a simulated one" {
-    assert !reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct_tail == 0)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("(SCAN_GATE.no_struct_tail == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: the longer name, simulated, is read" {
     let fields = ["no_struct", "no_struct_tail"] as List<String>;
-    assert reads_only_scan_gate_fields(&"(SCAN_GATE.no_struct_tail == 0)", &fields);
+    assert reads_only_scan_gate_fields("(SCAN_GATE.no_struct_tail == 0)", &fields);
 }
 
 test "reads_only_scan_gate_fields: an unsimulated field" {
-    assert !reads_only_scan_gate_fields(&"(SCAN_GATE.depth == 0)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("(SCAN_GATE.depth == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: a parser read" {
-    assert !reads_only_scan_gate_fields(&"(p.no_struct == 0)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("(p.no_struct == 0)", &["no_struct"]);
 }
 
 test "reads_only_scan_gate_fields: a call on the recognizer" {
-    assert !reads_only_scan_gate_fields(&"pred_3(p)", &["no_struct"]);
+    assert !reads_only_scan_gate_fields("pred_3(p)", &["no_struct"]);
 }

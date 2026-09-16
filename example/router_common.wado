@@ -166,7 +166,7 @@ pub variant Segment {
 /// `/foo/:bar/*baz` -> [Literal("foo"), Param("bar"), Wildcard("baz")].
 /// `/` (the empty pattern, which terminates at the root) yields `[]`.
 /// Panics when the pattern is empty or does not start with `/`.
-pub fn parse_pattern(path: &String) -> List<Segment> {
+pub fn parse_pattern<S: AsStrSlice>(path: S) -> List<Segment> {
     let mut out: List<Segment> = [];
     let bytes = path.len();
     if bytes == 0 || path.get_byte_unchecked(0) != b'/' {
@@ -221,7 +221,7 @@ test "build_access_pattern: 10 entries, 1 miss" {
 }
 
 test "parse_pattern: literals, params, wildcard" {
-    let segs = parse_pattern(&"/api/v1/users/:id/posts/*rest");
+    let segs = parse_pattern("/api/v1/users/:id/posts/*rest");
     assert segs.len() == 6;
     assert segs[0] matches { Literal("api") };
     assert segs[1] matches { Literal("v1") };
@@ -232,18 +232,18 @@ test "parse_pattern: literals, params, wildcard" {
 }
 
 test "parse_pattern: root pattern yields empty" {
-    let segs = parse_pattern(&"/");
+    let segs = parse_pattern("/");
     assert segs.len() == 0;
 }
 
 
 #[expect_trap]
 test "parse_pattern: missing leading slash panics" {
-    parse_pattern(&"foo");
+    parse_pattern("foo");
 }
 
 
 #[expect_trap]
 test "parse_pattern: empty pattern panics" {
-    parse_pattern(&"");
+    parse_pattern("");
 }

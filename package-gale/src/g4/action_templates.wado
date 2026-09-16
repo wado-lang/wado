@@ -43,7 +43,7 @@ pub struct ExpandOutcome {
     pub warnings: List<String>,
 }
 
-pub fn expand_action_templates(src: &String) -> ExpandOutcome {
+pub fn expand_action_templates<S: AsStrSlice>(src: S) -> ExpandOutcome {
     let chars: List<char> = src.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(src.len());
@@ -295,11 +295,11 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
 
 /// The Java-target expansion table. `recv` is the chained receiver
 /// (`X:F()` passes X's expansion), `args` are the evaluated arguments.
-fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> Result<String, String> {
+fn expand_helper<S: AsStrSlice>(name: S, recv: &Option<String>, args: &List<String>) -> Result<String, String> {
     // Receiver-capable helpers: the print helpers take the value chained or
     // as a single argument; the combinators require a chained receiver. A
     // non-match falls through to the receiver-free table below.
-    match *name {
+    match name.to_string() {
         "writeln" => {
             return Result::Ok(`System.out.println(${chain_or_arg(recv, args, name)?});`);
         },
@@ -340,10 +340,10 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
 
     // Everything below is receiver-free.
     if recv matches { Some(_) } {
-        return Result::Err(`template helper '${*name}' does not take a chained receiver`);
+        return Result::Err(`template helper '${name}' does not take a chained receiver`);
     }
 
-    return match *name {
+    return match name.to_string() {
         // Constants.
         "True" => Result::Ok("true"),
         "False" => Result::Ok("false"),
@@ -468,35 +468,35 @@ fn expand_helper(name: &String, recv: &Option<String>, args: &List<String>) -> R
             require_args(args, 3, name)?;
             Result::Ok(`this.${args[0]} % ${args[1]} != ${args[2]}`);
         },
-        _ => Result::Err(`unknown template helper '${*name}'`),
+        _ => Result::Err(`unknown template helper '${name}'`),
     };
 }
 
-fn chain_or_arg(recv: &Option<String>, args: &List<String>, name: &String) -> Result<String, String> {
+fn chain_or_arg<S: AsStrSlice>(recv: &Option<String>, args: &List<String>, name: S) -> Result<String, String> {
     if let Some(r) = recv {
         if !args.is_empty() {
-            return Result::Err(`template helper '${*name}' takes a receiver or one argument, not both`);
+            return Result::Err(`template helper '${name}' takes a receiver or one argument, not both`);
         }
         return Result::Ok(*r);
     }
     if args.len() != 1 {
-        return Result::Err(`template helper '${*name}' expects exactly one argument`);
+        return Result::Err(`template helper '${name}' expects exactly one argument`);
     }
     return Result::Ok(args[0]);
 }
 
-fn require_receiver(recv: &Option<String>, name: &String) -> Result<String, String> {
+fn require_receiver<S: AsStrSlice>(recv: &Option<String>, name: S) -> Result<String, String> {
     return match recv {
         Some(r) => Result::Ok(*r),
-        None => Result::Err(`template helper '${*name}' requires a chained receiver`),
+        None => Result::Err(`template helper '${name}' requires a chained receiver`),
     };
 }
 
 /// Validate the argument count; callers then index `args` directly (no
 /// list copy). `?`-propagates the arity error.
-fn require_args(args: &List<String>, count: i32, name: &String) -> Result<(), String> {
+fn require_args<S: AsStrSlice>(args: &List<String>, count: i32, name: S) -> Result<(), String> {
     if args.len() != count {
-        return Result::Err(`template helper '${*name}' expects ${count} argument(s), got ${args.len()}`);
+        return Result::Err(`template helper '${name}' expects ${count} argument(s), got ${args.len()}`);
     }
     return Result::Ok(());
 }

@@ -1,0 +1,32 @@
+use { println } from "core:cli";
+
+struct Tag { text: String }
+
+impl Eq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        return self.text == *other;
+    }
+}
+
+impl Eq for Tag {
+    fn eq(&self, other: &Tag) -> bool {
+        return self.text == other.text;
+    }
+}
+
+export fn run() with Stdout {
+    let view = "hello world".as_str_slice().sub(0, 5);
+    println(`${view == "hello"}`);
+    println(`${"hello" == view}`);
+    println(`${view != "world"}`);
+
+    let t = Tag { text: "x" };
+    println(`${t == "x"}`);
+    println(`${t == Tag { text: "x" }}`);
+    println(`${t == "y"}`);
+}
+
+__DATA__
+{
+  "stdout": "true\ntrue\ntrue\ntrue\ntrue\nfalse\n"
+}

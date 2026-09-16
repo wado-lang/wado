@@ -8,12 +8,12 @@ use wp from "./grammars/wado_predicate.g4"
     };
 
 test "a true predicate lets the parse complete" {
-    let result = wp::parse_ok(&"a b");
+    let result = wp::parse_ok("a b");
     assert result.ok(), "clean parse under a true predicate";
     assert result.output == "go", `output: '${result.output}'`;
 }
 
 test "a false predicate fails the parse" {
-    let result = wp::parse_bad(&"a b");
+    let result = wp::parse_bad("a b");
     assert !result.ok(), "false predicate must reject the input";
 }

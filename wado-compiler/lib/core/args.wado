@@ -140,7 +140,7 @@ struct LongOpt {
 impl ArgvDeserializer {
     /// Decompose a `--name[=value]` token (caller guarantees `tok` starts with
     /// `--` and is not the bare `--` marker). Folds `-`→`_` only when present.
-    fn split_long(tok: &String) -> LongOpt {
+    fn split_long<S: AsStrSlice>(tok: S) -> LongOpt {
         let body = tok.substr_bytes(2, tok.len());
         let mut raw = body;
         let mut inline: Option<String> = null;
@@ -258,7 +258,7 @@ impl ArgvDeserializer {
     }
 
     /// Record an `InvalidValue` and return the matching `DeserializeError`.
-    fn invalid_value(&mut self, token: &String) -> DeserializeError {
+    fn invalid_value<S: AsStrSlice>(&mut self, token: S) -> DeserializeError {
         let msg = `invalid value: '${token}'`;
         self.err = Option::Some(ArgsError {
             kind: ArgsErrorKind::InvalidValue,
@@ -451,7 +451,7 @@ impl DeserializeVariant for ArgvVariantAccess {
 }
 
 /// A `DeserializeError` for a serde feature `core:args` does not implement yet.
-fn unsupported(what: String) -> DeserializeError {
+fn unsupported<S: AsStrSlice>(what: S) -> DeserializeError {
     return DeserializeError {
         kind: DeserializeErrorKind::Custom,
         message: `core:args does not support ${what} yet`,
@@ -590,9 +590,9 @@ impl Deserializer for ArgvDeserializer {
         return Result::Err(unsupported("map"));
     }
 
-    fn begin_struct(
+    fn begin_struct<S: AsStrSlice>(
         &mut self,
-        name: &String,
+        name: S,
         num_fields: i32,
     ) -> Result<ArgvStructAccess, DeserializeError> with stores[self] {
         return Result::Ok(ArgvStructAccess {
@@ -601,9 +601,9 @@ impl Deserializer for ArgvDeserializer {
         });
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice>(
         &mut self,
-        type_name: &String,
+        type_name: S,
         num_cases: i32,
     ) -> Result<ArgvVariantAccess, DeserializeError> with stores[self] {
         // Externally tagged: the next bare token is the case tag. A subcommand
