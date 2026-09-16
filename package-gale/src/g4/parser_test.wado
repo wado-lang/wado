@@ -423,48 +423,12 @@ X : [\\p{Grek}] ;");
     assert !class_admits(&cc, 'a');
 }
 
-<<<<<<< HEAD
-test "an In-prefixed name is a block, not a script" {
-    // The `Greek` block is `Greek_And_Coptic` (U+0370..U+03FF), so it stops
-    // where Greek Extended begins — which the script does not.
-    let cc = class_of("grammar Test;
-X : [\\p{InGreek}] ;");
-    assert class_admits(&cc, 'α');
-    assert !class_admits(&cc, 'ᾰ'), "U+1FB0 is in Greek Extended, a different block";
-}
-
-||||||| 8568c5038
-test "an In-prefixed name is a block, not a script" {
-    // The `Greek` block is `Greek_And_Coptic` (U+0370..U+03FF), so it stops
-    // where Greek Extended begins — which the script does not.
-    let cc = class_of(&"grammar Test;
-X : [\\p{InGreek}] ;");
-    assert class_admits(&cc, 'α');
-    assert !class_admits(&cc, 'ᾰ'), "U+1FB0 is in Greek Extended, a different block";
-}
-
-=======
->>>>>>> origin/main
 test "binary properties resolve" {
     let syntax = class_of("grammar Test;
 X : [\\p{Pattern_Syntax}] ;");
     assert class_admits(&syntax, '+');
     assert !class_admits(&syntax, 'a');
-<<<<<<< HEAD
-    let id_start = class_of("grammar Test;
-X : [\\p{Other_ID_Start}] ;");
-    assert class_admits(&id_start, '\u{2118}'), "SCRIPT CAPITAL P is Other_ID_Start";
-    assert !class_admits(&id_start, 'a');
     let ws = class_of("grammar Test;
-||||||| 8568c5038
-    let id_start = class_of(&"grammar Test;
-X : [\\p{Other_ID_Start}] ;");
-    assert class_admits(&id_start, '\u{2118}'), "SCRIPT CAPITAL P is Other_ID_Start";
-    assert !class_admits(&id_start, 'a');
-    let ws = class_of(&"grammar Test;
-=======
-    let ws = class_of(&"grammar Test;
->>>>>>> origin/main
 X : [\\p{White_Space}] ;");
     assert class_admits(&ws, '\t');
     assert class_admits(&ws, '\u{00A0}');
@@ -494,17 +458,6 @@ X : [\\p{General_Category=Lu}] ;");
 X : [\\p{Script=Greek}] ;");
     assert class_admits(&sc, 'ᾰ');
     assert !class_admits(&sc, 'a');
-<<<<<<< HEAD
-    let blk = class_of("grammar Test;
-X : [\\p{Block=Greek_And_Coptic}] ;");
-    assert class_admits(&blk, 'α');
-    assert !class_admits(&blk, 'ᾰ');
-||||||| 8568c5038
-    let blk = class_of(&"grammar Test;
-X : [\\p{Block=Greek_And_Coptic}] ;");
-    assert class_admits(&blk, 'α');
-    assert !class_admits(&blk, 'ᾰ');
-=======
 }
 
 // Block, Decomposition_Type and the UCD's contributory `Other_*` are answered
@@ -526,7 +479,6 @@ test "a property Gale deliberately does not answer says so" {
     // the message at all.
     let indic = parse("grammar Test;\nX : [\\p{Indic_Positional_Category=Top}] ;");
     assert !indic.unwrap_err().message.contains("Block");
->>>>>>> origin/main
 }
 
 test "a script property complements like a category" {
@@ -2332,49 +2284,17 @@ X : [\\p{Numeric_Type=None}] ;"), 'A'), "the default value covers everything wit
 X : [\\p{ea=W}] ;"), '漢');
     assert class_admits(&class_of("grammar Test;
 X : [\\p{InSC=Bindu}] ;"), '\u{0901}');
-<<<<<<< HEAD
     assert class_admits(&class_of("grammar Test;
-X : [\\p{dt=Font}] ;"), '\u{2102}'), "DOUBLE-STRUCK CAPITAL C is a font variant of C";
-    assert class_admits(&class_of("grammar Test;
-||||||| 8568c5038
-    assert class_admits(&class_of(&"grammar Test;
-X : [\\p{dt=Font}] ;"), '\u{2102}'), "DOUBLE-STRUCK CAPITAL C is a font variant of C";
-    assert class_admits(&class_of(&"grammar Test;
-=======
-    assert class_admits(&class_of(&"grammar Test;
->>>>>>> origin/main
 X : [\\p{vo=U}] ;"), '漢');
     assert class_admits(&class_of("grammar Test;
 X : [\\p{vo=R}] ;"), 'A');
 }
 
-<<<<<<< HEAD
-test "a script or block with no code points of its own is still a value" {
-    let no_script = class_of("grammar Test;
-||||||| 8568c5038
-test "a script or block with no code points of its own is still a value" {
-    let no_script = class_of(&"grammar Test;
-=======
 test "a script with no code points of its own is still a value" {
-    let no_script = class_of(&"grammar Test;
->>>>>>> origin/main
+    let no_script = class_of("grammar Test;
 X : [\\p{sc=Zzzz}] ;");
     assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
     assert !class_admits(&no_script, 'A');
-<<<<<<< HEAD
-
-    let no_block = class_of("grammar Test;
-X : [\\p{blk=NB}] ;");
-    assert class_admits(&no_block, '\u{2FE0}'), "U+2FE0 sits outside every assigned block";
-    assert !class_admits(&no_block, 'A');
-||||||| 8568c5038
-
-    let no_block = class_of(&"grammar Test;
-X : [\\p{blk=NB}] ;");
-    assert class_admits(&no_block, '\u{2FE0}'), "U+2FE0 sits outside every assigned block";
-    assert !class_admits(&no_block, 'A');
-=======
->>>>>>> origin/main
 }
 
 test "an unknown enumerated property or value is still rejected" {
