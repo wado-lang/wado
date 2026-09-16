@@ -4,8 +4,8 @@
 //! training loop. Copyright (c) Andrej Karpathy, MIT License.
 //! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
 //!
-//! The JS and Rust arms in this directory are the same program, so all three
-//! build the same graph and report the same final loss.
+//! The JS and Rust arms in this directory are the same program. `train` reseeds
+//! and rebuilds the model, so all three report the same final loss.
 //!
 //!     mise run microgpt
 
@@ -493,8 +493,8 @@ fn train(steps: i32) -> f64 {
     return loss_value;
 }
 
-// Predicted next tokens per iteration, the unit `steps` would hide behind
-// whatever the corpus's document lengths happen to be.
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
 fn tokens_per_iteration(tok: &Tokenizer, steps: i32) -> f64 {
     let mut total = 0;
     for let step of 0..<steps {
@@ -510,8 +510,7 @@ test "smoke" {
 export fn run() with (Stdout, MonotonicClock) {
     let mut b = Benchmark {
         name: `microgpt ${STEPS} training steps`,
-        // A fresh model per iteration keeps the reported loss reproducible, so
-        // the three implementations can be checked against each other.
+        // Fixed rather than calibrated, so the three arms time equal work.
         iterations: 3,
         work_per_iter: Option::Some(tokens_per_iteration(&Tokenizer::new(&DOCS), STEPS)),
         unit: "tokens",

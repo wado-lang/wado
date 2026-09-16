@@ -18,9 +18,9 @@ compression, parsing, and application server.
 
 ### MicroGPT
 
-32 training steps of a character-level GPT over a scalar autograd graph: 1
+32 training steps of a character-level GPT (scalar autograd, object graph). One
 layer, 16 embedding dimensions, 4 heads, 4,096 parameters. A port of
-[Andrej Karpathy's microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95).
+[Andrej Karpathy's microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95);
 `example/microgpt.wado` is the full version, which also samples from the model.
 
 | Implementation |      Throughput |    ms/iter | vs best |
@@ -29,20 +29,20 @@ layer, 16 embedding dimensions, 4 heads, 4,096 parameters. A port of
 | JavaScript     | 567.30 tokens/s | 400.139 ms | 2.90x   |
 | **Wado**       | 450.55 tokens/s | 503.829 ms | 3.66x   |
 
-The rows above measure loops over flat arrays. This one measures a graph of
-small heap objects: a step builds 31k to 89k nodes, walks them depth-first, and
-accumulates gradients back through them. All three arms report the same final
-loss, so they are the same computation.
+The other rows in this section loop over flat arrays. This one walks a graph of
+small heap objects: a step builds 31k to 89k nodes, traverses them depth-first,
+and accumulates gradients back through them. All three arms report the same
+final loss, so they are the same computation.
 
 Rust makes a node a `usize` index into a `Vec<Value>`, because a `&mut` into a
 growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
 that `&mut Value` and a node holds those handles as its children, which is the
-shape the Python original has. This row prices the difference.
+shape the Python original has. The gap between the two rows is what that costs.
 
 These three figures come from a 4-core Xeon @ 2.80GHz, not from the dedicated
 machine the rest of this file uses, so read the `vs best` column rather than the
-absolute throughput. Best of three, as everywhere else. Re-measure the row on
-the benchmark machine when one is next taken.
+absolute throughput. Best of three, as everywhere else. Re-measure this row the
+next time the suite runs on that machine.
 
 ### Mandelbrot
 

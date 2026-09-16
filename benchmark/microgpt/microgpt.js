@@ -4,10 +4,10 @@
 // training loop. Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
-// Line-for-line the same program as microgpt.wado: a scalar autograd graph
-// where a node holds its children directly, so both arms measure a GC'd
-// language walking an object graph. A fixed iteration count keeps the reported
-// loss reproducible, so the arms can be checked against each other.
+// The same program as microgpt.wado: a scalar autograd graph where a node holds
+// its children directly, so both arms measure a GC'd language walking an object
+// graph. `train` reseeds and rebuilds the model, so the two report the same
+// final loss and can be checked against each other.
 //
 // How to run:
 //   node benchmark/microgpt/microgpt.js
@@ -399,7 +399,6 @@ class Adam {
   }
 }
 
-// prettier-ignore
 const DOCS = [
   "emma", "mary", "ada", "madeleine", "katelyn", "karla", "jayde", "harleigh",
   "paityn", "rosalina", "rita", "margaux", "mayra", "klara", "janiah", "coralie",
@@ -407,8 +406,8 @@ const DOCS = [
   "emmanuelle", "renae", "eveline", "yazmine", "corinna", "makyla", "marilynn", "malea",
 ];
 
-// Predicted next tokens per iteration, the unit `steps` would hide behind
-// whatever the corpus's document lengths happen to be.
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
 function tokensPerIteration(tok, steps) {
   let total = 0;
   for (let step = 0; step < steps; step++) {

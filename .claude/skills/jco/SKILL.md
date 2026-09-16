@@ -101,11 +101,11 @@ mise run jco-bench benchmark/mandelbrot/mandelbrot.wado
 
 **Works today** (compute-only — `Stdout` + `MonotonicClock`):
 
-| Benchmark   | Wado on Node (jco) | Wado on wasmtime        |
-| ----------- | ------------------ | ----------------------- |
-| mandelbrot  | ~4.0 M px/s        | ~4.2 M                  |
-| sieve       | ~150 M numbers/s   | ~64 M (V8 ~2.3× faster) |
-| fts         | ~12 M conv/s       | —                       |
+| Benchmark  | Wado on Node (jco) | Wado on wasmtime        |
+| ---------- | ------------------ | ----------------------- |
+| mandelbrot | ~4.0 M px/s        | ~4.2 M                  |
+| sieve      | ~150 M numbers/s   | ~64 M (V8 ~2.3× faster) |
+| fts        | ~12 M conv/s       | —                       |
 
 Compute throughput on V8 lands within ~5–10% of wasmtime (sieve is much faster
 on V8). Numbers are indicative on a noisy cloud VM; keep best-of-3.

@@ -12,8 +12,8 @@
 // is also the identity the `visited` set needs, which is why this file has no
 // `id` field and microgpt.wado does.
 //
-// A fixed iteration count keeps the reported loss reproducible, so the arms can
-// be checked against each other.
+// `train` reseeds and rebuilds the model, so every arm reports the same final
+// loss and they can be checked against each other.
 //
 // How to run:
 //   rustc -O --edition 2024 -o microgpt_rs microgpt.rs && ./microgpt_rs
@@ -523,8 +523,8 @@ const DOCS: [&str; 32] = [
     "emmanuelle", "renae", "eveline", "yazmine", "corinna", "makyla", "marilynn", "malea",
 ];
 
-// Predicted next tokens per iteration, the unit `steps` would hide behind
-// whatever the corpus's document lengths happen to be.
+// Next-token predictions per iteration, which is what the throughput counts.
+// A step count would move with the corpus's document lengths.
 fn tokens_per_iteration(tok: &Tokenizer, steps: usize) -> f64 {
     let mut total = 0;
     for step in 0..steps {
