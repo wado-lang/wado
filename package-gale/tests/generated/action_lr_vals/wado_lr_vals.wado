@@ -69,18 +69,19 @@ impl LexerSlice {
         self.push_to(&mut s);
         return s;
     }
+}
 
-    pub fn eq_str<S: AsStrSlice>(a: S, b: &LexerSlice) -> bool {
-        let a_chars = a.chars();
-        let mut a_iter = a_chars;
-        let mut i = b.start;
+impl Eq<String> for LexerSlice {
+    fn eq(&self, other: &String) -> bool {
+        let mut chars = other.chars();
+        let mut i = self.start;
         loop {
-            let a_next = a_iter.next();
-            if i >= b.end {
-                return a_next matches { None };
+            let next = chars.next();
+            if i >= self.end {
+                return next matches { None };
             }
-            if let Some(ac) = a_next {
-                if ac != b.chars[i] {
+            if let Some(c) = next {
+                if c != self.chars[i] {
                     return false;
                 }
             } else {
@@ -1767,7 +1768,7 @@ pub fn to_string_tree(result: &ParseResult) -> String {
 pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String {
     let mut _kind: i32 = -1;
     for let mut i = 0; i < RULE_NAMES.len(); i += 1 {
-        if rule.eq_str(RULE_NAMES[i]) {
+        if rule == RULE_NAMES[i] {
             _kind = i;
             break;
         }
