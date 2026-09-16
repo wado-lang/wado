@@ -405,9 +405,20 @@ the call receiving it still reads its parameter at the function type — so the
 argument arrives spelled at a type nothing mints, and the parameter falls back
 to any value of its own type. Where one function type has several closures, that
 takes each specialization back to their join, which is the coarsest reading of
-the one place exactly one value arrives. Closing it takes reading such an object
-as the closure it was, which the object does not say: what it holds is the
-lifted body, whose parameters are the closure's shifted by its environment.
+the one place exactly one value arrives.
+
+Closing it takes reading such an object as a mint of the function it holds,
+which the object does say — and at a shift, which is what makes it work. The
+function it holds is the lifted body, whose parameters are the closure's
+preceded by its environment, so the call's position `p` is that function's `p +
+1`. A mint would therefore have to carry where its positions start, and every
+reader of one — the join, the row a call resolves to, the destination a caller
+resolves against its own arguments — apply it. That is a change to the lattice
+rather than to one arm of the walk, and the size of it is the reason this is
+open rather than done. Reading the lifting phase's own record of which closure
+it specialized each copy for would need no shift, but the answer would then come
+from a previous phase instead of the tree the reader walks, which is what the
+decision above rests on.
 
 An element claim reads what a value holds, which a body fills but a signature
 never states. A parameter arrives holding whatever the caller put there, and
