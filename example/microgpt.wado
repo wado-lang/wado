@@ -1,0 +1,970 @@
+//! microgpt — train a GPT and sample from it, in pure Wado.
+//!
+//! A port of Andrej Karpathy's dependency-free Python microgpt,
+//! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>,
+//! Copyright (c) Andrej Karpathy, MIT License.
+//!
+//!     wado run example/microgpt.wado [num_steps]
+//!
+//! The training set is `input.txt` in the working directory, one document per
+//! line; without it the names in this file's `__DATA__` section are used.
+
+use { args, print, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
+use { TreeMap, TreeSet } from "core:collections";
+use fs from "core:fs";
+use { Preopens } from "wasi:filesystem";
+
+global SEED: u64 = 42;
+
+global N_LAYER: i32 = 1;
+global N_EMBD: i32 = 16;
+global BLOCK_SIZE: i32 = 16;
+global N_HEAD: i32 = 4;
+global HEAD_DIM: i32 = N_EMBD / N_HEAD;
+global INIT_STD: f64 = 0.08;
+
+global NUM_STEPS: i32 = 1000;
+global LEARNING_RATE: f64 = 0.01;
+global BETA1: f64 = 0.85;
+global BETA2: f64 = 0.99;
+global EPS_ADAM: f64 = 1e-8;
+global RMSNORM_EPS: f64 = 1e-5;
+
+global TEMPERATURE: f64 = 0.5;
+global NUM_SAMPLES: i32 = 20;
+
+// Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
+struct Rng {
+    state: u64,
+}
+
+impl Rng {
+    fn new(seed: u64) -> Rng {
+        return Rng { state: seed };
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.state = self.state + 0x9E3779B97F4A7C15 as u64;
+        let mut z = self.state;
+        z = (z ^ z >> 30 as u64) * 0xBF58476D1CE4E5B9 as u64;
+        z = (z ^ z >> 27 as u64) * 0x94D049BB133111EB as u64;
+        return z ^ z >> 31 as u64;
+    }
+
+    fn next_f64(&mut self) -> f64 {
+        return (self.next_u64() >> 11 as u64) as f64 / 9007199254740992.0;
+    }
+
+    fn below(&mut self, n: i32) -> i32 {
+        assert n > 0;
+        return (self.next_u64() % n as u64) as i32;
+    }
+
+    fn gauss(&mut self, std: f64) -> f64 {
+        let mut u = self.next_f64();
+        while u <= 0.0 {
+            u = self.next_f64();
+        }
+        let v = self.next_f64();
+        return std * f64::sqrt(-2.0 * f64::ln(u)) * f64::cos(2.0 * f64::PI * v);
+    }
+
+    fn shuffle(&mut self, items: &mut List<String>) {
+        for let mut i = items.len() - 1; i > 0; i -= 1 {
+            items.swap(i, self.below(i + 1));
+        }
+    }
+}
+
+// Let there be Autograd. A node is created after its children (`-1` marks an
+// absent one), so the tape is topologically sorted and backward is one sweep.
+struct Tape {
+    data: List<f64>,
+    grad: List<f64>,
+    lhs: List<i32>,
+    rhs: List<i32>,
+    dlhs: List<f64>,
+    drhs: List<f64>,
+}
+
+impl Tape {
+    fn new() -> Tape {
+        return Tape { data: [], grad: [], lhs: [], rhs: [], dlhs: [], drhs: [] };
+    }
+
+    fn len(&self) -> i32 {
+        return self.data.len();
+    }
+
+    fn node(&mut self, value: f64, a: i32, da: f64, b: i32, db: f64) -> i32 {
+        let id = self.data.len();
+        assert a < id;
+        assert b < id;
+        self.data.push(value);
+        self.grad.push(0.0);
+        self.lhs.push(a);
+        self.dlhs.push(da);
+        self.rhs.push(b);
+        self.drhs.push(db);
+        return id;
+    }
+
+    fn leaf(&mut self, value: f64) -> i32 {
+        return self.node(value, -1, 0.0, -1, 0.0);
+    }
+
+    fn add(&mut self, a: i32, b: i32) -> i32 {
+        let value = self.data[a] + self.data[b];
+        return self.node(value, a, 1.0, b, 1.0);
+    }
+
+    fn mul(&mut self, a: i32, b: i32) -> i32 {
+        let x = self.data[a];
+        let y = self.data[b];
+        return self.node(x * y, a, y, b, x);
+    }
+
+    fn add_scalar(&mut self, a: i32, c: f64) -> i32 {
+        let value = self.data[a] + c;
+        return self.node(value, a, 1.0, -1, 0.0);
+    }
+
+    fn mul_scalar(&mut self, a: i32, c: f64) -> i32 {
+        let value = self.data[a] * c;
+        return self.node(value, a, c, -1, 0.0);
+    }
+
+    fn pow_scalar(&mut self, a: i32, p: f64) -> i32 {
+        let x = self.data[a];
+        return self.node(f64::pow(x, p), a, p * f64::pow(x, p - 1.0), -1, 0.0);
+    }
+
+    fn log(&mut self, a: i32) -> i32 {
+        let x = self.data[a];
+        return self.node(f64::ln(x), a, 1.0 / x, -1, 0.0);
+    }
+
+    fn exp(&mut self, a: i32) -> i32 {
+        let e = f64::exp(self.data[a]);
+        return self.node(e, a, e, -1, 0.0);
+    }
+
+    fn relu(&mut self, a: i32) -> i32 {
+        let x = self.data[a];
+        if x > 0.0 {
+            return self.node(x, a, 1.0, -1, 0.0);
+        }
+        return self.node(0.0, a, 0.0, -1, 0.0);
+    }
+
+    fn backward(&mut self, root: i32) {
+        self.grad[root] = 1.0;
+        for let mut i = root; i >= 0; i -= 1 {
+            let g = self.grad[i];
+            if g == 0.0 {
+                continue;
+            }
+            let a = self.lhs[i];
+            if a >= 0 {
+                self.grad[a] += self.dlhs[i] * g;
+            }
+            let b = self.rhs[i];
+            if b >= 0 {
+                self.grad[b] += self.drhs[i] * g;
+            }
+        }
+    }
+
+    fn rewind(&mut self, len: i32) {
+        self.data.truncate(len);
+        self.grad.truncate(len);
+        self.lhs.truncate(len);
+        self.rhs.truncate(len);
+        self.dlhs.truncate(len);
+        self.drhs.truncate(len);
+    }
+}
+
+// Let there be a Tokenizer to translate strings to sequences of integers and back.
+struct Tokenizer {
+    uchars: List<char>,
+    ids: TreeMap<char, i32>,
+    bos: i32,
+    vocab_size: i32,
+}
+
+impl Tokenizer {
+    fn new(docs: &List<String>) -> Tokenizer {
+        let mut seen = TreeSet::<char>::new();
+        for let doc of docs {
+            for let c of doc.chars() {
+                seen.insert(c);
+            }
+        }
+        let mut uchars: List<char> = [];
+        for let c of seen.iter_value() {
+            uchars.push(c);
+        }
+        uchars.sort();
+
+        let mut ids = TreeMap::<char, i32>::new();
+        for let mut i = 0; i < uchars.len(); i += 1 {
+            ids[uchars[i]] = i;
+        }
+        let bos = uchars.len();
+        return Tokenizer { uchars, ids, bos, vocab_size: bos + 1 };
+    }
+
+    fn encode(&self, doc: &String) -> List<i32> {
+        let mut tokens: List<i32> = [self.bos];
+        for let c of doc.chars() {
+            tokens.push(self.ids[c]);
+        }
+        tokens.push(self.bos);
+        return tokens;
+    }
+}
+
+// A parameter matrix, flattened row-major into tape node ids.
+struct Matrix {
+    rows: i32,
+    cols: i32,
+    ids: List<i32>,
+}
+
+impl Matrix {
+    fn new(t: &mut Tape, rng: &mut Rng, rows: i32, cols: i32) -> Matrix {
+        let mut ids: List<i32> = List::with_capacity(rows * cols);
+        for let _ of 0..<rows * cols {
+            ids.push(t.leaf(rng.gauss(INIT_STD)));
+        }
+        return Matrix { rows, cols, ids };
+    }
+
+    fn row(&self, row: i32) -> List<i32> {
+        let base = row * self.cols;
+        let mut out: List<i32> = List::with_capacity(self.cols);
+        for let mut i = 0; i < self.cols; i += 1 {
+            out.push(self.ids[base + i]);
+        }
+        return out;
+    }
+}
+
+struct Layer {
+    attn_wq: Matrix,
+    attn_wk: Matrix,
+    attn_wv: Matrix,
+    attn_wo: Matrix,
+    mlp_fc1: Matrix,
+    mlp_fc2: Matrix,
+}
+
+struct Gpt {
+    wte: Matrix,
+    wpe: Matrix,
+    lm_head: Matrix,
+    layers: List<Layer>,
+}
+
+impl Gpt {
+    fn new(t: &mut Tape, rng: &mut Rng, vocab_size: i32) -> Gpt {
+        let wte = Matrix::new(t, rng, vocab_size, N_EMBD);
+        let wpe = Matrix::new(t, rng, BLOCK_SIZE, N_EMBD);
+        let lm_head = Matrix::new(t, rng, vocab_size, N_EMBD);
+        let mut layers: List<Layer> = List::with_capacity(N_LAYER);
+        for let _ of 0..<N_LAYER {
+            layers.push(Layer {
+                attn_wq: Matrix::new(t, rng, N_EMBD, N_EMBD),
+                attn_wk: Matrix::new(t, rng, N_EMBD, N_EMBD),
+                attn_wv: Matrix::new(t, rng, N_EMBD, N_EMBD),
+                attn_wo: Matrix::new(t, rng, N_EMBD, N_EMBD),
+                mlp_fc1: Matrix::new(t, rng, 4 * N_EMBD, N_EMBD),
+                mlp_fc2: Matrix::new(t, rng, N_EMBD, 4 * N_EMBD),
+            });
+        }
+        return Gpt { wte, wpe, lm_head, layers };
+    }
+}
+
+// The attention KV cache, flat: position-major, then layer, then embedding.
+struct Cache {
+    keys: List<i32>,
+    values: List<i32>,
+}
+
+impl Cache {
+    fn new() -> Cache {
+        return Cache { keys: [], values: [] };
+    }
+
+    fn offset(pos_id: i32, layer: i32) -> i32 {
+        return (pos_id * N_LAYER + layer) * N_EMBD;
+    }
+
+    fn append(&mut self, k: &List<i32>, v: &List<i32>) {
+        self.keys.extend(k);
+        self.values.extend(v);
+    }
+}
+
+fn linear(t: &mut Tape, x: &List<i32>, w: &Matrix) -> List<i32> {
+    assert w.cols == x.len();
+    let mut out: List<i32> = List::with_capacity(w.rows);
+    for let mut o = 0; o < w.rows; o += 1 {
+        let base = o * w.cols;
+        let mut acc = t.mul(w.ids[base], x[0]);
+        for let mut i = 1; i < w.cols; i += 1 {
+            let p = t.mul(w.ids[base + i], x[i]);
+            acc = t.add(acc, p);
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+fn softmax(t: &mut Tape, logits: &List<i32>) -> List<i32> {
+    let mut max_val = t.data[logits[0]];
+    for let mut i = 1; i < logits.len(); i += 1 {
+        let val = t.data[logits[i]];
+        if val > max_val {
+            max_val = val;
+        }
+    }
+
+    let mut exps: List<i32> = List::with_capacity(logits.len());
+    for let mut i = 0; i < logits.len(); i += 1 {
+        let shifted = t.add_scalar(logits[i], -max_val);
+        exps.push(t.exp(shifted));
+    }
+
+    let mut total = exps[0];
+    for let mut i = 1; i < exps.len(); i += 1 {
+        total = t.add(total, exps[i]);
+    }
+    let inv_total = t.pow_scalar(total, -1.0);
+
+    let mut out: List<i32> = List::with_capacity(exps.len());
+    for let mut i = 0; i < exps.len(); i += 1 {
+        out.push(t.mul(exps[i], inv_total));
+    }
+    return out;
+}
+
+fn rmsnorm(t: &mut Tape, x: &List<i32>) -> List<i32> {
+    let mut sum_sq = t.mul(x[0], x[0]);
+    for let mut i = 1; i < x.len(); i += 1 {
+        let sq = t.mul(x[i], x[i]);
+        sum_sq = t.add(sum_sq, sq);
+    }
+    let mean_sq = t.mul_scalar(sum_sq, 1.0 / x.len() as f64);
+    let shifted = t.add_scalar(mean_sq, RMSNORM_EPS);
+    let scale = t.pow_scalar(shifted, -0.5);
+
+    let mut out: List<i32> = List::with_capacity(x.len());
+    for let mut i = 0; i < x.len(); i += 1 {
+        out.push(t.mul(x[i], scale));
+    }
+    return out;
+}
+
+fn add_vec(t: &mut Tape, a: &List<i32>, b: &List<i32>) -> List<i32> {
+    assert a.len() == b.len();
+    let mut out: List<i32> = List::with_capacity(a.len());
+    for let mut i = 0; i < a.len(); i += 1 {
+        out.push(t.add(a[i], b[i]));
+    }
+    return out;
+}
+
+fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32) -> List<i32> {
+    let inv_scale = 1.0 / f64::sqrt(HEAD_DIM as f64);
+    let mut out: List<i32> = List::with_capacity(N_EMBD);
+    for let h of 0..<N_HEAD {
+        let hs = h * HEAD_DIM;
+
+        let mut logits: List<i32> = List::with_capacity(pos_id + 1);
+        for let p of 0..=pos_id {
+            let base = Cache::offset(p, layer) + hs;
+            let mut dot = t.mul(q[hs], cache.keys[base]);
+            for let mut j = 1; j < HEAD_DIM; j += 1 {
+                let term = t.mul(q[hs + j], cache.keys[base + j]);
+                dot = t.add(dot, term);
+            }
+            logits.push(t.mul_scalar(dot, inv_scale));
+        }
+        let weights = softmax(t, &logits);
+
+        for let mut j = 0; j < HEAD_DIM; j += 1 {
+            let mut acc = t.mul(weights[0], cache.values[Cache::offset(0, layer) + hs + j]);
+            for let mut p = 1; p <= pos_id; p += 1 {
+                let term = t.mul(weights[p], cache.values[Cache::offset(p, layer) + hs + j]);
+                acc = t.add(acc, term);
+            }
+            out.push(acc);
+        }
+    }
+    return out;
+}
+
+// GPT-2, blessed among the GPTs, with minor differences: layernorm -> rmsnorm,
+// no biases, GeLU -> ReLU.
+fn gpt(t: &mut Tape, m: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32) -> List<i32> {
+    let tok_emb = m.wte.row(token_id);
+    let pos_emb = m.wpe.row(pos_id);
+    let mut x = add_vec(t, &tok_emb, &pos_emb);
+    x = rmsnorm(t, &x);
+
+    for let li of 0..<N_LAYER {
+        let layer = &m.layers[li];
+
+        let attn_residual = x;
+        x = rmsnorm(t, &x);
+        let q = linear(t, &x, &layer.attn_wq);
+        let k = linear(t, &x, &layer.attn_wk);
+        let v = linear(t, &x, &layer.attn_wv);
+        assert cache.keys.len() == Cache::offset(pos_id, li);
+        cache.append(&k, &v);
+        let heads = attention(t, cache, &q, li, pos_id);
+        x = linear(t, &heads, &layer.attn_wo);
+        x = add_vec(t, &x, &attn_residual);
+
+        let mlp_residual = x;
+        x = rmsnorm(t, &x);
+        x = linear(t, &x, &layer.mlp_fc1);
+        for let mut i = 0; i < x.len(); i += 1 {
+            x[i] = t.relu(x[i]);
+        }
+        x = linear(t, &x, &layer.mlp_fc2);
+        x = add_vec(t, &x, &mlp_residual);
+    }
+
+    return linear(t, &x, &m.lm_head);
+}
+
+// Forward a whole document; the returned node is its mean loss.
+fn forward_loss(t: &mut Tape, m: &Gpt, tokens: &List<i32>) -> i32 {
+    let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
+    let mut cache = Cache::new();
+    let mut total = -1;
+    for let pos_id of 0..<n {
+        let logits = gpt(t, m, &mut cache, tokens[pos_id], pos_id);
+        let probs = softmax(t, &logits);
+        let log_prob = t.log(probs[tokens[pos_id + 1]]);
+        let loss = t.mul_scalar(log_prob, -1.0);
+        total = if total < 0 { loss } else { t.add(total, loss) };
+    }
+    return t.mul_scalar(total, 1.0 / n as f64);
+}
+
+// Let there be Adam, the blessed optimizer.
+struct Adam {
+    m: List<f64>,
+    v: List<f64>,
+}
+
+impl Adam {
+    fn new(n_params: i32) -> Adam {
+        return Adam {
+            m: List::filled(n_params, 0.0),
+            v: List::filled(n_params, 0.0),
+        };
+    }
+
+    fn step(&mut self, t: &mut Tape, lr: f64, step: i32) {
+        let bias1 = 1.0 - f64::pow(BETA1, (step + 1) as f64);
+        let bias2 = 1.0 - f64::pow(BETA2, (step + 1) as f64);
+        for let mut i = 0; i < self.m.len(); i += 1 {
+            let g = t.grad[i];
+            self.m[i] = BETA1 * self.m[i] + (1.0 - BETA1) * g;
+            self.v[i] = BETA2 * self.v[i] + (1.0 - BETA2) * g * g;
+            let m_hat = self.m[i] / bias1;
+            let v_hat = self.v[i] / bias2;
+            t.data[i] = t.data[i] - lr * m_hat / (f64::sqrt(v_hat) + EPS_ADAM);
+            t.grad[i] = 0.0;
+        }
+    }
+}
+
+fn train(t: &mut Tape, m: &Gpt, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
+    let n_params = t.len();
+    let mut adam = Adam::new(n_params);
+    for let step of 0..<num_steps {
+        let tokens = tok.encode(&docs[step % docs.len()]);
+        let loss = forward_loss(t, m, &tokens);
+        t.backward(loss);
+
+        let loss_value = t.data[loss];
+        adam.step(t, LEARNING_RATE * (1.0 - step as f64 / num_steps as f64), step);
+        t.rewind(n_params);
+
+        print(`step ${step + 1:>4} / ${num_steps:>4} | loss ${loss_value:.4f}\r`);
+    }
+    println("");
+}
+
+fn sample_token(rng: &mut Rng, probs: &List<f64>) -> i32 {
+    let mut total = 0.0;
+    for let p of probs {
+        total += *p;
+    }
+    let mut r = rng.next_f64() * total;
+    for let mut i = 0; i < probs.len(); i += 1 {
+        r -= probs[i];
+        if r < 0.0 {
+            return i;
+        }
+    }
+    return probs.len() - 1;
+}
+
+fn generate(t: &mut Tape, m: &Gpt, tok: &Tokenizer, rng: &mut Rng) -> String {
+    let n_params = t.len();
+    let mut cache = Cache::new();
+    let mut token_id = tok.bos;
+    let mut sample = String::with_capacity(BLOCK_SIZE);
+    for let pos_id of 0..<BLOCK_SIZE {
+        let logits = gpt(t, m, &mut cache, token_id, pos_id);
+        let mut scaled: List<i32> = List::with_capacity(logits.len());
+        for let mut i = 0; i < logits.len(); i += 1 {
+            scaled.push(t.mul_scalar(logits[i], 1.0 / TEMPERATURE));
+        }
+        let probs = softmax(t, &scaled);
+        let mut weights: List<f64> = List::with_capacity(probs.len());
+        for let mut i = 0; i < probs.len(); i += 1 {
+            weights.push(t.data[probs[i]]);
+        }
+        token_id = sample_token(rng, &weights);
+        if token_id == tok.bos {
+            break;
+        }
+        sample.push(tok.uchars[token_id]);
+    }
+    t.rewind(n_params);
+    return sample;
+}
+
+fn load_docs() -> List<String> with (Stderr, Preopens) {
+    let text = match fs::read_to_string(&"input.txt") {
+        Ok(contents) => contents,
+        Err(e) => {
+            eprintln(`microgpt: ${e}; falling back to the built-in names`);
+            #data;
+        },
+    };
+    let mut docs: List<String> = [];
+    for let line of text.lines() {
+        let doc = line.trim();
+        if !doc.is_empty() {
+            docs.push(doc);
+        }
+    }
+    return docs;
+}
+
+fn requested_steps() -> i32 with (Stderr, Environment) {
+    let arguments = args();
+    if arguments.is_empty() {
+        return NUM_STEPS;
+    }
+    match i32::from_str(&arguments[0]) {
+        Ok(n) && n > 0 => {
+            return n;
+        },
+        _ => {
+            eprintln(`microgpt: ignoring invalid step count: ${arguments[0]}`);
+            return NUM_STEPS;
+        },
+    }
+}
+
+export fn run() with (Stdout, Stderr, Environment, Preopens) {
+    let num_steps = requested_steps();
+    let mut rng = Rng::new(SEED);
+
+    let mut docs = load_docs();
+    rng.shuffle(&mut docs);
+    println(`num docs: ${docs.len()}`);
+
+    let tok = Tokenizer::new(&docs);
+    println(`vocab size: ${tok.vocab_size}`);
+
+    let mut tape = Tape::new();
+    let model = Gpt::new(&mut tape, &mut rng, tok.vocab_size);
+    println(`num params: ${tape.len()}`);
+
+    train(&mut tape, &model, &tok, &docs, num_steps);
+
+    println("--- inference (new, hallucinated names) ---");
+    for let i of 0..<NUM_SAMPLES {
+        let sample = generate(&mut tape, &model, &tok, &mut rng);
+        println(`sample ${i + 1:>2}: ${sample}`);
+    }
+}
+
+test "autograd matches the hand-computed gradient" {
+    let mut t = Tape::new();
+    let x = t.leaf(3.0);
+    let y = t.leaf(4.0);
+    // f = x * y + x^2 => df/dx = y + 2x = 10, df/dy = x = 3
+    let xy = t.mul(x, y);
+    let x2 = t.pow_scalar(x, 2.0);
+    let f = t.add(xy, x2);
+    t.backward(f);
+
+    assert t.data[f] == 21.0;
+    assert t.grad[x] == 10.0;
+    assert t.grad[y] == 3.0;
+}
+
+test "relu, exp, and log carry their local gradients" {
+    let mut t = Tape::new();
+    let neg = t.leaf(-2.0);
+    let r = t.relu(neg);
+    t.backward(r);
+    assert t.data[r] == 0.0;
+    assert t.grad[neg] == 0.0;
+
+    let mut u = Tape::new();
+    let a = u.leaf(2.0);
+    let e = u.exp(a);
+    let l = u.log(e);
+    u.backward(l);
+    assert f64::abs(u.data[l] - 2.0) < 1e-12;
+    assert f64::abs(u.grad[a] - 1.0) < 1e-12;
+}
+
+test "softmax is a distribution and rmsnorm has unit mean square" {
+    let mut t = Tape::new();
+    let mut logits: List<i32> = [];
+    for let v of 0..<5 {
+        logits.push(t.leaf(v as f64));
+    }
+
+    let probs = softmax(&mut t, &logits);
+    let mut total = 0.0;
+    for let p of probs {
+        total += t.data[p];
+    }
+    assert f64::abs(total - 1.0) < 1e-12;
+
+    let normed = rmsnorm(&mut t, &logits);
+    let mut sum_sq = 0.0;
+    for let n of normed {
+        sum_sq += t.data[n] * t.data[n];
+    }
+    assert f64::abs(sum_sq / normed.len() as f64 - 1.0) < 1e-4;
+}
+
+test "the tokenizer round-trips a document" {
+    let docs: List<String> = ["abc", "cab"];
+    let tok = Tokenizer::new(&docs);
+    assert tok.vocab_size == 4;
+    assert tok.bos == 3;
+
+    let tokens = tok.encode(&"cab");
+    assert tokens == [3, 2, 0, 1, 3] as List<i32>;
+
+    let mut round_trip = String::with_capacity(3);
+    for let mut i = 1; i < tokens.len() - 1; i += 1 {
+        round_trip.push(tok.uchars[tokens[i]]);
+    }
+    assert round_trip == "cab";
+}
+
+test "the tape rewinds to the parameters between steps" {
+    let mut t = Tape::new();
+    let p = t.leaf(1.0);
+    let n_params = t.len();
+    let doubled = t.mul_scalar(p, 2.0);
+    t.backward(doubled);
+    assert t.grad[p] == 2.0;
+
+    t.rewind(n_params);
+    assert t.len() == n_params;
+    assert t.data[p] == 1.0;
+}
+
+#[timeout_ms(30000)]
+test "training drives the loss down" {
+    let docs: List<String> = ["emma", "olivia", "ava", "isabella", "sophia"];
+    let tok = Tokenizer::new(&docs);
+    let mut rng = Rng::new(SEED);
+    let mut tape = Tape::new();
+    let model = Gpt::new(&mut tape, &mut rng, tok.vocab_size);
+
+    let n_params = tape.len();
+    let mut adam = Adam::new(n_params);
+    let first_tokens = tok.encode(&docs[0]);
+    let start = tape.data[forward_loss(&mut tape, &model, &first_tokens)];
+    tape.rewind(n_params);
+
+    for let step of 0..<40 {
+        let tokens = tok.encode(&docs[step % docs.len()]);
+        let loss = forward_loss(&mut tape, &model, &tokens);
+        tape.backward(loss);
+        adam.step(&mut tape, LEARNING_RATE, step);
+        tape.rewind(n_params);
+    }
+
+    let end = tape.data[forward_loss(&mut tape, &model, &first_tokens)];
+    assert end < start;
+}
+
+__DATA__
+emma
+mary
+ada
+madeleine
+katelyn
+karla
+jayde
+harleigh
+paityn
+rosalina
+rita
+margaux
+mayra
+klara
+janiah
+coralie
+blythe
+joana
+minerva
+jalani
+isra
+zariya
+rosanna
+loxley
+emmanuelle
+renae
+eveline
+yazmine
+corinna
+makyla
+marilynn
+malea
+ivyanna
+audri
+javeah
+koda
+muntaha
+xareni
+angelita
+carlin
+dempsey
+archer
+selin
+meral
+jezebel
+farryn
+zyriah
+leasia
+arika
+lemon
+aziya
+maanvi
+alexys
+korri
+amana
+jocelin
+shanzay
+dayonna
+miana
+anel
+kalahni
+retaj
+ariarose
+jaylianis
+paighton
+alene
+gwynn
+malala
+tracie
+baily
+greysen
+liylah
+saydie
+alyrica
+davionna
+kahlea
+maleeka
+rosamaria
+adessa
+breella
+grettell
+kelaiah
+milayna
+shreeya
+ahsha
+bethsaida
+enma
+jocilyn
+lissette
+niveah
+stellaluna
+afiyah
+bessy
+edelweiss
+ima
+kayelee
+mang
+nylia
+siennah
+zulma
+aneri
+brielyn
+dyna
+henya
+kaegan
+lakoda
+maziyah
+pera
+shambhavi
+xariyah
+ahmi
+ardis
+breylin
+daly
+elzie
+harmonei
+jayia
+karmon
+kymberlynn
+maiana
+myesha
+phinley
+salmah
+syenna
+xymena
+adeeva
+ameriie
+aset
+brandii
+connolly
+edin
+ffion
+iliyana
+jeselle
+kashia
+kjerstin
+life
+malk
+milaina
+novaleah
+rhettlee
+shamirah
+tani
+xaylah
+ziasia
+kayden
+kyrie
+joaquin
+alonzo
+quinton
+jamie
+elisha
+justus
+yaakov
+lazarus
+steele
+elyas
+shaurya
+renzo
+lex
+mahdi
+rashawn
+arin
+gabe
+javi
+rowyn
+musab
+kaydon
+wynston
+divine
+zein
+shlome
+mansa
+dream
+koleson
+sekou
+avyukt
+ehan
+delton
+arnulfo
+broc
+bray
+antwone
+rael
+kaesen
+beckem
+pasquale
+frederik
+treyden
+jeancarlo
+webster
+itay
+teagen
+firas
+pike
+azahel
+jeriko
+sammie
+bralyn
+jandriel
+raeden
+alyaan
+esmond
+khizar
+sahid
+amirr
+ezri
+kelso
+red
+abdelrahman
+chazz
+hassen
+kevaughn
+orien
+uzay
+arshaan
+davud
+jaelin
+kierce
+nasai
+seraphim
+zarif
+ayiden
+dechlan
+grigor
+jorell
+lamon
+neill
+rustam
+treylin
+aben
+ayeden
+chukwuebuka
+efran
+hennessy
+joban
+kiylan
+mcclane
+pius
+shloima
+vail
+abdulelah
+anzar
+bol
+covan
+dune
+georgi
+ivin
+jerold
+kazden
+kyston
+matrim
+oakleigh
+rohi
+stavro
+vahan
