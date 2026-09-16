@@ -12,6 +12,8 @@
 //! unterminated region as `None`; comment/string scanners run to
 //! end-of-input (ANTLR4 tolerates unterminated comments).
 
+use icu from "core:icu";
+
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
 /// the index of the terminating `\n` (which it excludes), or `chars.len()`.
 pub fn scan_line_comment(chars: &List<char>, pos: i32) -> i32 {
@@ -135,6 +137,16 @@ pub fn is_id_start_char(c: char) -> bool {
         || '\u{3001}' <= c <= '\u{D7FF}'
         || '\u{F900}' <= c <= '\u{FDCF}'
         || '\u{FDF0}' <= c <= '\u{FFFD}';
+}
+
+/// Whether a rule name starting with `c` is a lexer rule. ANTLR4 types a rule
+/// by `Character.isUpperCase` (`vendor/antlr4/doc/lexicon.md`), which is the
+/// UCD's `Uppercase`: `Lu` plus `Other_Uppercase`, not the ASCII range.
+pub fn is_rule_name_upper(c: char) -> bool {
+    if c <= '\u{007F}' {
+        return 'A' <= c <= 'Z';
+    }
+    return icu::contains(&"Uppercase", c).unwrap_or(false);
 }
 
 /// ANTLR4's `NameChar`.

@@ -1,11 +1,7 @@
 #![stdlib("core:icu")]
 //! Unicode character properties, from the ICU4X component bundled with the
-//! toolchain.
-//!
-//! A name this module does not answer comes back as `null`, never as an
-//! approximate set: a caller complementing one admits real members of the
-//! property rather than missing some. `Block`, `Decomposition_Type` and the
-//! UCD's contributory `Other_*` properties are the names withheld that way.
+//! toolchain. A name it does not answer is `null`, never an approximate set:
+//! `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
 
 use { Properties } from "./icu.wat" with { type: "wat" };
 
@@ -15,9 +11,7 @@ pub fn ranges(property: &String) -> Option<List<[u32, u32]>> {
 }
 
 /// Inclusive code point ranges of an enumerated property's value, lowest
-/// first. `property` is `gc` (whose value may name a group such as `L`), `sc`,
-/// `bc`, `lb`, `wb`, `sb`, `gcb`, `incb`, `ea`, `hst`, `nt`, `insc`, `jt`,
-/// `jg`, `vo` or `ccc`.
+/// first. A `gc` value may name a group (`L`) as well as a category (`Lu`).
 pub fn value_ranges(property: &String, value: &String) -> Option<List<[u32, u32]>> {
     return Properties::ranges(*property, Option::Some(*value));
 }

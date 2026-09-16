@@ -45,7 +45,7 @@ use {
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
-use { scan_balanced, is_id_continue_char } from "./scan.wado";
+use { scan_balanced, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
 use icu from "core:icu";
 
 pub struct G4Parser {
@@ -111,17 +111,11 @@ fn first_char(s: &String) -> Option<char> {
     return iter.next();
 }
 
-/// ANTLR4 retypes a rule by `Character.isUpperCase` on its first character
-/// (`vendor/antlr4/doc/lexicon.md`), which is the UCD's `Uppercase` — `Lu`
-/// plus `Other_Uppercase`, not the ASCII range.
 fn is_lexer_rule_name(name: &String) -> bool {
     let Some(c) = first_char(name) else {
         return false;
     };
-    if c <= '\u{007F}' {
-        return 'A' <= c <= 'Z';
-    }
-    return icu::contains(&"Uppercase", c).unwrap_or(false);
+    return is_rule_name_upper(c);
 }
 
 fn is_valid_not_set_element(elem: &Element) -> bool {
@@ -1568,12 +1562,14 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
         if parts.next() matches { Some(_) } {
             return false;
         }
-        if head == "emojipresentation" {
-            return expand_emoji_presentation(&value, ranges);
-        }
-        return push_found_ranges(value_ranges(&head, &value), ranges);
+        let found = if head == "emojipresentation" {
+            emoji_presentation_ranges(&value);
+        } else {
+            value_ranges(&head, &value);
+        };
+        return push_found_ranges(found, ranges);
     }
-    if expand_posix_property(&key, ranges) {
+    if push_found_ranges(posix_property_ranges(&key), ranges) {
         return true;
     }
     if push_found_ranges(value_ranges(&"gc", &key), ranges) {
@@ -1598,14 +1594,6 @@ fn subtract_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRa
 /// `a & b`, as `a - !b`.
 fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
     return subtract_char_ranges(a, &complement_char_ranges(b));
-}
-
-fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
-    let mut out = *a;
-    for let r of b {
-        out.push(*r);
-    }
-    return out;
 }
 
 /// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
@@ -1646,88 +1634,41 @@ fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange
 
 /// Ranges for a property this file names literally, so a name `core:icu` does
 /// not answer is Gale's own mistake rather than user input.
-fn gc_set(key: &String) -> List<CharRange> {
-    let Some(ranges) = value_ranges(&"gc", key) else {
-        panic(`core:icu does not answer gc=${*key}`);
+fn required_ranges(found: Option<List<CharRange>>, name: &String) -> List<CharRange> {
+    let Some(ranges) = found else {
+        panic(`core:icu does not answer '${*name}'`);
     };
     return ranges;
+}
+
+fn gc_set(key: &String) -> List<CharRange> {
+    return required_ranges(value_ranges(&"gc", key), key);
 }
 
 fn binary_set(key: &String) -> List<CharRange> {
-    let Some(ranges) = binary_ranges(key) else {
-        panic(`core:icu does not answer '${*key}'`);
-    };
-    return ranges;
+    return required_ranges(binary_ranges(key), key);
 }
 
 /// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
-/// ICU. None is a UCD property, so each is derived here from tables Gale
-/// already has — the derivation, not a table, is what can be wrong. `\P{...}`
-/// complements whatever comes back, so a definition that is merely close
-/// admits characters rather than missing them; every one below is measured
-/// against the published jar and pinned character-by-character in
-/// `parser_test.wado`.
-///
-/// `Alpha`, `Lower`, `Upper` and `Space` are POSIX names too, but each is a
-/// UCD alias (`Alphabetic`, `Lowercase`, `Uppercase`, `White_Space`) the
-/// binary-property table already answers with the same set.
-fn expand_posix_property(key: &String, ranges: &mut List<CharRange>) -> bool {
-    if let Some(set) = posix_property_ranges(key) {
-        for let r of &set {
-            ranges.push(*r);
-        }
-        return true;
-    }
-    return false;
-}
-
+/// ICU. `core:icu` ships five of them itself; `cntrl` and `digit` it does not,
+/// each being a `General_Category` under another name. `Alpha`, `Lower`, `Upper`
+/// and `Space` are POSIX names too, but each is a UCD alias the binary
+/// properties already answer with the same set.
 fn posix_property_ranges(key: &String) -> Option<List<CharRange>> {
     return match key {
         "cntrl" => Option::Some(gc_set(&"cc")),
         "digit" => Option::Some(gc_set(&"nd")),
-        "alnum" => Option::Some(union_char_ranges(&binary_set(&"alphabetic"), &gc_set(&"nd"))),
-        "xdigit" => Option::Some(union_char_ranges(&gc_set(&"nd"), &binary_set(&"hexdigit"))),
-        "blank" => Option::Some(posix_blank_ranges()),
-        "graph" => Option::Some(posix_graph_ranges()),
-        "print" => Option::Some(posix_print_ranges()),
+        "alnum" | "blank" | "graph" | "print" | "xdigit" => Option::Some(binary_set(key)),
         _ => null,
     };
 }
 
-/// Horizontal whitespace: `White_Space` less the characters that end a line.
-fn posix_blank_ranges() -> List<CharRange> {
-    let mut vertical = union_char_ranges(&gc_set(&"zl"), &gc_set(&"zp"));
-    for let c of ['\n', '\u{000B}', '\u{000C}', '\r', '\u{0085}'] {
-        vertical.push(CharRange::single(c));
-    }
-    return subtract_char_ranges(&binary_set(&"whitespace"), &vertical);
-}
-
-/// Everything with a visible glyph: not whitespace, not a control, not a
-/// surrogate, not unassigned. Format characters (`Cf`) stay in — ANTLR4 keeps
-/// them, and `gc=Cs` is empty here anyway since no `char` is a surrogate.
-fn posix_graph_ranges() -> List<CharRange> {
-    let mut invisible = binary_set(&"whitespace");
-    for let key of ["cc", "cs", "cn"] {
-        invisible = union_char_ranges(&invisible, &gc_set(&key));
-    }
-    return complement_char_ranges(&invisible);
-}
-
-/// `graph` plus horizontal whitespace, less the controls — so a space prints
-/// but a tab, being `Cc`, does not.
-fn posix_print_ranges() -> List<CharRange> {
-    let visible = union_char_ranges(&posix_graph_ranges(), &posix_blank_ranges());
-    return subtract_char_ranges(&visible, &gc_set(&"cc"));
-}
-
 /// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
-/// `lexer-rules.md` defines the three values). Derived from `Emoji` and
-/// `Emoji_Presentation`, both of which `emoji-data.txt` already gives the
-/// table; measured against the jar like the POSIX set.
-fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bool {
+/// `lexer-rules.md` defines the three values). Derived from the UCD's `Emoji`
+/// and `Emoji_Presentation`, and pinned character-by-character.
+fn emoji_presentation_ranges(value: &String) -> Option<List<CharRange>> {
     let emoji = binary_set(&"emoji");
-    let set = match value {
+    return match value {
         // Colourful by default.
         "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set(&"emojipresentation"))),
         // Emoji-capable, but drawn as text unless asked otherwise.
@@ -1736,13 +1677,6 @@ fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bo
         "text" => Option::Some(complement_char_ranges(&emoji)),
         _ => null,
     };
-    if let Some(items) = set {
-        for let r of &items {
-            ranges.push(*r);
-        }
-        return true;
-    }
-    return false;
 }
 
 /// Why `\p{name}` was refused. Three families ANTLR4 answers are deliberately
@@ -1756,21 +1690,20 @@ fn unsupported_property_message(name: &String) -> String {
     if head == "decompositiontype" || head == "dt" {
         return `Gale does not answer Decomposition_Type ("${*name}"): ICU ships no data for it.`;
     }
-    if contributory_property_names().contains(&key) {
+    if CONTRIBUTORY_PROPERTIES.contains(&key) {
         return `"${*name}" is a contributory property, which UAX #44 defines as an input to a derived property rather than one to query. Name the derived property instead (\\p{Alphabetic}, \\p{ID_Start}, …).`;
     }
     return `unsupported Unicode property "${*name}" in a character set`;
 }
 
-/// The UCD's contributory properties, folded. ICU omits them, and a general
-/// category spelling `Other_*` (`Lo`, `No`) is answered before this is asked.
-fn contributory_property_names() -> List<String> {
-    return [
-        "otheralphabetic", "oalpha", "otherdefaultignorablecodepoint", "odi", "othergraphemeextend", "ogrext",
-        "otheridcontinue", "oidc", "otheridstart", "oids", "otherlowercase", "olower", "othermath", "omath",
-        "otheruppercase", "oupper",
-    ];
-}
+/// The UCD's contributory properties, folded, in long and short form. ICU omits
+/// them; a general category spelling `Other_*` (`Lo`, `No`) is answered as a
+/// category before this is asked.
+global CONTRIBUTORY_PROPERTIES: List<String> = [
+    "otheralphabetic", "oalpha", "otherdefaultignorablecodepoint", "odi", "othergraphemeextend", "ogrext",
+    "otheridcontinue", "oidc", "otheridstart", "oids", "otherlowercase", "olower", "othermath", "omath",
+    "otheruppercase", "oupper",
+];
 
 /// Fold a property name the way UAX #44 matches one: ignoring case, `_`, `-`
 /// and spaces.

@@ -28,9 +28,8 @@ test "one character is answered without building the ranges" {
     assert icu::value_contains(&"gcb", &"Regional_Indicator", '\u{1F1EF}').unwrap();
 }
 
-// `Block`, `Decomposition_Type` and the UCD's contributory `Other_*` are
-// withheld rather than approximated: a caller complementing an approximate set
-// admits real members of the property rather than missing some.
+// A caller complementing an approximate set would admit real members of the
+// property, which is the failure that matters for a `\P{...}` in a grammar.
 test "a name this build does not answer is null, not an empty set" {
     assert icu::ranges(&"Other_ID_Start") matches { None };
     assert icu::ranges(&"Other_Alphabetic") matches { None };

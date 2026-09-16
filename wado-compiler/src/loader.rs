@@ -1560,7 +1560,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.fetch_wasm_asset_bytes(&source, &path).await?
         };
 
-        let wasm_bytes = match kind {
+        let core_wasm_bytes = match kind {
             WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
                 .map_err(|e| LoadError::WasmImport {
                     module_source: source.clone(),
@@ -1570,14 +1570,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             WasmAssetKind::Wasm => raw_bytes,
         };
 
-        // A CM component takes the component path; a core module falls through.
-        // The text form says which just as the binary does, so an asset is a
-        // component or not regardless of how it is written.
-        if is_wasm_component(&wasm_bytes) {
-            return self.handle_component_import(&source, &namespace, wasm_bytes);
+        // A component takes the component path, a core module falls through. The
+        // text form says which just as the binary does, so the bytes decide.
+        if is_wasm_component(&core_wasm_bytes) {
+            return self.handle_component_import(&source, &namespace, core_wasm_bytes);
         }
 
-        let core_wasm_bytes = wasm_bytes;
         let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
 
         // Synthesize a Wado AST module from the asset's exports and run

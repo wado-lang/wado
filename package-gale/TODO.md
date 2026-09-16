@@ -21,9 +21,6 @@ Entries state the symptom, how to reproduce it, and anything already measured �
 
 Empty right now.
 
-<!-- `ÀBC : [0-9]+ ;` is rejected as `unexpected character "À"`, though ANTLR4's `NameStartChar` admits `\u00C0` upwards. Measured: widening the g4 lexer's identifier predicates alone makes it parse, but `is_lexer_rule_name` then reads `ÀBC` as a _parser_ rule — it asks `is_ascii_uppercase` where ANTLR asks `Character.isUpperCase`. Both halves need `char::is_uppercase` (Stage C below). No corpus grammar hits this.
--->
-
 ### Pipeline and tooling correctness
 
 Empty right now.
@@ -38,7 +35,6 @@ One narrow gap remains in the surface itself: `$line` has no `$`-form, because t
 
 - Both remaining `[stage_c_todo]` entries are held by something other than action execution, so no amount of Stage C work closes them: `FullContextParsing/AmbiguityNoLoop` is ambiguity _reporting_ (its `@init` asks for `LL_EXACT_AMBIG_DETECTION`), and `ParseTrees/ExtraTokensAndAltLabels` is the recovery divergence its own triage line describes.
 - `PredictionMode` / `dumpDFA` describe ANTLR's simulator rather than the grammar, so an action printing one is out of scope for good (`action.md`, "Runtime context API").
-- `char::is_uppercase` in the Wado prelude — **blocked on ICU**. ANTLR retypes a grammar's rule name by `Character.isUpperCase`, and `NameStartChar` admits `\u00C0` upwards, so an ANTLRv4 base can only answer for ASCII names. The `Uppercase` property is `core:icu`'s ([WEP: `core:icu`](../docs/wep-2026-08-09-core-icu.md), `properties` interface); a UCD table generated into the prelude beside it would be a second source of truth. Start when `wado-bundled-icu/` is wired.
 - The ATN-class lexer path proper: predicates evaluated inside `latn_match` rather than refused, which needs a predicate transition in the blob and in the simulator. Do it when a grammar asks; the refusal above keeps the meantime honest.
 - java2wado numeric promotion: an `i32` token member (`$X.int` / `.type` / `.line` / `.pos` / `.index`) mixed with a wider value-channel field (`returns [long v]` / `[float]` / `[double]`) mismatches Wado's strict widths, since Wado has no implicit widening. Loud compile error, not silent; no corpus grammar hits it — lowest priority here. A proper fix threads Java's promotion rules through the translator.
 

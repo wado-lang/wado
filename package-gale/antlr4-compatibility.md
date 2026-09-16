@@ -68,8 +68,9 @@ against the jar at all: a property's members are ICU's answer, not something
 Gale keeps and could get wrong.
 
 What remains Gale's, and so remains a bug when it disagrees, is the layer above
-the data: the bare-name resolution order, the POSIX derivations,
-`EmojiPresentation=`, and the complement. Those are pinned
+the data: the bare-name resolution order, the two `General_Category` aliases
+behind `cntrl` and `digit`, `EmojiPresentation=`, and the complement. Those are
+pinned
 character-by-character in `src/g4/parser_test.wado`.
 
 ### Three properties Gale deliberately does not answer
