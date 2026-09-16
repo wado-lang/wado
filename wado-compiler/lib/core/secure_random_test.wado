@@ -1,5 +1,24 @@
 use { BufferedRandom } from "core:secure_random";
+use random from "core:secure_random";
 use { Random } from "wasi:random";
+
+// Hands out u64s from a script, so a draw that must be redrawn can be staged.
+struct ScriptedRandom {
+    u64s: List<u64> = [],
+    pos: i32 = 0,
+    calls: i32 = 0,
+}
+
+impl Random for ScriptedRandom {
+    fn get_random_u64(&mut self) -> u64 {
+        self.calls += 1;
+        let value = self.u64s[self.pos];
+        self.pos += 1;
+        resume value;
+    }
+
+    ..trap
+}
 
 // Counts host calls and hands out a known stream: what the buffer served, and
 // how often it reached past itself to get it.
@@ -24,7 +43,15 @@ impl Random for CountingRandom {
         resume out;
     }
 
-    ..trap
+    fn get_random_u64(&mut self) -> u64 {
+        self.calls += 1;
+        let mut value: u64 = 0;
+        for let mut i = 0; i < 8; i += 1 {
+            value = value | self.next as u64 << (i * 8) as u64;
+            self.next = (self.next as i32 + 1 & 0xFF) as u8;
+        }
+        resume value;
+    }
 }
 
 test "one host call serves many reads" {
@@ -138,4 +165,228 @@ test "leftover bytes survive a refill" {
         };
     };
     assert host.calls == 2;
+}
+
+test "bytes collects exactly what was asked for" {
+    let mut host = CountingRandom { chunk: 7 };
+    with Random => &mut host do {
+        let b = random::bytes(20);
+        assert b.len() == 20;
+        assert b[0] == 0;
+        assert b[19] == 19;
+    };
+    assert host.calls == 3;
+}
+
+test "bytes of zero length asks the host nothing useful" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        assert random::bytes(0).len() == 0;
+    };
+}
+
+test "int_below maps the draw onto the range" {
+    let mut host = ScriptedRandom {
+        u64s: [25, 0, 9],
+    };
+    with Random => &mut host do {
+        assert random::int_below(10) == 5;
+        assert random::int_below(10) == 0;
+        assert random::int_below(10) == 9;
+    };
+}
+
+test "int_below redraws a value that would bias the result" {
+    // 2^64 mod 3 == 1, so u64::MAX is the one draw that must not be folded in.
+    let mut host = ScriptedRandom {
+        u64s: [u64::MAX, 7],
+    };
+    with Random => &mut host do {
+        assert random::int_below(3) == 1;
+    };
+    assert host.calls == 2;
+}
+
+test "int_below of one is always zero" {
+    let mut host = ScriptedRandom {
+        u64s: [u64::MAX],
+    };
+    with Random => &mut host do {
+        assert random::int_below(1) == 0;
+    };
+}
+
+#[expect_trap]
+test "int_below rejects a non-positive bound" {
+    let mut host = ScriptedRandom {
+        u64s: [0],
+    };
+    with Random => &mut host do {
+        random::int_below(0);
+    };
+}
+
+test "int_in draws from an exclusive range" {
+    let mut host = ScriptedRandom {
+        u64s: [25, 3],
+    };
+    with Random => &mut host do {
+        assert random::int_in(10..<20) == 15;
+        assert random::int_in(-5..<5) == -2;
+    };
+}
+
+test "int_in draws from an inclusive range" {
+    let mut host = ScriptedRandom {
+        u64s: [25, 5],
+    };
+    with Random => &mut host do {
+        assert random::int_in(1..=6) == 2;
+        assert random::int_in(1..=6) == 6;
+    };
+}
+
+#[expect_trap]
+test "int_in rejects an empty range" {
+    let mut host = ScriptedRandom {
+        u64s: [0],
+    };
+    with Random => &mut host do {
+        random::int_in(3..<3);
+    };
+}
+
+test "fraction stays inside [0, 1)" {
+    let mut host = ScriptedRandom {
+        u64s: [0, u64::MAX],
+    };
+    with Random => &mut host do {
+        assert random::fraction() == 0.0;
+        let top = random::fraction();
+        assert top < 1.0;
+        assert top > 0.9999;
+    };
+}
+
+test "boolean follows the low bit" {
+    let mut host = ScriptedRandom {
+        u64s: [0, 1],
+    };
+    with Random => &mut host do {
+        assert random::boolean() == false;
+        assert random::boolean() == true;
+    };
+}
+
+test "shuffle keeps every element" {
+    let mut host = CountingRandom {};
+    let mut items: List<i32> = [];
+    for let mut i = 0; i < 32; i += 1 {
+        items.push(i);
+    }
+    with Random => &mut host do {
+        random::shuffle(&mut items);
+    };
+    assert items.len() == 32;
+    let seen = items.sorted();
+    for let mut i = 0; i < 32; i += 1 {
+        assert seen[i] == i;
+    }
+}
+
+test "shuffle reorders" {
+    let mut host = CountingRandom {};
+    let mut items: List<i32> = [];
+    for let mut i = 0; i < 32; i += 1 {
+        items.push(i);
+    }
+    let before = items;
+    with Random => &mut host do {
+        random::shuffle(&mut items);
+    };
+    assert items != before;
+}
+
+test "shuffle of a short list draws nothing" {
+    let mut host = ScriptedRandom {};
+    let mut items: List<i32> = [7];
+    with Random => &mut host do {
+        random::shuffle(&mut items);
+    };
+    assert items[0] == 7;
+    assert host.calls == 0;
+}
+
+test "choose picks an element" {
+    let mut host = ScriptedRandom {
+        u64s: [1],
+    };
+    let items: List<String> = ["a", "b", "c"];
+    with Random => &mut host do {
+        assert random::choose(&items) matches { Some(v) && v == "b" };
+    };
+}
+
+test "choose of an empty list is null" {
+    let mut host = ScriptedRandom {};
+    let items: List<i32> = [];
+    with Random => &mut host do {
+        assert random::choose(&items) matches { None };
+    };
+    assert host.calls == 0;
+}
+
+test "hex is two lowercase digits per byte" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        assert random::hex(4) == "00010203";
+    };
+}
+
+test "token is unpadded URL-safe base64" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        let t = random::token(16);
+        assert t.len() == 22;
+        for let c of t.chars() {
+            assert c.is_ascii_alphanumeric() || c == '-' || c == '_';
+        }
+    };
+}
+
+test "alphanumeric is len characters of the 62-character alphabet" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        let s = random::alphanumeric(40);
+        assert s.chars().count() == 40;
+        for let c of s.chars() {
+            assert c.is_ascii_alphanumeric();
+        }
+        assert random::alphanumeric(0) == "";
+    };
+}
+
+test "the real host drives the utilities" {
+    let mut rng = BufferedRandom {};
+    with Random => &mut rng do {
+        assert random::bytes(32).len() == 32;
+
+        let die = random::int_in(1..=6);
+        assert die >= 1 && die <= 6;
+
+        let f = random::fraction();
+        assert f >= 0.0;
+        assert f < 1.0;
+
+        assert random::token(16).len() == 22;
+        assert random::alphanumeric(24).chars().count() == 24;
+
+        let mut deck: List<i32> = [];
+        for let mut i = 0; i < 16; i += 1 {
+            deck.push(i);
+        }
+        random::shuffle(&mut deck);
+        assert deck.sorted()[15] == 15;
+        assert random::choose(&deck) matches { Some(_) };
+    };
 }

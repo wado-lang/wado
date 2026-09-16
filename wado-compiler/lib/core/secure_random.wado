@@ -2,20 +2,159 @@
 //! Randomness no one can predict, drawn from `wasi:random`. Nothing here is
 //! seedable or reproducible.
 //!
+//! The functions turn raw entropy into the shapes a program asks for: bytes, an
+//! integer in a range, a shuffle, a secret token. Every one of them draws
+//! uniformly — `int_below` and `int_in` redraw rather than fold a leftover into
+//! the low values, so no outcome is more likely than another.
+//!
 //! A host call costs about the same for 16 bytes as for 4096, so drawing many
 //! small values pays that fixed cost over and over. `BufferedRandom` draws in
-//! blocks and serves reads from one.
+//! blocks and serves reads from one; install it around a loop that generates.
 
+use base64 from "core:base64";
 use { Random } from "wasi:random";
 
 global POOL_BYTES: i32 = 4096;
+
+/// The 62 characters `alphanumeric` draws from.
+global ALPHANUMERIC: String = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
 #[synopsis]
 test {
     let mut rng = BufferedRandom {};
     with Random => &mut rng do {
-        assert Random::get_random_bytes(16).len() == 16;
+        let session = token(16);
+        assert session.len() == 22;
+
+        let die = int_in(1..=6);
+        assert die >= 1 && die <= 6;
+
+        let mut deck: List<i32> = [1, 2, 3, 4, 5];
+        shuffle(&mut deck);
+        assert deck.len() == 5;
     };
+}
+
+/// Exactly `n` unpredictable bytes. `Random::get_random_bytes` may hand back
+/// fewer than asked for, so this draws until it has them all.
+pub fn bytes(n: i32) -> ByteList with Random {
+    assert n >= 0, "byte count must not be negative";
+    let mut out = Random::get_random_bytes(n as u64);
+    while out.len() < n {
+        let chunk = Random::get_random_bytes((n - out.len()) as u64);
+        if chunk.is_empty() {
+            panic("wasi:random returned no data");
+        }
+        out.extend(&chunk);
+    }
+    assert out.len() == n, "wasi:random returned more bytes than were asked for";
+    return out as ByteList;
+}
+
+/// A uniform `i32` in `[0, bound)`. Traps unless `bound` is positive.
+pub fn int_below(bound: i32) -> i32 with Random {
+    assert bound > 0, "bound must be positive";
+    let span = bound as u64;
+    // The draws past the last whole multiple of `span` would favour the low
+    // results, so they are redrawn instead of taken modulo.
+    let limit = u64::MAX - (u64::MAX % span + 1) % span;
+    let mut draw = Random::get_random_u64();
+    while draw > limit {
+        draw = Random::get_random_u64();
+    }
+    return (draw % span) as i32;
+}
+
+/// A uniform `i32` from a range — `int_in(0..<10)` or `int_in(1..=6)`. Traps on
+/// an empty range.
+pub fn int_in<R: SampleRange>(range: R) -> i32 with Random {
+    let [low, count] = range.sample_span();
+    return low + int_below(count);
+}
+
+/// `true` or `false`, each half the time.
+pub fn boolean() -> bool with Random {
+    return Random::get_random_u64() & 1 == 1;
+}
+
+/// A uniform `f64` in `[0, 1)`, carrying the 53 bits the type holds exactly.
+pub fn fraction() -> f64 with Random {
+    let bits = Random::get_random_u64() >> 11 as u64;
+    return bits as f64 / 9007199254740992.0;
+}
+
+/// Shuffle in place (Fisher-Yates), every permutation equally likely.
+pub fn shuffle<T>(items: &mut List<T>) with Random {
+    let mut i = items.len();
+    while i > 1 {
+        i -= 1;
+        items.swap(i, int_below(i + 1));
+    }
+}
+
+/// One element chosen uniformly, or `null` when there is nothing to choose.
+pub fn choose<T>(items: &List<T>) -> Option<T> with Random {
+    if items.is_empty() {
+        return null;
+    }
+    return Option::Some(items[int_below(items.len())]);
+}
+
+/// `n` random bytes as lowercase hex, two characters per byte.
+pub fn hex(n: i32) -> String with Random {
+    return bytes(n).to_hex();
+}
+
+/// `n` random bytes as unpadded URL-safe Base64 — a secret that survives a URL,
+/// a cookie or a header. 16 bytes (128 bits) is a sound default.
+pub fn token(n: i32) -> String with Random {
+    let raw = bytes(n);
+    return base64::encode_url(&raw);
+}
+
+/// A `len`-character string of `[A-Za-z0-9]`, uniform over the 62 characters.
+pub fn alphanumeric(len: i32) -> String with Random {
+    assert len >= 0, "length must not be negative";
+    let mut out = String::with_capacity(len);
+    while out.len() < len {
+        let need = len - out.len();
+        // Two of every 64 draws land outside the alphabet, so take a little
+        // slack rather than come back to the host for one more character.
+        for let byte of bytes(need + need / 16 + 1) {
+            if out.len() == len {
+                break;
+            }
+            let index = byte as i32 & 63;
+            if index < 62 {
+                out.push(ALPHANUMERIC.get_byte_unchecked(index) as char);
+            }
+        }
+    }
+    return out;
+}
+
+/// A range [`int_in`] can draw from.
+pub trait SampleRange {
+    /// The lowest value in the range, and how many values it holds.
+    fn sample_span(&self) -> [i32, i32];
+}
+
+impl SampleRange for RangeExclusive<i32> {
+    fn sample_span(&self) -> [i32, i32] {
+        let count = self.end as i64 - self.start as i64;
+        assert count > 0, "range must not be empty";
+        assert count <= i32::MAX as i64, "range holds more values than an i32 can count";
+        return [self.start, count as i32];
+    }
+}
+
+impl SampleRange for RangeInclusive<i32> {
+    fn sample_span(&self) -> [i32, i32] {
+        let count = self.end as i64 - self.start as i64 + 1;
+        assert count > 0, "range must not be empty";
+        assert count <= i32::MAX as i64, "range holds more values than an i32 can count";
+        return [self.start, count as i32];
+    }
 }
 
 /// A `Random` handler that draws entropy in blocks. Install it around the work

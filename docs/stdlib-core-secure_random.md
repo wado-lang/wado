@@ -6,18 +6,86 @@
 Randomness no one can predict, drawn from `wasi:random`. Nothing here is
 seedable or reproducible.
 
+The functions turn raw entropy into the shapes a program asks for: bytes, an
+integer in a range, a shuffle, a secret token. Every one of them draws
+uniformly — `int_below` and `int_in` redraw rather than fold a leftover into
+the low values, so no outcome is more likely than another.
+
 A host call costs about the same for 16 bytes as for 4096, so drawing many
 small values pays that fixed cost over and over. `BufferedRandom` draws in
-blocks and serves reads from one.
+blocks and serves reads from one; install it around a loop that generates.
 
 ## Synopsis
 
 ```wado
 let mut rng = BufferedRandom {};
 with Random => &mut rng do {
-    assert Random::get_random_bytes(16).len() == 16;
+    let session = token(16);
+    assert session.len() == 22;
+
+    let die = int_in(1..=6);
+    assert die >= 1 && die <= 6;
+
+    let mut deck: List<i32> = [1, 2, 3, 4, 5];
+    shuffle(&mut deck);
+    assert deck.len() == 5;
 };
 ```
+
+## Functions
+
+### `pub fn bytes(n: i32) -> ByteList with Random`
+
+Exactly `n` unpredictable bytes. `Random::get_random_bytes` may hand back
+fewer than asked for, so this draws until it has them all.
+
+### `pub fn int_below(bound: i32) -> i32 with Random`
+
+A uniform `i32` in `[0, bound)`. Traps unless `bound` is positive.
+
+### `pub fn int_in<R: SampleRange>(range: R) -> i32 with Random`
+
+A uniform `i32` from a range — `int_in(0..<10)` or `int_in(1..=6)`. Traps on
+an empty range.
+
+### `pub fn boolean() -> bool with Random`
+
+`true` or `false`, each half the time.
+
+### `pub fn fraction() -> f64 with Random`
+
+A uniform `f64` in `[0, 1)`, carrying the 53 bits the type holds exactly.
+
+### `pub fn shuffle<T>(items: &mut List<T>) with Random`
+
+Shuffle in place (Fisher-Yates), every permutation equally likely.
+
+### `pub fn choose<T>(items: &List<T>) -> Option<T> with Random`
+
+One element chosen uniformly, or `null` when there is nothing to choose.
+
+### `pub fn hex(n: i32) -> String with Random`
+
+`n` random bytes as lowercase hex, two characters per byte.
+
+### `pub fn token(n: i32) -> String with Random`
+
+`n` random bytes as unpadded URL-safe Base64 — a secret that survives a URL,
+a cookie or a header. 16 bytes (128 bits) is a sound default.
+
+### `pub fn alphanumeric(len: i32) -> String with Random`
+
+A `len`-character string of `[A-Za-z0-9]`, uniform over the 62 characters.
+
+## Traits
+
+### `pub trait SampleRange`
+
+A range [`int_in`] can draw from.
+
+#### `fn sample_span(&self) -> [i32, i32]`
+
+The lowest value in the range, and how many values it holds.
 
 ## Structs
 

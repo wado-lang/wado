@@ -1696,7 +1696,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable
-  randomness, buffered from `wasi:random`
+  randomness from `wasi:random`: bytes, unbiased integers, shuffles, tokens
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time on the TC39 Temporal
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)

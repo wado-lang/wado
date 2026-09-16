@@ -19,6 +19,7 @@
 //! bytes, `rand_a` holding its sub-millisecond fraction, one tick per 244 ns.
 //! Values within a tick, or across a backwards clock step, are unordered.
 
+use random from "core:secure_random";
 use { u8x16 } from "core:simd";
 use {
     Serialize,
@@ -74,7 +75,7 @@ impl Uuid {
     /// Generate a version-4 (random) UUID: 122 bits from `Random`, with the
     /// RFC 9562 version and variant bits forced into place.
     pub fn v4() -> Uuid with Random {
-        let mut b = fill_random(16);
+        let mut b = random::bytes(16);
         b[6] = (b[6] as i32 & 0x0F | 0x40) as u8;
         b[8] = with_variant(b[8]);
         return from_byte_list(&b);
@@ -88,7 +89,7 @@ impl Uuid {
         let ms = now.seconds * 1000 + now.nanoseconds as i64 / 1_000_000;
         let sub_ms = now.nanoseconds as i64 % 1_000_000 * SUB_MS_TICKS / 1_000_000;
         // Bytes 0..=7 are all clock, so only the trailing 8 need entropy.
-        let r = fill_random(8);
+        let r = random::bytes(8);
         let mut b = ByteList::with_capacity(16);
         b.push((ms >> 40 & 0xFF) as u8);
         b.push((ms >> 32 & 0xFF) as u8);
@@ -290,22 +291,6 @@ impl Default for Uuid {
 /// Byte 8 with the RFC 9562 variant forced into its top two bits.
 fn with_variant(byte: u8) -> u8 {
     return (byte as i32 & 0x3F | 0x80) as u8;
-}
-
-/// Collect exactly `n` random bytes, looping to tolerate short reads (the
-/// `Random` contract allows returning fewer bytes than requested).
-fn fill_random(n: i32) -> ByteList with Random {
-    let mut out = Random::get_random_bytes(n as u64) as ByteList;
-    while out.len() < n {
-        let chunk = Random::get_random_bytes((n - out.len()) as u64);
-        if chunk.is_empty() {
-            panic("Random::get_random_bytes returned no data");
-        }
-        for let byte of chunk {
-            out.push(byte);
-        }
-    }
-    return out;
 }
 
 fn from_byte_list(b: &ByteList) -> Uuid {
