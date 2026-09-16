@@ -10,7 +10,7 @@ wit_bindgen::generate!({
     path: "wit-properties",
 });
 
-use exports::wado::icu::properties::Guest as PropertiesGuest;
+use exports::wado::icu::properties::{BinaryProperty as PropertyCase, Guest as PropertiesGuest};
 
 use icu::properties::props::{
     Alnum, Alphabetic, AsciiHexDigit, BidiClass, BidiControl, BidiMirrored, Blank,
@@ -94,11 +94,20 @@ impl Query for Contains {
 }
 
 macro_rules! binary_properties {
-    ($($ty:ty => [$($alias:literal),+]),+ $(,)?) => {
+    ($($ty:ident => [$($alias:literal),+]),+ $(,)?) => {
         fn binary_property<Q: Query>(q: &Q, key: &str) -> Option<Q::Out> {
             match key {
                 $($($alias)|+ => Some(q.binary::<$ty>()),)+
                 _ => None,
+            }
+        }
+
+        /// The same dispatch with the name already resolved, so it is total.
+        /// The WIT case and the ICU4X type share a spelling, which is what lets
+        /// one list write both arms.
+        fn binary_case<Q: Query>(q: &Q, property: PropertyCase) -> Q::Out {
+            match property {
+                $(PropertyCase::$ty => q.binary::<$ty>(),)+
             }
         }
     };
@@ -224,6 +233,14 @@ fn query<Q: Query>(q: Q, property: &str, value: Option<String>) -> Option<Q::Out
 }
 
 impl PropertiesGuest for Component {
+    fn has(property: PropertyCase, ch: char) -> bool {
+        binary_case(&Contains(ch), property)
+    }
+
+    fn set(property: PropertyCase) -> Vec<(u32, u32)> {
+        binary_case(&Ranges, property)
+    }
+
     fn ranges(property: String, value: Option<String>) -> Option<Vec<(u32, u32)>> {
         query(Ranges, &property, value)
     }

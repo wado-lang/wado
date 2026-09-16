@@ -13,6 +13,7 @@
 //! end-of-input (ANTLR4 tolerates unterminated comments).
 
 use icu from "core:icu";
+use { BinaryProperty } from "core:icu";
 
 /// Scan a `//` line comment. `pos` must point at the first `/`. Returns
 /// the index of the terminating `\n` (which it excludes), or `chars.len()`.
@@ -146,7 +147,7 @@ pub fn is_rule_name_upper(c: char) -> bool {
     if c <= '\u{007F}' {
         return 'A' <= c <= 'Z';
     }
-    return icu::contains(&"Uppercase", c).unwrap_or(false);
+    return icu::has(BinaryProperty::Uppercase, c);
 }
 
 /// ANTLR4's `NameChar`.

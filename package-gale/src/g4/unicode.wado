@@ -117,13 +117,13 @@ fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharR
 /// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
 /// does not answer, which is what lets the caller reject it.
 fn binary_ranges(property: &String) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::ranges(property));
+    return scalar_ranges(icu::ranges(*property));
 }
 
 /// An enumerated property value's ranges, as Unicode scalars. `gc` takes a
 /// group letter (`L`) as well as a category (`Lu`).
 fn value_ranges(property: &String, value: &String) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::value_ranges(property, value));
+    return scalar_ranges(icu::value_ranges(*property, *value));
 }
 
 fn scalar_ranges(found: Option<List<[u32, u32]>>) -> Option<List<CharRange>> {

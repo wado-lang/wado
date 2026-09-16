@@ -16,12 +16,15 @@ The crate builds one of two worlds:
 
 ## The shippable surface: character properties
 
-Resource-free, so the Wado import path consumes it today. `ranges` gives a
-property's inclusive code point ranges and `contains` answers for one
-character. Both take a property name and, for an enumerated property, a value.
-Names match as UAX #44 matches them, loosely.
+Resource-free, so the Wado import path consumes it today.
 
-**287 KB** import-free component, covering 63 binary properties, 15 enumerated
+`has` and `set` name a binary property as an enum case: the call site resolves
+it, so there is no string to copy and no name to search, and the operation is
+total. `contains` and `ranges` take the name as a string instead, for a name a
+program reads at run time rather than writes. Both take a value as well, for an
+enumerated property, and match names as UAX #44 matches them, loosely.
+
+**295 KB** import-free component, covering 63 binary properties, 15 enumerated
 ones, and General_Category groups (`L` as well as `Lu`).
 
 Three things it deliberately does not answer:
@@ -78,8 +81,10 @@ So segmenter+collator are ~93% of the bytes. Dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
 
 The 44 KB row answers seven properties by name in the WIT. The shippable
-surface takes the name at run time instead, which roots every property's data
-at once and is what puts it at 287 KB.
+surface answers every one, which roots all of their data at once and is what
+puts it at 295 KB. Naming a property as an enum case does not narrow that:
+the dispatch still reaches every case, so what bounds a program's share is the
+collection in the Known gaps, not the shape of the call.
 
 ## Post-hoc slicing: one asset, sliced per program
 

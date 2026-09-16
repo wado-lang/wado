@@ -199,9 +199,19 @@ package resolution.
 ### Character properties are the first capability
 
 They are resource-free, need no locale, and their data does not vary by one, so
-they need neither the handle kinds above nor the data image below. The surface
-is a property name resolved at run time, which answers for every property ICU4X
-ships rather than for a list fixed in the WIT.
+they need neither the handle kinds above nor the data image below.
+
+The surface names a property two ways, because programs name one two ways. A
+name written into the source is a WIT enum case: it resolves at the call site,
+carries no string, and cannot fail, which is what a per-character predicate like
+`is_upper` needs. A name a program reads at run time — the `\p{...}` in a
+grammar — stays a string, matched loosely per UAX #44 and answered with `none`
+where it does not resolve. Both reach the same baked data, so neither is an
+approximation of the other.
+
+The enum is not a size knob. ICU4X bakes every property as a static and the
+dispatch reaches every case, so what a program's share of the asset costs is
+settled by the collection in Known gaps, not by how the call names the property.
 
 Three UCD properties are deliberately not answered:
 
@@ -352,7 +362,7 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   whole, so neither the code nor the data of ICU's asset is reached today.
 
   What that costs is measured: a program calling one character property carries
-  the whole 287 KB asset, where the property it asked for is a few KB of it.
+  the whole 295 KB asset, where the property it asked for is a few KB of it.
   A program reaching none of `core:icu` pays nothing, since composition runs
   over the import plan and an unreached component is never composed.
 

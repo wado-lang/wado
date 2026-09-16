@@ -4,31 +4,36 @@
 # core:icu
 
 Unicode character properties, from the ICU4X component bundled with the
-toolchain.
-
-A name this module does not answer comes back as `null`, never as an
-approximate set: a caller complementing one admits real members of the
-property rather than missing some. `Block`, `Decomposition_Type` and the
-UCD's contributory `Other_*` properties are the names withheld that way.
+toolchain. A name it does not answer is `null`, never an approximate set:
+`Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
 
 ## Functions
 
-### `pub fn ranges(property: &String) -> Option<List<[u32, u32]>>`
+### `pub fn has(property: BinaryProperty, ch: char) -> bool`
 
-Inclusive code point ranges of a binary property, lowest first.
+Whether `ch` has the property. Total, and the name costs nothing at run
+time: an enum case is a number, and ICU4X bakes each property as a static.
 
-### `pub fn value_ranges(property: &String, value: &String) -> Option<List<[u32, u32]>>`
+### `pub fn set(property: BinaryProperty) -> List<[u32, u32]>`
+
+The property's inclusive code point ranges, lowest first.
+
+### `pub fn ranges(property: String) -> Option<List<[u32, u32]>>`
+
+Inclusive code point ranges of a binary property named at run time, lowest
+first. Prefer [`set`] for a name written into the source.
+
+### `pub fn value_ranges(property: String, value: String) -> Option<List<[u32, u32]>>`
 
 Inclusive code point ranges of an enumerated property's value, lowest
-first. `property` is `gc` (whose value may name a group such as `L`), `sc`,
-`bc`, `lb`, `wb`, `sb`, `gcb`, `incb`, `ea`, `hst`, `nt`, `insc`, `jt`,
-`jg`, `vo` or `ccc`.
+first. A `gc` value may name a group (`L`) as well as a category (`Lu`).
 
-### `pub fn contains(property: &String, ch: char) -> Option<bool>`
+### `pub fn contains(property: String, ch: char) -> Option<bool>`
 
-Whether `ch` has the binary property, without building its ranges.
+Whether `ch` has the binary property named at run time. Prefer [`has`] for a
+name written into the source.
 
-### `pub fn value_contains(property: &String, value: &String, ch: char) -> Option<bool>`
+### `pub fn value_contains(property: String, value: String, ch: char) -> Option<bool>`
 
 Whether `ch` has that enumerated property value, without building the
 ranges.
