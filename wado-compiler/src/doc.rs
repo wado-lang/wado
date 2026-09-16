@@ -11,8 +11,8 @@ use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
 use crate::token::Span;
 use crate::unparse::{
-    get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
-    unparse_type_into,
+    get_item_id, unparse_bound_arguments_into, unparse_enum_signature, unparse_function_signature,
+    unparse_struct_signature, unparse_type_into,
 };
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
@@ -703,18 +703,7 @@ fn render_trait_bounds(bounds: &[TraitBound], out: &mut String) {
             out.push_str(" + ");
         }
         out.push_str(&bound.name);
-        if !bound.assoc_types.is_empty() {
-            out.push('<');
-            for (j, assoc) in bound.assoc_types.iter().enumerate() {
-                if j > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(&assoc.name);
-                out.push_str(" = ");
-                unparse_type_into(&assoc.ty, out);
-            }
-            out.push('>');
-        }
+        unparse_bound_arguments_into(bound, out);
     }
 }
 

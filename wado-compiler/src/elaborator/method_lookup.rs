@@ -532,17 +532,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_param_bounds
             .get(param_name)?
             .clone();
-        let declared = bounds.iter().find_map(|bound| {
+        let (bound, declared) = bounds.iter().find_map(|bound| {
             let decl = self.trait_decl_at(bound.id, &bound.name)?;
             if decl != trait_ {
                 return None;
             }
             let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
-            sig.decl.param_types.get(sig.first_value_param()).copied()
+            let declared = sig.decl.param_types.get(sig.first_value_param()).copied()?;
+            Some((bound, declared))
         })?;
         // The same slots the dispatch binds, so the hint and the call agree on
-        // what a bare bound means.
-        let slots = self.bare_bound_slots(trait_, self_type_id);
+        // what the bound means.
+        let slots = self.bound_slots(bound, trait_, self_type_id);
         let substituted = self
             .tysys
             .type_table

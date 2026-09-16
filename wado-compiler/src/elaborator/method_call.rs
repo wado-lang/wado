@@ -545,6 +545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ast::TraitBound {
                                 id,
                                 name: b.base_name().to_string(),
+                                type_args: Vec::new(),
                                 assoc_types: Vec::new(),
                                 span,
                                 fn_signature: None,

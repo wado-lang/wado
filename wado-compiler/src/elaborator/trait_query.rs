@@ -2087,7 +2087,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| FqTraitName::declared(self.tysys.resolutions.defs(), decl));
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        let slots = self.bare_bound_slots(decl, self_type_id);
+        let slots = self.bound_slots(&bound, decl, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2390,11 +2390,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// What a bare bound binds `decl`'s slots to: slot 0 is `Self`, and the
-    /// trait's own parameters take their declared defaults, since a bound names
-    /// none of them positionally (`T: Add<Output = T>` binds an assoc type).
-    pub(super) fn bare_bound_slots(
+    /// What a bound binds `decl`'s slots to: slot 0 is `Self`, and the trait's
+    /// own parameters take what the bound writes positionally (`T: Eq<String>`),
+    /// or their declared defaults where it writes nothing (`T: Mul` is
+    /// `Mul<Self>`).
+    pub(super) fn bound_slots(
         &mut self,
+        bound: &ast::TraitBound,
         decl: DefId,
         self_type_id: TypeId,
     ) -> IndexMap<u32, TypeId> {
@@ -2402,14 +2404,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
             return slots;
         };
-        let defaults: Vec<(u32, ast::Type)> = trait_params
+        let written: Vec<(u32, ast::Type)> = trait_params
             .iter()
             .filter(|p| p.is_real_type_param())
             .enumerate()
-            .filter_map(|(i, p)| p.default.clone().map(|d| (1 + i as u32, d)))
+            .filter_map(|(i, p)| {
+                let ty = bound.type_args.get(i).or(p.default.as_ref())?;
+                Some((1 + i as u32, ty.clone()))
+            })
             .collect();
-        for (slot, default_ty) in defaults {
-            let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&default_ty));
+        for (slot, ty) in written {
+            let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&ty));
             slots.insert(slot, resolved);
         }
         slots
