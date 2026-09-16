@@ -423,8 +423,8 @@ dedup following genuine runtime data dependencies rather than taxonomy.
       every other section copied byte for byte, so nothing is renumbered and
       each `alias core export` still resolves. The root set is the lifted
       functions the program imports; the rest keep their name and signature as
-      a stub. A program reaching one property carries 104 KB where it carried
-      303 KB.
+      a stub. A program reaching one property carries 104 KB of the 303 KB
+      asset.
 - [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
       data range or a function. A live data range can root a function, so the
       data and code edges close over one worklist rather than the code seeding
