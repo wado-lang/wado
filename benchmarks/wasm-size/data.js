@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789542814122,
+  "lastUpdate": 1789549221398,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56245,6 +56245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d9d10c0392c6387304ef1e354718b68825b283e3"
         },
         "date": 1789542813550,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6456,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 18944,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285548,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d2f672be3d5f0747ba9483575f6d5341273663f",
+          "message": "Merge pull request #2069 from wado-lang/claude/microgpt-wado-port-wqgzri\n\nfeat(benchmark): a GPT that trains in Wado, and the suite's first object-graph workload",
+          "timestamp": "2026-09-16T17:40:51+09:00",
+          "tree_id": "ea2cb373bc5db6c809b6a23a94796bed411b205c",
+          "url": "https://github.com/wado-lang/wado/commit/9d2f672be3d5f0747ba9483575f6d5341273663f"
+        },
+        "date": 1789549220669,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
