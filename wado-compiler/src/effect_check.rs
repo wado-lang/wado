@@ -7,7 +7,7 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::is_test_function;
+use crate::name::{FqTraitName, is_test_function};
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
@@ -476,10 +476,8 @@ impl OwnedEffectData {
             }
         }
 
-        // Every trait method, whether or not it declares an effect: an entry
-        // holding an empty list is what says a trait method by this name
-        // exists and grants nothing. A declaration has no body, so its effects
-        // are read off the `with` clause rather than out of `fn_effects`.
+        // An empty entry is meaningful: the method exists and grants nothing.
+        // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         for (src, module) in &sem.modules {
@@ -492,12 +490,12 @@ impl OwnedEffectData {
                         .effects
                         .iter()
                         .map(|name| {
-                            effect_by_name.get(name).cloned().unwrap_or_else(|| {
+                            effect_named_in(name, src, sem, &closure, &effect_by_name).unwrap_or(
                                 EffectRef::Concrete {
                                     name: name.clone(),
                                     module_source: src.clone(),
-                                }
-                            })
+                                },
+                            )
                         })
                         .collect();
                     trait_method_effects.insert(
@@ -743,10 +741,8 @@ fn handled_effect(
     index.closure.contains_key(&effect).then_some(effect)
 }
 
-/// An impl method may not declare an effect its trait method leaves out. A call
-/// through a type parameter's bound sees the declaration and no impl, so the
-/// trait's `with` clause has to bound every impl of it. An `interface` handler
-/// and a `resource` impl are exempt: neither declares effects for its methods.
+/// Reports an impl method declaring an effect its trait method leaves out.
+/// An `interface` handler and a `resource` impl declare none, so both pass.
 fn check_impl_effect_conformance(
     sem: &Semantics,
     module: &ModuleSource,
@@ -763,16 +759,8 @@ fn check_impl_effect_conformance(
     else {
         return;
     };
-    let Some(trait_module) = trait_name.module() else {
-        return;
-    };
     for method in &impl_block.methods {
-        let key = (
-            trait_module.clone(),
-            trait_name.base_name().to_string(),
-            method.name.clone(),
-        );
-        let Some(declared_by_trait) = index.trait_method_effects.get(&key) else {
+        let Some(declared_by_trait) = index.effects_declared_by(trait_name, &method.name) else {
             continue;
         };
         let Some(declared) = index.fn_effects.get(&method.id) else {
@@ -1223,9 +1211,8 @@ impl EffectIndex<'_> {
     /// Effects a method dispatch requires: the callee's declared effects plus,
     /// for a direct (non-trait) method on a `resource`, the resource effect.
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
-        // A trait method's `with` clause is what any call to it requires,
-        // whichever impl runs: it bounds every impl, and a dispatch through a
-        // type parameter's bound has no impl to read in the first place.
+        // A trait method's `with` clause bounds every impl, and a bound
+        // dispatch has no impl to read: the declaration is what a call requires.
         let mut effects = match self.declared_by_trait(func_ref) {
             Some(declared) => declared.to_vec(),
             None => self
@@ -1261,13 +1248,18 @@ impl EffectIndex<'_> {
     /// the dispatch names no trait, or names an `interface` or a `resource`.
     fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
         let method_info = func_ref.method_info.as_ref()?;
-        let trait_name = method_info.trait_name.as_ref()?;
+        self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
+    }
+
+    /// The effects one trait method declares. `None` for a name no trait
+    /// declares, an `interface` operation, or a `resource` method.
+    fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
         let module = trait_name.module()?;
         self.trait_method_effects
             .get(&(
                 module.clone(),
                 trait_name.base_name().to_string(),
-                method_info.method_name.clone(),
+                method.to_string(),
             ))
             .map(Vec::as_slice)
     }

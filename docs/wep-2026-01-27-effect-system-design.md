@@ -366,7 +366,7 @@ impl Source for Loud {
 
 An `interface` is exempt as a whole. Its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
-A call reaches a method through a type parameter's bound in three shapes: a method on a receiver the parameter types, a static call written `T::make()`, and a `for-of` whose iterable the parameter types. Each demands the effects the trait method declares.
+A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. Each demands the effects the trait method declares.
 
 ```wado
 trait Source {
@@ -380,7 +380,7 @@ fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // `with Stdout` is required
 
 The impl is not known at such a call, so the declaration is the only thing it can demand. The conformance rule is what makes that sound: the trait's `with` clause bounds every impl.
 
-Resolving the selected impl's effects at each instantiation would admit more programs, since an impl could then add an effect and still be caught where it is used. It would also cost the property that a signature is the whole contract. A call added inside `draw` could change what every caller of `draw` must declare, with nothing in `draw`'s signature to show it.
+Resolving the selected impl's effects at each instantiation would admit more programs, since an impl could then add an effect and still be caught where it is used. It would also break the rule that a signature is the whole contract. A call added inside `draw` could change what every caller of `draw` must declare, with nothing in `draw`'s signature to show it.
 
 ### Handlers
 
@@ -402,7 +402,7 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 A trait fixes one effect set for every impl of it. `Iterator` declares none, so no `impl Iterator` can read a file or write a line, and the trait cannot grant that to one impl without granting it to all.
 
-Closing this takes an associated effect: the trait declares a hole, each impl fills it, and a use site names it through the type parameter the way an associated type is named today. The impl then chooses its effects, and a generic function still says in its signature what it needs, so neither property the conformance rule protects is given up. Flix's associated effects and Rust's `~const Trait` bounds are the closest precedents; Java's generic exception parameters solve the same problem for checked exceptions.
+Closing this takes an associated effect: the trait declares a hole, each impl fills it, and a use site names it through the type parameter the way an associated type is named today. The impl then chooses its effects, and a generic function still says in its signature what it needs, so nothing the conformance rule protects is lost. Flix's associated effects and Rust's `~const Trait` bounds are the closest precedents; Java's generic exception parameters solve the same problem for checked exceptions.
 
 The syntax is open. `effect` is a keyword and `effects` is not, so the declaration form, the way an impl fills the hole, and the spelling a use site writes for it are all undecided.
 

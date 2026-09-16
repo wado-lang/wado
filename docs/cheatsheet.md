@@ -1325,8 +1325,8 @@ fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 
-// A trait method's `with` clause bounds every impl of it, and a call requires
-// what the trait declares — through a bound there is no impl to read.
+// A trait method's `with` clause bounds every impl of it. A call requires what
+// the trait declares, since through a bound there is no impl to read.
 trait Source { fn next(&mut self) -> i32 with Stdout; }
 impl Source for Loud {
     fn next(&mut self) -> i32 with Stdout { ... }   // matching; more is an error

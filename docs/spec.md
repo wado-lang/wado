@@ -5185,11 +5185,11 @@ fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` need
 }
 ```
 
-A call reaches a method through a type parameter's bound in three shapes: a method on a receiver the parameter types, a static call written `T::make()`, and a `for-of` whose iterable the parameter types. None of them knows which impl runs, so each demands what the trait method declares.
+A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. None of them knows which impl runs, so each demands what the trait method declares.
 
 `stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
-An impl that needs an effect its trait does not declare has no spelling today. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for what closing that would take.
+There is no way today to write an impl that needs an effect its trait does not declare. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for what closing that would take.
 
 ### Variadic Type Packs
 
