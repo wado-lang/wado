@@ -1,0 +1,20 @@
+// A reference whose referent is a value binds that value to a local of its own,
+// so the place-based passes can see it. Without the binding the view a chained
+// `as_str_slice()` builds is allocated and loaded back for one field read,
+// because no pass reasons about storage nothing names.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let s = builtin::black_box("banana");
+    println(`${s.as_str_slice().len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_scope": ".wado/run\"",
+    "wir_not_expect:O2": [
+        "StrSlice"
+    ]
+}

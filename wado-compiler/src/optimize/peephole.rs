@@ -24,6 +24,7 @@ use super::known_case::KnownCaseRule;
 use super::labeled_block_fusion::{build_labeled_block_fusion, build_slot_temp_sroa};
 use super::match_to_bitset::MatchToBitsetRule;
 use super::match_to_switch::MatchToSwitchRule;
+use super::name_referent::NameReferentRule;
 use super::ref_elim::build_ref_elim;
 use super::string_push::{AppendFuseRule, ConstAsciiPushRule, resolve_ctx};
 use super::tuple_projection::TupleProjectionRule;
@@ -142,6 +143,12 @@ pub(super) fn run_peephole(
             rules.push(&if_chain_rule);
             rules.push(&bitset_rule);
             rules.push(&match_rule);
+        }
+        // Ahead of every rule that reasons about places: a reference whose
+        // referent is a value names no storage, so each such rule would
+        // otherwise need its own exception for the shape it happens to meet.
+        if !pre_inline {
+            rules.push(&NameReferentRule);
         }
         if let Some(ref_elim_rule) = ref_elim_rule.as_ref() {
             rules.push(ref_elim_rule);

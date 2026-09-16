@@ -36,6 +36,7 @@ mod loop_version_bce;
 mod match_to_bitset;
 mod match_to_switch;
 mod mod_ref;
+mod name_referent;
 pub(crate) mod multi_value_return;
 mod param_spec;
 mod peephole;
