@@ -90,8 +90,8 @@ impl FollowEnv {
     /// Tail-greedy first set for `rule_name`. Returns the empty array
     /// for unknown rules, which is the safe choice: an unknown rule
     /// cannot collide with any caller's follow.
-    pub fn tail_greedy(&self, rule_name: &String) -> List<String> {
-        if let Some(s) = self.tail_greedy.get(*rule_name) {
+    pub fn tail_greedy<S: AsStrSlice>(&self, rule_name: S) -> List<String> {
+        if let Some(s) = self.tail_greedy.get(rule_name.to_string()) {
             return s;
         }
         return [];
@@ -99,8 +99,8 @@ impl FollowEnv {
 
     /// FOLLOW set for `rule_name`. Returns the empty/closed=false set
     /// for unknown rules.
-    pub fn rule_follow(&self, rule_name: &String) -> FollowSet {
-        if let Some(s) = self.rule_follow.get(*rule_name) {
+    pub fn rule_follow<S: AsStrSlice>(&self, rule_name: S) -> FollowSet {
+        if let Some(s) = self.rule_follow.get(rule_name.to_string()) {
             return s;
         }
         return FollowSet::empty();
@@ -114,7 +114,7 @@ impl FollowEnv {
 /// resulting `rule_follow` reflects only call-graph contributions —
 /// useful for sub-grammar analysis or tests that exercise propagation
 /// without an EOF anchor.
-pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: &String) -> FollowEnv {
+pub fn build<S: AsStrSlice>(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: S) -> FollowEnv {
     let mut tail_greedy = TreeMap::<String, List<String>>::new();
     for let rule of parser_rules {
         let mut visiting: List<String> = [];
@@ -142,10 +142,10 @@ pub fn build(parser_rules: &List<ParserRule>, ctx: &mut GenContext, start_rule: 
 /// Termination: every iteration that doesn't grow any rule's set is
 /// the last; the algorithm terminates because each set is monotonic
 /// in a finite token universe.
-fn compute_rule_follow(
+fn compute_rule_follow<S: AsStrSlice>(
     parser_rules: &List<ParserRule>,
     ctx: &mut GenContext,
-    start_rule: &String,
+    start_rule: S,
 ) -> TreeMap<String, FollowSet> {
     let mut plans: List<List<Contribution>> = [];
     for let rule of parser_rules {

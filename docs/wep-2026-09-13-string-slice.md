@@ -39,12 +39,18 @@ character boundaries, and `AsStrSlice`, the conversion that lets one signature
 take a `String`, a reference to one, or a view of one. Where such a view still
 costs something at `-O2`, the optimizer is fixed rather than worked around.
 
+A parameter that only reads its text names `AsStrSlice` and takes it by value,
+across the standard library and the packages alike. A call site passes the
+literal bare.
+
 What follows:
 
 - `AsStrSlice` is an ordinary trait whose method returns a view of the
   receiver, so it declares `stores[self]`, the same shape `AsByteSlice` has.
-  Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: &S)` carries no
-  dispatch at `-O2`.
+  Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: S)` carries no
+  dispatch at `-O2`. The parameter is taken by value, so a call site writes the
+  literal bare — `f("banana")`, never `f(&"banana")` — and a `&String` still
+  passes through the blanket `impl<T: AsStrSlice> AsStrSlice for &T`.
 - Every `StrSlice` method that returns another view declares `stores[self]` too.
   A view holds its bytes in a reference field, and the spec's reference-storage
   rule counts reading one out of the receiver as the receiver escaping.
@@ -58,15 +64,13 @@ What follows:
   Closing it needs argument promotion, which `docs/optimizer.md` already lists
   as not implemented: a callee taking an aggregate by value and only reading its
   fields would take the fields instead.
-- The `StrSlice` API surface is open: which of `String`'s methods it carries,
-  which prelude traits it implements, and whether `String`'s own methods start
-  taking `impl AsStrSlice`. `String::push_str_range_unchecked` still takes a
-  `(text, start, end)` triple for that reason, and Kiln's generated parsers
-  call it.
-- `StrSlice` carries no string search or comparison beyond `Eq` / `Ord`:
-  `contains`, `starts_with`, `split` and the trims stay on `String`, so working
-  on part of a string still copies it out for those. Closing it means porting
-  each one to a view and having `String`'s own delegate.
+- `String::push_str_range_unchecked` still takes a `(text, start, end)` triple
+  rather than a view, and Kiln's generated parsers call it.
+- `StrSlice` carries the search and split surface — `contains`, `starts_with`,
+  `find`, `split`, `split_once`, the trims and `strip_*` — and `String`'s own
+  delegate to it. The ones that answer with part of their input return a view,
+  so working on part of a string no longer copies it out. `to_string` is where
+  a caller that wants an owned string asks for one.
 - A cast between two references whose referents share one representation head
   (`&ByteSlice` to `&Slice<u8>`) is not dropped, so it still hides the operand's
   shape from the rules that match on one. Only the unreferenced case is covered.

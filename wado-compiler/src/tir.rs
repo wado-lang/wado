@@ -1060,6 +1060,14 @@ impl TypeTable {
         id
     }
 
+    /// [`Self::get`] for a caller holding an id from another table — an
+    /// optimizer pass reading a function record, say. A type this table does
+    /// not carry answers `None` rather than panicking.
+    pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
+        let id = self.redirects.get(id).copied().unwrap_or(id);
+        self.types.get(id)
+    }
+
     pub fn get(&self, id: TypeId) -> &ResolvedType {
         let id = self.redirects.get(id).copied().unwrap_or(id);
         self.types
@@ -1097,6 +1105,11 @@ impl TypeTable {
     /// produced by [`Self::retain`]) are skipped.
     pub fn all_types(&self) -> impl Iterator<Item = (TypeId, &ResolvedType)> {
         self.types.iter()
+    }
+
+    /// Whether `id` resolves to exactly `want`, through any newtype chain.
+    pub fn is_primitive(&self, id: TypeId, want: PrimitiveType) -> bool {
+        matches!(self.get(self.representation_head(id)), ResolvedType::Primitive(p) if *p == want)
     }
 
     /// Whether `id` is one of the scalar integers. `i128` / `u128` answer
@@ -2030,7 +2043,12 @@ impl TypeTable {
         let Some(decl) = self.compiler_items.decl(item) else {
             return false;
         };
-        let id = self.peel_refs(id);
+        // A dead declaration's body is cleared in place and its signature types
+        // go with the prune, so an optimizer pass reading one off a function
+        // record holds an id this table no longer carries.
+        let Some(id) = self.try_peel_refs(id) else {
+            return false;
+        };
         match (self.nominal_def(id), self.defs.of_ast_id(decl)) {
             (Some(named), Some(declared)) => named == declared,
             _ => self.decl_of_type(id) == Some(decl),
@@ -2583,6 +2601,17 @@ impl TypeTable {
             match self.get(type_id) {
                 ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
                 _ => return type_id,
+            }
+        }
+    }
+
+    /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
+    /// table does not carry answers `None` rather than panicking.
+    pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
+        loop {
+            match self.try_get(type_id)? {
+                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => type_id = *inner,
+                _ => return Some(type_id),
             }
         }
     }

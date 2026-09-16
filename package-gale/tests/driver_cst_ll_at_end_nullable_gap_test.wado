@@ -3,17 +3,17 @@ use g from "./grammars/ll_at_end_nullable_gap.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_at_end_nullable_gap" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "tree: nullable rule between x and its stolen token yields c to caller" {
-    assert_tree(&"a b c", &"(s (x a b) nb c)");
+    assert_tree("a b c", "(s (x a b) nb c)");
 }
 
 test "tree: continuing alt still wins when nb consumes its token" {
-    assert_tree(&"a b w c", &"(s (x a b) (nb w) c)");
+    assert_tree("a b w c", "(s (x a b) (nb w) c)");
 }

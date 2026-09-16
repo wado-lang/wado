@@ -68,23 +68,25 @@ fn "opt_dce_string_push_final_prune.wado/$cm_binding__Stdout_write_via_stream"(d
 
 fn "opt_dce_string_push_final_prune.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
-    let start_9: i32;
+    let other_2: ref "core:prelude/string.wado//String";
+    let start_14: i32;
     let handle: i32;
     let packed: i64;
-    let rx_17: i32;
-    let tx_18: i32;
+    let rx_22: i32;
+    let tx_23: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    other_2 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("this is a long literal"), used: 22 };
     if @unlikely(22 > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, 22);
     }
-    start_9 = s.used;
+    start_14 = s.used;
     s.used = 22;
-    builtin::array_copy<u8>(s.repr, start_9, array.new_data<u8>("this is a long literal"), 0, 22);
-    rx_17 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_18 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_dce_string_push_final_prune.wado/$cm_binding__Stdout_write_via_stream"(rx_17);
-    "core:rt/write_string_to_stream"(tx_18, s);
+    builtin::array_copy<u8>(s.repr, start_14, other_2.repr, 0, 22);
+    rx_22 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_23 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_dce_string_push_final_prune.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
+    "core:rt/write_string_to_stream"(tx_23, s);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/task-return"(0);
 }

@@ -13,7 +13,7 @@ pub variant JToken {
     Punct(String),
 }
 
-pub fn tokenize_java(body: &String) -> Result<List<JToken>, String> {
+pub fn tokenize_java<S: AsStrSlice>(body: S) -> Result<List<JToken>, String> {
     let chars: List<char> = body.chars().collect();
     let n = chars.len();
     let mut out: List<JToken> = [];
@@ -100,17 +100,17 @@ fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
     return null;
 }
 
-fn is_two_char_op(s: &String) -> bool {
-    return *s == "=="
-        || *s == "!="
-        || *s == ">="
-        || *s == "<="
-        || *s == "&&"
-        || *s == "||"
-        || *s == "+="
-        || *s == "-="
-        || *s == "*="
-        || *s == "/=";
+fn is_two_char_op<S: AsStrSlice>(s: S) -> bool {
+    return s.eq_str("==")
+        || s.eq_str("!=")
+        || s.eq_str(">=")
+        || s.eq_str("<=")
+        || s.eq_str("&&")
+        || s.eq_str("||")
+        || s.eq_str("+=")
+        || s.eq_str("-=")
+        || s.eq_str("*=")
+        || s.eq_str("/=");
 }
 
 fn is_one_char_punct(c: char) -> bool {

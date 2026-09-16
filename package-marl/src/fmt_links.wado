@@ -26,14 +26,14 @@ pub fn ref_table_insert(table: &mut RefTable, def: LinkReferenceDef) {
 }
 
 /// Looks up a raw (not-yet-normalized) label.
-pub fn ref_table_get(table: &RefTable, raw_label: &String) -> Option<LinkReferenceDef> {
+pub fn ref_table_get<S: AsStrSlice>(table: &RefTable, raw_label: S) -> Option<LinkReferenceDef> {
     return table.defs.get(normalize_label(raw_label));
 }
 
 /// A case-folded, whitespace-collapsed label, per CommonMark's link
 /// reference matching rule. Case folding is ASCII-only — full Unicode case
 /// folding is out of scope (see `docs/wep-2026-07-05-marl.md`).
-pub fn normalize_label(raw: &String) -> String {
+pub fn normalize_label<S: AsStrSlice>(raw: S) -> String {
     let words: List<String> = raw.trim().to_ascii_lowercase().split_whitespace().collect();
     return words.join(" ");
 }
@@ -44,7 +44,7 @@ pub fn normalize_label(raw: &String) -> String {
 /// bare run up to the first space, or an angle-bracketed `<...>` run that may
 /// contain spaces; the title is an optional `"..."`, `'...'`, or `(...)`
 /// string after it.
-pub fn parse_dest_and_title(raw: &String) -> [String, String] {
+pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> [String, String] {
     let trimmed = raw.trim();
     let chars = trimmed.to_chars();
     let len = chars.len();

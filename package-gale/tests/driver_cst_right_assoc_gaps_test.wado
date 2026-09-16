@@ -7,25 +7,25 @@ use ra from "./grammars/right_assoc_gaps.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_right_assoc_gaps" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = ra::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = ra::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "right-assoc: single atom" {
-    assert_tree(&"42", &"(expr 42)");
+    assert_tree("42", "(expr 42)");
 }
 test "right-assoc: left-associative +" {
-    assert_tree(&"1 + 2 + 3", &"(expr (expr (expr 1) + (expr 2)) + (expr 3))");
+    assert_tree("1 + 2 + 3", "(expr (expr (expr 1) + (expr 2)) + (expr 3))");
 }
 test "right-assoc: ^ nests right" {
-    assert_tree(&"2 ^ 3 ^ 4", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr 4)))");
+    assert_tree("2 ^ 3 ^ 4", "(expr (expr 2) ^ (expr (expr 3) ^ (expr 4)))");
 }
 test "right-assoc: four-level ^ chain" {
-    assert_tree(&"2 ^ 3 ^ 4 ^ 5", &"(expr (expr 2) ^ (expr (expr 3) ^ (expr (expr 4) ^ (expr 5))))");
+    assert_tree("2 ^ 3 ^ 4 ^ 5", "(expr (expr 2) ^ (expr (expr 3) ^ (expr (expr 4) ^ (expr 5))))");
 }
 test "right-assoc: mixed + and ^" {
-    assert_tree(&"1 + 2 ^ 3 ^ 4", &"(expr (expr 1) + (expr (expr 2) ^ (expr (expr 3) ^ (expr 4))))");
+    assert_tree("1 + 2 ^ 3 ^ 4", "(expr (expr 1) + (expr (expr 2) ^ (expr (expr 3) ^ (expr 4))))");
 }

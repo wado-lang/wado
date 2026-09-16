@@ -8,7 +8,7 @@ use t from "./grammars/java_lex_action_pos.g4"
 use { TK_EOF } from "./grammars/java_lex_action_pos.g4";
 
 test "mid-element actions see the text matched so far" {
-    let actual = t::to_lexer_string(&t::tokenize(&"ab"), TK_EOF);
+    let actual = t::to_lexer_string(&t::tokenize("ab"), TK_EOF);
     let expected = "a0:
 a1:a
 a2:ab
@@ -22,7 +22,7 @@ end:ab
 test "a losing group alternative runs no actions" {
     // `a` alone can only match the first arm, so that arm's action runs once —
     // and the second arm, tried and failed, stays silent.
-    let actual = t::to_lexer_string(&t::tokenize(&"a"), TK_EOF);
+    let actual = t::to_lexer_string(&t::tokenize("a"), TK_EOF);
     let expected = "lose:
 end:a
 [@0,0:0='a',<1>,1:0]

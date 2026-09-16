@@ -6,7 +6,7 @@ use t from "./grammars/java_repeat_action.g4"
     };
 
 test "an action in a repeated group runs per iteration" {
-    let r = t::parse(&"A a B b");
+    let r = t::parse("A a B b");
     assert r.ok(), `unexpected diagnostics: ${r.diagnostics.len()}`;
     assert r.output == "A\na\nB\nb\n", `output:\n${r.output}`;
 }

@@ -165,8 +165,8 @@ impl G4Lexer {
         // skips the char comparison for the overwhelming majority of
         // identifiers, which are neither 7 nor 8 chars long.
         let kind = match buf.len() {
-            7 => if buf_eq(&buf, &"grammar") { G4Token::Grammar } else { G4Token::Identifier },
-            8 => if buf_eq(&buf, &"fragment") { G4Token::Fragment } else { G4Token::Identifier },
+            7 => if buf_eq(&buf, "grammar") { G4Token::Grammar } else { G4Token::Identifier },
+            8 => if buf_eq(&buf, "fragment") { G4Token::Fragment } else { G4Token::Identifier },
             _ => G4Token::Identifier,
         };
         return Token::new(kind as i32, owned_slice(buf), Span::new(start, self.pos));
@@ -262,7 +262,7 @@ fn owned_slice(buf: List<char>) -> LexerSlice {
 
 /// Compare an owned char buffer against a keyword literal. Callers gate on
 /// `buf.len()` first, so this only runs for length-matched candidates.
-fn buf_eq(buf: &List<char>, lit: &String) -> bool {
+fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
     let mut i = 0;
     for let c of lit.chars() {
         if i >= buf.len() || buf[i] != c {

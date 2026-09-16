@@ -12,11 +12,11 @@ use nrg from "./grammars/nested_repeat_greedy.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nested_repeat_greedy" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = nrg::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = nrg::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // The three `+`-then-`'x'` arms are one grammar spelled three ways, and they
@@ -25,23 +25,23 @@ fn assert_tree(input: &String, expected: &String) {
 // the inner `+?` would answer `'a'` alone, and the jar says all three agree.
 
 test "nested repeat: a non-greedy inner loop does not make the outer one non-greedy" {
-    assert_tree(&"a x x", &"(s a x x)");
-    assert_tree(&"a x x x", &"(s a x x x)");
+    assert_tree("a x x", "(s a x x)");
+    assert_tree("a x x x", "(s a x x x)");
 }
 
 test "nested repeat: the all-greedy twin reads the same" {
-    assert_tree(&"b x x", &"(s b x x)");
-    assert_tree(&"b x x x", &"(s b x x x)");
+    assert_tree("b x x", "(s b x x)");
+    assert_tree("b x x x", "(s b x x x)");
 }
 
 test "nested repeat: and so does the plain form they collapse to" {
-    assert_tree(&"d x x", &"(s d x x)");
-    assert_tree(&"d x x x", &"(s d x x x)");
+    assert_tree("d x x", "(s d x x)");
+    assert_tree("d x x x", "(s d x x x)");
 }
 
 test "nested repeat: two skip decisions still prefer to skip" {
-    assert_tree(&"e y", &"(s e y)");
-    assert_tree(&"e x y", &"(s e x y)");
+    assert_tree("e y", "(s e y)");
+    assert_tree("e x y", "(s e x y)");
 }
 
 // An outer `?` is not a loop, so the inner loop's preference is the one that
@@ -50,11 +50,11 @@ test "nested repeat: two skip decisions still prefer to skip" {
 // other way: the loop reserves the suffix the non-greedy one stops short of.
 
 test "nested repeat: an outer ? keeps the inner loop's preference" {
-    assert_tree(&"f x", &"(s f x)");
-    assert_tree(&"f x x", &"(s f x x)");
+    assert_tree("f x", "(s f x)");
+    assert_tree("f x x", "(s f x x)");
 }
 
 test "nested repeat: the greedy twin under an outer ? reserves the same suffix" {
-    assert_tree(&"g x", &"(s g x)");
-    assert_tree(&"g x x", &"(s g x x)");
+    assert_tree("g x", "(s g x)");
+    assert_tree("g x x", "(s g x x)");
 }

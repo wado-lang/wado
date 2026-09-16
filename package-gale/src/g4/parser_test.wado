@@ -304,8 +304,8 @@ ID : [\\p{L}0-9_] ;";
     }
 }
 
-fn class_of(input: &String) -> CharClass {
-    let g = parse(*input).unwrap();
+fn class_of<S: AsStrSlice>(input: S) -> CharClass {
+    let g = parse(input.to_string()).unwrap();
     if let CharClass(cc) = g.lexer_rules[0].body[0].elements[0] {
         return cc;
     }
@@ -317,7 +317,7 @@ fn class_admits(cc: &CharClass, c: char) -> bool {
 }
 
 test "negated unicode property class \\P{L}" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 NOT_LETTER : [\\P{L}] ;");
     assert !cc.negated, "\\P is expanded, not folded into the class-level negation";
     assert !class_admits(&cc, 'A'), "\\P{L} must exclude letters";
@@ -331,7 +331,7 @@ NOT_LETTER : [\\P{L}] ;");
 }
 
 test "negated unicode property mixes with literal items" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\P{Nd}a] ;");
     assert !class_admits(&cc, '0'), "\\P{Nd} must exclude digits";
     assert class_admits(&cc, 'a');
@@ -339,7 +339,7 @@ X : [\\P{Nd}a] ;");
 }
 
 test "unicode property ranges are the real general category" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 L : [\\p{L}] ;");
     // Letters the hand-maintained approximation used to miss. `\P{L}` is the
     // complement, so a gap here is not a miss but an admission.
@@ -351,7 +351,7 @@ L : [\\p{L}] ;");
 }
 
 test "negated unicode property excludes every member of the category" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\P{L}] ;");
     assert !class_admits(&cc, 'א');
     assert !class_admits(&cc, 'ก');
@@ -361,24 +361,24 @@ X : [\\P{L}] ;");
 }
 
 test "two-letter general categories resolve on their own" {
-    let upper = class_of(&"grammar Test;
+    let upper = class_of("grammar Test;
 X : [\\p{Lu}] ;");
     assert class_admits(&upper, 'A');
     assert !class_admits(&upper, 'a');
-    let lower = class_of(&"grammar Test;
+    let lower = class_of("grammar Test;
 X : [\\p{Ll}] ;");
     assert class_admits(&lower, 'a');
     assert !class_admits(&lower, 'A');
 }
 
 test "the surrogate category is empty in a scalar range set" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Cs}] ;");
     assert cc.ranges.is_empty(), "no input character can be a surrogate";
 }
 
 test "a script property resolves to its own code points" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Greek}] ;");
     assert class_admits(&cc, 'α'), "U+03B1 is Script=Greek";
     assert class_admits(&cc, 'ᾰ'), "U+1FB0 is Script=Greek too — the script spans blocks";
@@ -387,7 +387,7 @@ X : [\\p{Greek}] ;");
 }
 
 test "a script resolves through its four-letter alias" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Grek}] ;");
     assert class_admits(&cc, 'α');
     assert !class_admits(&cc, 'a');
@@ -396,22 +396,22 @@ X : [\\p{Grek}] ;");
 test "an In-prefixed name is a block, not a script" {
     // The `Greek` block is `Greek_And_Coptic` (U+0370..U+03FF), so it stops
     // where Greek Extended begins — which the script does not.
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{InGreek}] ;");
     assert class_admits(&cc, 'α');
     assert !class_admits(&cc, 'ᾰ'), "U+1FB0 is in Greek Extended, a different block";
 }
 
 test "binary properties resolve" {
-    let syntax = class_of(&"grammar Test;
+    let syntax = class_of("grammar Test;
 X : [\\p{Pattern_Syntax}] ;");
     assert class_admits(&syntax, '+');
     assert !class_admits(&syntax, 'a');
-    let id_start = class_of(&"grammar Test;
+    let id_start = class_of("grammar Test;
 X : [\\p{Other_ID_Start}] ;");
     assert class_admits(&id_start, '\u{2118}'), "SCRIPT CAPITAL P is Other_ID_Start";
     assert !class_admits(&id_start, 'a');
-    let ws = class_of(&"grammar Test;
+    let ws = class_of("grammar Test;
 X : [\\p{White_Space}] ;");
     assert class_admits(&ws, '\t');
     assert class_admits(&ws, '\u{00A0}');
@@ -419,36 +419,36 @@ X : [\\p{White_Space}] ;");
 }
 
 test "property names ignore case, underscores and hyphens" {
-    let lower = class_of(&"grammar Test;
+    let lower = class_of("grammar Test;
 X : [\\p{lu}] ;");
     assert class_admits(&lower, 'A');
     assert !class_admits(&lower, 'a');
-    let long = class_of(&"grammar Test;
+    let long = class_of("grammar Test;
 X : [\\p{uppercase-letter}] ;");
     assert class_admits(&long, 'A');
     assert !class_admits(&long, 'a');
-    let script = class_of(&"grammar Test;
+    let script = class_of("grammar Test;
 X : [\\p{GREEK}] ;");
     assert class_admits(&script, 'α');
 }
 
 test "an enumerated property picks its table by name" {
-    let gc = class_of(&"grammar Test;
+    let gc = class_of("grammar Test;
 X : [\\p{General_Category=Lu}] ;");
     assert class_admits(&gc, 'A');
     assert !class_admits(&gc, 'a');
-    let sc = class_of(&"grammar Test;
+    let sc = class_of("grammar Test;
 X : [\\p{Script=Greek}] ;");
     assert class_admits(&sc, 'ᾰ');
     assert !class_admits(&sc, 'a');
-    let blk = class_of(&"grammar Test;
+    let blk = class_of("grammar Test;
 X : [\\p{Block=Greek_And_Coptic}] ;");
     assert class_admits(&blk, 'α');
     assert !class_admits(&blk, 'ᾰ');
 }
 
 test "a script property complements like a category" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\P{Greek}] ;");
     assert !class_admits(&cc, 'α');
     assert class_admits(&cc, 'a');
@@ -465,13 +465,13 @@ test "unsupported unicode property is rejected, not silently empty" {
 }
 
 test "surrogate char range matches nothing instead of U+FFFD" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\uD800-\\uDFFF] ;");
     assert cc.ranges.is_empty(), `expected no scalar ranges, got ${cc.ranges.len()}`;
 }
 
 test "a char range with a surrogate endpoint keeps only its scalar part" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\uD700-\\uDFFF] ;");
     assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
     assert cc.ranges[0].start == '\uD700' && cc.ranges[0].end == '\uD7FF';
@@ -480,7 +480,7 @@ X : [\\uD700-\\uDFFF] ;");
 
 test "a scalar-endpoint range spanning the surrogate block stays one range" {
     // `char` cannot hold a surrogate, so the split would be cosmetic.
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\u0100-\\uFFFC] ;");
     assert cc.ranges.len() == 1, `expected 1 range, got ${cc.ranges.len()}`;
     assert cc.ranges[0].start == '\u0100' && cc.ranges[0].end == '\uFFFC';
@@ -1962,17 +1962,17 @@ CMT : '//' .*? '\\n' CMT?? ;";
     }
 }
 
-fn assert_option_ident(opt: &GrammarOption, expected: String) {
+fn assert_option_ident<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Ident(v) = &opt.value {
-        assert *v == expected, `option '${opt.name}': expected Ident('${expected}'), got Ident('${*v}')`;
+        assert expected.eq_str(*v), `option '${opt.name}': expected Ident('${expected.to_string()}'), got Ident('${*v}')`;
     } else {
         panic(`option '${opt.name}': expected Ident, got other`);
     }
 }
 
-fn assert_option_str(opt: &GrammarOption, expected: String) {
+fn assert_option_str<S: AsStrSlice>(opt: &GrammarOption, expected: S) {
     if let Str(v) = &opt.value {
-        assert *v == expected, `option '${opt.name}': expected Str('${expected}'), got Str('${*v}')`;
+        assert expected.eq_str(*v), `option '${opt.name}': expected Str('${expected.to_string()}'), got Str('${*v}')`;
     } else {
         panic(`option '${opt.name}': expected Str, got other`);
     }
@@ -2071,7 +2071,7 @@ test "a lexer closure over an empty alternative is rejected" {
 // disagree.
 
 test "POSIX alnum is Alphabetic plus Nd, not L plus N" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Alnum}] ;");
     assert class_admits(&cc, 'A');
     assert class_admits(&cc, '0');
@@ -2084,7 +2084,7 @@ X : [\\p{Alnum}] ;");
 }
 
 test "POSIX digit is Nd alone" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Digit}] ;");
     assert class_admits(&cc, '0');
     assert class_admits(&cc, '٣');
@@ -2094,7 +2094,7 @@ X : [\\p{Digit}] ;");
 }
 
 test "POSIX xdigit is Nd plus Hex_Digit" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{XDigit}] ;");
     assert class_admits(&cc, '0');
     assert class_admits(&cc, 'F');
@@ -2105,7 +2105,7 @@ X : [\\p{XDigit}] ;");
 }
 
 test "POSIX blank is horizontal whitespace only" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Blank}] ;");
     assert class_admits(&cc, ' ');
     assert class_admits(&cc, '\t');
@@ -2118,7 +2118,7 @@ X : [\\p{Blank}] ;");
 }
 
 test "POSIX cntrl is Cc" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Cntrl}] ;");
     assert class_admits(&cc, '\t');
     assert class_admits(&cc, '\n');
@@ -2130,7 +2130,7 @@ X : [\\p{Cntrl}] ;");
 }
 
 test "POSIX graph excludes whitespace but keeps format characters" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Graph}] ;");
     assert class_admits(&cc, 'A');
     assert class_admits(&cc, '!');
@@ -2145,7 +2145,7 @@ X : [\\p{Graph}] ;");
 }
 
 test "POSIX print is graph plus blank, less the controls" {
-    let cc = class_of(&"grammar Test;
+    let cc = class_of("grammar Test;
 X : [\\p{Print}] ;");
     assert class_admits(&cc, 'A');
     assert class_admits(&cc, ' '), "space is blank and not a control";
@@ -2156,19 +2156,19 @@ X : [\\p{Print}] ;");
 }
 
 test "EmojiPresentation splits Emoji by its default presentation" {
-    let colourful = class_of(&"grammar Test;
+    let colourful = class_of("grammar Test;
 X : [\\p{EmojiPresentation=EmojiDefault}] ;");
     assert class_admits(&colourful, '\u{1F600}');
     assert !class_admits(&colourful, '0'), "the keycap base is Emoji but text by default";
     assert !class_admits(&colourful, 'A');
 
-    let textual = class_of(&"grammar Test;
+    let textual = class_of("grammar Test;
 X : [\\p{EmojiPresentation=TextDefault}] ;");
     assert class_admits(&textual, '0');
     assert !class_admits(&textual, '\u{1F600}');
     assert !class_admits(&textual, 'A'), "A is not Emoji at all";
 
-    let not_emoji = class_of(&"grammar Test;
+    let not_emoji = class_of("grammar Test;
 X : [\\p{EmojiPresentation=Text}] ;");
     assert class_admits(&not_emoji, 'A');
     assert class_admits(&not_emoji, ' ');
@@ -2183,14 +2183,14 @@ X : [\\p{EmojiPresentation=Text}] ;");
 // rather than not at all.
 
 test "Line_Break takes both alias spellings and its default value" {
-    let alphabetic = class_of(&"grammar Test;
+    let alphabetic = class_of("grammar Test;
 X : [\\p{Line_Break=Alphabetic}] ;");
     assert class_admits(&alphabetic, 'A');
     assert !class_admits(&alphabetic, '0'), "a digit is lb=NU";
-    assert class_of(&"grammar Test;
+    assert class_of("grammar Test;
 X : [\\p{lb=AL}] ;").ranges == alphabetic.ranges, "the short spelling names the same set";
 
-    let unknown = class_of(&"grammar Test;
+    let unknown = class_of("grammar Test;
 X : [\\p{lb=XX}] ;");
     assert class_admits(&unknown, '\u{0378}'), "U+0378 is unassigned, so it takes the @missing default";
     assert !class_admits(&unknown, 'A');
@@ -2198,17 +2198,17 @@ X : [\\p{lb=XX}] ;");
 }
 
 test "Bidi_Class defaults per block, not globally" {
-    let arabic_letter = class_of(&"grammar Test;
+    let arabic_letter = class_of("grammar Test;
 X : [\\p{bc=AL}] ;");
     assert class_admits(&arabic_letter, 'ا'), "U+0627 is listed";
     assert class_admits(&arabic_letter, '\u{08B5}'), "unassigned inside 0860..08FF, whose own default is AL";
 
-    let right_to_left = class_of(&"grammar Test;
+    let right_to_left = class_of("grammar Test;
 X : [\\p{Bidi_Class=Right_To_Left}] ;");
     assert class_admits(&right_to_left, '\u{0590}'), "unassigned inside 0590..05FF, whose default is R";
     assert !class_admits(&right_to_left, 'A');
 
-    let left_to_right = class_of(&"grammar Test;
+    let left_to_right = class_of("grammar Test;
 X : [\\p{bc=L}] ;");
     assert class_admits(&left_to_right, 'A');
     assert class_admits(&left_to_right, '\u{0378}'), "unassigned outside every block default";
@@ -2218,55 +2218,55 @@ X : [\\p{bc=L}] ;");
 test "Joining_Type defaults through General_Category" {
     // ArabicShaping.txt states its default as a rule: unlisted is T for
     // Mn / Me / Cf, U otherwise.
-    let transparent = class_of(&"grammar Test;
+    let transparent = class_of("grammar Test;
 X : [\\p{jt=T}] ;");
     assert class_admits(&transparent, '\u{0300}'), "COMBINING GRAVE ACCENT is Mn and unlisted";
     assert class_admits(&transparent, '\u{00AD}'), "SOFT HYPHEN is Cf and unlisted";
     assert !class_admits(&transparent, 'A');
 
-    let non_joining = class_of(&"grammar Test;
+    let non_joining = class_of("grammar Test;
 X : [\\p{Joining_Type=Non_Joining}] ;");
     assert class_admits(&non_joining, 'A');
     assert !class_admits(&non_joining, '\u{0300}');
 
-    let dual = class_of(&"grammar Test;
+    let dual = class_of("grammar Test;
 X : [\\p{jt=D}] ;");
     assert class_admits(&dual, 'ب'), "U+0628 joins on both sides";
     assert !class_admits(&dual, 'ا'), "U+0627 is right-joining";
 }
 
 test "the remaining enumerated properties answer their own values" {
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{gcb=LVT}] ;"), '\u{AC01}'), "U+AC01 is a Hangul LVT syllable";
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{hst=LVT}] ;"), '\u{AC01}');
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{WB=XX}] ;"), '!'), "an exclamation mark is Word_Break=Other, the default value";
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{SB=LO}] ;"), 'a'), "a lowercase letter is Sentence_Break=Lower";
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{nt=De}] ;"), '0');
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{Numeric_Type=None}] ;"), 'A'), "the default value covers everything with no numeric value";
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{ea=W}] ;"), '漢');
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{InSC=Bindu}] ;"), '\u{0901}');
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{dt=Font}] ;"), '\u{2102}'), "DOUBLE-STRUCK CAPITAL C is a font variant of C";
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{vo=U}] ;"), '漢');
-    assert class_admits(&class_of(&"grammar Test;
+    assert class_admits(&class_of("grammar Test;
 X : [\\p{vo=R}] ;"), 'A');
 }
 
 test "a script or block with no code points of its own is still a value" {
-    let no_script = class_of(&"grammar Test;
+    let no_script = class_of("grammar Test;
 X : [\\p{sc=Zzzz}] ;");
     assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
     assert !class_admits(&no_script, 'A');
 
-    let no_block = class_of(&"grammar Test;
+    let no_block = class_of("grammar Test;
 X : [\\p{blk=NB}] ;");
     assert class_admits(&no_block, '\u{2FE0}'), "U+2FE0 sits outside every assigned block";
     assert !class_admits(&no_block, 'A');
@@ -2297,11 +2297,11 @@ test "a property escape cannot be a bound of a character range" {
 test "a dash beside a property escape is a literal, not a range" {
     // A `-` first or last in the set is an ordinary character, so neither of
     // these is a range and both stay accepted — the same line ANTLR4 draws.
-    let trailing = class_of(&"grammar Test;
+    let trailing = class_of("grammar Test;
 X : [\\p{Nd}-] ;");
     assert class_admits(&trailing, '0');
     assert class_admits(&trailing, '-');
-    let leading = class_of(&"grammar Test;
+    let leading = class_of("grammar Test;
 X : [-\\p{Nd}] ;");
     assert class_admits(&leading, '0');
     assert class_admits(&leading, '-');

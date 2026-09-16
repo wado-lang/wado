@@ -41,13 +41,13 @@ impl TokenKinds {
     /// Fallback id assignment for a name not already present — only reached for
     /// an element whose `kind_id` was never resolved (the test path). Extends
     /// the table so `name_of` still round-trips.
-    pub fn intern(&mut self, name: &String) -> i32 {
-        if let Some(id) = self.by_name.get(*name) {
+    pub fn intern<S: AsStrSlice>(&mut self, name: S) -> i32 {
+        if let Some(id) = self.by_name.get(name.to_string()) {
             return id;
         }
         let id = self.names.len();
-        self.by_name[*name] = id;
-        self.names.push(*name);
+        self.by_name[name.to_string()] = id;
+        self.names.push(name.to_string());
         return id;
     }
 
@@ -79,8 +79,8 @@ impl TokenKinds {
     }
 
     /// Kind id for a `TK_*` name, or -1 if the name is not a token kind.
-    pub fn id_of(&self, name: &String) -> i32 {
-        if let Some(id) = self.by_name.get(*name) {
+    pub fn id_of<S: AsStrSlice>(&self, name: S) -> i32 {
+        if let Some(id) = self.by_name.get(name.to_string()) {
             return id;
         }
         return -1;
@@ -167,7 +167,7 @@ fn resolve_elements(elements: &List<Element>, kinds: &TokenKinds) -> List<Elemen
 
 fn resolve_element(elem: &Element, kinds: &TokenKinds) -> Element {
     return match *elem {
-        TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(&`TK_${t.name}`) }),
+        TokenRef(t) => Element::TokenRef(TokenRefElement { ..t, kind_id: kinds.id_of(`TK_${t.name}`) }),
         Literal(l) => Element::Literal(LiteralElement { ..l, kind_id: kinds.id_of(&literal_const_name(&l.text)) }),
         Repeat(rep) => Element::Repeat(RepeatElement { ..rep, element: resolve_element(&rep.element, kinds) }),
         Group(g) => Element::Group(GroupElement { ..g, alternatives: resolve_alts(&g.alternatives, kinds) }),

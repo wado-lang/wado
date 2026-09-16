@@ -60,7 +60,7 @@ Number of captured parameters (0 for static routes).
 
 True when no parameters were captured.
 
-#### `pub fn get(&self, name: String) -> Option<String>`
+#### `pub fn get<S: AsStrSlice>(&self, name: S) -> Option<String>`
 
 Look up a captured parameter by name. Returns `None` if absent.
 The returned `String` is freshly allocated from the matched
@@ -92,24 +92,24 @@ _Fields are private._
 
 #### `pub fn new() -> Router<H>`
 
-#### `pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler]`
+#### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) with stores[handler]`
 
 Registers a handler for `(method, pattern)`. Last-write-wins.
 Panics on a malformed pattern.
 
-#### `pub fn get(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn post(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn put(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn patch(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn delete(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn options(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
-#### `pub fn any(&mut self, pattern: String, handler: H) with stores[handler]`
+#### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
 
 Registers a handler that matches any HTTP method (including
 `Method::Other(_)`) at `pattern`. Specific-method handlers at the
@@ -120,7 +120,7 @@ same pattern take precedence; `any` is the fallback.
 Matches `(method, path)`. The path argument must be a URL path
 (no query string, no fragment).
 
-#### `pub fn allowed_methods(&self, path: &String) -> List<Method>`
+#### `pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method>`
 
 Returns the specific methods registered for `path`. `any` does not
 contribute. Empty array on a 404 or when only `any` is registered.

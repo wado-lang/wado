@@ -7,7 +7,7 @@ fn no_refs() -> RefTable {
 }
 
 test "parse_inline reads plain text as a single Text node" {
-    let nodes = parse_inline(&"hello world", &no_refs());
+    let nodes = parse_inline("hello world", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::Text(s)) = nodes.get(0) {
         assert s == "hello world";
@@ -17,7 +17,7 @@ test "parse_inline reads plain text as a single Text node" {
 }
 
 test "parse_inline splits on a soft break" {
-    let nodes = parse_inline(&"line one\nline two", &no_refs());
+    let nodes = parse_inline("line one\nline two", &no_refs());
     assert nodes.len() == 3;
     assert nodes.get(0) matches { Some(Node::Text(_)) };
     assert nodes.get(1) matches { Some(Node::SoftBreak) };
@@ -25,7 +25,7 @@ test "parse_inline splits on a soft break" {
 }
 
 test "parse_inline turns a backslash-newline into a hard break" {
-    let nodes = parse_inline(&"line one\\\nline two", &no_refs());
+    let nodes = parse_inline("line one\\\nline two", &no_refs());
     assert nodes.len() == 3;
     assert nodes.get(1) matches { Some(Node::HardBreak) };
 }
@@ -34,7 +34,7 @@ test "parse_inline keeps a backslash escape verbatim (round-trip safety)" {
     // The backslash is preserved rather than unescaped: printing an
     // unescaped "1. item" back out would re-parse as a different construct
     // than the source's escaped "1\. item".
-    let nodes = parse_inline(&"a\\*b\\_c", &no_refs());
+    let nodes = parse_inline("a\\*b\\_c", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::Text(s)) = nodes.get(0) {
         assert s == "a\\*b\\_c";
@@ -44,7 +44,7 @@ test "parse_inline keeps a backslash escape verbatim (round-trip safety)" {
 }
 
 test "parse_inline resolves underscore emphasis" {
-    let nodes = parse_inline(&"a _word_ b", &no_refs());
+    let nodes = parse_inline("a _word_ b", &no_refs());
     assert nodes.len() == 3;
     if let Some(Node::Emphasis(em)) = nodes.get(1) {
         assert em.keep_asterisk == false;
@@ -60,7 +60,7 @@ test "parse_inline resolves underscore emphasis" {
 }
 
 test "parse_inline sets keep_asterisk when a * emphasis abuts an alphanumeric" {
-    let nodes = parse_inline(&"*word*s", &no_refs());
+    let nodes = parse_inline("*word*s", &no_refs());
     if let Some(Node::Emphasis(em)) = nodes.get(0) {
         assert em.keep_asterisk == true;
     } else {
@@ -69,7 +69,7 @@ test "parse_inline sets keep_asterisk when a * emphasis abuts an alphanumeric" {
 }
 
 test "parse_inline does not set keep_asterisk for an ordinary * emphasis" {
-    let nodes = parse_inline(&"*word* s", &no_refs());
+    let nodes = parse_inline("*word* s", &no_refs());
     if let Some(Node::Emphasis(em)) = nodes.get(0) {
         assert em.keep_asterisk == false;
     } else {
@@ -78,19 +78,19 @@ test "parse_inline does not set keep_asterisk for an ordinary * emphasis" {
 }
 
 test "parse_inline resolves strong emphasis" {
-    let nodes = parse_inline(&"**bold**", &no_refs());
+    let nodes = parse_inline("**bold**", &no_refs());
     assert nodes.len() == 1;
     assert nodes.get(0) matches { Some(Node::Strong(_)) };
 }
 
 test "parse_inline resolves strikethrough" {
-    let nodes = parse_inline(&"~~gone~~", &no_refs());
+    let nodes = parse_inline("~~gone~~", &no_refs());
     assert nodes.len() == 1;
     assert nodes.get(0) matches { Some(Node::Strikethrough(_)) };
 }
 
 test "parse_inline nests emphasis inside strong for ***text***" {
-    let nodes = parse_inline(&"***bold***", &no_refs());
+    let nodes = parse_inline("***bold***", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::Emphasis(outer)) = nodes.get(0) {
         assert outer.children.len() == 1;
@@ -109,7 +109,7 @@ test "parse_inline nests emphasis inside strong for ***text***" {
 }
 
 test "parse_inline reads a code span and trims a single padding space pair" {
-    let nodes = parse_inline(&"` code `", &no_refs());
+    let nodes = parse_inline("` code `", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::Code(s)) = nodes.get(0) {
         assert s == "code";
@@ -119,7 +119,7 @@ test "parse_inline reads a code span and trims a single padding space pair" {
 }
 
 test "parse_inline widens the code span delimiter when the content has a backtick" {
-    let nodes = parse_inline(&"``a`b``", &no_refs());
+    let nodes = parse_inline("``a`b``", &no_refs());
     if let Some(Node::Code(s)) = nodes.get(0) {
         assert s == "a`b";
     } else {
@@ -128,7 +128,7 @@ test "parse_inline widens the code span delimiter when the content has a backtic
 }
 
 test "parse_inline reads a bare http autolink" {
-    let nodes = parse_inline(&"see https://example.com/x for more", &no_refs());
+    let nodes = parse_inline("see https://example.com/x for more", &no_refs());
     assert nodes.len() == 3;
     if let Some(Node::AutoLink(link)) = nodes.get(1) {
         assert link.url == "https://example.com/x";
@@ -139,7 +139,7 @@ test "parse_inline reads a bare http autolink" {
 }
 
 test "parse_inline drops trailing punctuation from a bare autolink" {
-    let nodes = parse_inline(&"see https://example.com.", &no_refs());
+    let nodes = parse_inline("see https://example.com.", &no_refs());
     if let Some(Node::AutoLink(link)) = nodes.get(1) {
         assert link.url == "https://example.com";
     } else {
@@ -148,7 +148,7 @@ test "parse_inline drops trailing punctuation from a bare autolink" {
 }
 
 test "parse_inline reads an angle-bracketed scheme autolink" {
-    let nodes = parse_inline(&"<https://example.com>", &no_refs());
+    let nodes = parse_inline("<https://example.com>", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::AutoLink(link)) = nodes.get(0) {
         assert link.url == "https://example.com";
@@ -159,7 +159,7 @@ test "parse_inline reads an angle-bracketed scheme autolink" {
 }
 
 test "parse_inline reads a raw inline HTML span" {
-    let nodes = parse_inline(&"a <span class=\"x\"> b </span> c", &no_refs());
+    let nodes = parse_inline("a <span class=\"x\"> b </span> c", &no_refs());
     assert nodes.get(1) matches { Some(Node::Html(_)) };
     assert nodes.get(3) matches { Some(Node::Html(_)) };
     if let Some(Node::Html(s)) = nodes.get(1) {
@@ -168,7 +168,7 @@ test "parse_inline reads a raw inline HTML span" {
 }
 
 test "parse_inline reads an HTML comment span" {
-    let nodes = parse_inline(&"a <!-- note --> b", &no_refs());
+    let nodes = parse_inline("a <!-- note --> b", &no_refs());
     if let Some(Node::Html(s)) = nodes.get(1) {
         assert s == "<!-- note -->";
     } else {
@@ -177,7 +177,7 @@ test "parse_inline reads an HTML comment span" {
 }
 
 test "parse_inline reads an inline link with a title" {
-    let nodes = parse_inline(&"[text](https://example.com \"Title\")", &no_refs());
+    let nodes = parse_inline("[text](https://example.com \"Title\")", &no_refs());
     assert nodes.len() == 1;
     if let Some(Node::InlineLink(link)) = nodes.get(0) {
         assert link.url == "https://example.com";
@@ -192,7 +192,7 @@ test "parse_inline reads an inline link with a title" {
 }
 
 test "parse_inline treats an unresolved bracket pair as literal text" {
-    let nodes = parse_inline(&"[not a link] plain", &no_refs());
+    let nodes = parse_inline("[not a link] plain", &no_refs());
     if let Some(Node::Text(s)) = nodes.get(0) {
         assert s == "[not a link] plain";
     } else {
@@ -202,8 +202,8 @@ test "parse_inline treats an unresolved bracket pair as literal text" {
 
 test "parse_inline resolves a full reference link" {
     let mut refs = new_ref_table();
-    ref_table_insert(&mut refs, LinkReferenceDef { label: normalize_label(&"cli-wep"), url: "./wep.md", title: "" });
-    let nodes = parse_inline(&"[CLI WEP][cli-wep]", &refs);
+    ref_table_insert(&mut refs, LinkReferenceDef { label: normalize_label("cli-wep"), url: "./wep.md", title: "" });
+    let nodes = parse_inline("[CLI WEP][cli-wep]", &refs);
     if let Some(Node::ReferenceLink(link)) = nodes.get(0) {
         assert link.label == "cli-wep";
         if let Some(Node::Text(s)) = link.children.get(0) {
@@ -217,7 +217,7 @@ test "parse_inline resolves a full reference link" {
 test "parse_inline resolves a collapsed reference link, keeping the label's original casing" {
     let mut refs = new_ref_table();
     ref_table_insert(&mut refs, LinkReferenceDef { label: "RFC 8949", url: "https://rfc-editor.org/8949", title: "" });
-    let nodes = parse_inline(&"[RFC 8949][]", &refs);
+    let nodes = parse_inline("[RFC 8949][]", &refs);
     if let Some(Node::ReferenceLink(link)) = nodes.get(0) {
         // The label printed back is the raw usage-site text, not the
         // case-folded lookup key — matching resolution stays case-insensitive
@@ -231,11 +231,11 @@ test "parse_inline resolves a collapsed reference link, keeping the label's orig
 test "parse_inline resolves a shortcut reference link" {
     let mut refs = new_ref_table();
     ref_table_insert(&mut refs, LinkReferenceDef {
-        label: normalize_label(&"wado-lang/wado#1522"),
+        label: normalize_label("wado-lang/wado#1522"),
         url: "https://github.com/wado-lang/wado/issues/1522",
         title: "",
     });
-    let nodes = parse_inline(&"see [wado-lang/wado#1522] for details", &refs);
+    let nodes = parse_inline("see [wado-lang/wado#1522] for details", &refs);
     assert nodes.get(1) matches { Some(Node::ShortcutLink(_)) };
 }
 
@@ -247,11 +247,11 @@ test "parse_inline resolves a shortcut reference link whose text is a code span"
     // "[`BlobDataProvider`]: https://docs.rs/icu_provider_blob/".
     let mut refs = new_ref_table();
     ref_table_insert(&mut refs, LinkReferenceDef {
-        label: normalize_label(&"`BlobDataProvider`"),
+        label: normalize_label("`BlobDataProvider`"),
         url: "https://docs.rs/icu_provider_blob/",
         title: "",
     });
-    let nodes = parse_inline(&"the [`BlobDataProvider`] type", &refs);
+    let nodes = parse_inline("the [`BlobDataProvider`] type", &refs);
     if let Some(Node::ShortcutLink(link)) = nodes.get(1) {
         assert link.children.len() == 1;
         assert link.children.get(0) matches { Some(Node::Code(_)) };
@@ -261,7 +261,7 @@ test "parse_inline resolves a shortcut reference link whose text is a code span"
 }
 
 test "parse_inline reads an inline image" {
-    let nodes = parse_inline(&"![alt text](./img.png)", &no_refs());
+    let nodes = parse_inline("![alt text](./img.png)", &no_refs());
     if let Some(Node::InlineImage(img)) = nodes.get(0) {
         assert img.alt == "alt text";
         assert img.url == "./img.png";

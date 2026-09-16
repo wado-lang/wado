@@ -5,7 +5,8 @@
 //! replaces the call node they match.
 
 use crate::compiler_item::{CompilerItem, SeqField};
-use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
+use crate::hashmap::IndexSet;
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
@@ -21,8 +22,10 @@ pub(super) fn resolve_ctx(project: &NirPackage) -> Option<Ctx> {
 }
 
 pub(super) struct Ctx {
-    /// `FuncId` of `push_str`, one of the two appends a fused run absorbs.
-    push_str_id: FuncId,
+    /// The `push_str` instances a fused run absorbs: those appending a whole
+    /// `String` or a reference to one, since `write_str_at` copies from byte 0
+    /// and a view starts past it.
+    push_str_ids: IndexSet<FuncId>,
     /// `FuncId` of `push_char`, the call [`ConstAsciiPushRule`] retargets.
     push_char_id: FuncId,
     /// `FuncId` of `push_ascii_unchecked`: what [`ConstAsciiPushRule`] retargets
@@ -45,18 +48,27 @@ pub(super) struct FusedIds {
 
 impl Ctx {
     fn resolve(project: &NirPackage) -> Option<Self> {
-        let mut push_str_id: Option<FuncId> = None;
+        let mut push_str_ids = IndexSet::default();
         let mut push_char_id: Option<FuncId> = None;
         let mut push_ascii_id: Option<FuncId> = None;
         let mut len_id: Option<FuncId> = None;
         let mut reserve_id: Option<FuncId> = None;
         let mut set_byte_id: Option<FuncId> = None;
         let mut write_str_id: Option<FuncId> = None;
+        let type_table = project.type_table.borrow();
+        let appends_a_string = |f: &NirFunction| {
+            let [_receiver, text] = f.params.as_slice() else {
+                return false;
+            };
+            type_table
+                .try_peel_refs(text.type_id)
+                .is_some_and(|inner| type_table.is_string(inner))
+        };
         for func_rc in &project.functions {
             let f = func_rc.borrow();
             match f.compiler_item {
-                Some(CompilerItem::StringPushStr) => {
-                    push_str_id = Some(f.id.expect("func_id assigned at lower"));
+                Some(CompilerItem::StringPushStr) if appends_a_string(&f) => {
+                    push_str_ids.insert(f.id.expect("func_id assigned at lower"));
                 }
                 Some(CompilerItem::StringPushChar) => {
                     push_char_id = Some(f.id.expect("func_id assigned at lower"));
@@ -88,7 +100,7 @@ impl Ctx {
             })
         })();
         Some(Self {
-            push_str_id: push_str_id?,
+            push_str_ids,
             push_char_id: push_char_id?,
             push_ascii_id,
             fused,
@@ -211,7 +223,7 @@ enum LenTerm {
 /// length is read at the start of its own group: hoisting it over an earlier
 /// write in the same run would measure a buffer the run itself grew.
 pub(super) struct AppendFuseRule {
-    push_str_id: FuncId,
+    push_str_ids: IndexSet<FuncId>,
     push_ascii_id: FuncId,
     ids: FusedIds,
 }
@@ -220,7 +232,7 @@ impl AppendFuseRule {
     /// `None` unless every primitive the fused form is written with resolved.
     pub(super) fn new(ctx: &Ctx) -> Option<Self> {
         Some(Self {
-            push_str_id: ctx.push_str_id,
+            push_str_ids: ctx.push_str_ids.clone(),
             push_ascii_id: ctx.push_ascii_id?,
             ids: ctx.fused?,
         })
@@ -243,7 +255,7 @@ impl AppendFuseRule {
             let byte = u8::try_from(body.operand_const_int(arg.expr)?).ok()?;
             return Some((recv, Piece::Byte(byte)));
         }
-        if func_id != self.push_str_id {
+        if !self.push_str_ids.contains(&func_id) {
             return None;
         }
         let arg = arg.expr.as_expr()?;
@@ -547,17 +559,17 @@ fn local_operand(engine: &mut Engine, local: u32, span: Span) -> Operand {
     Operand::Expr(engine.alloc_expr(ExprKind::Local { index: local, name }, TypeTable::I32, span))
 }
 
-/// The byte length of a `&"literal"` argument, or `None` when the argument is
-/// not a string literal.
+/// The byte length of a string literal argument, bare or behind one `Ref`, or
+/// `None` when the argument is not one.
 fn const_str_len(body: &Body, arg: ExprId) -> Option<i32> {
-    let ExprKind::Unary {
-        op: NirUnaryOp::Ref,
-        expr: inner,
-    } = &body.exprs[arg].kind
-    else {
-        return None;
+    let literal = match &body.exprs[arg].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } => inner.as_expr()?,
+        _ => arg,
     };
-    let ExprKind::StructLiteral { fields, .. } = &body.exprs[inner.as_expr()?].kind else {
+    let ExprKind::StructLiteral { fields, .. } = &body.exprs[literal].kind else {
         return None;
     };
     let field = |which: SeqField| {

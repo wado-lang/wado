@@ -43,11 +43,11 @@ type "functype//const_object_globalization_mut_borrow_projection.wado/$cm_export
 
 type "functype//core:rt/write_string_to_stream" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write" = fn(ref "const_object_globalization_mut_borrow_projection.wado//JsonWriter", ref "core:prelude/string.wado//String");  // TypeId(16)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(17)
 
-type "functype//const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(18)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(18)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
@@ -74,8 +74,9 @@ global global:const_object_globalization_mut_borrow_projection.wado::$const_obj_
 global global:const_object_globalization_mut_borrow_projection.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 };
 
 fn "const_object_globalization_mut_borrow_projection.wado/run"() with Stdout {
+    let message_4: ref "core:prelude/string.wado//String";
     let handle_7: i32;
-    let writer_10: ref "core:prelude/string.wado//String";
+    let writer_10: ref "const_object_globalization_mut_borrow_projection.wado//JsonWriter";
     let packed_18: i64;
     let rx_19: i32;
     let tx_20: i32;
@@ -94,14 +95,15 @@ fn "const_object_globalization_mut_borrow_projection.wado/run"() with Stdout {
     let packed_68: i64;
     let rx_69: i32;
     let tx_70: i32;
-    writer_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    writer_10 = struct.new "const_object_globalization_mut_borrow_projection.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     if black_box(0) {
     }
-    "const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write$scalar"(writer_10, global:const_object_globalization_mut_borrow_projection.wado::$const_obj_3);
+    "const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write"(writer_10, global:const_object_globalization_mut_borrow_projection.wado::$const_obj_3);
+    message_4 = writer_10.buf;
     rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
     tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
     handle_7 = "const_object_globalization_mut_borrow_projection.wado/$cm_binding__Stdout_write_via_stream"(rx_19);
-    "core:rt/write_string_to_stream"(tx_20, writer_10);
+    "core:rt/write_string_to_stream"(tx_20, message_4);
     "wasi/future-drop-readable:transmission-cli"(handle_7);
     if black_box(0) {
     }
@@ -146,6 +148,26 @@ fn "core:rt/write_string_to_stream"(tx, message) {
     builtin::array_set_u8(new_repr, self_4, 10);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_4 + 1 });
     "wasi/stream-drop-writable"(tx);
+}
+
+fn "const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write"(self, s) {
+    let out_7: ref "core:prelude/string.wado//String";
+    let n_10: i32;
+    let new_used: i32;
+    let start_15: i32;
+    out_7 = self.buf;
+    $inline_core_prelude_string_wado_String__internal_push_string_3: block {
+        n_10 = s.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_3 n_10 == 0;
+        new_used = out_7.used + n_10;
+        if @unlikely(new_used > builtin::array_len(out_7.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, new_used);
+        }
+        start_15 = out_7.used;
+        out_7.used = new_used;
+        builtin::array_copy<u8>(out_7.repr, start_15, s.repr, 0, n_10);
+    };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
@@ -193,14 +215,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
-        l7: loop {
+        l8: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
-                l9: loop {
-                    break_if b8 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b9: block {
+                l10: loop {
+                    break_if b9 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
-                    continue l9;
+                    continue l10;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -233,26 +255,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l7;
+            continue l8;
         };
-    };
-}
-
-fn "const_object_globalization_mut_borrow_projection.wado/const_object_globalization_mut_borrow_projection.wado/JsonWriter::write$scalar"(self, s) {
-    let self_6: i32;
-    let new_used: i32;
-    let start_10: i32;
-    $inline_core_prelude_string_wado_String__push_str_0: block {
-        self_6 = s.used;
-        break_if $inline_core_prelude_string_wado_String__push_str_0 self_6 == 0;
-        new_used = self.used + self_6;
-        if @unlikely(new_used > builtin::array_len(self.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used);
-        }
-        start_10 = self.used;
-        self.used = new_used;
-        builtin::array_copy<u8>(self.repr, start_10, s.repr, 0, self_6);
     };
 }
 

@@ -11,31 +11,31 @@ use g from "./grammars/ll_opt_greedy_ambig.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_opt_greedy_ambig" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${g::to_string_tree(&result)}`;
 }
 
 test "the ambiguous inputs parse" {
-    assert_parses(&"x null");
-    assert_parses(&"x null null");
+    assert_parses("x null");
+    assert_parses("x null null");
 }
 
 test "ambiguous optional takes the shared token" {
-    assert_tree(&"x null", &"(s x (t null))");
+    assert_tree("x null", "(s x (t null))");
 }
 
 test "ambiguous optional takes the first shared token, the loop the rest" {
-    assert_tree(&"x null null", &"(s x (t null) (c null))");
+    assert_tree("x null null", "(s x (t null) (c null))");
 }
 
 test "optional is skipped when it cannot match" {
-    assert_tree(&"x", &"(s x)");
+    assert_tree("x", "(s x)");
 }

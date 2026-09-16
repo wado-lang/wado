@@ -1,0 +1,13 @@
+// `Value` declares no type parameters, so `Value<String>` names nothing. The
+// application used to resolve to `unknown` and the annotation was dropped, so
+// the program compiled and the first mention of the binding reported an
+// unrelated missing-trait error.
+use { Value } from "core:value";
+
+test "a variant that declares no type parameters takes no type arguments" {
+    let v: Value<String> = Value::String("hi");
+    assert v matches { Value::String(_) };
+}
+
+__DATA__
+{"compile_error": "`Value` takes no type arguments"}

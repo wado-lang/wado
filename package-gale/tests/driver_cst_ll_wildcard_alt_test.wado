@@ -3,31 +3,31 @@ use g from "./grammars/ll_wildcard_alt.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_wildcard_alt" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // Hit case: ID followed by `=` matches `assign`; ID followed by `;`
 // must fall through to the wildcard alt.
 test "wildcard alt: assign hits on ID '=' INT ';', wildcard hits on bare ID" {
-    assert_tree(&"x=10; abc;", &"(a (assign x = 10 ;) abc ;)");
+    assert_tree("x=10; abc;", "(a (assign x = 10 ;) abc ;)");
 }
 
 // Rejection case: when the assign scan can match, prediction must
 // commit to `assign` rather than the wildcard.
 test "wildcard alt: assign wins when its full pattern is present" {
-    assert_tree(&"y=99;", &"(a (assign y = 99 ;))");
+    assert_tree("y=99;", "(a (assign y = 99 ;))");
 }
 
 // Two assigns back to back.
 test "wildcard alt: two consecutive assigns" {
-    assert_tree(&"p=1; q=2;", &"(a (assign p = 1 ;) (assign q = 2 ;))");
+    assert_tree("p=1; q=2;", "(a (assign p = 1 ;) (assign q = 2 ;))");
 }
 
 // Only wildcard alt matches: a single bare ID.
 test "wildcard alt: bare ID falls through to wildcard" {
-    assert_tree(&"foo", &"(a foo)");
+    assert_tree("foo", "(a foo)");
 }

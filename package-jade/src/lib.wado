@@ -101,13 +101,13 @@ impl Schema {
     }
 
     /// Add a property named `name` with schema `schema`.
-    pub fn property(&mut self, name: String, schema: Schema) {
-        self.properties[name] = schema;
+    pub fn property<S: AsStrSlice>(&mut self, name: S, schema: Schema) {
+        self.properties[name.to_string()] = schema;
     }
 
     /// Mark `name` a required property.
-    pub fn require(&mut self, name: String) {
-        self.required.push(name);
+    pub fn require<S: AsStrSlice>(&mut self, name: S) {
+        self.required.push(name.to_string());
     }
 
     /// Set the `default` keyword.

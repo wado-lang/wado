@@ -84,7 +84,7 @@ type "functype//effect_handler_bundled_helper_effects.wado/effect_handler_bundle
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(29)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(30)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
@@ -111,7 +111,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_handler_bundled_helper_effects.wado::$effect_A: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_A" = ref.null none;
 global mut global:effect_handler_bundled_helper_effects.wado::$effect_B: ref null "effect_handler_bundled_helper_effects.wado//$Dispatch_B" = ref.null none;
 global global:effect_handler_bundled_helper_effects.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(116, 111, 116, 97, 108, 61);
-global global:core:prelude/primitive.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     let m: ref "effect_handler_bundled_helper_effects.wado//Mock";
@@ -129,10 +128,10 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
     let $local_2_15: i32;
     let handle: i32;
     let new_used: i32;
-    let start_30: i32;
+    let start_33: i32;
     let packed: i64;
-    let rx_38: i32;
-    let tx_39: i32;
+    let rx_41: i32;
+    let tx_42: i32;
     m = struct.new "effect_handler_bundled_helper_effects.wado//Mock" { n: 0 };
     $local_5 = global:effect_handler_bundled_helper_effects.wado::$effect_A;
     $local_6 = struct.new "effect_handler_bundled_helper_effects.wado//$Dispatch_A" { outer: $local_5, op_a: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_bundled_helper_effects.wado//$Closure_0" { $capture_0: m }, func: ref.func "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_0" } };
@@ -183,14 +182,14 @@ fn "effect_handler_bundled_helper_effects.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2_2, new_used);
     }
-    start_30 = $local_2_2.used;
+    start_33 = $local_2_2.used;
     $local_2_2.used = new_used;
-    builtin::array_copy<u8>($local_2_2.repr, start_30, global:effect_handler_bundled_helper_effects.wado::$const_obj_1, 0, 6);
+    builtin::array_copy<u8>($local_2_2.repr, start_33, global:effect_handler_bundled_helper_effects.wado::$const_obj_1, 0, 6);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($local_9, $local_2_2);
-    rx_38 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_39 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
-    "core:rt/write_string_to_stream"(tx_39, $local_2_2);
+    rx_41 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_42 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "effect_handler_bundled_helper_effects.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
+    "core:rt/write_string_to_stream"(tx_42, $local_2_2);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 
@@ -401,7 +400,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_4, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -418,26 +417,26 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     if is_negative {
-        new_used_21 = self.used + 1;
-        if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_22 = self.used;
-        self.used = new_used_21;
-        builtin::array_set_u8(self.repr, start_22, 45);
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_56 = self.used + digit_count, if @unlikely(new_used_56 > builtin::array_len(self.repr)) {
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
-    }, start_57 = self.used, self.used = new_used_56, start_57;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 fn "closure/effect_handler_bundled_helper_effects.wado/$closure_wrapper_0"($env) {

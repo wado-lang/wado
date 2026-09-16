@@ -30,7 +30,7 @@ pub global SCAN_GATE_TYPE: String = "ScanGate";
 /// writes `{noBrace = 1;}` and Wado `{p.noBrace = 1}`, and both arrive here as
 /// `p.<declared member> = 1`, so one recogniser answers for both and the member
 /// is already named the way the generated struct names it.
-pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
+pub fn gate_assignment<S: AsStrSlice>(text: S) -> Option<[String, i32]> {
     let stmts = statements(text);
     if stmts.len() != 1 {
         return null;
@@ -54,7 +54,7 @@ pub fn gate_assignment(text: &String) -> Option<[String, i32]> {
 ///
 /// A translated body reaches a member through the handle and nothing else, so
 /// this is what tells a member write from a subscript, a call, or a local.
-fn parser_member(target: &String) -> Option<String> {
+fn parser_member<S: AsStrSlice>(target: S) -> Option<String> {
     let Some(name) = target.strip_prefix(`${PARSER_HANDLE}.`) else {
         return null;
     };
@@ -65,13 +65,13 @@ fn parser_member(target: &String) -> Option<String> {
     if field.find_char(|c| !(c == '_' || c.is_ascii_alphanumeric())) matches { Some(_) } {
         return null;
     }
-    return Option::Some(field);
+    return Option::Some(field.to_string());
 }
 
 /// `lhs = rhs` with both sides trimmed, or `null` when the text is not one
 /// assignment. `==` leaves the `=` on the right-hand side, which is how a
 /// comparison is told from an assignment.
-fn one_assignment(text: &String) -> Option<[String, String]> {
+fn one_assignment<S: AsStrSlice>(text: S) -> Option<[String, String]> {
     let [lhs, rhs] = match text.split_once("=") {
         Some(pair) => pair,
         None => {
@@ -83,7 +83,10 @@ fn one_assignment(text: &String) -> Option<[String, String]> {
     if name.is_empty() || value.is_empty() || value.starts_with("=") {
         return null;
     }
-    return Option::Some([name, value]);
+    return Option::Some([
+        name.to_string(),
+        value.to_string(),
+    ]);
 }
 
 /// A parse-side condition rendered for the scan: every simulated member read
@@ -97,8 +100,8 @@ fn one_assignment(text: &String) -> Option<[String, String]> {
 /// the safe direction.
 ///
 /// Longest field first, for the prefix reason below.
-pub fn scan_gate_condition(code: &String, fields: &List<String>) -> String {
-    let mut out = *code;
+pub fn scan_gate_condition<S: AsStrSlice>(code: S, fields: &List<String>) -> String {
+    let mut out = code.to_string();
     for let f of fields.sorted_by(|a: &String, b: &String| b.len().cmp(&a.len())) {
         out = out.replace(`${PARSER_HANDLE}.${f}`, `${SCAN_GATE_HANDLE}.${f}`);
     }
@@ -117,8 +120,8 @@ pub fn scan_gate_condition(code: &String, fields: &List<String>) -> String {
 /// `_tail`. Asking for a name rather than for the handles is what sees that
 /// leftover — and the parser handle is one letter, so asking whether it appears
 /// anywhere answers yes inside `depth`.
-pub fn reads_only_scan_gate_fields(code: &String, fields: &List<String>) -> bool {
-    let mut rest = *code;
+pub fn reads_only_scan_gate_fields<S: AsStrSlice>(code: S, fields: &List<String>) -> bool {
+    let mut rest = code.to_string();
     for let f of fields.sorted_by(|a: &String, b: &String| b.len().cmp(&a.len())) {
         rest = rest.replace(`${SCAN_GATE_HANDLE}.${f}`, "");
     }
@@ -182,7 +185,7 @@ pub fn gate_scope(rule: &ParserRule, bodies: &TreeMap<i32, String>) -> Option<Ga
 }
 
 /// The scope a translated `@init` / `@after` pair opens, or `null`.
-pub fn gate_scope_of(init: &String, after: &String) -> Option<GateScope> {
+pub fn gate_scope_of<S: AsStrSlice, S1: AsStrSlice>(init: S, after: S1) -> Option<GateScope> {
     // `<field> = $L`, and the whole of `@after`: a body that does anything else
     // does more than a scan can put back.
     let restores = statements(after);
@@ -224,12 +227,12 @@ pub fn gate_scope_of(init: &String, after: &String) -> Option<GateScope> {
 }
 
 /// The `;`-separated statements of a body, empties dropped.
-fn statements(text: &String) -> List<String> {
+fn statements<S: AsStrSlice>(text: S) -> List<String> {
     let mut out: List<String> = [];
     for let part of text.split(";") {
         let stmt = part.trim();
         if !stmt.is_empty() {
-            out.push(stmt);
+            out.push(stmt.to_string());
         }
     }
     return out;
@@ -298,7 +301,7 @@ struct Refusals {
 }
 
 impl Refusals {
-    fn refuse(&mut self, body: &String) {
+    fn refuse<S: AsStrSlice>(&mut self, body: S) {
         push_new(&mut self.names, mentioned_names(body));
         // A `(` that is not a call — a grouping, a cast — costs the gate a
         // simulation it would have been sound without, which is the direction
@@ -368,7 +371,7 @@ fn rule_prequel_bodies(rule: &ParserRule) -> List<String> {
 /// This reads the grammar text, which is where an untranslatable body still says
 /// what it touches. A member is declared as written in Wado and snake_cased in
 /// Java, so a name is refused under both and the safe direction is taken.
-fn mentioned_names(text: &String) -> List<String> {
+fn mentioned_names<S: AsStrSlice>(text: S) -> List<String> {
     let mut out: List<String> = [];
     let mut start = -1;
     for let [index, c] of text.char_indices() {
@@ -386,10 +389,10 @@ fn mentioned_names(text: &String) -> List<String> {
     return out;
 }
 
-fn push_both_spellings(out: &mut List<String>, name: &String) {
-    out.push(*name);
+fn push_both_spellings<S: AsStrSlice>(out: &mut List<String>, name: S) {
+    out.push(name.to_string());
     let snake = to_snake_case(name);
-    if snake != *name {
+    if !name.eq_str(&snake) {
         out.push(snake);
     }
 }

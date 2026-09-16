@@ -9,19 +9,19 @@ use g from "./grammars/loop_declines_stranded_iteration.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_loop_declines_stranded_iteration" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // The hit case: the loop must leave `{ y }` to `expr?`, because the `.m()` it
 // would otherwise strand has no other taker.
 test "the loop declines an iteration that would strand the alternative" {
     assert_tree(
-        &"{ let a = x; { y }.m() }",
-        &"(start (block { (stmts (stmt let a = (expr x) ;) (expr (expr (blk { y })) . m ( ))) }))",
+        "{ let a = x; { y }.m() }",
+        "(start (block { (stmts (stmt let a = (expr x) ;) (expr (expr (blk { y })) . m ( ))) }))",
     );
 }
 
@@ -30,14 +30,14 @@ test "the loop declines an iteration that would strand the alternative" {
 // lets the rest of the alternative match.
 test "an iteration another iteration can follow is still taken" {
     assert_tree(
-        &"{ let a = x; { y } { z } }",
-        &"(start (block { (stmts (stmt let a = (expr x) ;) (stmt (blk { y })) (stmt (blk { z }))) }))",
+        "{ let a = x; { y } { z } }",
+        "(start (block { (stmts (stmt let a = (expr x) ;) (stmt (blk { y })) (stmt (blk { z }))) }))",
     );
 }
 
 test "an iteration the continuation follows is still taken" {
     assert_tree(
-        &"{ { y } z }",
-        &"(start (block { (stmts (stmt (blk { y })) (expr z)) }))",
+        "{ { y } z }",
+        "(start (block { (stmts (stmt (blk { y })) (expr z)) }))",
     );
 }

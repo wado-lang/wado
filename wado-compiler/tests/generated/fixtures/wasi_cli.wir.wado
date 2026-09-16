@@ -82,7 +82,7 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(31)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(32)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
@@ -113,7 +113,6 @@ global global:wasi_cli.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<
 global global:wasi_cli.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 69, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 58, 58, 103, 101, 116, 95, 97, 114, 103, 117, 109, 101, 110, 116, 115, 40, 41, 46, 108, 101, 110, 32, 61, 32);
 global global:wasi_cli.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 115, 116, 100, 101, 114, 114, 32, 119, 111, 114, 107, 115), used: 18 };
 global global:wasi_cli.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 101, 115, 116, 58, 32, 115, 116, 100, 111, 117, 116, 32, 119, 111, 114, 107, 115), used: 18 };
-global global:core:prelude/primitive.wado::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     let arguments: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -129,21 +128,21 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     let rx_24: i32;
     let tx_25: i32;
     let handle_33: i32;
-    let new_used_43: i32;
-    let start_44: i32;
-    let packed_52: i64;
-    let rx_53: i32;
-    let tx_54: i32;
-    let handle_62: i32;
-    let new_used_72: i32;
-    let start_73: i32;
-    let packed_81: i64;
-    let rx_82: i32;
-    let tx_83: i32;
-    let handle_91: i32;
-    let packed_93: i64;
-    let rx_94: i32;
-    let tx_95: i32;
+    let new_used_46: i32;
+    let start_47: i32;
+    let packed_55: i64;
+    let rx_56: i32;
+    let tx_57: i32;
+    let handle_65: i32;
+    let new_used_78: i32;
+    let start_79: i32;
+    let packed_87: i64;
+    let rx_88: i32;
+    let tx_89: i32;
+    let handle_97: i32;
+    let packed_99: i64;
+    let rx_100: i32;
+    let tx_101: i32;
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     handle_9 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
@@ -156,41 +155,41 @@ fn "wasi_cli.wado/run"() with Stdout, Stderr, Environment {
     "wasi/future-drop-readable:transmission-cli"(handle_21);
     arguments = "wasi_cli.wado/$cm_binding__Environment_get_arguments"();
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(57), used: 0 };
-    new_used_43 = 0 + 41;
-    if @unlikely(new_used_43 > builtin::array_len($local_2.repr)) {
+    new_used_46 = 0 + 41;
+    if @unlikely(new_used_46 > builtin::array_len($local_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_43);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_46);
     }
-    start_44 = $local_2.used;
-    $local_2.used = new_used_43;
-    builtin::array_copy<u8>($local_2.repr, start_44, global:wasi_cli.wado::$const_obj_3, 0, 41);
+    start_47 = $local_2.used;
+    $local_2.used = new_used_46;
+    builtin::array_copy<u8>($local_2.repr, start_47, global:wasi_cli.wado::$const_obj_3, 0, 41);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(arguments.used, $local_2);
-    rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"()));
-    tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64);
-    handle_33 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_53);
-    "core:rt/write_string_to_stream"(tx_54, $local_2);
+    rx_56 = builtin::i32_wrap_i64(local.tee packed_55("wasi/stream-new"()));
+    tx_57 = builtin::i32_wrap_i64(packed_55 >> 32_i64);
+    handle_33 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_56);
+    "core:rt/write_string_to_stream"(tx_57, $local_2);
     "wasi/future-drop-readable:transmission-cli"(handle_33);
     env_vars = "wasi_cli.wado/$cm_binding__Environment_get_environment"();
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(59), used: 0 };
-    new_used_72 = 0 + 43;
-    if @unlikely(new_used_72 > builtin::array_len($local_4_4.repr)) {
+    new_used_78 = 0 + 43;
+    if @unlikely(new_used_78 > builtin::array_len($local_4_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_72);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_78);
     }
-    start_73 = $local_4_4.used;
-    $local_4_4.used = new_used_72;
-    builtin::array_copy<u8>($local_4_4.repr, start_73, global:wasi_cli.wado::$const_obj_2, 0, 43);
+    start_79 = $local_4_4.used;
+    $local_4_4.used = new_used_78;
+    builtin::array_copy<u8>($local_4_4.repr, start_79, global:wasi_cli.wado::$const_obj_2, 0, 43);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(env_vars.used, $local_4_4);
-    rx_82 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
-    tx_83 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
-    handle_62 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_82);
-    "core:rt/write_string_to_stream"(tx_83, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_62);
-    rx_94 = builtin::i32_wrap_i64(local.tee packed_93("wasi/stream-new"()));
-    tx_95 = builtin::i32_wrap_i64(packed_93 >> 32_i64);
-    handle_91 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_94);
-    "core:rt/write_string_to_stream"(tx_95, global:wasi_cli.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_91);
+    rx_88 = builtin::i32_wrap_i64(local.tee packed_87("wasi/stream-new"()));
+    tx_89 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
+    handle_65 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_88);
+    "core:rt/write_string_to_stream"(tx_89, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_65);
+    rx_100 = builtin::i32_wrap_i64(local.tee packed_99("wasi/stream-new"()));
+    tx_101 = builtin::i32_wrap_i64(packed_99 >> 32_i64);
+    handle_97 = "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_100);
+    "core:rt/write_string_to_stream"(tx_101, global:wasi_cli.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_97);
 }
 
 fn "wasi_cli.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -527,7 +526,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_8, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
     arr = f.repr;
     pos = offset_5 + digit_count_4;
     t = abs_val;
@@ -544,26 +543,26 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write$spec0$scalar"(self, is_negative, alt_prefix, digit_count) {
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_56: i32;
-    let start_57: i32;
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
     if is_negative {
-        new_used_21 = self.used + 1;
-        if @unlikely(new_used_21 > builtin::array_len(self.repr)) {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
         }
-        start_22 = self.used;
-        self.used = new_used_21;
-        builtin::array_set_u8(self.repr, start_22, 45);
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
     } else {
     }
-    return new_used_56 = self.used + digit_count, if @unlikely(new_used_56 > builtin::array_len(self.repr)) {
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_56);
-    }, start_57 = self.used, self.used = new_used_56, start_57;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
 }
 
 export fn "wasi_cli.wado/$cm_export__run" as "run"

@@ -4000,7 +4000,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let formatter_type = { tt.make_compiler_struct(CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(CompilerItem::String);
-    let ref_string_type = tt.make_ref(string_type);
 
     // Every reflected kind derives Inspect through its own blanket in
     // `core:prelude/traits` (WEP 2026-06-13) — a newtype's ` as Name` tag
@@ -4045,7 +4044,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
                     ref_type,
                     fmt_type,
                     string_type,
-                    ref_string_type,
                     ctx.trait_env,
                     &shape_module,
                     &mut tt,
@@ -4075,7 +4073,6 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
             ref_type,
             fmt_type,
             string_type,
-            ref_string_type,
             ctx.trait_env,
             &module_source,
             &mut tt,
@@ -4140,7 +4137,6 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
     let formatter_type = { tt.make_compiler_struct(CompilerItem::Formatter) };
     let fmt_type = tt.make_mut_ref(formatter_type);
     let string_type = tt.make_compiler_struct(CompilerItem::String);
-    let ref_string_type = tt.make_ref(string_type);
 
     let mut generated = Vec::new();
     for (_name, cases, espan, def) in &enum_infos {
@@ -4157,7 +4153,6 @@ fn generate_enum_display_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_
             ref_type,
             fmt_type,
             string_type,
-            ref_string_type,
             *espan,
             &display_fq,
             &display_method,
@@ -4180,7 +4175,6 @@ fn generate_enum_display_fn(
     ref_enum_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
-    ref_string_type: TypeId,
     span: Span,
     display_trait: &FqTraitName,
     display_method: &str,
@@ -4199,7 +4193,6 @@ fn generate_enum_display_fn(
                 case_name.clone(),
                 fmt(),
                 string_type,
-                ref_string_type,
                 span,
                 formatter_fq,
             )],
@@ -4294,7 +4287,6 @@ fn generate_opaque_inspect_fn(
     ref_type: TypeId,
     fmt_type: TypeId,
     string_type: TypeId,
-    ref_string_type: TypeId,
     trait_env: &TraitEnv,
     module_source: &ModuleSource,
     tt: &mut TypeTable,
@@ -4336,7 +4328,6 @@ fn generate_opaque_inspect_fn(
                 format!("{type_name}#0x"),
                 fmt(),
                 string_type,
-                ref_string_type,
                 span,
                 formatter_fq,
             ),

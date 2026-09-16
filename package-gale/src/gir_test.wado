@@ -73,12 +73,12 @@ fn empty_scan_body() -> ScanBody {
     return ScanBody { elements: [] };
 }
 
-fn empty_header(name: &String) -> RuleHeader {
+fn empty_header<S: AsStrSlice>(name: S) -> RuleHeader {
     return RuleHeader {
-        name: *name,
-        snake_name: *name,
-        field_name: *name,
-        type_name: `${*name}Node`,
+        name: name.to_string(),
+        snake_name: name.to_string(),
+        field_name: name.to_string(),
+        type_name: `${name.to_string()}Node`,
         visibility: Visibility::Default,
         case_names: [],
     };
@@ -114,7 +114,7 @@ test "LoweredGrammar empty construction" {
 
 test "Diagnostic round-trips through its kind" {
     let d = Diagnostic {
-        owner: DiagnosticOwner::rule_dispatch(&"expr"),
+        owner: DiagnosticOwner::rule_dispatch("expr"),
         kind: DiagnosticKind::OverlapTournament,
         message: "alts 0, 1 share first {IDENT}",
     };
@@ -127,17 +127,17 @@ test "Diagnostic round-trips through its kind" {
 }
 
 test "DiagnosticOwner compares by identity, not by label" {
-    let rule_site = DiagnosticOwner::rule_dispatch(&"expr");
+    let rule_site = DiagnosticOwner::rule_dispatch("expr");
     let lr_site = DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch };
     // Same rule, different decision points inside it.
     assert rule_site.rule == lr_site.rule;
     assert rule_site != lr_site;
-    assert rule_site == DiagnosticOwner::rule_dispatch(&"expr");
-    assert rule_site != DiagnosticOwner::rule_dispatch(&"stmt");
+    assert rule_site == DiagnosticOwner::rule_dispatch("expr");
+    assert rule_site != DiagnosticOwner::rule_dispatch("stmt");
 }
 
 test "DiagnosticOwner labels every site" {
-    assert DiagnosticOwner::rule_dispatch(&"expr").label() == "rule 'expr'";
+    assert DiagnosticOwner::rule_dispatch("expr").label() == "rule 'expr'";
     assert DiagnosticOwner { rule: "expr", site: DiagnosticSite::LrAtomDispatch }.label() == "LR rule 'expr' atom";
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::GeneralGroup(0) }.label() == "General group rGroup0";
     // The scan pass lowers a group with no index in scope; it never warns, so
@@ -147,12 +147,12 @@ test "DiagnosticOwner labels every site" {
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Optional("tail") }.label() == "optional 'tail' in rule 'r'";
     assert DiagnosticOwner { rule: "r", site: DiagnosticSite::Action(7) }.label() == "action 7";
     assert DiagnosticOwner { site: DiagnosticSite::LexerAction(7) }.label() == "lexer action 7";
-    assert DiagnosticOwner::host(&"@members").label() == "@members";
+    assert DiagnosticOwner::host("@members").label() == "@members";
 }
 
 test "Rule::Simple round-trip" {
     let rule = Rule::Simple(SimpleRule {
-        header: empty_header(&"value"),
+        header: empty_header("value"),
         body: empty_alt_body(0),
         scan_body: empty_scan_body(),
     });
@@ -478,24 +478,24 @@ test "FieldDecl and KindSet" {
 
 test "rule_header reaches every Rule variant" {
     let s = Rule::Simple(SimpleRule {
-        header: empty_header(&"a"),
+        header: empty_header("a"),
         body: empty_alt_body(0),
         scan_body: empty_scan_body(),
     });
     let m = Rule::MultiAlt(MultiAltRule {
-        header: empty_header(&"b"),
+        header: empty_header("b"),
         alts: [empty_alt_body(0)],
         scan_alts: [empty_scan_body()],
         dispatch: direct_single_alt(0),
     });
     let lr_atom = MultiAltRule {
-        header: empty_header(&"c_atom"),
+        header: empty_header("c_atom"),
         alts: [empty_alt_body(0)],
         scan_alts: [empty_scan_body()],
         dispatch: direct_single_alt(0),
     };
     let lr = Rule::LeftRecursive(LeftRecursiveRule {
-        header: empty_header(&"c"),
+        header: empty_header("c"),
         atom: lr_atom,
         lr_alts: [],
         lr_dispatch: LrDispatchData { valid_lr_alts: [], groups: [] },

@@ -8,25 +8,25 @@ use lr from "./grammars/lr_overlap.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_overlap" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = lr::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = lr::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "lr-overlap: bare atom" {
-    assert_tree(&"5", &"(e 5)");
+    assert_tree("5", "(e 5)");
 }
 
 test "lr-overlap: indexed picks the INT-second alt" {
-    assert_tree(&"5[3]", &"(e (e 5) [ (e 3) ])");
+    assert_tree("5[3]", "(e (e 5) [ (e 3) ])");
 }
 
 test "lr-overlap: empty index picks the ']'-second alt" {
-    assert_tree(&"5[]", &"(e (e 5) [ ])");
+    assert_tree("5[]", "(e (e 5) [ ])");
 }
 
 test "lr-overlap: left-associative chain mixes both suffixes" {
-    assert_tree(&"5[][3]", &"(e (e (e 5) [ ]) [ (e 3) ])");
+    assert_tree("5[][3]", "(e (e (e 5) [ ]) [ (e 3) ])");
 }

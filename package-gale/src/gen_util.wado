@@ -20,12 +20,12 @@ pub fn gen_visibility_comment(w: &mut CodeWriter, visibility: &Visibility) {
     if label == "" {
         return;
     }
-    w.line(&`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
+    w.line(`// rule visibility: ${label} (ignored by codegen, matches ANTLR4)`);
 }
 
-pub fn rule_type_name(name: &String) -> String {
+pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     let mut result = to_pascal_case(name);
-    result.push_str(&"Node");
+    result.push_str("Node");
     return result;
 }
 
@@ -98,7 +98,7 @@ pub fn not_element_field_name(inner: &Element) -> String {
     };
 }
 
-pub fn literal_field_name(text: &String) -> String {
+pub fn literal_field_name<S: AsStrSlice>(text: S) -> String {
     let chars: List<char> = text.chars().collect();
     if chars.len() == 1 {
         if let Some(names) = symbol_char_names(chars[0]) {
@@ -106,31 +106,31 @@ pub fn literal_field_name(text: &String) -> String {
         }
     }
     let mut result = String::with_capacity(text.len() + 4);
-    result.push_str(&"lit_");
+    result.push_str("lit_");
     for let c of chars {
         if 'a' <= c <= 'z' || 'A' <= c <= 'Z' || '0' <= c <= '9' {
             result.push(c.to_ascii_lowercase());
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(&names.0);
         } else {
-            result.push_str(&"u");
+            result.push_str("u");
             result.push_str(&char_hex_name(c));
         }
     }
     return result;
 }
 
-pub fn strip_suffix(s: &String, suffix: &String) -> String {
+pub fn strip_suffix<S: AsStrSlice, S1: AsStrSlice>(s: S, suffix: S1) -> String {
     let s_chars: List<char> = s.chars().collect();
     let suffix_chars: List<char> = suffix.chars().collect();
     let s_len = s_chars.len();
     let suf_len = suffix_chars.len();
     if s_len < suf_len {
-        return *s;
+        return s.to_string();
     }
     for let mut i = 0; i < suf_len; i += 1 {
         if s_chars[s_len - suf_len + i] != suffix_chars[i] {
-            return *s;
+            return s.to_string();
         }
     }
     let mut result = String::with_capacity(s.len());
@@ -161,13 +161,13 @@ pub fn group_variant_type_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"Or");
+            result.push_str("Or");
         }
         if let RuleRef(r) = &alts[i].elements[0] {
             result.push_str(&to_pascal_case(&r.name));
         }
     }
-    result.push_str(&"Group");
+    result.push_str("Group");
     return result;
 }
 
@@ -175,7 +175,7 @@ pub fn group_field_base_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_or_");
+            result.push_str("_or_");
         }
         if let RuleRef(r) = &alts[i].elements[0] {
             result.push_str(&r.snake_name);
@@ -334,7 +334,7 @@ pub fn count_element_groups(elem: &Element) -> i32 {
 
 /// Generate a variant type name for a general multi-alt group.
 /// Uses parent rule name + group index: "InsertStmtGroup0"
-pub fn general_group_type_name(rule_name: &String, group_index: i32) -> String {
+pub fn general_group_type_name<S: AsStrSlice>(rule_name: S, group_index: i32) -> String {
     return `${to_pascal_case(rule_name)}Group${group_index}`;
 }
 
@@ -346,7 +346,7 @@ pub fn general_group_field_name(group_index: i32) -> String {
 
 /// Generate a struct name for a specific alternative in a general group.
 /// Uses parent rule name + group index + alt index: "InsertStmtGroup0Alt1"
-pub fn general_group_alt_struct_name(rule_name: &String, group_index: i32, alt_index: i32) -> String {
+pub fn general_group_alt_struct_name<S: AsStrSlice>(rule_name: S, group_index: i32, alt_index: i32) -> String {
     return `${to_pascal_case(rule_name)}Group${group_index}Alt${alt_index}`;
 }
 
@@ -383,7 +383,7 @@ pub fn single_alt_group_type_name(alt: &Alternative) -> String {
     for let elem of &alt.elements {
         result.push_str(&to_pascal_case(&element_type_base_name(elem)));
     }
-    result.push_str(&"Item");
+    result.push_str("Item");
     return result;
 }
 
@@ -393,7 +393,7 @@ pub fn single_alt_group_field_name(alt: &Alternative) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_");
+            result.push_str("_");
         }
         result.push_str(&element_base_name(&alt.elements[i]));
     }
@@ -406,16 +406,16 @@ pub fn token_group_field_name(alts: &List<Alternative>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < alts.len(); i += 1 {
         if i > 0 {
-            result.push_str(&"_or_");
+            result.push_str("_or_");
         }
         result.push_str(&element_base_name(&alts[i].elements[0]));
     }
     return result;
 }
 
-pub fn literal_const_name(text: &String) -> String {
+pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
     let mut result = String::with_capacity(text.len() + 8);
-    result.push_str(&"TK_LIT_");
+    result.push_str("TK_LIT_");
     for let c of text.chars() {
         if c.is_ascii_lowercase() {
             result.push(c.to_ascii_uppercase());
@@ -427,7 +427,7 @@ pub fn literal_const_name(text: &String) -> String {
             // Unknown character: encode the Unicode scalar as hex so distinct
             // characters never collapse to the same name (e.g. `?`, `@`, `#`
             // all used to degenerate to a single `_`).
-            result.push_str(&"U");
+            result.push_str("U");
             result.push_str(&char_hex_name(c));
         }
     }
@@ -535,8 +535,8 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
 }
 
 /// Return `true` when `first` contains `token` (linear scan).
-pub fn first_contains(first: &List<String>, token: &String) -> bool {
-    return first.iter_ref().any(|item| *item == *token);
+pub fn first_contains<S: AsStrSlice>(first: &List<String>, token: S) -> bool {
+    return first.iter_ref().any(|item| *item == token.as_str_slice());
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
@@ -557,47 +557,47 @@ pub fn subtract_sets(a: &List<String>, b: &List<String>) -> List<String> {
 // once in an alt (e.g. two `ID` tokens) the second occurrence gets a
 // `_2` suffix, the third `_3`, and so on. `List<[String, i32]>` is
 // the running counter: `[base, count_emitted_so_far]`.
-fn get_count(counts: &List<[String, i32]>, name: &String) -> i32 {
+fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
     for let entry of counts {
-        if entry.0 == *name {
+        if entry.0 == name.as_str_slice() {
             return entry.1;
         }
     }
     return 0;
 }
 
-fn increment_count(counts: &mut List<[String, i32]>, name: &String) {
+fn increment_count<S: AsStrSlice>(counts: &mut List<[String, i32]>, name: S) {
     for let mut i = 0; i < counts.len(); i += 1 {
-        if counts[i].0 == *name {
+        if counts[i].0 == name.as_str_slice() {
             let prev = counts[i].1;
-            counts[i] = [*name, prev + 1];
+            counts[i] = [name.to_string(), prev + 1];
             return;
         }
     }
-    counts.push([*name, 1]);
+    counts.push([name.to_string(), 1]);
 }
 
 /// Emit-and-record: returns the deduplicated name and bumps the counter.
 /// First occurrence returns `base`, second returns `${base}_2`, etc.
-pub fn dedup_name(base: &String, counts: &mut List<[String, i32]>) -> String {
+pub fn dedup_name<S: AsStrSlice>(base: S, counts: &mut List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     increment_count(counts, base);
     if count > 0 {
         return `${base}_${count + 1}`;
     }
-    return *base;
+    return base.to_string();
 }
 
 /// Predict what `dedup_name(base, counts)` would return without
 /// advancing the counter. Used at scan-guard / lookahead sites where
 /// the inner emission performs the actual `dedup_name` (which both
 /// returns the name and advances the counter).
-pub fn peek_dedup_name(base: &String, counts: &List<[String, i32]>) -> String {
+pub fn peek_dedup_name<S: AsStrSlice>(base: S, counts: &List<[String, i32]>) -> String {
     let count = get_count(counts, base);
     if count > 0 {
         return `${base}_${count + 1}`;
     }
-    return *base;
+    return base.to_string();
 }
 
 pub fn element_field_info(elem: &Element) -> [String, String] {
@@ -661,20 +661,20 @@ pub fn follow_forward_args() -> String {
 /// positions early — `{ x, y }` inside `[ … ]` handing its own comma to the
 /// list, whose next iteration also starts with one. Only the reading this
 /// composition opens is at a position the gate can still place.
-pub fn follow_composed(prefix: &String, positions: i32, opens: bool) -> String {
+pub fn follow_composed<S: AsStrSlice>(prefix: S, positions: i32, opens: bool) -> String {
     let sequenced = `${FOLLOW_PARAM} & FOLLOW_SEQUENCED`;
     let shifted = if opens { `(${sequenced} | FOLLOW_OPENS_BIT)` } else { `(${sequenced})` };
-    return `(${*prefix} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
+    return `(${prefix.to_string()} | ${shifted} << ${positions * FOLLOW_SLOT_BITS}) & FOLLOW_CONT_MASK`;
 }
 
 /// A `follow_yields` call on the forwarded continuation.
-pub fn follow_yields_call(tokens: &String, pos: &String) -> String {
+pub fn follow_yields_call<S: AsStrSlice, S1: AsStrSlice>(tokens: S, pos: S1) -> String {
     return follow_yields_call_of(tokens, pos, &FOLLOW_PARAM);
 }
 
 /// A `follow_yields` call on a continuation held in one local.
-pub fn follow_yields_call_of(tokens: &String, pos: &String, head: &String) -> String {
-    return `follow_yields(${*tokens}, ${*pos}, ${*head}, &FOLLOW_SETS, TK_EOF)`;
+pub fn follow_yields_call_of<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(tokens: S, pos: S1, head: S2) -> String {
+    return `follow_yields(${tokens.to_string()}, ${pos.to_string()}, ${head.to_string()}, &FOLLOW_SETS, TK_EOF)`;
 }
 
 /// `", <forwarded continuation>"` when the callee declares the parameter, else
@@ -690,7 +690,7 @@ pub fn join_kinds(kinds: &List<String>) -> String {
     let mut result = String::with_capacity(64);
     for let mut i = 0; i < kinds.len(); i += 1 {
         if i > 0 {
-            result.push_str(&", ");
+            result.push_str(", ");
         }
         result.push_str(&kinds[i]);
     }

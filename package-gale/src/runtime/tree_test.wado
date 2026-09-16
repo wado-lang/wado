@@ -6,7 +6,7 @@ use { NodeKind, K_ERROR, CstStore, ChildKind, TreeBuilder, ParseResult } from ".
 use { Severity, DiagnosticCode, RecoveryAction, RelatedInfo, Diagnostic } from "./diag.wado";
 
 /// Build a TokenStream over `src` from `[kind, start, end]` specs (no trivia).
-fn stream_of(src: String, specs: List<[i32, i32, i32]>) -> TokenStream {
+fn stream_of<S: AsStrSlice>(src: S, specs: List<[i32, i32, i32]>) -> TokenStream {
     let chars: List<char> = src.chars().collect();
     let mut ts = TokenStream::new(&chars);
     for let s of &specs {

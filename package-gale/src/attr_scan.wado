@@ -38,7 +38,7 @@ pub struct AttrRef {
 /// `{ ... }` interpolation regions, where `$refs` are Wado expressions to
 /// substitute — a literal `$` in template text is not a reference. A lone
 /// `$` not followed by an identifier is host text.
-pub fn find_attr_refs(body: &String) -> List<AttrRef> {
+pub fn find_attr_refs<S: AsStrSlice>(body: S) -> List<AttrRef> {
     let chars: List<char> = body.chars().collect();
     let mut out: List<AttrRef> = [];
     scan_refs(&chars, 0, chars.len(), &mut out);

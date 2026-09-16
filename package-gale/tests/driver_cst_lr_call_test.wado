@@ -8,25 +8,25 @@ use lc from "./grammars/lr_call.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_call" },
     };
 
-fn chk(input: &String, expected: &String) {
+fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = lc::parse(input);
-    assert r.ok(), `unexpected diagnostics for ${*input}: ${lc::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${input.to_string()}: ${lc::to_string_tree(&r)}`;
     let a = lc::to_string_tree(&r);
-    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
+    assert a == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${a}`;
 }
 
 test "call: nested call arg stays a full expr" {
-    chk(&"a(b(c))", &"(prog (e (e a) ( (e (e b) ( (e c) )) )))");
+    chk("a(b(c))", "(prog (e (e a) ( (e (e b) ( (e c) )) )))");
 }
 test "call: lower-precedence arg parses inside the call" {
-    chk(&"a(b+c)", &"(prog (e (e a) ( (e (e b) + (e c)) )))");
+    chk("a(b+c)", "(prog (e (e a) ( (e (e b) + (e c)) )))");
 }
 test "call: comma-separated args" {
-    chk(&"a(b,c)", &"(prog (e (e a) ( (e b) , (e c) )))");
+    chk("a(b,c)", "(prog (e (e a) ( (e b) , (e c) )))");
 }
 test "call: empty arg list" {
-    chk(&"a()", &"(prog (e (e a) ( )))");
+    chk("a()", "(prog (e (e a) ( )))");
 }
 test "call: postfix binds looser than +" {
-    chk(&"a+b(c)", &"(prog (e (e (e a) + (e b)) ( (e c) )))");
+    chk("a+b(c)", "(prog (e (e (e a) + (e b)) ( (e c) )))");
 }

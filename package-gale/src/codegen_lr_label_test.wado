@@ -57,7 +57,7 @@ WS : (' '|'\\n') -> skip ;
     }
 }
 
-fn scan_e_body(out: &String) -> String {
+fn scan_e_body<S: AsStrSlice>(out: S) -> String {
     let idx = match out.find("fn scan_e(") {
         Some(i) => i,
         None => panic("generated parser has no `scan_e` function"),

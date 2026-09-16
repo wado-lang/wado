@@ -10,7 +10,7 @@ use jm from "./grammars/java_members.g4"
 
 test "java @members field + method execute during the parse" {
     // `bumpTwice` reaches `bump` across the two blocks, bare and through `this`.
-    let result = jm::parse(&"abc");
+    let result = jm::parse("abc");
     assert result.ok(), "clean parse";
     assert result.output == "2\n", `output: '${result.output}'`;
 }

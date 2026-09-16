@@ -145,7 +145,7 @@ impl Deserialize for Header;
 pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
     let mut header_json = `{"alg":`;
     write_escaped_string(&mut header_json, &key.alg());
-    header_json.push_str(&`,"typ":"JWT"}`);
+    header_json.push_str(`,"typ":"JWT"}`);
     let header = encode_url(&header_json);
     let signing_input = `${header}.${encode_url(payload)}`;
     let bytes: ByteList = signing_input.bytes().collect();
@@ -158,7 +158,7 @@ pub fn sign<K: JwsSigner, P: AsByteSlice>(payload: &P, key: &K) -> String {
 /// over `header.payload`, the header's `alg` against the key's, and that no
 /// extension is marked critical. Claims are not read: checking `exp` is
 /// [`RegisteredClaims::validate_time`]'s job, and the caller's to invoke.
-pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtError> {
+pub fn verify<K: JwsVerifier, S: AsStrSlice>(token: S, key: &K) -> Result<ByteList, JwtError> {
     let parts: List<String> = token.split(".").collect();
     if parts.len() != 3 {
         return Result::Err(JwtError::Malformed);
@@ -218,8 +218,8 @@ impl JwsVerifier for Hs256Key {
 }
 
 /// One token segment, which JWS spells as canonical base64url or not at all.
-fn decode_segment(segment: &String) -> Result<ByteList, JwtError> {
-    let Some(bytes) = decode_url_strict(segment) else {
+fn decode_segment<S: AsStrSlice>(segment: S) -> Result<ByteList, JwtError> {
+    let Some(bytes) = decode_url_strict(&segment.as_bytes()) else {
         return Result::Err(JwtError::Malformed);
     };
     return Result::Ok(bytes);

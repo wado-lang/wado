@@ -47,7 +47,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(18)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(19)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(19)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
@@ -85,72 +85,80 @@ fn "tir_optimize_bool_identity.wado/run"() with Stdout {
     let $local_6: ref "core:prelude/string.wado//String";
     let handle_11: i32;
     let self_17: bool;
-    let packed_19: i64;
-    let rx_20: i32;
-    let tx_21: i32;
-    let handle_29: i32;
-    let self_35: bool;
-    let packed_37: i64;
-    let rx_38: i32;
-    let tx_39: i32;
-    let handle_47: i32;
-    let self_53: bool;
-    let packed_55: i64;
-    let rx_56: i32;
-    let tx_57: i32;
-    let handle_65: i32;
-    let self_71: bool;
-    let packed_73: i64;
-    let rx_74: i32;
-    let tx_75: i32;
+    let text_19: ref "core:prelude/string.wado//String";
+    let packed_20: i64;
+    let rx_21: i32;
+    let tx_22: i32;
+    let handle_30: i32;
+    let self_36: bool;
+    let text_38: ref "core:prelude/string.wado//String";
+    let packed_39: i64;
+    let rx_40: i32;
+    let tx_41: i32;
+    let handle_49: i32;
+    let self_55: bool;
+    let text_57: ref "core:prelude/string.wado//String";
+    let packed_58: i64;
+    let rx_59: i32;
+    let tx_60: i32;
+    let handle_68: i32;
+    let self_74: bool;
+    let text_76: ref "core:prelude/string.wado//String";
+    let packed_77: i64;
+    let rx_78: i32;
+    let tx_79: i32;
     $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     self_17 = "tir_optimize_bool_identity.wado/test_or_identity"(black_box(1));
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"($local_0, (if self_17 -> ref "core:prelude/string.wado//String" {
+    text_19 = (if self_17 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }));
-    rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
-    tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
-    handle_11 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-    "core:rt/write_string_to_stream"(tx_21, $local_0);
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_0, text_19);
+    rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
+    tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
+    handle_11 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_21);
+    "core:rt/write_string_to_stream"(tx_22, $local_0);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_35 = "tir_optimize_bool_identity.wado/test_or_identity"(black_box(0));
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"($local_2, (if self_35 -> ref "core:prelude/string.wado//String" {
+    self_36 = "tir_optimize_bool_identity.wado/test_or_identity"(black_box(0));
+    text_38 = (if self_36 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }));
-    rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
-    tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
-    handle_29 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
-    "core:rt/write_string_to_stream"(tx_39, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_2, text_38);
+    rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
+    tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
+    handle_30 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
+    "core:rt/write_string_to_stream"(tx_41, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_30);
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_53 = "tir_optimize_bool_identity.wado/test_and_identity"(black_box(1));
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"($local_4_4, (if self_53 -> ref "core:prelude/string.wado//String" {
+    self_55 = "tir_optimize_bool_identity.wado/test_and_identity"(black_box(1));
+    text_57 = (if self_55 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }));
-    rx_56 = builtin::i32_wrap_i64(local.tee packed_55("wasi/stream-new"()));
-    tx_57 = builtin::i32_wrap_i64(packed_55 >> 32_i64);
-    handle_47 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_56);
-    "core:rt/write_string_to_stream"(tx_57, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_47);
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_4_4, text_57);
+    rx_59 = builtin::i32_wrap_i64(local.tee packed_58("wasi/stream-new"()));
+    tx_60 = builtin::i32_wrap_i64(packed_58 >> 32_i64);
+    handle_49 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_59);
+    "core:rt/write_string_to_stream"(tx_60, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_49);
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    self_71 = "tir_optimize_bool_identity.wado/test_and_identity"(black_box(0));
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"($local_6, (if self_71 -> ref "core:prelude/string.wado//String" {
+    self_74 = "tir_optimize_bool_identity.wado/test_and_identity"(black_box(0));
+    text_76 = (if self_74 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
     } else {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    }));
-    rx_74 = builtin::i32_wrap_i64(local.tee packed_73("wasi/stream-new"()));
-    tx_75 = builtin::i32_wrap_i64(packed_73 >> 32_i64);
-    handle_65 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_74);
-    "core:rt/write_string_to_stream"(tx_75, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_65);
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_6, text_76);
+    rx_78 = builtin::i32_wrap_i64(local.tee packed_77("wasi/stream-new"()));
+    tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
+    handle_68 = "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(rx_78);
+    "core:rt/write_string_to_stream"(tx_79, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_68);
 }
 
 fn "tir_optimize_bool_identity.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -262,21 +270,21 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"(self, content) {
-    let self_12: i32;
-    let new_used_15: i32;
-    let start_16: i32;
-    $inline_core_prelude_string_wado_String__push_str_0: block {
-        self_12 = content.used;
-        break_if $inline_core_prelude_string_wado_String__push_str_0 self_12 == 0;
-        new_used_15 = self.used + self_12;
-        if @unlikely(new_used_15 > builtin::array_len(self.repr)) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, content) {
+    let n_15: i32;
+    let new_used_19: i32;
+    let start_20: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
+        n_15 = content.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 n_15 == 0;
+        new_used_19 = self.used + n_15;
+        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_15);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
         }
-        start_16 = self.used;
-        self.used = new_used_15;
-        builtin::array_copy<u8>(self.repr, start_16, content.repr, 0, self_12);
+        start_20 = self.used;
+        self.used = new_used_19;
+        builtin::array_copy<u8>(self.repr, start_20, content.repr, 0, n_15);
     };
     return;
 }

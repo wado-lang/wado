@@ -14,7 +14,7 @@ use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
-    let paths = collect_paths(&args(), &".wado");
+    let paths = collect_paths(&args(), ".wado");
 
     let mut bad = 0;
     for let arg of &paths {
@@ -43,7 +43,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens) {
 }
 
 /// The source line containing byte offset `at`, trimmed.
-fn snippet(src: &String, at: i32) -> String {
+fn snippet<S: AsStrSlice>(src: S, at: i32) -> String {
     let mut start = at;
     if start > src.len() {
         start = src.len();
@@ -55,5 +55,5 @@ fn snippet(src: &String, at: i32) -> String {
     while end < src.len() && src.get_byte_unchecked(end) != b'\n' {
         end += 1;
     }
-    return src.substr_bytes(start, end).trim();
+    return src.substr_bytes(start, end).trim().to_string();
 }

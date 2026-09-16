@@ -406,21 +406,21 @@ impl GenContext {
         self.rule_captures = captures;
     }
 
-    pub fn rule_captures(&self, rule_name: &String) -> &RuleCaptures with stores[self] {
-        if !self.rule_captures.contains_key(*rule_name) {
+    pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures with stores[self] {
+        if !self.rule_captures.contains_key(rule_name.to_string()) {
             return &NO_CAPTURES;
         }
-        return &self.rule_captures[*rule_name];
+        return &self.rule_captures[rule_name.to_string()];
     }
 
     /// Whether the rule being emitted captures `field`'s token range / builder
     /// row — the gate on emitting the capture and on resolving a reference.
-    pub fn captures_span(&self, field: &String) -> bool {
-        return self.current_captures().spans.contains(field);
+    pub fn captures_span<S: AsStrSlice>(&self, field: S) -> bool {
+        return self.current_captures().spans.contains(&field.to_string());
     }
 
-    pub fn captures_node(&self, field: &String) -> bool {
-        return self.current_captures().nodes.contains(field);
+    pub fn captures_node<S: AsStrSlice>(&self, field: S) -> bool {
+        return self.current_captures().nodes.contains(&field.to_string());
     }
 
     fn current_captures(&self) -> &RuleCaptures with stores[self] {
@@ -448,28 +448,28 @@ impl GenContext {
     /// probe on its previous answer. The set over-approximates (a union over
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
-    pub fn rule_follow_for_probe(&self, rule_name: &String) -> List<String> {
-        if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(*rule_name) {
+    pub fn rule_follow_for_probe<S: AsStrSlice>(&self, rule_name: S) -> List<String> {
+        if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(rule_name.to_string()) {
             return [];
         }
-        return self.rule_follow_kinds[*rule_name];
+        return self.rule_follow_kinds[rule_name.to_string()];
     }
 
-    pub fn at_end_conflict_routes(&self, rule_name: &String, branch_tokens: &List<String>) -> bool {
+    pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<String>) -> bool {
         if !self.rule_follow_exact {
             return true;
         }
-        if !self.rule_follow_kinds.contains_key(*rule_name) {
+        if !self.rule_follow_kinds.contains_key(rule_name.to_string()) {
             return true;
         }
-        let follow = self.rule_follow_kinds[*rule_name];
+        let follow = self.rule_follow_kinds[rule_name.to_string()];
         return sets_overlap(branch_tokens, &follow);
     }
 
-    pub fn emits_at_end_conflict_via_atn(
+    pub fn emits_at_end_conflict_via_atn<S: AsStrSlice>(
         &self,
         rule_index: i32,
-        rule_name: &String,
+        rule_name: S,
         branch_tokens: &List<String>,
     ) -> bool {
         return self.needs_atn()
@@ -536,9 +536,9 @@ impl GenContext {
         self.lr_rule_snakes = *names;
     }
 
-    pub fn rule_takes_min_prec_arg(&self, snake: &String) -> bool {
+    pub fn rule_takes_min_prec_arg<S: AsStrSlice>(&self, snake: S) -> bool {
         for let n of &self.lr_rule_snakes {
-            if *n == *snake {
+            if *n == snake.as_str_slice() {
                 return true;
             }
         }
@@ -556,10 +556,10 @@ impl GenContext {
 
     /// Record that the rule being lowered hands its own continuation to
     /// `target`, so it reads the slots exactly when `target` declares them.
-    pub fn mark_rule_forwards_follow(&mut self, target: &String) {
+    pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
         let idx = self.current_rule_index;
-        if idx >= 0 && !self.follow_forward_edges[idx].contains(target) {
-            self.follow_forward_edges[idx].push(*target);
+        if idx >= 0 && !self.follow_forward_edges[idx].contains(&target.to_string()) {
+            self.follow_forward_edges[idx].push(target.to_string());
         }
     }
 
@@ -587,12 +587,12 @@ impl GenContext {
 
     /// Whether `snake`'s functions carry the FOLLOW slots. Asked at the
     /// declaration and at every call site, so the two cannot disagree.
-    pub fn rule_reads_follow(&self, snake: &String) -> bool {
+    pub fn rule_reads_follow<S: AsStrSlice>(&self, snake: S) -> bool {
         if !self.caller_follow_gate_seen {
             return false;
         }
         for let n of &self.follow_rule_snakes {
-            if *n == *snake {
+            if *n == snake.as_str_slice() {
                 return true;
             }
         }
@@ -692,8 +692,8 @@ impl GenContext {
         return self.action_language;
     }
 
-    pub fn set_grammar_name(&mut self, name: &String) {
-        self.grammar_name = *name;
+    pub fn set_grammar_name<S: AsStrSlice>(&mut self, name: S) {
+        self.grammar_name = name.to_string();
     }
 
     /// Read off the translated `@parser::members`, so a body can only resolve a
@@ -749,8 +749,8 @@ impl GenContext {
         return self.emit_actions && !self.scan_gate_fields.is_empty();
     }
 
-    pub fn set_superclass(&mut self, name: &String, ops: List<SuperOp>) {
-        self.superclass_name = *name;
+    pub fn set_superclass<S: AsStrSlice>(&mut self, name: S, ops: List<SuperOp>) {
+        self.superclass_name = name.to_string();
         self.superclass_ops = ops;
     }
 
@@ -766,8 +766,8 @@ impl GenContext {
         return &self.superclass_ops;
     }
 
-    pub fn set_parser_superclass(&mut self, name: &String, ops: List<SuperOp>) {
-        self.parser_superclass_name = *name;
+    pub fn set_parser_superclass<S: AsStrSlice>(&mut self, name: S, ops: List<SuperOp>) {
+        self.parser_superclass_name = name.to_string();
         self.parser_superclass_ops = ops;
     }
 
@@ -810,13 +810,13 @@ impl GenContext {
     /// Register a context-free gated predicate's body for a standalone
     /// `pred_<id>(p)` fn. Deduped by `id` (a predicate is marked once, but stay
     /// idempotent).
-    pub fn register_predicate_fn(&mut self, id: i32, body: &String) {
+    pub fn register_predicate_fn<S: AsStrSlice>(&mut self, id: i32, body: S) {
         for let e of &self.predicate_fns {
             if e.0 == id {
                 return;
             }
         }
-        self.predicate_fns.push([id, *body]);
+        self.predicate_fns.push([id, body.to_string()]);
     }
 
     pub fn predicate_fns(&self) -> &List<[i32, String]> with stores[self] {
@@ -857,8 +857,8 @@ impl GenContext {
 
     /// The rendered expected-token set the action about to be emitted would see.
     /// Set around a site codegen can answer for, cleared everywhere else.
-    pub fn set_expected_names(&mut self, rendered: String) {
-        self.expected_names = rendered;
+    pub fn set_expected_names<S: AsStrSlice>(&mut self, rendered: S) {
+        self.expected_names = rendered.to_string();
     }
 
     pub fn expected_names(&self) -> &String with stores[self] {
@@ -870,13 +870,13 @@ impl GenContext {
     /// the same alts twice — is reported once. `message` already encodes
     /// everything `kind` does, so the pair keys it without an `Eq` on
     /// `DiagnosticKind`.
-    pub fn warn(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: String) {
+    pub fn warn<S: AsStrSlice>(&mut self, owner: &DiagnosticOwner, kind: DiagnosticKind, message: S) {
         for let d of &self.diagnostics {
-            if d.owner == *owner && d.message == message {
+            if d.owner == *owner && d.message == message.as_str_slice() {
                 return;
             }
         }
-        self.diagnostics.push(Diagnostic { owner: *owner, kind, message });
+        self.diagnostics.push(Diagnostic { owner: *owner, kind, message: message.to_string() });
     }
 
     /// The name of the parser rule currently being lowered / emitted, or
@@ -901,15 +901,15 @@ impl GenContext {
     /// Index of a parser rule by name (position in `parser_rules`), or -1.
     /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
     /// parser can push this onto `atn_stack` for full-context prediction.
-    pub fn rule_index_of(&self, name: &String) -> i32 {
-        if let Some(i) = self.rule_index.get(*name) {
+    pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
+        if let Some(i) = self.rule_index.get(name.to_string()) {
             return i;
         }
         return -1;
     }
 
-    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> with stores[self] {
-        let idx = self.rule_index.get(*name);
+    pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> with stores[self] {
+        let idx = self.rule_index.get(name.to_string());
         if let Some(i) = idx {
             return Option::Some(&self.parser_rules[i]);
         }
@@ -977,20 +977,20 @@ impl GenContext {
     /// table (`token_slot_order` emits the Eof slot); the intern lazily
     /// extends only a test-path table built without `set_token_kinds`.
     pub fn eof_kind_id(&mut self) -> i32 {
-        return self.token_kinds.intern(&"TK_EOF");
+        return self.token_kinds.intern("TK_EOF");
     }
 
     /// Kind id for a terminal element, using the resolved `kind_id` when
     /// present (the fast path — no string, no lookup) and falling back to a
     /// lazy intern for unresolved IR (unit tests).
-    pub fn token_ref_id(&mut self, name: &String, kind_id: i32) -> i32 {
+    pub fn token_ref_id<S: AsStrSlice>(&mut self, name: S, kind_id: i32) -> i32 {
         if kind_id >= 0 {
             return kind_id;
         }
-        return self.token_kinds.intern(&`TK_${*name}`);
+        return self.token_kinds.intern(`TK_${name.to_string()}`);
     }
 
-    pub fn literal_id(&mut self, text: &String, kind_id: i32) -> i32 {
+    pub fn literal_id<S: AsStrSlice>(&mut self, text: S, kind_id: i32) -> i32 {
         if kind_id >= 0 {
             return kind_id;
         }
@@ -1007,14 +1007,14 @@ impl GenContext {
         return self.token_kinds.name_of(id);
     }
 
-    pub fn first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
+    pub fn first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
         let ids = self.first_ids_of_rule(name, visiting);
         return self.token_kinds.names_of(&ids);
     }
 
     /// FIRST set as interned kind ids (the internal representation). Public
     /// callers that want names go through `first_of_rule`.
-    pub fn first_ids_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<i32> {
+    pub fn first_ids_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<i32> {
         let mut min_cycle = i32::MAX;
         return self.first_of_rule_at(name, visiting, &mut min_cycle);
     }
@@ -1023,7 +1023,12 @@ impl GenContext {
     /// `min_cycle` mechanism. A FIRST set computed while ancestors are on the
     /// stack may under-count (a cycle contributes the empty set), so it is only
     /// cached once its whole SCC has closed at this frame (`local_min >= p`).
-    fn first_of_rule_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> List<i32> {
+    fn first_of_rule_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> List<i32> {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.first_cache[rid];
@@ -1041,7 +1046,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result: List<i32> = [];
@@ -1433,7 +1438,7 @@ impl GenContext {
         };
     }
 
-    pub fn rule_is_nullable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+    pub fn rule_is_nullable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.rule_is_nullable_at(name, visiting, &mut min_cycle);
     }
@@ -1442,7 +1447,7 @@ impl GenContext {
     /// value computed while ancestors are on the stack may be provisional (a
     /// cycle assumes not-nullable), so it is cached only once its SCC has
     /// closed at this frame (`local_min >= p`).
-    fn rule_is_nullable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn rule_is_nullable_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.nullable_cache[rid];
@@ -1460,7 +1465,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result = false;
@@ -1544,7 +1549,12 @@ impl GenContext {
 
     /// Open-endedness of a rule, with `rule_is_nullable_at`'s SCC-aware memo:
     /// every decision site asks, and the rule graph is transitive.
-    fn rule_reaches_open_end_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn rule_reaches_open_end_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             if let Some(val) = self.open_end_cache[rid] {
@@ -1561,7 +1571,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result = false;
@@ -1695,7 +1705,7 @@ impl GenContext {
         return !self.tail_is_nullable_deep(elements, i + 1);
     }
 
-    pub fn rule_is_single_token(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+    pub fn rule_is_single_token<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.rule_is_single_token_at(name, visiting, &mut min_cycle);
     }
@@ -1703,7 +1713,12 @@ impl GenContext {
     /// Single-token classification with SCC-aware memoization (see
     /// `is_rule_scannable_at`): cache only once the SCC has closed at this
     /// frame (`local_min >= p`).
-    fn rule_is_single_token_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn rule_is_single_token_at<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        visiting: &mut List<String>,
+        min_cycle: &mut i32,
+    ) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.single_token_cache[rid];
@@ -1721,7 +1736,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result = false;
@@ -1784,7 +1799,7 @@ impl GenContext {
     /// to the first grammar alt. Each per-candidate LR scan is bounded by
     /// the scan-helper structure, so the tournament stays linear in the
     /// candidate count.
-    pub fn is_rule_scannable(&mut self, name: &String, visiting: &mut List<String>) -> bool {
+    pub fn is_rule_scannable<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> bool {
         let mut min_cycle = i32::MAX;
         return self.is_rule_scannable_at(name, visiting, &mut min_cycle);
     }
@@ -1799,7 +1814,7 @@ impl GenContext {
     /// far more: a result is final once it no longer depends on an unresolved
     /// ancestor, which the SCC condition below decides. Results stay identical
     /// to the top-level-only scheme; only the number of recomputations drops.
-    fn is_rule_scannable_at(&mut self, name: &String, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
+    fn is_rule_scannable_at<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>, min_cycle: &mut i32) -> bool {
         let rid = self.rule_index_of(name);
         if rid >= 0 {
             let cached = self.scannable_cache[rid];
@@ -1819,7 +1834,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result = false;
@@ -1951,11 +1966,15 @@ impl GenContext {
     /// shared single-alt group (in practice every reached single-alt
     /// group is in the map; callers pass the surrounding rule's name as
     /// a defensive fallback).
-    pub fn general_group_rule_name(&self, single_alt_type_name: &String, fallback: &String) -> String {
-        if let Some(owner) = self.single_alt_owner.get(*single_alt_type_name) {
+    pub fn general_group_rule_name<S: AsStrSlice, S1: AsStrSlice>(
+        &self,
+        single_alt_type_name: S,
+        fallback: S1,
+    ) -> String {
+        if let Some(owner) = self.single_alt_owner.get(single_alt_type_name.to_string()) {
             return owner;
         }
-        return *fallback;
+        return fallback.to_string();
     }
 
     /// Intern a token-kind set. The same set (regardless of input order
@@ -2132,14 +2151,14 @@ impl GenContext {
     ///
     /// An empty set is not a condition: which of the two it means is `Admits`'s
     /// to say at the site that knows, so pass a real set here.
-    pub fn kind_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
+    pub fn kind_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
         assert !tokens.is_empty(), "an empty token set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
-            return `${*expr} == ${tokens[0]}`;
+            return `${expr.to_string()} == ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
         self.mark_kind_set_used(id);
-        return `_kind_set_${id}(${*expr})`;
+        return `_kind_set_${id}(${expr.to_string()})`;
     }
 
     /// Render a guard: enter, or go round again, while the lookahead is in
@@ -2150,7 +2169,7 @@ impl GenContext {
     }
 
     /// Render what an `Admits` admits, as a condition on `expr`.
-    pub fn admits_check_str(&mut self, admits: &Admits, expr: &String) -> String {
+    pub fn admits_check_str<S: AsStrSlice>(&mut self, admits: &Admits, expr: S) -> String {
         return match admits {
             Everything(_) | Untestable => "true",
             Kinds(kinds) => self.kind_check_str(kinds, expr),
@@ -2159,7 +2178,7 @@ impl GenContext {
 
     /// Sugar for `admits_check_str` against `p.peek_kind()`.
     pub fn admits_first_check_str(&mut self, admits: &Admits) -> String {
-        return self.admits_check_str(admits, &"p.peek_kind()");
+        return self.admits_check_str(admits, "p.peek_kind()");
     }
 
     /// Returns the set of token kinds that the rule's body may greedily
@@ -2171,16 +2190,16 @@ impl GenContext {
     /// site's caller-local `FOLLOW` does not intersect this set, the
     /// callee's tail-greedy elements cannot collide with the caller's
     /// expectations and no FOLLOW argument is needed.
-    pub fn tail_greedy_first_of_rule(&mut self, name: &String, visiting: &mut List<String>) -> List<String> {
+    pub fn tail_greedy_first_of_rule<S: AsStrSlice>(&mut self, name: S, visiting: &mut List<String>) -> List<String> {
         let mut min_cycle = i32::MAX;
         return self.tail_greedy_first_of_rule_at(name, visiting, &mut min_cycle);
     }
 
     /// Tail-greedy FIRST with SCC-aware memoization (see `is_rule_scannable_at`):
     /// cache only once the SCC has closed at this frame (`local_min >= p`).
-    fn tail_greedy_first_of_rule_at(
+    fn tail_greedy_first_of_rule_at<S: AsStrSlice>(
         &mut self,
-        name: &String,
+        name: S,
         visiting: &mut List<String>,
         min_cycle: &mut i32,
     ) -> List<String> {
@@ -2201,7 +2220,7 @@ impl GenContext {
         }
 
         let p = visiting.len();
-        visiting.push(*name);
+        visiting.push(name.to_string());
 
         let mut local_min = i32::MAX;
         let mut result: List<String> = [];
@@ -2301,14 +2320,14 @@ impl GenContext {
     /// Render the negation of a token-set membership check —
     /// `!_kind_set_<id>(<expr>)` for ≥2 tokens, else
     /// `<expr> != TK_X`. Used by non-greedy emit sites.
-    pub fn kind_negate_check_str(&mut self, tokens: &List<String>, expr: &String) -> String {
+    pub fn kind_negate_check_str<S: AsStrSlice>(&mut self, tokens: &List<String>, expr: S) -> String {
         assert !tokens.is_empty(), "an empty exclusion set is not a condition; say what it admits with `Admits`";
         if tokens.len() == 1 {
-            return `${*expr} != ${tokens[0]}`;
+            return `${expr.to_string()} != ${tokens[0]}`;
         }
         let id = self.intern_kind_set(tokens);
         self.mark_kind_set_used(id);
-        return `!_kind_set_${id}(${*expr})`;
+        return `!_kind_set_${id}(${expr.to_string()})`;
     }
 }
 
@@ -2352,19 +2371,23 @@ fn build_single_alt_owner_map(parser_rules: &List<ParserRule>) -> TreeMap<String
     return map;
 }
 
-fn scan_elements_for_single_alt_groups(elements: &List<Element>, rule_name: &String, map: &mut TreeMap<String, String>) {
+fn scan_elements_for_single_alt_groups<S: AsStrSlice>(
+    elements: &List<Element>,
+    rule_name: S,
+    map: &mut TreeMap<String, String>,
+) {
     for let elem of elements {
         scan_element_for_single_alt_groups(elem, rule_name, map);
     }
 }
 
-fn scan_element_for_single_alt_groups(elem: &Element, rule_name: &String, map: &mut TreeMap<String, String>) {
+fn scan_element_for_single_alt_groups<S: AsStrSlice>(elem: &Element, rule_name: S, map: &mut TreeMap<String, String>) {
     let alts = extract_group_alts_for_scan(elem);
     if let Some(group_alts) = alts {
         if is_single_alt_group(group_alts) {
             let type_name = single_alt_group_type_name(&group_alts[0]);
             if !map.contains_key(type_name) {
-                map[type_name] = *rule_name;
+                map[type_name] = rule_name.to_string();
             }
             // Recurse into the single-alt group's elements
             scan_elements_for_single_alt_groups(&group_alts[0].elements, rule_name, map);
@@ -2472,9 +2495,9 @@ fn none_list_cache(n: i32) -> List<Option<List<String>>> {
 
 /// Index of `name` in the visiting stack, or -1. Used by the scannability
 /// analysis to record how shallow a cycle reaches (see `is_rule_scannable_at`).
-fn visiting_index(visiting: &List<String>, name: &String) -> i32 {
+fn visiting_index<S: AsStrSlice>(visiting: &List<String>, name: S) -> i32 {
     for let mut i = 0; i < visiting.len(); i += 1 {
-        if visiting[i] == *name {
+        if visiting[i] == name.as_str_slice() {
             return i;
         }
     }
@@ -2505,7 +2528,7 @@ fn collect_scannable_refs_element(elem: &Element, out: &mut List<String>) {
     }
 }
 
-fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
+fn remove_from_visiting<S: AsStrSlice>(visiting: &mut List<String>, name: S) {
     // `visiting` is a stack: every caller pushes `name`, recurses (inner frames
     // pop their own names), then removes `name` — so `name` is on top. Pop in
     // O(1). The old `filter().collect()` rebuilt the whole list on every
@@ -2513,9 +2536,9 @@ fn remove_from_visiting(visiting: &mut List<String>, name: &String) {
     // dominated allocation and GC. Fall back to a scan if the invariant is ever
     // violated.
     let n = visiting.len();
-    if n > 0 && visiting[n - 1] == *name {
+    if n > 0 && visiting[n - 1] == name.as_str_slice() {
         visiting.pop();
         return;
     }
-    *visiting = visiting.iter_value().filter(|v: String| v != *name).collect();
+    *visiting = visiting.iter_value().filter(|v: String| v != name.as_str_slice()).collect();
 }

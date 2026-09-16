@@ -10,18 +10,18 @@ use tnf from "./grammars/transparent_nullable_follow.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_transparent_nullable_follow" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = tnf::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = tnf::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "transparent nullable: each alternative's own first set selects it" {
-    assert_tree(&"a c", &"(s a c)");
-    assert_tree(&"b c", &"(s b c)");
+    assert_tree("a c", "(s a c)");
+    assert_tree("b c", "(s b c)");
 }
 
 test "transparent nullable: the follow set survives the wrapper" {
-    assert_tree(&"c", &"(s c)");
+    assert_tree("c", "(s c)");
 }

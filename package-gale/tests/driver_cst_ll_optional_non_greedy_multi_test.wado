@@ -3,27 +3,27 @@ use g from "./grammars/ll_optional_non_greedy_multi.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_optional_non_greedy_multi" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "tree: single if with trailing else binds" {
-    assert_tree(&"if y x else x", &"(start (statement if y (statement x) else (statement x)))");
+    assert_tree("if y x else x", "(start (statement if y (statement x) else (statement x)))");
 }
 
 test "tree: dangling else binds to the outer if (first ?? of a two-?? rule)" {
     assert_tree(
-        &"if y if y x else x",
-        &"(start (statement if y (statement if y (statement x)) else (statement x)))",
+        "if y if y x else x",
+        "(start (statement if y (statement if y (statement x)) else (statement x)))",
     );
 }
 
 test "tree: dangling otherwise binds to the outer when (second ?? of a two-?? rule)" {
     assert_tree(
-        &"when y when y x otherwise x",
-        &"(start (statement when y (statement when y (statement x)) otherwise (statement x)))",
+        "when y when y x otherwise x",
+        "(start (statement when y (statement when y (statement x)) otherwise (statement x)))",
     );
 }

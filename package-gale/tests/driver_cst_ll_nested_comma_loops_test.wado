@@ -7,44 +7,44 @@ use g from "./grammars/ll_nested_comma_loops.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_nested_comma_loops" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "the inner brace loop keeps its own separator" {
     assert_tree(
-        &"[{a, b}]",
-        &"(start (list [ (elems (alt (item { (fields a , b) }))) ]))",
+        "[{a, b}]",
+        "(start (list [ (elems (alt (item { (fields a , b) }))) ]))",
     );
 }
 
 test "the outer loop still takes the separator that is its own" {
     assert_tree(
-        &"[{a}, b]",
-        &"(start (list [ (elems (alt (item { (fields a) })) , (alt (item b))) ]))",
+        "[{a}, b]",
+        "(start (list [ (elems (alt (item { (fields a) })) , (alt (item b))) ]))",
     );
 }
 
 test "both loops run at once" {
     assert_tree(
-        &"[{a, b}, c]",
-        &"(start (list [ (elems (alt (item { (fields a , b) })) , (alt (item c))) ]))",
+        "[{a, b}, c]",
+        "(start (list [ (elems (alt (item { (fields a , b) })) , (alt (item c))) ]))",
     );
 }
 
 test "the alternation loop between them still takes its own bar" {
     assert_tree(
-        &"[{a, b} | c]",
-        &"(start (list [ (elems (alt (item { (fields a , b) }) | (item c))) ]))",
+        "[{a, b} | c]",
+        "(start (list [ (elems (alt (item { (fields a , b) }) | (item c))) ]))",
     );
 }
 
 test "a brace list with one field is unambiguous either way" {
     assert_tree(
-        &"[{a}]",
-        &"(start (list [ (elems (alt (item { (fields a) }))) ]))",
+        "[{a}]",
+        "(start (list [ (elems (alt (item { (fields a) }))) ]))",
     );
 }

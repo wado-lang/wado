@@ -15,15 +15,15 @@ use g from "./grammars/ll_loop_yields_closer.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_ll_loop_yields_closer" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "an empty name list closes on its own bar" {
-    assert_tree(&"|| b", &"(start (block | | b))");
+    assert_tree("|| b", "(start (block | | b))");
 }
 
 // Three things have to line up for the mask to reach the loop that decides
@@ -36,19 +36,19 @@ test "an empty name list closes on its own bar" {
 // two: `|a|` and `|a|b|` are the same two tokens at the loop and differ at the
 // third.
 test "one name yields the bar that closes the list" {
-    assert_tree(&"|a| b", &"(start (block | (names (name a)) | b))");
+    assert_tree("|a| b", "(start (block | (names (name a)) | b))");
 }
 
 // The rejection case: the loop yields the closing bar exactly once, not every
 // bar. A repair that reads only the first two tokens at the loop cannot tell
 // this input from the one above.
 test "the loop keeps a bar the closer cannot be" {
-    assert_tree(&"|a|b| c", &"(start (block | (names (name a | b)) | c))");
+    assert_tree("|a|b| c", "(start (block | (names (name a | b)) | c))");
 }
 
 test "a comma-separated list yields the closer too" {
     assert_tree(
-        &"|a, b| c",
-        &"(start (block | (names (name a) , (name b)) | c))",
+        "|a, b| c",
+        "(start (block | (names (name a) , (name b)) | c))",
     );
 }

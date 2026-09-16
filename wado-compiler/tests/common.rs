@@ -233,8 +233,17 @@ pub fn bail_to_compile_error(diagnostics: &[Diagnostic], filename: Option<&str>)
                 is_todo_module: false,
             }
         } else {
-            // All other errors
-            let all_messages: Vec<String> = errors.iter().map(|d| d.message.clone()).collect();
+            // Only the first diagnostic's span reaches the header, so every
+            // later one carries its own: two faults reading alike would
+            // otherwise render as one message repeated.
+            let all_messages: Vec<String> = errors
+                .iter()
+                .enumerate()
+                .map(|(i, d)| match &d.span {
+                    Some(s) if i > 0 => format!("{}:{}: {}", s.line, s.column, d.message),
+                    _ => d.message.clone(),
+                })
+                .collect();
             CompileError::Analyzer {
                 message: all_messages.join("; "),
                 line,

@@ -10,30 +10,30 @@ use g from "./grammars/mandatory_scan_group_strict.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_mandatory_scan_group_strict" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // The hit case: `# a` is not a `stmt`, so the whole input is the one `expr`.
 test "a mandatory group that matches nothing is not a match" {
-    assert_tree(&"{ # a x }", &"(start (block { (body (expr (attr # a) x)) }))");
+    assert_tree("{ # a x }", "(start (block { (body (expr (attr # a) x)) }))");
 }
 
 // The rejection cases: the same group, found. A repair that made every group
 // strict, or that stopped scanning the prefix, fails these.
 test "the group found is still a statement" {
     assert_tree(
-        &"{ # a let y; }",
-        &"(start (block { (body (stmt (attr # a) (decl let y ;))) }))",
+        "{ # a let y; }",
+        "(start (block { (body (stmt (attr # a) (decl let y ;))) }))",
     );
 }
 
 test "a statement and a trailing expression" {
     assert_tree(
-        &"{ let y; # a x }",
-        &"(start (block { (body (stmt (decl let y ;)) (expr (attr # a) x)) }))",
+        "{ let y; # a x }",
+        "(start (block { (body (stmt (decl let y ;)) (expr (attr # a) x)) }))",
     );
 }

@@ -18,51 +18,51 @@ use fe_off from "./grammars/fragment_entry_off.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_fragment_entry_off" },
     };
 
-fn assert_clean_identical(input: &String, expected: &String) {
+fn assert_clean_identical<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let on = fe_on::to_string_tree(&fe_on::parse(input));
     let off = fe_off::to_string_tree(&fe_off::parse(input));
-    assert on == *expected, `on:\n  expected: ${*expected}\n  actual:   ${on}`;
+    assert on == expected.to_string(), `on:\n  expected: ${expected.to_string()}\n  actual:   ${on}`;
     assert on == off, `option changed a clean parse:\n  on:  ${on}\n  off: ${off}`;
-    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${*input}`;
+    assert fe_on::parse(input).ok(), `clean input should parse cleanly: ${input.to_string()}`;
 }
 
 test "clean parse unchanged: bare item" {
-    assert_clean_identical(&"set a ;", &"(prog (item set a ;))");
+    assert_clean_identical("set a ;", "(prog (item set a ;))");
 }
 
 test "clean parse unchanged: main block with statements" {
-    assert_clean_identical(&"main { do x ; do y ; }", &"(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
+    assert_clean_identical("main { do x ; do y ; }", "(prog (item (main main { (stmt do x ;) (stmt do y ;) })))");
 }
 
 test "fragment recovers a statement sequence under root" {
-    let r = fe_on::parse(&"do x ; do y ;");
+    let r = fe_on::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree == "(prog (<error> (stmt do x ;) (stmt do y ;)))", `unexpected tree: ${tree}`;
 }
 
 test "fragment without the option builds nothing" {
-    let r = fe_off::parse(&"do x ; do y ;");
+    let r = fe_off::parse("do x ; do y ;");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_off::to_string_tree(&r);
     assert tree == "prog", `unexpected tree: ${tree}`;
 }
 
 test "fragment with trailing junk terminates" {
-    let r = fe_on::parse(&"do x ; zzz");
+    let r = fe_on::parse("do x ; zzz");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree.contains("(stmt do x ;)"), `island missing: ${tree}`;
 }
 
 test "truncated trailing entry does not trap" {
-    let r = fe_on::parse(&"do x ; do");
+    let r = fe_on::parse("do x ; do");
     assert !r.ok(), "fragment should report a diagnostic";
     let tree = fe_on::to_string_tree(&r);
     assert tree.contains("(stmt do x ;)"), `first island missing: ${tree}`;
 }
 
-fn assert_balanced(input: &String) {
+fn assert_balanced<S: AsStrSlice>(input: S) {
     let r = fe_on::parse(input);
     let mut depth = 0;
     let mut min_depth = 0;
@@ -77,14 +77,14 @@ fn assert_balanced(input: &String) {
             min_depth = depth;
         }
     }
-    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${*input}`;
-    assert min_depth >= 0, `Close before Open for: ${*input}`;
+    assert depth == 0, `unbalanced (Open-Close=${depth}) for: ${input.to_string()}`;
+    assert min_depth >= 0, `Close before Open for: ${input.to_string()}`;
 }
 
 test "recovered fragments keep a balanced CST" {
-    assert_balanced(&"do x ; do");
-    assert_balanced(&"main { do x");
-    assert_balanced(&"main {");
-    assert_balanced(&"main { do x ; do y");
-    assert_balanced(&"do } zzz");
+    assert_balanced("do x ; do");
+    assert_balanced("main { do x");
+    assert_balanced("main {");
+    assert_balanced("main { do x ; do y");
+    assert_balanced("do } zzz");
 }

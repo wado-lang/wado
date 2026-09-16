@@ -75,14 +75,18 @@ struct ParsedMethod {
 /// Translate a `@members` block body to fields + methods. `grammar_name` keys the
 /// `<Name>Parser` token-constant qualifier; a call inside a method body resolves
 /// against the block's own method names.
-pub fn translate_java_members(body: &String, grammar_name: &String, lexer: bool = false) -> Result<MemberDecls, String> {
+pub fn translate_java_members<S: AsStrSlice, S1: AsStrSlice>(
+    body: S,
+    grammar_name: S1,
+    lexer: bool = false,
+) -> Result<MemberDecls, String> {
     let tokens = tokenize_java(body)?;
     // A method body resolves names against the whole block: its siblings, and
     // the fields declared after it as much as before it.
     let scanned = scan_member_names(&tokens);
     let env = JEnv {
         this_bind: "self",
-        grammar: *grammar_name,
+        grammar: grammar_name.to_string(),
         methods: scanned.methods,
         fields: scanned.fields,
         lexer,
@@ -96,11 +100,11 @@ pub fn translate_java_members(body: &String, grammar_name: &String, lexer: bool 
         if pos >= tokens.len() {
             break;
         }
-        let ty = member_ident(&tokens, pos, &"type")?;
+        let ty = member_ident(&tokens, pos, "type")?;
         pos += 1;
-        let name = member_ident(&tokens, pos, &"name")?;
+        let name = member_ident(&tokens, pos, "name")?;
         pos += 1;
-        if punct_is(&tokens, pos, &"(") {
+        if punct_is(&tokens, pos, "(") {
             parsed.push(parse_method(&tokens, &mut pos, &name, &ty)?);
         } else {
             fields.push(parse_field(&tokens, &mut pos, &name, &ty, &env)?);
@@ -287,10 +291,10 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             break;
         }
         pos += 2;
-        if punct_is(tokens, pos, &"(") {
+        if punct_is(tokens, pos, "(") {
             out.methods.push(to_snake_case(&name_opt.unwrap()));
             pos = skip_parens(tokens, pos);
-            if !punct_is(tokens, pos, &"{") {
+            if !punct_is(tokens, pos, "{") {
                 break;
             }
             let close = find_braced_end(tokens, pos);
@@ -300,7 +304,7 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
             pos = close.unwrap() + 1;
         } else {
             out.fields.push(to_snake_case(&name_opt.unwrap()));
-            while pos < tokens.len() && !punct_is(tokens, pos, &";") {
+            while pos < tokens.len() && !punct_is(tokens, pos, ";") {
                 pos += 1;
             }
             if pos < tokens.len() {
@@ -314,9 +318,9 @@ fn scan_member_names(tokens: &List<JToken>) -> MemberNames {
 fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {
     let mut depth = 0;
     for let mut i = open; i < tokens.len(); i += 1 {
-        if punct_is(tokens, i, &"(") {
+        if punct_is(tokens, i, "(") {
             depth += 1;
-        } else if punct_is(tokens, i, &")") {
+        } else if punct_is(tokens, i, ")") {
             depth -= 1;
             if depth == 0 {
                 return i + 1;
@@ -326,29 +330,29 @@ fn skip_parens(tokens: &List<JToken>, open: i32) -> i32 {
     return tokens.len();
 }
 
-fn parse_field(
+fn parse_field<S: AsStrSlice, S1: AsStrSlice>(
     tokens: &List<JToken>,
     pos: &mut i32,
-    name: &String,
-    ty_java: &String,
+    name: S,
+    ty_java: S1,
     env: &JEnv,
 ) -> Result<MemberField, String> {
     let ty = match map_java_type(ty_java) {
         Some(t) => t,
         None => {
-            return Result::Err(`java2wado: @members: unsupported field type '${*ty_java}'`);
+            return Result::Err(`java2wado: @members: unsupported field type '${ty_java.to_string()}'`);
         },
     };
-    let init = if punct_is(tokens, *pos, &"=") {
+    let init = if punct_is(tokens, *pos, "=") {
         *pos += 1;
         let slice = collect_until_semi(tokens, pos);
         let e = parse_java_expr(&slice)?;
         emit_member_expr(&e, env)?;
     } else {
-        return Result::Err(`java2wado: @members: field '${*name}' needs an initializer`);
+        return Result::Err(`java2wado: @members: field '${name.to_string()}' needs an initializer`);
     };
-    if !punct_is(tokens, *pos, &";") {
-        return Result::Err(`java2wado: @members: expected ';' after field '${*name}'`);
+    if !punct_is(tokens, *pos, ";") {
+        return Result::Err(`java2wado: @members: expected ';' after field '${name.to_string()}'`);
     }
     *pos += 1;
     // snake_cased at the declaration, as a method name is: every read of it —
@@ -357,16 +361,26 @@ fn parse_field(
     return Result::Ok(MemberField { name: to_snake_case(name), ty, init });
 }
 
-fn parse_method(tokens: &List<JToken>, pos: &mut i32, name: &String, ret_java: &String) -> Result<ParsedMethod, String> {
+fn parse_method<S: AsStrSlice, S1: AsStrSlice>(
+    tokens: &List<JToken>,
+    pos: &mut i32,
+    name: S,
+    ret_java: S1,
+) -> Result<ParsedMethod, String> {
     let params = parse_params(tokens, pos)?;
-    if !punct_is(tokens, *pos, &"{") {
-        return Result::Err(`java2wado: @members: expected '{' for method '${*name}'`);
+    if !punct_is(tokens, *pos, "{") {
+        return Result::Err(`java2wado: @members: expected '{' for method '${name.to_string()}'`);
     }
     let close = find_braced_end(tokens, *pos)?;
     let body_tokens = slice_tokens(tokens, *pos + 1, close);
     *pos = close + 1;
     let stmts = parse_java_stmts(&body_tokens)?;
-    return Result::Ok(ParsedMethod { name: *name, params, ret_java: *ret_java, stmts });
+    return Result::Ok(ParsedMethod {
+        name: name.to_string(),
+        params,
+        ret_java: ret_java.to_string(),
+        stmts,
+    });
 }
 
 /// Emit a field initializer, which has no rule / value-channel context.
@@ -379,29 +393,29 @@ fn emit_member_expr(e: &JExpr, env: &JEnv) -> Result<String, String> {
 
 /// `&self` unless the body writes: the narrower receiver is what lets a lexer
 /// predicate, which holds `&Lexer`, reach a read-only member method at all.
-fn build_method(
-    name: &String,
+fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    name: S,
     params: &List<[String, String]>,
-    ret_java: &String,
-    body_wado: &String,
+    ret_java: S1,
+    body_wado: S2,
     mutates: bool,
 ) -> Result<String, String> {
     let recv = if mutates { "&mut self" } else { "&self" };
-    let mut sig = `fn ${*name}(${recv}`;
+    let mut sig = `fn ${name.to_string()}(${recv}`;
     for let p of params {
-        sig.push_str(&`, ${escape_ident(&p.0)}: ${p.1}`);
+        sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
-    if *ret_java != "void" {
+    if !ret_java.eq_str("void") {
         let rty = match map_java_type(ret_java) {
             Some(t) => t,
             None => {
-                return Result::Err(`java2wado: @members: unsupported return type '${*ret_java}'`);
+                return Result::Err(`java2wado: @members: unsupported return type '${ret_java.to_string()}'`);
             },
         };
-        sig.push_str(&` -> ${rty}`);
+        sig.push_str(` -> ${rty}`);
     }
-    return Result::Ok(`${sig} { ${*body_wado} }`);
+    return Result::Ok(`${sig} { ${body_wado.to_string()} }`);
 }
 
 /// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,
@@ -409,14 +423,14 @@ fn build_method(
 fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, String]>, String> {
     *pos += 1;
     let mut ps: List<[String, String]> = [];
-    if punct_is(tokens, *pos, &")") {
+    if punct_is(tokens, *pos, ")") {
         *pos += 1;
         return Result::Ok(ps);
     }
     loop {
-        let ty = member_ident(tokens, *pos, &"parameter type")?;
+        let ty = member_ident(tokens, *pos, "parameter type")?;
         *pos += 1;
-        let nm = member_ident(tokens, *pos, &"parameter name")?;
+        let nm = member_ident(tokens, *pos, "parameter name")?;
         *pos += 1;
         let wty = match map_java_type(&ty) {
             Some(t) => t,
@@ -425,11 +439,11 @@ fn parse_params(tokens: &List<JToken>, pos: &mut i32) -> Result<List<[String, St
             },
         };
         ps.push([nm, wty]);
-        if punct_is(tokens, *pos, &",") {
+        if punct_is(tokens, *pos, ",") {
             *pos += 1;
             continue;
         }
-        if punct_is(tokens, *pos, &")") {
+        if punct_is(tokens, *pos, ")") {
             *pos += 1;
             return Result::Ok(ps);
         }
@@ -450,10 +464,10 @@ fn is_modifier(tokens: &List<JToken>, pos: i32) -> bool {
     };
 }
 
-fn member_ident(tokens: &List<JToken>, pos: i32, what: &String) -> Result<String, String> {
+fn member_ident<S: AsStrSlice>(tokens: &List<JToken>, pos: i32, what: S) -> Result<String, String> {
     return match ident_at(tokens, pos) {
         Some(n) => Result::Ok(n),
-        None => Result::Err(`java2wado: @members: expected ${*what} identifier`),
+        None => Result::Err(`java2wado: @members: expected ${what.to_string()} identifier`),
     };
 }
 
@@ -461,7 +475,7 @@ fn member_ident(tokens: &List<JToken>, pos: i32, what: &String) -> Result<String
 /// leaves `pos` at the `;`. Field initializers carry no nested `;`.
 fn collect_until_semi(tokens: &List<JToken>, pos: &mut i32) -> List<JToken> {
     let start = *pos;
-    while *pos < tokens.len() && !punct_is(tokens, *pos, &";") {
+    while *pos < tokens.len() && !punct_is(tokens, *pos, ";") {
         *pos += 1;
     }
     return slice_tokens(tokens, start, *pos);
@@ -471,9 +485,9 @@ fn collect_until_semi(tokens: &List<JToken>, pos: &mut i32) -> List<JToken> {
 fn find_braced_end(tokens: &List<JToken>, open: i32) -> Result<i32, String> {
     let mut depth = 0;
     for let mut i = open; i < tokens.len(); i += 1 {
-        if punct_is(tokens, i, &"{") {
+        if punct_is(tokens, i, "{") {
             depth += 1;
-        } else if punct_is(tokens, i, &"}") {
+        } else if punct_is(tokens, i, "}") {
             depth -= 1;
             if depth == 0 {
                 return Result::Ok(i);

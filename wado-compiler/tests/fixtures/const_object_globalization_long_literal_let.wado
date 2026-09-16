@@ -1,29 +1,32 @@
-// A hoisted `let` literal past `string_inline_max_bytes` must keep the
-// lazy-init guard (WEP: Constant Object Globalization).
+// A hoisted `let` literal past the eager bound must keep the lazy-init guard
+// (WEP: Constant Object Globalization).
 //
 // The `let`-shape hoist replaces the binding with an unguarded
 // `GlobalVarSet`, counting on `wir_optimize::const_global` to promote the
-// global eager and delete the assignment. A string past the opt-level's
-// inline threshold keeps the `array.new_data` repr, which is not
-// Wasm-const-expressible, so the assignment survives — and an unguarded one
-// re-runs where the `let` stood, here once per loop iteration.
+// global eager and delete the assignment. A string past the hoist's eager
+// bound (`name::INLINE_REF_EAGER_MAX_BYTES`) keeps the `array.new_data` repr,
+// which is not Wasm-const-expressible, so the assignment survives — and an
+// unguarded one re-runs where the `let` stood, here once per loop iteration.
 //
 // The list is what keeps the binding standing: a plain `let msg = "..."` is
-// folded into its use, and globalization then hoists the in-place literal
-// under the `&`-shape's wider eager bound instead.
+// folded into its use, and globalization hoists the in-place literal under the
+// same bound.
 
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {
     for let mut i = 0; i < 2; i += 1 {
-        let names: List<String> = ["alpha", "bravo"];
+        let names: List<String> = [
+            "alpha, the first of the letters, spelled out well past the eager bound",
+            "bravo, the second of the letters, spelled out well past the eager bound",
+        ];
         println(`${i}:${names[i % 2]}`);
     }
 }
 
 __DATA__
 {
-    "stdout": "0:alpha\n1:bravo\n",
+    "stdout": "0:alpha, the first of the letters, spelled out well past the eager bound\n1:bravo, the second of the letters, spelled out well past the eager bound\n",
     "wir_expect:O2": [
         "if ref.is_null(global:const_object_globalization_long_literal_let.wado::$const_obj_"
     ]

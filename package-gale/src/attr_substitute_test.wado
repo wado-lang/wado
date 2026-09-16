@@ -7,7 +7,7 @@ test "splice_attrs rewrites resolved spans to expressions" {
 r returns [int v] : a=e ;
 e returns [int v] : ID ;
 ").unwrap();
-    let body = &" $v = $a.v; ";
+    let body = " $v = $a.v; ";
     let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
     let repls: List<String> = ["vals.v", "a.v"];
     let out = splice_attrs(body, &refs, &repls);
@@ -15,7 +15,7 @@ e returns [int v] : ID ;
 }
 
 test "splice_attrs leaves a ref-free body verbatim" {
-    let body = &" p.emit(\"hi\"); ";
+    let body = " p.emit(\"hi\"); ";
     let out = splice_attrs(body, &[], &[]);
     assert out == " p.emit(\"hi\"); ", `out: '${out}'`;
 }
@@ -24,7 +24,7 @@ test "splice_attrs handles adjacent and end-anchored references" {
     let g = parse("grammar T;
 r : x=ID ;
 ").unwrap();
-    let body = &"$x.text$x.text";
+    let body = "$x.text$x.text";
     let refs = resolve_attrs(body, &g.parser_rules[0], &g.parser_rules).unwrap();
     assert refs.len() == 2;
     let repls: List<String> = ["A", "B"];

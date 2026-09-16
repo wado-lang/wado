@@ -10,19 +10,19 @@ use g from "./grammars/gate_scope_restores.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_gate_scope_restores" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // The hit case: the ban resumes after the `)`, so `a { b }` is not the braced
 // form and the `{ b }` is the block the `if` owes.
 test "the ban resumes after a scope inside the head" {
     assert_tree(
-        &"if f(x) || a { b }",
-        &"(start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))",
+        "if f(x) || a { b }",
+        "(start (stmt if (expr (expr f ( (args (expr x)) )) || (expr a)) (block { b })))",
     );
 }
 
@@ -30,11 +30,11 @@ test "the ban resumes after a scope inside the head" {
 // any head it was never on.
 test "inside the scope the braced form is allowed" {
     assert_tree(
-        &"if f(a { b }) { c }",
-        &"(start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))",
+        "if f(a { b }) { c }",
+        "(start (stmt if (expr f ( (args (expr a { b })) )) (block { c })))",
     );
 }
 
 test "outside a head the braced form still wins" {
-    assert_tree(&"a { b } ;", &"(start (stmt (expr a { b }) ;))");
+    assert_tree("a { b } ;", "(start (stmt (expr a { b }) ;))");
 }

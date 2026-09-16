@@ -8,31 +8,31 @@ use g from "./grammars/alt_shared_ident_prefix.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_alt_shared_ident_prefix" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "alt-shared: bare-ident pattern" {
-    assert_tree(&"match c { a => z }", &"(prog (matchExpr match c { (arm (pattern a) => z) }))");
+    assert_tree("match c { a => z }", "(prog (matchExpr match c { (arm (pattern a) => z) }))");
 }
 test "alt-shared: variant pattern (regression)" {
     assert_tree(
-        &"match c { N ( n ) => z }",
-        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))",
+        "match c { N ( n ) => z }",
+        "(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) }))",
     );
 }
 test "alt-shared: variant then bare-ident arm" {
     assert_tree(
-        &"match c { N ( n ) => z , a => z }",
-        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) , (arm (pattern a) => z) }))",
+        "match c { N ( n ) => z , a => z }",
+        "(prog (matchExpr match c { (arm (pattern (path N) ( (pattern n) )) => z) , (arm (pattern a) => z) }))",
     );
 }
 test "alt-shared: nested variant pattern" {
     assert_tree(
-        &"match c { N ( M ( x ) ) => z }",
-        &"(prog (matchExpr match c { (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z) }))",
+        "match c { N ( M ( x ) ) => z }",
+        "(prog (matchExpr match c { (arm (pattern (path N) ( (pattern (path M) ( (pattern x) )) )) => z) }))",
     );
 }

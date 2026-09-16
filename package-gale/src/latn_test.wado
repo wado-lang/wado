@@ -8,18 +8,23 @@ use { latn_match } from "./runtime/latn.wado";
 // match a rule against an input string. Returns the end position of the
 // `CMT` match (or -1). Expectations are the published-ANTLR4 oracle's
 // behaviour, characterized as a black box (see runtime/latn.wado).
-fn cmt_match(grammar_src: String, input: String) -> i32 {
+fn cmt_match<S: AsStrSlice, S1: AsStrSlice>(grammar_src: S, input: S1) -> i32 {
     return match_rule(grammar_src, "CMT", input);
 }
 
 /// `longest` is what a non-greedy subrule turns off: `CMT` ends at the first
 /// `*/`, not the last, so its accept is the earliest one and not the furthest.
-fn match_rule(grammar_src: String, rule: String, input: String, longest: bool = false) -> i32 {
+fn match_rule<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
+    grammar_src: S,
+    rule: S1,
+    input: S2,
+    longest: bool = false,
+) -> i32 {
     let g = parse(grammar_src).unwrap();
     let built = build_latn(&g);
     let blob = atn_blob_bytes(&built.atn);
     let sim = atn_decode(&blob);
-    let idx = built.rule_index.get(rule).unwrap();
+    let idx = built.rule_index.get(rule.to_string()).unwrap();
     let chars: List<char> = input.chars().collect();
     return latn_match(&sim, idx, &chars, 0, longest);
 }

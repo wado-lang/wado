@@ -8,7 +8,7 @@ use rt from "./grammars/wado_rule_text.g4"
     };
 
 test "$text is the concatenated token text (skipped WS excluded, ANTLR semantics)" {
-    let result = rt::parse(&"foo bar");
+    let result = rt::parse("foo bar");
     assert result.ok(), "clean parse";
     // The `' '` between the two IDs is `-> skip`, so it is absent from the token
     // stream; ANTLR's `$text` concatenates the parse-tree tokens, not the raw

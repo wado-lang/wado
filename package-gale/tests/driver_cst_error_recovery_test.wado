@@ -9,20 +9,20 @@ use errrec from "./grammars/error_recovery.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_error_recovery" },
     };
 
-fn first_diag_col(input: &String) -> i32 {
+fn first_diag_col<S: AsStrSlice>(input: S) -> i32 {
     let r = errrec::parse(input);
-    assert !r.ok(), `expected a diagnostic for ${*input}`;
+    assert !r.ok(), `expected a diagnostic for ${input.to_string()}`;
     return r.diagnostics[0].col;
 }
 
 test "error position: malformed item under `item* EOF`" {
-    assert first_diag_col(&"let x = ;") == 8, `expected col 8 (the ';')`;
+    assert first_diag_col("let x = ;") == 8, `expected col 8 (the ';')`;
 }
 test "error position: malformed item under `item* '}'`" {
-    assert first_diag_col(&"{ let x = ; }") == 10, `expected col 10 (the ';')`;
+    assert first_diag_col("{ let x = ; }") == 10, `expected col 10 (the ';')`;
 }
 test "error position: non-item token stays put" {
-    assert first_diag_col(&"let x = y ; +") == 12, `expected col 12 (the '+')`;
+    assert first_diag_col("let x = y ; +") == 12, `expected col 12 (the '+')`;
 }
 
 // Error-token trees: at a *mandatory* `item` call (`single : item EOF`) the
@@ -30,23 +30,23 @@ test "error position: non-item token stays put" {
 // `<missing>`, delete -> `<skip>`, unrecoverable run -> `<error>`). A clean
 // parse keeps these markers absent. (A scan-gated `item*` cannot commit edits —
 // see the diagnostic-position tests above — so these use the mandatory entry.)
-fn assert_single(input: &String, expected: &String) {
+fn assert_single<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = errrec::parse_single(input);
     let actual = errrec::to_string_tree(&r);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // `item : 'let' ID '=' ID ';'`; the second ID is absent. The current token (`;`)
 // is the rule's own next terminal (FIRST-of-rest), so recovery inserts a
 // synthetic ID and keeps parsing — a complete `item` with one missing leaf.
 test "tree: insert missing terminal" {
-    assert_single(&"let x = ;", &"(single (item let x = <missing ID> ;))");
+    assert_single("let x = ;", "(single (item let x = <missing ID> ;))");
 }
 
 // A spurious extra ID before `=`; peek(1) is the expected `=`, so the extra
 // token is deleted (skipped) and `=` consumed.
 test "tree: delete extra terminal" {
-    assert_single(&"let x y = z ;", &"(single (item let x <skip y> = z ;))");
+    assert_single("let x y = z ;", "(single (item let x <skip y> = z ;))");
 }
 
 // At the second ID, `}` is neither the expected ID (match), the token before
@@ -55,8 +55,8 @@ test "tree: delete extra terminal" {
 // inserted. The original input round-trips through the tree.
 test "tree: error region resyncs to FOLLOW" {
     assert_single(
-        &"let x = } } ;",
-        &"(single (item let x = (<error> <skip }> <skip }>) <missing ID> ;))",
+        "let x = } } ;",
+        "(single (item let x = (<error> <skip }> <skip }>) <missing ID> ;))",
     );
 }
 
@@ -64,8 +64,8 @@ test "tree: error region resyncs to FOLLOW" {
 // uncapped parse reports two diagnostics; `max_errors` stops recovery after the
 // first and folds.
 test "max_errors caps recovery diagnostics" {
-    let full = errrec::parse_double(&"let x = ; let y = ;");
+    let full = errrec::parse_double("let x = ; let y = ;");
     assert full.diagnostics.len() == 2, `expected 2, got ${full.diagnostics.len()}`;
-    let capped = errrec::parse_double(&"let x = ; let y = ;", 1);
+    let capped = errrec::parse_double("let x = ; let y = ;", 1);
     assert capped.diagnostics.len() == 1, `expected 1, got ${capped.diagnostics.len()}`;
 }

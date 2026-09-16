@@ -11,7 +11,7 @@ export fn escape_attr(s: String) -> String {
     return escape_attr_ref(&s);
 }
 
-internal fn escape_text_ref(s: &String) -> String {
+internal fn escape_text_ref<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, false);
@@ -19,7 +19,7 @@ internal fn escape_text_ref(s: &String) -> String {
     return out;
 }
 
-internal fn escape_attr_ref(s: &String) -> String {
+internal fn escape_attr_ref<S: AsStrSlice>(s: S) -> String {
     let mut out = String::with_capacity(s.len());
     for let c of s.chars() {
         push_escaped(&mut out, c, true);
@@ -29,10 +29,10 @@ internal fn escape_attr_ref(s: &String) -> String {
 
 fn push_escaped(out: &mut String, c: char, in_attr: bool) {
     match c {
-        '&' => out.push_str(&"&amp;"),
-        '<' => out.push_str(&"&lt;"),
-        '>' => out.push_str(&"&gt;"),
-        '"' && in_attr => out.push_str(&"&quot;"),
+        '&' => out.push_str("&amp;"),
+        '<' => out.push_str("&lt;"),
+        '>' => out.push_str("&gt;"),
+        '"' && in_attr => out.push_str("&quot;"),
         _ => out.push(c),
     }
 }

@@ -21,13 +21,13 @@ impl Theme {
     }
 
     /// Assign `color` to capture class `class`; last write wins.
-    pub fn set(&mut self, class: String, color: String) {
-        self.colors[class] = color;
+    pub fn set<S: AsStrSlice, S1: AsStrSlice>(&mut self, class: S, color: S1) {
+        self.colors[class.to_string()] = color.to_string();
     }
 
     /// The color assigned to `class`, if any.
-    pub fn color(&self, class: &String) -> Option<String> {
-        return self.colors.get(*class);
+    pub fn color<S: AsStrSlice>(&self, class: S) -> Option<String> {
+        return self.colors.get(class.to_string());
     }
 
     /// The classes in `vocabulary` this theme leaves without a color — they

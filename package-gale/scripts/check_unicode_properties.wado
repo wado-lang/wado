@@ -63,8 +63,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 /// Taken through the real parser, so the comparison covers escape parsing and
 /// lookup rather than the table alone. Null when Gale rejects the escape —
 /// unsupported is a different finding from a set that disagrees.
-fn gale_ranges(property: &String, value: &String) -> Option<List<[i32, i32]>> {
-    let source = `lexer grammar T;\nX : [\\p{${*property}=${*value}}] ;`;
+fn gale_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<List<[i32, i32]>> {
+    let source = `lexer grammar T;\nX : [\\p{${property.to_string()}=${value.to_string()}}] ;`;
     let parsed = parse(source);
     if let Err(_) = &parsed {
         return null;
@@ -77,12 +77,12 @@ fn gale_ranges(property: &String, value: &String) -> Option<List<[i32, i32]>> {
         }
         return Option::Some(out);
     }
-    panic(`\\p{${*property}=${*value}} did not parse into a character class`);
+    panic(`\\p{${property.to_string()}=${value.to_string()}} did not parse into a character class`);
 }
 
 /// `VALUE<TAB>START-END` lines, grouped by value in first-seen order. A `?`
 /// value is the oracle reporting a span no value claimed.
-fn parse_table(content: &String, failures: &mut i32) -> List<ValueRanges> with Stdout {
+fn parse_table<S: AsStrSlice>(content: S, failures: &mut i32) -> List<ValueRanges> with Stdout {
     let mut out: List<ValueRanges> = [];
     for let line of content.lines() {
         if line.is_empty() {
@@ -118,8 +118,15 @@ fn parse_table(content: &String, failures: &mut i32) -> List<ValueRanges> with S
     return out;
 }
 
-fn report(property: &String, value: &String, expected: &List<[i32, i32]>, actual: &List<[i32, i32]>) with Stdout {
-    println(`${*property}=${*value}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`);
+fn report<S: AsStrSlice, S1: AsStrSlice>(
+    property: S,
+    value: S1,
+    expected: &List<[i32, i32]>,
+    actual: &List<[i32, i32]>,
+) with Stdout {
+    println(
+        `${property.to_string()}=${value.to_string()}: ${expected.len()} oracle ranges vs ${actual.len()} Gale ranges`,
+    );
     let mut shown = 0;
     for let mut i = 0; i < i32::max(expected.len(), actual.len()) && shown < 4; i += 1 {
         let e = if i < expected.len() { `${expected[i].0:X}-${expected[i].1:X}` } else { "—" };

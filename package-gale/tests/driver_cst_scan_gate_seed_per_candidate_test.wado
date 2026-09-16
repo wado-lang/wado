@@ -10,20 +10,20 @@ use g from "./grammars/scan_gate_seed_per_candidate.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_scan_gate_seed_per_candidate" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 // The hit case: the first candidate raises the ban and fails on its last token,
 // so the second only matches if it started from the parser's gate.
 test "a candidate starts from the parser's gate, not the previous candidate's" {
-    assert_tree(&"x { y } ;", &"(start (pick (expr x { y }) ;))");
+    assert_tree("x { y } ;", "(start (pick (expr x { y }) ;))");
 }
 
 // The rejection case: the first candidate, when it does match, still wins.
 test "the first candidate still wins where it matches" {
-    assert_tree(&"x { y } }", &"(start (pick x { y } }))");
+    assert_tree("x { y } }", "(start (pick x { y } }))");
 }

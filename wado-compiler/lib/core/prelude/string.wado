@@ -109,9 +109,9 @@ fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
 /// True if `needle[0..needle_len)` equals `haystack[pos..pos+needle_len)`.
 /// Caller ensures `pos + needle_len <= haystack.len()`.
 #[inline]
-fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_len: i32) -> bool {
+fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_at: i32, needle_len: i32) -> bool {
     for let mut j = 0; j < needle_len; j += 1 {
-        if haystack[pos + j] != needle[j] {
+        if haystack[pos + j] != needle[needle_at + j] {
             return false;
         }
     }
@@ -271,6 +271,9 @@ internal struct StrCharIndicesIter {
     repr: &Array<u8>,
     used: i32,
     byte_index: i32,
+    /// Where the viewed text starts in `repr`. Yielded indices count from it,
+    /// as every other `StrSlice` index does.
+    base: i32,
 }
 
 impl Iterator for StrCharIndicesIter {
@@ -280,7 +283,7 @@ impl Iterator for StrCharIndicesIter {
         if self.byte_index >= self.used {
             return null;
         }
-        let idx = self.byte_index;
+        let idx = self.byte_index - self.base;
         let [code, len] = decode_char_at(self.repr, self.byte_index);
         self.byte_index += len;
         return Option::Some([idx, char::from_u32_unchecked(code)]);
@@ -292,7 +295,8 @@ internal struct StrSplitIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: Array<u8>,
+    sep_repr: &Array<u8>,
+    sep_at: i32,
     sep_len: i32,
     finished: bool,
 }
@@ -304,10 +308,9 @@ impl Iterator for StrSplitIter {
         if self.finished {
             return null;
         }
-        let sep = &self.sep_repr as &Array<u8>;
         let limit = self.used - self.sep_len;
         for let mut i = self.pos; i <= limit; i += 1 {
-            if self.sep_len > 0 && bytes_match_at(self.repr, i, sep, self.sep_len) {
+            if self.sep_len > 0 && bytes_match_at(self.repr, i, self.sep_repr, self.sep_at, self.sep_len) {
                 let part = substring(self.repr, self.pos, i - self.pos);
                 self.pos = i + self.sep_len;
                 return Option::Some(part);
@@ -323,7 +326,8 @@ internal struct StrSplitNIter {
     repr: &Array<u8>,
     used: i32,
     pos: i32,
-    sep_repr: Array<u8>,
+    sep_repr: &Array<u8>,
+    sep_at: i32,
     sep_len: i32,
     remaining: i32,
     finished: bool,
@@ -340,10 +344,9 @@ impl Iterator for StrSplitNIter {
             self.finished = true;
             return Option::Some(substring(self.repr, self.pos, self.used - self.pos));
         }
-        let sep = &self.sep_repr as &Array<u8>;
         let limit = self.used - self.sep_len;
         for let mut i = self.pos; i <= limit; i += 1 {
-            if self.sep_len > 0 && bytes_match_at(self.repr, i, sep, self.sep_len) {
+            if self.sep_len > 0 && bytes_match_at(self.repr, i, self.sep_repr, self.sep_at, self.sep_len) {
                 let part = substring(self.repr, self.pos, i - self.pos);
                 self.pos = i + self.sep_len;
                 self.remaining -= 1;
@@ -565,15 +568,32 @@ impl String {
         builtin::array_fill(&mut self.repr as &mut Array<u8>, start, byte, n);
     }
 
-    /// Append another string to this one.
+    /// Append any `AsStrSlice` text to this one.
     #[compiler_item("string_push_str")]
-    pub fn push_str(&mut self, other: &String) {
-        let other_len = other.len();
-        if other_len == 0 {
+    pub fn push_str<S: AsStrSlice>(&mut self, other: S) {
+        other.internal_append_to(self);
+    }
+
+    /// Internal: the whole-string append, the shape the append fusion and the
+    /// constant-folding frame both read (stdlib use only).
+    internal fn internal_push_string(&mut self, other: &String) {
+        let n = other.used;
+        if n == 0 {
             return;
         }
-        let start = self.internal_reserve_uninit(other_len);
-        builtin::array_copy(&mut self.repr as &mut Array<u8>, start, &other.repr as &Array<u8>, 0, other_len);
+        let start = self.internal_reserve_uninit(n);
+        builtin::array_copy(&mut self.repr as &mut Array<u8>, start, &other.repr as &Array<u8>, 0, n);
+    }
+
+    /// Internal: the view append, for a source that is not a whole string
+    /// (stdlib use only).
+    internal fn internal_push_view(&mut self, view: &StrSlice) {
+        let n = view.len();
+        if n == 0 {
+            return;
+        }
+        let start = self.internal_reserve_uninit(n);
+        builtin::array_copy(&mut self.repr as &mut Array<u8>, start, view.repr, view.start, n);
     }
 
     /// Append the bytes of any `AsByteSlice` source (`ByteList`, `ByteArray`,
@@ -597,13 +617,11 @@ impl String {
     /// - `0 <= start <= end <= s.len()`.
     /// - `start` and `end` must lie on UTF-8 character boundaries of `s`.
     /// - The resulting byte sequence must remain valid UTF-8.
-    pub fn push_str_range_unchecked(&mut self, s: &String, start: i32, end: i32) {
-        let n = end - start;
-        if n <= 0 {
+    pub fn push_str_range_unchecked<S: AsStrSlice>(&mut self, s: S, start: i32, end: i32) {
+        if end <= start {
             return;
         }
-        let dst = self.internal_reserve_uninit(n);
-        builtin::array_copy(&mut self.repr as &mut Array<u8>, dst, &s.repr as &Array<u8>, start, n);
+        self.push_str(s.as_str_slice().sub_unchecked(start, end));
     }
 
     /// Returns an iterator over the UTF-8 bytes of the string.
@@ -618,27 +636,12 @@ impl String {
 
     /// Returns an iterator over characters with their byte indices.
     pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
-        return StrCharIndicesIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
+        return self.as_str_slice().char_indices();
     }
 
     /// Decode the whole string into a `List<char>`.
     pub fn to_chars(&self) -> List<char> {
-        let bytes = self.as_bytes();
-        let len = self.used;
-        let mut chars: List<char> = List::with_capacity(len);
-        let mut i = 0;
-        while i < len {
-            let b0 = bytes.get_unchecked(i);
-            if b0 < 0x80 {
-                chars.push(char::from_u32_unchecked(b0 as u32));
-                i += 1;
-                continue;
-            }
-            let scalar = decode_utf8_scalar(bytes, i, len);
-            chars.push(char::from_u32_unchecked(scalar.code));
-            i += scalar.advance;
-        }
-        return chars;
+        return self.as_str_slice().to_chars();
     }
 
     /// Decodes the UTF-8 character starting at the given byte index.
@@ -646,13 +649,7 @@ impl String {
     /// aren't enough bytes to form a full UTF-8 sequence.
     /// Assumes `byte_index` is on a character boundary (the string is valid UTF-8).
     pub fn char_at_byte(&self, byte_index: i32) -> Option<char> {
-        if byte_index >= self.used {
-            return null;
-        }
-        if byte_index + utf8_seq_len(self.repr[byte_index]) > self.used {
-            return null;
-        }
-        return Option::Some(self.char_at_byte_unchecked(byte_index));
+        return self.as_str_slice().char_at_byte(byte_index);
     }
 
     /// Decodes the UTF-8 character starting at `byte_index` without bounds checks.
@@ -662,7 +659,7 @@ impl String {
     /// - The full multi-byte sequence (1–4 bytes) starting at `byte_index`
     ///   is in range `[0, self.len())`.
     pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
-        return char::from_u32_unchecked(decode_char_at(&self.repr as &Array<u8>, byte_index).0);
+        return self.as_str_slice().char_at_byte_unchecked(byte_index);
     }
 
     /// Appends a Unicode scalar value (char) to this string.
@@ -767,97 +764,28 @@ impl String {
         }
     }
 
-    /// Returns a new string with leading ASCII whitespace removed.
-    pub fn trim_ascii_start(&self) -> String {
-        let mut start = 0;
-        while start < self.used && self.repr[start].is_ascii_whitespace() {
-            start += 1;
-        }
-        return self.substr_bytes(start, self.used);
-    }
-
-    /// Returns a new string with trailing ASCII whitespace removed.
-    pub fn trim_ascii_end(&self) -> String {
-        let mut end = self.used;
-        while end > 0 && self.repr[end - 1].is_ascii_whitespace() {
-            end -= 1;
-        }
-        return self.substr_bytes(0, end);
-    }
-
-    /// Returns a new string with leading and trailing ASCII whitespace removed.
-    pub fn trim_ascii(&self) -> String {
-        return self.trim_ascii_start().trim_ascii_end();
-    }
-
-    /// Returns a new string with leading Unicode whitespace removed.
-    pub fn trim_start(&self) -> String {
-        let mut iter = self.chars();
-        let mut start = 0;
-        while let Some(c) = iter.next() {
-            if !c.is_whitespace() {
-                break;
-            }
-            start += c.len_utf8();
-        }
-        return self.substr_bytes(start, self.used);
-    }
-
-    /// Returns a new string with trailing Unicode whitespace removed.
-    pub fn trim_end(&self) -> String {
-        let repr = &self.repr as &Array<u8>;
-        let mut end = self.used;
-        while end > 0 {
-            let pos = char_start_backward(repr, end - 1);
-            let ch = char::from_u32_unchecked(decode_char_at(repr, pos).0);
-            if !ch.is_whitespace() {
-                break;
-            }
-            end = pos;
-        }
-        return self.substr_bytes(0, end);
-    }
-
-    /// Returns a new string with leading and trailing Unicode whitespace removed.
-    pub fn trim(&self) -> String {
-        return self.trim_start().trim_end();
-    }
-
     /// Returns a new string with all ASCII uppercase letters converted to lowercase.
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_lowercase(&self) -> String {
-        return String::from_iter(self.chars().map(|c: char| c.to_ascii_lowercase()));
+        return self.as_str_slice().to_ascii_lowercase();
     }
 
     /// Returns a new string with all ASCII lowercase letters converted to uppercase.
     /// Non-ASCII bytes are left unchanged.
     pub fn to_ascii_uppercase(&self) -> String {
-        return String::from_iter(self.chars().map(|c: char| c.to_ascii_uppercase()));
+        return self.as_str_slice().to_ascii_uppercase();
     }
 
     /// Checks that two strings are an ASCII case-insensitive match.
     /// Non-ASCII bytes are compared exactly.
-    pub fn eq_ignore_ascii_case(&self, other: String) -> bool {
-        let len = self.len();
-        if len != other.len() {
-            return false;
-        }
-        let a = &self.repr as &Array<u8>;
-        let b = &other.repr as &Array<u8>;
-        for let mut i = 0; i < len; i += 1 {
-            if !a[i].eq_ignore_ascii_case(&b[i]) {
-                return false;
-            }
-        }
-        return true;
+    pub fn eq_ignore_ascii_case<S: AsStrSlice>(&self, other: S) -> bool {
+        return self.as_str_slice().eq_ignore_ascii_case(other);
     }
 
     /// Extract a substring by byte range `[start, end)`.
     /// Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
-        assert 0 <= start && start <= end && end <= self.used, "byte range out of bounds";
-        assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
-        return self.substr_bytes_unchecked(start, end);
+        return self.as_str_slice().substr_bytes(start, end);
     }
 
     /// Extract a substring by byte range `[start, end)` without bounds or
@@ -867,117 +795,42 @@ impl String {
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
     pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        if end <= start {
-            return String::with_capacity(0);
-        }
-        return substring(&self.repr as &Array<u8>, start, end - start);
+        return self.as_str_slice().substr_bytes_unchecked(start, end);
     }
 
     /// Returns true if this string contains the given substring.
-    pub fn contains(&self, pat: String) -> bool {
-        return self.find(pat) matches { Some(_) };
+    pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool {
+        return self.as_str_slice().contains(pat);
     }
 
     /// Returns true if this string starts with the given prefix.
-    pub fn starts_with(&self, pat: String) -> bool {
-        let pat_len = pat.len();
-        if pat_len > self.used {
-            return false;
-        }
-        return bytes_match_at(&self.repr as &Array<u8>, 0, &pat.repr as &Array<u8>, pat_len);
+    pub fn starts_with<S: AsStrSlice>(&self, pat: S) -> bool {
+        return self.as_str_slice().starts_with(pat);
     }
 
     /// Returns true if this string ends with the given suffix.
-    pub fn ends_with(&self, pat: String) -> bool {
-        let pat_len = pat.len();
-        if pat_len > self.used {
-            return false;
-        }
-        return bytes_match_at(&self.repr as &Array<u8>, self.used - pat_len, &pat.repr as &Array<u8>, pat_len);
-    }
-
-    /// Returns the string with `prefix` removed from the front, or None when it
-    /// does not start with `prefix`.
-    pub fn strip_prefix(&self, prefix: String) -> Option<String> {
-        if !self.starts_with(prefix) {
-            return null;
-        }
-        let start = prefix.len();
-        return Option::Some(substring(&self.repr as &Array<u8>, start, self.used - start));
-    }
-
-    /// Returns the string with `suffix` removed from the end, or None when it
-    /// does not end with `suffix`.
-    pub fn strip_suffix(&self, suffix: String) -> Option<String> {
-        if !self.ends_with(suffix) {
-            return null;
-        }
-        return Option::Some(substring(&self.repr as &Array<u8>, 0, self.used - suffix.len()));
+    pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool {
+        return self.as_str_slice().ends_with(pat);
     }
 
     /// Returns the byte index of the first occurrence of `pat`, or None.
-    pub fn find(&self, pat: String) -> Option<i32> {
-        let pat_len = pat.len();
-        if pat_len == 0 {
-            return Option::Some(0);
-        }
-        if pat_len > self.used {
-            return null;
-        }
-        let self_repr = &self.repr as &Array<u8>;
-        let pat_repr = &pat.repr as &Array<u8>;
-        let limit = self.used - pat_len;
-        for let mut i = 0; i <= limit; i += 1 {
-            if bytes_match_at(self_repr, i, pat_repr, pat_len) {
-                return Option::Some(i);
-            }
-        }
-        return null;
+    pub fn find<S: AsStrSlice>(&self, pat: S) -> Option<i32> {
+        return self.as_str_slice().find(pat);
     }
 
     /// Returns the byte index of the last occurrence of `pat`, or None.
-    pub fn rfind(&self, pat: String) -> Option<i32> {
-        let pat_len = pat.len();
-        if pat_len == 0 {
-            return Option::Some(self.used);
-        }
-        if pat_len > self.used {
-            return null;
-        }
-        let self_repr = &self.repr as &Array<u8>;
-        let pat_repr = &pat.repr as &Array<u8>;
-        let mut i = self.used - pat_len;
-        loop {
-            if bytes_match_at(self_repr, i, pat_repr, pat_len) {
-                return Option::Some(i);
-            }
-            if i == 0 {
-                break;
-            }
-            i -= 1;
-        }
-        return null;
+    pub fn rfind<S: AsStrSlice>(&self, pat: S) -> Option<i32> {
+        return self.as_str_slice().rfind(pat);
     }
 
     /// Returns true if the string contains the given character.
     pub fn contains_char(&self, ch: char) -> bool {
-        for let c of self.chars() {
-            if c == ch {
-                return true;
-            }
-        }
-        return false;
+        return self.as_str_slice().contains_char(ch);
     }
 
     /// Returns the byte index of the first character matching the predicate, or None.
-    pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32> {
-        let mut iter = self.chars();
-        for let mut byte_index = 0; let Some(c) = iter.next(); byte_index += c.len_utf8() {
-            if pred(c) {
-                return Option::Some(byte_index);
-            }
-        }
-        return null;
+    pub fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32> {
+        return self.as_str_slice().find_char(pred);
     }
 
     /// Grow if needed and shift the bytes from `byte_index` onward right by `width`,
@@ -1017,7 +870,7 @@ impl String {
 
     /// Inserts a string at the given byte index.
     /// Panics if `byte_index` is out of bounds or not on a UTF-8 character boundary.
-    pub fn insert_str(&mut self, byte_index: i32, s: String) {
+    pub fn insert_str<S: AsStrSlice>(&mut self, byte_index: i32, s: S) {
         assert self.is_char_boundary(byte_index), "insert_str index not on UTF-8 character boundary";
         self.insert_str_unchecked(byte_index, s);
     }
@@ -1027,13 +880,14 @@ impl String {
     /// # Safety (caller-side preconditions)
     /// - `0 <= byte_index <= self.len()`.
     /// - `byte_index` lies on a UTF-8 character boundary.
-    pub fn insert_str_unchecked(&mut self, byte_index: i32, s: String) {
-        let s_len = s.len();
+    pub fn insert_str_unchecked<S: AsStrSlice>(&mut self, byte_index: i32, s: S) {
+        let view = s.as_str_slice();
+        let s_len = view.len();
         if s_len == 0 {
             return;
         }
         self.make_gap(byte_index, s_len);
-        builtin::array_copy(&mut self.repr as &mut Array<u8>, byte_index, &s.repr as &Array<u8>, 0, s_len);
+        builtin::array_copy(&mut self.repr as &mut Array<u8>, byte_index, view.repr, view.start, s_len);
     }
 
     /// Removes and returns the character at the given byte index.
@@ -1065,54 +919,18 @@ impl String {
 
     /// Returns this string repeated `n` times.
     pub fn repeat(&self, n: i32) -> String {
-        if n <= 0 || self.used == 0 {
-            return String::with_capacity(0);
-        }
-        let total = self.used * n;
-        let src = &self.repr as &Array<u8>;
-        let mut repr: Array<u8> = builtin::array_new(total);
-        for let mut r = 0; r < n; r += 1 {
-            builtin::array_copy(&mut repr, r * self.used, src, 0, self.used);
-        }
-        return String { repr: repr as ByteArray, used: total };
+        return self.as_str_slice().repeat(n);
     }
 
     /// Replaces all occurrences of `from` with `to`.
-    pub fn replace(&self, from: String, to: String) -> String {
-        return self.replacen(from, to, -1);
+    pub fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String {
+        return self.as_str_slice().replace(from, to);
     }
 
     /// Replaces the first `count` occurrences of `from` with `to`.
     /// If `count` is negative, replaces all occurrences.
-    pub fn replacen(&self, from: String, to: String, count: i32) -> String {
-        let from_len = from.len();
-        if from_len == 0 {
-            return *self;
-        }
-        let self_repr = &self.repr as &Array<u8>;
-        let from_repr = &from.repr as &Array<u8>;
-        let mut result = String::with_capacity(self.used);
-        let mut pos = 0;
-        let mut replacements = 0;
-        let limit = self.used - from_len;
-        while pos <= limit {
-            if count >= 0 && replacements >= count {
-                break;
-            }
-            if bytes_match_at(self_repr, pos, from_repr, from_len) {
-                result.push_str(&to);
-                pos += from_len;
-                replacements += 1;
-            } else {
-                let dst = result.internal_reserve_uninit(1);
-                result.set_byte_unchecked(dst, self.repr[pos]);
-                pos += 1;
-            }
-        }
-        if pos < self.used {
-            result.push_str_range_unchecked(self, pos, self.used);
-        }
-        return result;
+    pub fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String {
+        return self.as_str_slice().replacen(from, to, count);
     }
 
     /// Build a `String` from an iterable of chars.
@@ -1274,68 +1092,35 @@ impl String {
     }
 
     /// Returns an iterator over substrings split by the given separator.
-    pub fn split(&self, sep: String) -> StrSplitIter with stores[self] {
-        let sep_len = sep.len();
-        return StrSplitIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            finished: false,
-        };
+    pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter with stores[self] {
+        return self.as_str_slice().split(sep);
     }
 
     /// Returns an iterator over at most `n` substrings split by the given separator.
-    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self] {
-        let sep_len = sep.len();
-        return StrSplitNIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            remaining: n,
-            finished: n <= 0,
-        };
-    }
-
-    /// The parts either side of a separator of `sep_len` bytes found at `at`.
-    fn cut_at(&self, at: i32, sep_len: i32) -> [String, String] {
-        let repr = &self.repr as &Array<u8>;
-        let rest = at + sep_len;
-        return [
-            substring(repr, 0, at),
-            substring(repr, rest, self.used - rest),
-        ];
+    pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter with stores[self] {
+        return self.as_str_slice().splitn(n, sep);
     }
 
     /// Splits at the first `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn split_once(&self, sep: String) -> Option<[String, String]> {
-        let Some(at) = self.find(sep) else {
-            return null;
-        };
-        return Option::Some(self.cut_at(at, sep.len()));
+    pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        return self.as_str_slice().split_once(sep);
     }
 
     /// Splits at the last `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn rsplit_once(&self, sep: String) -> Option<[String, String]> {
-        let Some(at) = self.rfind(sep) else {
-            return null;
-        };
-        return Option::Some(self.cut_at(at, sep.len()));
+    pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        return self.as_str_slice().rsplit_once(sep);
     }
 
     /// Returns an iterator over whitespace-separated substrings.
     pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
-        return StrSplitWhitespaceIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0 };
+        return self.as_str_slice().split_whitespace();
     }
 
     /// Returns an iterator over the lines of this string.
     pub fn lines(&self) -> StrLinesIter with stores[self] {
-        return StrLinesIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, finished: false };
+        return self.as_str_slice().lines();
     }
 }
 
@@ -1366,9 +1151,9 @@ impl Eq for String {
 impl LenientFromStr for String {
     type Err = LenientParseError;
 
-    /// Identity: any string parses to itself. Never fails.
-    fn from_str_lenient(s: &String) -> Result<String, LenientParseError> {
-        return Result::Ok(*s);
+    /// Identity: any text parses to the string it spells. Never fails.
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<String, LenientParseError> {
+        return Result::Ok(s.as_str_slice().to_string());
     }
 }
 
@@ -1458,6 +1243,16 @@ impl StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
 
+    /// The backing array and this view's offset into it (stdlib use only):
+    /// what a byte-at-a-time reader needs to index without a bounds check.
+    internal fn internal_raw_bytes(&self) -> &Array<u8> with stores[self] {
+        return self.repr;
+    }
+
+    internal fn internal_byte_offset(&self) -> i32 {
+        return self.start;
+    }
+
     /// The view's UTF-8 bytes.
     pub fn as_bytes(&self) -> ByteSlice with stores[self] {
         return Slice::internal_new(self.repr, self.start, self.end) as ByteSlice;
@@ -1477,17 +1272,610 @@ impl StrSlice {
     pub fn to_string(&self) -> String {
         return substring(self.repr, self.start, self.len());
     }
+
+    /// Returns true if the view starts with `pat`.
+    pub fn starts_with<S: AsStrSlice>(&self, pat: S) -> bool {
+        let p = pat.as_str_slice();
+        let pat_len = p.len();
+        if pat_len > self.len() {
+            return false;
+        }
+        return bytes_match_at(self.repr, self.start, p.repr, p.start, pat_len);
+    }
+
+    /// Returns true if the view ends with `pat`.
+    pub fn ends_with<S: AsStrSlice>(&self, pat: S) -> bool {
+        let p = pat.as_str_slice();
+        let pat_len = p.len();
+        if pat_len > self.len() {
+            return false;
+        }
+        return bytes_match_at(self.repr, self.end - pat_len, p.repr, p.start, pat_len);
+    }
+
+    /// Returns true if the view contains `pat`.
+    pub fn contains<S: AsStrSlice>(&self, pat: S) -> bool {
+        return self.find(pat) matches { Some(_) };
+    }
+
+    /// The byte index of the first occurrence of `pat`, counted from the view's
+    /// start, or None.
+    pub fn find<S: AsStrSlice>(&self, pat: S) -> Option<i32> {
+        let p = pat.as_str_slice();
+        let pat_len = p.len();
+        if pat_len == 0 {
+            return Option::Some(0);
+        }
+        let limit = self.len() - pat_len;
+        for let mut i = 0; i <= limit; i += 1 {
+            if bytes_match_at(self.repr, self.start + i, p.repr, p.start, pat_len) {
+                return Option::Some(i);
+            }
+        }
+        return null;
+    }
+
+    /// The byte index of the last occurrence of `pat`, counted from the view's
+    /// start, or None.
+    pub fn rfind<S: AsStrSlice>(&self, pat: S) -> Option<i32> {
+        let p = pat.as_str_slice();
+        let pat_len = p.len();
+        if pat_len == 0 {
+            return Option::Some(self.len());
+        }
+        let mut i = self.len() - pat_len;
+        while i >= 0 {
+            if bytes_match_at(self.repr, self.start + i, p.repr, p.start, pat_len) {
+                return Option::Some(i);
+            }
+            i -= 1;
+        }
+        return null;
+    }
+
+    /// The view with `prefix` removed from the front, or None when it does not
+    /// start with `prefix`.
+    pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> with stores[self] {
+        let start = prefix.as_str_slice().len();
+        if !self.starts_with(prefix) {
+            return null;
+        }
+        return Option::Some(self.sub_unchecked(start, self.len()));
+    }
+
+    /// The view with `suffix` removed from the end, or None when it does not
+    /// end with `suffix`.
+    pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> with stores[self] {
+        let suffix_len = suffix.as_str_slice().len();
+        if !self.ends_with(suffix) {
+            return null;
+        }
+        return Option::Some(self.sub_unchecked(0, self.len() - suffix_len));
+    }
+
+    /// Byte order against any text, the `cmp` a generic body cannot reach:
+    /// `Ord` compares two `StrSlice`s, and a type parameter is neither.
+    pub fn cmp_str<S: AsStrSlice>(&self, other: S) -> Ordering {
+        let o = other.as_str_slice();
+        return seq_cmp(self.repr, self.start, self.end, o.repr, o.start, o.end);
+    }
+
+    /// Byte equality against any text. `==` reaches only another `StrSlice`,
+    /// so a body generic over `AsStrSlice` has no operator to compare with.
+    pub fn eq_str<S: AsStrSlice>(&self, other: S) -> bool {
+        let len = self.len();
+        let b = other.as_str_slice();
+        if len != b.len() {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if self.repr[self.start + i] != b.repr[b.start + i] {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Checks that two views are an ASCII case-insensitive match.
+    /// Non-ASCII bytes are compared exactly.
+    pub fn eq_ignore_ascii_case<S: AsStrSlice>(&self, other: S) -> bool {
+        let len = self.len();
+        let b = other.as_str_slice();
+        if len != b.len() {
+            return false;
+        }
+        for let mut i = 0; i < len; i += 1 {
+            if !self.repr[self.start + i].eq_ignore_ascii_case(&b.repr[b.start + i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// The character starting at `byte_index`, counted from the view's start,
+    /// or None past the end.
+    pub fn char_at_byte(&self, byte_index: i32) -> Option<char> {
+        let at = self.start + byte_index;
+        if at >= self.end || at + utf8_seq_len(self.repr[at]) > self.end {
+            return null;
+        }
+        return Option::Some(char::from_u32_unchecked(decode_char_at(self.repr, at).0));
+    }
+
+    /// The view with leading ASCII whitespace removed.
+    pub fn trim_ascii_start(&self) -> StrSlice with stores[self] {
+        let mut start = self.start;
+        while start < self.end && self.repr[start].is_ascii_whitespace() {
+            start += 1;
+        }
+        return StrSlice { repr: self.repr, start, end: self.end };
+    }
+
+    /// The view with trailing ASCII whitespace removed.
+    pub fn trim_ascii_end(&self) -> StrSlice with stores[self] {
+        let mut end = self.end;
+        while end > self.start && self.repr[end - 1].is_ascii_whitespace() {
+            end -= 1;
+        }
+        return StrSlice { repr: self.repr, start: self.start, end };
+    }
+
+    /// The view with leading and trailing ASCII whitespace removed.
+    pub fn trim_ascii(&self) -> StrSlice with stores[self] {
+        return self.trim_ascii_start().trim_ascii_end();
+    }
+
+    /// The view with leading Unicode whitespace removed.
+    pub fn trim_start(&self) -> StrSlice with stores[self] {
+        let mut start = self.start;
+        while start < self.end {
+            let [code, len] = decode_char_at(self.repr, start);
+            if !char::from_u32_unchecked(code).is_whitespace() {
+                break;
+            }
+            start += len;
+        }
+        return StrSlice { repr: self.repr, start, end: self.end };
+    }
+
+    /// The view with trailing Unicode whitespace removed.
+    pub fn trim_end(&self) -> StrSlice with stores[self] {
+        let mut end = self.end;
+        while end > self.start {
+            let pos = char_start_backward(self.repr, end - 1);
+            if !char::from_u32_unchecked(decode_char_at(self.repr, pos).0).is_whitespace() {
+                break;
+            }
+            end = pos;
+        }
+        return StrSlice { repr: self.repr, start: self.start, end };
+    }
+
+    /// The view with leading and trailing Unicode whitespace removed.
+    pub fn trim(&self) -> StrSlice with stores[self] {
+        return self.trim_start().trim_end();
+    }
+
+    pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self] {
+        let s = sep.as_str_slice();
+        return StrSplitIter {
+            repr: self.repr,
+            used: self.end,
+            pos: self.start,
+            sep_repr: s.repr,
+            sep_at: s.start,
+            sep_len: s.len(),
+            finished: false,
+        };
+    }
+
+    pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self] {
+        let s = sep.as_str_slice();
+        return StrSplitNIter {
+            repr: self.repr,
+            used: self.end,
+            pos: self.start,
+            sep_repr: s.repr,
+            sep_at: s.start,
+            sep_len: s.len(),
+            remaining: n,
+            finished: n <= 0,
+        };
+    }
+
+    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
+        return StrSplitWhitespaceIter { repr: self.repr, used: self.end, pos: self.start };
+    }
+
+    pub fn lines(&self) -> StrLinesIter with stores[self] {
+        return StrLinesIter { repr: self.repr, used: self.end, pos: self.start, finished: false };
+    }
+
+    /// The parts either side of the first `sep`, or None when it does not
+    /// occur. Both parts view this one; `to_string` copies whichever is kept.
+    pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        let sep_len = sep.as_str_slice().len();
+        let Some(at) = self.find(sep) else {
+            return null;
+        };
+        return Option::Some(self.cut_at(at, sep_len));
+    }
+
+    pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        let sep_len = sep.as_str_slice().len();
+        let Some(at) = self.rfind(sep) else {
+            return null;
+        };
+        return Option::Some(self.cut_at(at, sep_len));
+    }
+
+    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] with stores[self] {
+        return [
+            self.sub_unchecked(0, at),
+            self.sub_unchecked(at + sep_len, self.len()),
+        ];
+    }
+
+    pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
+        return StrCharIndicesIter { repr: self.repr, used: self.end, byte_index: self.start, base: self.start };
+    }
+
+    pub fn to_chars(&self) -> List<char> {
+        let mut chars: List<char> = List::with_capacity(self.len());
+        for let c of self.chars() {
+            chars.push(c);
+        }
+        return chars;
+    }
+
+    pub fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
+        return char::from_u32_unchecked(decode_char_at(self.repr, self.start + byte_index).0);
+    }
+
+    pub fn to_ascii_lowercase(&self) -> String {
+        return String::from_iter(self.chars().map(|c: char| c.to_ascii_lowercase()));
+    }
+
+    pub fn to_ascii_uppercase(&self) -> String {
+        return String::from_iter(self.chars().map(|c: char| c.to_ascii_uppercase()));
+    }
+
+    pub fn substr_bytes(&self, start: i32, end: i32) -> String {
+        return self.sub(start, end).to_string();
+    }
+
+    pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
+        return self.sub_unchecked(start, end).to_string();
+    }
+
+    pub fn contains_char(&self, ch: char) -> bool {
+        for let c of self.chars() {
+            if c == ch {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn find_char(&self, mut pred: fn mut(char) -> bool) -> Option<i32> {
+        let mut iter = self.chars();
+        for let mut byte_index = 0; let Some(c) = iter.next(); byte_index += c.len_utf8() {
+            if pred(c) {
+                return Option::Some(byte_index);
+            }
+        }
+        return null;
+    }
+
+    pub fn repeat(&self, n: i32) -> String {
+        let len = self.len();
+        if n <= 0 || len == 0 {
+            return String::with_capacity(0);
+        }
+        let mut result = String::with_capacity(len * n);
+        for let mut r = 0; r < n; r += 1 {
+            result.push_str(*self);
+        }
+        return result;
+    }
+
+    /// Replaces all occurrences of `from` with `to`.
+    pub fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String {
+        return self.replacen(from, to, -1);
+    }
+
+    /// Replaces the first `count` occurrences of `from` with `to`.
+    /// If `count` is negative, replaces all occurrences.
+    pub fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String {
+        let pat = from.as_str_slice();
+        let from_len = pat.len();
+        let len = self.len();
+        if from_len == 0 {
+            return self.to_string();
+        }
+        let mut result = String::with_capacity(len);
+        let mut pos = 0;
+        let mut replacements = 0;
+        let limit = len - from_len;
+        while pos <= limit {
+            if count >= 0 && replacements >= count {
+                break;
+            }
+            if bytes_match_at(self.repr, self.start + pos, pat.repr, pat.start, from_len) {
+                result.push_str(to);
+                pos += from_len;
+                replacements += 1;
+            } else {
+                let dst = result.internal_reserve_uninit(1);
+                result.set_byte_unchecked(dst, self.get_byte_unchecked(pos));
+                pos += 1;
+            }
+        }
+        if pos < len {
+            result.push_str(self.sub_unchecked(pos, len));
+        }
+        return result;
+    }
 }
 
 /// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 /// owned string, a reference to one, or a view of part of one.
 pub trait AsStrSlice {
     fn as_str_slice(&self) -> StrSlice with stores[self];
+
+    /// Append this text to `out`. `String` overrides it to copy straight out of
+    /// its own backing array: the view the default builds hides the append's
+    /// operands from the constant-folding frame, which is how a template of
+    /// literals stops folding to one.
+    fn internal_append_to(&self, out: &mut String) {
+        let view = self.as_str_slice();
+        out.internal_push_view(&view);
+    }
+
+    fn len(&self) -> i32 {
+        return self.as_str_slice().len();
+    }
+
+    fn is_empty(&self) -> bool {
+        return self.as_str_slice().is_empty();
+    }
+
+    fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.as_str_slice().get_byte_unchecked(index);
+    }
+
+    fn is_char_boundary(&self, index: i32) -> bool {
+        return self.as_str_slice().is_char_boundary(index);
+    }
+
+    fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+        return self.as_str_slice().sub(start, end);
+    }
+
+    fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+        return self.as_str_slice().sub_unchecked(start, end);
+    }
+
+    fn as_bytes(&self) -> ByteSlice with stores[self] {
+        return self.as_str_slice().as_bytes();
+    }
+
+    fn chars(&self) -> StrCharIter with stores[self] {
+        return self.as_str_slice().chars();
+    }
+
+    fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
+        return self.as_str_slice().bytes();
+    }
+
+    fn to_string(&self) -> String {
+        return self.as_str_slice().to_string();
+    }
+
+    fn starts_with<P: AsStrSlice>(&self, pat: P) -> bool {
+        return self.as_str_slice().starts_with(pat);
+    }
+
+    fn ends_with<P: AsStrSlice>(&self, pat: P) -> bool {
+        return self.as_str_slice().ends_with(pat);
+    }
+
+    fn contains<P: AsStrSlice>(&self, pat: P) -> bool {
+        return self.as_str_slice().contains(pat);
+    }
+
+    fn find<P: AsStrSlice>(&self, pat: P) -> Option<i32> {
+        return self.as_str_slice().find(pat);
+    }
+
+    fn rfind<P: AsStrSlice>(&self, pat: P) -> Option<i32> {
+        return self.as_str_slice().rfind(pat);
+    }
+
+    fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self] {
+        return self.as_str_slice().strip_prefix(prefix);
+    }
+
+    fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self] {
+        return self.as_str_slice().strip_suffix(suffix);
+    }
+
+    fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering {
+        return self.as_str_slice().cmp_str(other);
+    }
+
+    fn eq_str<P: AsStrSlice>(&self, other: P) -> bool {
+        return self.as_str_slice().eq_str(other);
+    }
+
+    fn eq_ignore_ascii_case<P: AsStrSlice>(&self, other: P) -> bool {
+        return self.as_str_slice().eq_ignore_ascii_case(other);
+    }
+
+    fn char_at_byte(&self, byte_index: i32) -> Option<char> {
+        return self.as_str_slice().char_at_byte(byte_index);
+    }
+
+    fn trim_ascii_start(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii_start();
+    }
+
+    fn trim_ascii_end(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii_end();
+    }
+
+    fn trim_ascii(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_ascii();
+    }
+
+    fn trim_start(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_start();
+    }
+
+    fn trim_end(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim_end();
+    }
+
+    fn trim(&self) -> StrSlice with stores[self] {
+        return self.as_str_slice().trim();
+    }
+
+    fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self] {
+        return self.as_str_slice().split(sep);
+    }
+
+    fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self] {
+        return self.as_str_slice().splitn(n, sep);
+    }
+
+    fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
+        return self.as_str_slice().split_whitespace();
+    }
+
+    fn lines(&self) -> StrLinesIter with stores[self] {
+        return self.as_str_slice().lines();
+    }
+
+    fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        return self.as_str_slice().split_once(sep);
+    }
+
+    fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+        return self.as_str_slice().rsplit_once(sep);
+    }
+
+    fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
+        return self.as_str_slice().char_indices();
+    }
+
+    fn to_chars(&self) -> List<char> {
+        return self.as_str_slice().to_chars();
+    }
+
+    fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
+        return self.as_str_slice().char_at_byte_unchecked(byte_index);
+    }
+
+    fn to_ascii_lowercase(&self) -> String {
+        return self.as_str_slice().to_ascii_lowercase();
+    }
+
+    fn to_ascii_uppercase(&self) -> String {
+        return self.as_str_slice().to_ascii_uppercase();
+    }
+
+    fn substr_bytes(&self, start: i32, end: i32) -> String {
+        return self.as_str_slice().substr_bytes(start, end);
+    }
+
+    fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
+        return self.as_str_slice().substr_bytes_unchecked(start, end);
+    }
+
+    fn contains_char(&self, ch: char) -> bool {
+        return self.as_str_slice().contains_char(ch);
+    }
+
+    fn find_char(&self, pred: fn mut(char) -> bool) -> Option<i32> {
+        return self.as_str_slice().find_char(pred);
+    }
+
+    fn repeat(&self, n: i32) -> String {
+        return self.as_str_slice().repeat(n);
+    }
+
+    fn replace<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T) -> String {
+        return self.as_str_slice().replace(from, to);
+    }
+
+    fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String {
+        return self.as_str_slice().replacen(from, to, count);
+    }
 }
 
 impl AsStrSlice for String {
     fn as_str_slice(&self) -> StrSlice with stores[self] {
         return StrSlice::internal_new(&self.repr as &Array<u8>, 0, self.used);
+    }
+
+    fn internal_append_to(&self, out: &mut String) {
+        out.internal_push_string(self);
+    }
+
+    /// The byte accessors read the backing array directly. The default builds a
+    /// view per call, which a scan over a generic body's text pays per byte.
+    fn len(&self) -> i32 {
+        return self.used;
+    }
+
+    fn is_empty(&self) -> bool {
+        return self.used == 0;
+    }
+
+    fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return self.repr[index];
+    }
+
+    /// Already a `String`: the default would rebuild one byte by byte, which a
+    /// per-field wire name pays on every serialization.
+    fn to_string(&self) -> String {
+        return *self;
+    }
+}
+
+impl<T: AsStrSlice> AsStrSlice for &T {
+    fn as_str_slice(&self) -> StrSlice with stores[self] {
+        return (*self).as_str_slice();
+    }
+
+    fn internal_append_to(&self, out: &mut String) {
+        (*self).internal_append_to(out);
+    }
+
+    /// Forwarded, so a reference reaches `T`'s own overrides instead of the
+    /// defaults, which answer through a view built on every call.
+    fn len(&self) -> i32 {
+        return (*self).len();
+    }
+
+    fn is_empty(&self) -> bool {
+        return (*self).is_empty();
+    }
+
+    fn get_byte_unchecked(&self, index: i32) -> u8 {
+        return (*self).get_byte_unchecked(index);
+    }
+
+    fn is_char_boundary(&self, index: i32) -> bool {
+        return (*self).is_char_boundary(index);
+    }
+
+    fn char_at_byte_unchecked(&self, byte_index: i32) -> char {
+        return (*self).char_at_byte_unchecked(byte_index);
+    }
+
+    fn to_string(&self) -> String {
+        return (*self).to_string();
     }
 }
 
@@ -1506,5 +1894,19 @@ impl Eq for StrSlice {
 impl Ord for StrSlice {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return seq_cmp(self.repr, self.start, self.end, other.repr, other.start, other.end);
+    }
+}
+
+/// A view and an owned string are the same text when their bytes are, so `==`
+/// spans the two rather than asking the caller which side to copy.
+impl Eq<String> for StrSlice {
+    pub fn eq(&self, other: &String) -> bool {
+        return self.eq_str(other);
+    }
+}
+
+impl Eq<StrSlice> for String {
+    pub fn eq(&self, other: &StrSlice) -> bool {
+        return other.eq_str(self);
     }
 }

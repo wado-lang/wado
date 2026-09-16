@@ -7,21 +7,21 @@ use t from "./grammars/amb_tour.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_tour" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = t::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = t::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "tournament: assignment wins on '='" {
-    assert_tree(&"x = 5", &"(prog (stat x = (expr 5)))");
+    assert_tree("x = 5", "(prog (stat x = (expr 5)))");
 }
 
 test "tournament: bare identifier expr" {
-    assert_tree(&"x", &"(prog (stat (expr x)))");
+    assert_tree("x", "(prog (stat (expr x)))");
 }
 
 test "tournament: bare integer expr" {
-    assert_tree(&"42", &"(prog (stat (expr 42)))");
+    assert_tree("42", "(prog (stat (expr 42)))");
 }

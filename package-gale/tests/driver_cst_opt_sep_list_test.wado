@@ -7,25 +7,25 @@ use osl from "./grammars/opt_sep_list.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_opt_sep_list" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = osl::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}`;
+    assert result.ok(), `unexpected diagnostics for ${input.to_string()}`;
     let actual = osl::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input.to_string()}\nexpected: ${expected.to_string()}\nactual:   ${actual}`;
 }
 
 test "opt-sep-list: empty list" {
-    assert_tree(&"", &"(prog list)");
+    assert_tree("", "(prog list)");
 }
 
 test "opt-sep-list: single arm" {
-    assert_tree(&"a", &"(prog (list (arm a)))");
+    assert_tree("a", "(prog (list (arm a)))");
 }
 
 test "opt-sep-list: comma-separated arms" {
-    assert_tree(&"a , b", &"(prog (list (arm a) , (arm b)))");
+    assert_tree("a , b", "(prog (list (arm a) , (arm b)))");
 }
 
 test "opt-sep-list: trailing comma yields to the optional `,?`" {
-    assert_tree(&"a , b ,", &"(prog (list (arm a) , (arm b) ,))");
+    assert_tree("a , b ,", "(prog (list (arm a) , (arm b) ,))");
 }
