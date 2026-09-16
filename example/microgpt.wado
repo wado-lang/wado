@@ -299,16 +299,10 @@ impl Cache {
     }
 }
 
-// The innermost loop of the whole program, so it stays an index walk: an
-// iterator chain here costs about a fifth of the run time.
 fn dot(t: &mut Tape, a: Slice<i32>, b: Slice<i32>) -> i32 {
-    assert a.len() == b.len() && !a.is_empty();
-    let mut acc = t.mul(a[0], b[0]);
-    for let mut i = 1; i < a.len(); i += 1 {
-        let term = t.mul(a[i], b[i]);
-        acc = t.add(acc, term);
-    }
-    return acc;
+    assert a.len() == b.len();
+    let mut terms = a.into_iter().zip(b.into_iter()).map(|pair| t.mul(pair.0, pair.1));
+    return terms.reduce(|x, y| t.add(x, y)).expect("dot of no terms");
 }
 
 fn sum(t: &mut Tape, xs: Slice<i32>) -> i32 {
@@ -357,7 +351,7 @@ fn attention(t: &mut Tape, cache: &Cache, q: &List<i32>, layer: i32, pos_id: i32
         }).collect();
         let weights = softmax(t, &logits);
 
-        for let mut j = 0; j < HEAD_DIM; j += 1 {
+        for let j of 0..<HEAD_DIM {
             let blend = (0..=pos_id).into_iter().map(|p| {
                 let value = cache.values[Cache::offset(p, layer) + hs + j];
                 return t.mul(weights[p], value);
@@ -405,13 +399,12 @@ fn gpt(t: &mut Tape, model: &Gpt, cache: &mut Cache, token_id: i32, pos_id: i32)
 fn forward_loss(t: &mut Tape, model: &Gpt, tokens: &List<i32>) -> i32 {
     let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
     let mut cache = Cache::new();
-    let mut losses: List<i32> = List::with_capacity(n);
-    for let pos_id of 0..<n {
+    let losses: List<i32> = (0..<n).into_iter().map(|pos_id| {
         let logits = gpt(t, model, &mut cache, tokens[pos_id], pos_id);
         let probs = softmax(t, &logits);
         let log_prob = t.log(probs[tokens[pos_id + 1]]);
-        losses.push(t.mul_scalar(log_prob, -1.0));
-    }
+        return t.mul_scalar(log_prob, -1.0);
+    }).collect();
     let total = sum(t, losses.as_slice());
     return t.mul_scalar(total, 1.0 / n as f64);
 }
@@ -465,8 +458,8 @@ fn train(t: &mut Tape, model: &Gpt, tok: &Tokenizer, docs: &List<String>, num_st
 fn sample_token(rng: &mut Rng, probs: &List<f64>) -> i32 {
     let total = probs.as_slice().into_iter().sum().unwrap_or(0.0);
     let mut r = rng.next_f64() * total;
-    for let mut i = 0; i < probs.len(); i += 1 {
-        r -= probs[i];
+    for let [i, p] of probs.into_iter().enumerate() {
+        r -= *p;
         if r < 0.0 {
             return i;
         }
