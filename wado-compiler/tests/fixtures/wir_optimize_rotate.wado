@@ -30,6 +30,13 @@ fn rotr64_const(x: u64) -> u64 {
     return x >> 40 | x << 24;
 }
 
+// Not a rotate: the counts do not add up to 64, and adding them at all used to
+// overflow the fold's check. Wasm reduces each mod 64, so this is `x << 63 | x
+// >>u 1`.
+fn shift_counts_that_overflow_their_sum(x: u64) -> u64 {
+    return x << 9223372036854775807 | x >> 1;
+}
+
 test {
     let x32 = builtin::black_box(0x12345678 as u32);
     let x64 = builtin::black_box(0x0123456789abcdef as u64);
@@ -45,6 +52,7 @@ test {
 
     assert rotl32_const(x32) == 0x1a2b3c09;
     assert rotr64_const(x64) == 0x6789abcdef012345;
+    assert shift_counts_that_overflow_their_sum(x64) == 0x8091a2b3c4d5e6f7;
 }
 
 __DATA__
@@ -52,5 +60,5 @@ __DATA__
     "test": {},
     "wir_expect:O0": ["<<", ">>u"],
     "wir_expect:O1": ["rotl", "rotr"],
-    "wir_expect:O2": ["rotl", "rotr"]
+    "wir_expect:O2": ["rotl", "rotr", "<<"]
 }

@@ -554,18 +554,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// an instruction immediate, so only a literal naming a lane that exists
     /// can be lowered — anything else reaches codegen as an invalid module.
     fn check_simd_lane_immediates(&mut self, builtin: &str, args: &[Expr]) {
-        let Some((count, lanes)) = simd_lane_immediates(builtin) else {
+        let Some(SimdLaneShape {
+            immediates,
+            arity,
+            lanes,
+        }) = simd_lane_immediates(builtin)
+        else {
             return;
         };
-        for arg in args.iter().take(count) {
-            let literal = match arg {
-                Expr::Literal(lit) => match &lit.value {
-                    ast::Literal::Number(repr) => parse_i128_literal(repr).ok(),
-                    _ => None,
-                },
-                _ => None,
-            };
-            let message = match literal {
+        // A miscounted call has no lane positions yet: every argument has
+        // shifted, and the arity error is the one to report.
+        if args.len() != arity {
+            return;
+        }
+        for arg in args.iter().take(immediates) {
+            let message = match lane_literal(arg) {
                 None => format!("`builtin::{builtin}` needs an integer literal lane index"),
                 Some(lane) if lane < 0 || lane >= lanes => {
                     format!("lane index out of range for `builtin::{builtin}`: {lane} (0..{lanes})")
@@ -3680,17 +3683,46 @@ impl TypeSystem {
     }
 }
 
-/// The lane immediates a SIMD builtin takes: how many leading arguments are
-/// lane indices, and how many lanes they may name. `i8x16.shuffle` indexes a
+/// The lane a literal argument names. A negative one is a negation applied to
+/// a literal rather than a literal, and reaches the range check either way.
+fn lane_literal(arg: &Expr) -> Option<i128> {
+    match arg {
+        Expr::Literal(lit) => match &lit.value {
+            ast::Literal::Number(repr) => parse_i128_literal(repr).ok(),
+            _ => None,
+        },
+        Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => {
+            lane_literal(&unary.expr)?.checked_neg()
+        }
+        _ => None,
+    }
+}
+
+/// Where a SIMD builtin keeps its lane immediates, and what they may name.
+struct SimdLaneShape {
+    immediates: usize,
+    arity: usize,
+    lanes: i128,
+}
+
+/// The lane shape a SIMD builtin's name spells out. `i8x16.shuffle` indexes a
 /// pair of vectors, so its bound is twice a single vector's.
-fn simd_lane_immediates(builtin: &str) -> Option<(usize, i128)> {
+fn simd_lane_immediates(builtin: &str) -> Option<SimdLaneShape> {
     if builtin == "i8x16_shuffle" {
-        return Some((16, 32));
+        return Some(SimdLaneShape {
+            immediates: 16,
+            arity: 18,
+            lanes: 32,
+        });
     }
     let (vector, operation) = builtin.split_once('_')?;
-    if !operation.starts_with("extract_lane") && !operation.starts_with("replace_lane") {
+    let arity = if operation.starts_with("extract_lane") {
+        2
+    } else if operation.starts_with("replace_lane") {
+        3
+    } else {
         return None;
-    }
+    };
     let lanes = match vector {
         "i8x16" => 16,
         "i16x8" => 8,
@@ -3698,7 +3730,11 @@ fn simd_lane_immediates(builtin: &str) -> Option<(usize, i128)> {
         "i64x2" | "f64x2" => 2,
         _ => return None,
     };
-    Some((1, lanes))
+    Some(SimdLaneShape {
+        immediates: 1,
+        arity,
+        lanes,
+    })
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

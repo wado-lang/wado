@@ -911,10 +911,11 @@ fn is_same_free_read(a: &WirInstr, b: &WirInstr) -> bool {
 }
 
 /// `complement` is `width - amount`, written either as the subtraction itself
-/// or as two constants that add up to the width.
+/// or as two constants that add up to the width. Both constants are whatever
+/// the source wrote, so the sum is taken under an overflow check.
 fn is_width_complement(width: i64, amount: &WirInstr, complement: &WirInstr) -> bool {
     if let (Some(n), Some(m)) = (const_int(amount), const_int(complement)) {
-        return n >= 0 && m >= 0 && n + m == width;
+        return n >= 0 && m >= 0 && n.checked_add(m) == Some(width);
     }
     match complement {
         WirInstr::I32Sub(w, n) | WirInstr::I64Sub(w, n) => {
