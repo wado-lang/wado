@@ -1,0 +1,40 @@
+use icu from "core:icu";
+
+test "binary properties come back as ranges" {
+    assert icu::ranges(&"White_Space").unwrap()[0] == [9, 13];
+    assert icu::ranges(&"Hex_Digit").unwrap()[0] == [48, 57];
+}
+
+test "an enumerated property takes its value" {
+    assert icu::value_ranges(&"gc", &"Lu").unwrap()[0] == [65, 90];
+    assert icu::value_ranges(&"sc", &"Hiragana").unwrap()[0] == [12353, 12438];
+}
+
+test "a General_Category value may name a group" {
+    let group = icu::value_ranges(&"gc", &"L").unwrap();
+    assert group[0] == [65, 90];
+    assert group[1] == [97, 122];
+}
+
+test "a name matches as UAX 44 matches it" {
+    assert icu::ranges(&"white space") == icu::ranges(&"WSpace");
+    assert icu::value_ranges(&"General_Category", &"uppercase letter")
+        == icu::value_ranges(&"gc", &"Lu");
+}
+
+test "one character is answered without building the ranges" {
+    assert icu::contains(&"Uppercase", 'À').unwrap();
+    assert !icu::contains(&"Uppercase", 'à').unwrap();
+    assert icu::value_contains(&"gcb", &"Regional_Indicator", '\u{1F1EF}').unwrap();
+}
+
+// `Block`, `Decomposition_Type` and the UCD's contributory `Other_*` are
+// withheld rather than approximated: a caller complementing an approximate set
+// admits real members of the property rather than missing some.
+test "a name this build does not answer is null, not an empty set" {
+    assert icu::ranges(&"Other_ID_Start") matches { None };
+    assert icu::ranges(&"Other_Alphabetic") matches { None };
+    assert icu::value_ranges(&"blk", &"Greek") matches { None };
+    assert icu::value_ranges(&"dt", &"Font") matches { None };
+    assert icu::contains(&"Other_Math", 'x') matches { None };
+}

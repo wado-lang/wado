@@ -390,7 +390,8 @@ cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:json_nsd core:args core:value core:cbor core:simd core:url core:kiln \
-  core:benchmark core:router core:digest core:random core:uuid core:temporal core:log core:jwt"
+  core:benchmark core:router core:digest core:random core:uuid core:temporal core:log core:jwt \
+  core:icu"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -573,6 +574,29 @@ if cmp -s "$WAT_TMP" "$WAT_FILE"; then
 else
   mv "$WAT_TMP" "$WAT_FILE"
   echo "  bundled libm WAT updated"
+fi
+"""
+
+[tasks.update-bundled-icu]
+description = "Rebuild the bundled ICU character-property component"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+cd wado-bundled-icu && cargo build --release && cd ..
+CORE="wado-bundled-icu/target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm"
+COMPONENT="wado-bundled-icu/target/icu.component.wasm"
+# The crate imports nothing, so the wrap needs no WASI adapter.
+wasm-tools component new "$CORE" -o "$COMPONENT"
+wasm-tools validate "$COMPONENT"
+WAT_FILE="wado-compiler/lib/core/icu.wat"
+WAT_TMP="${WAT_FILE}.tmp"
+wasm-tools print -f "$COMPONENT" -o "$WAT_TMP"
+if cmp -s "$WAT_TMP" "$WAT_FILE"; then
+  rm "$WAT_TMP"
+  echo "  bundled ICU WAT unchanged, skipping update"
+else
+  mv "$WAT_TMP" "$WAT_FILE"
+  echo "  bundled ICU WAT updated"
 fi
 """
 
