@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.0.29](https://github.com/wado-lang/wado/compare/v0.0.28...v0.0.29) - 2026-09-16
+
+- fix(lower): value-copy hand-over decided by place, and a variant pattern carrying its case index by @gfx in https://github.com/wado-lang/wado/pull/2054
+- feat(gale): diagnostics through core:log, and one checked path for every type-parameter slot by @gfx in https://github.com/wado-lang/wado/pull/2056
+- fix(compiler): two wrong-code bugs, from an EMI campaign widened to a loop guard and five levels by @gfx in https://github.com/wado-lang/wado/pull/2052
+- feat(prelude): StrSlice and AsStrSlice — one signature for String, &String and a view, free at -O2 by @gfx in https://github.com/wado-lang/wado/pull/2055
+- feat: warn when a binder shadows a known name, and check every declared world by @gfx in https://github.com/wado-lang/wado/pull/2062
+- fix(compiler): a global initializer is a function body, and every pass walks it by @gfx in https://github.com/wado-lang/wado/pull/2063
+- feat(lang): branchless comparison chains, and the bounds checks they unblock by @gfx in https://github.com/wado-lang/wado/pull/2065
+
 ## [v0.0.28](https://github.com/wado-lang/wado/compare/v0.0.27...v0.0.28) - 2026-09-14
 
 - perf(liveness): a trait's default body is an edge, not a root (e2e −8.7%) by @gfx in https://github.com/wado-lang/wado/pull/2017
