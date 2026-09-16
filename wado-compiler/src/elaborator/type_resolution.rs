@@ -581,9 +581,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_named_type_at(None, name, span, false)
     }
 
-    /// Report an application writing more type arguments than `params`
-    /// declares, and say whether it did. One short of the arity may be filling
-    /// the rest from defaults, which [`Self::type_args_of_application`] settles.
+    /// Report an application writing more type arguments than `params` declares,
+    /// and say whether it did. Fewer is [`Self::type_args_of_application`]'s.
     fn reject_surplus_type_args(
         &mut self,
         name: &str,

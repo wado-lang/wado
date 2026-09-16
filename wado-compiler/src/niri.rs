@@ -322,11 +322,9 @@ pub fn is_ctfe_eligible(func: &NirFunction) -> bool {
 }
 
 /// Derive the [`MaterializingGlobals`] set: claim a global on the block that
-/// stores into it, and drop it again on any mention the block does not enclose.
-/// What is left is stored in one place and read only under it, so a frame
-/// running that block binds the value and the global leaves with the block. One
-/// derivation for the fold and the remark alike, which must agree on what a
-/// store means.
+/// stores into it, and drop it again on any mention that block does not enclose.
+/// What survives is stored in one place and read only under it. One derivation
+/// for the fold and the remark alike, which must agree on what a store means.
 #[must_use]
 pub fn materializing_globals(project: &NirPackage) -> MaterializingGlobals {
     enum Step {
