@@ -46,15 +46,7 @@ use {
 use { G4Token } from "./token.wado";
 use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
 use { scan_balanced, is_id_continue_char } from "./scan.wado";
-use { decode as base64_decode } from "core:base64";
-use {
-    general_category_ranges,
-    general_category_group,
-    script_ranges,
-    block_ranges,
-    binary_property_ranges,
-    enumerated_property_ranges,
-} from "./unicode_tables.wado";
+use icu from "core:icu";
 
 pub struct G4Parser {
     tokens: List<Token>,
@@ -119,11 +111,17 @@ fn first_char(s: &String) -> Option<char> {
     return iter.next();
 }
 
+/// ANTLR4 retypes a rule by `Character.isUpperCase` on its first character
+/// (`vendor/antlr4/doc/lexicon.md`), which is the UCD's `Uppercase` — `Lu`
+/// plus `Other_Uppercase`, not the ASCII range.
 fn is_lexer_rule_name(name: &String) -> bool {
-    if let Some(c) = first_char(name) {
+    let Some(c) = first_char(name) else {
+        return false;
+    };
+    if c <= '\u{007F}' {
         return 'A' <= c <= 'Z';
     }
-    return false;
+    return icu::contains(&"Uppercase", c).unwrap_or(false);
 }
 
 fn is_valid_not_set_element(elem: &Element) -> bool {
@@ -1455,11 +1453,7 @@ fn parse_char_class(text: &String, span: Span) -> Result<CharClass, ParseError> 
             if !expand_unicode_property(&prop, &mut prop_ranges) {
                 let expected: List<String> = ["a supported Unicode property"];
                 return Result::<CharClass, ParseError>::Err(
-                    ParseError::new(
-                        `unsupported Unicode property "${prop}" in a character set`,
-                        span,
-                        expected,
-                    ),
+                    ParseError::new(unsupported_property_message(&prop), span, expected),
                 );
             }
             if opens_char_range(&chars, pos, end) {
@@ -1556,18 +1550,16 @@ fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
     return out;
 }
 
-/// Expand a `\p{...}` property into its ranges. False for a property with no
-/// table, so the caller can reject rather than yield a set matching nothing.
+/// Expand a `\p{...}` property into its ranges. False for a property
+/// `core:icu` does not answer, so the caller can reject rather than yield a set
+/// matching nothing.
 ///
 /// Bare names are resolved POSIX → general category → script → binary
-/// property → block, which is what makes a block need the `In` prefix ANTLR4
-/// documents (`\p{InGreek}`); a name that happens to start with `in` (the
-/// `Inscriptional_*` scripts) is answered by an earlier table. The POSIX names
-/// go first so their meaning stays the measured one even if a future UCD grows
-/// a property that spells the same. The `Property=Value` form names its table
-/// instead; the enumerated properties (`lb=`, `bc=`, …) are reachable only
-/// that way, their single-letter values being ones a bare-name lookup would
-/// collide with.
+/// property. The POSIX names go first so their meaning stays the measured one
+/// even if a future UCD grows a property that spells the same. The
+/// `Property=Value` form names its property instead; the enumerated properties
+/// (`lb=`, `bc=`, …) are reachable only that way, their single-letter values
+/// being ones a bare-name lookup would collide with.
 fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool {
     let key = normalize_property_name(name);
     let mut parts = key.split("=");
@@ -1576,30 +1568,21 @@ fn expand_unicode_property(name: &String, ranges: &mut List<CharRange>) -> bool 
         if parts.next() matches { Some(_) } {
             return false;
         }
-        return match head {
-            "generalcategory" | "gc" => expand_general_category(&value, ranges),
-            "script" | "sc" => push_property_ranges(&script_ranges(&value), ranges),
-            "block" | "blk" => push_property_ranges(&block_ranges(&value), ranges),
-            "emojipresentation" => expand_emoji_presentation(&value, ranges),
-            _ => push_property_ranges(&enumerated_property_ranges(&head, &value), ranges),
-        };
+        if head == "emojipresentation" {
+            return expand_emoji_presentation(&value, ranges);
+        }
+        return push_found_ranges(value_ranges(&head, &value), ranges);
     }
     if expand_posix_property(&key, ranges) {
         return true;
     }
-    if expand_general_category(&key, ranges) {
+    if push_found_ranges(value_ranges(&"gc", &key), ranges) {
         return true;
     }
-    if push_property_ranges(&script_ranges(&key), ranges) {
+    if push_found_ranges(value_ranges(&"sc", &key), ranges) {
         return true;
     }
-    if push_property_ranges(&binary_property_ranges(&key), ranges) {
-        return true;
-    }
-    if key.starts_with("in") {
-        return push_property_ranges(&block_ranges(&drop_prefix(&key, 2)), ranges);
-    }
-    return false;
+    return push_found_ranges(binary_ranges(&key), ranges);
 }
 
 /// `a - b`, via De Morgan (`!(!a | b)`) so the only set primitive here is the
@@ -1625,22 +1608,56 @@ fn union_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange
     return out;
 }
 
-/// Ranges for a table entry this file names literally. The key is a constant,
-/// so an empty entry is generator drift, not user input — except `gc=Cs`,
-/// whose surrogates `clip_to_scalars` drops on the way in.
-fn required_ranges(encoded: &String, name: &String) -> List<CharRange> {
-    assert !encoded.is_empty(), `unicode_tables.wado has no entry for '${*name}'`;
-    let mut out: List<CharRange> = [];
-    push_encoded_ranges(encoded, &mut out);
-    return out;
+/// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
+/// does not answer, which is what lets the caller reject it.
+///
+/// ANTLR4 matches UTF-16 code units where Gale matches decoded scalars, so the
+/// surrogate part of a range is dropped rather than carried.
+fn binary_ranges(property: &String) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::ranges(property));
 }
 
+/// An enumerated property value's ranges, as Unicode scalars. `gc` takes a
+/// group letter (`L`) as well as a category (`Lu`).
+fn value_ranges(property: &String, value: &String) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::value_ranges(property, value));
+}
+
+fn scalar_ranges(found: Option<List<[u32, u32]>>) -> Option<List<CharRange>> {
+    let Some(found) = found else {
+        return null;
+    };
+    let mut out: List<CharRange> = [];
+    for let r of &found {
+        clip_to_scalars(&mut out, r.0 as i32, r.1 as i32);
+    }
+    return Option::Some(out);
+}
+
+fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange>) -> bool {
+    let Some(items) = found else {
+        return false;
+    };
+    for let r of &items {
+        ranges.push(*r);
+    }
+    return true;
+}
+
+/// Ranges for a property this file names literally, so a name `core:icu` does
+/// not answer is Gale's own mistake rather than user input.
 fn gc_set(key: &String) -> List<CharRange> {
-    return required_ranges(&general_category_ranges(key), key);
+    let Some(ranges) = value_ranges(&"gc", key) else {
+        panic(`core:icu does not answer gc=${*key}`);
+    };
+    return ranges;
 }
 
 fn binary_set(key: &String) -> List<CharRange> {
-    return required_ranges(&binary_property_ranges(key), key);
+    let Some(ranges) = binary_ranges(key) else {
+        panic(`core:icu does not answer '${*key}'`);
+    };
+    return ranges;
 }
 
 /// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
@@ -1728,30 +1745,35 @@ fn expand_emoji_presentation(value: &String, ranges: &mut List<CharRange>) -> bo
     return false;
 }
 
-/// A general category (`Lu`), or a group letter (`L`) as the union of its
-/// subcategories.
-fn expand_general_category(key: &String, ranges: &mut List<CharRange>) -> bool {
-    let group = general_category_group(key);
-    if !group.is_empty() {
-        for let sub of &group {
-            push_encoded_ranges(&general_category_ranges(sub), ranges);
-        }
-        return true;
+/// Why `\p{name}` was refused. Three families ANTLR4 answers are deliberately
+/// not Gale's, so each says so rather than reading as a hole in a table.
+fn unsupported_property_message(name: &String) -> String {
+    let key = normalize_property_name(name);
+    let head = key.split("=").next().unwrap();
+    if head == "block" || head == "blk" || key.starts_with("in") {
+        return `Gale does not answer the Block property ("${*name}"): ICU ships no Block data. Name a script (\\p{Greek}) or the code point range itself.`;
     }
-    return push_property_ranges(&general_category_ranges(key), ranges);
+    if head == "decompositiontype" || head == "dt" {
+        return `Gale does not answer Decomposition_Type ("${*name}"): ICU ships no data for it.`;
+    }
+    if contributory_property_names().contains(&key) {
+        return `"${*name}" is a contributory property, which UAX #44 defines as an input to a derived property rather than one to query. Name the derived property instead (\\p{Alphabetic}, \\p{ID_Start}, …).`;
+    }
+    return `unsupported Unicode property "${*name}" in a character set`;
 }
 
-fn push_property_ranges(encoded: &String, ranges: &mut List<CharRange>) -> bool {
-    if encoded.is_empty() {
-        return false;
-    }
-    push_encoded_ranges(encoded, ranges);
-    return true;
+/// The UCD's contributory properties, folded. ICU omits them, and a general
+/// category spelling `Other_*` (`Lo`, `No`) is answered before this is asked.
+fn contributory_property_names() -> List<String> {
+    return [
+        "otheralphabetic", "oalpha", "otherdefaultignorablecodepoint", "odi", "othergraphemeextend", "ogrext",
+        "otheridcontinue", "oidc", "otheridstart", "oids", "otherlowercase", "olower", "othermath", "omath",
+        "otheruppercase", "oupper",
+    ];
 }
 
-/// Fold a property name to its table key. UAX #44 matches property and value
-/// names ignoring case, `_`, `-` and spaces, and `scripts/gen_unicode_tables`
-/// emits every key folded the same way.
+/// Fold a property name the way UAX #44 matches one: ignoring case, `_`, `-`
+/// and spaces.
 fn normalize_property_name(name: &String) -> String {
     let mut out = String::with_capacity(name.len());
     for let c of name.chars() {
@@ -1761,48 +1783,6 @@ fn normalize_property_name(name: &String) -> String {
         out.push(c.to_ascii_lowercase());
     }
     return out;
-}
-
-fn drop_prefix(name: &String, count: i32) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut i = 0;
-    for let c of name.chars() {
-        if i >= count {
-            out.push(c);
-        }
-        i += 1;
-    }
-    return out;
-}
-
-/// Decode a range list from the generated tables: base64 over a varint stream
-/// whose every range is the gap from the previous range's end, shifted up one
-/// bit saying whether a length varint follows.
-fn push_encoded_ranges(encoded: &String, ranges: &mut List<CharRange>) {
-    let bytes = base64_decode(encoded).unwrap();
-    let mut pos = 0;
-    let mut prev = -1;
-    while pos < bytes.len() {
-        let head = read_varint(&bytes, &mut pos);
-        let lo = prev + 1 + head / 2;
-        let hi = if head % 2 == 0 { lo } else { lo + 1 + read_varint(&bytes, &mut pos) };
-        clip_to_scalars(ranges, lo, hi);
-        prev = hi;
-    }
-}
-
-fn read_varint(bytes: &ByteList, pos: &mut i32) -> i32 {
-    let mut value = 0;
-    let mut shift = 0;
-    loop {
-        let byte = bytes[*pos] as i32;
-        *pos += 1;
-        value |= (byte & 0x7F) << shift;
-        if byte < 0x80 {
-            return value;
-        }
-        shift += 7;
-    }
 }
 
 fn intern_mode(mode_names: &mut List<String>, name: &String) -> i32 {

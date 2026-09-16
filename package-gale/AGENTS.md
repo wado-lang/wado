@@ -115,13 +115,9 @@ Real-world grammars can also be oracle-pinned (Stage B′ over the published jar
 
 A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4-oracle.sh` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java`, once per base — a lexer and its sibling parser declare their own. Each is the Java twin of a Wado `impl` in the matching driver test, and keeping the pair in sync is what makes the comparison mean anything. `--probe-super` only reports what an input does against a synthesized base — it never yields pinnable output, for the reason in "Oracling a `superClass` grammar" in [`antlr4-compatibility.md`](./antlr4-compatibility.md). `scripts/antlr4-oracle-selftest.sh` pins both paths (needs java; run it after touching the oracle).
 
-The `\p{...}` tables get an exact whole-space diff instead of pinned samples: `scripts/check-unicode-properties.sh` compares every property against the jar. The jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), so regenerate to match first:
+`\p{...}` takes its properties from [`core:icu`](../docs/stdlib-core-icu.md), so the data is the toolchain's Unicode version and not Gale's to be wrong about. What Gale can still get wrong is the layer above it — the bare-name resolution order, the POSIX derivations, `EmojiPresentation=`, and the complement — and that is pinned character-by-character in `src/g4/parser_test.wado`.
 
-```sh
-scripts/regen-unicode-tables.sh 15.0.0   # match the jar
-scripts/check-unicode-properties.sh
-scripts/regen-unicode-tables.sh          # back to latest
-```
+`scripts/check-unicode-properties.sh` still diffs every property against the jar over the whole code-point space, but it is a diff tool rather than a gate: the jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), and there is no longer a knob to regenerate Gale's tables to match it. Read its output, not its exit status.
 
 To add an e2e grammar: drop the `.g4` in `tests/grammars/`, add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator. Open the file with a comment saying which shape it pins and why that shape is hard.
 

@@ -19,7 +19,10 @@ The highest-risk bugs: a static-prediction edge or a parse/scan asymmetry that c
 
 Entries state the symptom, how to reproduce it, and anything already measured — not a diagnosis or a proposed fix. A diagnosis written here reads as an instruction later, and two have been wrong: one would have broken compatibility if implemented as written, the other described a difference that did not exist.
 
-- [ ] **Blocked on ICU.** `ÀBC : [0-9]+ ;` is rejected as `unexpected character "À"`, though ANTLR4's `NameStartChar` admits `\u00C0` upwards. Measured: widening the g4 lexer's identifier predicates alone makes it parse, but `is_lexer_rule_name` then reads `ÀBC` as a _parser_ rule — it asks `is_ascii_uppercase` where ANTLR asks `Character.isUpperCase`. Both halves need `char::is_uppercase` (Stage C below). No corpus grammar hits this.
+Empty right now.
+
+<!-- `ÀBC : [0-9]+ ;` is rejected as `unexpected character "À"`, though ANTLR4's `NameStartChar` admits `\u00C0` upwards. Measured: widening the g4 lexer's identifier predicates alone makes it parse, but `is_lexer_rule_name` then reads `ÀBC` as a _parser_ rule — it asks `is_ascii_uppercase` where ANTLR asks `Character.isUpperCase`. Both halves need `char::is_uppercase` (Stage C below). No corpus grammar hits this.
+-->
 
 ### Pipeline and tooling correctness
 

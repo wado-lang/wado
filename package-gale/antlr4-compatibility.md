@@ -58,17 +58,37 @@ diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-### The Unicode version is Gale's, not the jar's
+### The Unicode version is the toolchain's, not the jar's
 
-`\p{...}` resolves against the latest UCD — 17.0.0 today — and tracking a
-new release promptly is the standing policy. ANTLR4 ships a property
-table frozen when the jar was built (4.13.2 is Unicode 15.0.0), so Gale
-runs ahead of it: **divergence that traces to the Unicode version is
-wontfix**. The superset rule already covers it — a newly assigned code
-point's meaning is fixed by the UCD, not invented by Gale.
+`\p{...}` resolves through [`core:icu`](../docs/stdlib-core-icu.md), so its
+Unicode version is whatever the Wado release carries — 17.0.0 today. ANTLR4
+ships a property table frozen when the jar was built (4.13.2 is Unicode
+15.0.0), so Gale runs ahead of it: **divergence that traces to the Unicode
+version is wontfix**. The superset rule already covers it: a newly assigned
+code point's meaning is fixed by the UCD, not invented by Gale.
 
-A derivation that disagrees on a code point _both_ versions define is
-still a bug; `scripts/check-unicode-properties.sh` separates the two.
+A derivation that disagrees on a code point _both_ versions define is still a
+bug. That is now the whole of what Gale can get wrong here, since the data is
+ICU's; what remains Gale's is the bare-name resolution order, the POSIX
+derivations, `EmojiPresentation=`, and the complement.
+
+### Three properties Gale deliberately does not answer
+
+ICU does not carry them, and Gale refuses rather than approximating. `\P{...}`
+complements what comes back, so a close-enough set would admit real members of
+the property instead of missing some. Each refusal names its reason.
+
+- **`Block`**, written `\p{Block=Greek}` or `\p{InGreek}`. ICU4X ships no Block
+  data. Name a script or the code point range itself.
+- **`Decomposition_Type`** (`\p{dt=Font}`). Likewise no data.
+- **The UCD's contributory `Other_*` properties** (`\p{Other_ID_Start}` and the
+  seven beside it). UAX #44 defines them as inputs to derived properties rather
+  than as properties to query, and ICU follows that. Name the derived property.
+
+Measured against [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s
+1,150 grammars: `Block` and `Decomposition_Type` never appear, and every
+`Other_*` occurrence sits in a comment. Python's and Rust's lexers spell the
+code points out by hand rather than use the property.
 
 ### EOF in parse trees
 
@@ -396,8 +416,12 @@ spot-checked.
 one `[\p{PROPERTY=VALUE}]+` rule per value over every Unicode scalar in
 order; a `+` rule consumes a whole run, so the token stream _is_ the
 jar's range table. `scripts/check-unicode-properties.sh` diffs that
-against Gale's expansion, with the tables regenerated at the jar's frozen
-version (above). Java runs only here, never in CI.
+against Gale's expansion. Java runs only here, never in CI.
+
+It is a diff tool rather than a gate. Gale's properties come from the
+toolchain's ICU and the jar's are frozen, and there is no longer a knob to
+regenerate Gale's at the jar's version, so every Unicode change between the two
+shows up as a difference. Read the output, not the exit status.
 
 ANTLR4's `Property=Value` surface is narrower than the UCD's: it rejects
 group letters (`\p{gc=L}`, though bare `\p{L}` is fine) and empty values

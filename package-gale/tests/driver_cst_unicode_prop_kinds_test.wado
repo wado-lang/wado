@@ -21,11 +21,12 @@ fn assert_kinds(input: &String, expected: &List<String>) {
     assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected:?}\nactual:   ${actual:?}`;
 }
 
-// U+03B1 is in both the script and the block, so the tie goes to the rule
-// declared first; U+1FB0 is Script=Greek only.
-test "script and block are different sets" {
+// U+03B1 and U+1FB0 are Script=Greek; U+0300 is `Mn` and belongs to no script
+// of its own, so the two rules cover different sets.
+test "a script and a category are different sets" {
     assert_kinds(&"α", &["GREEK"]);
     assert_kinds(&"ᾰ", &["GREEK"]);
+    assert_kinds(&"\u{0300}", &["GREEKMARK"]);
     assert_kinds(&"α ᾰ", &["GREEK", "GREEK"]);
 }
 

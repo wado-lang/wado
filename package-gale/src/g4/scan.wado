@@ -117,12 +117,30 @@ pub fn scan_balanced(chars: &List<char>, open_idx: i32, open: char, close: char)
     return null;
 }
 
-/// ASCII identifier-start predicate, shared by the g4 frontend's char-level
-/// scanners.
+/// ANTLR4's `NameStartChar` (`vendor/antlr4/doc/lexicon.md`), which is XML's:
+/// a fixed range list rather than a Unicode property, so it is written out
+/// rather than asked of `core:icu`.
 pub fn is_id_start_char(c: char) -> bool {
-    return c.is_ascii_alphabetic() || c == '_';
+    if c.is_ascii_alphabetic() || c == '_' {
+        return true;
+    }
+    return '\u{00C0}' <= c <= '\u{00D6}'
+        || '\u{00D8}' <= c <= '\u{00F6}'
+        || '\u{00F8}' <= c <= '\u{02FF}'
+        || '\u{0370}' <= c <= '\u{037D}'
+        || '\u{037F}' <= c <= '\u{1FFF}'
+        || '\u{200C}' <= c <= '\u{200D}'
+        || '\u{2070}' <= c <= '\u{218F}'
+        || '\u{2C00}' <= c <= '\u{2FEF}'
+        || '\u{3001}' <= c <= '\u{D7FF}'
+        || '\u{F900}' <= c <= '\u{FDCF}'
+        || '\u{FDF0}' <= c <= '\u{FFFD}';
 }
 
+/// ANTLR4's `NameChar`.
 pub fn is_id_continue_char(c: char) -> bool {
-    return is_id_start_char(c) || c.is_ascii_digit();
+    if is_id_start_char(c) || c.is_ascii_digit() {
+        return true;
+    }
+    return c == '\u{00B7}' || '\u{0300}' <= c <= '\u{036F}' || '\u{203F}' <= c <= '\u{2040}';
 }

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Check Gale's `\p{...}` tables against the published ANTLR4 jar over the whole
-# code-point space, one property at a time: the value list comes from the UCD's
-# PropertyValueAliases.txt, the jar's table from `antlr4-property-oracle.sh`,
-# and the diff from `check_unicode_properties.wado`.
+# Diff Gale's `\p{...}` expansion against the published ANTLR4 jar over the
+# whole code-point space, one property at a time: the value list comes from the
+# UCD's PropertyValueAliases.txt, the jar's table from
+# `antlr4-property-oracle.sh`, and the diff from `check_unicode_properties.wado`.
 #
-# The jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), so
-# compare like-for-like or every Unicode change since reads as a failure:
+# This is a diff tool, not a gate. Gale takes its properties from `core:icu`,
+# whose Unicode version is the toolchain's, and the jar's snapshot is frozen at
+# its build (4.13.2 is 15.0.0). Every Unicode change between the two reads as a
+# difference, so read the output rather than the exit status. Set UCD_VERSION to
+# the version Gale's ICU answers for.
 #
-#     scripts/regen-unicode-tables.sh 15.0.0   # match the jar
-#     scripts/check-unicode-properties.sh
-#     scripts/regen-unicode-tables.sh          # back to latest
+# `blk` and `dt` are absent because Gale does not answer them; see
+# `antlr4-compatibility.md`.
 #
 # Usage: scripts/check-unicode-properties.sh [property...]   (default: all)
 # Needs java, javac, network access, and a built `wado` (WADO env, default
@@ -18,19 +20,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-DEFAULT_PROPERTIES="gc sc blk bc lb WB SB GCB nt ea hst jt InSC dt vo"
+DEFAULT_PROPERTIES="gc sc bc lb WB SB GCB nt ea hst jt InSC vo"
 PROPERTIES="${*:-$DEFAULT_PROPERTIES}"
 
 WADO="${WADO:-../target/debug/wado}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/gale"
 mkdir -p "$CACHE_DIR"
 
-TABLE_VERSION=$(sed -n 's/^pub global UNICODE_VERSION: String = "\([^"]*\)".*/\1/p' src/g4/unicode_tables.wado)
-if [ -z "$TABLE_VERSION" ]; then
-    echo "check: cannot read UNICODE_VERSION from src/g4/unicode_tables.wado" >&2
-    exit 1
-fi
-echo "checking tables generated from UCD $TABLE_VERSION" >&2
+TABLE_VERSION="${UCD_VERSION:-17.0.0}"
+echo "diffing against the jar, using UCD $TABLE_VERSION value names" >&2
 
 ALIASES="$CACHE_DIR/PropertyValueAliases-$TABLE_VERSION.txt"
 if [ ! -f "$ALIASES" ]; then
