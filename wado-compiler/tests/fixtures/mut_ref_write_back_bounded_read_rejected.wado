@@ -1,0 +1,40 @@
+// The same bounded retention, with the argument it lands in read after the
+// call: the borrow is still reachable there, so a write-back would leave it
+// naming a temp and the call is refused.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+#[inline("never")]
+fn park(k: &mut Keep, p: &mut Payload) {
+    k.held = p;
+    *p = Payload::Text("parked");
+}
+
+fn park_a_field(b: &mut Bag, spare: &mut Payload) -> bool {
+    let mut seen = Keep { held: spare };
+    park(&mut seen, &mut b.item);
+    return seen.held matches { Text(_) };
+}
+
+test "unreachable" {
+    let mut b = Bag { item: Payload::Empty };
+    let mut spare = Payload::Empty;
+    assert park_a_field(&mut b, &mut spare);
+}
+
+__DATA__
+{
+    "test": {},
+    "compile_error": "stores it, so it outlives the call"
+}

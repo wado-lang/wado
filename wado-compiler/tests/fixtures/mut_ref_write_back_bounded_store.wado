@@ -1,0 +1,40 @@
+// A callee that keeps the borrow only in another of its own arguments keeps it
+// for that argument's extent. `unread` is never read after the call, so nothing
+// is left to read the borrow back out of and the write-back stands. Read off
+// "position 1 is kept, never mind where", this would be refused.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+#[inline("never")]
+fn park(k: &mut Keep, p: &mut Payload) {
+    k.held = p;
+    *p = Payload::Text("parked");
+}
+
+fn park_a_field(b: &mut Bag, spare: &mut Payload) {
+    let mut unread = Keep { held: spare };
+    park(&mut unread, &mut b.item);
+}
+
+test "a bounded retention still writes back" {
+    let mut b = Bag { item: Payload::Empty };
+    let mut spare = Payload::Empty;
+    park_a_field(&mut b, &mut spare);
+    assert b.item matches { Text(_) };
+}
+
+__DATA__
+{
+    "test": {}
+}

@@ -3,17 +3,17 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
-use super::value_copy::stores::{FunctorRows, RefCarrying, StoredParams};
+use super::value_copy::stores::{BoundedRetention, FunctorRows, RefCarrying, StoredParams};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, ErrorSink};
 use crate::tir::{
     ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLocal, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId, TypeTable,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr, opt_walk_stmt};
+use crate::tir_visitor::{TirOptVisitor, TirRefVisitor, opt_walk_expr, opt_walk_stmt};
 use crate::token::Span;
 
 /// Runs before [`super::boxing::prepare_types`], while `&mut T` is still
@@ -22,6 +22,7 @@ pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
     escaping: &StoredParams,
+    bounded: &BoundedRetention,
     functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
@@ -44,10 +45,13 @@ pub fn insert_write_backs(
                 )
             })
             .unwrap_or_default();
+        let last_read = func.body.as_ref().map(LastRead::of).unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
             carrying: &carrying,
             escaping,
+            bounded,
+            last_read,
             functor_rows,
             replaced: &replaced,
             replaced_locals,
@@ -86,10 +90,114 @@ pub fn insert_write_backs(
     Ok(())
 }
 
+/// Where each local of a body is last read, and where a borrow of it was taken.
+/// A read inside a loop or a closure carries no order against a call — the loop
+/// runs it again, and the closure runs it wherever it is called — so the local
+/// is pinned instead.
+#[derive(Default)]
+struct LastRead {
+    end: IndexMap<u32, usize>,
+    /// Every borrow of a local, by span. One taken outside a call is a second
+    /// name for the local that a read through says nothing about, so it counts
+    /// as a read after every call it is not inside.
+    borrows: IndexMap<u32, Vec<Span>>,
+    pinned: IndexSet<u32>,
+    loop_depth: u32,
+    closure_depth: u32,
+}
+
+impl LastRead {
+    fn of(body: &TirBlock) -> Self {
+        let mut found = LastRead::default();
+        found.visit_block(body);
+        found
+    }
+
+    fn of_expr(body: &TirExpr) -> Self {
+        let mut found = LastRead::default();
+        found.visit_expr(body);
+        found
+    }
+
+    /// Whether a read of `local` can happen after a call spanning `call`.
+    fn after(&self, local: u32, call: Span) -> bool {
+        if self.pinned.contains(&local) {
+            return true;
+        }
+        if self.end.get(&local).is_some_and(|&end| end > call.end) {
+            return true;
+        }
+        self.borrows.get(&local).is_some_and(|spans| {
+            spans
+                .iter()
+                .any(|at| at.start < call.start || at.end > call.end)
+        })
+    }
+}
+
+impl TirRefVisitor for LastRead {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        if let TirExprKind::Local { index, .. } = &expr.kind {
+            let end = self.end.entry(*index).or_default();
+            *end = (*end).max(expr.span.end);
+            if self.loop_depth > 0 || self.closure_depth > 0 {
+                self.pinned.insert(*index);
+            }
+        }
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr: place,
+        } = &expr.kind
+            && let Some(root) = argument_root(place)
+        {
+            self.borrows.entry(root).or_default().push(expr.span);
+        }
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            self.closure_depth += 1;
+            self.walk_expr(expr);
+            self.closure_depth -= 1;
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
+    fn visit_stmt(&mut self, stmt: &TirStmt) {
+        if matches!(stmt.kind, TirStmtKind::Loop { .. }) {
+            self.loop_depth += 1;
+            self.walk_stmt(stmt);
+            self.loop_depth -= 1;
+            return;
+        }
+        self.walk_stmt(stmt);
+    }
+}
+
+/// The local an argument names, past the borrow and the field or element steps
+/// that lead to it.
+fn argument_root(expr: &TirExpr) -> Option<u32> {
+    match &expr.kind {
+        TirExprKind::Local { index, .. } => Some(*index),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr,
+        } => argument_root(expr),
+        TirExprKind::FieldAccess { expr, .. } | TirExprKind::Index { expr, .. } => {
+            argument_root(expr)
+        }
+        _ => None,
+    }
+}
+
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
     carrying: &'a RefCarrying<'a>,
     escaping: &'a FuncKeyMap<IndexSet<u32>>,
+    /// Where a retention the caller can resolve lands, so a borrow kept only in
+    /// another argument of the same call is refused on that argument's extent
+    /// rather than on the call.
+    bounded: &'a BoundedRetention,
+    /// Where each local of this body is last read.
+    last_read: LastRead,
     /// What a call through a function value of each functor type keeps. Read
     /// where no callee name is available, so an indirect call is refused on the
     /// same ground a direct one is rather than on a different reading.
@@ -231,6 +339,10 @@ impl WriteBack<'_> {
             type_table: self.type_table,
             carrying: self.carrying,
             escaping: self.escaping,
+            bounded: self.bounded,
+            // A closure body is its own order, and its own local namespace with
+            // it, so where a local is last read is read from that body.
+            last_read: LastRead::of_expr(body),
             functor_rows: self.functor_rows,
             replaced: self.replaced,
             // A closure body's slots are its own, so what it replaces through
@@ -417,44 +529,77 @@ impl WriteBack<'_> {
         }
         // A direct callee declares the positions it keeps a borrow past the
         // call; an indirect one carries them on its function type.
-        let (callee, escaping, replaced, has_receiver, args): (_, _, _, _, Vec<&mut TirExpr>) =
-            match &mut call.kind {
-                TirExprKind::Call {
-                    func,
-                    args,
-                    has_receiver,
-                    ..
-                } => (
-                    func.name.clone(),
-                    self.escaping
-                        .get(&func.module_source, &func.name)
-                        .cloned()
-                        .unwrap_or_default(),
-                    self.replaced
-                        .get(&func.module_source, &func.name)
-                        .cloned()
-                        .unwrap_or_default(),
-                    *has_receiver,
-                    args.iter_mut().map(|a| &mut a.expr).collect(),
-                ),
-                TirExprKind::IndirectCall { callee, args } => {
-                    // Nothing here names the body that will run, so what it
-                    // keeps is the join over every function value of the
-                    // callee's type — the same reading the copy analysis takes,
-                    // so the two no longer disagree. What it replaces is still
-                    // unknown, and over-approximating that only costs a store.
-                    let stores = self.functor_rows.retained(callee, args.len()).positions();
-                    let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
-                    (
-                        "a function value".to_string(),
-                        stores,
-                        replaced,
-                        false,
-                        args.iter_mut().collect(),
-                    )
+        let call_span = call.span;
+        let (callee, escaping, bounded, replaced, has_receiver, args): (
+            _,
+            _,
+            Vec<Option<IndexSet<u32>>>,
+            _,
+            _,
+            Vec<&mut TirExpr>,
+        ) = match &mut call.kind {
+            TirExprKind::Call {
+                func,
+                args,
+                has_receiver,
+                ..
+            } => (
+                func.name.clone(),
+                self.escaping
+                    .get(&func.module_source, &func.name)
+                    .cloned()
+                    .unwrap_or_default(),
+                (0..args.len())
+                    .map(|position| self.bounded.destinations(func, position).cloned())
+                    .collect(),
+                self.replaced
+                    .get(&func.module_source, &func.name)
+                    .cloned()
+                    .unwrap_or_default(),
+                *has_receiver,
+                args.iter_mut().map(|a| &mut a.expr).collect(),
+            ),
+            TirExprKind::IndirectCall { callee, args } => {
+                // Nothing here names the body that will run, so what it
+                // keeps is the join over every function value of the
+                // callee's type — the same reading the copy analysis takes,
+                // so the two no longer disagree. What it replaces is still
+                // unknown, and over-approximating that only costs a store.
+                let retained = self.functor_rows.retained(callee, args.len());
+                let bounded = (0..u32::try_from(args.len()).unwrap())
+                    .map(|position| retained.destinations(position).cloned())
+                    .collect();
+                let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
+                (
+                    "a function value".to_string(),
+                    retained.positions(),
+                    bounded,
+                    replaced,
+                    false,
+                    args.iter_mut().collect(),
+                )
+            }
+            _ => return,
+        };
+        // A borrow the callee keeps only in another argument of the same call
+        // outlives that argument and no longer, so the write-back stands wherever
+        // every place it landed in is past its last read: nothing is left to read
+        // the borrow back out of.
+        let outlives: Vec<bool> = (0..args.len())
+            .map(|position| {
+                if !escaping.contains(&u32::try_from(position).unwrap()) {
+                    return false;
                 }
-                _ => return,
-            };
+                let Some(destinations) = &bounded[position] else {
+                    return true;
+                };
+                destinations.iter().any(|destination| {
+                    args.get(usize::try_from(*destination).unwrap_or(usize::MAX))
+                        .and_then(|arg| argument_root(arg))
+                        .is_none_or(|root| self.last_read.after(root, call_span))
+                })
+            })
+            .collect();
         // What is at risk is decided by the argument's *type* and what the
         // callee does with it, never by the shape of the expression: a shape
         // this pass fails to recognise then costs a refusal, not a lost write.
@@ -463,8 +608,7 @@ impl WriteBack<'_> {
             .enumerate()
             .map(|(position, arg)| {
                 self.takes_a_detached_borrow(arg)
-                    && (escaping.contains(&u32::try_from(position).unwrap())
-                        || replaced.contains(&u32::try_from(position).unwrap()))
+                    && (outlives[position] || replaced.contains(&u32::try_from(position).unwrap()))
             })
             .collect();
         // Only a position the callee can replace has anything to store back.
@@ -495,7 +639,7 @@ impl WriteBack<'_> {
                     // Why there is no write-back point differs: a stored borrow
                     // outlives every point in this body, where a replaced one
                     // has a point but no place this pass can spell.
-                    let why = if escaping.contains(&u32::try_from(position).unwrap()) {
+                    let why = if outlives[position] {
                         "stores it, so it outlives the call"
                     } else {
                         "replaces it, and no place here can be stored back to"
@@ -516,7 +660,7 @@ impl WriteBack<'_> {
                 continue;
             }
             let place = self.detached_place(arg).expect("detached above");
-            if escaping.contains(&u32::try_from(position).unwrap()) {
+            if outlives[position] {
                 self.refuse(
                     arg.span,
                     format!("'{callee}' stores it, so it outlives the call"),

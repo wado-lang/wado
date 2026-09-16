@@ -219,7 +219,12 @@ the compiler may stop doing to the argument:
   outlives the call, so the call is no place to write it. Where no place in the
   body can be written back to, the call is refused — which is why an indirect
   call must read the same answer as a direct one, or the same program is
-  accepted through a function value and refused by name.
+  accepted through a function value and refused by name. Where the retention
+  names a destination the caller owns, the refusal reads it as a move does: the
+  borrow outlives that destination and no longer, so a call whose destinations
+  are all past their last read is written back after all. A borrow of a
+  destination taken outside the call is a second name for it, and says nothing
+  about where the read through it happens, so it counts as a read after.
 - A constant is not forwarded into a retained parameter.
 - A call whose result could embed a retained reference is not folded at compile
   time, since compile-time evaluation has no reference values to embed and the
@@ -378,13 +383,12 @@ written. Wasm GC uses the same word for the same thing.
 
 ## Known gaps
 
-The write-back reads the union where the last-use walk reads the destination.
-Refusing a write-back is a correctness rule rather than a precision one — a
-`&mut` to a detached place cannot be stored back at a call that keeps it — and
-the destination would sharpen it the same way, but the two walks run on rows
-built from different trees, one before boxing and one after lifting, so the
-bounded map the later one reads is not the one the earlier would need. Closing
-it takes publishing the destination from both passes.
+The write-back orders a read against a call by where the two sit in the source,
+which is the execution order only for straight-line code. A read inside a loop
+runs again after a call in that loop, and one inside a closure runs wherever the
+closure is called, so a local either of them reads counts as read after every
+call in the body. Closing it takes a control-flow reading, which this pass has
+none of: it rewrites a tree on the way down and never builds a graph to ask.
 
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
