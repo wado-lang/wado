@@ -58,19 +58,19 @@ diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-### The Unicode version is the toolchain's, not the jar's
+### ICU is the source of truth for `\p{...}`
 
 `\p{...}` resolves through [`core:icu`](../docs/stdlib-core-icu.md), so its
 Unicode version is whatever the Wado release carries — 17.0.0 today. ANTLR4
 ships a property table frozen when the jar was built (4.13.2 is Unicode
-15.0.0), so Gale runs ahead of it: **divergence that traces to the Unicode
-version is wontfix**. The superset rule already covers it: a newly assigned
-code point's meaning is fixed by the UCD, not invented by Gale.
+15.0.0). **Divergence that traces to ICU is accepted**, and it is not compared
+against the jar at all: a property's members are ICU's answer, not something
+Gale keeps and could get wrong.
 
-A derivation that disagrees on a code point _both_ versions define is still a
-bug. That is now the whole of what Gale can get wrong here, since the data is
-ICU's; what remains Gale's is the bare-name resolution order, the POSIX
-derivations, `EmojiPresentation=`, and the complement.
+What remains Gale's, and so remains a bug when it disagrees, is the layer above
+the data: the bare-name resolution order, the POSIX derivations,
+`EmojiPresentation=`, and the complement. Those are pinned
+character-by-character in `src/g4/parser_test.wado`.
 
 ### Three properties Gale deliberately does not answer
 
@@ -405,29 +405,16 @@ stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
 
-#### Oracling the Unicode property tables
+#### The Unicode properties are not oracled
 
-`\P{...}` complements what `\p` selects, so a table that is merely close
-_admits_ code points rather than missing them — and a property's values
-partition the code-point space, so it can be compared exactly instead of
-spot-checked.
+The jar is not consulted about them at all. They come from `core:icu`, which
+is their single source of truth, and the property oracle that used to diff
+every value against the jar is gone with the tables it checked.
 
-`scripts/antlr4-property-oracle.sh <property> <value>...` gives the jar
-one `[\p{PROPERTY=VALUE}]+` rule per value over every Unicode scalar in
-order; a `+` rule consumes a whole run, so the token stream _is_ the
-jar's range table. `scripts/check-unicode-properties.sh` diffs that
-against Gale's expansion. Java runs only here, never in CI.
-
-It is a diff tool rather than a gate. Gale's properties come from the
-toolchain's ICU and the jar's are frozen, and there is no longer a knob to
-regenerate Gale's at the jar's version, so every Unicode change between the two
-shows up as a difference. Read the output, not the exit status.
-
-ANTLR4's `Property=Value` surface is narrower than the UCD's: it rejects
+ANTLR4's `Property=Value` surface is narrower than the UCD's anyway: it rejects
 group letters (`\p{gc=L}`, though bare `\p{L}` is fine) and empty values
 (`\p{sc=Hrkt}`), and matches aliases case-insensitively but
-underscore-sensitively. Gale's UAX #44 loose matching is a superset; the
-oracle drops what the jar rejects, naming each on stderr.
+underscore-sensitively. Gale's UAX #44 loose matching is a superset.
 
 ### Stage C — action-body translation
 
