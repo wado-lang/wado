@@ -7,7 +7,7 @@
 use crate::compiler_trace;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
-use crate::wir_optimize::util::{self, is_side_effect_free, may_trap_in};
+use crate::wir_optimize::util::{self, is_same_free_read, is_side_effect_free, may_trap_in};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
 
@@ -378,6 +378,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         });
         changed |= rewrite_everywhere(instrs, &mut try_fold_branchless_increment);
         changed |= rewrite_everywhere(instrs, &mut try_drop_mask);
+        changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
@@ -856,6 +857,67 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
                 (None, None) => None,
             }
         }
+        _ => None,
+    }
+}
+
+/// Fold `x << n | x >>u W - n`, and its mirror, to a rotate. Wasm reduces a
+/// shift count mod `W`, so `x >>u W - 0` is `x >>u 0`: the identity holds for
+/// every `n`, zero included, and needs no guard.
+fn try_fold_rotate(instr: &mut WirInstr) -> bool {
+    // `|` is commutative, so either operand may carry the left shift.
+    let matched = match &*instr {
+        WirInstr::I32Or(l, r) | WirInstr::I64Or(l, r) => {
+            rotate_from_halves(l, r).or_else(|| rotate_from_halves(r, l))
+        }
+        _ => return false,
+    };
+    let Some(rotate) = matched else {
+        return false;
+    };
+    *instr = rotate;
+    true
+}
+
+/// `shl | shru` is a left rotate and `shru | shl` a right one, in both cases by
+/// the amount the first half names.
+fn rotate_from_halves(a: &WirInstr, b: &WirInstr) -> Option<WirInstr> {
+    type Build = fn(Box<WirInstr>, Box<WirInstr>) -> WirInstr;
+    let (width, value, amount, reread, complement, build): (i64, _, _, _, _, Build) = match (a, b) {
+        (WirInstr::I32Shl(v, n), WirInstr::I32ShrU(w, m)) => (32, v, n, w, m, WirInstr::I32Rotl),
+        (WirInstr::I32ShrU(v, n), WirInstr::I32Shl(w, m)) => (32, v, n, w, m, WirInstr::I32Rotr),
+        (WirInstr::I64Shl(v, n), WirInstr::I64ShrU(w, m)) => (64, v, n, w, m, WirInstr::I64Rotl),
+        (WirInstr::I64ShrU(v, n), WirInstr::I64Shl(w, m)) => (64, v, n, w, m, WirInstr::I64Rotr),
+        _ => return None,
+    };
+    if !is_same_free_read(value, reread) || !is_width_complement(width, amount, complement) {
+        return None;
+    }
+    Some(build(
+        Box::new(value.as_ref().clone()),
+        Box::new(amount.as_ref().clone()),
+    ))
+}
+
+/// `complement` is `width - amount`, written either as the subtraction itself
+/// or as two constants that add up to the width. Both constants are whatever
+/// the source wrote, so the sum is taken under an overflow check.
+fn is_width_complement(width: i64, amount: &WirInstr, complement: &WirInstr) -> bool {
+    if let (Some(n), Some(m)) = (const_int(amount), const_int(complement)) {
+        return n >= 0 && m >= 0 && n.checked_add(m) == Some(width);
+    }
+    match complement {
+        WirInstr::I32Sub(w, n) | WirInstr::I64Sub(w, n) => {
+            const_int(w) == Some(width) && is_same_free_read(n, amount)
+        }
+        _ => false,
+    }
+}
+
+fn const_int(instr: &WirInstr) -> Option<i64> {
+    match instr {
+        WirInstr::I32Const(v) => Some(i64::from(*v)),
+        WirInstr::I64Const(v) => Some(*v),
         _ => None,
     }
 }

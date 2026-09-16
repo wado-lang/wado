@@ -1,0 +1,16 @@
+// A miscounted shuffle has no lane positions yet: its two vectors sit where
+// lane immediates would be, and reporting them as bad lanes buries the one
+// error that explains the call.
+use { i8x16 } from "core:simd";
+
+export fn run() {
+    let v = i8x16::splat(3);
+    let r = builtin::i8x16_shuffle(v as v128, v as v128);
+    builtin::black_box(r);
+}
+
+__DATA__
+{
+    "compile_error": "expected 18 arguments, found 2",
+    "compile_errors_not_contains": ["needs an integer literal lane index"]
+}

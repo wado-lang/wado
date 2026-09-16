@@ -5,6 +5,7 @@
 
 use crate::tir::PrimitiveType;
 use crate::wir::{WirData, WirInstr, WirPackage, WirType, WirTypeDef};
+use crate::wir_optimize::util::is_same_free_read;
 use crate::wir_visitor::WirMutVisitor;
 
 /// Minimum element count to trigger `array.new_data` promotion. Arrays with
@@ -390,6 +391,9 @@ impl WirMutVisitor for ZeroFillElider {
 /// `array.fill(<name>, 0, <zero scalar>, <new_len>)` — a fill whose target is
 /// the just-created array, whose range is exactly the construction length, and
 /// whose value the allocation already holds.
+///
+/// The two statements are adjacent and the first only writes the array local,
+/// so a length read in both yields the same value.
 fn fill_is_redundant(instr: &WirInstr, name: &str, new_len: &WirInstr) -> bool {
     let WirInstr::ArrayFill {
         array,
@@ -404,7 +408,7 @@ fn fill_is_redundant(instr: &WirInstr, name: &str, new_len: &WirInstr) -> bool {
     matches!(peel_ref_as_non_null(array), WirInstr::LocalGet { name: n, .. } if n == name)
         && matches!(offset.as_ref(), WirInstr::I32Const(0))
         && is_zero_scalar_const(value)
-        && same_pure_operand(new_len, len)
+        && is_same_free_read(new_len, len)
 }
 
 fn peel_ref_as_non_null(instr: &WirInstr) -> &WirInstr {
@@ -422,17 +426,6 @@ fn is_zero_scalar_const(instr: &WirInstr) -> bool {
         WirInstr::I64Const(v) => *v == 0,
         WirInstr::F32Const(v) => v.to_bits() == 0,
         WirInstr::F64Const(v) => v.to_bits() == 0,
-        _ => false,
-    }
-}
-
-/// Both operands are the same constant or the same local read. The pair sits
-/// in adjacent statements whose first only writes the array local, so an equal
-/// local read yields the same value at both points.
-fn same_pure_operand(a: &WirInstr, b: &WirInstr) -> bool {
-    match (a, b) {
-        (WirInstr::I32Const(x), WirInstr::I32Const(y)) => x == y,
-        (WirInstr::LocalGet { name: x, .. }, WirInstr::LocalGet { name: y, .. }) => x == y,
         _ => false,
     }
 }

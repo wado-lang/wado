@@ -1,0 +1,14 @@
+// A lane index is encoded into the instruction, so it must be a literal at the
+// call. `i8x16::extract_lane_u` is the way to reach one chosen at runtime: it
+// spells out an arm per lane.
+use { i8x16 } from "core:simd";
+
+export fn run(lane: i32) {
+    let v = i8x16::splat(3);
+    assert builtin::i8x16_extract_lane_u(lane, v as v128) == 3;
+}
+
+__DATA__
+{
+    "compile_error": "`builtin::i8x16_extract_lane_u` needs an integer literal lane index"
+}

@@ -1,0 +1,64 @@
+// Test: `x << n | x >> W - n` and its mirror fold to Wasm's rotate.
+//
+// Wasm takes a shift count mod the width, so at n == 0 the second shift is
+// `x >> W`, which is `x >> 0`. The fold holds for every n and needs no guard.
+//
+// `black_box` keeps the operands off the constant path: with constant ones the
+// whole expression folds to its result and there is nothing left to inspect.
+
+fn rotl32(x: u32, n: u32) -> u32 {
+    return x << n | x >> 32 - n;
+}
+
+fn rotr32(x: u32, n: u32) -> u32 {
+    return x >> n | x << 32 - n;
+}
+
+fn rotl64(x: u64, n: u64) -> u64 {
+    return x << n | x >> 64 - n;
+}
+
+fn rotr64(x: u64, n: u64) -> u64 {
+    return x >> n | x << 64 - n;
+}
+
+fn rotl32_const(x: u32) -> u32 {
+    return x << 7 | x >> 25;
+}
+
+fn rotr64_const(x: u64) -> u64 {
+    return x >> 40 | x << 24;
+}
+
+// Not a rotate: the counts do not add up to 64, and adding them at all used to
+// overflow the fold's check. Wasm reduces each mod 64, so this is `x << 63 | x
+// >>u 1`.
+fn shift_counts_that_overflow_their_sum(x: u64) -> u64 {
+    return x << 9223372036854775807 | x >> 1;
+}
+
+test {
+    let x32 = builtin::black_box(0x12345678 as u32);
+    let x64 = builtin::black_box(0x0123456789abcdef as u64);
+
+    assert rotl32(x32, builtin::black_box(8 as u32)) == 0x34567812;
+    assert rotr32(x32, builtin::black_box(8 as u32)) == 0x78123456;
+    assert rotl32(x32, builtin::black_box(0 as u32)) == 0x12345678;
+    assert rotr32(x32, builtin::black_box(0 as u32)) == 0x12345678;
+
+    assert rotl64(x64, builtin::black_box(16 as u64)) == 0x456789abcdef0123;
+    assert rotr64(x64, builtin::black_box(16 as u64)) == 0xcdef0123456789ab;
+    assert rotl64(x64, builtin::black_box(0 as u64)) == 0x0123456789abcdef;
+
+    assert rotl32_const(x32) == 0x1a2b3c09;
+    assert rotr64_const(x64) == 0x6789abcdef012345;
+    assert shift_counts_that_overflow_their_sum(x64) == 0x8091a2b3c4d5e6f7;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": ["<<", ">>u"],
+    "wir_expect:O1": ["rotl", "rotr"],
+    "wir_expect:O2": ["rotl", "rotr", "<<"]
+}

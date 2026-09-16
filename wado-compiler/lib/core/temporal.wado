@@ -819,7 +819,7 @@ fn add_months_to_civil(year: i64, month: i64, day: i64, months: i64) -> [i64, i6
     let shifted_year = floor_div(total, 12);
     let shifted_month = floor_mod(total, 12) + 1;
     let month_length = days_in_month_value(shifted_year, shifted_month);
-    let shifted_day = if day > month_length { month_length } else { day };
+    let shifted_day = i64::min(day, month_length);
     return [shifted_year, shifted_month, shifted_day];
 }
 
