@@ -1244,9 +1244,8 @@ fn is_globalizable_const(
         ExprKind::VariantConstruct { payload, .. } => {
             payload.is_none_or(|p| is_globalizable_const_operand(body, p, gate, bound))
         }
-        // A projection of a constant aggregate is a constant. The fields it
-        // drops are pure, so the aggregate goes with them and the global holds
-        // the field alone.
+        // The global then holds the projected field, not the aggregate it came
+        // out of.
         ExprKind::FieldAccess { .. } => projected_const_field(body, expr)
             .is_some_and(|op| is_globalizable_const_operand(body, op, gate, bound)),
         // A pure call on closed constants is itself a closed constant
@@ -1353,9 +1352,8 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             contains_aggregate_operand(body, *inner, gate)
         }
-        // What a projection of an aggregate builds is what the projected field
-        // builds, not what the aggregate around it does: `String { .. }.used` is
-        // a scalar.
+        // Answered by the projected field, never by the receiver:
+        // `String { .. }.used` is a scalar though the struct owns an array.
         ExprKind::FieldAccess { .. } => projected_const_field(body, expr)
             .is_some_and(|op| contains_aggregate_operand(body, op, gate)),
         ExprKind::LabeledBlock { block, .. } => {
